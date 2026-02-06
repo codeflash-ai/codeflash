@@ -820,9 +820,12 @@ class FunctionOptimizer:
         perf_class = perf_class_match.group(1) if perf_class_match else "GeneratedPerfTest"
 
         # Build paths with package structure
-        # Use the Java sources root, not tests_root, to avoid path duplication
-        # when tests_root already includes the package path
-        test_dir = self._get_java_sources_root()
+        # For multi-module projects, use module-aware test root based on source file location
+        from codeflash.languages.java.build_tools import find_test_root
+        test_dir = find_test_root(self.test_cfg.project_root_path, self.function_to_optimize.file_path)
+        if test_dir is None:
+            # Fall back to configured test root if detection fails
+            test_dir = self.test_cfg.tests_root
 
         if package_name:
             package_path = package_name.replace(".", "/")
@@ -2954,6 +2957,7 @@ class FunctionOptimizer:
                     enable_coverage=enable_coverage,
                     js_project_root=self.test_cfg.js_project_root,
                     candidate_index=optimization_iteration,
+                    java_test_module=self.test_cfg.java_test_module,
                 )
             elif testing_type == TestingMode.LINE_PROFILE:
                 result_file_path, run_result = run_line_profile_tests(
@@ -2979,6 +2983,7 @@ class FunctionOptimizer:
                     pytest_max_loops=pytest_max_loops,
                     test_framework=self.test_cfg.test_framework,
                     js_project_root=self.test_cfg.js_project_root,
+                    java_test_module=self.test_cfg.java_test_module,
                 )
             else:
                 msg = f"Unexpected testing type: {testing_type}"

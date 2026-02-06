@@ -21,10 +21,16 @@ from typing import Any
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.languages.base import TestResult
 from codeflash.languages.java.build_tools import (
+    BuildTool,
     add_jacoco_plugin_to_pom,
+    detect_build_tool,
+    find_gradle_executable,
     find_maven_executable,
+    get_gradle_settings_file,
     get_jacoco_xml_path,
     is_jacoco_configured,
+    parse_gradle_modules,
+    run_gradle_tests,
 )
 
 logger = logging.getLogger(__name__)
@@ -82,10 +88,83 @@ def _validate_test_filter(test_filter: str) -> str:
     return test_filter
 
 
-def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, str | None]:
-    """Find the multi-module Maven parent root if tests are in a different module.
+def _extract_test_file_paths(test_paths: Any) -> list[Path]:
+    """Extract test file paths from various input formats.
 
-    For multi-module Maven projects, tests may be in a separate module from the source code.
+    Args:
+        test_paths: TestFiles object or list of test file paths.
+
+    Returns:
+        List of Path objects for test files.
+
+    """
+    test_file_paths: list[Path] = []
+    if hasattr(test_paths, "test_files"):
+        for test_file in test_paths.test_files:
+            if hasattr(test_file, "benchmarking_file_path") and test_file.benchmarking_file_path:
+                test_file_paths.append(test_file.benchmarking_file_path)
+            elif hasattr(test_file, "instrumented_behavior_file_path") and test_file.instrumented_behavior_file_path:
+                test_file_paths.append(test_file.instrumented_behavior_file_path)
+    elif isinstance(test_paths, (list, tuple)):
+        test_file_paths = [Path(p) if isinstance(p, str) else p for p in test_paths]
+    return test_file_paths
+
+
+def _get_module_from_test_path(test_path: Path, project_root: Path, module_names: list[str]) -> str | None:
+    """Extract module name from test path if it matches a known module.
+
+    Args:
+        test_path: Path to test file.
+        project_root: Project root directory.
+        module_names: List of known module names.
+
+    Returns:
+        Module name if detected, None otherwise.
+
+    """
+    try:
+        # Use parts-based prefix check to avoid the overhead of Path.relative_to.
+        test_parts = test_path.parts
+        root_parts = project_root.parts
+
+        # If project_root is not a prefix of test_path, mimic relative_to raising ValueError.
+        if len(test_parts) < len(root_parts) or test_parts[: len(root_parts)] != root_parts:
+            raise ValueError
+
+        rel_path = test_parts[len(root_parts) :]
+        first_component = rel_path[0] if rel_path else None
+        if first_component and first_component in module_names:
+            return first_component
+    except ValueError:
+        pass
+    return None
+
+
+def _parse_maven_modules(pom_path: Path) -> list[str]:
+    """Parse module names from a Maven pom.xml file.
+
+    Args:
+        pom_path: Path to pom.xml.
+
+    Returns:
+        List of module names, empty if not a multi-module project.
+
+    """
+    if not pom_path.exists():
+        return []
+    try:
+        content = pom_path.read_text(encoding="utf-8")
+        if "<modules>" not in content:
+            return []
+        return re.findall(r"<module>([^<]+)</module>", content)
+    except Exception:
+        return []
+
+
+def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, str | None]:
+    """Find the multi-module parent root if tests are in a different module.
+
+    For multi-module Maven/Gradle projects, tests may be in a separate module from the source code.
     This function detects this situation and returns the parent project root along with
     the module containing the tests.
 
@@ -94,97 +173,69 @@ def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, 
         test_paths: TestFiles object or list of test file paths.
 
     Returns:
-        Tuple of (maven_root, test_module_name) where:
-        - maven_root: The directory to run Maven from (parent if multi-module, else project_root)
+        Tuple of (build_root, test_module_name) where:
+        - build_root: The directory to run build tool from (parent if multi-module, else project_root)
         - test_module_name: The name of the test module if different from project_root, else None
 
     """
-    # Get test file paths - try both benchmarking and behavior paths
-    test_file_paths: list[Path] = []
-    if hasattr(test_paths, "test_files"):
-        for test_file in test_paths.test_files:
-            # Prefer benchmarking_file_path for performance mode
-            if hasattr(test_file, "benchmarking_file_path") and test_file.benchmarking_file_path:
-                test_file_paths.append(test_file.benchmarking_file_path)
-            elif hasattr(test_file, "instrumented_behavior_file_path") and test_file.instrumented_behavior_file_path:
-                test_file_paths.append(test_file.instrumented_behavior_file_path)
-    elif isinstance(test_paths, (list, tuple)):
-        test_file_paths = [Path(p) if isinstance(p, str) else p for p in test_paths]
+    build_tool = detect_build_tool(project_root)
+    test_file_paths = _extract_test_file_paths(test_paths)
 
     if not test_file_paths:
         return project_root, None
 
     # Check if any test file is outside the project_root
-    test_outside_project = False
     test_dir: Path | None = None
     for test_path in test_file_paths:
         try:
             test_path.relative_to(project_root)
         except ValueError:
-            # Test is outside project_root
-            test_outside_project = True
             test_dir = test_path.parent
             break
 
-    if not test_outside_project:
-        # Check if project_root itself is a multi-module project
-        # and the test file is in a submodule (e.g., test/src/...)
-        pom_path = project_root / "pom.xml"
-        if pom_path.exists():
-            try:
-                content = pom_path.read_text(encoding="utf-8")
-                if "<modules>" in content:
-                    # This is a multi-module project root
-                    # Extract modules from pom.xml
-                    import re
+    # If tests are inside project_root, check if it's a multi-module project
+    if test_dir is None:
+        module_names: list[str] = []
+        if build_tool == BuildTool.MAVEN:
+            module_names = _parse_maven_modules(project_root / "pom.xml")
+        elif build_tool == BuildTool.GRADLE:
+            settings_file = get_gradle_settings_file(project_root)
+            if settings_file:
+                module_names = parse_gradle_modules(settings_file)
 
-                    modules = re.findall(r"<module>([^<]+)</module>", content)
-                    # Check if test file is in one of the modules
-                    for test_path in test_file_paths:
-                        try:
-                            rel_path = test_path.relative_to(project_root)
-                            # Get the first component of the relative path
-                            first_component = rel_path.parts[0] if rel_path.parts else None
-                            if first_component and first_component in modules:
-                                logger.debug(
-                                    "Detected multi-module Maven project. Root: %s, Test module: %s",
-                                    project_root,
-                                    first_component,
-                                )
-                                return project_root, first_component
-                        except ValueError:
-                            pass
-            except Exception:
-                pass
+        if module_names:
+            for test_path in test_file_paths:
+                module = _get_module_from_test_path(test_path, project_root, module_names)
+                if module:
+                    logger.debug("Detected multi-module project. Root: %s, Test module: %s", project_root, module)
+                    return project_root, module
+
         return project_root, None
 
-    # Find common parent that contains both project_root and test files
-    # and has a pom.xml with <modules> section
+    # Tests are outside project_root - search parent directories for multi-module root
     current = project_root.parent
     while current != current.parent:
-        pom_path = current / "pom.xml"
-        if pom_path.exists():
-            # Check if this is a multi-module pom
+        module_names = []
+
+        # Check Gradle first
+        gradle_settings = get_gradle_settings_file(current)
+        if gradle_settings:
+            module_names = parse_gradle_modules(gradle_settings)
+
+        # Then check Maven
+        if not module_names:
+            module_names = _parse_maven_modules(current / "pom.xml")
+
+        if module_names and test_dir:
             try:
-                content = pom_path.read_text(encoding="utf-8")
-                if "<modules>" in content:
-                    # Found multi-module parent
-                    # Get the relative module name for the test directory
-                    if test_dir:
-                        try:
-                            test_module = test_dir.relative_to(current)
-                            # Get the top-level module name (first component)
-                            test_module_name = test_module.parts[0] if test_module.parts else None
-                            logger.debug(
-                                "Detected multi-module Maven project. Root: %s, Test module: %s",
-                                current,
-                                test_module_name,
-                            )
-                            return current, test_module_name
-                        except ValueError:
-                            pass
-            except Exception:
+                test_module = test_dir.relative_to(current)
+                test_module_name = test_module.parts[0] if test_module.parts else None
+                if test_module_name:
+                    logger.debug("Detected multi-module project. Root: %s, Test module: %s", current, test_module_name)
+                    return current, test_module_name
+            except ValueError:
                 pass
+
         current = current.parent
 
     return project_root, None
@@ -231,6 +282,7 @@ def run_behavioral_tests(
     project_root: Path | None = None,
     enable_coverage: bool = False,
     candidate_index: int = 0,
+    java_test_module: str | None = None,
 ) -> tuple[Path, Any, Path | None, Path | None]:
     """Run behavioral tests for Java code.
 
@@ -246,6 +298,7 @@ def run_behavioral_tests(
         project_root: Project root directory.
         enable_coverage: Whether to collect coverage information.
         candidate_index: Index of the candidate being tested.
+        java_test_module: Module name for multi-module Java projects (e.g., "server").
 
     Returns:
         Tuple of (result_xml_path, subprocess_result, sqlite_db_path, coverage_xml_path).
@@ -255,6 +308,12 @@ def run_behavioral_tests(
 
     # Detect multi-module Maven projects where tests are in a different module
     maven_root, test_module = _find_multi_module_root(project_root, test_paths)
+
+    # Use provided java_test_module as fallback if detection didn't find a module
+    if test_module is None and java_test_module:
+        test_module = java_test_module
+        maven_root = project_root
+        logger.debug(f"Using configured Java test module: {test_module}")
 
     # Create SQLite database path for behavior capture - use standard path that parse_test_results expects
     sqlite_db_path = get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite"))
@@ -267,11 +326,14 @@ def run_behavioral_tests(
     run_env["CODEFLASH_TEST_ITERATION"] = str(candidate_index)
     run_env["CODEFLASH_OUTPUT_FILE"] = str(sqlite_db_path)  # SQLite output path
 
-    # If coverage is enabled, ensure JaCoCo is configured
-    # For multi-module projects, add JaCoCo to the test module's pom.xml (where tests run)
+    # If coverage is enabled, prepare coverage paths
+    # For Maven: configure JaCoCo plugin in pom.xml
+    # For Gradle: coverage will be collected via Java agent (no build changes needed)
     coverage_xml_path: Path | None = None
-    if enable_coverage:
-        # Determine which pom.xml to configure JaCoCo in
+    build_tool = detect_build_tool(maven_root)
+
+    if enable_coverage and build_tool == BuildTool.MAVEN:
+        # Maven: ensure JaCoCo plugin is configured in pom.xml
         if test_module:
             # Multi-module project: add JaCoCo to test module
             test_module_pom = maven_root / test_module / "pom.xml"
@@ -288,9 +350,16 @@ def run_behavioral_tests(
                     logger.info("Adding JaCoCo plugin to pom.xml for coverage collection")
                     add_jacoco_plugin_to_pom(pom_path)
                 coverage_xml_path = get_jacoco_xml_path(project_root)
+    elif enable_coverage and build_tool == BuildTool.GRADLE:
+        # Gradle: coverage will be collected via Java agent
+        # Expected XML path after conversion from .exec
+        if test_module:
+            coverage_xml_path = maven_root / test_module / "build" / "jacoco" / "test.xml"
+        else:
+            coverage_xml_path = maven_root / "build" / "jacoco" / "test.xml"
 
-    # Run Maven tests from the appropriate root
-    # Use a minimum timeout of 60s for Java builds (120s when coverage is enabled due to verify phase)
+    # Run tests from the appropriate root
+    # Use a minimum timeout of 60s for Java builds (120s when coverage is enabled due to verify phase for Maven)
     min_timeout = 120 if enable_coverage else 60
     effective_timeout = max(timeout or 300, min_timeout)
     result = _run_maven_tests(
@@ -308,6 +377,11 @@ def run_behavioral_tests(
     target_dir = _get_test_module_target_dir(maven_root, test_module)
     surefire_dir = target_dir / "surefire-reports"
     result_xml_path = _get_combined_junit_xml(surefire_dir, candidate_index)
+
+    # Check if coverage XML was actually generated (for Gradle with agent, verify the file exists)
+    if coverage_xml_path and not coverage_xml_path.exists():
+        logger.warning(f"Expected coverage XML not found: {coverage_xml_path}")
+        coverage_xml_path = None
 
     # Return coverage_xml_path as the fourth element when coverage is enabled
     return result_xml_path, result, sqlite_db_path, coverage_xml_path
@@ -641,7 +715,10 @@ def _run_benchmarking_tests_maven(
             if not has_timing_markers:
                 logger.warning("Tests failed in Maven loop %d with no timing markers, stopping", loop_idx)
                 break
-            logger.debug("Some tests failed in Maven loop %d but timing markers present, continuing", loop_idx)
+            logger.debug(
+                "Some tests failed in Maven loop %d but timing markers present, continuing",
+                loop_idx,
+            )
 
     combined_stdout = "\n".join(all_stdout)
     combined_stderr = "\n".join(all_stderr)
@@ -679,6 +756,7 @@ def run_benchmarking_tests(
     max_loops: int = 3,
     target_duration_seconds: float = 10.0,
     inner_iterations: int = 10,
+    java_test_module: str | None = None,
 ) -> tuple[Path, Any]:
     """Run benchmarking tests for Java code with compile-once-run-many optimization.
 
@@ -702,6 +780,7 @@ def run_benchmarking_tests(
         max_loops: Maximum number of outer loops (JVM invocations). Default: 3.
         target_duration_seconds: Target duration for benchmarking in seconds.
         inner_iterations: Number of inner loop iterations per JVM invocation. Default: 100.
+        java_test_module: Module name for multi-module Java projects (e.g., "server").
 
     Returns:
         Tuple of (result_file_path, subprocess_result with aggregated stdout).
@@ -713,6 +792,12 @@ def run_benchmarking_tests(
 
     # Detect multi-module Maven projects where tests are in a different module
     maven_root, test_module = _find_multi_module_root(project_root, test_paths)
+
+    # Use provided java_test_module as fallback if detection didn't find a module
+    if test_module is None and java_test_module:
+        test_module = java_test_module
+        maven_root = project_root
+        logger.debug(f"Using configured Java test module for benchmarking: {test_module}")
 
     # Get test class names
     test_classes = _get_test_class_names(test_paths, mode="performance")
@@ -857,7 +942,10 @@ def run_benchmarking_tests(
             if not has_timing_markers:
                 logger.warning("Tests failed in loop %d with no timing markers, stopping benchmark", loop_idx)
                 break
-            logger.debug("Some tests failed in loop %d but timing markers present, continuing", loop_idx)
+            logger.debug(
+                "Some tests failed in loop %d but timing markers present, continuing",
+                loop_idx,
+            )
 
     # Create a combined result with all stdout
     combined_stdout = "\n".join(all_stdout)
@@ -988,6 +1076,167 @@ def _combine_junit_xml_files(xml_files: list[Path], output_path: Path) -> None:
 
 
 def _run_maven_tests(
+    project_root: Path,
+    test_paths: Any,
+    env: dict[str, str],
+    timeout: int = 300,
+    mode: str = "behavior",
+    enable_coverage: bool = False,
+    test_module: str | None = None,
+) -> subprocess.CompletedProcess:
+    """Run tests using appropriate build tool (Maven or Gradle).
+
+    Detects build tool and dispatches to Maven or Gradle implementation.
+
+    Args:
+        project_root: Root directory of the project.
+        test_paths: Test files or classes to run.
+        env: Environment variables.
+        timeout: Maximum execution time in seconds.
+        mode: Testing mode - "behavior" or "performance".
+        enable_coverage: Whether to enable JaCoCo coverage collection.
+        test_module: For multi-module projects, the module containing tests.
+
+    Returns:
+        CompletedProcess with test results.
+
+    """
+    # Detect build tool
+    build_tool = detect_build_tool(project_root)
+    logger.info(f"Detected build tool: {build_tool} for project_root: {project_root}")
+
+    if build_tool == BuildTool.GRADLE:
+        logger.info("Using Gradle for test execution")
+        return _run_gradle_tests_impl(
+            project_root, test_paths, env, timeout, mode, enable_coverage, test_module
+        )
+    if build_tool == BuildTool.MAVEN:
+        logger.info("Using Maven for test execution")
+        return _run_maven_tests_impl(
+            project_root, test_paths, env, timeout, mode, enable_coverage, test_module
+        )
+    logger.error(f"No supported build tool (Maven/Gradle) found for {project_root}")
+    return subprocess.CompletedProcess(
+        args=["unknown"],
+        returncode=-1,
+        stdout="",
+        stderr="No supported build tool found. Please ensure Maven or Gradle is configured.",
+    )
+
+
+def _run_gradle_tests_impl(
+    project_root: Path,
+    test_paths: Any,
+    env: dict[str, str],
+    timeout: int = 300,
+    mode: str = "behavior",
+    enable_coverage: bool = False,
+    test_module: str | None = None,
+) -> subprocess.CompletedProcess:
+    """Run Gradle tests.
+
+    Args:
+        project_root: Root directory of the Gradle project.
+        test_paths: Test files or classes to run.
+        env: Environment variables.
+        timeout: Maximum execution time in seconds.
+        mode: Testing mode - "behavior" or "performance".
+        enable_coverage: Whether to enable JaCoCo coverage collection.
+        test_module: For multi-module projects, the module containing tests.
+
+    Returns:
+        CompletedProcess with test results.
+
+    """
+    gradle = find_gradle_executable(project_root)
+    if not gradle:
+        logger.error("Gradle not found")
+        return subprocess.CompletedProcess(
+            args=["gradle"],
+            returncode=-1,
+            stdout="",
+            stderr="Gradle not found",
+        )
+
+    # Build test filter
+    test_filter = _build_test_filter(test_paths, mode=mode)
+
+    # Convert test filter to Gradle format (Class.method or Class)
+    test_classes = []
+    test_methods = []
+
+    if test_filter:
+        # Parse Maven-style filter to Gradle format
+        # Maven: com.example.TestClass#testMethod or com.example.TestClass
+        # Gradle: --tests com.example.TestClass.testMethod or --tests com.example.TestClass
+        for test_spec in test_filter.split(","):
+            test_spec = test_spec.strip()
+            if "#" in test_spec:
+                # Method-specific test
+                class_name, method_name = test_spec.split("#", 1)
+                test_methods.append(f"{class_name}.{method_name}")
+            else:
+                # Class-level test
+                test_classes.append(test_spec)
+
+    # Run Gradle tests
+    result = run_gradle_tests(
+        project_root=project_root,
+        test_classes=test_classes if test_classes else None,
+        test_methods=test_methods if test_methods else None,
+        env=env,
+        timeout=timeout,
+        enable_coverage=enable_coverage,
+        test_module=test_module,
+    )
+
+    # Convert JaCoCo .exec to XML if coverage was enabled
+    if enable_coverage and result.coverage_exec_path and result.coverage_exec_path.exists():
+        from codeflash.languages.java.build_tools import convert_jacoco_exec_to_xml
+
+        xml_path = result.coverage_exec_path.with_suffix(".xml")
+
+        # Determine class and source directories
+        classes_dirs = []
+        sources_dirs = []
+
+        if test_module:
+            # Multi-module project
+            module_path = project_root / test_module
+            classes_dirs.append(module_path / "build" / "classes" / "java" / "main")
+            classes_dirs.append(module_path / "build" / "classes" / "java" / "test")
+            sources_dirs.append(module_path / "src" / "main" / "java")
+            sources_dirs.append(module_path / "src" / "test" / "java")
+        else:
+            # Single module project
+            classes_dirs.append(project_root / "build" / "classes" / "java" / "main")
+            classes_dirs.append(project_root / "build" / "classes" / "java" / "test")
+            sources_dirs.append(project_root / "src" / "main" / "java")
+            sources_dirs.append(project_root / "src" / "test" / "java")
+
+        # Convert .exec to XML
+        success = convert_jacoco_exec_to_xml(
+            result.coverage_exec_path,
+            classes_dirs,
+            sources_dirs,
+            xml_path
+        )
+
+        if success:
+            logger.info(f"JaCoCo coverage XML generated: {xml_path}")
+        else:
+            logger.warning("Failed to convert JaCoCo .exec to XML")
+
+    # Convert GradleTestResult to CompletedProcess for compatibility
+    return subprocess.CompletedProcess(
+        args=["gradle", "test"],
+        returncode=result.returncode,
+        stdout=result.stdout,
+        stderr=result.stderr,
+    )
+
+
+def _run_maven_tests_impl(
     project_root: Path,
     test_paths: Any,
     env: dict[str, str],

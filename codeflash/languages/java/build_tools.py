@@ -21,6 +21,45 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def get_gradle_settings_file(project_root: Path) -> Path | None:
+    """Find the Gradle settings file (settings.gradle or settings.gradle.kts).
+
+    Args:
+        project_root: Root directory of the Gradle project.
+
+    Returns:
+        Path to settings file if found, None otherwise.
+
+    """
+    settings_path = project_root / "settings.gradle"
+    if settings_path.exists():
+        return settings_path
+    settings_kts_path = project_root / "settings.gradle.kts"
+    if settings_kts_path.exists():
+        return settings_kts_path
+    return None
+
+
+def parse_gradle_modules(settings_file: Path) -> list[str]:
+    """Parse module names from a Gradle settings file.
+
+    Args:
+        settings_file: Path to settings.gradle or settings.gradle.kts.
+
+    Returns:
+        List of module names (without leading colons).
+
+    """
+    import re
+
+    try:
+        content = settings_file.read_text(encoding="utf-8")
+        modules = re.findall(r"include\s*[(\[]?\s*['\"]([^'\"]+)['\"]", content)
+        return [m.lstrip(":").replace(":", "/") for m in modules]
+    except Exception:
+        return []
+
+
 def _safe_parse_xml(file_path: Path) -> ET.ElementTree:
     """Safely parse an XML file with protections against XXE attacks.
 
@@ -83,16 +122,36 @@ class MavenTestResult:
     returncode: int
 
 
-def detect_build_tool(project_root: Path) -> BuildTool:
+@dataclass
+class GradleTestResult:
+    """Result of running Gradle tests."""
+
+    success: bool
+    tests_run: int
+    failures: int
+    errors: int
+    skipped: int
+    test_results_dir: Path | None
+    stdout: str
+    stderr: str
+    returncode: int
+    coverage_exec_path: Path | None = None
+
+
+def detect_build_tool(project_root: Path | str) -> BuildTool:
     """Detect which build tool a Java project uses.
 
     Args:
-        project_root: Root directory of the Java project.
+        project_root: Root directory of the Java project (Path or string).
 
     Returns:
         The detected BuildTool enum value.
 
     """
+    # Ensure project_root is a Path object
+    if isinstance(project_root, str):
+        project_root = Path(project_root)
+
     # Check for Maven (pom.xml)
     if (project_root / "pom.xml").exists():
         return BuildTool.MAVEN
@@ -305,14 +364,26 @@ def find_maven_executable() -> str | None:
     return None
 
 
-def find_gradle_executable() -> str | None:
+def find_gradle_executable(project_root: Path | None = None) -> str | None:
     """Find the Gradle executable.
+
+    Args:
+        project_root: Optional project root to check for wrapper. If None, checks current directory.
 
     Returns:
         Path to gradle executable, or None if not found.
 
     """
-    # Check for Gradle wrapper first
+    # If project_root provided, check there first
+    if project_root:
+        gradlew = project_root / "gradlew"
+        if gradlew.exists():
+            return str(gradlew.absolute())
+        gradlew_bat = project_root / "gradlew.bat"
+        if gradlew_bat.exists():
+            return str(gradlew_bat.absolute())
+
+    # Check for Gradle wrapper in current directory
     if os.path.exists("gradlew"):
         return "./gradlew"
     if os.path.exists("gradlew.bat"):
@@ -527,6 +598,355 @@ def compile_maven_project(
     try:
         result = subprocess.run(
             cmd, check=False, cwd=project_root, env=run_env, capture_output=True, text=True, timeout=timeout
+        )
+
+        return result.returncode == 0, result.stdout, result.stderr
+
+    except subprocess.TimeoutExpired:
+        return False, "", f"Compilation timed out after {timeout} seconds"
+    except Exception as e:
+        return False, "", str(e)
+
+
+def _detect_module_from_test_classes(project_root: Path, test_patterns: list[str]) -> str | None:
+    """Detect module name from test class patterns.
+
+    For multi-module projects, infer the module from the package structure of test classes.
+
+    Args:
+        project_root: Root directory of the Gradle project.
+        test_patterns: List of test class names or patterns.
+
+    Returns:
+        Module name if detected, None otherwise.
+
+    """
+    settings_file = get_gradle_settings_file(project_root)
+    if not settings_file:
+        return None
+
+    module_names = parse_gradle_modules(settings_file)
+    if not module_names:
+        return None
+
+    # Try to find test classes on disk to determine their module
+    for pattern in test_patterns:
+        class_path = pattern.replace(".", "/")
+
+        for module in module_names:
+            # Check if pattern already contains module path
+            if class_path.startswith(module + "/"):
+                return module
+
+            # Check if test file exists in module
+            test_file = project_root / module / "src" / "test" / "java" / f"{class_path}.java"
+            if test_file.exists():
+                return module
+
+    # Fallback: glob search for test files matching class name
+    for module in module_names:
+        test_dir = project_root / module / "src" / "test" / "java"
+        if not test_dir.exists():
+            continue
+        for pattern in test_patterns:
+            class_name = pattern.split(".")[-1] if "." in pattern else pattern
+            if list(test_dir.rglob(f"*{class_name}*.java")):
+                return module
+
+    return None
+
+
+def run_gradle_tests(
+    project_root: Path,
+    test_classes: list[str] | None = None,
+    test_methods: list[str] | None = None,
+    env: dict[str, str] | None = None,
+    timeout: int = 300,
+    skip_compilation: bool = False,
+    enable_coverage: bool = False,
+    test_module: str | None = None,
+) -> GradleTestResult:
+    """Run Gradle tests.
+
+    Args:
+        project_root: Root directory of the Gradle project.
+        test_classes: Optional list of test class names to run.
+        test_methods: Optional list of specific test methods (format: ClassName.methodName).
+        env: Optional environment variables.
+        timeout: Maximum time in seconds for test execution.
+        skip_compilation: Whether to skip compilation (useful when only running tests).
+        enable_coverage: Whether to enable JaCoCo coverage collection.
+        test_module: For multi-module projects, the module containing tests.
+
+    Returns:
+        GradleTestResult with test execution results.
+
+    """
+    # Detect test module from test class paths if not provided
+    if test_module is None and (test_classes or test_methods):
+        test_module = _detect_module_from_test_classes(project_root, test_classes or test_methods)
+
+    gradle = find_gradle_executable(project_root)
+    if not gradle:
+        logger.error("Gradle not found. Please install Gradle or use Gradle wrapper.")
+        return GradleTestResult(
+            success=False,
+            tests_run=0,
+            failures=0,
+            errors=0,
+            skipped=0,
+            test_results_dir=None,
+            stdout="",
+            stderr="Gradle not found",
+            returncode=-1,
+            coverage_exec_path=None,
+        )
+
+    cmd = [gradle]
+
+    # Build the test task
+    if test_module:
+        # Multi-module project: :module:test
+        test_task = f":{test_module}:test"
+    else:
+        test_task = "test"
+
+    # Add test task
+    cmd.append(test_task)
+
+    # Add specific test filters if provided
+    if test_classes or test_methods:
+        test_patterns = []
+        if test_classes:
+            test_patterns.extend(test_classes)
+        if test_methods:
+            test_patterns.extend(test_methods)
+
+        for pattern in test_patterns:
+            cmd.extend(["--tests", pattern])
+
+    # Skip compilation if requested
+    if skip_compilation:
+        cmd.append("-x")
+        if test_module:
+            cmd.append(f":{test_module}:compileTestJava")
+        else:
+            cmd.append("compileTestJava")
+
+    # Add common flags
+    cmd.extend([
+        "--no-daemon",  # Avoid daemon issues
+        "--console=plain",  # Plain output for parsing
+    ])
+
+    run_env = os.environ.copy()
+    if env:
+        run_env.update(env)
+
+    # Configure JaCoCo coverage collection using Java agent (no build system changes needed)
+    coverage_exec_path = None
+    if enable_coverage:
+        try:
+            # Get JaCoCo agent JAR (downloads automatically if needed)
+            agent_jar = get_jacoco_agent_jar()
+
+            # Determine output path for coverage data
+            if test_module:
+                coverage_exec_path = project_root / test_module / "build" / "jacoco" / "test.exec"
+            else:
+                coverage_exec_path = project_root / "build" / "jacoco" / "test.exec"
+
+            coverage_exec_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Configure JaCoCo agent via JAVA_TOOL_OPTIONS environment variable
+            # This instruments all Java code at runtime without requiring build.gradle changes
+            agent_options = f"destfile={coverage_exec_path.absolute()}"
+            java_tool_options = f"-javaagent:{agent_jar.absolute()}={agent_options}"
+
+            # Add to existing JAVA_TOOL_OPTIONS if present
+            existing_options = run_env.get("JAVA_TOOL_OPTIONS", "")
+            if existing_options:
+                run_env["JAVA_TOOL_OPTIONS"] = f"{existing_options} {java_tool_options}"
+            else:
+                run_env["JAVA_TOOL_OPTIONS"] = java_tool_options
+
+            logger.info(f"JaCoCo agent enabled: {java_tool_options}")
+            logger.info(f"Coverage data will be written to: {coverage_exec_path}")
+
+        except Exception as e:
+            logger.error(f"Failed to configure JaCoCo agent: {e}")
+            logger.warning("Coverage collection will be disabled for this run")
+            coverage_exec_path = None
+
+    try:
+        result = subprocess.run(
+            cmd,
+            check=False,
+            cwd=project_root,
+            env=run_env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+
+        # Determine test results directory
+        if test_module:
+            test_results_dir = project_root / test_module / "build" / "test-results" / "test"
+        else:
+            test_results_dir = project_root / "build" / "test-results" / "test"
+
+        # Parse test results from XML files
+        tests_run, failures, errors, skipped = 0, 0, 0, 0
+        if test_results_dir.exists():
+            tests_run, failures, errors, skipped = _parse_gradle_test_results(test_results_dir)
+
+        success = result.returncode == 0
+
+        return GradleTestResult(
+            success=success,
+            tests_run=tests_run,
+            failures=failures,
+            errors=errors,
+            skipped=skipped,
+            test_results_dir=test_results_dir if test_results_dir.exists() else None,
+            stdout=result.stdout,
+            stderr=result.stderr,
+            returncode=result.returncode,
+            coverage_exec_path=coverage_exec_path if coverage_exec_path and coverage_exec_path.exists() else None,
+        )
+
+    except subprocess.TimeoutExpired:
+        return GradleTestResult(
+            success=False,
+            tests_run=0,
+            failures=0,
+            errors=0,
+            skipped=0,
+            test_results_dir=None,
+            stdout="",
+            stderr=f"Tests timed out after {timeout} seconds",
+            returncode=-1,
+            coverage_exec_path=None,
+        )
+    except Exception as e:
+        logger.exception("Error running Gradle tests")
+        return GradleTestResult(
+            success=False,
+            tests_run=0,
+            failures=0,
+            errors=0,
+            skipped=0,
+            test_results_dir=None,
+            stdout="",
+            stderr=str(e),
+            returncode=-1,
+            coverage_exec_path=None,
+        )
+
+
+def _parse_gradle_test_results(test_results_dir: Path) -> tuple[int, int, int, int]:
+    """Parse Gradle XML test results.
+
+    Gradle uses JUnit XML format (same as Maven Surefire).
+
+    Args:
+        test_results_dir: Directory containing TEST-*.xml files.
+
+    Returns:
+        Tuple of (tests_run, failures, errors, skipped).
+
+    """
+    tests_run = 0
+    failures = 0
+    errors = 0
+    skipped = 0
+
+    # Find all TEST-*.xml files
+    xml_files = list(test_results_dir.glob("TEST-*.xml"))
+
+    for xml_file in xml_files:
+        try:
+            tree = _safe_parse_xml(xml_file)
+            root = tree.getroot()
+
+            # Safely parse numeric attributes
+            try:
+                tests_run += int(root.get("tests", "0"))
+            except (ValueError, TypeError):
+                logger.warning("Invalid 'tests' value in %s, defaulting to 0", xml_file)
+
+            try:
+                failures += int(root.get("failures", "0"))
+            except (ValueError, TypeError):
+                logger.warning("Invalid 'failures' value in %s, defaulting to 0", xml_file)
+
+            try:
+                errors += int(root.get("errors", "0"))
+            except (ValueError, TypeError):
+                logger.warning("Invalid 'errors' value in %s, defaulting to 0", xml_file)
+
+            try:
+                skipped += int(root.get("skipped", "0"))
+            except (ValueError, TypeError):
+                logger.warning("Invalid 'skipped' value in %s, defaulting to 0", xml_file)
+
+        except ET.ParseError as e:
+            logger.warning("Failed to parse Gradle test report %s: %s", xml_file, e)
+        except Exception as e:
+            logger.warning("Unexpected error parsing Gradle test report %s: %s", xml_file, e)
+
+    return tests_run, failures, errors, skipped
+
+
+def compile_with_gradle(
+    project_root: Path,
+    include_tests: bool = True,
+    env: dict[str, str] | None = None,
+    timeout: int = 300,
+) -> tuple[bool, str, str]:
+    """Compile a Gradle project.
+
+    Args:
+        project_root: Root directory of the Gradle project.
+        include_tests: Whether to compile test classes as well.
+        env: Optional environment variables.
+        timeout: Maximum time in seconds for compilation.
+
+    Returns:
+        Tuple of (success, stdout, stderr).
+
+    """
+    gradle = find_gradle_executable(project_root)
+    if not gradle:
+        return False, "", "Gradle not found"
+
+    cmd = [gradle]
+
+    # Add compilation tasks
+    if include_tests:
+        cmd.extend(["compileJava", "compileTestJava"])
+    else:
+        cmd.append("compileJava")
+
+    # Add common flags
+    cmd.extend([
+        "--no-daemon",
+        "--console=plain",
+    ])
+
+    run_env = os.environ.copy()
+    if env:
+        run_env.update(env)
+
+    try:
+        result = subprocess.run(
+            cmd,
+            check=False,
+            cwd=project_root,
+            env=run_env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
         )
 
         return result.returncode == 0, result.stdout, result.stderr
@@ -888,11 +1308,15 @@ def get_jacoco_xml_path(project_root: Path) -> Path:
     return project_root / "target" / "site" / "jacoco" / "jacoco.xml"
 
 
-def find_test_root(project_root: Path) -> Path | None:
+def find_test_root(project_root: Path, source_file_path: Path | None = None) -> Path | None:
     """Find the test root directory for a Java project.
+
+    For multi-module Maven/Gradle projects, if source_file_path is provided and belongs to a module,
+    returns the test directory for that specific module (e.g., server/src/test/java).
 
     Args:
         project_root: Root directory of the Java project.
+        source_file_path: Optional path to the source file being optimized.
 
     Returns:
         Path to test root, or None if not found.
@@ -900,6 +1324,25 @@ def find_test_root(project_root: Path) -> Path | None:
     """
     build_tool = detect_build_tool(project_root)
 
+    # If source_file_path provided, detect module and return module-specific test directory
+    if source_file_path:
+        try:
+            rel_path = source_file_path.relative_to(project_root)
+            parts = rel_path.parts
+
+            # Check if source file is in a module (e.g., server/src/main/java/...)
+            if len(parts) >= 4 and parts[1] == "src" and parts[2] == "main":
+                module_name = parts[0]
+                module_test_root = project_root / module_name / "src" / "test" / "java"
+                if module_test_root.exists() or (project_root / module_name / "src" / "main").exists():
+                    # Return even if it doesn't exist yet - we'll create it
+                    logger.debug(f"Detected module '{module_name}' for source file, using test root: {module_test_root}")
+                    return module_test_root
+        except (ValueError, IndexError):
+            # source_file_path not relative to project_root or unexpected structure
+            pass
+
+    # Standard single-module or fallback behavior
     if build_tool in (BuildTool.MAVEN, BuildTool.GRADLE):
         test_root = project_root / "src" / "test" / "java"
         if test_root.exists():
@@ -995,3 +1438,171 @@ def _get_gradle_classpath(project_root: Path) -> str | None:
     Returns None for now as Gradle support is not fully implemented.
     """
     return None
+
+
+def get_jacoco_agent_jar(codeflash_home: Path | None = None) -> Path:
+    """Get JaCoCo agent JAR, downloading if needed.
+
+    This function downloads the JaCoCo Java agent JAR from Maven Central
+    if it's not already present. The agent is used for runtime bytecode
+    instrumentation to collect code coverage data without requiring
+    build system configuration.
+
+    Args:
+        codeflash_home: Optional CodeFlash home directory. Defaults to ~/.codeflash
+
+    Returns:
+        Path to the JaCoCo agent JAR file.
+
+    """
+    if codeflash_home is None:
+        codeflash_home = Path.home() / ".codeflash"
+
+    agent_dir = codeflash_home / "java_agents"
+    agent_dir.mkdir(parents=True, exist_ok=True)
+
+    agent_jar = agent_dir / "jacocoagent.jar"
+
+    if not agent_jar.exists():
+        # Download JaCoCo agent from Maven Central
+        import urllib.request
+
+        jacoco_version = "0.8.11"
+        url = (
+            f"https://repo1.maven.org/maven2/org/jacoco/org.jacoco.agent/{jacoco_version}/"
+            f"org.jacoco.agent-{jacoco_version}-runtime.jar"
+        )
+
+        logger.info(f"Downloading JaCoCo agent from {url}")
+        logger.info(f"Saving to {agent_jar}")
+
+        try:
+            urllib.request.urlretrieve(url, agent_jar)
+            logger.info(f"Successfully downloaded JaCoCo agent to {agent_jar}")
+        except Exception as e:
+            logger.error(f"Failed to download JaCoCo agent: {e}")
+            raise
+
+    return agent_jar
+
+
+def get_jacoco_cli_jar(codeflash_home: Path | None = None) -> Path:
+    """Get JaCoCo CLI JAR, downloading if needed.
+
+    The CLI is used to convert binary .exec coverage files to XML format.
+
+    Args:
+        codeflash_home: Optional CodeFlash home directory. Defaults to ~/.codeflash
+
+    Returns:
+        Path to the JaCoCo CLI JAR file.
+
+    """
+    if codeflash_home is None:
+        codeflash_home = Path.home() / ".codeflash"
+
+    cli_dir = codeflash_home / "java_agents"
+    cli_dir.mkdir(parents=True, exist_ok=True)
+
+    cli_jar = cli_dir / "jacococli.jar"
+
+    if not cli_jar.exists():
+        # Download JaCoCo CLI from Maven Central
+        import urllib.request
+
+        jacoco_version = "0.8.11"
+        url = (
+            f"https://repo1.maven.org/maven2/org/jacoco/org.jacoco.cli/{jacoco_version}/"
+            f"org.jacoco.cli-{jacoco_version}-nodeps.jar"
+        )
+
+        logger.info(f"Downloading JaCoCo CLI from {url}")
+        logger.info(f"Saving to {cli_jar}")
+
+        try:
+            urllib.request.urlretrieve(url, cli_jar)
+            logger.info(f"Successfully downloaded JaCoCo CLI to {cli_jar}")
+        except Exception as e:
+            logger.error(f"Failed to download JaCoCo CLI: {e}")
+            raise
+
+    return cli_jar
+
+
+def convert_jacoco_exec_to_xml(
+    exec_path: Path,
+    classes_dirs: list[Path],
+    sources_dirs: list[Path],
+    xml_path: Path,
+) -> bool:
+    """Convert JaCoCo .exec binary coverage file to XML format.
+
+    Uses the JaCoCo CLI tool to generate an XML report from the binary
+    execution data file.
+
+    Args:
+        exec_path: Path to the .exec file generated by JaCoCo agent.
+        classes_dirs: List of directories containing compiled .class files.
+        sources_dirs: List of directories containing source .java files.
+        xml_path: Output path for the XML report.
+
+    Returns:
+        True if conversion succeeded, False otherwise.
+
+    """
+    if not exec_path.exists():
+        logger.error(f"JaCoCo .exec file not found: {exec_path}")
+        return False
+
+    # Get JaCoCo CLI
+    try:
+        cli_jar = get_jacoco_cli_jar()
+    except Exception as e:
+        logger.error(f"Failed to get JaCoCo CLI: {e}")
+        return False
+
+    # Build command
+    cmd = [
+        "java",
+        "-jar",
+        str(cli_jar),
+        "report",
+        str(exec_path),
+    ]
+
+    # Add class directories
+    for classes_dir in classes_dirs:
+        if classes_dir.exists():
+            cmd.extend(["--classfiles", str(classes_dir)])
+
+    # Add source directories
+    for sources_dir in sources_dirs:
+        if sources_dir.exists():
+            cmd.extend(["--sourcefiles", str(sources_dir)])
+
+    # Add XML output
+    cmd.extend(["--xml", str(xml_path)])
+
+    logger.info(f"Converting JaCoCo .exec to XML: {' '.join(cmd)}")
+
+    try:
+        result = subprocess.run(
+            cmd,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+
+        if result.returncode == 0:
+            logger.info(f"Successfully converted .exec to XML: {xml_path}")
+            return True
+        logger.error(f"Failed to convert .exec to XML: {result.stderr}")
+        return False
+
+    except subprocess.TimeoutExpired:
+        logger.error("JaCoCo CLI conversion timed out")
+        return False
+    except Exception as e:
+        logger.exception(f"Error converting .exec to XML: {e}")
+        return False

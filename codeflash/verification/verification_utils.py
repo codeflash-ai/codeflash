@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import ast
+import logging
 from pathlib import Path
 from typing import Optional
 
 from pydantic.dataclasses import dataclass
 
 from codeflash.languages import current_language_support, is_java, is_javascript
+
+logger = logging.getLogger(__name__)
 
 
 def get_test_file_path(
@@ -158,6 +161,37 @@ class TestConfig:
         except Exception:
             pass
         return "junit5"  # Default fallback
+
+    @property
+    def java_test_module(self) -> str | None:
+        """Extract Java module name from tests_root for multi-module projects.
+
+        For multi-module Gradle/Maven projects, if tests_root is like "server/src/test/java",
+        this extracts "server" as the module name.
+
+        Returns:
+            Module name if detected, None otherwise.
+
+        """
+        if not is_java():
+            return None
+
+        try:
+            if self.tests_root.is_absolute():
+                rel_path = self.tests_root.relative_to(self.project_root_path)
+            else:
+                rel_path = self.tests_root
+
+            parts = rel_path.parts
+            # Check for module pattern: module/src/test/...
+            if len(parts) >= 3 and parts[1] == "src" and parts[2] == "test":
+                module_name = parts[0]
+                logger.info(f"Detected Java test module from tests_root: {module_name}")
+                return module_name
+        except (ValueError, Exception):
+            pass
+
+        return None
 
     def set_language(self, language: str) -> None:
         """Set the language for this test config.

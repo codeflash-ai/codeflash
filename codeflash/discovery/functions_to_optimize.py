@@ -828,26 +828,46 @@ def filter_functions(
 
     # Test file patterns for when tests_root overlaps with source
     test_file_name_patterns = (".test.", ".spec.", "_test.", "_spec.")
-    test_dir_patterns = (os.sep + "test" + os.sep, os.sep + "tests" + os.sep, os.sep + "__tests__" + os.sep)
+    test_dir_patterns = (
+        os.sep + "test" + os.sep,
+        os.sep + "tests" + os.sep,
+        os.sep + "__tests__" + os.sep,
+        os.sep + "testfixtures" + os.sep,
+    )
 
     def is_test_file(file_path_normalized: str) -> bool:
         """Check if a file is a test file based on patterns."""
         if tests_root_overlaps_source:
-            # Use file pattern matching when tests_root overlaps with source
+            # When tests_root overlaps with source, use pattern-based filtering
             file_lower = file_path_normalized.lower()
-            # Check filename patterns (e.g., .test.ts, .spec.ts)
+
+            # Check filename patterns (e.g., .test.ts, .spec.ts, _test.py)
             if any(pattern in file_lower for pattern in test_file_name_patterns):
                 return True
+
             # Check directory patterns, but only within the project root
             # to avoid false positives from parent directories (e.g., project at /home/user/tests/myproject)
             if project_root_str and file_lower.startswith(project_root_str.lower()):
                 relative_path = file_lower[len(project_root_str) :]
-                return any(pattern in relative_path for pattern in test_dir_patterns)
-            # If we can't compute relative path from project root, don't check directory patterns
-            # This avoids false positives when project is inside a folder named "tests"
+                if any(pattern in relative_path for pattern in test_dir_patterns):
+                    return True
+
             return False
-        # Use directory-based filtering when tests are in a separate directory
-        return file_path_normalized.startswith(tests_root_str + os.sep)
+
+        # When tests_root doesn't overlap with source, use directory-based filtering
+        # Check if file is directly under tests_root
+        if file_path_normalized.startswith(tests_root_str + os.sep):
+            return True
+
+        # Also check for test-related directories (e.g., src/main/test/, src/testFixtures/)
+        # but NOT filename patterns in non-overlapping mode
+        file_lower = file_path_normalized.lower()
+        if project_root_str and file_lower.startswith(project_root_str.lower()):
+            relative_path = file_lower[len(project_root_str) :]
+            if any(pattern in relative_path for pattern in test_dir_patterns):
+                return True
+
+        return False
 
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
     for file_path_path, functions in modified_functions.items():
