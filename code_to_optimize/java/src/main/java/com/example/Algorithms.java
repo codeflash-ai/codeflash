@@ -18,7 +18,26 @@ public class Algorithms {
         if (n <= 1) {
             return n;
         }
-        return fibonacci(n - 1) + fibonacci(n - 2);
+        // Use iterative fast-doubling method to compute F(n) in O(log n) time.
+        long a = 0L; // F(0)
+        long b = 1L; // F(1)
+
+        int highestBit = 31 - Integer.numberOfLeadingZeros(n);
+        for (int i = highestBit; i >= 0; --i) {
+            // c = F(2k) = a * (2*b - a)
+            long c = a * ((b << 1) - a);
+            // d = F(2k+1) = a*a + b*b
+            long d = a * a + b * b;
+
+            if (((n >> i) & 1) == 0) {
+                a = c;
+                b = d;
+            } else {
+                a = d;
+                b = c + d;
+            }
+        }
+        return a;
     }
 
     /**
