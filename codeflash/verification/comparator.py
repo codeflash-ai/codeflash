@@ -94,7 +94,7 @@ def _get_wrapped_exception(exc: BaseException) -> Optional[BaseException]:  # no
     return _extract_exception_from_message(str(exc))
 
 
-def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
+def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
     """Compare two objects for equality recursively. If superset_obj is True, the new object is allowed to have more keys than the original object. However, the existing keys/values must be equivalent."""
     try:
         # Handle exceptions specially - before type check to allow wrapper comparison
