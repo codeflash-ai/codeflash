@@ -308,7 +308,8 @@ class TreeSitterAnalyzer:
         # Check if function is exported
         # For function_declaration: check if parent is export_statement
         # For arrow functions: check if parent variable_declarator's grandparent is export_statement
-        is_exported = self._is_node_exported(node)
+        # For CommonJS: check module.exports = { name } or exports.name = ...
+        is_exported = self._is_node_exported(node, source_bytes)
 
         # Get function name based on node type
         if node.type in ("function_declaration", "generator_function_declaration"):
@@ -362,7 +363,7 @@ class TreeSitterAnalyzer:
             is_exported=is_exported,
         )
 
-    def _is_node_exported(self, node: Node) -> bool:
+    def _is_node_exported(self, node: Node, source_bytes: bytes | None = None) -> bool:
         """Check if a function node is exported.
 
         Handles various export patterns:
@@ -370,9 +371,12 @@ class TreeSitterAnalyzer:
         - export const foo = () => {}
         - export default function foo() {}
         - Class methods in exported classes
+        - module.exports = { foo } (CommonJS)
+        - exports.foo = ... (CommonJS)
 
         Args:
             node: The function node to check.
+            source_bytes: Source code bytes (needed for CommonJS export detection).
 
         Returns:
             True if the function is exported, False otherwise.
@@ -399,11 +403,111 @@ class TreeSitterAnalyzer:
             current = node.parent
             while current:
                 if current.type in ("class_declaration", "class"):
-                    # Check if this class is exported
+                    # Check if this class is exported via ES module export
                     if current.parent and current.parent.type == "export_statement":
                         return True
+                    # Check if class is exported via CommonJS
+                    if source_bytes:
+                        class_name_node = current.child_by_field_name("name")
+                        if class_name_node:
+                            class_name = self.get_node_text(class_name_node, source_bytes)
+                            if self._is_name_in_commonjs_exports(node, class_name, source_bytes):
+                                return True
                     break
                 current = current.parent
+
+        # Check CommonJS exports: module.exports = { foo } or exports.foo = ...
+        if source_bytes:
+            func_name = self._get_function_name_for_export_check(node, source_bytes)
+            if func_name and self._is_name_in_commonjs_exports(node, func_name, source_bytes):
+                return True
+
+        return False
+
+    def _get_function_name_for_export_check(self, node: Node, source_bytes: bytes) -> str | None:
+        """Get the function name for export checking."""
+        if node.type in ("function_declaration", "generator_function_declaration"):
+            name_node = node.child_by_field_name("name")
+            if name_node:
+                return self.get_node_text(name_node, source_bytes)
+        elif node.type in ("arrow_function", "function_expression", "generator_function"):
+            # Get name from variable assignment
+            parent = node.parent
+            if parent and parent.type == "variable_declarator":
+                name_node = parent.child_by_field_name("name")
+                if name_node and name_node.type == "identifier":
+                    return self.get_node_text(name_node, source_bytes)
+        return None
+
+    def _is_name_in_commonjs_exports(self, node: Node, name: str, source_bytes: bytes) -> bool:
+        """Check if a name is exported via CommonJS module.exports or exports.
+
+        Handles patterns like:
+        - module.exports = { foo, bar }
+        - module.exports = { foo: someFunc }
+        - exports.foo = ...
+        - module.exports.foo = ...
+
+        Args:
+            node: Any node in the tree (used to find the program root).
+            name: The name to check for in exports.
+            source_bytes: Source code bytes.
+
+        Returns:
+            True if the name is in CommonJS exports.
+
+        """
+        # Walk up to find program root
+        root = node
+        while root.parent:
+            root = root.parent
+
+        # Search for CommonJS export patterns in program children
+        for child in root.children:
+            if child.type == "expression_statement":
+                # Look for assignment expressions
+                for expr in child.children:
+                    if expr.type == "assignment_expression":
+                        if self._check_commonjs_assignment_exports(expr, name, source_bytes):
+                            return True
+
+        return False
+
+    def _check_commonjs_assignment_exports(self, node: Node, name: str, source_bytes: bytes) -> bool:
+        """Check if a CommonJS assignment exports the given name."""
+        left_node = node.child_by_field_name("left")
+        right_node = node.child_by_field_name("right")
+
+        if not left_node or not right_node:
+            return False
+
+        left_text = self.get_node_text(left_node, source_bytes)
+
+        # Check module.exports = { name, ... } or module.exports = { key: name, ... }
+        if left_text == "module.exports" and right_node.type == "object":
+            for child in right_node.children:
+                if child.type == "shorthand_property_identifier":
+                    # { foo } - shorthand export
+                    if self.get_node_text(child, source_bytes) == name:
+                        return True
+                elif child.type == "pair":
+                    # { key: value } - check both key and value
+                    key_node = child.child_by_field_name("key")
+                    value_node = child.child_by_field_name("value")
+                    if key_node and self.get_node_text(key_node, source_bytes) == name:
+                        return True
+                    if value_node and value_node.type == "identifier":
+                        if self.get_node_text(value_node, source_bytes) == name:
+                            return True
+
+        # Check module.exports = name (single export)
+        if left_text == "module.exports" and right_node.type == "identifier":
+            if self.get_node_text(right_node, source_bytes) == name:
+                return True
+
+        # Check module.exports.name = ... or exports.name = ...
+        if left_text in {f"module.exports.{name}", f"exports.{name}"}:
+            return True
 
         return False
 
