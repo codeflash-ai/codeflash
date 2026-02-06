@@ -1,38 +1,27 @@
 package com.codeflash;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.lang.reflect.Array;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.*;
 
 /**
- * Compares test results between original and optimized code.
+ * Deep object comparison for verifying serialization/deserialization correctness.
  *
- * Used by CodeFlash to verify that optimized code produces the
- * same outputs as the original code for the same inputs.
- *
- * Can be run as a CLI tool:
- * java -jar codeflash-runtime.jar original.db candidate.db
+ * This comparator is used to verify that objects survive the serialize-deserialize
+ * cycle correctly. It handles:
+ * - Primitives and wrappers with epsilon tolerance for floats
+ * - Collections, Maps, and Arrays
+ * - Custom objects via reflection
+ * - NaN and Infinity special cases
+ * - Exception comparison
+ * - Placeholder rejection
  */
 public final class Comparator {
 
-    private static final Gson GSON = new GsonBuilder()
-            .serializeNulls()
-            .setPrettyPrinting()
-            .create();
-
-    // Tolerance for floating point comparison
     private static final double EPSILON = 1e-9;
 
     private Comparator() {
@@ -40,346 +29,481 @@ public final class Comparator {
     }
 
     /**
-     * Main entry point for CLI usage.
+     * Compare two objects for deep equality.
      *
-     * @param args [originalDb, candidateDb]
+     * @param orig   The original object
+     * @param newObj The object to compare against
+     * @return true if objects are equivalent
+     * @throws KryoPlaceholderAccessException if comparison involves a placeholder
      */
-    public static void main(String[] args) {
-        if (args.length != 2) {
-            System.err.println("Usage: java -jar codeflash-runtime.jar <original.db> <candidate.db>");
-            System.exit(1);
-        }
-
-        try {
-            ComparisonResult result = compare(args[0], args[1]);
-            System.out.println(GSON.toJson(result));
-            System.exit(result.isEquivalent() ? 0 : 1);
-        } catch (Exception e) {
-            JsonObject error = new JsonObject();
-            error.addProperty("error", e.getMessage());
-            System.out.println(GSON.toJson(error));
-            System.exit(2);
-        }
+    public static boolean compare(Object orig, Object newObj) {
+        return compareInternal(orig, newObj, new IdentityHashMap<>());
     }
 
     /**
-     * Compare two result databases.
+     * Compare two objects, returning a detailed result.
      *
-     * @param originalDbPath Path to original results database
-     * @param candidateDbPath Path to candidate results database
-     * @return Comparison result with list of differences
+     * @param orig   The original object
+     * @param newObj The object to compare against
+     * @return ComparisonResult with details about the comparison
      */
-    public static ComparisonResult compare(String originalDbPath, String candidateDbPath) throws SQLException {
-        List<Diff> diffs = new ArrayList<>();
-
-        try (Connection originalConn = DriverManager.getConnection("jdbc:sqlite:" + originalDbPath);
-             Connection candidateConn = DriverManager.getConnection("jdbc:sqlite:" + candidateDbPath)) {
-
-            // Get all invocations from original
-            List<Invocation> originalInvocations = getInvocations(originalConn);
-            List<Invocation> candidateInvocations = getInvocations(candidateConn);
-
-            // Create lookup map for candidate invocations
-            java.util.Map<Long, Invocation> candidateMap = new java.util.HashMap<>();
-            for (Invocation inv : candidateInvocations) {
-                candidateMap.put(inv.callId, inv);
-            }
-
-            // Compare each original invocation with candidate
-            for (Invocation original : originalInvocations) {
-                Invocation candidate = candidateMap.get(original.callId);
-
-                if (candidate == null) {
-                    diffs.add(new Diff(
-                        original.callId,
-                        original.methodId,
-                        DiffType.MISSING_IN_CANDIDATE,
-                        "Invocation not found in candidate",
-                        original.resultJson,
-                        null
-                    ));
-                    continue;
-                }
-
-                // Compare results
-                if (!compareJsonValues(original.resultJson, candidate.resultJson)) {
-                    diffs.add(new Diff(
-                        original.callId,
-                        original.methodId,
-                        DiffType.RETURN_VALUE,
-                        "Return values differ",
-                        original.resultJson,
-                        candidate.resultJson
-                    ));
-                }
-
-                // Compare errors
-                boolean originalHasError = original.errorJson != null && !original.errorJson.isEmpty();
-                boolean candidateHasError = candidate.errorJson != null && !candidate.errorJson.isEmpty();
-
-                if (originalHasError != candidateHasError) {
-                    diffs.add(new Diff(
-                        original.callId,
-                        original.methodId,
-                        DiffType.EXCEPTION,
-                        originalHasError ? "Original threw exception, candidate did not" :
-                                          "Candidate threw exception, original did not",
-                        original.errorJson,
-                        candidate.errorJson
-                    ));
-                } else if (originalHasError && !compareExceptions(original.errorJson, candidate.errorJson)) {
-                    diffs.add(new Diff(
-                        original.callId,
-                        original.methodId,
-                        DiffType.EXCEPTION,
-                        "Exception details differ",
-                        original.errorJson,
-                        candidate.errorJson
-                    ));
-                }
-
-                // Remove from map to track extra invocations
-                candidateMap.remove(original.callId);
-            }
-
-            // Check for extra invocations in candidate
-            for (Invocation extra : candidateMap.values()) {
-                diffs.add(new Diff(
-                    extra.callId,
-                    extra.methodId,
-                    DiffType.EXTRA_IN_CANDIDATE,
-                    "Extra invocation in candidate",
-                    null,
-                    extra.resultJson
-                ));
-            }
-        }
-
-        return new ComparisonResult(diffs.isEmpty(), diffs);
-    }
-
-    private static List<Invocation> getInvocations(Connection conn) throws SQLException {
-        List<Invocation> invocations = new ArrayList<>();
-        String sql = "SELECT test_class_name, function_getting_tested, loop_index, iteration_id, return_value " +
-                     "FROM test_results ORDER BY loop_index, iteration_id";
-
-        try (PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
-
-            while (rs.next()) {
-                String testClassName = rs.getString("test_class_name");
-                String functionName = rs.getString("function_getting_tested");
-                int loopIndex = rs.getInt("loop_index");
-                String iterationId = rs.getString("iteration_id");
-                String returnValue = rs.getString("return_value");
-
-                // Create unique call_id from loop_index and iteration_id
-                // Parse iteration_id which is in format "iter_testIteration" (e.g., "1_0")
-                long callId = (loopIndex * 10000L) + parseIterationId(iterationId);
-
-                // Construct method_id as "ClassName.methodName"
-                String methodId = testClassName + "." + functionName;
-
-                invocations.add(new Invocation(
-                    callId,
-                    methodId,
-                    null,  // args_json not captured in test_results schema
-                    returnValue,  // return_value maps to resultJson
-                    null   // error_json not captured in test_results schema
-                ));
-            }
-        }
-
-        return invocations;
-    }
-
-    /**
-     * Parse iteration_id string to extract the numeric iteration number.
-     * Format: "iter_testIteration" (e.g., "1_0" → 1)
-     */
-    private static long parseIterationId(String iterationId) {
-        if (iterationId == null || iterationId.isEmpty()) {
-            return 0;
-        }
+    public static ComparisonResult compareWithDetails(Object orig, Object newObj) {
         try {
-            // Split by underscore and take the first part
-            String[] parts = iterationId.split("_");
-            return Long.parseLong(parts[0]);
-        } catch (Exception e) {
-            // If parsing fails, try to parse the whole string
-            try {
-                return Long.parseLong(iterationId);
-            } catch (Exception ex) {
-                return 0;
+            boolean equal = compareInternal(orig, newObj, new IdentityHashMap<>());
+            return new ComparisonResult(equal, null);
+        } catch (KryoPlaceholderAccessException e) {
+            return new ComparisonResult(false, e.getMessage());
+        }
+    }
+
+    private static boolean compareInternal(Object orig, Object newObj,
+                                           IdentityHashMap<Object, Object> seen) {
+        // Handle nulls
+        if (orig == null && newObj == null) {
+            return true;
+        }
+        if (orig == null || newObj == null) {
+            return false;
+        }
+
+        // Detect and reject KryoPlaceholder
+        if (orig instanceof KryoPlaceholder) {
+            KryoPlaceholder p = (KryoPlaceholder) orig;
+            throw new KryoPlaceholderAccessException(
+                "Cannot compare: original contains placeholder for unserializable object",
+                p.getObjType(), p.getPath());
+        }
+        if (newObj instanceof KryoPlaceholder) {
+            KryoPlaceholder p = (KryoPlaceholder) newObj;
+            throw new KryoPlaceholderAccessException(
+                "Cannot compare: new object contains placeholder for unserializable object",
+                p.getObjType(), p.getPath());
+        }
+
+        // Handle exceptions specially
+        if (orig instanceof Throwable && newObj instanceof Throwable) {
+            return compareExceptions((Throwable) orig, (Throwable) newObj);
+        }
+
+        Class<?> origClass = orig.getClass();
+        Class<?> newClass = newObj.getClass();
+
+        // Check type compatibility
+        if (!origClass.equals(newClass)) {
+            if (!areTypesCompatible(origClass, newClass)) {
+                return false;
             }
+        }
+
+        // Handle primitives and wrappers
+        if (orig instanceof Boolean) {
+            return orig.equals(newObj);
+        }
+        if (orig instanceof Character) {
+            return orig.equals(newObj);
+        }
+        if (orig instanceof String) {
+            return orig.equals(newObj);
+        }
+        if (orig instanceof Number) {
+            return compareNumbers((Number) orig, (Number) newObj);
+        }
+
+        // Handle enums
+        if (origClass.isEnum()) {
+            return orig.equals(newObj);
+        }
+
+        // Handle Class objects
+        if (orig instanceof Class) {
+            return orig.equals(newObj);
+        }
+
+        // Handle date/time types
+        if (orig instanceof Date || orig instanceof LocalDateTime ||
+            orig instanceof LocalDate || orig instanceof LocalTime) {
+            return orig.equals(newObj);
+        }
+
+        // Handle Optional
+        if (orig instanceof Optional && newObj instanceof Optional) {
+            return compareOptionals((Optional<?>) orig, (Optional<?>) newObj, seen);
+        }
+
+        // Check for circular reference to prevent infinite recursion
+        if (seen.containsKey(orig)) {
+            // If we've seen this object before, just check identity
+            return seen.get(orig) == newObj;
+        }
+        seen.put(orig, newObj);
+
+        try {
+            // Handle arrays
+            if (origClass.isArray()) {
+                return compareArrays(orig, newObj, seen);
+            }
+
+            // Handle collections
+            if (orig instanceof Collection && newObj instanceof Collection) {
+                return compareCollections((Collection<?>) orig, (Collection<?>) newObj, seen);
+            }
+
+            // Handle maps
+            if (orig instanceof Map && newObj instanceof Map) {
+                return compareMaps((Map<?, ?>) orig, (Map<?, ?>) newObj, seen);
+            }
+
+            // Handle general objects via reflection
+            return compareObjects(orig, newObj, seen);
+
+        } finally {
+            seen.remove(orig);
         }
     }
 
     /**
-     * Compare two JSON values for equivalence.
+     * Check if two types are compatible for comparison.
      */
-    private static boolean compareJsonValues(String json1, String json2) {
-        if (json1 == null && json2 == null) return true;
-        if (json1 == null || json2 == null) return false;
-        if (json1.equals(json2)) return true;
-
-        try {
-            JsonElement elem1 = JsonParser.parseString(json1);
-            JsonElement elem2 = JsonParser.parseString(json2);
-            return compareJsonElements(elem1, elem2);
-        } catch (Exception e) {
-            // If parsing fails, fall back to string comparison
-            return json1.equals(json2);
+    private static boolean areTypesCompatible(Class<?> type1, Class<?> type2) {
+        // Allow comparing different Collection implementations
+        if (Collection.class.isAssignableFrom(type1) && Collection.class.isAssignableFrom(type2)) {
+            return true;
         }
-    }
-
-    private static boolean compareJsonElements(JsonElement elem1, JsonElement elem2) {
-        if (elem1 == null && elem2 == null) return true;
-        if (elem1 == null || elem2 == null) return false;
-        if (elem1.isJsonNull() && elem2.isJsonNull()) return true;
-
-        // Compare primitives
-        if (elem1.isJsonPrimitive() && elem2.isJsonPrimitive()) {
-            return comparePrimitives(elem1.getAsJsonPrimitive(), elem2.getAsJsonPrimitive());
+        // Allow comparing different Map implementations
+        if (Map.class.isAssignableFrom(type1) && Map.class.isAssignableFrom(type2)) {
+            return true;
         }
-
-        // Compare arrays
-        if (elem1.isJsonArray() && elem2.isJsonArray()) {
-            return compareArrays(elem1.getAsJsonArray(), elem2.getAsJsonArray());
+        // Allow comparing different Number types
+        if (Number.class.isAssignableFrom(type1) && Number.class.isAssignableFrom(type2)) {
+            return true;
         }
-
-        // Compare objects
-        if (elem1.isJsonObject() && elem2.isJsonObject()) {
-            return compareObjects(elem1.getAsJsonObject(), elem2.getAsJsonObject());
-        }
-
         return false;
     }
 
-    private static boolean comparePrimitives(com.google.gson.JsonPrimitive p1, com.google.gson.JsonPrimitive p2) {
-        // Handle numeric comparison with epsilon
-        if (p1.isNumber() && p2.isNumber()) {
-            double d1 = p1.getAsDouble();
-            double d2 = p2.getAsDouble();
+    /**
+     * Compare two numbers with epsilon tolerance for floating point.
+     */
+    private static boolean compareNumbers(Number n1, Number n2) {
+        // Handle BigDecimal - exact comparison using compareTo
+        if (n1 instanceof java.math.BigDecimal && n2 instanceof java.math.BigDecimal) {
+            return ((java.math.BigDecimal) n1).compareTo((java.math.BigDecimal) n2) == 0;
+        }
+
+        // Handle BigInteger - exact comparison using equals
+        if (n1 instanceof java.math.BigInteger && n2 instanceof java.math.BigInteger) {
+            return n1.equals(n2);
+        }
+
+        // Handle BigDecimal vs other number types
+        if (n1 instanceof java.math.BigDecimal || n2 instanceof java.math.BigDecimal) {
+            java.math.BigDecimal bd1 = toBigDecimal(n1);
+            java.math.BigDecimal bd2 = toBigDecimal(n2);
+            return bd1.compareTo(bd2) == 0;
+        }
+
+        // Handle BigInteger vs other number types
+        if (n1 instanceof java.math.BigInteger || n2 instanceof java.math.BigInteger) {
+            java.math.BigInteger bi1 = toBigInteger(n1);
+            java.math.BigInteger bi2 = toBigInteger(n2);
+            return bi1.equals(bi2);
+        }
+
+        // Handle floating point with epsilon
+        if (n1 instanceof Double || n1 instanceof Float ||
+            n2 instanceof Double || n2 instanceof Float) {
+
+            double d1 = n1.doubleValue();
+            double d2 = n2.doubleValue();
+
             // Handle NaN
-            if (Double.isNaN(d1) && Double.isNaN(d2)) return true;
-            // Handle infinity
+            if (Double.isNaN(d1) && Double.isNaN(d2)) {
+                return true;
+            }
+            if (Double.isNaN(d1) || Double.isNaN(d2)) {
+                return false;
+            }
+
+            // Handle Infinity
             if (Double.isInfinite(d1) && Double.isInfinite(d2)) {
-                return (d1 > 0) == (d2 > 0);
+                return (d1 > 0) == (d2 > 0); // Same sign
             }
-            // Compare with epsilon
-            return Math.abs(d1 - d2) < EPSILON;
+            if (Double.isInfinite(d1) || Double.isInfinite(d2)) {
+                return false;
+            }
+
+            // Compare with relative and absolute epsilon
+            double diff = Math.abs(d1 - d2);
+            if (diff < EPSILON) {
+                return true;  // Absolute tolerance
+            }
+            // Relative tolerance for large numbers
+            double maxAbs = Math.max(Math.abs(d1), Math.abs(d2));
+            return diff <= EPSILON * maxAbs;
         }
 
-        return Objects.equals(p1, p2);
+        // Integer types - exact comparison
+        return n1.longValue() == n2.longValue();
     }
 
-    private static boolean compareArrays(JsonArray arr1, JsonArray arr2) {
-        if (arr1.size() != arr2.size()) return false;
+    /**
+     * Convert a Number to BigDecimal.
+     */
+    private static java.math.BigDecimal toBigDecimal(Number n) {
+        if (n instanceof java.math.BigDecimal) {
+            return (java.math.BigDecimal) n;
+        }
+        if (n instanceof java.math.BigInteger) {
+            return new java.math.BigDecimal((java.math.BigInteger) n);
+        }
+        if (n instanceof Double || n instanceof Float) {
+            return java.math.BigDecimal.valueOf(n.doubleValue());
+        }
+        return java.math.BigDecimal.valueOf(n.longValue());
+    }
 
-        for (int i = 0; i < arr1.size(); i++) {
-            if (!compareJsonElements(arr1.get(i), arr2.get(i))) {
+    /**
+     * Convert a Number to BigInteger.
+     */
+    private static java.math.BigInteger toBigInteger(Number n) {
+        if (n instanceof java.math.BigInteger) {
+            return (java.math.BigInteger) n;
+        }
+        if (n instanceof java.math.BigDecimal) {
+            return ((java.math.BigDecimal) n).toBigInteger();
+        }
+        return java.math.BigInteger.valueOf(n.longValue());
+    }
+
+    /**
+     * Compare two exceptions.
+     */
+    private static boolean compareExceptions(Throwable orig, Throwable newEx) {
+        // Must be same type
+        if (!orig.getClass().equals(newEx.getClass())) {
+            return false;
+        }
+        // Compare message (both may be null)
+        return Objects.equals(orig.getMessage(), newEx.getMessage());
+    }
+
+    /**
+     * Compare two Optional values.
+     */
+    private static boolean compareOptionals(Optional<?> orig, Optional<?> newOpt,
+                                            IdentityHashMap<Object, Object> seen) {
+        if (orig.isPresent() != newOpt.isPresent()) {
+            return false;
+        }
+        if (!orig.isPresent()) {
+            return true; // Both empty
+        }
+        return compareInternal(orig.get(), newOpt.get(), seen);
+    }
+
+    /**
+     * Compare two arrays.
+     */
+    private static boolean compareArrays(Object orig, Object newObj,
+                                         IdentityHashMap<Object, Object> seen) {
+        int length1 = Array.getLength(orig);
+        int length2 = Array.getLength(newObj);
+
+        if (length1 != length2) {
+            return false;
+        }
+
+        for (int i = 0; i < length1; i++) {
+            Object elem1 = Array.get(orig, i);
+            Object elem2 = Array.get(newObj, i);
+            if (!compareInternal(elem1, elem2, seen)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Compare two collections.
+     */
+    private static boolean compareCollections(Collection<?> orig, Collection<?> newColl,
+                                              IdentityHashMap<Object, Object> seen) {
+        if (orig.size() != newColl.size()) {
+            return false;
+        }
+
+        // For Sets, compare element-by-element (order doesn't matter)
+        if (orig instanceof Set && newColl instanceof Set) {
+            return compareSets((Set<?>) orig, (Set<?>) newColl, seen);
+        }
+
+        // For ordered collections (List, etc.), compare in order
+        Iterator<?> iter1 = orig.iterator();
+        Iterator<?> iter2 = newColl.iterator();
+
+        while (iter1.hasNext() && iter2.hasNext()) {
+            if (!compareInternal(iter1.next(), iter2.next(), seen)) {
+                return false;
+            }
+        }
+
+        return !iter1.hasNext() && !iter2.hasNext();
+    }
+
+    /**
+     * Compare two sets (order-independent).
+     */
+    private static boolean compareSets(Set<?> orig, Set<?> newSet,
+                                       IdentityHashMap<Object, Object> seen) {
+        if (orig.size() != newSet.size()) {
+            return false;
+        }
+
+        // For each element in orig, find a matching element in newSet
+        for (Object elem1 : orig) {
+            boolean found = false;
+            for (Object elem2 : newSet) {
+                try {
+                    if (compareInternal(elem1, elem2, new IdentityHashMap<>(seen))) {
+                        found = true;
+                        break;
+                    }
+                } catch (KryoPlaceholderAccessException e) {
+                    // Propagate placeholder exceptions
+                    throw e;
+                }
+            }
+            if (!found) {
                 return false;
             }
         }
         return true;
     }
 
-    private static boolean compareObjects(JsonObject obj1, JsonObject obj2) {
-        // Skip type metadata for comparison
-        java.util.Set<String> keys1 = new java.util.HashSet<>(obj1.keySet());
-        java.util.Set<String> keys2 = new java.util.HashSet<>(obj2.keySet());
-        keys1.remove("__type__");
-        keys2.remove("__type__");
+    /**
+     * Compare two maps.
+     * Uses deep comparison for keys instead of relying on equals()/hashCode().
+     */
+    private static boolean compareMaps(Map<?, ?> orig, Map<?, ?> newMap,
+                                       IdentityHashMap<Object, Object> seen) {
+        if (orig.size() != newMap.size()) {
+            return false;
+        }
 
-        if (!keys1.equals(keys2)) return false;
+        // For each entry in orig, find a matching entry in newMap using deep comparison
+        for (Map.Entry<?, ?> entry1 : orig.entrySet()) {
+            Object key1 = entry1.getKey();
+            Object value1 = entry1.getValue();
 
-        for (String key : keys1) {
-            if (!compareJsonElements(obj1.get(key), obj2.get(key))) {
+            boolean foundMatch = false;
+
+            // Search for matching key in newMap using deep comparison
+            for (Map.Entry<?, ?> entry2 : newMap.entrySet()) {
+                Object key2 = entry2.getKey();
+
+                // Use deep comparison for keys
+                try {
+                    if (compareInternal(key1, key2, new IdentityHashMap<>(seen))) {
+                        // Found matching key - now compare values
+                        Object value2 = entry2.getValue();
+                        if (!compareInternal(value1, value2, seen)) {
+                            return false;
+                        }
+                        foundMatch = true;
+                        break;
+                    }
+                } catch (KryoPlaceholderAccessException e) {
+                    // Propagate placeholder exceptions
+                    throw e;
+                }
+            }
+
+            if (!foundMatch) {
                 return false;
             }
         }
+
         return true;
     }
 
-    private static boolean compareExceptions(String error1, String error2) {
+    /**
+     * Compare two objects via reflection.
+     */
+    private static boolean compareObjects(Object orig, Object newObj,
+                                          IdentityHashMap<Object, Object> seen) {
+        Class<?> clazz = orig.getClass();
+
+        // If class has a custom equals method, use it
         try {
-            JsonObject e1 = JsonParser.parseString(error1).getAsJsonObject();
-            JsonObject e2 = JsonParser.parseString(error2).getAsJsonObject();
-
-            // Compare exception type and message
-            String type1 = e1.has("type") ? e1.get("type").getAsString() : "";
-            String type2 = e2.has("type") ? e2.get("type").getAsString() : "";
-
-            // Types must match
-            return type1.equals(type2);
+            if (hasCustomEquals(clazz)) {
+                return orig.equals(newObj);
+            }
         } catch (Exception e) {
-            return error1.equals(error2);
+            // Fall through to field comparison
+        }
+
+        // Compare all fields via reflection
+        Class<?> currentClass = clazz;
+        while (currentClass != null && currentClass != Object.class) {
+            for (Field field : currentClass.getDeclaredFields()) {
+                if (Modifier.isStatic(field.getModifiers()) ||
+                    Modifier.isTransient(field.getModifiers())) {
+                    continue;
+                }
+
+                try {
+                    field.setAccessible(true);
+                    Object value1 = field.get(orig);
+                    Object value2 = field.get(newObj);
+
+                    if (!compareInternal(value1, value2, seen)) {
+                        return false;
+                    }
+                } catch (IllegalAccessException e) {
+                    // Can't access field - assume not equal
+                    return false;
+                }
+            }
+            currentClass = currentClass.getSuperclass();
+        }
+
+        return true;
+    }
+
+    /**
+     * Check if a class has a custom equals method (not from Object).
+     */
+    private static boolean hasCustomEquals(Class<?> clazz) {
+        try {
+            java.lang.reflect.Method equalsMethod = clazz.getMethod("equals", Object.class);
+            return equalsMethod.getDeclaringClass() != Object.class;
+        } catch (NoSuchMethodException e) {
+            return false;
         }
     }
 
-    // Data classes
-
-    private static class Invocation {
-        final long callId;
-        final String methodId;
-        final String argsJson;
-        final String resultJson;
-        final String errorJson;
-
-        Invocation(long callId, String methodId, String argsJson, String resultJson, String errorJson) {
-            this.callId = callId;
-            this.methodId = methodId;
-            this.argsJson = argsJson;
-            this.resultJson = resultJson;
-            this.errorJson = errorJson;
-        }
-    }
-
-    public enum DiffType {
-        RETURN_VALUE,
-        EXCEPTION,
-        MISSING_IN_CANDIDATE,
-        EXTRA_IN_CANDIDATE
-    }
-
-    public static class Diff {
-        private final long callId;
-        private final String methodId;
-        private final DiffType type;
-        private final String message;
-        private final String originalValue;
-        private final String candidateValue;
-
-        public Diff(long callId, String methodId, DiffType type, String message,
-                   String originalValue, String candidateValue) {
-            this.callId = callId;
-            this.methodId = methodId;
-            this.type = type;
-            this.message = message;
-            this.originalValue = originalValue;
-            this.candidateValue = candidateValue;
-        }
-
-        // Getters
-        public long getCallId() { return callId; }
-        public String getMethodId() { return methodId; }
-        public DiffType getType() { return type; }
-        public String getMessage() { return message; }
-        public String getOriginalValue() { return originalValue; }
-        public String getCandidateValue() { return candidateValue; }
-    }
-
+    /**
+     * Result of a comparison with optional error details.
+     */
     public static class ComparisonResult {
-        private final boolean equivalent;
-        private final List<Diff> diffs;
+        private final boolean equal;
+        private final String errorMessage;
 
-        public ComparisonResult(boolean equivalent, List<Diff> diffs) {
-            this.equivalent = equivalent;
-            this.diffs = diffs;
+        public ComparisonResult(boolean equal, String errorMessage) {
+            this.equal = equal;
+            this.errorMessage = errorMessage;
         }
 
-        public boolean isEquivalent() { return equivalent; }
-        public List<Diff> getDiffs() { return diffs; }
+        public boolean isEqual() {
+            return equal;
+        }
+
+        public String getErrorMessage() {
+            return errorMessage;
+        }
+
+        public boolean hasError() {
+            return errorMessage != null;
+        }
     }
 }

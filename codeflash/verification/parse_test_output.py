@@ -171,7 +171,7 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
                 return potential_path
 
         # 3. Search for the file in base_dir and its subdirectories
-        file_name = test_class_path.split(".")[-1] + ".java"
+        file_name = test_class_path.rsplit(".", maxsplit=1)[-1] + ".java"
         for java_file in base_dir.rglob(file_name):
             return java_file
 

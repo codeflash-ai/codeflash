@@ -88,8 +88,8 @@ public final class CodeFlash {
      */
     public static void captureInput(String methodId, Object... args) {
         long callId = callIdCounter.incrementAndGet();
-        String argsJson = Serializer.toJson(args);
-        getWriter().recordInput(callId, methodId, argsJson, System.nanoTime());
+        byte[] argsBytes = Serializer.serialize(args);
+        getWriter().recordInput(callId, methodId, argsBytes, System.nanoTime());
     }
 
     /**
@@ -102,8 +102,8 @@ public final class CodeFlash {
      */
     public static <T> T captureOutput(String methodId, T result) {
         long callId = callIdCounter.get(); // Use same callId as input
-        String resultJson = Serializer.toJson(result);
-        getWriter().recordOutput(callId, methodId, resultJson, System.nanoTime());
+        byte[] resultBytes = Serializer.serialize(result);
+        getWriter().recordOutput(callId, methodId, resultBytes, System.nanoTime());
         return result;
     }
 
@@ -115,8 +115,8 @@ public final class CodeFlash {
      */
     public static void captureException(String methodId, Throwable error) {
         long callId = callIdCounter.get();
-        String errorJson = Serializer.exceptionToJson(error);
-        getWriter().recordError(callId, methodId, errorJson, System.nanoTime());
+        byte[] errorBytes = Serializer.serializeException(error);
+        getWriter().recordError(callId, methodId, errorBytes, System.nanoTime());
     }
 
     /**
