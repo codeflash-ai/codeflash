@@ -18,7 +18,30 @@ public class Algorithms {
         if (n <= 1) {
             return n;
         }
-        return fibonacci(n - 1) + fibonacci(n - 2);
+        // Fast-doubling iterative approach:
+        // Maintain (a, b) = (F(k), F(k+1)) and process bits of n from MSB to LSB.
+        long a = 0L; // F(0)
+        long b = 1L; // F(1)
+
+        int highestBit = 31 - Integer.numberOfLeadingZeros(n); // position of highest set bit
+        int mask = 1 << highestBit;
+        for (; mask != 0; mask >>>= 1) {
+            // Loop invariant: (a, b) = (F(k), F(k+1)) for current k
+            long twoBminusA = (b << 1) - a; // 2*b - a
+            long c = a * twoBminusA;        // F(2k) = F(k) * (2*F(k+1) − F(k))
+            long d = a * a + b * b;         // F(2k+1) = F(k)^2 + F(k+1)^2
+
+            if ((n & mask) == 0) {
+                // bit is 0 -> (F(2k), F(2k+1))
+                a = c;
+                b = d;
+            } else {
+                // bit is 1 -> (F(2k+1), F(2k+2)) = (d, c + d)
+                a = d;
+                b = c + d;
+            }
+        }
+        return a;
     }
 
     /**
