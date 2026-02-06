@@ -902,10 +902,7 @@ def validate_and_fix_import_style(test_code: str, source_file_path: Path, functi
 
 
 def fix_import_path_for_test_location(
-    test_code: str,
-    source_file_path: Path,
-    test_file_path: Path,
-    module_root: Path,
+    test_code: str, source_file_path: Path, test_file_path: Path, module_root: Path
 ) -> str:
     """Fix import paths in generated test code to be relative to test file location.
 
@@ -974,12 +971,14 @@ def fix_import_path_for_test_location(
     # ESM: import { func } from 'path' or import func from 'path'
     esm_import_pattern = re.compile(r"(import\s+(?:{[^}]+}|\w+)\s+from\s+['\"])([^'\"]+)(['\"])")
     # CommonJS: const { func } = require('path') or const func = require('path')
-    cjs_require_pattern = re.compile(r"((?:const|let|var)\s+(?:{[^}]+}|\w+)\s*=\s*require\s*\(\s*['\"])([^'\"]+)(['\"])")
+    cjs_require_pattern = re.compile(
+        r"((?:const|let|var)\s+(?:{[^}]+}|\w+)\s*=\s*require\s*\(\s*['\"])([^'\"]+)(['\"])"
+    )
 
     def should_fix_path(import_path: str) -> bool:
         """Check if this import path looks like it should point to our source file."""
         # Skip relative imports that already look correct
-        if import_path.startswith("./") or import_path.startswith("../"):
+        if import_path.startswith(("./", "../")):
             return False
         # Skip package imports (no path separators or start with @)
         if "/" not in import_path and "\\" not in import_path:
@@ -992,11 +991,11 @@ def fix_import_path_for_test_location(
             return True
         if source_rel_to_project and import_path == source_rel_to_project:
             return True
-        if import_path.endswith(source_name) or import_path.endswith("/" + source_name):
+        if import_path.endswith((source_name, "/" + source_name)):
             return True
         return False
 
-    def fix_import(match: re.Match) -> str:
+    def fix_import(match: re.Match[str]) -> str:
         """Replace incorrect import path with correct relative path."""
         prefix = match.group(1)
         import_path = match.group(2)
@@ -1008,9 +1007,7 @@ def fix_import_path_for_test_location(
         return match.group(0)
 
     test_code = esm_import_pattern.sub(fix_import, test_code)
-    test_code = cjs_require_pattern.sub(fix_import, test_code)
-
-    return test_code
+    return cjs_require_pattern.sub(fix_import, test_code)
 
 
 def get_instrumented_test_path(original_path: Path, mode: str) -> Path:
