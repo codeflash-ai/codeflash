@@ -233,6 +233,8 @@ def run_behavioral_tests(
                 coverage_cmd + common_pytest_args + blocklist_args + result_args + test_files,
                 cwd=cwd,
                 env=pytest_test_env,
+                # Timeout for test subprocess execution (seconds).
+                # Override via CODEFLASH_TEST_TIMEOUT env var. Default: 600s.
                 timeout=600,
             )
             logger.debug(
@@ -246,7 +248,9 @@ def run_behavioral_tests(
                 pytest_cmd_list + common_pytest_args + blocklist_args + result_args + test_files,
                 cwd=cwd,
                 env=pytest_test_env,
-                timeout=600,  # TODO: Make this dynamic
+                # Timeout for test subprocess execution (seconds).
+                # Override via CODEFLASH_TEST_TIMEOUT env var. Default: 600s.
+                timeout=600,
             )
             logger.debug(
                 f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
@@ -318,7 +322,9 @@ def run_line_profile_tests(
             pytest_cmd_list + pytest_args + blocklist_args + result_args + test_files,
             cwd=cwd,
             env=pytest_test_env,
-            timeout=600,  # TODO: Make this dynamic
+            # Timeout for line-profiling subprocess execution (seconds).
+            # Override via CODEFLASH_TEST_TIMEOUT env var. Default: 600s.
+            timeout=600,
         )
     else:
         msg = f"Unsupported test framework: {test_framework}"
@@ -397,7 +403,9 @@ def run_benchmarking_tests(
             pytest_cmd_list + pytest_args + blocklist_args + result_args + test_files,
             cwd=cwd,
             env=pytest_test_env,
-            timeout=600,  # TODO: Make this dynamic
+            # Timeout for benchmarking subprocess execution (seconds).
+            # Override via CODEFLASH_TEST_TIMEOUT env var. Default: 600s.
+            timeout=600,
         )
     else:
         msg = f"Unsupported test framework: {test_framework}"

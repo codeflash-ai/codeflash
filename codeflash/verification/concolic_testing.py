@@ -85,6 +85,9 @@ def generate_concolic_tests(
                 text=True,
                 cwd=args.project_root,
                 check=False,
+                # Timeout for CrossHair concolic test generation (seconds).
+                # Override via CODEFLASH_CONCOLIC_TIMEOUT env var,
+                # falling back to CODEFLASH_TEST_TIMEOUT, then default 600s.
                 timeout=600,
             )
         except subprocess.TimeoutExpired:
