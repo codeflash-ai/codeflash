@@ -315,7 +315,7 @@ class CandidateProcessor:
                 self.future_all_code_repair,
                 "Repairing {0} candidates",
                 "Added {0} candidates from repair, total candidates now: {1}",
-                lambda: self.future_all_code_repair.clear(),
+                self.future_all_code_repair.clear,
             )
         if self.line_profiler_done and not self.refinement_done:
             return self._process_candidates(
@@ -330,7 +330,7 @@ class CandidateProcessor:
                 self.future_adaptive_optimizations,
                 "Applying adaptive optimizations to {0} candidates",
                 "Added {0} candidates from adaptive optimization, total candidates now: {1}",
-                lambda: self.future_adaptive_optimizations.clear(),
+                self.future_adaptive_optimizations.clear,
             )
         return None  # All done
 
@@ -545,15 +545,24 @@ class FunctionOptimizer:
     ]:
         """Generate and instrument tests for the function."""
         n_tests = get_effort_value(EffortKeys.N_GENERATED_TESTS, self.effort)
+        source_file = Path(self.function_to_optimize.file_path)
         generated_test_paths = [
             get_test_file_path(
-                self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="unit"
+                self.test_cfg.tests_root,
+                self.function_to_optimize.function_name,
+                test_index,
+                test_type="unit",
+                source_file_path=source_file,
             )
             for test_index in range(n_tests)
         ]
         generated_perf_test_paths = [
             get_test_file_path(
-                self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="perf"
+                self.test_cfg.tests_root,
+                self.function_to_optimize.function_name,
+                test_index,
+                test_type="perf",
+                source_file_path=source_file,
             )
             for test_index in range(n_tests)
         ]
@@ -578,7 +587,7 @@ class FunctionOptimizer:
         if not is_python():
             module_system = detect_module_system(self.project_root, self.function_to_optimize.file_path)
             if module_system == "esm":
-                generated_tests = inject_test_globals(generated_tests)
+                generated_tests = inject_test_globals(generated_tests, self.test_cfg.test_framework)
             if is_typescript():
                 # disable ts check for typescript tests
                 generated_tests = disable_ts_check(generated_tests)
@@ -1906,10 +1915,11 @@ class FunctionOptimizer:
             return Failure(baseline_result.failure())
 
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
-        if isinstance(original_code_baseline, OriginalCodeBaseline) and (
-            not coverage_critic(original_code_baseline.coverage_results)
-            or not quantity_of_tests_critic(original_code_baseline)
-        ):
+        # Check test quantity for all languages
+        quantity_ok = quantity_of_tests_critic(original_code_baseline)
+        # TODO: {Self} Only check coverage for Python - coverage infrastructure not yet reliable for JS/TS
+        coverage_ok = coverage_critic(original_code_baseline.coverage_results) if is_python() else True
+        if isinstance(original_code_baseline, OriginalCodeBaseline) and (not coverage_ok or not quantity_ok):
             if self.args.override_fixtures:
                 restore_conftest(original_conftest_content)
             cleanup_paths(paths_to_cleanup)
@@ -2093,7 +2103,7 @@ class FunctionOptimizer:
             formatted_generated_test = format_generated_code(concolic_test_str, self.args.formatter_cmds)
             generated_tests_str += f"```{code_lang}\n{formatted_generated_test}\n```\n\n"
 
-        existing_tests, replay_tests, concolic_tests = existing_tests_source_for(
+        existing_tests, replay_tests, _ = existing_tests_source_for(
             self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root),
             function_to_all_tests,
             test_cfg=self.test_cfg,
