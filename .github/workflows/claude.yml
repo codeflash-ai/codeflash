@@ -62,6 +62,7 @@ jobs:
 
             If there are prek issues:
             - For SAFE auto-fixable issues (formatting, import sorting, trailing whitespace, etc.), run `uv run prek run --from-ref origin/main` again to auto-fix them
+            - For issues that prek cannot auto-fix, do NOT attempt to fix them manually — report them as remaining issues in your summary
 
             If there are mypy issues:
             - Fix type annotation issues (missing return types, Optional/None unions, import errors for type hints, incorrect types)
@@ -71,6 +72,11 @@ jobs:
             - Stage the fixed files with `git add`
             - Commit with message "style: auto-fix linting issues" or "fix: resolve mypy type errors" as appropriate
             - Push the changes with `git push`
+
+            IMPORTANT - Verification after fixing:
+            - After committing fixes, run `uv run prek run --from-ref origin/main` ONE MORE TIME to verify all issues are resolved
+            - If errors remain, either fix them or report them honestly as unfixed in your summary
+            - NEVER claim issues are fixed without verifying. If you cannot fix an issue, say so
 
             Do NOT attempt to fix:
             - Type errors that require logic changes or refactoring
