@@ -1068,6 +1068,13 @@ def parse_test_xml(
                 continue
             test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
             if test_type is None:
+                # Try original_file_path lookup (for existing tests that were instrumented)
+                test_type = test_files.get_test_type_by_original_file_path(test_file_path)
+            # Default to GENERATED_REGRESSION for Java tests when test type can't be determined
+            if test_type is None and is_java():
+                test_type = TestType.GENERATED_REGRESSION
+                logger.debug(f"Test type defaulted to GENERATED_REGRESSION for Java test: {test_file_path}")
+            if test_type is None:
                 # Log registered paths for debugging
                 registered_paths = [str(tf.instrumented_behavior_file_path) for tf in test_files.test_files]
                 logger.warning(
