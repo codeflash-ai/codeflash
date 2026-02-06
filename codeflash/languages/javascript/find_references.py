@@ -168,7 +168,7 @@ class ReferenceFinder:
             if import_info:
                 # Found an import - mark as visited and search for calls
                 context.visited_files.add(file_path)
-                import_name, original_import = import_info
+                import_name, _original_import = import_info
                 file_refs = self._find_references_in_file(
                     file_path, file_code, function_name, import_name, file_analyzer, include_self=True
                 )
@@ -404,7 +404,7 @@ class ReferenceFinder:
             name_node = node.child_by_field_name("name")
             if name_node:
                 new_current_function = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf8")
-        elif node.type in ("variable_declarator",):
+        elif node.type == "variable_declarator":
             # Arrow function or function expression assigned to variable
             name_node = node.child_by_field_name("name")
             value_node = node.child_by_field_name("value")

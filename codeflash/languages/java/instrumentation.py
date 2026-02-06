@@ -262,8 +262,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 continue
             if stripped.startswith(("public class", "class")):
                 # No imports found, add before class
-                for imp in import_statements:
-                    result.append(imp)
+                result.extend(import_statements)
                 result.append("")
                 imports_added = True
 
@@ -372,7 +371,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                             var_with_cast = f"({cast_type}){var_name}" if cast_type else var_name
 
                             # Replace this occurrence with the variable (with cast if needed)
-                            new_line = new_line[:match.start()] + var_with_cast + new_line[match.end():]
+                            new_line = new_line[: match.start()] + var_with_cast + new_line[match.end() :]
 
                             # Insert capture line
                             capture_line = f"{line_indent_str}Object {var_name} = {full_call};"
@@ -381,8 +380,8 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                         # Check if the line is now just a variable reference (invalid statement)
                         # This happens when the original line was just a void method call
                         # e.g., "BubbleSort.bubbleSort(original);" becomes "_cf_result1_1;"
-                        stripped_new = new_line.strip().rstrip(';').strip()
-                        if stripped_new and stripped_new != var_name and stripped_new != var_with_cast:
+                        stripped_new = new_line.strip().rstrip(";").strip()
+                        if stripped_new and stripped_new not in (var_name, var_with_cast):
                             wrapped_body_lines.append(new_line)
                     else:
                         wrapped_body_lines.append(body_line)
@@ -528,8 +527,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 i += 1
 
             # Add the method signature lines
-            for ml in method_lines:
-                result.append(ml)
+            result.extend(method_lines)
             i += 1
 
             # We're now inside the method body
