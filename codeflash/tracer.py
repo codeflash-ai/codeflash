@@ -18,7 +18,7 @@ import subprocess
 import sys
 from argparse import ArgumentParser
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from codeflash.cli_cmds.cli import project_root_from_module_root
 from codeflash.cli_cmds.console import console
@@ -30,6 +30,41 @@ from codeflash.tracing.pytest_parallelization import pytest_split
 
 if TYPE_CHECKING:
     from argparse import Namespace
+
+
+def detect_language_from_config(config: dict[str, Any]) -> str:
+    """Detect the project language from config or file extensions.
+
+    Args:
+        config: Project configuration dictionary.
+
+    Returns:
+        Language identifier ('python', 'javascript', or 'typescript').
+
+    """
+    # Check explicit language in config
+    if "language" in config:
+        language: str = config["language"].lower()
+        return language
+
+    # Check module root for file types
+    module_root = Path(config.get("module_root", "."))
+    if module_root.exists():
+        js_files = list(module_root.glob("**/*.js")) + list(module_root.glob("**/*.jsx"))
+        ts_files = list(module_root.glob("**/*.ts")) + list(module_root.glob("**/*.tsx"))
+        py_files = list(module_root.glob("**/*.py"))
+
+        # Filter out node_modules
+        js_files = [f for f in js_files if "node_modules" not in str(f)]
+        ts_files = [f for f in ts_files if "node_modules" not in str(f)]
+
+        total_js = len(js_files) + len(ts_files)
+        total_py = len(py_files)
+
+        if total_js > total_py:
+            return "typescript" if len(ts_files) > len(js_files) else "javascript"
+
+    return "python"
 
 
 def main(args: Namespace | None = None) -> ArgumentParser:
@@ -59,6 +94,11 @@ def main(args: Namespace | None = None) -> ArgumentParser:
     parser.add_argument("--trace-only", action="store_true", help="Trace and create replay tests only, don't optimize")
     parser.add_argument(
         "--limit", type=int, default=None, help="Limit the number of test files to process (for -m pytest mode)"
+    )
+    parser.add_argument(
+        "--language",
+        help="Language to trace (python, javascript, typescript). Auto-detected if not specified.",
+        default=None,
     )
 
     if args is not None:
@@ -93,6 +133,16 @@ def main(args: Namespace | None = None) -> ArgumentParser:
     outfile = parsed_args.outfile
     config, found_config_path = parse_config_file(parsed_args.codeflash_config)
     project_root = project_root_from_module_root(Path(config["module_root"]), found_config_path)
+
+    # Detect or use specified language
+    language = getattr(parsed_args, "language", None) or detect_language_from_config(config)
+
+    # Route to appropriate tracer based on language
+    if language in ("javascript", "typescript"):
+        if outfile is None:
+            outfile = Path("codeflash.trace.sqlite")
+        return run_javascript_tracer_main(parsed_args, config, project_root, outfile, unknown_args)
+
     if len(unknown_args) > 0:
         args_dict = {
             "functions": parsed_args.only_functions,
@@ -105,16 +155,17 @@ def main(args: Namespace | None = None) -> ArgumentParser:
             "module": parsed_args.module,
         }
         try:
-            pytest_splits = []
-            test_paths = []
-            replay_test_paths = []
+            pytest_splits: list[list[str]] = []
+            test_paths: list[str] = []
+            replay_test_paths: list[str] = []
             if parsed_args.module and unknown_args[0] == "pytest":
-                pytest_splits, test_paths = pytest_split(unknown_args[1:], limit=parsed_args.limit)
-                if pytest_splits is None or test_paths is None:
+                split_result = pytest_split(unknown_args[1:], limit=parsed_args.limit)
+                if split_result[0] is None or split_result[1] is None:
                     console.print(f"❌ Could not find test files in the specified paths: {unknown_args[1:]}")
                     console.print(f"Current working directory: {Path.cwd()}")
                     console.print("Please ensure the test directory exists and contains test files.")
                     sys.exit(1)
+                pytest_splits, test_paths = split_result
 
             if len(pytest_splits) > 1:
                 processes = []
@@ -253,6 +304,90 @@ def main(args: Namespace | None = None) -> ArgumentParser:
     else:
         parser.print_usage()
     return parser
+
+
+def run_javascript_tracer_main(
+    parsed_args: Namespace, config: dict[str, Any], project_root: Path, outfile: Path, unknown_args: list[str]
+) -> ArgumentParser:
+    """Run the JavaScript tracer.
+
+    Args:
+        parsed_args: Parsed command line arguments.
+        config: Project configuration.
+        project_root: Project root directory.
+        outfile: Output trace file path.
+        unknown_args: Remaining command line arguments.
+
+    Returns:
+        The argument parser.
+
+    """
+    from codeflash.languages.javascript.tracer_runner import (
+        check_javascript_tracer_available,
+        get_tracer_requirements_message,
+        run_javascript_tracer,
+    )
+
+    # Check requirements
+    if not check_javascript_tracer_available():
+        console.print(f"[red]{get_tracer_requirements_message()}[/red]")
+        sys.exit(1)
+
+    # Prepare args for the tracer runner
+    parsed_args.script_args = unknown_args
+
+    # Run the tracer
+    console.print("[bold blue]Running JavaScript tracer...[/bold blue]")
+    result = run_javascript_tracer(parsed_args, config, project_root)
+
+    if not result["success"]:
+        console.print(f"[red]Tracing failed: {result.get('error', 'Unknown error')}[/red]")
+        sys.exit(1)
+
+    console.print(f"[green]Trace saved to: {result['trace_file']}[/green]")
+
+    if result.get("replay_test_file"):
+        console.print(f"[green]Replay test generated: {result['replay_test_file']}[/green]")
+
+        # Run optimization if not trace-only mode
+        if not parsed_args.trace_only:
+            from codeflash.cli_cmds.cli import parse_args as cli_parse_args
+            from codeflash.cli_cmds.cli import process_pyproject_config
+            from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
+            from codeflash.cli_cmds.console import paneled_text
+            from codeflash.languages import set_current_language
+            from codeflash.languages.base import Language
+            from codeflash.telemetry import posthog_cf
+            from codeflash.telemetry.sentry import init_sentry
+
+            # Set language to JavaScript
+            set_current_language(Language.JAVASCRIPT)
+
+            sys.argv = ["codeflash", "--replay-test", result["replay_test_file"]]
+            args = cli_parse_args()
+            paneled_text(
+                CODEFLASH_LOGO,
+                panel_args={"title": "https://codeflash.ai", "expand": False},
+                text_args={"style": "bold gold3"},
+            )
+
+            args = process_pyproject_config(args)
+            args.previous_checkpoint_functions = None
+            init_sentry(enabled=not args.disable_telemetry, exclude_errors=True)
+            posthog_cf.initialize_posthog(enabled=not args.disable_telemetry)
+
+            from codeflash.optimization import optimizer
+
+            args.effort = EffortLevel.HIGH.value
+            optimizer.run_with_args(args)
+
+            # Clean up trace and replay test files
+            if outfile:
+                outfile.unlink(missing_ok=True)
+            Path(result["replay_test_file"]).unlink(missing_ok=True)
+
+    # Return a new parser for API compatibility
+    return ArgumentParser(allow_abbrev=False)
 
 
 if __name__ == "__main__":

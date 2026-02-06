@@ -1,34 +1,57 @@
 """Function tracing instrumentation for JavaScript.
 
-This module provides functionality to wrap JavaScript functions to capture their
-inputs, outputs, and execution behavior. This is used for generating replay tests
-and verifying optimization correctness.
+This module provides functionality to parse JavaScript function traces and generate
+replay tests. Tracing is performed via Babel AST transformation using the
+babel-tracer-plugin.js and trace-runner.js in the npm package.
+
+The tracer uses Babel plugin for AST transformation which:
+- Works with both CommonJS and ESM
+- Handles async functions, arrow functions, methods correctly
+- Preserves source maps and formatting
+
+Database Schema (matches Python tracer):
+- function_calls: Main trace data (type, function, classname, filename, line_number, time_ns, args)
+- metadata: Key-value metadata about the trace session
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
-from typing import TYPE_CHECKING, Any
+import textwrap
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-
 logger = logging.getLogger(__name__)
 
 
-class JavaScriptTracer:
-    """Instruments JavaScript code to capture function inputs and outputs.
+@dataclass
+class JavaScriptFunctionInfo:
+    """Information about a traced JavaScript function."""
 
-    Similar to Python's tracing system, this wraps functions to record:
-    - Input arguments
-    - Return values
-    - Exceptions thrown
-    - Execution time
+    function_name: str
+    file_name: str
+    module_path: str
+    class_name: Optional[str] = None
+    line_number: Optional[int] = None
+
+
+class JavaScriptTracer:
+    """Parses JavaScript function traces and generates replay tests.
+
+    Tracing is performed via Babel AST transformation (trace-runner.js).
+    This class handles:
+    - Parsing trace results from SQLite database
+    - Extracting traced function information
+    - Generating replay test files for Jest/Vitest
     """
+
+    SCHEMA_VERSION = "1.0.0"
 
     def __init__(self, output_db: Path) -> None:
         """Initialize the tracer.
@@ -38,322 +61,15 @@ class JavaScriptTracer:
 
         """
         self.output_db = output_db
-        self.tracer_var = "__codeflash_tracer__"
-
-    def instrument_source(self, source: str, file_path: Path, functions: list[FunctionToOptimize]) -> str:
-        """Instrument JavaScript source code with function tracing.
-
-        Wraps specified functions to capture their inputs and outputs.
-
-        Args:
-            source: Original JavaScript source code.
-            file_path: Path to the source file.
-            functions: List of functions to instrument.
-
-        Returns:
-            Instrumented source code with tracing.
-
-        """
-        if not functions:
-            return source
-
-        # Add tracer initialization at the top
-        tracer_init = self._generate_tracer_init()
-
-        # Add instrumentation to each function
-        lines = source.splitlines(keepends=True)
-
-        # Process functions in reverse order to preserve line numbers
-        for func in sorted(functions, key=lambda f: f.starting_line, reverse=True):
-            instrumented = self._instrument_function(func, lines, file_path)
-            start_idx = func.starting_line - 1
-            end_idx = func.ending_line
-            lines = lines[:start_idx] + instrumented + lines[end_idx:]
-
-        instrumented_source = "".join(lines)
-
-        # Add tracer save at the end
-        tracer_save = self._generate_tracer_save()
-
-        return tracer_init + "\n" + instrumented_source + "\n" + tracer_save
-
-    def _generate_tracer_init(self) -> str:
-        """Generate JavaScript code for tracer initialization."""
-        return f"""
-// Codeflash function tracer initialization
-const {self.tracer_var} = {{
-    traces: [],
-    callId: 0,
-
-    serialize: function(value) {{
-        try {{
-            // Handle special cases
-            if (value === undefined) return {{ __type__: 'undefined' }};
-            if (value === null) return null;
-            if (typeof value === 'function') return {{ __type__: 'function', name: value.name }};
-            if (typeof value === 'symbol') return {{ __type__: 'symbol', value: value.toString() }};
-            if (value instanceof Error) return {{
-                __type__: 'error',
-                name: value.name,
-                message: value.message,
-                stack: value.stack
-            }};
-            if (typeof value === 'bigint') return {{ __type__: 'bigint', value: value.toString() }};
-            if (value instanceof Date) return {{ __type__: 'date', value: value.toISOString() }};
-            if (value instanceof RegExp) return {{ __type__: 'regexp', value: value.toString() }};
-            if (value instanceof Map) return {{
-                __type__: 'map',
-                value: Array.from(value.entries()).map(([k, v]) => [this.serialize(k), this.serialize(v)])
-            }};
-            if (value instanceof Set) return {{
-                __type__: 'set',
-                value: Array.from(value).map(v => this.serialize(v))
-            }};
-
-            // Handle circular references with a simple check
-            return JSON.parse(JSON.stringify(value));
-        }} catch (e) {{
-            return {{ __type__: 'unserializable', error: e.message }};
-        }}
-    }},
-
-    wrap: function(originalFunc, funcName, filePath) {{
-        const self = this;
-
-        if (originalFunc.constructor.name === 'AsyncFunction') {{
-            return async function(...args) {{
-                const callId = self.callId++;
-                const start = process.hrtime.bigint();
-                let result, error;
-
-                try {{
-                    result = await originalFunc.apply(this, args);
-                }} catch (e) {{
-                    error = e;
-                }}
-
-                const end = process.hrtime.bigint();
-
-                self.traces.push({{
-                    call_id: callId,
-                    function: funcName,
-                    file: filePath,
-                    args: args.map(a => self.serialize(a)),
-                    result: error ? null : self.serialize(result),
-                    error: error ? self.serialize(error) : null,
-                    runtime_ns: (end - start).toString(),
-                    timestamp: Date.now()
-                }});
-
-                if (error) throw error;
-                return result;
-            }};
-        }}
-
-        return function(...args) {{
-            const callId = self.callId++;
-            const start = process.hrtime.bigint();
-            let result, error;
-
-            try {{
-                result = originalFunc.apply(this, args);
-            }} catch (e) {{
-                error = e;
-            }}
-
-            const end = process.hrtime.bigint();
-
-            self.traces.push({{
-                call_id: callId,
-                function: funcName,
-                file: filePath,
-                args: args.map(a => self.serialize(a)),
-                result: error ? null : self.serialize(result),
-                error: error ? self.serialize(error) : null,
-                runtime_ns: (end - start).toString(),
-                timestamp: Date.now()
-            }});
-
-            if (error) throw error;
-            return result;
-        }};
-    }},
-
-    saveToDb: function() {{
-        const sqlite3 = require('sqlite3').verbose();
-        const fs = require('fs');
-        const path = require('path');
-
-        const dbPath = '{self.output_db.as_posix()}';
-        const dbDir = path.dirname(dbPath);
-
-        if (!fs.existsSync(dbDir)) {{
-            fs.mkdirSync(dbDir, {{ recursive: true }});
-        }}
-
-        const db = new sqlite3.Database(dbPath);
-
-        db.serialize(() => {{
-            // Create table
-            db.run(`
-                CREATE TABLE IF NOT EXISTS traces (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    call_id INTEGER,
-                    function TEXT,
-                    file TEXT,
-                    args TEXT,
-                    result TEXT,
-                    error TEXT,
-                    runtime_ns TEXT,
-                    timestamp INTEGER
-                )
-            `);
-
-            // Insert traces
-            const stmt = db.prepare(`
-                INSERT INTO traces (call_id, function, file, args, result, error, runtime_ns, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `);
-
-            for (const trace of this.traces) {{
-                stmt.run(
-                    trace.call_id,
-                    trace.function,
-                    trace.file,
-                    JSON.stringify(trace.args),
-                    JSON.stringify(trace.result),
-                    JSON.stringify(trace.error),
-                    trace.runtime_ns,
-                    trace.timestamp
-                );
-            }}
-
-            stmt.finalize();
-        }});
-
-        db.close();
-    }},
-
-    saveToJson: function() {{
-        const fs = require('fs');
-        const path = require('path');
-
-        const jsonPath = '{self.output_db.with_suffix(".json").as_posix()}';
-        const jsonDir = path.dirname(jsonPath);
-
-        if (!fs.existsSync(jsonDir)) {{
-            fs.mkdirSync(jsonDir, {{ recursive: true }});
-        }}
-
-        fs.writeFileSync(jsonPath, JSON.stringify(this.traces, null, 2));
-    }}
-}};
-"""
-
-    def _generate_tracer_save(self) -> str:
-        """Generate JavaScript code to save tracer results."""
-        return f"""
-// Save tracer results on process exit
-process.on('exit', () => {{
-    try {{
-        {self.tracer_var}.saveToJson();
-        // Try SQLite, but don't fail if sqlite3 is not installed
-        try {{
-            {self.tracer_var}.saveToDb();
-        }} catch (e) {{
-            // SQLite not available, JSON is sufficient
-        }}
-    }} catch (e) {{
-        console.error('Failed to save traces:', e);
-    }}
-}});
-"""
-
-    def _instrument_function(self, func: FunctionToOptimize, lines: list[str], file_path: Path) -> list[str]:
-        """Instrument a single function with tracing.
-
-        Args:
-            func: Function to instrument.
-            lines: Source lines.
-            file_path: Path to source file.
-
-        Returns:
-            Instrumented function lines.
-
-        """
-        func_lines = lines[func.starting_line - 1 : func.ending_line]
-        func_text = "".join(func_lines)
-
-        # Detect function pattern
-        func_name = func.function_name
-        is_arrow = "=>" in func_text.split("\n")[0]
-        is_method = func.is_method
-        is_async = func.is_async
-
-        # Generate wrapper code based on function type
-        if is_arrow:
-            # For arrow functions: const foo = (a, b) => { ... }
-            # Replace with: const foo = __codeflash_tracer__.wrap((a, b) => { ... }, 'foo', 'file.js')
-            return self._wrap_arrow_function(func_lines, func_name, file_path)
-        if is_method:
-            # For methods: methodName(a, b) { ... }
-            # Wrap the method body
-            return self._wrap_method(func_lines, func_name, file_path, is_async)
-        # For regular functions: function foo(a, b) { ... }
-        # Wrap the entire function
-        return self._wrap_regular_function(func_lines, func_name, file_path, is_async)
-
-    def _wrap_arrow_function(self, func_lines: list[str], func_name: str, file_path: Path) -> list[str]:
-        """Wrap an arrow function with tracing."""
-        # Find the assignment line
-        first_line = func_lines[0]
-        indent = len(first_line) - len(first_line.lstrip())
-        indent_str = " " * indent
-
-        # Insert wrapper call
-        func_text = "".join(func_lines).rstrip()
-
-        # Find the '=' and wrap everything after it
-        if "=" in func_text:
-            parts = func_text.split("=", 1)
-            wrapped = f"{parts[0]}= {self.tracer_var}.wrap({parts[1]}, '{func_name}', '{file_path.as_posix()}');\n"
-            return [wrapped]
-
-        return func_lines
-
-    def _wrap_method(self, func_lines: list[str], func_name: str, file_path: Path, is_async: bool) -> list[str]:
-        """Wrap a class method with tracing."""
-        # For methods, we wrap by reassigning them after definition
-        # This is complex, so for now we'll return unwrapped
-        # TODO: Implement method wrapping
-        logger.warning("Method wrapping not fully implemented for %s", func_name)
-        return func_lines
-
-    def _wrap_regular_function(
-        self, func_lines: list[str], func_name: str, file_path: Path, is_async: bool
-    ) -> list[str]:
-        """Wrap a regular function declaration with tracing."""
-        # Replace: function foo(a, b) { ... }
-        # With: const __original_foo = function foo(a, b) { ... }; const foo = __codeflash_tracer__.wrap(__original_foo, 'foo', 'file.js');
-
-        func_text = "".join(func_lines).rstrip()
-        first_line = func_lines[0]
-        indent = len(first_line) - len(first_line.lstrip())
-        indent_str = " " * indent
-
-        wrapped = (
-            f"{indent_str}const __original_{func_name}__ = {func_text};\n"
-            f"{indent_str}const {func_name} = {self.tracer_var}.wrap(__original_{func_name}__, '{func_name}', '{file_path.as_posix()}');\n"
-        )
-
-        return [wrapped]
 
     @staticmethod
     def parse_results(trace_file: Path) -> list[dict[str, Any]]:
         """Parse tracing results from output file.
 
+        Supports both the new function_calls schema and legacy traces schema.
+
         Args:
-            trace_file: Path to traces JSON file.
+            trace_file: Path to traces file (SQLite or JSON).
 
         Returns:
             List of trace records.
@@ -364,35 +80,59 @@ process.on('exit', () => {{
         if json_file.exists():
             try:
                 with json_file.open("r") as f:
-                    return json.load(f)
+                    data: list[dict[str, Any]] = json.load(f)
+                    return data
             except Exception as e:
                 logger.exception("Failed to parse trace JSON: %s", e)
                 return []
 
-        # Try SQLite database
         if not trace_file.exists():
             return []
 
         try:
             conn = sqlite3.connect(trace_file)
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM traces ORDER BY id")
+
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = {row[0] for row in cursor.fetchall()}
 
             traces = []
-            for row in cursor.fetchall():
-                traces.append(
-                    {
-                        "id": row[0],
-                        "call_id": row[1],
-                        "function": row[2],
-                        "file": row[3],
-                        "args": json.loads(row[4]),
-                        "result": json.loads(row[5]),
-                        "error": json.loads(row[6]) if row[6] != "null" else None,
-                        "runtime_ns": int(row[7]),
-                        "timestamp": row[8],
-                    }
+
+            if "function_calls" in tables:
+                cursor.execute(
+                    "SELECT type, function, classname, filename, line_number, "
+                    "last_frame_address, time_ns, args FROM function_calls ORDER BY time_ns"
                 )
+                for row in cursor.fetchall():
+                    traces.append(
+                        {
+                            "type": row[0],
+                            "function": row[1],
+                            "classname": row[2],
+                            "filename": row[3],
+                            "line_number": row[4],
+                            "last_frame_address": row[5],
+                            "time_ns": row[6],
+                            "args": json.loads(row[7]) if row[7] else [],
+                        }
+                    )
+            elif "traces" in tables:
+                # Legacy schema
+                cursor.execute("SELECT * FROM traces ORDER BY id")
+                for row in cursor.fetchall():
+                    traces.append(
+                        {
+                            "id": row[0],
+                            "call_id": row[1],
+                            "function": row[2],
+                            "file": row[3],
+                            "args": json.loads(row[4]) if row[4] else [],
+                            "result": json.loads(row[5]) if row[5] else None,
+                            "error": json.loads(row[6]) if row[6] and row[6] != "null" else None,
+                            "runtime_ns": int(row[7]) if row[7] else 0,
+                            "timestamp": row[8] if len(row) > 8 else None,
+                        }
+                    )
 
             conn.close()
             return traces
@@ -400,3 +140,168 @@ process.on('exit', () => {{
         except Exception as e:
             logger.exception("Failed to parse trace database: %s", e)
             return []
+
+    @staticmethod
+    def get_traced_functions(trace_file: Path) -> list[JavaScriptFunctionInfo]:
+        """Get list of functions that were traced.
+
+        Args:
+            trace_file: Path to trace database.
+
+        Returns:
+            List of traced function information.
+
+        """
+        if not trace_file.exists():
+            return []
+
+        try:
+            conn = sqlite3.connect(trace_file)
+            cursor = conn.cursor()
+
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = {row[0] for row in cursor.fetchall()}
+
+            functions = []
+
+            if "function_calls" in tables:
+                cursor.execute(
+                    "SELECT DISTINCT function, filename, classname, line_number FROM function_calls WHERE type = 'call'"
+                )
+                for row in cursor.fetchall():
+                    func_name = row[0]
+                    file_name = row[1]
+                    class_name = row[2]
+                    line_number = row[3]
+
+                    module_path = file_name.replace("\\", "/").replace(".js", "").replace(".ts", "")
+                    module_path = module_path.removeprefix("./")
+
+                    functions.append(
+                        JavaScriptFunctionInfo(
+                            function_name=func_name,
+                            file_name=file_name,
+                            module_path=module_path,
+                            class_name=class_name,
+                            line_number=line_number,
+                        )
+                    )
+
+            conn.close()
+            return functions
+
+        except Exception as e:
+            logger.exception("Failed to get traced functions: %s", e)
+            return []
+
+    def create_replay_test(
+        self,
+        trace_file: Path,
+        output_path: Path,
+        framework: str = "jest",
+        max_run_count: int = 100,
+        project_root: Optional[Path] = None,
+    ) -> Optional[str]:
+        """Generate a replay test file from traced function calls.
+
+        Args:
+            trace_file: Path to the trace database.
+            output_path: Path to write the test file.
+            framework: Test framework ('jest' or 'vitest').
+            max_run_count: Maximum number of test cases per function.
+            project_root: Project root for calculating relative imports.
+
+        Returns:
+            Path to generated test file, or None if generation failed.
+
+        """
+        functions = self.get_traced_functions(trace_file)
+        if not functions:
+            logger.warning("No traced functions found in %s", trace_file)
+            return None
+
+        is_vitest = framework.lower() == "vitest"
+
+        imports = []
+        if is_vitest:
+            imports.append("import { describe, test } from 'vitest';")
+
+        imports.append("const { getNextArg } = require('codeflash/replay');")
+        imports.append("")
+
+        for func in functions:
+            alias = self._get_function_alias(func.module_path, func.function_name, func.class_name)
+            if func.class_name:
+                imports.append(f"const {{ {func.class_name}: {alias}_class }} = require('./{func.module_path}');")
+            else:
+                imports.append(f"const {{ {func.function_name}: {alias} }} = require('./{func.module_path}');")
+
+        imports.append("")
+
+        trace_path = trace_file.as_posix()
+        metadata = [
+            f"const traceFilePath = '{trace_path}';",
+            f"const functions = {json.dumps([f.function_name for f in functions])};",
+            "",
+        ]
+
+        test_cases = []
+        for func in functions:
+            alias = self._get_function_alias(func.module_path, func.function_name, func.class_name)
+            test_name = f"{func.class_name}.{func.function_name}" if func.class_name else func.function_name
+            class_arg = f"'{func.class_name}'" if func.class_name else "null"
+
+            if func.class_name:
+                test_cases.append(
+                    textwrap.dedent(f"""
+describe('Replay: {test_name}', () => {{
+    const traces = getNextArg(traceFilePath, '{func.function_name}', '{func.file_name}', {max_run_count}, {class_arg});
+
+    test.each(traces.map((args, i) => [i, args]))('call %i', (index, args) => {{
+        const instance = new {alias}_class();
+        instance.{func.function_name}(...args);
+    }});
+}});
+""")
+                )
+            else:
+                test_cases.append(
+                    textwrap.dedent(f"""
+describe('Replay: {test_name}', () => {{
+    const traces = getNextArg(traceFilePath, '{func.function_name}', '{func.file_name}', {max_run_count});
+
+    test.each(traces.map((args, i) => [i, args]))('call %i', (index, args) => {{
+        {alias}(...args);
+    }});
+}});
+""")
+                )
+
+        content = "\n".join(
+            [
+                "// Auto-generated replay test by Codeflash",
+                "// Do not edit this file directly",
+                "",
+                *imports,
+                *metadata,
+                *test_cases,
+            ]
+        )
+
+        try:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(content)
+            logger.info("Generated replay test: %s", output_path)
+            return str(output_path)
+        except Exception as e:
+            logger.exception("Failed to write replay test: %s", e)
+            return None
+
+    @staticmethod
+    def _get_function_alias(module_path: str, function_name: str, class_name: Optional[str] = None) -> str:
+        """Create a function alias for imports."""
+        module_alias = re.sub(r"[^a-zA-Z0-9]", "_", module_path).strip("_")
+
+        if class_name:
+            return f"{module_alias}_{class_name}_{function_name}"
+        return f"{module_alias}_{function_name}"
