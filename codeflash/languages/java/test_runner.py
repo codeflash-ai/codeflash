@@ -27,6 +27,8 @@ from codeflash.languages.java.build_tools import (
     is_jacoco_configured,
 )
 
+_VALID_JAVA_CLASS_PATTERN = re.compile(r"^[a-zA-Z_$*][a-zA-Z0-9_$.*]*$")
+
 logger = logging.getLogger(__name__)
 
 
@@ -67,9 +69,7 @@ def _validate_test_filter(test_filter: str) -> str:
     patterns = [p.strip() for p in test_filter.split(",")]
 
     for pattern in patterns:
-        name_to_validate = pattern.replace("*", "A")
-
-        if not _validate_java_class_name(name_to_validate):
+        if not _VALID_JAVA_CLASS_PATTERN.match(pattern):
             msg = (
                 f"Invalid test class name or pattern: '{pattern}'. "
                 f"Test names must follow Java identifier rules."
