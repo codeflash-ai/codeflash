@@ -904,10 +904,9 @@ def _path_to_class_name(path: Path, source_dirs: list[str] | None = None) -> str
     if path.suffix != ".java":
         return None
 
-    path_str = str(path).replace("\\", "/")
-
     # Step 1: Try matching against provided custom source directories
     if source_dirs:
+        path_str = str(path).replace("\\", "/")
         for src_dir in source_dirs:
             normalized = src_dir.replace("\\", "/").rstrip("/") + "/"
             idx = path_str.find(normalized)
@@ -917,7 +916,7 @@ def _path_to_class_name(path: Path, source_dirs: list[str] | None = None) -> str
                 return remainder.replace("/", ".")
 
     # Step 2: Try standard Maven/Gradle source directories
-    parts = list(path.parts)
+    parts = path.parts
 
     java_idx = None
     for i, part in enumerate(parts):
@@ -926,14 +925,14 @@ def _path_to_class_name(path: Path, source_dirs: list[str] | None = None) -> str
             break
 
     if java_idx is not None:
-        class_parts = parts[java_idx + 1 :]
+        class_parts = list(parts[java_idx + 1 :])
         class_parts[-1] = class_parts[-1].replace(".java", "")
         return ".".join(class_parts)
 
     # Step 3: Find the last 'java' in path as a fallback heuristic
     for i in range(len(parts) - 1, -1, -1):
         if parts[i] == "java":
-            class_parts = parts[i + 1 :]
+            class_parts = list(parts[i + 1 :])
             class_parts[-1] = class_parts[-1].replace(".java", "")
             return ".".join(class_parts)
 
