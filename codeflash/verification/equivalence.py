@@ -102,7 +102,30 @@ def compare_test_results(
                 )
             )
 
-        elif not pass_fail_only and not comparator(
+        elif pass_fail_only:
+            # Log when return values differ but are being ignored due to pass_fail_only mode
+            if original_test_result.return_value != cdd_test_result.return_value:
+                logger.warning(
+                    "pass_fail_only mode: ignoring return value difference for test %s. "
+                    "Original: %s, Candidate: %s",
+                    original_test_result.id or "unknown",
+                    safe_repr(original_test_result.return_value)[:100],
+                    safe_repr(cdd_test_result.return_value)[:100],
+                )
+            # Log when stdout values differ but are being ignored due to pass_fail_only mode
+            if (
+                original_test_result.stdout
+                and cdd_test_result.stdout
+                and original_test_result.stdout != cdd_test_result.stdout
+            ):
+                logger.warning(
+                    "pass_fail_only mode: ignoring stdout difference for test %s. "
+                    "Original: %s, Candidate: %s",
+                    original_test_result.id or "unknown",
+                    safe_repr(original_test_result.stdout)[:100],
+                    safe_repr(cdd_test_result.stdout)[:100],
+                )
+        elif not comparator(
             original_test_result.return_value, cdd_test_result.return_value, superset_obj=superset_obj
         ):
             test_diffs.append(
@@ -130,8 +153,7 @@ def compare_test_results(
             except Exception as e:
                 logger.error(e)
         elif (
-            not pass_fail_only
-            and (original_test_result.stdout and cdd_test_result.stdout)
+            (original_test_result.stdout and cdd_test_result.stdout)
             and not comparator(original_test_result.stdout, cdd_test_result.stdout)
         ):
             test_diffs.append(

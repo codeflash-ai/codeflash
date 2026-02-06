@@ -48,10 +48,21 @@ def discover_tests(
     analyzer = analyzer or get_java_analyzer()
 
     # Build a map of function names for quick lookup
+    # Track overloaded names (same qualified_name appearing multiple times)
     function_map: dict[str, FunctionToOptimize] = {}
+    overloaded_names: set[str] = set()
     for func in source_functions:
+        if func.qualified_name in function_map:
+            overloaded_names.add(func.qualified_name)
         function_map[func.function_name] = func
         function_map[func.qualified_name] = func
+
+    if overloaded_names:
+        logger.info(
+            "Detected overloaded methods (same qualified name, different signatures): %s. "
+            "Test discovery will map tests to the overloaded name without distinguishing signatures.",
+            ", ".join(sorted(overloaded_names)),
+        )
 
     # Find all test files (various naming conventions)
     test_files = (
@@ -158,7 +169,67 @@ def _match_test_to_functions(
         if func_info.class_name and func_info.class_name in imported_classes:
             matched.append(func_info.qualified_name)
 
-    return matched
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for m in matched:
+        if m not in seen:
+            seen.add(m)
+            deduped.append(m)
+
+    return deduped
+
+
+def disambiguate_overloads(
+    matched_names: list[str],
+    test_method_name: str,
+    test_source: str,
+    source_functions: list[FunctionToOptimize] | None = None,
+) -> list[str]:
+    """Attempt to disambiguate overloaded method matches using heuristics.
+
+    When multiple functions with the same function_name but different qualified_names
+    are matched, try to narrow the list using type hints in the test method name or
+    test source code. If disambiguation is not possible, return the original list
+    and log the ambiguity.
+
+    Args:
+        matched_names: List of qualified function names that matched.
+        test_method_name: Name of the test method (e.g., "testAddIntegers").
+        test_source: Source code of the test file.
+        source_functions: Optional list of source functions for parameter info.
+
+    Returns:
+        Filtered list of matched qualified names (may be unchanged if no disambiguation).
+
+    """
+    if len(matched_names) <= 1:
+        return matched_names
+
+    # Group by function_name to find overloaded groups
+    name_groups: dict[str, list[str]] = defaultdict(list)
+    for qname in matched_names:
+        # Extract function_name from qualified_name (ClassName.methodName -> methodName)
+        func_name = qname.rsplit(".", 1)[-1] if "." in qname else qname
+        name_groups[func_name].append(qname)
+
+    # Only process groups with >1 member (actual overloads across classes)
+    has_ambiguity = any(len(qnames) > 1 for qnames in name_groups.values())
+
+    if not has_ambiguity:
+        return matched_names
+
+    # Log the ambiguity -- disambiguation by parameter types requires FunctionToOptimize
+    # to carry parameter metadata, which it currently does not
+    ambiguous_groups = {fn: qn for fn, qn in name_groups.items() if len(qn) > 1}
+    logger.info(
+        "Ambiguous overload match for test %s: %s. "
+        "Multiple functions with same name matched; keeping all matches as safe fallback.",
+        test_method_name,
+        dict(ambiguous_groups),
+    )
+
+    return matched_names
 
 
 def _extract_imports(node, source_bytes: bytes, analyzer: JavaAnalyzer) -> set[str]:
