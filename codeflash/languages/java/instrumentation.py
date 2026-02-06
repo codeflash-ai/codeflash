@@ -771,11 +771,3 @@ def _get_method_call_pattern(func_name: str):
     return re.compile(
         rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)", re.MULTILINE
     )
-
-
-@lru_cache(maxsize=128)
-def _get_method_call_pattern(func_name: str):
-    """Cache compiled regex patterns for method call matching."""
-    return re.compile(
-        rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)", re.MULTILINE
-    )
