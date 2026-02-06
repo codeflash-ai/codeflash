@@ -558,6 +558,7 @@ class MultiFileHelperFinder:
 
         """
         from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash.languages.registry import get_language_support
         from codeflash.languages.treesitter_utils import get_analyzer_for_file
 
         if context.current_depth >= context.max_depth:
@@ -578,12 +579,15 @@ class MultiFileHelperFinder:
         imports = analyzer.find_imports(source)
 
         # Create FunctionToOptimize for the helper
+        # Get language from the language support registry
+        lang_support = get_language_support(file_path)
         func_info = FunctionToOptimize(
             function_name=helper.name,
             file_path=file_path,
             parents=[],
             starting_line=helper.start_line,
             ending_line=helper.end_line,
+            language=str(lang_support.language),
         )
 
         # Recursively find helpers

@@ -434,8 +434,8 @@ function process() {
         # Should be converted to ESM
         assert "import x from './module';" in result
 
-    def test_mixed_code_not_converted(self, tmp_path):
-        """Test that mixed CJS/ESM code is NOT converted (already has both)."""
+    def test_mixed_code_converted_to_esm(self, tmp_path):
+        """Test that mixed CJS/ESM code has require converted to import when targeting ESM."""
         package_json = tmp_path / "package.json"
         package_json.write_text('{"devDependencies": {"jest": "^29.0.0"}}')
 
@@ -447,10 +447,18 @@ function process() {
     return existing() + helper();
 }
 """
-        # Mixed code has both import and require, so no conversion
+        expected = """\
+import { existing } from './module.js';
+import { helper } from './helpers';
+
+function process() {
+    return existing() + helper();
+}
+"""
+        # Mixed code should have require converted to import for ESM target
         result = ensure_module_system_compatibility(mixed_code, ModuleSystem.ES_MODULE, tmp_path)
 
-        assert result == mixed_code, "Mixed code should not be converted"
+        assert result == expected, "require should be converted to import for ESM target"
 
     def test_pure_esm_unchanged_for_esm_target(self, tmp_path):
         """Test that pure ESM code is unchanged when targeting ESM."""

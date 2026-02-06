@@ -77,8 +77,13 @@ module.exports = {
     incrementBatch: capture.incrementBatch,
     getCurrentBatch: capture.getCurrentBatch,
     checkSharedTimeLimit: capture.checkSharedTimeLimit,
-    PERF_BATCH_SIZE: capture.PERF_BATCH_SIZE,
-    PERF_LOOP_COUNT: capture.PERF_LOOP_COUNT,
+    // Getter functions for dynamic env var reading (not constants)
+    getPerfBatchSize: capture.getPerfBatchSize,
+    getPerfLoopCount: capture.getPerfLoopCount,
+    getPerfMinLoops: capture.getPerfMinLoops,
+    getPerfTargetDurationMs: capture.getPerfTargetDurationMs,
+    getPerfStabilityCheck: capture.getPerfStabilityCheck,
+    getPerfCurrentBatch: capture.getPerfCurrentBatch,
 
     // === Feature Detection ===
     hasV8: serializer.hasV8,
