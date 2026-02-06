@@ -29,53 +29,50 @@ from codeflash.languages.java.build_tools import (
 
 logger = logging.getLogger(__name__)
 
+
+def _extract_modules_from_pom_content(content: str) -> list[str]:
+    """Extract module names from Maven POM XML content using proper XML parsing.
+
+    Handles both namespaced and non-namespaced POMs.
+    """
+    try:
+        root = ET.fromstring(content)
+    except ET.ParseError:
+        logger.debug("Failed to parse POM XML for module extraction")
+        return []
+
+    ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+
+    modules_elem = root.find("m:modules", ns)
+    if modules_elem is None:
+        modules_elem = root.find("modules")
+
+    if modules_elem is None:
+        return []
+
+    return [m.text for m in modules_elem if m.text]
+
+
 # Regex pattern for valid Java class names (package.ClassName format)
-# Allows: letters, digits, underscores, dots, and dollar signs (inner classes)
 _VALID_JAVA_CLASS_NAME = re.compile(r"^[a-zA-Z_$][a-zA-Z0-9_$.]*$")
 
 
 def _validate_java_class_name(class_name: str) -> bool:
-    """Validate that a string is a valid Java class name.
-
-    This prevents command injection when passing test class names to Maven.
-
-    Args:
-        class_name: The class name to validate (e.g., "com.example.MyTest").
-
-    Returns:
-        True if valid, False otherwise.
-
-    """
+    """Validate that a string is a valid Java class name."""
     return bool(_VALID_JAVA_CLASS_NAME.match(class_name))
 
 
 def _validate_test_filter(test_filter: str) -> str:
-    """Validate and sanitize a test filter string for Maven.
-
-    Test filters can contain commas (multiple classes) and wildcards (*).
-    This function validates the format to prevent command injection.
-
-    Args:
-        test_filter: The test filter string (e.g., "MyTest", "MyTest,OtherTest", "My*Test").
-
-    Returns:
-        The sanitized test filter.
-
-    Raises:
-        ValueError: If the test filter contains invalid characters.
-
-    """
-    # Split by comma for multiple test patterns
+    """Validate and sanitize a test filter string for Maven."""
     patterns = [p.strip() for p in test_filter.split(",")]
 
     for pattern in patterns:
-        # Remove wildcards for validation (they're allowed in test filters)
-        name_to_validate = pattern.replace("*", "A")  # Replace * with a valid char
+        name_to_validate = pattern.replace("*", "A")
 
         if not _validate_java_class_name(name_to_validate):
             msg = (
                 f"Invalid test class name or pattern: '{pattern}'. "
-                f"Test names must follow Java identifier rules (letters, digits, underscores, dots, dollar signs)."
+                f"Test names must follow Java identifier rules."
             )
             raise ValueError(msg)
 
@@ -83,27 +80,10 @@ def _validate_test_filter(test_filter: str) -> str:
 
 
 def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, str | None]:
-    """Find the multi-module Maven parent root if tests are in a different module.
-
-    For multi-module Maven projects, tests may be in a separate module from the source code.
-    This function detects this situation and returns the parent project root along with
-    the module containing the tests.
-
-    Args:
-        project_root: The current project root (typically the source module).
-        test_paths: TestFiles object or list of test file paths.
-
-    Returns:
-        Tuple of (maven_root, test_module_name) where:
-        - maven_root: The directory to run Maven from (parent if multi-module, else project_root)
-        - test_module_name: The name of the test module if different from project_root, else None
-
-    """
-    # Get test file paths - try both benchmarking and behavior paths
+    """Find the multi-module Maven parent root if tests are in a different module."""
     test_file_paths: list[Path] = []
     if hasattr(test_paths, "test_files"):
         for test_file in test_paths.test_files:
-            # Prefer benchmarking_file_path for performance mode
             if hasattr(test_file, "benchmarking_file_path") and test_file.benchmarking_file_path:
                 test_file_paths.append(test_file.benchmarking_file_path)
             elif hasattr(test_file, "instrumented_behavior_file_path") and test_file.instrumented_behavior_file_path:
@@ -114,36 +94,26 @@ def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, 
     if not test_file_paths:
         return project_root, None
 
-    # Check if any test file is outside the project_root
     test_outside_project = False
     test_dir: Path | None = None
     for test_path in test_file_paths:
         try:
             test_path.relative_to(project_root)
         except ValueError:
-            # Test is outside project_root
             test_outside_project = True
             test_dir = test_path.parent
             break
 
     if not test_outside_project:
-        # Check if project_root itself is a multi-module project
-        # and the test file is in a submodule (e.g., test/src/...)
         pom_path = project_root / "pom.xml"
         if pom_path.exists():
             try:
                 content = pom_path.read_text(encoding="utf-8")
                 if "<modules>" in content:
-                    # This is a multi-module project root
-                    # Extract modules from pom.xml
-                    import re
-
-                    modules = re.findall(r"<module>([^<]+)</module>", content)
-                    # Check if test file is in one of the modules
+                    modules = _extract_modules_from_pom_content(content)
                     for test_path in test_file_paths:
                         try:
                             rel_path = test_path.relative_to(project_root)
-                            # Get the first component of the relative path
                             first_component = rel_path.parts[0] if rel_path.parts else None
                             if first_component and first_component in modules:
                                 logger.debug(
@@ -158,22 +128,16 @@ def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, 
                 pass
         return project_root, None
 
-    # Find common parent that contains both project_root and test files
-    # and has a pom.xml with <modules> section
     current = project_root.parent
     while current != current.parent:
         pom_path = current / "pom.xml"
         if pom_path.exists():
-            # Check if this is a multi-module pom
             try:
                 content = pom_path.read_text(encoding="utf-8")
                 if "<modules>" in content:
-                    # Found multi-module parent
-                    # Get the relative module name for the test directory
                     if test_dir:
                         try:
                             test_module = test_dir.relative_to(current)
-                            # Get the top-level module name (first component)
                             test_module_name = test_module.parts[0] if test_module.parts else None
                             logger.debug(
                                 "Detected multi-module Maven project. Root: %s, Test module: %s",
@@ -191,16 +155,7 @@ def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, 
 
 
 def _get_test_module_target_dir(maven_root: Path, test_module: str | None) -> Path:
-    """Get the target directory for the test module.
-
-    Args:
-        maven_root: The Maven project root.
-        test_module: The test module name, or None if not a multi-module project.
-
-    Returns:
-        Path to the target directory where surefire reports will be.
-
-    """
+    """Get the target directory for the test module."""
     if test_module:
         return maven_root / test_module / "target"
     return maven_root / "target"
@@ -232,48 +187,23 @@ def run_behavioral_tests(
     enable_coverage: bool = False,
     candidate_index: int = 0,
 ) -> tuple[Path, Any, Path | None, Path | None]:
-    """Run behavioral tests for Java code.
-
-    This runs tests and captures behavior (inputs/outputs) for verification.
-    For Java, test results are written to a SQLite database via CodeflashHelper,
-    and JUnit test pass/fail results serve as the primary verification mechanism.
-
-    Args:
-        test_paths: TestFiles object or list of test file paths.
-        test_env: Environment variables for the test run.
-        cwd: Working directory for running tests.
-        timeout: Optional timeout in seconds.
-        project_root: Project root directory.
-        enable_coverage: Whether to collect coverage information.
-        candidate_index: Index of the candidate being tested.
-
-    Returns:
-        Tuple of (result_xml_path, subprocess_result, sqlite_db_path, coverage_xml_path).
-
-    """
+    """Run behavioral tests for Java code."""
     project_root = project_root or cwd
 
-    # Detect multi-module Maven projects where tests are in a different module
     maven_root, test_module = _find_multi_module_root(project_root, test_paths)
 
-    # Create SQLite database path for behavior capture - use standard path that parse_test_results expects
     sqlite_db_path = get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite"))
 
-    # Set environment variables for timing instrumentation and behavior capture
     run_env = os.environ.copy()
     run_env.update(test_env)
-    run_env["CODEFLASH_LOOP_INDEX"] = "1"  # Single loop for behavior tests
+    run_env["CODEFLASH_LOOP_INDEX"] = "1"
     run_env["CODEFLASH_MODE"] = "behavior"
     run_env["CODEFLASH_TEST_ITERATION"] = str(candidate_index)
-    run_env["CODEFLASH_OUTPUT_FILE"] = str(sqlite_db_path)  # SQLite output path
+    run_env["CODEFLASH_OUTPUT_FILE"] = str(sqlite_db_path)
 
-    # If coverage is enabled, ensure JaCoCo is configured
-    # For multi-module projects, add JaCoCo to the test module's pom.xml (where tests run)
     coverage_xml_path: Path | None = None
     if enable_coverage:
-        # Determine which pom.xml to configure JaCoCo in
         if test_module:
-            # Multi-module project: add JaCoCo to test module
             test_module_pom = maven_root / test_module / "pom.xml"
             if test_module_pom.exists():
                 if not is_jacoco_configured(test_module_pom):
@@ -281,7 +211,6 @@ def run_behavioral_tests(
                     add_jacoco_plugin_to_pom(test_module_pom)
                 coverage_xml_path = get_jacoco_xml_path(maven_root / test_module)
         else:
-            # Single module project
             pom_path = project_root / "pom.xml"
             if pom_path.exists():
                 if not is_jacoco_configured(pom_path):
@@ -289,8 +218,6 @@ def run_behavioral_tests(
                     add_jacoco_plugin_to_pom(pom_path)
                 coverage_xml_path = get_jacoco_xml_path(project_root)
 
-    # Run Maven tests from the appropriate root
-    # Use a minimum timeout of 60s for Java builds (120s when coverage is enabled due to verify phase)
     min_timeout = 120 if enable_coverage else 60
     effective_timeout = max(timeout or 300, min_timeout)
     result = _run_maven_tests(
@@ -303,37 +230,28 @@ def run_behavioral_tests(
         test_module=test_module,
     )
 
-    # Find or create the JUnit XML results file
-    # For multi-module projects, look in the test module's target directory
     target_dir = _get_test_module_target_dir(maven_root, test_module)
     surefire_dir = target_dir / "surefire-reports"
     result_xml_path = _get_combined_junit_xml(surefire_dir, candidate_index)
 
-    # Return coverage_xml_path as the fourth element when coverage is enabled
     return result_xml_path, result, sqlite_db_path, coverage_xml_path
 
 
 def _compile_tests(
     project_root: Path, env: dict[str, str], test_module: str | None = None, timeout: int = 120
 ) -> subprocess.CompletedProcess:
-    """Compile test code using Maven (without running tests).
-
-    Args:
-        project_root: Root directory of the Maven project.
-        env: Environment variables.
-        test_module: For multi-module projects, the module containing tests.
-        timeout: Maximum execution time in seconds.
-
-    Returns:
-        CompletedProcess with compilation results.
-
-    """
+    """Compile test code using Maven (without running tests)."""
     mvn = find_maven_executable()
     if not mvn:
         logger.error("Maven not found")
         return subprocess.CompletedProcess(args=["mvn"], returncode=-1, stdout="", stderr="Maven not found")
 
-    cmd = [mvn, "test-compile", "-e"]  # Show errors but not verbose output
+    cmd = [mvn, "test-compile", "-e"]
+
+    # Add Maven profiles if configured
+    maven_profiles = os.environ.get("CODEFLASH_MAVEN_PROFILES", "").strip()
+    if maven_profiles:
+        cmd.extend(["-P", maven_profiles])
 
     if test_module:
         cmd.extend(["-pl", test_module, "-am"])
@@ -357,23 +275,11 @@ def _compile_tests(
 def _get_test_classpath(
     project_root: Path, env: dict[str, str], test_module: str | None = None, timeout: int = 60
 ) -> str | None:
-    """Get the test classpath from Maven.
-
-    Args:
-        project_root: Root directory of the Maven project.
-        env: Environment variables.
-        test_module: For multi-module projects, the module containing tests.
-        timeout: Maximum execution time in seconds.
-
-    Returns:
-        Classpath string, or None if failed.
-
-    """
+    """Get the test classpath from Maven."""
     mvn = find_maven_executable()
     if not mvn:
         return None
 
-    # Create temp file for classpath output
     cp_file = project_root / ".codeflash_classpath.txt"
 
     cmd = [mvn, "dependency:build-classpath", "-DincludeScope=test", f"-Dmdep.outputFile={cp_file}", "-q"]
@@ -398,8 +304,6 @@ def _get_test_classpath(
 
         classpath = cp_file.read_text(encoding="utf-8").strip()
 
-        # Add compiled classes directories to classpath
-        # For multi-module, we need to find the correct target directories
         if test_module:
             module_path = project_root / test_module
         else:
@@ -423,7 +327,6 @@ def _get_test_classpath(
         logger.exception("Failed to get classpath: %s", e)
         return None
     finally:
-        # Clean up temp file
         if cp_file.exists():
             cp_file.unlink()
 
@@ -436,23 +339,7 @@ def _run_tests_direct(
     timeout: int = 60,
     reports_dir: Path | None = None,
 ) -> subprocess.CompletedProcess:
-    """Run JUnit tests directly using java command (bypassing Maven).
-
-    This is much faster than Maven invocation (~500ms vs ~5-10s overhead).
-
-    Args:
-        classpath: Full classpath including test dependencies.
-        test_classes: List of fully qualified test class names to run.
-        env: Environment variables.
-        working_dir: Working directory for execution.
-        timeout: Maximum execution time in seconds.
-        reports_dir: Optional directory for JUnit XML reports.
-
-    Returns:
-        CompletedProcess with test results.
-
-    """
-    # Find java executable
+    """Run JUnit tests directly using java command (bypassing Maven)."""
     java_home = os.environ.get("JAVA_HOME")
     if java_home:
         java = Path(java_home) / "bin" / "java"
@@ -461,8 +348,6 @@ def _run_tests_direct(
     else:
         java = "java"
 
-    # Build command using JUnit Platform Console Launcher
-    # The launcher is included in junit-platform-console-standalone or junit-jupiter
     cmd = [
         str(java),
         "-cp",
@@ -470,21 +355,15 @@ def _run_tests_direct(
         "org.junit.platform.console.ConsoleLauncher",
         "--disable-banner",
         "--disable-ansi-colors",
-        # Use 'none' details to avoid duplicate output
-        # Timing markers are captured in XML via stdout capture config
         "--details=none",
-        # Enable stdout/stderr capture in XML reports
-        # This ensures timing markers are included in the XML system-out element
         "--config=junit.platform.output.capture.stdout=true",
         "--config=junit.platform.output.capture.stderr=true",
     ]
 
-    # Add reports directory if specified (for XML output)
     if reports_dir:
         reports_dir.mkdir(parents=True, exist_ok=True)
         cmd.extend(["--reports-dir", str(reports_dir)])
 
-    # Add test classes to select
     for test_class in test_classes:
         cmd.extend(["--select-class", test_class])
 
@@ -505,16 +384,7 @@ def _run_tests_direct(
 
 
 def _get_test_class_names(test_paths: Any, mode: str = "performance") -> list[str]:
-    """Extract fully qualified test class names from test paths.
-
-    Args:
-        test_paths: TestFiles object or list of test file paths.
-        mode: Testing mode - "behavior" or "performance".
-
-    Returns:
-        List of fully qualified class names.
-
-    """
+    """Extract fully qualified test class names from test paths."""
     class_names = []
 
     if hasattr(test_paths, "test_files"):
@@ -541,16 +411,7 @@ def _get_test_class_names(test_paths: Any, mode: str = "performance") -> list[st
 
 
 def _get_empty_result(maven_root: Path, test_module: str | None) -> tuple[Path, Any]:
-    """Return an empty result for when no tests can be run.
-
-    Args:
-        maven_root: Maven project root.
-        test_module: Optional test module name.
-
-    Returns:
-        Tuple of (empty_xml_path, empty_result).
-
-    """
+    """Return an empty result for when no tests can be run."""
     target_dir = _get_test_module_target_dir(maven_root, test_module)
     surefire_dir = target_dir / "surefire-reports"
     result_xml_path = _get_combined_junit_xml(surefire_dir, -1)
@@ -572,25 +433,7 @@ def _run_benchmarking_tests_maven(
     target_duration_seconds: float,
     inner_iterations: int,
 ) -> tuple[Path, Any]:
-    """Fallback: Run benchmarking tests using Maven (slower but more reliable).
-
-    This is used when direct JVM execution fails (e.g., classpath issues).
-
-    Args:
-        test_paths: TestFiles object or list of test file paths.
-        test_env: Environment variables for the test run.
-        cwd: Working directory for running tests.
-        timeout: Optional timeout in seconds.
-        project_root: Project root directory.
-        min_loops: Minimum number of outer loops.
-        max_loops: Maximum number of outer loops.
-        target_duration_seconds: Target duration for benchmarking.
-        inner_iterations: Number of inner loop iterations.
-
-    Returns:
-        Tuple of (result_file_path, subprocess_result with aggregated stdout).
-
-    """
+    """Fallback: Run benchmarking tests using Maven (slower but more reliable)."""
     import time
 
     project_root = project_root or cwd
@@ -631,11 +474,7 @@ def _run_benchmarking_tests_maven(
             logger.debug("Stopping Maven benchmark after %d loops (%.2fs elapsed)", loop_idx, elapsed)
             break
 
-        # Check if we have timing markers even if some tests failed
-        # We should continue looping if we're getting valid timing data
         if result.returncode != 0:
-            import re
-
             timing_pattern = re.compile(r"!######[^:]*:[^:]*:[^:]*:[^:]*:[^:]+:[^:]+######!")
             has_timing_markers = bool(timing_pattern.search(result.stdout or ""))
             if not has_timing_markers:
@@ -680,47 +519,18 @@ def run_benchmarking_tests(
     target_duration_seconds: float = 10.0,
     inner_iterations: int = 10,
 ) -> tuple[Path, Any]:
-    """Run benchmarking tests for Java code with compile-once-run-many optimization.
-
-    This compiles tests once, then runs them multiple times directly via JVM,
-    bypassing Maven overhead (~500ms vs ~5-10s per invocation).
-
-    The instrumented tests run CODEFLASH_INNER_ITERATIONS iterations per JVM invocation,
-    printing timing markers that are parsed from stdout:
-      Start: !$######testModule:testClass:funcName:loopIndex:iterationId######$!
-      End:   !######testModule:testClass:funcName:loopIndex:iterationId:durationNs######!
-
-    Where iterationId is the inner iteration number (0, 1, 2, ..., inner_iterations-1).
-
-    Args:
-        test_paths: TestFiles object or list of test file paths.
-        test_env: Environment variables for the test run.
-        cwd: Working directory for running tests.
-        timeout: Optional timeout in seconds.
-        project_root: Project root directory.
-        min_loops: Minimum number of outer loops (JVM invocations). Default: 1.
-        max_loops: Maximum number of outer loops (JVM invocations). Default: 3.
-        target_duration_seconds: Target duration for benchmarking in seconds.
-        inner_iterations: Number of inner loop iterations per JVM invocation. Default: 100.
-
-    Returns:
-        Tuple of (result_file_path, subprocess_result with aggregated stdout).
-
-    """
+    """Run benchmarking tests for Java code with compile-once-run-many optimization."""
     import time
 
     project_root = project_root or cwd
 
-    # Detect multi-module Maven projects where tests are in a different module
     maven_root, test_module = _find_multi_module_root(project_root, test_paths)
 
-    # Get test class names
     test_classes = _get_test_class_names(test_paths, mode="performance")
     if not test_classes:
         logger.error("No test classes found")
         return _get_empty_result(maven_root, test_module)
 
-    # Step 1: Compile tests once using Maven
     compile_env = os.environ.copy()
     compile_env.update(test_env)
 
@@ -736,41 +546,24 @@ def run_benchmarking_tests(
             compile_result.stdout,
             compile_result.stderr,
         )
-        # Fall back to Maven-based execution
         logger.warning("Falling back to Maven-based test execution")
         return _run_benchmarking_tests_maven(
-            test_paths,
-            test_env,
-            cwd,
-            timeout,
-            project_root,
-            min_loops,
-            max_loops,
-            target_duration_seconds,
-            inner_iterations,
+            test_paths, test_env, cwd, timeout, project_root,
+            min_loops, max_loops, target_duration_seconds, inner_iterations,
         )
 
     logger.debug("Compilation completed in %.2fs", compile_time)
 
-    # Step 2: Get classpath from Maven
     logger.debug("Step 2: Getting classpath")
     classpath = _get_test_classpath(maven_root, compile_env, test_module, timeout=60)
 
     if not classpath:
         logger.warning("Failed to get classpath, falling back to Maven-based execution")
         return _run_benchmarking_tests_maven(
-            test_paths,
-            test_env,
-            cwd,
-            timeout,
-            project_root,
-            min_loops,
-            max_loops,
-            target_duration_seconds,
-            inner_iterations,
+            test_paths, test_env, cwd, timeout, project_root,
+            min_loops, max_loops, target_duration_seconds, inner_iterations,
         )
 
-    # Step 3: Run tests multiple times directly via JVM
     logger.debug("Step 3: Running tests directly (bypassing Maven)")
 
     all_stdout = []
@@ -779,22 +572,18 @@ def run_benchmarking_tests(
     loop_count = 0
     last_result = None
 
-    # Calculate timeout per loop
     per_loop_timeout = timeout or max(60, 30 + inner_iterations // 10)
 
-    # Determine working directory for test execution
     if test_module:
         working_dir = maven_root / test_module
     else:
         working_dir = maven_root
 
-    # Create reports directory for JUnit XML output (in Surefire-compatible location)
     target_dir = _get_test_module_target_dir(maven_root, test_module)
     reports_dir = target_dir / "surefire-reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
 
     for loop_idx in range(1, max_loops + 1):
-        # Set environment variables for this loop
         run_env = os.environ.copy()
         run_env.update(test_env)
         run_env["CODEFLASH_LOOP_INDEX"] = str(loop_idx)
@@ -802,7 +591,6 @@ def run_benchmarking_tests(
         run_env["CODEFLASH_TEST_ITERATION"] = "0"
         run_env["CODEFLASH_INNER_ITERATIONS"] = str(inner_iterations)
 
-        # Run tests directly with XML report generation
         loop_start = time.time()
         result = _run_tests_direct(
             classpath, test_classes, run_env, working_dir, timeout=per_loop_timeout, reports_dir=reports_dir
@@ -812,7 +600,6 @@ def run_benchmarking_tests(
         last_result = result
         loop_count = loop_idx
 
-        # Collect stdout/stderr
         if result.stdout:
             all_stdout.append(result.stdout)
         if result.stderr:
@@ -820,38 +607,22 @@ def run_benchmarking_tests(
 
         logger.debug("Loop %d completed in %.2fs (returncode=%d)", loop_idx, loop_time, result.returncode)
 
-        # Check if JUnit Console Launcher is not available (JUnit 4 projects)
-        # Fall back to Maven-based execution in this case
         if loop_idx == 1 and result.returncode != 0 and result.stderr and "ConsoleLauncher" in result.stderr:
             logger.debug("JUnit Console Launcher not available, falling back to Maven-based execution")
             return _run_benchmarking_tests_maven(
-                test_paths,
-                test_env,
-                cwd,
-                timeout,
-                project_root,
-                min_loops,
-                max_loops,
-                target_duration_seconds,
-                inner_iterations,
+                test_paths, test_env, cwd, timeout, project_root,
+                min_loops, max_loops, target_duration_seconds, inner_iterations,
             )
 
-        # Check if we've hit the target duration
         elapsed = time.time() - total_start_time
         if loop_idx >= min_loops and elapsed >= target_duration_seconds:
             logger.debug(
                 "Stopping benchmark after %d loops (%.2fs elapsed, target: %.2fs, %d inner iterations each)",
-                loop_idx,
-                elapsed,
-                target_duration_seconds,
-                inner_iterations,
+                loop_idx, elapsed, target_duration_seconds, inner_iterations,
             )
             break
 
-        # Check if tests failed - continue looping if we have timing markers
         if result.returncode != 0:
-            import re
-
             timing_pattern = re.compile(r"!######[^:]*:[^:]*:[^:]*:[^:]*:[^:]+:[^:]+######!")
             has_timing_markers = bool(timing_pattern.search(result.stdout or ""))
             if not has_timing_markers:
@@ -859,7 +630,6 @@ def run_benchmarking_tests(
                 break
             logger.debug("Some tests failed in loop %d but timing markers present, continuing", loop_idx)
 
-    # Create a combined result with all stdout
     combined_stdout = "\n".join(all_stdout)
     combined_stderr = "\n".join(all_stderr)
 
@@ -867,14 +637,9 @@ def run_benchmarking_tests(
     total_iterations = loop_count * inner_iterations
     logger.debug(
         "Completed %d loops x %d inner iterations = %d total iterations in %.2fs (compile: %.2fs)",
-        loop_count,
-        inner_iterations,
-        total_iterations,
-        total_time,
-        compile_time,
+        loop_count, inner_iterations, total_iterations, total_time, compile_time,
     )
 
-    # Create a combined subprocess result
     combined_result = subprocess.CompletedProcess(
         args=last_result.args if last_result else ["mvn", "test"],
         returncode=last_result.returncode if last_result else -1,
@@ -882,36 +647,22 @@ def run_benchmarking_tests(
         stderr=combined_stderr,
     )
 
-    # Find or create the JUnit XML results file (from last run)
-    # For multi-module projects, look in the test module's target directory
     target_dir = _get_test_module_target_dir(maven_root, test_module)
     surefire_dir = target_dir / "surefire-reports"
-    result_xml_path = _get_combined_junit_xml(surefire_dir, -1)  # Use -1 for benchmark
+    result_xml_path = _get_combined_junit_xml(surefire_dir, -1)
 
     return result_xml_path, combined_result
 
 
 def _get_combined_junit_xml(surefire_dir: Path, candidate_index: int) -> Path:
-    """Get or create a combined JUnit XML file from Surefire reports.
-
-    Args:
-        surefire_dir: Directory containing Surefire reports.
-        candidate_index: Index for unique naming.
-
-    Returns:
-        Path to the combined JUnit XML file.
-
-    """
-    # Create a temp file for the combined results
+    """Get or create a combined JUnit XML file from Surefire reports."""
     result_id = uuid.uuid4().hex[:8]
     result_xml_path = Path(tempfile.gettempdir()) / f"codeflash_java_results_{candidate_index}_{result_id}.xml"
 
     if not surefire_dir.exists():
-        # Create an empty results file
         _write_empty_junit_xml(result_xml_path)
         return result_xml_path
 
-    # Find all TEST-*.xml files
     xml_files = list(surefire_dir.glob("TEST-*.xml"))
 
     if not xml_files:
@@ -919,11 +670,9 @@ def _get_combined_junit_xml(surefire_dir: Path, candidate_index: int) -> Path:
         return result_xml_path
 
     if len(xml_files) == 1:
-        # Copy the single file
         shutil.copy(xml_files[0], result_xml_path)
         return result_xml_path
 
-    # Combine multiple XML files into one
     _combine_junit_xml_files(xml_files, result_xml_path)
     return result_xml_path
 
@@ -938,13 +687,7 @@ def _write_empty_junit_xml(path: Path) -> None:
 
 
 def _combine_junit_xml_files(xml_files: list[Path], output_path: Path) -> None:
-    """Combine multiple JUnit XML files into one.
-
-    Args:
-        xml_files: List of XML files to combine.
-        output_path: Path for the combined output.
-
-    """
+    """Combine multiple JUnit XML files into one."""
     total_tests = 0
     total_failures = 0
     total_errors = 0
@@ -957,21 +700,18 @@ def _combine_junit_xml_files(xml_files: list[Path], output_path: Path) -> None:
             tree = ET.parse(xml_file)
             root = tree.getroot()
 
-            # Get testsuite attributes
             total_tests += int(root.get("tests", 0))
             total_failures += int(root.get("failures", 0))
             total_errors += int(root.get("errors", 0))
             total_skipped += int(root.get("skipped", 0))
             total_time += float(root.get("time", 0))
 
-            # Collect all testcases
             for testcase in root.findall(".//testcase"):
                 all_testcases.append(testcase)
 
         except Exception as e:
             logger.warning("Failed to parse %s: %s", xml_file, e)
 
-    # Create combined XML
     combined_root = ET.Element("testsuite")
     combined_root.set("name", "CombinedTests")
     combined_root.set("tests", str(total_tests))
@@ -996,68 +736,49 @@ def _run_maven_tests(
     enable_coverage: bool = False,
     test_module: str | None = None,
 ) -> subprocess.CompletedProcess:
-    """Run Maven tests with Surefire.
-
-    Args:
-        project_root: Root directory of the Maven project.
-        test_paths: Test files or classes to run.
-        env: Environment variables.
-        timeout: Maximum execution time in seconds.
-        mode: Testing mode - "behavior" or "performance".
-        enable_coverage: Whether to enable JaCoCo coverage collection.
-        test_module: For multi-module projects, the module containing tests.
-
-    Returns:
-        CompletedProcess with test results.
-
-    """
+    """Run Maven tests with Surefire."""
     mvn = find_maven_executable()
     if not mvn:
         logger.error("Maven not found")
         return subprocess.CompletedProcess(args=["mvn"], returncode=-1, stdout="", stderr="Maven not found")
 
-    # Build test filter
     test_filter = _build_test_filter(test_paths, mode=mode)
     logger.debug(f"Built test filter for mode={mode}: '{test_filter}' (empty={not test_filter})")
     logger.debug(f"test_paths type: {type(test_paths)}, has test_files: {hasattr(test_paths, 'test_files')}")
     if hasattr(test_paths, "test_files"):
         logger.debug(f"Number of test files: {len(test_paths.test_files)}")
-        for i, tf in enumerate(test_paths.test_files[:3]):  # Log first 3
-            logger.debug(f"  TestFile[{i}]: behavior={tf.instrumented_behavior_file_path}, bench={tf.benchmarking_file_path}")
+        for i, tf in enumerate(test_paths.test_files[:3]):
+            logger.debug(
+                f"  TestFile[{i}]: behavior={tf.instrumented_behavior_file_path},"
+                f" bench={tf.benchmarking_file_path}"
+            )
 
-    # Build Maven command
-    # When coverage is enabled, use 'verify' phase to ensure JaCoCo report runs after tests
-    # JaCoCo's report goal is bound to the verify phase to get post-test execution data
     maven_goal = "verify" if enable_coverage else "test"
-    cmd = [mvn, maven_goal, "-fae"]  # Fail at end to run all tests
+    cmd = [mvn, maven_goal, "-fae"]
 
-    # When coverage is enabled, continue build even if tests fail so JaCoCo report is generated
+    # Add Maven profiles if configured via environment variable
+    maven_profiles = os.environ.get("CODEFLASH_MAVEN_PROFILES", "").strip()
+    if maven_profiles:
+        cmd.extend(["-P", maven_profiles])
+        logger.debug("Using Maven profiles: %s", maven_profiles)
+
     if enable_coverage:
         cmd.append("-Dmaven.test.failure.ignore=true")
 
-    # For multi-module projects, specify which module to test
     if test_module:
-        # -am = also make dependencies
-        # -DfailIfNoTests=false allows dependency modules without tests to pass
-        # -DskipTests=false overrides any skipTests=true in pom.xml
         cmd.extend(["-pl", test_module, "-am", "-DfailIfNoTests=false", "-DskipTests=false"])
 
     if test_filter:
-        # Validate test filter to prevent command injection
         validated_filter = _validate_test_filter(test_filter)
         cmd.append(f"-Dtest={validated_filter}")
         logger.debug(f"Added -Dtest={validated_filter} to Maven command")
     else:
-        # CRITICAL: Empty test filter means Maven will run ALL tests
-        # This is almost always a bug - tests should be filtered to relevant ones
         error_msg = (
             f"Test filter is EMPTY for mode={mode}! "
             f"Maven will run ALL tests instead of the specified tests. "
             f"This indicates a problem with test file instrumentation or path resolution."
         )
         logger.error(error_msg)
-        # Raise exception to prevent running all tests unintentionally
-        # This helps catch bugs early rather than silently running wrong tests
         raise ValueError(error_msg)
 
     logger.debug("Running Maven command: %s in %s", " ".join(cmd), project_root)
@@ -1078,26 +799,15 @@ def _run_maven_tests(
 
 
 def _build_test_filter(test_paths: Any, mode: str = "behavior") -> str:
-    """Build a Maven Surefire test filter from test paths.
-
-    Args:
-        test_paths: Test files, classes, or methods to include.
-        mode: Testing mode - "behavior" or "performance".
-
-    Returns:
-        Surefire test filter string.
-
-    """
+    """Build a Maven Surefire test filter from test paths."""
     if not test_paths:
         logger.debug("_build_test_filter: test_paths is empty/None")
         return ""
 
-    # Handle different input types
     if isinstance(test_paths, (list, tuple)):
         filters = []
         for path in test_paths:
             if isinstance(path, Path):
-                # Convert file path to class name
                 class_name = _path_to_class_name(path)
                 if class_name:
                     filters.append(class_name)
@@ -1109,54 +819,67 @@ def _build_test_filter(test_paths: Any, mode: str = "behavior") -> str:
         logger.debug(f"_build_test_filter (list/tuple): {len(filters)} filters -> '{result}'")
         return result
 
-    # Handle TestFiles object (has test_files attribute)
     if hasattr(test_paths, "test_files"):
         filters = []
         skipped = 0
         skipped_reasons = []
 
         for test_file in test_paths.test_files:
-            # For performance mode, use benchmarking_file_path
             if mode == "performance":
                 if hasattr(test_file, "benchmarking_file_path") and test_file.benchmarking_file_path:
                     class_name = _path_to_class_name(test_file.benchmarking_file_path)
                     if class_name:
                         filters.append(class_name)
                     else:
-                        reason = f"Could not convert benchmarking path to class name: {test_file.benchmarking_file_path}"
+                        reason = (
+                            "Could not convert benchmarking path to class name:"
+                            f" {test_file.benchmarking_file_path}"
+                        )
                         logger.debug(f"_build_test_filter: {reason}")
                         skipped += 1
                         skipped_reasons.append(reason)
                 else:
-                    reason = f"TestFile has no benchmarking_file_path (original: {test_file.original_file_path})"
+                    reason = (
+                        "TestFile has no benchmarking_file_path"
+                        f" (original: {test_file.original_file_path})"
+                    )
                     logger.warning(f"_build_test_filter: {reason}")
                     skipped += 1
                     skipped_reasons.append(reason)
-            # For behavior mode, use instrumented_behavior_file_path
-            elif hasattr(test_file, "instrumented_behavior_file_path") and test_file.instrumented_behavior_file_path:
+            elif (
+                hasattr(test_file, "instrumented_behavior_file_path")
+                and test_file.instrumented_behavior_file_path
+            ):
                 class_name = _path_to_class_name(test_file.instrumented_behavior_file_path)
                 if class_name:
                     filters.append(class_name)
                 else:
-                    reason = f"Could not convert behavior path to class name: {test_file.instrumented_behavior_file_path}"
+                    reason = (
+                        "Could not convert behavior path to class name:"
+                        f" {test_file.instrumented_behavior_file_path}"
+                    )
                     logger.debug(f"_build_test_filter: {reason}")
                     skipped += 1
                     skipped_reasons.append(reason)
             else:
-                reason = f"TestFile has no instrumented_behavior_file_path (original: {test_file.original_file_path})"
+                reason = (
+                    "TestFile has no instrumented_behavior_file_path"
+                    f" (original: {test_file.original_file_path})"
+                )
                 logger.warning(f"_build_test_filter: {reason}")
                 skipped += 1
                 skipped_reasons.append(reason)
 
         result = ",".join(filters) if filters else ""
-        logger.debug(f"_build_test_filter (TestFiles): {len(filters)} filters, {skipped} skipped -> '{result}'")
+        logger.debug(
+            f"_build_test_filter (TestFiles): {len(filters)} filters, {skipped} skipped -> '{result}'"
+        )
 
-        # If all tests were skipped, log detailed information to help diagnose
         if not filters and skipped > 0:
             logger.error(
                 f"All {skipped} test files were skipped in _build_test_filter! "
                 f"Mode: {mode}. This will cause an empty test filter. "
-                f"Reasons: {skipped_reasons[:5]}"  # Show first 5 reasons
+                f"Reasons: {skipped_reasons[:5]}"
             )
 
         return result
@@ -1165,11 +888,14 @@ def _build_test_filter(test_paths: Any, mode: str = "behavior") -> str:
     return ""
 
 
-def _path_to_class_name(path: Path) -> str | None:
+def _path_to_class_name(path: Path, source_dirs: list[str] | None = None) -> str | None:
     """Convert a test file path to a Java class name.
 
     Args:
         path: Path to the test file.
+        source_dirs: Optional list of custom source directory suffixes to try
+            (e.g., ["src/main/custom", "app/java"]). These are matched against
+            the path before standard Maven directories.
 
     Returns:
         Fully qualified class name, or None if unable to determine.
@@ -1178,86 +904,103 @@ def _path_to_class_name(path: Path) -> str | None:
     if path.suffix != ".java":
         return None
 
-    # Try to extract package from path
-    # e.g., src/test/java/com/example/CalculatorTest.java -> com.example.CalculatorTest
+    path_str = str(path).replace("\\", "/")
+
+    # Step 1: Try matching against provided custom source directories
+    if source_dirs:
+        for src_dir in source_dirs:
+            normalized = src_dir.replace("\\", "/").rstrip("/") + "/"
+            idx = path_str.find(normalized)
+            if idx != -1:
+                remainder = path_str[idx + len(normalized) :]
+                remainder = remainder.removesuffix(".java")
+                return remainder.replace("/", ".")
+
+    # Step 2: Try standard Maven/Gradle source directories
     parts = list(path.parts)
 
-    # Look for standard Maven/Gradle source directories
-    # Find 'java' that comes after 'main' or 'test'
     java_idx = None
     for i, part in enumerate(parts):
         if part == "java" and i > 0 and parts[i - 1] in ("main", "test"):
             java_idx = i
             break
 
-    # If no standard Maven structure, find the last 'java' in path
-    if java_idx is None:
-        for i in range(len(parts) - 1, -1, -1):
-            if parts[i] == "java":
-                java_idx = i
-                break
-
     if java_idx is not None:
         class_parts = parts[java_idx + 1 :]
-        # Remove .java extension from last part
         class_parts[-1] = class_parts[-1].replace(".java", "")
         return ".".join(class_parts)
 
-    # Fallback: just use the file name
+    # Step 3: Find the last 'java' in path as a fallback heuristic
+    for i in range(len(parts) - 1, -1, -1):
+        if parts[i] == "java":
+            class_parts = parts[i + 1 :]
+            class_parts[-1] = class_parts[-1].replace(".java", "")
+            return ".".join(class_parts)
+
     return path.stem
 
 
-def run_tests(test_files: list[Path], cwd: Path, env: dict[str, str], timeout: int) -> tuple[list[TestResult], Path]:
-    """Run tests and return results.
+def _extract_source_dirs_from_pom(project_root: Path) -> list[str]:
+    """Extract custom source and test source directories from pom.xml."""
+    pom_path = project_root / "pom.xml"
+    if not pom_path.exists():
+        return []
 
-    Args:
-        test_files: Paths to test files to run.
-        cwd: Working directory for test execution.
-        env: Environment variables.
-        timeout: Maximum execution time in seconds.
+    try:
+        content = pom_path.read_text(encoding="utf-8")
+        root = ET.fromstring(content)
+        ns = {"m": "http://maven.apache.org/POM/4.0.0"}
 
-    Returns:
-        Tuple of (list of TestResults, path to JUnit XML).
+        source_dirs: list[str] = []
+        standard_dirs = {
+            "src/main/java",
+            "src/test/java",
+            "${project.basedir}/src/main/java",
+            "${project.basedir}/src/test/java",
+        }
 
-    """
-    # Run Maven tests
+        for build in [root.find("m:build", ns), root.find("build")]:
+            if build is not None:
+                for tag in ("sourceDirectory", "testSourceDirectory"):
+                    for elem in [build.find(f"m:{tag}", ns), build.find(tag)]:
+                        if elem is not None and elem.text:
+                            dir_text = elem.text.strip()
+                            if dir_text not in standard_dirs:
+                                source_dirs.append(dir_text)
+
+        return source_dirs
+    except ET.ParseError:
+        logger.debug("Failed to parse pom.xml for source directories")
+        return []
+    except Exception:
+        logger.debug("Error reading pom.xml for source directories")
+        return []
+
+
+def run_tests(
+    test_files: list[Path], cwd: Path, env: dict[str, str], timeout: int
+) -> tuple[list[TestResult], Path]:
+    """Run tests and return results."""
     result = _run_maven_tests(cwd, test_files, env, timeout)
 
-    # Parse JUnit XML results
     surefire_dir = cwd / "target" / "surefire-reports"
     test_results = parse_surefire_results(surefire_dir)
 
-    # Return first XML file path
     junit_files = list(surefire_dir.glob("TEST-*.xml")) if surefire_dir.exists() else []
-    junit_path = junit_files[0] if junit_files else cwd / "target" / "surefire-reports" / "test-results.xml"
+    junit_path = (
+        junit_files[0] if junit_files else cwd / "target" / "surefire-reports" / "test-results.xml"
+    )
 
     return test_results, junit_path
 
 
 def parse_test_results(junit_xml_path: Path, stdout: str) -> list[TestResult]:
-    """Parse test results from JUnit XML and stdout.
-
-    Args:
-        junit_xml_path: Path to JUnit XML results file.
-        stdout: Standard output from test execution.
-
-    Returns:
-        List of TestResult objects.
-
-    """
+    """Parse test results from JUnit XML and stdout."""
     return parse_surefire_results(junit_xml_path.parent)
 
 
 def parse_surefire_results(surefire_dir: Path) -> list[TestResult]:
-    """Parse Maven Surefire XML reports into TestResult objects.
-
-    Args:
-        surefire_dir: Directory containing Surefire XML reports.
-
-    Returns:
-        List of TestResult objects.
-
-    """
+    """Parse Maven Surefire XML reports into TestResult objects."""
     results: list[TestResult] = []
 
     if not surefire_dir.exists():
@@ -1270,31 +1013,20 @@ def parse_surefire_results(surefire_dir: Path) -> list[TestResult]:
 
 
 def _parse_surefire_xml(xml_file: Path) -> list[TestResult]:
-    """Parse a single Surefire XML file.
-
-    Args:
-        xml_file: Path to the XML file.
-
-    Returns:
-        List of TestResult objects for tests in this file.
-
-    """
+    """Parse a single Surefire XML file."""
     results: list[TestResult] = []
 
     try:
         tree = ET.parse(xml_file)
         root = tree.getroot()
 
-        # Get test class info
-        class_name = root.get("name", "")
+        class_name = root.get("name", "")  # noqa: F841
 
-        # Process each test case
         for testcase in root.findall(".//testcase"):
             test_name = testcase.get("name", "")
             test_time = float(testcase.get("time", "0"))
             runtime_ns = int(test_time * 1_000_000_000)
 
-            # Check for failure/error
             failure = testcase.find("failure")
             error = testcase.find("error")
             skipped = testcase.find("skipped")
@@ -1312,7 +1044,6 @@ def _parse_surefire_xml(xml_file: Path) -> list[TestResult]:
                 if error.text:
                     error_message += "\n" + error.text
 
-            # Get stdout/stderr from system-out/system-err elements
             stdout = ""
             stderr = ""
             stdout_elem = testcase.find("system-out")
@@ -1340,27 +1071,22 @@ def _parse_surefire_xml(xml_file: Path) -> list[TestResult]:
     return results
 
 
-def get_test_run_command(project_root: Path, test_classes: list[str] | None = None) -> list[str]:
-    """Get the command to run Java tests.
-
-    Args:
-        project_root: Root directory of the Maven project.
-        test_classes: Optional list of test class names to run.
-
-    Returns:
-        Command as list of strings.
-
-    """
+def get_test_run_command(
+    project_root: Path, test_classes: list[str] | None = None
+) -> list[str]:
+    """Get the command to run Java tests."""
     mvn = find_maven_executable() or "mvn"
 
     cmd = [mvn, "test"]
 
     if test_classes:
-        # Validate each test class name to prevent command injection
         validated_classes = []
         for test_class in test_classes:
             if not _validate_java_class_name(test_class):
-                msg = f"Invalid test class name: '{test_class}'. Test names must follow Java identifier rules."
+                msg = (
+                    f"Invalid test class name: '{test_class}'."
+                    " Test names must follow Java identifier rules."
+                )
                 raise ValueError(msg)
             validated_classes.append(test_class)
 

@@ -1,9 +1,12 @@
 """Tests for Java build tool detection and integration."""
 
+import os
 import tempfile
 from pathlib import Path
 
 import pytest
+
+from codeflash.languages.java.test_runner import _extract_modules_from_pom_content
 
 from codeflash.languages.java.build_tools import (
     BuildTool,
@@ -277,3 +280,99 @@ version = '1.0.0'
         assert info.build_tool == BuildTool.GRADLE
         assert len(info.source_roots) == 1
         assert len(info.test_roots) == 1
+
+class TestXmlModuleExtraction:
+    """Tests for XML-based module extraction replacing regex."""
+
+    def test_namespaced_pom_modules(self):
+        content = """<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <modules>
+        <module>core</module>
+        <module>service</module>
+        <module>app</module>
+    </modules>
+</project>
+"""
+        modules = _extract_modules_from_pom_content(content)
+        assert modules == ["core", "service", "app"]
+
+    def test_non_namespaced_pom_modules(self):
+        content = """<?xml version="1.0" encoding="UTF-8"?>
+<project>
+    <modules>
+        <module>api</module>
+        <module>impl</module>
+    </modules>
+</project>
+"""
+        modules = _extract_modules_from_pom_content(content)
+        assert modules == ["api", "impl"]
+
+    def test_empty_modules_element(self):
+        content = """<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modules>
+    </modules>
+</project>
+"""
+        modules = _extract_modules_from_pom_content(content)
+        assert modules == []
+
+    def test_no_modules_element(self):
+        content = """<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+</project>
+"""
+        modules = _extract_modules_from_pom_content(content)
+        assert modules == []
+
+    def test_malformed_xml_handled_gracefully(self):
+        content = "this is not valid xml <<<<"
+        modules = _extract_modules_from_pom_content(content)
+        assert modules == []
+
+    def test_partial_xml_handled_gracefully(self):
+        content = "<project><modules><module>core</module>"
+        modules = _extract_modules_from_pom_content(content)
+        assert modules == []
+
+    def test_nested_module_paths(self):
+        content = """<?xml version="1.0" encoding="UTF-8"?>
+<project>
+    <modules>
+        <module>libs/core</module>
+        <module>apps/web</module>
+    </modules>
+</project>
+"""
+        modules = _extract_modules_from_pom_content(content)
+        assert modules == ["libs/core", "apps/web"]
+
+
+class TestMavenProfiles:
+    """Tests for Maven profile support in test commands."""
+
+    def test_profile_env_var_read(self, monkeypatch):
+        monkeypatch.setenv("CODEFLASH_MAVEN_PROFILES", "test-profile")
+        profiles = os.environ.get("CODEFLASH_MAVEN_PROFILES", "").strip()
+        assert profiles == "test-profile"
+
+    def test_no_profile_when_env_not_set(self, monkeypatch):
+        monkeypatch.delenv("CODEFLASH_MAVEN_PROFILES", raising=False)
+        profiles = os.environ.get("CODEFLASH_MAVEN_PROFILES", "").strip()
+        assert profiles == ""
+
+    def test_multiple_profiles_comma_separated(self, monkeypatch):
+        monkeypatch.setenv("CODEFLASH_MAVEN_PROFILES", "profile1,profile2")
+        profiles = os.environ.get("CODEFLASH_MAVEN_PROFILES", "").strip()
+        assert profiles == "profile1,profile2"
+        cmd_parts = ["-P", profiles]
+        assert cmd_parts == ["-P", "profile1,profile2"]
+
+    def test_whitespace_stripped_from_profiles(self, monkeypatch):
+        monkeypatch.setenv("CODEFLASH_MAVEN_PROFILES", "  my-profile  ")
+        profiles = os.environ.get("CODEFLASH_MAVEN_PROFILES", "").strip()
+        assert profiles == "my-profile"
