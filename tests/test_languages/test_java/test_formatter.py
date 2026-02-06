@@ -1,6 +1,8 @@
 """Tests for Java code formatting."""
 
+import os
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -10,6 +12,7 @@ from codeflash.languages.java.formatter import (
     format_java_file,
     normalize_java_code,
 )
+from codeflash.setup.detector import _detect_formatter
 
 
 class TestNormalizeJavaCode:
@@ -242,3 +245,109 @@ public class Example {
 """
         normalized = normalize_java_code(source)
         assert normalized == ""
+
+
+class TestDetectJavaFormatter:
+    """Tests for Java formatter detection in the project detector pipeline."""
+
+    def test_detect_formatter_returns_commands_when_java_and_jar_available(self, tmp_path: Path):
+        """Detector returns formatter commands when Java executable and JAR both exist."""
+        jar_dir = tmp_path / ".codeflash"
+        jar_dir.mkdir()
+        version = JavaFormatter.GOOGLE_JAVA_FORMAT_VERSION
+        jar_file = jar_dir / f"google-java-format-{version}-all-deps.jar"
+        jar_file.write_text("fake jar")
+
+        with (
+            patch.dict(os.environ, {"JAVA_HOME": ""}, clear=False),
+            patch("shutil.which", return_value="/usr/bin/java"),
+        ):
+            cmds, description = _detect_formatter(tmp_path, "java")
+
+        assert len(cmds) == 1
+        assert "java" in cmds[0]
+        assert "--replace" in cmds[0]
+        assert "$file" in cmds[0]
+        assert str(jar_file) in cmds[0]
+        assert description == "google-java-format"
+
+    def test_detect_formatter_returns_empty_when_java_not_available(self, tmp_path: Path):
+        """Detector returns empty list with descriptive message when Java is not found."""
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("shutil.which", return_value=None),
+        ):
+            cmds, description = _detect_formatter(tmp_path, "java")
+
+        assert cmds == []
+        assert "java not available" in description
+
+    def test_detect_formatter_returns_empty_when_jar_not_found(self, tmp_path: Path):
+        """Detector returns empty list when Java exists but JAR is not found."""
+        with (
+            patch.dict(os.environ, {"JAVA_HOME": ""}, clear=False),
+            patch("shutil.which", return_value="/usr/bin/java"),
+        ):
+            cmds, description = _detect_formatter(tmp_path, "java")
+
+        assert cmds == []
+        assert "install google-java-format" in description
+
+    def test_detect_formatter_uses_java_home(self, tmp_path: Path):
+        """Detector finds Java via JAVA_HOME environment variable."""
+        java_home = tmp_path / "jdk"
+        java_bin = java_home / "bin"
+        java_bin.mkdir(parents=True)
+        java_exe = java_bin / "java"
+        java_exe.write_text("fake java")
+
+        jar_dir = tmp_path / "project" / ".codeflash"
+        jar_dir.mkdir(parents=True)
+        version = JavaFormatter.GOOGLE_JAVA_FORMAT_VERSION
+        jar_file = jar_dir / f"google-java-format-{version}-all-deps.jar"
+        jar_file.write_text("fake jar")
+
+        with patch.dict(os.environ, {"JAVA_HOME": str(java_home)}, clear=False):
+            cmds, description = _detect_formatter(tmp_path / "project", "java")
+
+        assert len(cmds) == 1
+        assert str(java_exe) in cmds[0]
+        assert description == "google-java-format"
+
+    def test_detect_formatter_checks_home_codeflash_dir(self, tmp_path: Path):
+        """Detector finds JAR in ~/.codeflash/ directory."""
+        version = JavaFormatter.GOOGLE_JAVA_FORMAT_VERSION
+        jar_name = f"google-java-format-{version}-all-deps.jar"
+        home_codeflash = tmp_path / "fakehome" / ".codeflash"
+        home_codeflash.mkdir(parents=True)
+        jar_file = home_codeflash / jar_name
+        jar_file.write_text("fake jar")
+
+        with (
+            patch.dict(os.environ, {"JAVA_HOME": ""}, clear=False),
+            patch("shutil.which", return_value="/usr/bin/java"),
+            patch("pathlib.Path.home", return_value=tmp_path / "fakehome"),
+        ):
+            cmds, description = _detect_formatter(tmp_path, "java")
+
+        assert len(cmds) == 1
+        assert str(jar_file) in cmds[0]
+        assert description == "google-java-format"
+
+    def test_detect_formatter_python_still_works(self, tmp_path: Path):
+        """Ensure Python formatter detection is not broken by Java changes."""
+        ruff_toml = tmp_path / "ruff.toml"
+        ruff_toml.write_text("[tool.ruff]\n")
+
+        cmds, _description = _detect_formatter(tmp_path, "python")
+        assert len(cmds) > 0
+        assert "ruff" in cmds[0]
+
+    def test_detect_formatter_js_still_works(self, tmp_path: Path):
+        """Ensure JavaScript formatter detection is not broken by Java changes."""
+        prettierrc = tmp_path / ".prettierrc"
+        prettierrc.write_text("{}")
+
+        cmds, _description = _detect_formatter(tmp_path, "javascript")
+        assert len(cmds) > 0
+        assert "prettier" in cmds[0]

@@ -15,6 +15,9 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -536,15 +539,60 @@ def _detect_formatter(project_root: Path, language: str) -> tuple[list[str], str
 
     Python: ruff > black
     JavaScript: prettier > eslint --fix
-    Java: not supported yet (returns empty)
+    Java: google-java-format (if java and JAR available)
 
     """
     if language in ("javascript", "typescript"):
         return _detect_js_formatter(project_root)
     if language == "java":
-        # Java formatter support not implemented yet
-        return [], "not supported for Java"
+        return _detect_java_formatter(project_root)
     return _detect_python_formatter(project_root)
+
+
+def _detect_java_formatter(project_root: Path) -> tuple[list[str], str]:
+    """Detect Java formatter (google-java-format).
+
+    Checks for a Java executable and the google-java-format JAR in standard locations.
+    Returns formatter commands if both are available, otherwise returns an empty list
+    with a descriptive fallback message.
+
+    """
+    from codeflash.languages.java.formatter import JavaFormatter
+
+    # Find java executable
+    java_executable = None
+    java_home = os.environ.get("JAVA_HOME")
+    if java_home:
+        java_path = Path(java_home) / "bin" / "java"
+        if java_path.exists():
+            java_executable = str(java_path)
+    if not java_executable:
+        java_which = shutil.which("java")
+        if java_which:
+            java_executable = java_which
+
+    if not java_executable:
+        return [], "no Java formatter found (java not available)"
+
+    # Check for google-java-format JAR in standard locations
+    version = JavaFormatter.GOOGLE_JAVA_FORMAT_VERSION
+    jar_name = f"google-java-format-{version}-all-deps.jar"
+    possible_paths = [
+        project_root / ".codeflash" / jar_name,
+        Path.home() / ".codeflash" / jar_name,
+        Path(tempfile.gettempdir()) / "codeflash" / jar_name,
+    ]
+
+    jar_path = None
+    for candidate in possible_paths:
+        if candidate.exists():
+            jar_path = candidate
+            break
+
+    if not jar_path:
+        return [], "no Java formatter found (install google-java-format)"
+
+    return ([f"{java_executable} -jar {jar_path} --replace $file"], "google-java-format")
 
 
 def _detect_python_formatter(project_root: Path) -> tuple[list[str], str]:
