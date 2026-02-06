@@ -6,6 +6,7 @@ test files, similar to Python's inject_profiling_into_existing_test.
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -989,24 +990,38 @@ def fix_imports_inside_test_blocks(test_code: str) -> str:
     # 1. Start with whitespace (indicating they're inside a block)
     # 2. Have an import statement
 
+
+    # Pattern to match import statements inside functions
+    # This captures imports that appear after function/test block openings
+    # We look for lines that:
+    # 1. Start with whitespace (indicating they're inside a block)
+    # 2. Have an import statement
+
+    # Precompile regexes for speed
+    test_block_re = re.compile(r"^(test|it|describe|beforeEach|afterEach|beforeAll|afterAll)\s*\(")
+    named_import_re = re.compile(r"import\s+\{([^}]+)\}\s+from\s+['\"]([^'\"]+)['\"]")
+    default_import_re = re.compile(r"import\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"]")
+    namespace_import_re = re.compile(r"import\s+\*\s+as\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"]")
+
     lines = test_code.split("\n")
     result_lines = []
     brace_depth = 0
     in_test_block = False
+
+
+    # Local binding for logger debug check
+    debug_enabled = logger.isEnabledFor(logging.DEBUG)
 
     for line in lines:
         stripped = line.strip()
 
         # Track brace depth to know if we're inside a block
         # Count braces, but ignore braces in strings (simplified check)
-        for char in stripped:
-            if char == "{":
-                brace_depth += 1
-            elif char == "}":
-                brace_depth -= 1
+        # Use count-based update to avoid Python-level char iteration overhead
+        brace_depth += stripped.count("{") - stripped.count("}")
 
         # Check if we're entering a test/it/describe block
-        if re.match(r"^(test|it|describe|beforeEach|afterEach|beforeAll|afterAll)\s*\(", stripped):
+        if test_block_re.match(stripped):
             in_test_block = True
 
         # Check for import statement inside a block (brace_depth > 0 means we're inside a function/block)
@@ -1015,9 +1030,11 @@ def fix_imports_inside_test_blocks(test_code: str) -> str:
             # Pattern: import { name } from 'module' -> const { name } = require('module')
             # Pattern: import name from 'module' -> const name = require('module')
 
-            named_import = re.match(r"import\s+\{([^}]+)\}\s+from\s+['\"]([^'\"]+)['\"]", stripped)
-            default_import = re.match(r"import\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"]", stripped)
-            namespace_import = re.match(r"import\s+\*\s+as\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"]", stripped)
+            named_import = named_import_re.match(stripped)
+            default_import = default_import_re.match(stripped)
+            namespace_import = namespace_import_re.match(stripped)
+
+            # Preserve original computation of leading whitespace (left-side only)
 
             leading_whitespace = line[: len(line) - len(line.lstrip())]
 
@@ -1026,21 +1043,24 @@ def fix_imports_inside_test_blocks(test_code: str) -> str:
                 module = named_import.group(2)
                 new_line = f"{leading_whitespace}const {{{names}}} = require('{module}');"
                 result_lines.append(new_line)
-                logger.debug(f"Fixed import inside block: {stripped} -> {new_line.strip()}")
+                if debug_enabled:
+                    logger.debug(f"Fixed import inside block: {stripped} -> {new_line.strip()}")
                 continue
             if default_import:
                 name = default_import.group(1)
                 module = default_import.group(2)
                 new_line = f"{leading_whitespace}const {name} = require('{module}');"
                 result_lines.append(new_line)
-                logger.debug(f"Fixed import inside block: {stripped} -> {new_line.strip()}")
+                if debug_enabled:
+                    logger.debug(f"Fixed import inside block: {stripped} -> {new_line.strip()}")
                 continue
             if namespace_import:
                 name = namespace_import.group(1)
                 module = namespace_import.group(2)
                 new_line = f"{leading_whitespace}const {name} = require('{module}');"
                 result_lines.append(new_line)
-                logger.debug(f"Fixed import inside block: {stripped} -> {new_line.strip()}")
+                if debug_enabled:
+                    logger.debug(f"Fixed import inside block: {stripped} -> {new_line.strip()}")
                 continue
 
         result_lines.append(line)
