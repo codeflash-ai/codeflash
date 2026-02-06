@@ -7,6 +7,7 @@ import decimal
 import re
 import sys
 import uuid
+import weakref
 from collections import ChainMap, Counter, OrderedDict, UserDict, UserList, UserString, defaultdict, deque, namedtuple
 from enum import Enum, Flag, IntFlag, auto
 from pathlib import Path
@@ -134,6 +135,162 @@ def test_basic_python_objects() -> None:
     c = type({})
     assert comparator(a, b)
     assert not comparator(a, c)
+
+
+def test_weakref() -> None:
+    """Test comparator for weakref.ref objects."""
+
+    # Helper class that supports weak references and has comparable __dict__
+    class Holder:
+        def __init__(self, value):
+            self.value = value
+
+    # Test weak references to the same object
+    obj = Holder([1, 2, 3])
+    ref1 = weakref.ref(obj)
+    ref2 = weakref.ref(obj)
+    assert comparator(ref1, ref2)
+
+    # Test weak references to equivalent but different objects
+    obj1 = Holder({"key": "value"})
+    obj2 = Holder({"key": "value"})
+    ref1 = weakref.ref(obj1)
+    ref2 = weakref.ref(obj2)
+    assert comparator(ref1, ref2)
+
+    # Test weak references to different objects
+    obj1 = Holder([1, 2, 3])
+    obj2 = Holder([1, 2, 4])
+    ref1 = weakref.ref(obj1)
+    ref2 = weakref.ref(obj2)
+    assert not comparator(ref1, ref2)
+
+    # Test weak references with different data
+    obj1 = Holder([1, 2, 3])
+    obj2 = Holder([1, 2, 3, 4])
+    ref1 = weakref.ref(obj1)
+    ref2 = weakref.ref(obj2)
+    assert not comparator(ref1, ref2)
+
+    # Test dead weak references (both dead)
+    obj1 = Holder([1, 2, 3])
+    obj2 = Holder([1, 2, 3])
+    ref1 = weakref.ref(obj1)
+    ref2 = weakref.ref(obj2)
+    del obj1
+    del obj2
+    # Both refs are now dead, should be equal
+    assert comparator(ref1, ref2)
+
+    # Test one dead, one alive weak reference
+    obj1 = Holder([1, 2, 3])
+    obj2 = Holder([1, 2, 3])
+    ref1 = weakref.ref(obj1)
+    ref2 = weakref.ref(obj2)
+    del obj1
+    # ref1 is dead, ref2 is alive, should not be equal
+    assert not comparator(ref1, ref2)
+    assert not comparator(ref2, ref1)
+
+    # Test weak references to nested structures
+    obj1 = Holder({"nested": [1, 2, {"inner": "value"}]})
+    obj2 = Holder({"nested": [1, 2, {"inner": "value"}]})
+    ref1 = weakref.ref(obj1)
+    ref2 = weakref.ref(obj2)
+    assert comparator(ref1, ref2)
+
+    # Test weak references to nested structures with differences
+    obj1 = Holder({"nested": [1, 2, {"inner": "value1"}]})
+    obj2 = Holder({"nested": [1, 2, {"inner": "value2"}]})
+    ref1 = weakref.ref(obj1)
+    ref2 = weakref.ref(obj2)
+    assert not comparator(ref1, ref2)
+
+    # Test weak references in a dictionary (simulating __dict__ with weakrefs)
+    obj1 = Holder([1, 2, 3])
+    obj2 = Holder([1, 2, 3])
+    dict1 = {"data": 42, "ref": weakref.ref(obj1)}
+    dict2 = {"data": 42, "ref": weakref.ref(obj2)}
+    assert comparator(dict1, dict2)
+
+    # Test weak references in a dictionary with different referents
+    obj1 = Holder([1, 2, 3])
+    obj2 = Holder([4, 5, 6])
+    dict1 = {"data": 42, "ref": weakref.ref(obj1)}
+    dict2 = {"data": 42, "ref": weakref.ref(obj2)}
+    assert not comparator(dict1, dict2)
+
+    # Test weak references in a list
+    obj1 = Holder({"a": 1})
+    obj2 = Holder({"a": 1})
+    list1 = [weakref.ref(obj1), "other"]
+    list2 = [weakref.ref(obj2), "other"]
+    assert comparator(list1, list2)
+
+
+def test_weakref_to_custom_objects() -> None:
+    """Test comparator for weakref.ref to custom class instances."""
+
+    class MyClass:
+        def __init__(self, value):
+            self.value = value
+
+    # Test weak references to equivalent custom objects
+    obj1 = MyClass(42)
+    obj2 = MyClass(42)
+    ref1 = weakref.ref(obj1)
+    ref2 = weakref.ref(obj2)
+    assert comparator(ref1, ref2)
+
+    # Test weak references to different custom objects
+    obj1 = MyClass(42)
+    obj2 = MyClass(99)
+    ref1 = weakref.ref(obj1)
+    ref2 = weakref.ref(obj2)
+    assert not comparator(ref1, ref2)
+
+    # Test weak references to custom objects with nested data
+    class Container:
+        def __init__(self, items):
+            self.items = items
+
+    obj1 = Container([1, 2, 3])
+    obj2 = Container([1, 2, 3])
+    ref1 = weakref.ref(obj1)
+    ref2 = weakref.ref(obj2)
+    assert comparator(ref1, ref2)
+
+    obj1 = Container([1, 2, 3])
+    obj2 = Container([1, 2, 4])
+    ref1 = weakref.ref(obj1)
+    ref2 = weakref.ref(obj2)
+    assert not comparator(ref1, ref2)
+
+
+def test_weakref_with_callbacks() -> None:
+    """Test that weakrefs with callbacks are compared correctly."""
+
+    class Holder:
+        def __init__(self, value):
+            self.value = value
+
+    callback_called = []
+
+    def callback(ref):
+        callback_called.append(ref)
+
+    obj1 = Holder([1, 2, 3])
+    obj2 = Holder([1, 2, 3])
+    # Weakrefs with callbacks should still compare based on referents
+    ref1 = weakref.ref(obj1, callback)
+    ref2 = weakref.ref(obj2, callback)
+    assert comparator(ref1, ref2)
+
+    obj1 = Holder([1, 2, 3])
+    obj2 = Holder([4, 5, 6])
+    ref1 = weakref.ref(obj1, callback)
+    ref2 = weakref.ref(obj2, callback)
+    assert not comparator(ref1, ref2)
 
 
 @pytest.mark.parametrize(
