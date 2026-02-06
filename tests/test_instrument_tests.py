@@ -3306,3 +3306,77 @@ import unittest
 
     finally:
         test_path.unlink(missing_ok=True)
+
+
+def test_pytorch_forward_method_instrumentation() -> None:
+    """Test instrumentation of PyTorch nn.Module forward method when called via instance().
+
+    This tests the pattern:
+        model = MyModule(...)
+        model(input_data)  # calls __call__ which invokes forward()
+
+    The instrumentation should wrap the instance call even though the position
+    recorded is where the class is referenced, not where the instance is called.
+    """
+    code = """
+class MockModule:
+    def __init__(self, num_classes=10):
+        self.num_classes = num_classes
+
+    def forward(self, x):
+        return x * 2
+
+def test_module():
+    model = MockModule(num_classes=10)
+    input_data = 5
+    result = model(input_data)
+    assert result == 10
+"""
+    code_path = Path(tempfile.gettempdir()) / "mock_module.py"
+    test_path = Path(tempfile.gettempdir()) / "test_mock_module.py"
+
+    try:
+        with code_path.open("w") as f:
+            f.write(code)
+
+        with test_path.open("w") as f:
+            f.write(code)
+
+        func = FunctionToOptimize(
+            function_name="forward",
+            parents=[FunctionParent("MockModule", "ClassDef")],
+            file_path=code_path,
+            starting_line=6,
+            ending_line=7,
+            is_async=False,
+        )
+
+        # Position where MockModule is called (line 10 in 1-indexed: model = MockModule(...))
+        call_positions = [CodePosition(line_no=10, col_no=12)]
+
+        success, new_test = inject_profiling_into_existing_test(
+            test_path,
+            call_positions,
+            func,
+            test_path.parent,
+            mode=TestingMode.PERFORMANCE,
+        )
+
+        assert success
+        assert new_test is not None
+
+        # The key assertion: model(input_data) should be wrapped with codeflash_wrap
+        # The wrap should be around 'model', passing the instance as the callable
+        assert "codeflash_wrap(model," in new_test, (
+            "Expected model(input_data) to be wrapped as codeflash_wrap(model, ..., input_data), "
+            f"but got:\n{new_test}"
+        )
+
+        # Verify the function name in the wrap is the qualified name (MockModule.forward)
+        assert "MockModule.forward" in new_test, (
+            f"Expected 'MockModule.forward' to appear in the instrumented code, but got:\n{new_test}"
+        )
+
+    finally:
+        code_path.unlink(missing_ok=True)
+        test_path.unlink(missing_ok=True)
