@@ -157,8 +157,8 @@ def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, 
 def _get_test_module_target_dir(maven_root: Path, test_module: str | None) -> Path:
     """Get the target directory for the test module."""
     if test_module:
-        return maven_root / test_module / "target"
-    return maven_root / "target"
+        return maven_root.joinpath(test_module, "target")
+    return maven_root.joinpath("target")
 
 
 @dataclass
