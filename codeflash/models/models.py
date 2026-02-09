@@ -15,6 +15,7 @@ from codeflash.models.test_type import TestType
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
 import enum
 import re
 import sys
@@ -22,7 +23,7 @@ from collections.abc import Collection
 from enum import Enum, IntEnum
 from pathlib import Path
 from re import Pattern
-from typing import NamedTuple, Optional, cast
+from typing import Any, NamedTuple, Optional, cast
 
 from jedi.api.classes import Name
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, model_validator
@@ -171,7 +172,7 @@ class BestOptimization(BaseModel):
     winning_behavior_test_results: TestResults
     winning_benchmarking_test_results: TestResults
     winning_replay_benchmarking_test_results: Optional[TestResults] = None
-    line_profiler_test_results: dict
+    line_profiler_test_results: dict[Any, Any]
     async_throughput: Optional[int] = None
     concurrency_metrics: Optional[ConcurrencyMetrics] = None
 
@@ -208,7 +209,7 @@ class BenchmarkDetail:
             f"Benchmark speedup for {self.benchmark_name}::{self.test_function}: {self.speedup_percent:.2f}%\n"
         )
 
-    def to_dict(self) -> dict[str, any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "benchmark_name": self.benchmark_name,
             "test_function": self.test_function,
@@ -231,20 +232,28 @@ class ProcessedBenchmarkInfo:
             result += detail.to_string() + "\n"
         return result
 
-    def to_dict(self) -> dict[str, list[dict[str, any]]]:
+    def to_dict(self) -> dict[str, list[dict[str, Any]]]:
         return {"benchmark_details": [detail.to_dict() for detail in self.benchmark_details]}
 
 
 class CodeString(BaseModel):
     code: str
     file_path: Optional[Path] = None
-    language: str = "python"  # Language for validation - only Python code is validated
+    language: str = "python"  # Language for validation
 
     @model_validator(mode="after")
     def validate_code_syntax(self) -> CodeString:
-        """Validate code syntax for Python only."""
+        """Validate code syntax for the specified language."""
         if self.language == "python":
             validate_python_code(self.code)
+        elif self.language in ("javascript", "typescript"):
+            # Validate JavaScript/TypeScript syntax using language support
+            from codeflash.languages.registry import get_language_support
+
+            lang_support = get_language_support(self.language)
+            if not lang_support.validate_syntax(self.code):
+                msg = f"Invalid {self.language.title()} code"
+                raise ValueError(msg)
         return self
 
 
@@ -271,7 +280,7 @@ markdown_pattern_python_only = re.compile(r"```python:([^\n]+)\n(.*?)\n```", re.
 class CodeStringsMarkdown(BaseModel):
     code_strings: list[CodeString] = []
     language: str = "python"  # Language for markdown code block tags
-    _cache: dict = PrivateAttr(default_factory=dict)
+    _cache: dict[str, Any] = PrivateAttr(default_factory=dict)
 
     @property
     def flat(self) -> str:
@@ -407,7 +416,7 @@ class GeneratedTestsList(BaseModel):
 
 class TestFile(BaseModel):
     instrumented_behavior_file_path: Path
-    benchmarking_file_path: Path = None
+    benchmarking_file_path: Optional[Path] = None
     original_file_path: Optional[Path] = None
     original_source: Optional[str] = None
     test_type: TestType
@@ -447,6 +456,19 @@ class TestFiles(BaseModel):
                 normalized_benchmark_path = self._normalize_path_for_comparison(test_file.benchmarking_file_path)
                 if normalized == normalized_benchmark_path:
                     return test_file.test_type
+
+        # Fallback: try filename-only matching for JavaScript/TypeScript
+        # Jest/Vitest JUnit XML may have relative paths that don't match absolute paths
+        file_name = file_path.name
+        for test_file in self.test_files:
+            if (
+                test_file.instrumented_behavior_file_path
+                and test_file.instrumented_behavior_file_path.name == file_name
+            ):
+                return test_file.test_type
+            if test_file.benchmarking_file_path and test_file.benchmarking_file_path.name == file_name:
+                return test_file.test_type
+
         return None
 
     def get_test_type_by_original_file_path(self, file_path: Path) -> TestType | None:
@@ -876,15 +898,14 @@ class TestResults(BaseModel):  # noqa: PLW1641
         return max(test_result.loop_index for test_result in self.test_results)
 
     def get_test_pass_fail_report_by_type(self) -> dict[TestType, dict[str, int]]:
-        report = {}
-        for test_type in TestType:
-            report[test_type] = {"passed": 0, "failed": 0}
+        report: dict[TestType, dict[str, int]] = {tt: {"passed": 0, "failed": 0} for tt in TestType}
         for test_result in self.test_results:
-            if test_result.loop_index == 1:
-                if test_result.did_pass:
-                    report[test_result.test_type]["passed"] += 1
-                else:
-                    report[test_result.test_type]["failed"] += 1
+            if test_result.loop_index != 1:
+                continue
+            if test_result.did_pass:
+                report[test_result.test_type]["passed"] += 1
+            else:
+                report[test_result.test_type]["failed"] += 1
         return report
 
     @staticmethod

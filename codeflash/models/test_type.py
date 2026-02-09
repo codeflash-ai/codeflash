@@ -12,11 +12,13 @@ class TestType(Enum):
     def to_name(self) -> str:
         if self is TestType.INIT_STATE_TEST:
             return ""
-        names = {
-            TestType.EXISTING_UNIT_TEST: "⚙️ Existing Unit Tests",
-            TestType.INSPIRED_REGRESSION: "🎨 Inspired Regression Tests",
-            TestType.GENERATED_REGRESSION: "🌀 Generated Regression Tests",
-            TestType.REPLAY_TEST: "⏪ Replay Tests",
-            TestType.CONCOLIC_COVERAGE_TEST: "🔎 Concolic Coverage Tests",
-        }
-        return names[self]
+        return _TO_NAME_MAP[self]
+
+
+_TO_NAME_MAP: dict[TestType, str] = {
+    TestType.EXISTING_UNIT_TEST: "⚙️ Existing Unit Tests",
+    TestType.INSPIRED_REGRESSION: "🎨 Inspired Regression Tests",
+    TestType.GENERATED_REGRESSION: "🌀 Generated Regression Tests",
+    TestType.REPLAY_TEST: "⏪ Replay Tests",
+    TestType.CONCOLIC_COVERAGE_TEST: "🔎 Concolic Coverage Tests",
+}
