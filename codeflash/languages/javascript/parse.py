@@ -175,6 +175,19 @@ def parse_jest_test_xml(
                     logger.debug(f"Found {marker_count} timing start markers in Jest stdout")
                 else:
                     logger.debug(f"No timing start markers found in Jest stdout (len={len(global_stdout)})")
+                # Check for END markers with duration (perf test markers)
+                end_marker_count = len(jest_end_pattern.findall(global_stdout))
+                if end_marker_count > 0:
+                    logger.debug(
+                        f"[PERF-DEBUG] Found {end_marker_count} END timing markers with duration in Jest stdout"
+                    )
+                    # Sample a few markers to verify loop indices
+                    end_samples = list(jest_end_pattern.finditer(global_stdout))[:5]
+                    for sample in end_samples:
+                        groups = sample.groups()
+                        logger.debug(f"[PERF-DEBUG] Sample END marker: loopIndex={groups[3]}, duration={groups[5]}")
+                else:
+                    logger.debug("[PERF-DEBUG] No END markers with duration found in Jest stdout")
         except (AttributeError, UnicodeDecodeError):
             global_stdout = ""
 
@@ -196,6 +209,14 @@ def parse_jest_test_xml(
             # Key: (testName, testName2, funcName, loopIndex, lineId)
             key = match.groups()[:5]
             end_matches_dict[key] = match
+
+        # Debug: log suite-level END marker parsing for perf tests
+        if end_matches_dict:
+            # Get unique loop indices from the parsed END markers
+            loop_indices = sorted({int(k[3]) if k[3].isdigit() else 1 for k in end_matches_dict})
+            logger.debug(
+                f"[PERF-DEBUG] Suite {suite_count}: parsed {len(end_matches_dict)} END markers from suite_stdout, loop_index range: {min(loop_indices)}-{max(loop_indices)}"
+            )
 
         # Also collect timing markers from testcase-level system-out (Vitest puts output at testcase level)
         for tc in suite:
@@ -327,6 +348,13 @@ def parse_jest_test_xml(
             sanitized_test_name = re.sub(r"[!#: ()\[\]{}|\\/*?^$.+\-]", "_", test_name)
             matching_starts = [m for m in start_matches if sanitized_test_name in m.group(2)]
 
+            # Debug: log which branch we're taking
+            logger.debug(
+                f"[FLOW-DEBUG] Testcase '{test_name[:50]}': "
+                f"total_start_matches={len(start_matches)}, matching_starts={len(matching_starts)}, "
+                f"total_end_matches={len(end_matches_dict)}"
+            )
+
             # For performance tests (capturePerf), there are no START markers - only END markers with duration
             # Check for END markers directly if no START markers found
             matching_ends_direct = []
@@ -337,6 +365,28 @@ def parse_jest_test_xml(
                     # end_key is (module, testName, funcName, loopIndex, invocationId)
                     if len(end_key) >= 2 and sanitized_test_name in end_key[1]:
                         matching_ends_direct.append(end_match)
+                # Debug: log matching results for perf tests
+                if matching_ends_direct:
+                    loop_indices = [int(m.groups()[3]) if m.groups()[3].isdigit() else 1 for m in matching_ends_direct]
+                    logger.debug(
+                        f"[PERF-MATCH] Testcase '{test_name[:40]}': matched {len(matching_ends_direct)} END markers, "
+                        f"loop_index range: {min(loop_indices)}-{max(loop_indices)}"
+                    )
+                elif end_matches_dict:
+                    # No matches but we have END markers - check why
+                    sample_keys = list(end_matches_dict.keys())[:3]
+                    logger.debug(
+                        f"[PERF-MISMATCH] Testcase '{test_name[:40]}': no matches found. "
+                        f"sanitized_test_name='{sanitized_test_name[:50]}', "
+                        f"sample end_keys={[k[1][:30] if len(k) >= 2 else k for k in sample_keys]}"
+                    )
+
+            # Log if we're skipping the matching_ends_direct branch
+            if matching_starts and end_matches_dict:
+                logger.debug(
+                    f"[FLOW-SKIP] Testcase '{test_name[:40]}': has {len(matching_starts)} START markers, "
+                    f"skipping {len(end_matches_dict)} END markers (behavior test mode)"
+                )
 
             if not matching_starts and not matching_ends_direct:
                 # No timing markers found - use JUnit XML time attribute as fallback
@@ -373,11 +423,13 @@ def parse_jest_test_xml(
                 )
             elif matching_ends_direct:
                 # Performance test format: process END markers directly (no START markers)
+                loop_indices_found = []
                 for end_match in matching_ends_direct:
                     groups = end_match.groups()
                     # groups: (module, testName, funcName, loopIndex, invocationId, durationNs)
                     func_name = groups[2]
                     loop_index = int(groups[3]) if groups[3].isdigit() else 1
+                    loop_indices_found.append(loop_index)
                     line_id = groups[4]
                     try:
                         runtime = int(groups[5])
@@ -402,6 +454,12 @@ def parse_jest_test_xml(
                             timed_out=timed_out,
                             stdout="",
                         )
+                    )
+                if loop_indices_found:
+                    logger.debug(
+                        f"[LOOP-DEBUG] Testcase '{test_name}': processed {len(matching_ends_direct)} END markers, "
+                        f"loop_index range: {min(loop_indices_found)}-{max(loop_indices_found)}, "
+                        f"total results so far: {len(test_results.test_results)}"
                     )
             else:
                 # Process each timing marker
@@ -454,5 +512,19 @@ def parse_jest_test_xml(
             f"Jest XML parsing complete: {len(test_results.test_results)} results "
             f"from {suite_count} suites, {testcase_count} testcases"
         )
+        # Debug: show loop_index distribution for perf analysis
+        if test_results.test_results:
+            loop_indices = [r.loop_index for r in test_results.test_results]
+            unique_loop_indices = sorted(set(loop_indices))
+            min_idx, max_idx = min(unique_loop_indices), max(unique_loop_indices)
+            logger.debug(
+                f"[LOOP-SUMMARY] Results loop_index: min={min_idx}, max={max_idx}, "
+                f"unique_count={len(unique_loop_indices)}, total_results={len(loop_indices)}"
+            )
+            if max_idx == 1 and len(loop_indices) > 1:
+                logger.warning(
+                    f"[LOOP-WARNING] All {len(loop_indices)} results have loop_index=1. "
+                    "Perf test markers may not have been parsed correctly."
+                )
 
     return test_results

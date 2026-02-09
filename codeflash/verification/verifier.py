@@ -79,8 +79,12 @@ def generate_tests(
         if is_javascript():
             from codeflash.languages.javascript.instrument import (
                 TestingMode,
+<<<<<<< fix/js-jest30-loop-runner
                 fix_imports_inside_test_blocks,
                 fix_jest_mock_paths,
+=======
+                fix_import_path_for_test_location,
+>>>>>>> main
                 instrument_generated_js_test,
                 validate_and_fix_import_style,
             )
@@ -91,12 +95,19 @@ def generate_tests(
 
             source_file = Path(function_to_optimize.file_path)
 
+<<<<<<< fix/js-jest30-loop-runner
             # Fix import statements that appear inside test blocks (invalid JS syntax)
             generated_test_source = fix_imports_inside_test_blocks(generated_test_source)
 
             # Fix relative paths in jest.mock() calls
             generated_test_source = fix_jest_mock_paths(
                 generated_test_source, test_path, source_file, test_cfg.tests_project_rootdir
+=======
+            # Fix import paths to be relative to test file location
+            # AI may generate imports like 'apps/web/app/file' instead of '../../app/file'
+            generated_test_source = fix_import_path_for_test_location(
+                generated_test_source, source_file, test_path, module_path
+>>>>>>> main
             )
 
             # Validate and fix import styles (default vs named exports)
