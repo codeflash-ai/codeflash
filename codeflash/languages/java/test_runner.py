@@ -49,6 +49,29 @@ def _validate_java_class_name(class_name: str) -> bool:
     return bool(_VALID_JAVA_CLASS_NAME.match(class_name))
 
 
+def _extract_modules_from_pom_content(content: str) -> list[str]:
+    """Extract module names from Maven POM XML content using proper XML parsing.
+
+    Handles both namespaced and non-namespaced POMs.
+    """
+    try:
+        root = ET.fromstring(content)
+    except ET.ParseError:
+        logger.debug("Failed to parse POM XML for module extraction")
+        return []
+
+    ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+
+    modules_elem = root.find("m:modules", ns)
+    if modules_elem is None:
+        modules_elem = root.find("modules")
+
+    if modules_elem is None:
+        return []
+
+    return [m.text for m in modules_elem if m.text]
+
+
 def _validate_test_filter(test_filter: str) -> str:
     """Validate and sanitize a test filter string for Maven.
 
@@ -1374,6 +1397,43 @@ def _parse_surefire_xml(xml_file: Path) -> list[TestResult]:
         logger.warning("Failed to parse Surefire report %s: %s", xml_file, e)
 
     return results
+
+
+def _extract_source_dirs_from_pom(project_root: Path) -> list[str]:
+    """Extract custom source and test source directories from pom.xml."""
+    pom_path = project_root / "pom.xml"
+    if not pom_path.exists():
+        return []
+
+    try:
+        content = pom_path.read_text(encoding="utf-8")
+        root = ET.fromstring(content)
+        ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+
+        source_dirs: list[str] = []
+        standard_dirs = {
+            "src/main/java",
+            "src/test/java",
+            "${project.basedir}/src/main/java",
+            "${project.basedir}/src/test/java",
+        }
+
+        for build in [root.find("m:build", ns), root.find("build")]:
+            if build is not None:
+                for tag in ("sourceDirectory", "testSourceDirectory"):
+                    for elem in [build.find(f"m:{tag}", ns), build.find(tag)]:
+                        if elem is not None and elem.text:
+                            dir_text = elem.text.strip()
+                            if dir_text not in standard_dirs:
+                                source_dirs.append(dir_text)
+
+        return source_dirs
+    except ET.ParseError:
+        logger.debug("Failed to parse pom.xml for source directories")
+        return []
+    except Exception:
+        logger.debug("Error reading pom.xml for source directories")
+        return []
 
 
 def get_test_run_command(project_root: Path, test_classes: list[str] | None = None) -> list[str]:
