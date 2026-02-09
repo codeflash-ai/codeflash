@@ -2363,7 +2363,9 @@ class FunctionOptimizer:
             )
         console.rule()
         with progress_bar("Running performance benchmarks..."):
-            logger.debug(f"[BENCHMARK-START] Starting benchmarking tests with {len(self.test_files.test_files)} test files")
+            logger.debug(
+                f"[BENCHMARK-START] Starting benchmarking tests with {len(self.test_files.test_files)} test files"
+            )
             for idx, tf in enumerate(self.test_files.test_files):
                 logger.debug(f"[BENCHMARK-FILES] Test file {idx}: perf_file={tf.benchmarking_file_path}")
 

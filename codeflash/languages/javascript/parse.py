@@ -178,14 +178,16 @@ def parse_jest_test_xml(
                 # Check for END markers with duration (perf test markers)
                 end_marker_count = len(jest_end_pattern.findall(global_stdout))
                 if end_marker_count > 0:
-                    logger.debug(f"[PERF-DEBUG] Found {end_marker_count} END timing markers with duration in Jest stdout")
+                    logger.debug(
+                        f"[PERF-DEBUG] Found {end_marker_count} END timing markers with duration in Jest stdout"
+                    )
                     # Sample a few markers to verify loop indices
                     end_samples = list(jest_end_pattern.finditer(global_stdout))[:5]
                     for sample in end_samples:
                         groups = sample.groups()
                         logger.debug(f"[PERF-DEBUG] Sample END marker: loopIndex={groups[3]}, duration={groups[5]}")
                 else:
-                    logger.debug(f"[PERF-DEBUG] No END markers with duration found in Jest stdout")
+                    logger.debug("[PERF-DEBUG] No END markers with duration found in Jest stdout")
         except (AttributeError, UnicodeDecodeError):
             global_stdout = ""
 
@@ -211,8 +213,10 @@ def parse_jest_test_xml(
         # Debug: log suite-level END marker parsing for perf tests
         if end_matches_dict:
             # Get unique loop indices from the parsed END markers
-            loop_indices = sorted(set(int(k[3]) if k[3].isdigit() else 1 for k in end_matches_dict.keys()))
-            logger.debug(f"[PERF-DEBUG] Suite {suite_count}: parsed {len(end_matches_dict)} END markers from suite_stdout, loop_index range: {min(loop_indices)}-{max(loop_indices)}")
+            loop_indices = sorted({int(k[3]) if k[3].isdigit() else 1 for k in end_matches_dict})
+            logger.debug(
+                f"[PERF-DEBUG] Suite {suite_count}: parsed {len(end_matches_dict)} END markers from suite_stdout, loop_index range: {min(loop_indices)}-{max(loop_indices)}"
+            )
 
         # Also collect timing markers from testcase-level system-out (Vitest puts output at testcase level)
         for tc in suite:

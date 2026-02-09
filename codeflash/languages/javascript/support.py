@@ -2134,7 +2134,7 @@ class JavaScriptSupport:
         from codeflash.languages.test_framework import get_js_test_framework_or_default
 
         framework = test_framework or get_js_test_framework_or_default()
-        logger.debug(f"run_benchmarking_tests called with framework={framework}")
+        logger.debug("run_benchmarking_tests called with framework=%s", framework)
 
         # Use JS-specific high max_loops - actual loop count is limited by target_duration
         effective_max_loops = self.JS_BENCHMARKING_MAX_LOOPS

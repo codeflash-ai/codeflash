@@ -550,11 +550,15 @@ def run_vitest_benchmarking_tests(
     # Log test file selection
     total_test_files = len(test_paths.test_files)
     perf_test_files = len(test_files)
-    logger.debug(f"Vitest benchmark test file selection: {perf_test_files}/{total_test_files} have benchmarking_file_path")
+    logger.debug(
+        f"Vitest benchmark test file selection: {perf_test_files}/{total_test_files} have benchmarking_file_path"
+    )
     if perf_test_files == 0:
         logger.warning("No perf test files found! Cannot run benchmarking tests.")
         for tf in test_paths.test_files:
-            logger.warning(f"Test file: behavior={tf.instrumented_behavior_file_path}, perf={tf.benchmarking_file_path}")
+            logger.warning(
+                f"Test file: behavior={tf.instrumented_behavior_file_path}, perf={tf.benchmarking_file_path}"
+            )
     elif perf_test_files < total_test_files:
         for tf in test_paths.test_files:
             if not tf.benchmarking_file_path:
@@ -595,7 +599,11 @@ def run_vitest_benchmarking_tests(
 
     # Set test module for marker identification (use first test file as reference)
     if test_files:
-        test_module_path = str(test_files[0].relative_to(effective_cwd) if test_files[0].is_relative_to(effective_cwd) else test_files[0].name)
+        test_module_path = str(
+            test_files[0].relative_to(effective_cwd)
+            if test_files[0].is_relative_to(effective_cwd)
+            else test_files[0].name
+        )
         vitest_env["CODEFLASH_TEST_MODULE"] = test_module_path
         logger.debug(f"[VITEST-BENCH] Set CODEFLASH_TEST_MODULE={test_module_path}")
 
@@ -637,6 +645,7 @@ def run_vitest_benchmarking_tests(
     # Debug: Check for END markers with duration (perf test format)
     if result.stdout:
         import re
+
         perf_end_pattern = re.compile(r"!######[^:]+:[^:]+:[^:]+:(\d+):[^:]+:(\d+)######!")
         perf_matches = list(perf_end_pattern.finditer(result.stdout))
         if perf_matches:
