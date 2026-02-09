@@ -40,6 +40,38 @@ def _get_function_name(func: Any) -> str:
     raise AttributeError(msg)
 
 
+# Pattern to detect primitive array types in assertions
+_PRIMITIVE_ARRAY_PATTERN = re.compile(r"new\s+(int|long|double|float|short|byte|char|boolean)\s*\[\s*\]")
+
+
+def _infer_array_cast_type(line: str) -> str | None:
+    """Infer the array cast type needed for assertion methods.
+
+    When a line contains an assertion like assertArrayEquals with a primitive array
+    as the first argument, we need to cast the captured Object result back to
+    that primitive array type.
+
+    Args:
+        line: The source line containing the assertion.
+
+    Returns:
+        The cast type (e.g., "int[]") if needed, None otherwise.
+
+    """
+    # Only apply to assertion methods that take arrays
+    assertion_methods = ("assertArrayEquals", "assertArrayNotEquals")
+    if not any(method in line for method in assertion_methods):
+        return None
+
+    # Look for primitive array type in the line (usually the first/expected argument)
+    match = _PRIMITIVE_ARRAY_PATTERN.search(line)
+    if match:
+        primitive_type = match.group(1)
+        return f"{primitive_type}[]"
+
+    return None
+
+
 def _get_qualified_name(func: Any) -> str:
     """Get the qualified name from FunctionToOptimize."""
     if hasattr(func, "qualified_name"):
@@ -230,8 +262,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 continue
             if stripped.startswith(("public class", "class")):
                 # No imports found, add before class
-                for imp in import_statements:
-                    result.append(imp)
+                result.extend(import_statements)
                 result.append("")
                 imports_added = True
 
@@ -334,14 +365,24 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                             var_name = f"_cf_result{iter_id}_{call_counter}"
                             full_call = match.group(0)  # e.g., "new StringUtils().reverse(\"hello\")"
 
-                            # Replace this occurrence with the variable
-                            new_line = new_line[: match.start()] + var_name + new_line[match.end() :]
+                            # Check if we need to cast the result for assertions with primitive arrays
+                            # This handles assertArrayEquals(int[], int[]) etc.
+                            cast_type = _infer_array_cast_type(body_line)
+                            var_with_cast = f"({cast_type}){var_name}" if cast_type else var_name
+
+                            # Replace this occurrence with the variable (with cast if needed)
+                            new_line = new_line[: match.start()] + var_with_cast + new_line[match.end() :]
 
                             # Insert capture line
                             capture_line = f"{line_indent_str}Object {var_name} = {full_call};"
                             wrapped_body_lines.append(capture_line)
 
-                        wrapped_body_lines.append(new_line)
+                        # Check if the line is now just a variable reference (invalid statement)
+                        # This happens when the original line was just a void method call
+                        # e.g., "BubbleSort.bubbleSort(original);" becomes "_cf_result1_1;"
+                        stripped_new = new_line.strip().rstrip(";").strip()
+                        if stripped_new and stripped_new not in (var_name, var_with_cast):
+                            wrapped_body_lines.append(new_line)
                     else:
                         wrapped_body_lines.append(body_line)
                 else:
@@ -486,8 +527,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 i += 1
 
             # Add the method signature lines
-            for ml in method_lines:
-                result.append(ml)
+            result.extend(method_lines)
             i += 1
 
             # We're now inside the method body
@@ -721,14 +761,6 @@ def _add_import(source: str, import_statement: str) -> str:
 
     lines.insert(insert_idx, import_statement + "\n")
     return "".join(lines)
-
-
-@lru_cache(maxsize=128)
-def _get_method_call_pattern(func_name: str):
-    """Cache compiled regex patterns for method call matching."""
-    return re.compile(
-        rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)", re.MULTILINE
-    )
 
 
 @lru_cache(maxsize=128)

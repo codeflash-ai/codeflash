@@ -119,7 +119,7 @@ class JavaFormatter:
 
                 if result.returncode == 0:
                     # Read back the formatted file
-                    with open(tmp_path, encoding="utf-8") as f:
+                    with Path(tmp_path).open(encoding="utf-8") as f:
                         return f.read()
                 else:
                     logger.debug("google-java-format failed: %s", result.stderr or result.stdout)
@@ -127,7 +127,7 @@ class JavaFormatter:
             finally:
                 # Clean up temp file
                 with contextlib.suppress(OSError):
-                    os.unlink(tmp_path)
+                    Path(tmp_path).unlink()
 
         except subprocess.TimeoutExpired:
             logger.warning("google-java-format timed out")
@@ -216,7 +216,7 @@ class JavaFormatter:
 
         try:
             logger.info("Downloading google-java-format from %s", url)
-            urllib.request.urlretrieve(url, jar_path)
+            urllib.request.urlretrieve(url, jar_path)  # noqa: S310
             JavaFormatter._google_java_format_jar = jar_path
             logger.info("Downloaded google-java-format to %s", jar_path)
             return jar_path
