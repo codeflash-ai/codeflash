@@ -839,7 +839,7 @@ function setTestName(name) {
     resetInvocationCounters();
 }
 
-// Jest lifecycle hooks - these run automatically when this module is imported
+// Jest/Vitest lifecycle hooks - these run automatically when this module is imported
 if (typeof beforeEach !== 'undefined') {
     beforeEach(() => {
         // Get current test name and path from Jest's expect state
@@ -854,6 +854,17 @@ if (typeof beforeEach !== 'undefined') {
         }
         // Reset invocation counters for each test
         resetInvocationCounters();
+
+        // For Vitest (no external loop-runner), reset perf state for each test
+        // so each test gets its own time budget for internal looping.
+        // For Jest with loop-runner, CODEFLASH_PERF_CURRENT_BATCH is set,
+        // and we want shared state across the test file.
+        const hasExternalLoopRunner = process.env.CODEFLASH_PERF_CURRENT_BATCH !== undefined;
+        if (!hasExternalLoopRunner) {
+            resetPerfState();
+            // Also reset invocation loop counts so each test starts fresh
+            sharedPerfState.invocationLoopCounts = {};
+        }
     });
 }
 

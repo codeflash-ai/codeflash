@@ -520,6 +520,9 @@ def run_vitest_benchmarking_tests(
 ) -> tuple[Path, subprocess.CompletedProcess]:
     """Run Vitest benchmarking tests with external looping from Python.
 
+    NOTE: This function MUST use benchmarking_file_path (perf tests with capturePerf),
+    NOT instrumented_behavior_file_path (behavior tests with capture).
+
     Uses external process-level looping to run tests multiple times and
     collect timing data. This matches the Python pytest approach where
     looping is controlled externally for simplicity.
@@ -543,6 +546,22 @@ def run_vitest_benchmarking_tests(
 
     # Get performance test files
     test_files = [Path(file.benchmarking_file_path) for file in test_paths.test_files if file.benchmarking_file_path]
+
+    # Log test file selection
+    total_test_files = len(test_paths.test_files)
+    perf_test_files = len(test_files)
+    logger.debug(f"Vitest benchmark test file selection: {perf_test_files}/{total_test_files} have benchmarking_file_path")
+    if perf_test_files == 0:
+        logger.warning("No perf test files found! Cannot run benchmarking tests.")
+        for tf in test_paths.test_files:
+            logger.warning(f"Test file: behavior={tf.instrumented_behavior_file_path}, perf={tf.benchmarking_file_path}")
+    elif perf_test_files < total_test_files:
+        for tf in test_paths.test_files:
+            if not tf.benchmarking_file_path:
+                logger.warning(f"Missing benchmarking_file_path: behavior={tf.instrumented_behavior_file_path}")
+    else:
+        for tf in test_files[:3]:  # Log first 3 perf test files
+            logger.debug(f"Using perf test file: {tf}")
 
     # Use provided project_root, or detect it as fallback
     if project_root is None and test_files:
@@ -574,14 +593,21 @@ def run_vitest_benchmarking_tests(
     vitest_env["CODEFLASH_PERF_STABILITY_CHECK"] = "true" if stability_check else "false"
     vitest_env["CODEFLASH_LOOP_INDEX"] = "1"
 
+    # Set test module for marker identification (use first test file as reference)
+    if test_files:
+        test_module_path = str(test_files[0].relative_to(effective_cwd) if test_files[0].is_relative_to(effective_cwd) else test_files[0].name)
+        vitest_env["CODEFLASH_TEST_MODULE"] = test_module_path
+        logger.debug(f"[VITEST-BENCH] Set CODEFLASH_TEST_MODULE={test_module_path}")
+
     # Total timeout for the entire benchmark run
     total_timeout = max(120, (target_duration_ms // 1000) + 60, timeout or 120)
 
-    logger.debug(f"Running Vitest benchmarking tests: {' '.join(vitest_cmd)}")
+    logger.debug(f"[VITEST-BENCH] Running Vitest benchmarking tests: {' '.join(vitest_cmd)}")
     logger.debug(
-        f"Vitest benchmarking config: min_loops={min_loops}, max_loops={max_loops}, "
+        f"[VITEST-BENCH] Config: min_loops={min_loops}, max_loops={max_loops}, "
         f"target_duration={target_duration_ms}ms, stability_check={stability_check}"
     )
+    logger.debug(f"[VITEST-BENCH] Environment: CODEFLASH_PERF_LOOP_COUNT={vitest_env.get('CODEFLASH_PERF_LOOP_COUNT')}")
 
     total_start_time = time.time()
 
@@ -606,7 +632,26 @@ def run_vitest_benchmarking_tests(
         result = subprocess.CompletedProcess(args=vitest_cmd, returncode=-1, stdout="", stderr="Vitest not found")
 
     wall_clock_seconds = time.time() - total_start_time
-    logger.debug(f"Vitest benchmarking completed in {wall_clock_seconds:.2f}s")
+    logger.debug(f"[VITEST-BENCH] Completed in {wall_clock_seconds:.2f}s, returncode={result.returncode}")
+
+    # Debug: Check for END markers with duration (perf test format)
+    if result.stdout:
+        import re
+        perf_end_pattern = re.compile(r"!######[^:]+:[^:]+:[^:]+:(\d+):[^:]+:(\d+)######!")
+        perf_matches = list(perf_end_pattern.finditer(result.stdout))
+        if perf_matches:
+            loop_indices = [int(m.group(1)) for m in perf_matches]
+            logger.debug(
+                f"[VITEST-BENCH] Found {len(perf_matches)} perf END markers in stdout, "
+                f"loop_index range: {min(loop_indices)}-{max(loop_indices)}"
+            )
+        else:
+            logger.debug(f"[VITEST-BENCH] No perf END markers found in stdout (len={len(result.stdout)})")
+            # Check if there are behavior END markers instead
+            behavior_end_pattern = re.compile(r"!######[^:]+:[^:]+:[^:]+:\d+:[^#]+######!")
+            behavior_matches = list(behavior_end_pattern.finditer(result.stdout))
+            if behavior_matches:
+                logger.debug(f"[VITEST-BENCH] Found {len(behavior_matches)} behavior END markers instead (no duration)")
 
     return result_file_path, result
 
