@@ -28,7 +28,7 @@ def safe_repr(obj: object) -> str:
 
 
 def compare_test_results(
-    original_results: TestResults, candidate_results: TestResults, pass_fail_only: bool = False
+    original_results: TestResults, candidate_results: TestResults
 ) -> tuple[bool, list[TestDiff]]:
     # This is meant to be only called with test results for the first loop index
     if len(original_results) == 0 or len(candidate_results) == 0:
@@ -102,29 +102,6 @@ def compare_test_results(
                 )
             )
 
-        elif pass_fail_only:
-            # Log when return values differ but are being ignored due to pass_fail_only mode
-            if original_test_result.return_value != cdd_test_result.return_value:
-                logger.warning(
-                    "pass_fail_only mode: ignoring return value difference for test %s. "
-                    "Original: %s, Candidate: %s",
-                    original_test_result.id or "unknown",
-                    safe_repr(original_test_result.return_value)[:100],
-                    safe_repr(cdd_test_result.return_value)[:100],
-                )
-            # Log when stdout values differ but are being ignored due to pass_fail_only mode
-            if (
-                original_test_result.stdout
-                and cdd_test_result.stdout
-                and original_test_result.stdout != cdd_test_result.stdout
-            ):
-                logger.warning(
-                    "pass_fail_only mode: ignoring stdout difference for test %s. "
-                    "Original: %s, Candidate: %s",
-                    original_test_result.id or "unknown",
-                    safe_repr(original_test_result.stdout)[:100],
-                    safe_repr(cdd_test_result.stdout)[:100],
-                )
         elif not comparator(
             original_test_result.return_value, cdd_test_result.return_value, superset_obj=superset_obj
         ):

@@ -2829,11 +2829,17 @@ class FunctionOptimizer:
                     # Cleanup SQLite files after comparison
                     candidate_sqlite.unlink(missing_ok=True)
                 else:
-                    # Fallback: compare test pass/fail status (tests aren't instrumented yet)
-                    # If all tests that passed for original also pass for candidate, consider it a match
-                    match, diffs = compare_test_results(
-                        baseline_results.behavior_test_results, candidate_behavior_results, pass_fail_only=True
+                    # CORRECTNESS REQUIREMENT: SQLite files must exist for proper behavioral verification
+                    # TODO: Fix instrumentation to ensure SQLite files are always generated:
+                    # 1. Java: Verify JavaTestInstrumentation captures all return values
+                    # 2. JavaScript: Verify JS instrumentation runs before optimization
+                    # 3. Other languages: Implement proper test result capture
+                    logger.error(
+                        "Cannot verify correctness: SQLite test result files not found. "
+                        f"Expected: {original_sqlite} and {candidate_sqlite}. "
+                        "Test instrumentation must capture return values to ensure optimization correctness."
                     )
+                    return self.get_results_not_matched_error()
             else:
                 # Python: Compare using Python comparator
                 match, diffs = compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
