@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.api.cfapi import send_completion_email
-from codeflash.cli_cmds.console import console, logger, progress_bar
+from codeflash.cli_cmds.console import call_graph_live_display, console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import cleanup_paths, get_run_tmp_file
 from codeflash.code_utils.env_utils import get_pr_number, is_pr_draft
@@ -525,6 +525,11 @@ class Optimizer:
                 call_graph = CallGraph(self.args.project_root)
             except Exception:
                 logger.debug("Failed to initialize CallGraph, falling back to per-function Jedi analysis")
+
+        if call_graph is not None and file_to_funcs_to_optimize:
+            source_files = list(file_to_funcs_to_optimize.keys())
+            with call_graph_live_display(len(source_files)) as on_progress:
+                call_graph.build_index(source_files, on_progress=on_progress)
 
         optimizations_found: int = 0
         self.test_cfg.concolic_test_root_dir = Path(

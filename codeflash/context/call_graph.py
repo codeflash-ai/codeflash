@@ -4,6 +4,7 @@ import hashlib
 import os
 import sqlite3
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -12,7 +13,18 @@ from codeflash.code_utils.code_utils import get_qualified_name, path_belongs_to_
 from codeflash.models.models import FunctionSource
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable
+
     from jedi.api.classes import Name
+
+
+@dataclass(frozen=True, slots=True)
+class IndexResult:
+    file_path: Path
+    cached: bool
+    num_edges: int
+    edges: tuple[tuple[str, str], ...]  # (caller_qn, callee_name) pairs
+    error: bool
 
 
 class CallGraph:
@@ -117,17 +129,17 @@ class CallGraph:
 
         return file_path_to_function_source, function_source_list
 
-    def ensure_file_indexed(self, file_path: Path) -> None:
+    def ensure_file_indexed(self, file_path: Path) -> IndexResult:
         resolved = str(file_path.resolve())
         try:
             content = file_path.read_text(encoding="utf-8")
         except Exception:
-            return
+            return IndexResult(file_path=file_path, cached=False, num_edges=0, edges=(), error=True)
         file_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
 
         cached_hash = self.indexed_file_hashes.get(resolved)
         if cached_hash == file_hash:
-            return
+            return IndexResult(file_path=file_path, cached=True, num_edges=0, edges=(), error=False)
 
         # Check DB for stored hash
         row = self.conn.execute(
@@ -136,11 +148,11 @@ class CallGraph:
         ).fetchone()
         if row and row[0] == file_hash:
             self.indexed_file_hashes[resolved] = file_hash
-            return
+            return IndexResult(file_path=file_path, cached=True, num_edges=0, edges=(), error=False)
 
-        self.index_file(file_path, file_hash)
+        return self.index_file(file_path, file_hash)
 
-    def index_file(self, file_path: Path, file_hash: str) -> None:
+    def index_file(self, file_path: Path, file_hash: str) -> IndexResult:
         import jedi
 
         resolved = str(file_path.resolve())
@@ -165,7 +177,7 @@ class CallGraph:
             )
             self.conn.commit()
             self.indexed_file_hashes[resolved] = file_hash
-            return
+            return IndexResult(file_path=file_path, cached=False, num_edges=0, edges=(), error=True)
 
         edges: set[tuple[str, str, str, str, str, str, str, str]] = set()
 
@@ -237,6 +249,9 @@ class CallGraph:
         self.conn.commit()
         self.indexed_file_hashes[resolved] = file_hash
 
+        edges_summary = tuple((caller_qn, callee_name) for (_, caller_qn, _, _, _, callee_name, _, _) in edges)
+        return IndexResult(file_path=file_path, cached=False, num_edges=len(edges), edges=edges_summary, error=False)
+
     def _resolve_definitions(self, ref: Name) -> list[Name]:
         try:
             inferred = ref.infer()
@@ -290,6 +305,13 @@ class CallGraph:
             return get_qualified_name(parent.module_name, parent.full_name)
         except (ValueError, AttributeError):
             return None
+
+    def build_index(self, file_paths: Iterable[Path], on_progress: Callable[[IndexResult], None] | None = None) -> None:
+        """Pre-index a batch of files. Calls on_progress(result) after each file."""
+        for file_path in file_paths:
+            result = self.ensure_file_indexed(file_path)
+            if on_progress is not None:
+                on_progress(result)
 
     def close(self) -> None:
         self.conn.close()

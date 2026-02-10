@@ -24,10 +24,11 @@ from codeflash.lsp.lsp_logger import enhanced_log
 from codeflash.lsp.lsp_message import LspCodeMessage, LspTextMessage
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Callable, Generator
 
     from rich.progress import TaskID
 
+    from codeflash.context.call_graph import IndexResult
     from codeflash.lsp.lsp_message import LspMessage
 
 DEBUG_MODE = logging.getLogger().getEffectiveLevel() == logging.DEBUG
@@ -196,3 +197,84 @@ def test_files_progress_bar(total: int, description: str) -> Generator[tuple[Pro
     ) as progress:
         task_id = progress.add_task(description, total=total)
         yield progress, task_id
+
+
+MAX_TREE_ENTRIES = 8
+MAX_EDGE_CHILDREN = 3
+
+
+@contextmanager
+def call_graph_live_display(total: int) -> Generator[Callable[[IndexResult], None], None, None]:
+    from rich.console import Group
+    from rich.live import Live
+    from rich.panel import Panel
+    from rich.text import Text
+    from rich.tree import Tree
+
+    if is_LSP_enabled():
+        lsp_log(LspTextMessage(text="Building call graph", takes_time=True))
+        yield lambda _result: None
+        return
+
+    progress = Progress(
+        SpinnerColumn(next(spinners)),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(complete_style="cyan", finished_style="green", pulse_style="yellow"),
+        MofNCompleteColumn(),
+        TimeElapsedColumn(),
+        TimeRemainingColumn(),
+        auto_refresh=False,
+    )
+    task_id = progress.add_task("Analyzing files", total=total)
+
+    results: list[IndexResult] = []
+    stats_indexed = 0
+    stats_cached = 0
+    stats_edges = 0
+    stats_errors = 0
+
+    def make_display() -> Panel:
+        tree = Tree("[bold]Call Graph[/bold]")
+        for result in results[-MAX_TREE_ENTRIES:]:
+            name = result.file_path.name
+            if result.error:
+                tree.add(f"[red]{name}  (error)[/red]")
+            elif result.cached:
+                tree.add(f"[dim]{name}  (cached)[/dim]")
+            else:
+                branch = tree.add(f"[cyan]{name}[/cyan]  [dim]({result.num_edges} edges)[/dim]")
+                for caller, callee in result.edges[:MAX_EDGE_CHILDREN]:
+                    branch.add(f"[dim]{caller} -> {callee}[/dim]")
+                remaining = len(result.edges) - MAX_EDGE_CHILDREN
+                if remaining > 0:
+                    branch.add(f"[dim italic]...and {remaining} more[/dim italic]")
+
+        parts: list[str] = []
+        if stats_indexed:
+            parts.append(f"{stats_indexed} indexed")
+        if stats_cached:
+            parts.append(f"{stats_cached} cached")
+        if stats_errors:
+            parts.append(f"{stats_errors} errors")
+        parts.append(f"{stats_edges} edges")
+        stats_text = Text(" . ".join(parts), style="dim")
+
+        return Panel(
+            Group(progress, Text(""), tree, Text(""), stats_text), title="Building Call Graph", border_style="cyan"
+        )
+
+    def update(result: IndexResult) -> None:
+        nonlocal stats_indexed, stats_cached, stats_edges, stats_errors
+        results.append(result)
+        if result.error:
+            stats_errors += 1
+        elif result.cached:
+            stats_cached += 1
+        else:
+            stats_indexed += 1
+            stats_edges += result.num_edges
+        progress.advance(task_id)
+        live.update(make_display())
+
+    with Live(make_display(), console=console, transient=True, refresh_per_second=8) as live:
+        yield update

@@ -7,7 +7,7 @@ import pytest
 if TYPE_CHECKING:
     from pathlib import Path
 
-from codeflash.context.call_graph import CallGraph
+from codeflash.context.call_graph import CallGraph, IndexResult
 
 
 @pytest.fixture
@@ -284,3 +284,94 @@ def caller():
         assert any(fs.qualified_name == "helper" for fs in result_list)
     finally:
         cg2.close()
+
+
+def test_build_index_with_progress(project: Path, db_path: Path) -> None:
+    write_file(
+        project,
+        "a.py",
+        """\
+def helper_a():
+    return 1
+
+def caller_a():
+    return helper_a()
+""",
+    )
+    write_file(
+        project,
+        "b.py",
+        """\
+from a import helper_a
+
+def caller_b():
+    return helper_a()
+""",
+    )
+
+    cg = CallGraph(project, db_path=db_path)
+    try:
+        progress_calls: list[IndexResult] = []
+        files = [project / "a.py", project / "b.py"]
+        cg.build_index(files, on_progress=progress_calls.append)
+
+        # Callback fired once per file
+        assert len(progress_calls) == 2
+
+        # Verify IndexResult fields for freshly indexed files
+        for result in progress_calls:
+            assert isinstance(result, IndexResult)
+            assert not result.error
+            assert not result.cached
+            assert result.num_edges > 0
+            assert len(result.edges) == result.num_edges
+
+        # Files are now indexed — get_callees should return correct results
+        _, result_list = cg.get_callees({project / "a.py": {"caller_a"}})
+        callee_qns = {fs.qualified_name for fs in result_list}
+        assert "helper_a" in callee_qns
+    finally:
+        cg.close()
+
+
+def test_build_index_cached_results(project: Path, db_path: Path) -> None:
+    write_file(
+        project,
+        "a.py",
+        """\
+def helper_a():
+    return 1
+
+def caller_a():
+    return helper_a()
+""",
+    )
+    write_file(
+        project,
+        "b.py",
+        """\
+from a import helper_a
+
+def caller_b():
+    return helper_a()
+""",
+    )
+
+    cg = CallGraph(project, db_path=db_path)
+    try:
+        files = [project / "a.py", project / "b.py"]
+        # First pass — fresh indexing
+        cg.build_index(files)
+
+        # Second pass — should all be cached
+        cached_results: list[IndexResult] = []
+        cg.build_index(files, on_progress=cached_results.append)
+
+        assert len(cached_results) == 2
+        for result in cached_results:
+            assert result.cached
+            assert not result.error
+            assert result.num_edges == 0
+            assert result.edges == ()
+    finally:
+        cg.close()
