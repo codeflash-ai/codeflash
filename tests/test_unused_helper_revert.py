@@ -915,7 +915,7 @@ class OuterClass:
                                 "only_function_name": "global_helper_1",
                                 "fully_qualified_name": "main.global_helper_1",
                                 "file_path": main_file,
-                                "jedi_definition": type("MockJedi", (), {"type": "function"})(),
+                                "definition_type": "function",
                             },
                         )(),
                         type(
@@ -926,7 +926,7 @@ class OuterClass:
                                 "only_function_name": "global_helper_2",
                                 "fully_qualified_name": "main.global_helper_2",
                                 "file_path": main_file,
-                                "jedi_definition": type("MockJedi", (), {"type": "function"})(),
+                                "definition_type": "function",
                             },
                         )(),
                     ]

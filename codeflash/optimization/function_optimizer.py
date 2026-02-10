@@ -1501,8 +1501,8 @@ class FunctionOptimizer:
             self.function_to_optimize.qualified_name
         )
         for helper_function in code_context.helper_functions:
-            # Skip class definitions (jedi_definition may be None for non-Python languages)
-            if helper_function.jedi_definition is None or helper_function.jedi_definition.type != "class":
+            # Skip class definitions (definition_type may be None for non-Python languages)
+            if helper_function.definition_type != "class":
                 read_writable_functions_by_file_path[helper_function.file_path].add(helper_function.qualified_name)
         for module_abspath, qualified_names in read_writable_functions_by_file_path.items():
             did_update |= replace_function_definitions_in_module(
