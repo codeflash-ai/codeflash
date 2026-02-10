@@ -322,7 +322,7 @@ class JavaSupport(LanguageSupport):
 
             return True
         except Exception as e:
-            logger.error("Failed to instrument %s for line profiling: %s", func_info.name, e)
+            logger.error("Failed to instrument %s for line profiling: %s", func_info.function_name, e)
             return False
 
     def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict:

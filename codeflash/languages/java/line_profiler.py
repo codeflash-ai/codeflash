@@ -83,10 +83,10 @@ class JavaLineProfiler:
         lines = source.splitlines(keepends=True)
 
         # Process functions in reverse order to preserve line numbers
-        for func in sorted(functions, key=lambda f: f.start_line, reverse=True):
+        for func in sorted(functions, key=lambda f: f.starting_line, reverse=True):
             func_lines = self._instrument_function(func, lines, file_path, analyzer)
-            start_idx = func.start_line - 1
-            end_idx = func.end_line
+            start_idx = func.starting_line - 1
+            end_idx = func.ending_line
             lines = lines[:start_idx] + func_lines + lines[end_idx:]
 
         instrumented_source = "".join(lines)
@@ -261,7 +261,7 @@ class {self.profiler_class} {{
             Instrumented function lines.
 
         """
-        func_lines = lines[func.start_line - 1 : func.end_line]
+        func_lines = lines[func.starting_line - 1 : func.ending_line]
         instrumented_lines = []
 
         # Parse the function to find executable lines
@@ -271,7 +271,7 @@ class {self.profiler_class} {{
             tree = analyzer.parse(source.encode("utf8"))
             executable_lines = self._find_executable_lines(tree.root_node)
         except Exception as e:
-            logger.warning("Failed to parse function %s: %s", func.name, e)
+            logger.warning("Failed to parse function %s: %s", func.function_name, e)
             return func_lines
 
         # Add profiling to each executable line
@@ -279,7 +279,7 @@ class {self.profiler_class} {{
 
         for local_idx, line in enumerate(func_lines):
             local_line_num = local_idx + 1  # 1-indexed within function
-            global_line_num = func.start_line + local_idx  # Global line number
+            global_line_num = func.starting_line + local_idx  # Global line number
             stripped = line.strip()
 
             # Add enterFunction() call after the method's opening brace
@@ -409,7 +409,7 @@ class {self.profiler_class} {{
 
         """
         if not profile_file.exists():
-            return {"timings": {}, "unit": 1e-9, "raw_data": {}}
+            return {"timings": {}, "unit": 1e-9, "raw_data": {}, "str_out": ""}
 
         try:
             with profile_file.open("r") as f:
@@ -435,15 +435,17 @@ class {self.profiler_class} {{
                     "content": content,
                 }
 
-            return {
+            result = {
                 "timings": timings,
                 "unit": 1e-9,  # nanoseconds
                 "raw_data": data,
             }
+            result["str_out"] = format_line_profile_results(result)
+            return result
 
         except Exception as e:
             logger.error("Failed to parse line profile results: %s", e)
-            return {"timings": {}, "unit": 1e-9, "raw_data": {}}
+            return {"timings": {}, "unit": 1e-9, "raw_data": {}, "str_out": ""}
 
 
 def format_line_profile_results(results: dict, file_path: Path | None = None) -> str:
