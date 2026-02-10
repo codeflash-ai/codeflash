@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from tree_sitter import Node
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-    from codeflash.languages.treesitter_utils import ImportInfo, TreeSitterAnalyzer
+    from codeflash.languages.javascript.treesitter import ImportInfo, TreeSitterAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +112,7 @@ class ReferenceFinder:
             List of Reference objects describing each call site.
 
         """
-        from codeflash.languages.treesitter_utils import get_analyzer_for_file
+        from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
         function_name = function_to_optimize.function_name
         source_file = function_to_optimize.file_path
@@ -719,7 +719,7 @@ class ReferenceFinder:
                 continue
 
             # Create a fake ImportInfo to resolve the re-export source
-            from codeflash.languages.treesitter_utils import ImportInfo
+            from codeflash.languages.javascript.treesitter import ImportInfo
 
             fake_import = ImportInfo(
                 module_path=exp.reexport_source,

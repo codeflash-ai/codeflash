@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import HelperFunction
-    from codeflash.languages.treesitter_utils import ImportInfo, TreeSitterAnalyzer
+    from codeflash.languages.javascript.treesitter import ImportInfo, TreeSitterAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -486,7 +486,7 @@ class MultiFileHelperFinder:
 
         """
         from codeflash.languages.base import HelperFunction
-        from codeflash.languages.treesitter_utils import get_analyzer_for_file
+        from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
         try:
             source = file_path.read_text(encoding="utf-8")
@@ -559,7 +559,7 @@ class MultiFileHelperFinder:
         """
         from codeflash.discovery.functions_to_optimize import FunctionToOptimize
         from codeflash.languages.registry import get_language_support
-        from codeflash.languages.treesitter_utils import get_analyzer_for_file
+        from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
         if context.current_depth >= context.max_depth:
             return {}

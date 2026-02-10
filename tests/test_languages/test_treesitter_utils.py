@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
+from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
 
 
 class TestTreeSitterLanguage:

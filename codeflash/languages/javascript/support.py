@@ -15,14 +15,14 @@ from typing import TYPE_CHECKING, Any
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, Language, TestInfo, TestResult
 from codeflash.languages.registry import register_language
-from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
+from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
 from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from codeflash.languages.base import ReferenceInfo
-    from codeflash.languages.treesitter_utils import TypeDefinition
+    from codeflash.languages.javascript.treesitter import TypeDefinition
 
 logger = logging.getLogger(__name__)
 
