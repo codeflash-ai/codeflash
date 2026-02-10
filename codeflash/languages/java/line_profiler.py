@@ -125,7 +125,7 @@ class {self.profiler_class} {{
     private static final ThreadLocal<Long> lastLineTime = new ThreadLocal<>();
     private static final ThreadLocal<String> lastKey = new ThreadLocal<>();
     private static final java.util.concurrent.atomic.AtomicInteger totalHits = new java.util.concurrent.atomic.AtomicInteger(0);
-    private static final String OUTPUT_FILE = {str(self.output_file)!r};
+    private static final String OUTPUT_FILE = "{str(self.output_file)}";
 
     static class LineStats {{
         public final java.util.concurrent.atomic.AtomicLong hits = new java.util.concurrent.atomic.AtomicLong(0);
@@ -201,11 +201,11 @@ class {self.profiler_class} {{
 
             // Build JSON with stats
             StringBuilder json = new StringBuilder();
-            json.append("{{\n");
+            json.append("{{\\n");
 
             boolean first = true;
             for (java.util.Map.Entry<String, LineStats> entry : stats.entrySet()) {{
-                if (!first) json.append(",\n");
+                if (!first) json.append(",\\n");
                 first = false;
 
                 String key = entry.getKey();
@@ -215,16 +215,16 @@ class {self.profiler_class} {{
                 // Escape quotes in content
                 content = content.replace("\\"", "\\\\\\"");
 
-                json.append("  \\"").append(key).append("\\": {{\n");
-                json.append("    \\"hits\\": ").append(st.hits.get()).append(",\n");
-                json.append("    \\"time\\": ").append(st.timeNs.get()).append(",\n");
-                json.append("    \\"file\\": \\"").append(st.file).append("\\",\n");
-                json.append("    \\"line\\": ").append(st.line).append(",\n");
+                json.append("  \\"").append(key).append("\\": {{\\n");
+                json.append("    \\"hits\\": ").append(st.hits.get()).append(",\\n");
+                json.append("    \\"time\\": ").append(st.timeNs.get()).append(",\\n");
+                json.append("    \\"file\\": \\"").append(st.file).append("\\",\\n");
+                json.append("    \\"line\\": ").append(st.line).append(",\\n");
                 json.append("    \\"content\\": \\"").append(content).append("\\"\\n");
                 json.append("  }}");
             }}
 
-            json.append("\n}}");
+            json.append("\\n}}");
 
             java.nio.file.Files.write(
                 outputFile.toPath(),
