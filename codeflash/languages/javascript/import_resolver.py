@@ -558,8 +558,8 @@ class MultiFileHelperFinder:
 
         """
         from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-        from codeflash.languages.registry import get_language_support
         from codeflash.languages.javascript.treesitter import get_analyzer_for_file
+        from codeflash.languages.registry import get_language_support
 
         if context.current_depth >= context.max_depth:
             return {}
