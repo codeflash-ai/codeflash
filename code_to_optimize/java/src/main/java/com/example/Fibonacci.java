@@ -34,8 +34,11 @@ public class Fibonacci {
         if (num < 0) {
             return false;
         }
-        long check1 = 5 * num * num + 4;
-        long check2 = 5 * num * num - 4;
+        // Compute num*num once and reuse to avoid duplicate multiplications.
+        long s = num * num;
+        long fiveS = 5L * s;
+        long check1 = fiveS + 4;
+        long check2 = fiveS - 4;
 
         return isPerfectSquare(check1) || isPerfectSquare(check2);
     }
