@@ -1255,3 +1255,122 @@ void testSynchronizedMethodWithAssertJ() {
 }"""
         result = transform_java_assertions(source, "incrementAndGet")
         assert result == expected
+
+
+class TestFullyQualifiedAssertions:
+    """Tests for fully qualified assertion calls like org.junit.jupiter.api.Assertions.assertXxx."""
+
+    def test_assert_timeout_fully_qualified_with_variable_assignment(self):
+        source = """\
+@Test
+void testLargeInput() {
+    Long result = org.junit.jupiter.api.Assertions.assertTimeout(
+            Duration.ofSeconds(1),
+            () -> Fibonacci.fibonacci(100_000)
+    );
+}"""
+        expected = """\
+@Test
+void testLargeInput() {
+    Object _cf_result1 = Fibonacci.fibonacci(100_000);
+}"""
+        result = transform_java_assertions(source, "fibonacci")
+        assert result == expected
+
+    def test_assert_equals_fully_qualified(self):
+        source = """\
+@Test
+void testAdd() {
+    org.junit.jupiter.api.Assertions.assertEquals(5, calc.add(2, 3));
+}"""
+        expected = """\
+@Test
+void testAdd() {
+    Object _cf_result1 = calc.add(2, 3);
+}"""
+        result = transform_java_assertions(source, "add")
+        assert result == expected
+
+
+class TestAssertThrowsVariableAssignment:
+    """Tests for assertThrows assigned to a variable: Type var = assertThrows(...)."""
+
+    def test_assert_throws_assigned_to_variable(self):
+        source = """\
+@Test
+void testDivideByZero() {
+    Calculator calc = new Calculator();
+    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> calc.divide(1, 0));
+    assertEquals("Cannot divide by zero", ex.getMessage());
+}"""
+        expected = """\
+@Test
+void testDivideByZero() {
+    Calculator calc = new Calculator();
+    IllegalArgumentException ex = null;
+    try { calc.divide(1, 0); } catch (IllegalArgumentException _cf_caught1) { ex = _cf_caught1; }
+    assertEquals("Cannot divide by zero", ex.getMessage());
+}"""
+        result = transform_java_assertions(source, "divide")
+        assert result == expected
+
+    def test_assert_throws_assigned_to_variable_block_lambda(self):
+        source = """\
+@Test
+void testDivideByZero() {
+    ArithmeticException ex = assertThrows(ArithmeticException.class, () -> {
+        calculator.divide(1, 0);
+    });
+}"""
+        expected = """\
+@Test
+void testDivideByZero() {
+    ArithmeticException ex = null;
+    try { calculator.divide(1, 0); } catch (ArithmeticException _cf_caught1) { ex = _cf_caught1; }
+}"""
+        result = transform_java_assertions(source, "divide")
+        assert result == expected
+
+    def test_assert_throws_assigned_with_final_modifier(self):
+        source = """\
+@Test
+void testDivideByZero() {
+    final IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> calc.divide(1, 0));
+}"""
+        expected = """\
+@Test
+void testDivideByZero() {
+    IllegalArgumentException ex = null;
+    try { calc.divide(1, 0); } catch (IllegalArgumentException _cf_caught1) { ex = _cf_caught1; }
+}"""
+        result = transform_java_assertions(source, "divide")
+        assert result == expected
+
+    def test_assert_throws_not_assigned_unchanged(self):
+        source = """\
+@Test
+void testDivideByZero() {
+    assertThrows(IllegalArgumentException.class, () -> calculator.divide(1, 0));
+}"""
+        expected = """\
+@Test
+void testDivideByZero() {
+    try { calculator.divide(1, 0); } catch (Exception _cf_ignored1) {}
+}"""
+        result = transform_java_assertions(source, "divide")
+        assert result == expected
+
+    def test_assert_throws_assigned_with_qualified_assertions(self):
+        source = """\
+@Test
+void testDivideByZero() {
+    IllegalArgumentException ex = Assertions.assertThrows(IllegalArgumentException.class, () -> calc.divide(1, 0));
+}"""
+        expected = """\
+@Test
+void testDivideByZero() {
+    IllegalArgumentException ex = null;
+    try { calc.divide(1, 0); } catch (IllegalArgumentException _cf_caught1) { ex = _cf_caught1; }
+}"""
+        result = transform_java_assertions(source, "divide")
+        assert result == expected
