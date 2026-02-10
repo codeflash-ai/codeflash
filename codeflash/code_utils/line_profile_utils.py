@@ -41,22 +41,30 @@ class JitDecoratorDetector(ast.NodeVisitor):
         """Track regular imports like 'import numba' or 'import numba as nb'."""
         for alias in node.names:
             # alias.name is the module name, alias.asname is the alias (or None)
-            local_name = alias.asname if alias.asname else alias.name
+            local_name = alias.asname or alias.name
             # For module imports, we store (module_name, None) to indicate it's a module import
             self.import_aliases[local_name] = (alias.name, None)
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         """Track from imports like 'from numba import jit' or 'from numba import jit as my_jit'."""
-        if node.module is None:
+        module_name = node.module
+        if module_name is None:
             self.generic_visit(node)
             return
 
+
+        # Localize for speed
+        import_aliases = self.import_aliases
         for alias in node.names:
-            local_name = alias.asname if alias.asname else alias.name
+            local_name = alias.asname or alias.name
             # For from imports, we store (module_name, imported_name)
-            self.import_aliases[local_name] = (node.module, alias.name)
-        self.generic_visit(node)
+            import_aliases[local_name] = (module_name, alias.name)
+
+        # Only traverse children if there's a specific visitor that might need them.
+        # This preserves behavior for subclasses that implement visit_alias.
+        if getattr(self, "visit_alias", None) is not None:
+            self.generic_visit(node)
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         """Check function decorators for JIT decorators."""

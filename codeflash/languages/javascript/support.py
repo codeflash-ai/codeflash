@@ -675,7 +675,7 @@ class JavaScriptSupport:
             if imp.namespace_import:
                 imported_names.add(imp.namespace_import)
             for name, alias in imp.named_imports:
-                imported_names.add(alias if alias else name)
+                imported_names.add(alias or name)
 
         # Build a map of declaration name -> declaration info
         decl_map: dict[str, Any] = {}
@@ -903,7 +903,7 @@ class JavaScriptSupport:
             # Check if any of our type names are imported from this module
             for name, alias in imp.named_imports:
                 # The type could be imported with an alias
-                local_name = alias if alias else name
+                local_name = alias or name
                 if local_name in type_names:
                     type_import_map[local_name] = (imp, name)  # (ImportInfo, original_name)
 

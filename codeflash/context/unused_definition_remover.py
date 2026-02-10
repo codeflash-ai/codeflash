@@ -646,7 +646,7 @@ def _analyze_imports_in_optimized_code(
                 file_entry = helpers_by_file_and_func.get(module_name)
                 if file_entry:
                     for alias in node.names:
-                        imported_name = alias.asname if alias.asname else alias.name
+                        imported_name = alias.asname or alias.name
                         original_name = alias.name
                         helpers = file_entry.get(original_name)
                         if helpers:
@@ -658,7 +658,7 @@ def _analyze_imports_in_optimized_code(
         elif isinstance(node, ast.Import):
             # Handle "import module" statements
             for alias in node.names:
-                imported_name = alias.asname if alias.asname else alias.name
+                imported_name = alias.asname or alias.name
                 module_name = alias.name
                 helpers = helpers_by_file.get(module_name)
                 if helpers:

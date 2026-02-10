@@ -429,8 +429,8 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
     for val in data:
         try:
             test_module_path = val[0]
-            test_class_name = val[1] if val[1] else None
-            test_function_name = val[2] if val[2] else None
+            test_class_name = val[1] or None
+            test_function_name = val[2] or None
             function_getting_tested = val[3]
 
             # For Jest tests, test_module_path could be:
@@ -1152,7 +1152,7 @@ def merge_test_results(
             for result_bin in bin_results:
                 # Prefer XML runtime (from stdout markers) if bin runtime is None/0
                 # This is important for Jest perf tests which output timing to stdout, not SQLite
-                merged_runtime = result_bin.runtime if result_bin.runtime else xml_result.runtime
+                merged_runtime = result_bin.runtime or xml_result.runtime
                 merged_test_results.add(
                     FunctionTestInvocation(
                         loop_index=xml_result.loop_index,
@@ -1183,7 +1183,7 @@ def merge_test_results(
                     continue
                 # Prefer XML runtime (from stdout markers) if bin runtime is None/0
                 # This is important for Jest perf tests which output timing to stdout, not SQLite
-                merged_runtime = bin_result.runtime if bin_result.runtime else xml_result.runtime
+                merged_runtime = bin_result.runtime or xml_result.runtime
                 merged_test_results.add(
                     FunctionTestInvocation(
                         loop_index=xml_result.loop_index,
@@ -1215,7 +1215,7 @@ def merge_test_results(
                     continue
                 # Prefer XML runtime (from stdout markers) if bin runtime is None/0
                 # This is important for Jest perf tests which output timing to stdout, not SQLite
-                merged_runtime = bin_result.runtime if bin_result.runtime else xml_result.runtime
+                merged_runtime = bin_result.runtime or xml_result.runtime
                 merged_test_results.add(
                     FunctionTestInvocation(
                         loop_index=bin_result.loop_index,
