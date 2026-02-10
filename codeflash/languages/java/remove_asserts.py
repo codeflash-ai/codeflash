@@ -188,6 +188,9 @@ class JavaAssertTransformer:
         self.invocation_counter = 0
         self._detected_framework: str | None = None
 
+        # Precompile the assignment-detection regex to avoid recompiling on each call.
+        self._assign_re = re.compile(r"(\w+(?:<[^>]+>)?)\s+(\w+)\s*=\s*$")
+
     def transform(self, source: str) -> str:
         """Remove assertions from source code, preserving target function calls.
 
@@ -628,12 +631,10 @@ class JavaAssertTransformer:
         else:
             line_start += 1
 
-        line_before_assert = source[line_start:assertion_start]
-
         # Pattern: Type varName = assertXxx(...)
         # Handle generic types: Type<Generic> varName = ...
-        pattern = r"(\w+(?:<[^>]+>)?)\s+(\w+)\s*=\s*$"
-        match = re.search(pattern, line_before_assert)
+        match = self._assign_re.search(source, line_start, assertion_start)
+
 
         if match:
             var_type = match.group(1).strip()
