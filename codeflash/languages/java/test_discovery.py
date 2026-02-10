@@ -127,7 +127,12 @@ def _match_test_method_with_context(
     type_map = {**field_types, **local_types}
 
     resolved_calls = _resolve_method_calls_in_range(
-        tree.root_node, source_bytes, test_method.starting_line, test_method.ending_line, analyzer, type_map,
+        tree.root_node,
+        source_bytes,
+        test_method.starting_line,
+        test_method.ending_line,
+        analyzer,
+        type_map,
         static_import_map,
     )
 

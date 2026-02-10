@@ -206,14 +206,32 @@ class JacocoCoverageUtils:
 
         """
         if not jacoco_xml_path or not jacoco_xml_path.exists():
-            logger.debug(f"JaCoCo XML file not found: {jacoco_xml_path}")
+            logger.warning(f"JaCoCo XML file not found at path: {jacoco_xml_path}")
+            return CoverageData.create_empty(source_code_path, function_name, code_context)
+
+        # Log file info for debugging
+        file_size = jacoco_xml_path.stat().st_size
+        logger.info(f"Parsing JaCoCo XML file: {jacoco_xml_path} (size: {file_size} bytes)")
+
+        if file_size == 0:
+            logger.warning(f"JaCoCo XML file is empty: {jacoco_xml_path}")
             return CoverageData.create_empty(source_code_path, function_name, code_context)
 
         try:
             tree = ET.parse(jacoco_xml_path)
             root = tree.getroot()
         except ET.ParseError as e:
-            logger.warning(f"Failed to parse JaCoCo XML file: {e}")
+            # Log detailed debugging info
+            try:
+                with jacoco_xml_path.open(encoding="utf-8") as f:
+                    content_preview = f.read(500)
+                logger.warning(
+                    f"Failed to parse JaCoCo XML file at '{jacoco_xml_path}' "
+                    f"(size: {file_size} bytes, exists: {jacoco_xml_path.exists()}): {e}. "
+                    f"File preview: {content_preview!r}"
+                )
+            except Exception as read_err:
+                logger.warning(f"Failed to parse JaCoCo XML file at '{jacoco_xml_path}': {e}. Could not read file: {read_err}")
             return CoverageData.create_empty(source_code_path, function_name, code_context)
 
         # Determine expected source file name from path

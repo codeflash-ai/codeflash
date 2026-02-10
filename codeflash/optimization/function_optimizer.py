@@ -375,7 +375,7 @@ class CandidateProcessor:
                 self.future_all_code_repair,
                 "Repairing {0} candidates",
                 "Added {0} candidates from repair, total candidates now: {1}",
-                lambda: self.future_all_code_repair.clear(),
+                self.future_all_code_repair.clear,
             )
         if self.line_profiler_done and not self.refinement_done:
             return self._process_candidates(
@@ -390,7 +390,7 @@ class CandidateProcessor:
                 self.future_adaptive_optimizations,
                 "Applying adaptive optimizations to {0} candidates",
                 "Added {0} candidates from adaptive optimization, total candidates now: {1}",
-                lambda: self.future_adaptive_optimizations.clear(),
+                self.future_adaptive_optimizations.clear,
             )
         return None  # All done
 

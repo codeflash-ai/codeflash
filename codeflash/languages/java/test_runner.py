@@ -21,11 +21,14 @@ from typing import Any
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.languages.base import TestResult
 from codeflash.languages.java.build_tools import (
+    add_codeflash_dependency_to_pom,
     add_jacoco_plugin_to_pom,
     find_maven_executable,
     get_jacoco_xml_path,
+    install_codeflash_runtime,
     is_jacoco_configured,
 )
+from codeflash.languages.java.comparator import _find_comparator_jar
 
 logger = logging.getLogger(__name__)
 
@@ -223,6 +226,44 @@ class JavaTestRunResult:
     returncode: int
 
 
+def _ensure_runtime_on_classpath(maven_root: Path, test_module: str | None = None) -> None:
+    """Ensure codeflash-runtime JAR is installed and added as a dependency.
+
+    This installs the fat JAR (with Kryo, sqlite-jdbc) to the local Maven repository
+    and adds it as a test-scoped dependency in the project's pom.xml.
+    Required for com.codeflash.Serializer (Kryo binary serialization) in instrumented tests.
+    """
+    jar_path = _find_comparator_jar()
+    if not jar_path:
+        logger.warning("codeflash-runtime JAR not found, Kryo serialization will not be available")
+        return
+
+    # Check if already installed in local Maven repo
+    m2_jar = (
+        Path.home()
+        / ".m2"
+        / "repository"
+        / "com"
+        / "codeflash"
+        / "codeflash-runtime"
+        / "1.0.0"
+        / "codeflash-runtime-1.0.0.jar"
+    )
+    if not m2_jar.exists():
+        if not install_codeflash_runtime(maven_root, jar_path):
+            logger.warning("Failed to install codeflash-runtime to local Maven repository")
+            return
+
+    # Add dependency to the pom.xml where tests are compiled
+    if test_module:
+        pom_path = maven_root / test_module / "pom.xml"
+    else:
+        pom_path = maven_root / "pom.xml"
+
+    if pom_path.exists():
+        add_codeflash_dependency_to_pom(pom_path)
+
+
 def run_behavioral_tests(
     test_paths: Any,
     test_env: dict[str, str],
@@ -256,6 +297,10 @@ def run_behavioral_tests(
     # Detect multi-module Maven projects where tests are in a different module
     maven_root, test_module = _find_multi_module_root(project_root, test_paths)
 
+    # Ensure codeflash-runtime JAR is available on the test classpath
+    # This provides com.codeflash.Serializer for Kryo binary serialization
+    _ensure_runtime_on_classpath(maven_root, test_module)
+
     # Create SQLite database path for behavior capture - use standard path that parse_test_results expects
     sqlite_db_path = get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite"))
 
@@ -277,7 +322,7 @@ def run_behavioral_tests(
             test_module_pom = maven_root / test_module / "pom.xml"
             if test_module_pom.exists():
                 if not is_jacoco_configured(test_module_pom):
-                    logger.info(f"Adding JaCoCo plugin to test module pom.xml: {test_module_pom}")
+                    logger.info("Adding JaCoCo plugin to test module pom.xml: %s", test_module_pom)
                     add_jacoco_plugin_to_pom(test_module_pom)
                 coverage_xml_path = get_jacoco_xml_path(maven_root / test_module)
         else:
@@ -309,14 +354,39 @@ def run_behavioral_tests(
     surefire_dir = target_dir / "surefire-reports"
     result_xml_path = _get_combined_junit_xml(surefire_dir, candidate_index)
 
-    # Return coverage_xml_path as the fourth element when coverage is enabled
-    return result_xml_path, result, sqlite_db_path, coverage_xml_path
+    # Debug: Log Maven result and coverage file status
+    if enable_coverage:
+        logger.info(f"Maven verify completed with return code: {result.returncode}")
+        if result.returncode != 0:
+            logger.warning(f"Maven verify had non-zero return code: {result.returncode}. Coverage data may be incomplete.")
+
+    # Log coverage file status after Maven verify
+    if enable_coverage and coverage_xml_path:
+        jacoco_exec_path = target_dir / "jacoco.exec"
+        logger.info(f"Coverage paths - target_dir: {target_dir}, coverage_xml_path: {coverage_xml_path}")
+        if jacoco_exec_path.exists():
+            logger.info(f"JaCoCo exec file exists: {jacoco_exec_path} ({jacoco_exec_path.stat().st_size} bytes)")
+        else:
+            logger.warning(f"JaCoCo exec file not found: {jacoco_exec_path} - JaCoCo agent may not have run")
+        if coverage_xml_path.exists():
+            file_size = coverage_xml_path.stat().st_size
+            logger.info(f"JaCoCo XML report exists: {coverage_xml_path} ({file_size} bytes)")
+            if file_size == 0:
+                logger.warning(f"JaCoCo XML report is empty - report generation may have failed")
+        else:
+            logger.warning(f"JaCoCo XML report not found: {coverage_xml_path} - verify phase may not have completed")
+
+    # Return tuple matching the expected signature:
+    # (result_xml_path, run_result, coverage_database_file, coverage_config_file)
+    # For Java: coverage_database_file is the jacoco.xml path, coverage_config_file is not used (None)
+    # The sqlite_db_path is used internally for behavior capture but doesn't need to be returned
+    return result_xml_path, result, coverage_xml_path, None
 
 
 def _compile_tests(
     project_root: Path, env: dict[str, str], test_module: str | None = None, timeout: int = 120
 ) -> subprocess.CompletedProcess:
-    """Compile test code using Maven (without running tests).
+    """Compile production and test code using Maven (without running tests).
 
     Args:
         project_root: Root directory of the Maven project.
@@ -333,7 +403,7 @@ def _compile_tests(
         logger.error("Maven not found")
         return subprocess.CompletedProcess(args=["mvn"], returncode=-1, stdout="", stderr="Maven not found")
 
-    cmd = [mvn, "test-compile", "-e"]  # Show errors but not verbose output
+    cmd = [mvn, "compile", "test-compile", "-e"]  # Compile production + test code
 
     if test_module:
         cmd.extend(["-pl", test_module, "-am"])
@@ -965,8 +1035,7 @@ def _combine_junit_xml_files(xml_files: list[Path], output_path: Path) -> None:
             total_time += float(root.get("time", 0))
 
             # Collect all testcases
-            for testcase in root.findall(".//testcase"):
-                all_testcases.append(testcase)
+            all_testcases.extend(root.findall(".//testcase"))
 
         except Exception as e:
             logger.warning("Failed to parse %s: %s", xml_file, e)
@@ -1018,18 +1087,32 @@ def _run_maven_tests(
 
     # Build test filter
     test_filter = _build_test_filter(test_paths, mode=mode)
-    logger.debug(f"Built test filter for mode={mode}: '{test_filter}' (empty={not test_filter})")
-    logger.debug(f"test_paths type: {type(test_paths)}, has test_files: {hasattr(test_paths, 'test_files')}")
+    logger.debug("Built test filter for mode=%s: '%s' (empty=%s)", mode, test_filter, not test_filter)
+    logger.debug("test_paths type: %s, has test_files: %s", type(test_paths), hasattr(test_paths, "test_files"))
     if hasattr(test_paths, "test_files"):
-        logger.debug(f"Number of test files: {len(test_paths.test_files)}")
+        logger.debug("Number of test files: %s", len(test_paths.test_files))
         for i, tf in enumerate(test_paths.test_files[:3]):  # Log first 3
-            logger.debug(f"  TestFile[{i}]: behavior={tf.instrumented_behavior_file_path}, bench={tf.benchmarking_file_path}")
+            logger.debug(
+                "  TestFile[%s]: behavior=%s, bench=%s",
+                i,
+                tf.instrumented_behavior_file_path,
+                tf.benchmarking_file_path,
+            )
 
     # Build Maven command
     # When coverage is enabled, use 'verify' phase to ensure JaCoCo report runs after tests
     # JaCoCo's report goal is bound to the verify phase to get post-test execution data
     maven_goal = "verify" if enable_coverage else "test"
     cmd = [mvn, maven_goal, "-fae"]  # Fail at end to run all tests
+
+    # Add --add-opens for Kryo serialization on Java 16+ (module system restrictions)
+    add_opens = (
+        "--add-opens java.base/java.util=ALL-UNNAMED "
+        "--add-opens java.base/java.lang=ALL-UNNAMED "
+        "--add-opens java.base/java.math=ALL-UNNAMED "
+        "--add-opens java.base/java.time=ALL-UNNAMED"
+    )
+    cmd.append(f'-DargLine={add_opens}')
 
     # When coverage is enabled, continue build even if tests fail so JaCoCo report is generated
     if enable_coverage:
@@ -1046,7 +1129,7 @@ def _run_maven_tests(
         # Validate test filter to prevent command injection
         validated_filter = _validate_test_filter(test_filter)
         cmd.append(f"-Dtest={validated_filter}")
-        logger.debug(f"Added -Dtest={validated_filter} to Maven command")
+        logger.debug("Added -Dtest=%s to Maven command", validated_filter)
     else:
         # CRITICAL: Empty test filter means Maven will run ALL tests
         # This is almost always a bug - tests should be filtered to relevant ones
@@ -1102,11 +1185,11 @@ def _build_test_filter(test_paths: Any, mode: str = "behavior") -> str:
                 if class_name:
                     filters.append(class_name)
                 else:
-                    logger.debug(f"_build_test_filter: Could not convert path to class name: {path}")
+                    logger.debug("_build_test_filter: Could not convert path to class name: %s", path)
             elif isinstance(path, str):
                 filters.append(path)
         result = ",".join(filters) if filters else ""
-        logger.debug(f"_build_test_filter (list/tuple): {len(filters)} filters -> '{result}'")
+        logger.debug("_build_test_filter (list/tuple): %s filters -> '%s'", len(filters), result)
         return result
 
     # Handle TestFiles object (has test_files attribute)
@@ -1123,13 +1206,15 @@ def _build_test_filter(test_paths: Any, mode: str = "behavior") -> str:
                     if class_name:
                         filters.append(class_name)
                     else:
-                        reason = f"Could not convert benchmarking path to class name: {test_file.benchmarking_file_path}"
-                        logger.debug(f"_build_test_filter: {reason}")
+                        reason = (
+                            f"Could not convert benchmarking path to class name: {test_file.benchmarking_file_path}"
+                        )
+                        logger.debug("_build_test_filter: %s", reason)
                         skipped += 1
                         skipped_reasons.append(reason)
                 else:
                     reason = f"TestFile has no benchmarking_file_path (original: {test_file.original_file_path})"
-                    logger.warning(f"_build_test_filter: {reason}")
+                    logger.warning("_build_test_filter: %s", reason)
                     skipped += 1
                     skipped_reasons.append(reason)
             # For behavior mode, use instrumented_behavior_file_path
@@ -1138,30 +1223,35 @@ def _build_test_filter(test_paths: Any, mode: str = "behavior") -> str:
                 if class_name:
                     filters.append(class_name)
                 else:
-                    reason = f"Could not convert behavior path to class name: {test_file.instrumented_behavior_file_path}"
-                    logger.debug(f"_build_test_filter: {reason}")
+                    reason = (
+                        f"Could not convert behavior path to class name: {test_file.instrumented_behavior_file_path}"
+                    )
+                    logger.debug("_build_test_filter: %s", reason)
                     skipped += 1
                     skipped_reasons.append(reason)
             else:
                 reason = f"TestFile has no instrumented_behavior_file_path (original: {test_file.original_file_path})"
-                logger.warning(f"_build_test_filter: {reason}")
+                logger.warning("_build_test_filter: %s", reason)
                 skipped += 1
                 skipped_reasons.append(reason)
 
         result = ",".join(filters) if filters else ""
-        logger.debug(f"_build_test_filter (TestFiles): {len(filters)} filters, {skipped} skipped -> '{result}'")
+        logger.debug("_build_test_filter (TestFiles): %s filters, %s skipped -> '%s'", len(filters), skipped, result)
 
         # If all tests were skipped, log detailed information to help diagnose
         if not filters and skipped > 0:
             logger.error(
-                f"All {skipped} test files were skipped in _build_test_filter! "
-                f"Mode: {mode}. This will cause an empty test filter. "
-                f"Reasons: {skipped_reasons[:5]}"  # Show first 5 reasons
+                "All %s test files were skipped in _build_test_filter! "
+                "Mode: %s. This will cause an empty test filter. "
+                "Reasons: %s",  # Show first 5 reasons
+                skipped,
+                mode,
+                skipped_reasons[:5],
             )
 
         return result
 
-    logger.debug(f"_build_test_filter: Unknown test_paths type: {type(test_paths)}")
+    logger.debug("_build_test_filter: Unknown test_paths type: %s", type(test_paths))
     return ""
 
 
@@ -1338,6 +1428,62 @@ def _parse_surefire_xml(xml_file: Path) -> list[TestResult]:
         logger.warning("Failed to parse Surefire report %s: %s", xml_file, e)
 
     return results
+
+
+def run_line_profile_tests(
+    test_paths: Any,
+    test_env: dict[str, str],
+    cwd: Path,
+    timeout: int | None = None,
+    project_root: Path | None = None,
+    line_profile_output_file: Path | None = None,
+) -> tuple[Path, Any]:
+    """Run tests with line profiling enabled.
+
+    Runs the instrumented tests once to collect line profiling data.
+    The profiler will save results to line_profile_output_file on JVM exit.
+
+    Args:
+        test_paths: TestFiles object or list of test file paths.
+        test_env: Environment variables for the test run.
+        cwd: Working directory for running tests.
+        timeout: Optional timeout in seconds.
+        project_root: Project root directory.
+        line_profile_output_file: Path where profiling results will be written.
+
+    Returns:
+        Tuple of (result_file_path, subprocess_result).
+
+    """
+    project_root = project_root or cwd
+
+    # Detect multi-module Maven projects
+    maven_root, test_module = _find_multi_module_root(project_root, test_paths)
+
+    # Set up environment with profiling mode
+    run_env = os.environ.copy()
+    run_env.update(test_env)
+    run_env["CODEFLASH_MODE"] = "line_profile"
+    if line_profile_output_file:
+        run_env["CODEFLASH_LINE_PROFILE_OUTPUT"] = str(line_profile_output_file)
+
+    # Run tests once with profiling
+    logger.debug("Running line profiling tests (single run)")
+    result = _run_maven_tests(
+        maven_root,
+        test_paths,
+        run_env,
+        timeout=timeout or 120,
+        mode="line_profile",
+        test_module=test_module,
+    )
+
+    # Get result XML path
+    target_dir = _get_test_module_target_dir(maven_root, test_module)
+    surefire_dir = target_dir / "surefire-reports"
+    result_xml_path = _get_combined_junit_xml(surefire_dir, -1)
+
+    return result_xml_path, result
 
 
 def get_test_run_command(project_root: Path, test_classes: list[str] | None = None) -> list[str]:

@@ -13,10 +13,7 @@ import subprocess
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -292,9 +289,9 @@ def find_maven_executable() -> str | None:
 
     """
     # Check for Maven wrapper first
-    if os.path.exists("mvnw"):
+    if Path("mvnw").exists():
         return "./mvnw"
-    if os.path.exists("mvnw.cmd"):
+    if Path("mvnw.cmd").exists():
         return "mvnw.cmd"
 
     # Check system Maven
@@ -313,9 +310,9 @@ def find_gradle_executable() -> str | None:
 
     """
     # Check for Gradle wrapper first
-    if os.path.exists("gradlew"):
+    if Path("gradlew").exists():
         return "./gradlew"
-    if os.path.exists("gradlew.bat"):
+    if Path("gradlew.bat").exists():
         return "gradlew.bat"
 
     # Check system Gradle
@@ -581,8 +578,22 @@ def install_codeflash_runtime(project_root: Path, runtime_jar_path: Path) -> boo
         return False
 
 
+CODEFLASH_DEPENDENCY_SNIPPET = """\
+        <dependency>
+            <groupId>com.codeflash</groupId>
+            <artifactId>codeflash-runtime</artifactId>
+            <version>1.0.0</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>"""
+
+
 def add_codeflash_dependency_to_pom(pom_path: Path) -> bool:
     """Add codeflash-runtime dependency to pom.xml if not present.
+
+    Uses string manipulation instead of ElementTree to preserve the original
+    XML formatting and namespace prefixes (ElementTree rewrites ns0: prefixes
+    which breaks Maven).
 
     Args:
         pom_path: Path to the pom.xml file.
@@ -595,57 +606,28 @@ def add_codeflash_dependency_to_pom(pom_path: Path) -> bool:
         return False
 
     try:
-        tree = _safe_parse_xml(pom_path)
-        root = tree.getroot()
+        content = pom_path.read_text(encoding="utf-8")
 
-        # Handle Maven namespace
-        ns = {"m": "http://maven.apache.org/POM/4.0.0"}
-        ns_prefix = "{http://maven.apache.org/POM/4.0.0}"
+        # Check if already present
+        if "codeflash-runtime" in content:
+            logger.info("codeflash-runtime dependency already present in pom.xml")
+            return True
 
-        # Check if namespace is used
-        if root.tag.startswith("{"):
-            use_ns = True
-        else:
-            use_ns = False
-            ns_prefix = ""
+        # Find </dependencies> closing tag and insert before it
+        closing_tag = "</dependencies>"
+        idx = content.find(closing_tag)
+        if idx == -1:
+            logger.warning("No </dependencies> tag found in pom.xml, cannot add dependency")
+            return False
 
-        # Find or create dependencies section
-        deps = root.find(f"{ns_prefix}dependencies" if use_ns else "dependencies")
-        if deps is None:
-            deps = ET.SubElement(root, f"{ns_prefix}dependencies" if use_ns else "dependencies")
+        new_content = content[:idx] + CODEFLASH_DEPENDENCY_SNIPPET
+        # Skip the original </dependencies> tag since our snippet includes it
+        new_content += content[idx + len(closing_tag):]
 
-        # Check if codeflash dependency already exists
-        for dep in deps.findall(f"{ns_prefix}dependency" if use_ns else "dependency"):
-            group = dep.find(f"{ns_prefix}groupId" if use_ns else "groupId")
-            artifact = dep.find(f"{ns_prefix}artifactId" if use_ns else "artifactId")
-            if group is not None and artifact is not None:
-                if group.text == "com.codeflash" and artifact.text == "codeflash-runtime":
-                    logger.info("codeflash-runtime dependency already present in pom.xml")
-                    return True
-
-        # Add codeflash dependency
-        dep_elem = ET.SubElement(deps, f"{ns_prefix}dependency" if use_ns else "dependency")
-
-        group_elem = ET.SubElement(dep_elem, f"{ns_prefix}groupId" if use_ns else "groupId")
-        group_elem.text = "com.codeflash"
-
-        artifact_elem = ET.SubElement(dep_elem, f"{ns_prefix}artifactId" if use_ns else "artifactId")
-        artifact_elem.text = "codeflash-runtime"
-
-        version_elem = ET.SubElement(dep_elem, f"{ns_prefix}version" if use_ns else "version")
-        version_elem.text = "1.0.0"
-
-        scope_elem = ET.SubElement(dep_elem, f"{ns_prefix}scope" if use_ns else "scope")
-        scope_elem.text = "test"
-
-        # Write back to file
-        tree.write(pom_path, xml_declaration=True, encoding="utf-8")
+        pom_path.write_text(new_content, encoding="utf-8")
         logger.info("Added codeflash-runtime dependency to pom.xml")
         return True
 
-    except ET.ParseError as e:
-        logger.exception("Failed to parse pom.xml: %s", e)
-        return False
     except Exception as e:
         logger.exception("Failed to add dependency to pom.xml: %s", e)
         return False
