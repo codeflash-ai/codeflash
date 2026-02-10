@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import subprocess
 from pathlib import Path
@@ -59,6 +60,11 @@ def _find_comparator_jar(project_root: Path | None = None) -> Path | None:
         )
         if m2_jar.exists():
             return m2_jar
+
+    # Check bundled JAR in package resources
+    resources_jar = Path(__file__).parent / "resources" / "codeflash-runtime-1.0.0.jar"
+    if resources_jar.exists():
+        return resources_jar
 
     return None
 
@@ -238,6 +244,26 @@ def compare_test_results(
         return False, []
 
 
+def values_equal(orig: str | None, cand: str | None) -> bool:
+    """Compare two serialized values with numeric-aware equality.
+
+    Handles boxing mismatches where Integer(0) and Long(0) serialize to different strings
+    (e.g., "0" vs "0.0") but represent the same numeric value.
+    """
+    if orig == cand:
+        return True
+    if orig is None or cand is None:
+        return False
+    try:
+        orig_num = float(orig)
+        cand_num = float(cand)
+        if math.isnan(orig_num) and math.isnan(cand_num):
+            return True
+        return orig_num == cand_num or math.isclose(orig_num, cand_num, rel_tol=1e-9)
+    except (ValueError, TypeError):
+        return False
+
+
 def compare_invocations_directly(original_results: dict, candidate_results: dict) -> tuple[bool, list]:
     """Compare test invocations directly from Python dictionaries.
 
@@ -313,7 +339,7 @@ def compare_invocations_directly(original_results: dict, candidate_results: dict
                         original_pytest_error=orig_error,
                     )
                 )
-            elif orig_result != cand_result:
+            elif not values_equal(orig_result, cand_result):
                 # Results differ
                 test_diffs.append(
                     TestDiff(

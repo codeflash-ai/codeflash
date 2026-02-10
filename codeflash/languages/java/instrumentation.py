@@ -275,6 +275,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
     result = []
     i = 0
     iteration_counter = 0
+    helper_added = False
 
     # Pre-compile the regex pattern once
     method_call_pattern = _get_method_call_pattern(func_name)
@@ -285,6 +286,8 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
 
         # Look for @Test annotation
         if stripped.startswith("@Test"):
+            if not helper_added:
+                helper_added = True
             result.append(line)
             i += 1
 
@@ -349,9 +352,39 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)", re.MULTILINE
             )
 
+            # Track lambda block nesting depth to avoid wrapping calls inside lambda bodies.
+            # assertThrows/assertDoesNotThrow expect an Executable (void functional interface),
+            # and wrapping the call in a variable assignment would turn the void-compatible
+            # lambda into a value-returning lambda, causing a compilation error.
+            # Handles both expression lambdas: () -> func()
+            # and block lambdas: () -> { func(); }
+            lambda_brace_depth = 0
+
             for body_line in body_lines:
+                # Detect new block lambda openings: () -> {
+                is_lambda_open = bool(re.search(r"\(\s*\)\s*->\s*\{", body_line))
+
+                # Update lambda brace depth tracking for block lambdas
+                if is_lambda_open or lambda_brace_depth > 0:
+                    open_braces = body_line.count("{")
+                    close_braces = body_line.count("}")
+                    if is_lambda_open and lambda_brace_depth == 0:
+                        # Starting a new lambda block - only count braces from this lambda
+                        lambda_brace_depth = open_braces - close_braces
+                    else:
+                        lambda_brace_depth += open_braces - close_braces
+                    # Ensure depth doesn't go below 0
+                    lambda_brace_depth = max(0, lambda_brace_depth)
+
+                inside_lambda = lambda_brace_depth > 0 or bool(re.search(r"\(\s*\)\s*->", body_line))
+
                 # Check if this line contains a call to the target function
                 if func_name in body_line and "(" in body_line:
+                    # Skip wrapping if the function call is inside a lambda expression
+                    if inside_lambda:
+                        wrapped_body_lines.append(body_line)
+                        continue
+
                     line_indent = len(body_line) - len(body_line.lstrip())
                     line_indent_str = " " * line_indent
 
@@ -373,8 +406,10 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                             # Replace this occurrence with the variable (with cast if needed)
                             new_line = new_line[: match.start()] + var_with_cast + new_line[match.end() :]
 
-                            # Insert capture line
-                            capture_line = f"{line_indent_str}Object {var_name} = {full_call};"
+                            # Use 'var' instead of 'Object' to preserve the exact return type.
+                            # This avoids boxing mismatches (e.g., assertEquals(int, Object) where
+                            # Object is boxed Long but expected is boxed Integer). Requires Java 10+.
+                            capture_line = f"{line_indent_str}var {var_name} = {full_call};"
                             wrapped_body_lines.append(capture_line)
 
                         # Check if the line is now just a variable reference (invalid statement)
@@ -389,13 +424,13 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                     wrapped_body_lines.append(body_line)
 
             # Build the serialized return value expression
-            # If we captured any calls, serialize the last one; otherwise serialize null
-            # Note: We use String.valueOf() instead of Gson to avoid external dependencies
+            # If we captured any calls, serialize the last one via Kryo; otherwise null bytes
+            # The (Object) cast ensures primitives get autoboxed before being passed to the method.
             if call_counter > 0:
                 result_var = f"_cf_result{iter_id}_{call_counter}"
-                serialize_expr = f"String.valueOf({result_var})"
+                serialize_expr = f"com.codeflash.Serializer.serialize((Object) {result_var})"
             else:
-                serialize_expr = '"null"'
+                serialize_expr = "null"
 
             # Add behavior instrumentation code
             behavior_start_code = [
@@ -410,7 +445,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 f'{indent}if (_cf_testIteration{iter_id} == null) _cf_testIteration{iter_id} = "0";',
                 f'{indent}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + "######$!");',
                 f"{indent}long _cf_start{iter_id} = System.nanoTime();",
-                f"{indent}String _cf_serializedResult{iter_id} = null;",
+                f"{indent}byte[] _cf_serializedResult{iter_id} = null;",
                 f"{indent}try {{",
             ]
             result.extend(behavior_start_code)
@@ -438,7 +473,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 f'{indent}                    _cf_stmt{iter_id}.execute("CREATE TABLE IF NOT EXISTS test_results (" +',
                 f'{indent}                        "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +',
                 f'{indent}                        "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +',
-                f'{indent}                        "runtime INTEGER, return_value TEXT, verification_type TEXT)");',
+                f'{indent}                        "runtime INTEGER, return_value BLOB, verification_type TEXT)");',
                 f"{indent}                }}",
                 f'{indent}                String _cf_sql{iter_id} = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";',
                 f"{indent}                try (PreparedStatement _cf_pstmt{iter_id} = _cf_conn{iter_id}.prepareStatement(_cf_sql{iter_id})) {{",
@@ -449,7 +484,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 f"{indent}                    _cf_pstmt{iter_id}.setInt(5, _cf_loop{iter_id});",
                 f'{indent}                    _cf_pstmt{iter_id}.setString(6, _cf_iter{iter_id} + "_" + _cf_testIteration{iter_id});',
                 f"{indent}                    _cf_pstmt{iter_id}.setLong(7, _cf_dur{iter_id});",
-                f"{indent}                    _cf_pstmt{iter_id}.setString(8, _cf_serializedResult{iter_id});",  # Serialized return value
+                f"{indent}                    _cf_pstmt{iter_id}.setBytes(8, _cf_serializedResult{iter_id});",  # Kryo-serialized return value
                 f'{indent}                    _cf_pstmt{iter_id}.setString(9, "function_call");',
                 f"{indent}                    _cf_pstmt{iter_id}.executeUpdate();",
                 f"{indent}                }}",

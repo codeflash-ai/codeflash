@@ -3,6 +3,10 @@ package com.codeflash;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -26,6 +30,192 @@ public final class Comparator {
 
     private Comparator() {
         // Utility class
+    }
+
+    /**
+     * CLI entry point for comparing test results from two SQLite databases.
+     *
+     * Reads Kryo-serialized BLOBs from the test_results table, deserializes them,
+     * and compares using deep object comparison.
+     *
+     * Outputs JSON to stdout:
+     *   {"equivalent": true/false, "totalInvocations": N, "diffs": [...]}
+     *
+     * Exit code: 0 if equivalent, 1 if different.
+     */
+    public static void main(String[] args) {
+        if (args.length != 2) {
+            System.err.println("Usage: java com.codeflash.Comparator <originalDbPath> <candidateDbPath>");
+            System.exit(2);
+            return;
+        }
+
+        String originalDbPath = args[0];
+        String candidateDbPath = args[1];
+
+        try {
+            Class.forName("org.sqlite.JDBC");
+        } catch (ClassNotFoundException e) {
+            printError("SQLite JDBC driver not found: " + e.getMessage());
+            System.exit(2);
+            return;
+        }
+
+        Map<String, byte[]> originalResults;
+        Map<String, byte[]> candidateResults;
+
+        try {
+            originalResults = readTestResults(originalDbPath);
+        } catch (Exception e) {
+            printError("Failed to read original database: " + e.getMessage());
+            System.exit(2);
+            return;
+        }
+
+        try {
+            candidateResults = readTestResults(candidateDbPath);
+        } catch (Exception e) {
+            printError("Failed to read candidate database: " + e.getMessage());
+            System.exit(2);
+            return;
+        }
+
+        Set<String> allKeys = new LinkedHashSet<>();
+        allKeys.addAll(originalResults.keySet());
+        allKeys.addAll(candidateResults.keySet());
+
+        List<String> diffs = new ArrayList<>();
+        int totalInvocations = allKeys.size();
+
+        for (String key : allKeys) {
+            byte[] origBytes = originalResults.get(key);
+            byte[] candBytes = candidateResults.get(key);
+
+            if (origBytes == null && candBytes == null) {
+                // Both null (void methods) — equivalent
+                continue;
+            }
+
+            if (origBytes == null) {
+                Object candObj = safeDeserialize(candBytes);
+                diffs.add(formatDiff("missing", key, 0, null, safeToString(candObj)));
+                continue;
+            }
+
+            if (candBytes == null) {
+                Object origObj = safeDeserialize(origBytes);
+                diffs.add(formatDiff("missing", key, 0, safeToString(origObj), null));
+                continue;
+            }
+
+            Object origObj = safeDeserialize(origBytes);
+            Object candObj = safeDeserialize(candBytes);
+
+            try {
+                if (!compare(origObj, candObj)) {
+                    diffs.add(formatDiff("return_value", key, 0, safeToString(origObj), safeToString(candObj)));
+                }
+            } catch (KryoPlaceholderAccessException e) {
+                // Placeholder detected — skip comparison for this invocation
+                continue;
+            }
+        }
+
+        boolean equivalent = diffs.isEmpty();
+
+        StringBuilder json = new StringBuilder();
+        json.append("{\"equivalent\":").append(equivalent);
+        json.append(",\"totalInvocations\":").append(totalInvocations);
+        json.append(",\"diffs\":[");
+        for (int i = 0; i < diffs.size(); i++) {
+            if (i > 0) json.append(",");
+            json.append(diffs.get(i));
+        }
+        json.append("]}");
+
+        System.out.println(json.toString());
+        System.exit(equivalent ? 0 : 1);
+    }
+
+    private static Map<String, byte[]> readTestResults(String dbPath) throws Exception {
+        Map<String, byte[]> results = new LinkedHashMap<>();
+        String url = "jdbc:sqlite:" + dbPath;
+
+        try (Connection conn = DriverManager.getConnection(url);
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(
+                 "SELECT iteration_id, return_value FROM test_results WHERE loop_index = 1")) {
+            while (rs.next()) {
+                String iterationId = rs.getString("iteration_id");
+                byte[] returnValue = rs.getBytes("return_value");
+                // Strip the CODEFLASH_TEST_ITERATION suffix (e.g. "7_0" -> "7")
+                // Original runs with _0, candidate with _1, but the test iteration
+                // counter before the underscore is what identifies the invocation.
+                int lastUnderscore = iterationId.lastIndexOf('_');
+                if (lastUnderscore > 0) {
+                    iterationId = iterationId.substring(0, lastUnderscore);
+                }
+                results.put(iterationId, returnValue);
+            }
+        }
+        return results;
+    }
+
+    private static Object safeDeserialize(byte[] data) {
+        if (data == null) {
+            return null;
+        }
+        try {
+            return Serializer.deserialize(data);
+        } catch (Exception e) {
+            return java.util.Map.of("__type", "DeserializationError", "error", String.valueOf(e.getMessage()));
+        }
+    }
+
+    private static String safeToString(Object obj) {
+        if (obj == null) {
+            return "null";
+        }
+        try {
+            if (obj.getClass().isArray()) {
+                return java.util.Arrays.deepToString(new Object[]{obj});
+            }
+            return String.valueOf(obj);
+        } catch (Exception e) {
+            return "<toString failed: " + e.getMessage() + ">";
+        }
+    }
+
+    private static String formatDiff(String scope, String methodId, int callId,
+                                     String originalValue, String candidateValue) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("{\"scope\":\"").append(escapeJson(scope)).append("\"");
+        sb.append(",\"methodId\":\"").append(escapeJson(methodId)).append("\"");
+        sb.append(",\"callId\":").append(callId);
+        sb.append(",\"originalValue\":").append(jsonStringOrNull(originalValue));
+        sb.append(",\"candidateValue\":").append(jsonStringOrNull(candidateValue));
+        sb.append("}");
+        return sb.toString();
+    }
+
+    private static String jsonStringOrNull(String value) {
+        if (value == null) {
+            return "null";
+        }
+        return "\"" + escapeJson(value) + "\"";
+    }
+
+    private static String escapeJson(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
+    }
+
+    private static void printError(String message) {
+        System.out.println("{\"error\":\"" + escapeJson(message) + "\"}");
     }
 
     /**

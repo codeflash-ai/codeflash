@@ -13,6 +13,10 @@ from codeflash.languages.base import Language, LanguageSupport
 from codeflash.languages.java.build_tools import find_test_root
 from codeflash.languages.java.comparator import compare_test_results as _compare_test_results
 from codeflash.languages.java.config import detect_java_project
+from codeflash.languages.java.concurrency_analyzer import (
+    JavaConcurrencyAnalyzer,
+    analyze_function_concurrency,
+)
 from codeflash.languages.java.context import extract_code_context, find_helper_functions
 from codeflash.languages.java.discovery import discover_functions, discover_functions_from_source
 from codeflash.languages.java.formatter import format_java_code, normalize_java_code
@@ -109,6 +113,19 @@ class JavaSupport(LanguageSupport):
     def find_helper_functions(self, function: FunctionToOptimize, project_root: Path) -> list[HelperFunction]:
         """Find helper functions called by the target function."""
         return find_helper_functions(function, project_root, analyzer=self._analyzer)
+
+    def analyze_concurrency(self, function: FunctionInfo, source: str | None = None):
+        """Analyze a function for concurrency patterns.
+
+        Args:
+            function: Function to analyze.
+            source: Optional source code (will read from file if not provided).
+
+        Returns:
+            ConcurrencyInfo with detected concurrent patterns.
+
+        """
+        return analyze_function_concurrency(function, source, self._analyzer)
 
     # === Code Transformation ===
 
@@ -280,14 +297,47 @@ class JavaSupport(LanguageSupport):
     def instrument_source_for_line_profiler(
         self, func_info: FunctionToOptimize, line_profiler_output_file: Path
     ) -> bool:
-        """Instrument source code before line profiling."""
-        # Not yet implemented for Java
-        return False
+        """Instrument source code for line profiling.
+
+        Args:
+            func_info: Function to instrument.
+            line_profiler_output_file: Path where profiling results will be written.
+
+        Returns:
+            True if instrumentation succeeded, False otherwise.
+
+        """
+        from codeflash.languages.java.line_profiler import JavaLineProfiler
+
+        try:
+            # Read source file
+            source = func_info.file_path.read_text(encoding="utf-8")
+
+            # Instrument with line profiler
+            profiler = JavaLineProfiler(output_file=line_profiler_output_file)
+            instrumented = profiler.instrument_source(source, func_info.file_path, [func_info], self._analyzer)
+
+            # Write instrumented source back
+            func_info.file_path.write_text(instrumented, encoding="utf-8")
+
+            return True
+        except Exception as e:
+            logger.error("Failed to instrument %s for line profiling: %s", func_info.name, e)
+            return False
 
     def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict:
-        """Parse line profiler output."""
-        # Not yet implemented for Java
-        return {}
+        """Parse line profiler output for Java.
+
+        Args:
+            line_profiler_output_file: Path to profiler output file.
+
+        Returns:
+            Dict with timing information in standard format.
+
+        """
+        from codeflash.languages.java.line_profiler import JavaLineProfiler
+
+        return JavaLineProfiler.parse_results(line_profiler_output_file)
 
     def run_behavioral_tests(
         self,
@@ -325,6 +375,40 @@ class JavaSupport(LanguageSupport):
             max_loops,
             target_duration_seconds,
             inner_iterations,
+        )
+
+    def run_line_profile_tests(
+        self,
+        test_paths: Any,
+        test_env: dict[str, str],
+        cwd: Path,
+        timeout: int | None = None,
+        project_root: Path | None = None,
+        line_profile_output_file: Path | None = None,
+    ) -> tuple[Path, Any]:
+        """Run tests with line profiling enabled.
+
+        Args:
+            test_paths: TestFiles object containing test file information.
+            test_env: Environment variables for test execution.
+            cwd: Working directory for running tests.
+            timeout: Optional timeout in seconds.
+            project_root: Project root directory.
+            line_profile_output_file: Path where profiling results will be written.
+
+        Returns:
+            Tuple of (result_file_path, subprocess_result).
+
+        """
+        from codeflash.languages.java.test_runner import run_line_profile_tests as _run_line_profile_tests
+
+        return _run_line_profile_tests(
+            test_paths=test_paths,
+            test_env=test_env,
+            cwd=cwd,
+            timeout=timeout,
+            project_root=project_root,
+            line_profile_output_file=line_profile_output_file,
         )
 
 
