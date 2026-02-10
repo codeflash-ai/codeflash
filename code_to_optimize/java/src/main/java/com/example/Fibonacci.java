@@ -69,9 +69,17 @@ public class Fibonacci {
         }
 
         long[] result = new long[n];
-        for (int i = 0; i < n; i++) {
-            result[i] = fibonacci(i);
+        
+        // Handle base cases
+        result[0] = 0;
+        if (n > 1) {
+            result[1] = 1;
+            // Iteratively compute remaining Fibonacci numbers
+            for (int i = 2; i < n; i++) {
+                result[i] = result[i - 1] + result[i - 2];
+            }
         }
+        
         return result;
     }
 
