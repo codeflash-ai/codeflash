@@ -21,11 +21,14 @@ import pytest
 # Set API key for tests that instantiate Optimizer
 os.environ["CODEFLASH_API_KEY"] = "cf-test-key"
 
-from codeflash.languages.base import FunctionInfo, Language
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.languages.base import Language
 from codeflash.languages.current import set_current_language
+from codeflash.models.function_types import FunctionParent
 from codeflash.languages.java.build_tools import find_maven_executable
 from codeflash.languages.java.discovery import discover_functions_from_source
 from codeflash.languages.java.instrumentation import (
+    _add_behavior_instrumentation,
     _add_timing_instrumentation,
     create_benchmark_test,
     instrument_existing_test,
@@ -79,14 +82,14 @@ public class CalculatorTest {
     }
 }
 """
-        func = FunctionInfo(
-            name="add",
+        func = FunctionToOptimize(
+            function_name="add",
             file_path=Path("Calculator.java"),
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         result = instrument_for_benchmarking(source, func)
@@ -111,14 +114,14 @@ public class CalculatorTest {
 """
         test_file.write_text(source)
 
-        func = FunctionInfo(
-            name="add",
+        func = FunctionToOptimize(
+            function_name="add",
             file_path=tmp_path / "Calculator.java",
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, result = instrument_existing_test(
@@ -145,6 +148,106 @@ public class CalculatorTest {
         assert "_cf_loop1" in result
         assert "_cf_iter1" in result
         assert "System.nanoTime()" in result
+        assert "com.codeflash.Serializer.serialize((Object)" in result
+
+    def test_instrument_behavior_mode_assert_throws_expression_lambda(self, tmp_path: Path):
+        """Test that assertThrows expression lambdas are not broken by behavior instrumentation.
+
+        When a target function call is inside an expression lambda (e.g., () -> Fibonacci.fibonacci(-1)),
+        the instrumentation must NOT wrap it in a variable assignment, as that would turn
+        the void-compatible lambda into a value-returning lambda and break compilation.
+        """
+        test_file = tmp_path / "FibonacciTest.java"
+        source = """import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class FibonacciTest {
+    @Test
+    void testNegativeInput_ThrowsIllegalArgumentException() {
+        assertThrows(IllegalArgumentException.class, () -> Fibonacci.fibonacci(-1));
+    }
+
+    @Test
+    void testZeroInput_ReturnsZero() {
+        assertEquals(0L, Fibonacci.fibonacci(0));
+    }
+}
+"""
+        test_file.write_text(source)
+
+        func = FunctionToOptimize(
+            function_name="fibonacci",
+            file_path=tmp_path / "Fibonacci.java",
+            starting_line=1,
+            ending_line=10,
+            parents=[],
+            is_method=True,
+            language="java",
+        )
+
+        success, result = instrument_existing_test(
+            test_file,
+            call_positions=[],
+            function_to_optimize=func,
+            tests_project_root=tmp_path,
+            mode="behavior",
+        )
+
+        assert success is True
+        # The assertThrows lambda line should remain unchanged (not wrapped in variable assignment)
+        assert "() -> Fibonacci.fibonacci(-1)" in result
+        # The non-lambda call should still be wrapped
+        assert "_cf_result" in result
+
+    def test_instrument_behavior_mode_assert_throws_block_lambda(self, tmp_path: Path):
+        """Test that assertThrows block lambdas are not broken by behavior instrumentation.
+
+        When a target function call is inside a block lambda (e.g., () -> { func(); }),
+        the instrumentation must NOT wrap it in a variable assignment.
+        """
+        test_file = tmp_path / "FibonacciTest.java"
+        source = """import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class FibonacciTest {
+    @Test
+    void testNegativeInput_ThrowsIllegalArgumentException() {
+        assertThrows(IllegalArgumentException.class, () -> {
+            Fibonacci.fibonacci(-1);
+        });
+    }
+
+    @Test
+    void testZeroInput_ReturnsZero() {
+        assertEquals(0L, Fibonacci.fibonacci(0));
+    }
+}
+"""
+        test_file.write_text(source)
+
+        func = FunctionToOptimize(
+            function_name="fibonacci",
+            file_path=tmp_path / "Fibonacci.java",
+            starting_line=1,
+            ending_line=10,
+            parents=[],
+            is_method=True,
+            language="java",
+        )
+
+        success, result = instrument_existing_test(
+            test_file,
+            call_positions=[],
+            function_to_optimize=func,
+            tests_project_root=tmp_path,
+            mode="behavior",
+        )
+
+        assert success is True
+        assert "Fibonacci.fibonacci(-1);" in result
+        assert "() -> {" in result
+        lines_with_cf_result = [l for l in result.split("\n") if "var _cf_result" in l and "Fibonacci.fibonacci(0)" in l]
+        assert len(lines_with_cf_result) > 0, "Non-lambda call to fibonacci(0) should be wrapped"
 
     def test_instrument_performance_mode_simple(self, tmp_path: Path):
         """Test instrumenting a simple test in performance mode with inner loop."""
@@ -161,14 +264,14 @@ public class CalculatorTest {
 """
         test_file.write_text(source)
 
-        func = FunctionInfo(
-            name="add",
+        func = FunctionToOptimize(
+            function_name="add",
             file_path=tmp_path / "Calculator.java",
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, result = instrument_existing_test(
@@ -228,14 +331,14 @@ public class MathTest {
 """
         test_file.write_text(source)
 
-        func = FunctionInfo(
-            name="calculate",
+        func = FunctionToOptimize(
+            function_name="calculate",
             file_path=tmp_path / "Math.java",
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, result = instrument_existing_test(
@@ -320,14 +423,14 @@ public class ServiceTest {
 """
         test_file.write_text(source)
 
-        func = FunctionInfo(
-            name="call",
+        func = FunctionToOptimize(
+            function_name="call",
             file_path=tmp_path / "Service.java",
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, result = instrument_existing_test(
@@ -397,14 +500,14 @@ public class ServiceTest__perfonlyinstrumented {
         """Test handling missing test file."""
         test_file = tmp_path / "NonExistent.java"
 
-        func = FunctionInfo(
-            name="add",
+        func = FunctionToOptimize(
+            function_name="add",
             file_path=tmp_path / "Calculator.java",
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, result = instrument_existing_test(
@@ -416,6 +519,107 @@ public class ServiceTest__perfonlyinstrumented {
         )
 
         assert success is False
+
+
+class TestKryoSerializerUsage:
+    """Tests for Kryo Serializer usage in behavior mode."""
+
+    def test_serializer_used_for_return_values(self):
+        """Test that captured return values use com.codeflash.Serializer.serialize()."""
+        source = """import org.junit.jupiter.api.Test;
+
+public class MyTest {
+    @Test
+    public void testFoo() {
+        assertEquals(0, obj.foo());
+    }
+}
+"""
+        result = _add_behavior_instrumentation(source, "MyTest", "foo")
+
+        assert "com.codeflash.Serializer.serialize((Object)" in result
+        # Should NOT use old _cfSerialize helper
+        assert "_cfSerialize" not in result
+
+    def test_byte_array_result_variable(self):
+        """Test that the serialized result variable is byte[] not String."""
+        source = """import org.junit.jupiter.api.Test;
+
+public class MyTest {
+    @Test
+    public void testFoo() {
+        assertEquals(0, obj.foo());
+    }
+}
+"""
+        result = _add_behavior_instrumentation(source, "MyTest", "foo")
+
+        assert "byte[] _cf_serializedResult" in result
+        assert "String _cf_serializedResult" not in result
+
+    def test_blob_column_in_schema(self):
+        """Test that the SQLite schema uses BLOB for return_value column."""
+        source = """import org.junit.jupiter.api.Test;
+
+public class MyTest {
+    @Test
+    public void testFoo() {
+        assertEquals(0, obj.foo());
+    }
+}
+"""
+        result = _add_behavior_instrumentation(source, "MyTest", "foo")
+
+        assert "return_value BLOB" in result
+        assert "return_value TEXT" not in result
+
+    def test_set_bytes_for_blob_write(self):
+        """Test that setBytes is used to write BLOB data to SQLite."""
+        source = """import org.junit.jupiter.api.Test;
+
+public class MyTest {
+    @Test
+    public void testFoo() {
+        assertEquals(0, obj.foo());
+    }
+}
+"""
+        result = _add_behavior_instrumentation(source, "MyTest", "foo")
+
+        assert "setBytes(8, _cf_serializedResult" in result
+        # Should NOT use setString for return value
+        assert "setString(8, _cf_serializedResult" not in result
+
+    def test_no_inline_helper_injected(self):
+        """Test that no inline _cfSerialize helper method is injected."""
+        source = """import org.junit.jupiter.api.Test;
+
+public class MyTest {
+    @Test
+    public void testFoo() {
+        assertEquals(0, obj.foo());
+    }
+}
+"""
+        result = _add_behavior_instrumentation(source, "MyTest", "foo")
+
+        assert "private static String _cfSerialize" not in result
+
+    def test_serializer_not_used_in_performance_mode(self):
+        """Test that Serializer is NOT used in performance mode (only behavior)."""
+        source = """import org.junit.jupiter.api.Test;
+
+public class MyTest {
+    @Test
+    public void testFoo() {
+        assertEquals(0, obj.foo());
+    }
+}
+"""
+        result = _add_timing_instrumentation(source, "MyTest", "foo")
+
+        assert "Serializer.serialize" not in result
+        assert "_cfSerialize" not in result
 
 
 class TestAddTimingInstrumentation:
@@ -565,14 +769,14 @@ class TestCreateBenchmarkTest:
 
     def test_create_benchmark(self):
         """Test creating a benchmark test."""
-        func = FunctionInfo(
-            name="add",
+        func = FunctionToOptimize(
+            function_name="add",
             file_path=Path("Calculator.java"),
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         result = create_benchmark_test(
@@ -620,14 +824,14 @@ public class TargetBenchmark {
 
     def test_create_benchmark_different_iterations(self):
         """Test benchmark with different iteration count."""
-        func = FunctionInfo(
-            name="multiply",
+        func = FunctionToOptimize(
+            function_name="multiply",
             file_path=Path("Math.java"),
-            start_line=1,
-            end_line=3,
-            parents=(),
+            starting_line=1,
+            ending_line=3,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         result = create_benchmark_test(
@@ -705,7 +909,13 @@ class TestInstrumentGeneratedJavaTest:
     """Tests for instrument_generated_java_test."""
 
     def test_instrument_generated_test_behavior_mode(self):
-        """Test instrumenting generated test in behavior mode."""
+        """Test instrumenting generated test in behavior mode.
+
+        Behavior mode should:
+        1. Remove assertions containing the target function call
+        2. Capture the function return value instead
+        3. Rename the class with __perfinstrumented suffix
+        """
         test_code = """import org.junit.jupiter.api.Test;
 
 public class CalculatorTest {
@@ -722,12 +932,13 @@ public class CalculatorTest {
             mode="behavior",
         )
 
+        # Behavior mode transforms assertions to capture return values
         expected = """import org.junit.jupiter.api.Test;
 
 public class CalculatorTest__perfinstrumented {
     @Test
     public void testAdd() {
-        assertEquals(4, new Calculator().add(2, 2));
+        Object _cf_result1 = new Calculator().add(2, 2);
     }
 }
 """
@@ -908,14 +1119,14 @@ public class BraceTest {
 """
         test_file.write_text(source)
 
-        func = FunctionInfo(
-            name="process",
+        func = FunctionToOptimize(
+            function_name="process",
             file_path=tmp_path / "Processor.java",
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, result = instrument_existing_test(
@@ -1001,14 +1212,14 @@ public class ImportTest {
 """
         test_file.write_text(source)
 
-        func = FunctionInfo(
-            name="size",
+        func = FunctionToOptimize(
+            function_name="size",
             file_path=tmp_path / "Collection.java",
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, result = instrument_existing_test(
@@ -1071,14 +1282,14 @@ public class EmptyTest {
 """
         test_file.write_text(source)
 
-        func = FunctionInfo(
-            name="empty",
+        func = FunctionToOptimize(
+            function_name="empty",
             file_path=tmp_path / "Empty.java",
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, result = instrument_existing_test(
@@ -1137,14 +1348,14 @@ public class NestedTest {
 """
         test_file.write_text(source)
 
-        func = FunctionInfo(
-            name="process",
+        func = FunctionToOptimize(
+            function_name="process",
             file_path=tmp_path / "Processor.java",
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, result = instrument_existing_test(
@@ -1213,14 +1424,14 @@ public class InnerClassTest {
 """
         test_file.write_text(source)
 
-        func = FunctionInfo(
-            name="testMethod",
+        func = FunctionToOptimize(
+            function_name="testMethod",
             file_path=tmp_path / "Target.java",
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, result = instrument_existing_test(
@@ -1338,6 +1549,12 @@ class TestRunAndParseTests:
             <version>2.10.1</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>com.codeflash</groupId>
+            <artifactId>codeflash-runtime</artifactId>
+            <version>1.0.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
     <build>
         <plugins>
@@ -1415,14 +1632,14 @@ public class CalculatorTest {
         test_file = test_dir / "CalculatorTest.java"
         test_file.write_text(test_source, encoding="utf-8")
 
-        func_info = FunctionInfo(
-            name="add",
+        func_info = FunctionToOptimize(
+            function_name="add",
             file_path=src_dir / "Calculator.java",
-            start_line=4,
-            end_line=6,
-            parents=(),
+            starting_line=4,
+            ending_line=6,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, instrumented = instrument_existing_test(
@@ -1527,14 +1744,14 @@ public class MathUtilsTest {
         test_file = test_dir / "MathUtilsTest.java"
         test_file.write_text(test_source, encoding="utf-8")
 
-        func_info = FunctionInfo(
-            name="multiply",
+        func_info = FunctionToOptimize(
+            function_name="multiply",
             file_path=src_dir / "MathUtils.java",
-            start_line=4,
-            end_line=6,
-            parents=(),
+            starting_line=4,
+            ending_line=6,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, instrumented = instrument_existing_test(
@@ -1660,14 +1877,14 @@ public class StringUtilsTest {
         test_file = test_dir / "StringUtilsTest.java"
         test_file.write_text(test_source, encoding="utf-8")
 
-        func_info = FunctionInfo(
-            name="reverse",
+        func_info = FunctionToOptimize(
+            function_name="reverse",
             file_path=src_dir / "StringUtils.java",
-            start_line=4,
-            end_line=6,
-            parents=(),
+            starting_line=4,
+            ending_line=6,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, instrumented = instrument_existing_test(
@@ -1762,14 +1979,14 @@ public class BrokenCalcTest {
         test_file = test_dir / "BrokenCalcTest.java"
         test_file.write_text(test_source, encoding="utf-8")
 
-        func_info = FunctionInfo(
-            name="add",
+        func_info = FunctionToOptimize(
+            function_name="add",
             file_path=src_dir / "BrokenCalc.java",
-            start_line=4,
-            end_line=6,
-            parents=(),
+            starting_line=4,
+            ending_line=6,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, instrumented = instrument_existing_test(
@@ -1872,14 +2089,14 @@ public class CounterTest {
         test_file.write_text(test_source, encoding="utf-8")
 
         # Instrument for BEHAVIOR mode (this should include SQLite writing)
-        func_info = FunctionInfo(
-            name="increment",
+        func_info = FunctionToOptimize(
+            function_name="increment",
             file_path=src_dir / "Counter.java",
-            start_line=6,
-            end_line=8,
-            parents=(),
+            starting_line=6,
+            ending_line=8,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, instrumented = instrument_existing_test(
@@ -1986,11 +2203,9 @@ public class CounterTest {
             assert loop_index == 1
             assert runtime > 0, f"Should have a positive runtime, got {runtime}"
             assert verification_type == "function_call"  # Updated from "output"
-
-            # Verify return value is serialized (not null)
             assert return_value is not None, "Return value should be serialized, not null"
-            # The return value should be a JSON representation of an integer (1)
-            assert return_value == "1", f"Expected serialized integer '1', got: {return_value}"
+            assert isinstance(return_value, bytes), f"Expected bytes (Kryo binary), got: {type(return_value)}"
+            assert len(return_value) > 0, "Kryo-serialized return value should not be empty"
 
         conn.close()
 
@@ -2036,14 +2251,14 @@ public class FibonacciTest {
         test_file.write_text(test_source, encoding="utf-8")
 
         # Instrument for performance mode (adds inner loop)
-        func_info = FunctionInfo(
-            name="fib",
+        func_info = FunctionToOptimize(
+            function_name="fib",
             file_path=src_dir / "Fibonacci.java",
-            start_line=4,
-            end_line=7,
-            parents=(),
+            starting_line=4,
+            ending_line=7,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, instrumented = instrument_existing_test(
@@ -2157,14 +2372,14 @@ public class MathOpsTest {
         test_file.write_text(test_source, encoding="utf-8")
 
         # Instrument for performance mode
-        func_info = FunctionInfo(
-            name="add",
+        func_info = FunctionToOptimize(
+            function_name="add",
             file_path=src_dir / "MathOps.java",
-            start_line=4,
-            end_line=6,
-            parents=(),
+            starting_line=4,
+            ending_line=6,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, instrumented = instrument_existing_test(

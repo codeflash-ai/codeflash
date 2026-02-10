@@ -1,0 +1,18 @@
+name: Lint
+on: [pull_request]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+    prek:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                fetch-depth: 0
+            - uses: astral-sh/setup-uv@v6
+            - uses: j178/prek-action@v1
+              with:
+                extra-args: '--from-ref origin/${{ github.base_ref }} --to-ref ${{ github.sha }}'

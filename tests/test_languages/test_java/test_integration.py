@@ -104,7 +104,7 @@ class TestEndToEndWorkflow:
         context = extract_code_context(func, java_fixture_path)
 
         assert context.target_code
-        assert func.name in context.target_code
+        assert func.function_name in context.target_code
         assert context.language == Language.JAVA
 
     def test_code_replacement_workflow(self):
@@ -198,7 +198,7 @@ public class StringUtilsTest {
         # 1. Discover functions
         functions = support.discover_functions(src_file)
         assert len(functions) == 1
-        assert functions[0].name == "reverse"
+        assert functions[0].function_name == "reverse"
 
         # 2. Extract code context
         context = support.extract_code_context(functions[0], tmp_path, tmp_path)
@@ -330,14 +330,14 @@ public class Example {
         criteria = FunctionFilterCriteria(include_patterns=["public*"])
         functions = discover_functions_from_source(source, filter_criteria=criteria)
         # Should match publicMethod
-        public_names = {f.name for f in functions}
+        public_names = {f.function_name for f in functions}
         assert "publicMethod" in public_names or len(functions) >= 0
 
         # Test filtering by require_return
         criteria = FunctionFilterCriteria(require_return=True)
         functions = discover_functions_from_source(source, filter_criteria=criteria)
         # voidMethod should be excluded
-        names = {f.name for f in functions}
+        names = {f.function_name for f in functions}
         assert "voidMethod" not in names
 
 

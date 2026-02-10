@@ -13,12 +13,261 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.init_javascript import get_package_install_command
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.config_consts import STABILITY_CENTER_TOLERANCE, STABILITY_SPREAD_TOLERANCE
 from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
 
 if TYPE_CHECKING:
     from codeflash.models.models import TestFiles
+
+
+def _detect_bundler_module_resolution(project_root: Path) -> bool:
+    """Detect if the project uses moduleResolution: 'bundler' in tsconfig.
+
+    TypeScript 5+ supports 'bundler' moduleResolution which requires
+    module: 'preserve' or ES2015+. This can cause issues with ts-jest
+    in some configurations.
+
+    This function also resolves extended tsconfigs to find bundler setting
+    in parent configs.
+
+    Args:
+        project_root: Root of the project to check.
+
+    Returns:
+        True if the project uses bundler moduleResolution.
+
+    """
+    tsconfig_path = project_root / "tsconfig.json"
+    if not tsconfig_path.exists():
+        return False
+
+    visited_configs: set[Path] = set()
+
+    def check_tsconfig(config_path: Path) -> bool:
+        """Recursively check tsconfig and its extends for bundler moduleResolution."""
+        if config_path in visited_configs:
+            return False
+        visited_configs.add(config_path)
+
+        if not config_path.exists():
+            return False
+
+        try:
+            content = config_path.read_text()
+            tsconfig = json.loads(content)
+
+            # Check direct moduleResolution setting
+            compiler_options = tsconfig.get("compilerOptions", {})
+            module_resolution = compiler_options.get("moduleResolution", "").lower()
+            if module_resolution == "bundler":
+                return True
+
+            # Check extended config if present
+            extends = tsconfig.get("extends")
+            if extends:
+                # Resolve the extended config path
+                if extends.startswith("."):
+                    # Relative path
+                    extended_path = (config_path.parent / extends).resolve()
+                    if not extended_path.suffix:
+                        extended_path = extended_path.with_suffix(".json")
+                else:
+                    # Package reference (e.g., "@n8n/typescript-config/modern/tsconfig.json")
+                    # Try to find it in node_modules
+                    node_modules_path = project_root / "node_modules" / extends
+                    if not node_modules_path.suffix:
+                        node_modules_path = node_modules_path.with_suffix(".json")
+                    if node_modules_path.exists():
+                        extended_path = node_modules_path
+                    else:
+                        # Try parent directories for monorepo support
+                        current = project_root.parent
+                        extended_path = None
+                        while current != current.parent:
+                            candidate = current / "node_modules" / extends
+                            if not candidate.suffix:
+                                candidate = candidate.with_suffix(".json")
+                            if candidate.exists():
+                                extended_path = candidate
+                                break
+                            # Also check packages directory for workspace packages
+                            packages_candidate = current / "packages" / extends
+                            if not packages_candidate.suffix:
+                                packages_candidate = packages_candidate.with_suffix(".json")
+                            if packages_candidate.exists():
+                                extended_path = packages_candidate
+                                break
+                            current = current.parent
+
+                if extended_path and extended_path.exists():
+                    return check_tsconfig(extended_path)
+
+            return False
+        except Exception as e:
+            logger.debug(f"Failed to read {config_path}: {e}")
+            return False
+
+    return check_tsconfig(tsconfig_path)
+
+
+def _create_codeflash_tsconfig(project_root: Path) -> Path:
+    """Create a codeflash-compatible tsconfig for projects using bundler moduleResolution.
+
+    This creates a tsconfig that inherits from the project's tsconfig but overrides
+    moduleResolution to 'Node' for compatibility with ts-jest.
+
+    Args:
+        project_root: Root of the project.
+
+    Returns:
+        Path to the created tsconfig.codeflash.json file.
+
+    """
+    codeflash_tsconfig_path = project_root / "tsconfig.codeflash.json"
+
+    # If it already exists, use it
+    if codeflash_tsconfig_path.exists():
+        logger.debug(f"Using existing {codeflash_tsconfig_path}")
+        return codeflash_tsconfig_path
+
+    # Read the original tsconfig to preserve most settings
+    original_tsconfig_path = project_root / "tsconfig.json"
+    try:
+        original_content = original_tsconfig_path.read_text()
+        original_tsconfig = json.loads(original_content)
+    except Exception:
+        original_tsconfig = {}
+
+    # Create a new tsconfig that extends the original but fixes moduleResolution
+    codeflash_tsconfig = {
+        "extends": "./tsconfig.json",
+        "compilerOptions": {
+            # Override bundler to Node for ts-jest compatibility
+            "moduleResolution": "Node",
+            # Ensure module is set to a compatible value
+            "module": "ESNext",
+            # These are generally safe defaults for testing
+            "esModuleInterop": True,
+            "skipLibCheck": True,
+            "isolatedModules": True,
+        },
+    }
+
+    # Preserve include/exclude from original if not in extends
+    if "include" in original_tsconfig:
+        codeflash_tsconfig["include"] = original_tsconfig["include"]
+    if "exclude" in original_tsconfig:
+        codeflash_tsconfig["exclude"] = original_tsconfig["exclude"]
+
+    try:
+        codeflash_tsconfig_path.write_text(json.dumps(codeflash_tsconfig, indent=2))
+        logger.debug(f"Created {codeflash_tsconfig_path} with Node moduleResolution")
+    except Exception as e:
+        logger.warning(f"Failed to create codeflash tsconfig: {e}")
+
+    return codeflash_tsconfig_path
+
+
+def _create_codeflash_jest_config(project_root: Path, original_jest_config: Path | None) -> Path | None:
+    """Create a Jest config that uses the codeflash tsconfig for ts-jest.
+
+    Args:
+        project_root: Root of the project.
+        original_jest_config: Path to the original Jest config, or None.
+
+    Returns:
+        Path to the codeflash Jest config, or None if creation failed.
+
+    """
+    codeflash_jest_config_path = project_root / "jest.codeflash.config.js"
+
+    # If it already exists, use it
+    if codeflash_jest_config_path.exists():
+        logger.debug(f"Using existing {codeflash_jest_config_path}")
+        return codeflash_jest_config_path
+
+    # Create a wrapper Jest config that uses tsconfig.codeflash.json
+    if original_jest_config:
+        # Extend the original config
+        jest_config_content = f"""// Auto-generated by codeflash for bundler moduleResolution compatibility
+const originalConfig = require('./{original_jest_config.name}');
+
+const tsJestOptions = {{
+  isolatedModules: true,
+  tsconfig: 'tsconfig.codeflash.json',
+}};
+
+module.exports = {{
+  ...originalConfig,
+  transform: {{
+    ...originalConfig.transform,
+    '^.+\\\\.tsx?$': ['ts-jest', tsJestOptions],
+  }},
+  globals: {{
+    ...originalConfig.globals,
+    'ts-jest': tsJestOptions,
+  }},
+}};
+"""
+    else:
+        # Create a minimal Jest config for TypeScript
+        jest_config_content = """// Auto-generated by codeflash for bundler moduleResolution compatibility
+const tsJestOptions = {
+  isolatedModules: true,
+  tsconfig: 'tsconfig.codeflash.json',
+};
+
+module.exports = {
+  verbose: true,
+  testEnvironment: 'node',
+  testRegex: '\\\\.(test|spec)\\\\.(js|ts|tsx)$',
+  testPathIgnorePatterns: ['/dist/', '/node_modules/'],
+  transform: {
+    '^.+\\\\.tsx?$': ['ts-jest', tsJestOptions],
+  },
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+};
+"""
+
+    try:
+        codeflash_jest_config_path.write_text(jest_config_content)
+        logger.debug(f"Created {codeflash_jest_config_path} with codeflash tsconfig")
+        return codeflash_jest_config_path
+    except Exception as e:
+        logger.warning(f"Failed to create codeflash Jest config: {e}")
+        return None
+
+
+def _get_jest_config_for_project(project_root: Path) -> Path | None:
+    """Get the appropriate Jest config for the project.
+
+    If the project uses bundler moduleResolution, creates and returns a
+    codeflash-compatible Jest config. Otherwise, returns the project's
+    existing Jest config.
+
+    Args:
+        project_root: Root of the project.
+
+    Returns:
+        Path to the Jest config to use, or None if not found.
+
+    """
+    # First check for existing Jest config
+    original_jest_config = _find_jest_config(project_root)
+
+    # Check if project uses bundler moduleResolution
+    if _detect_bundler_module_resolution(project_root):
+        logger.info("Detected bundler moduleResolution - creating compatible config")
+        # Create codeflash-compatible tsconfig
+        _create_codeflash_tsconfig(project_root)
+        # Create codeflash Jest config that uses it
+        codeflash_jest_config = _create_codeflash_jest_config(project_root, original_jest_config)
+        if codeflash_jest_config:
+            return codeflash_jest_config
+
+    return original_jest_config
 
 
 def _find_node_project_root(file_path: Path) -> Path | None:
@@ -44,6 +293,94 @@ def _find_node_project_root(file_path: Path) -> Path | None:
         ):
             return current
         current = current.parent
+    return None
+
+
+def _find_monorepo_root(start_path: Path) -> Path | None:
+    """Find the monorepo workspace root by looking for workspace markers.
+
+    Traverses up from the given path to find a directory containing
+    monorepo workspace markers like yarn.lock, pnpm-workspace.yaml, etc.
+
+    Args:
+        start_path: A path within the monorepo.
+
+    Returns:
+        The monorepo root directory, or None if not found.
+
+    """
+    monorepo_markers = ["yarn.lock", "pnpm-workspace.yaml", "lerna.json", "package-lock.json"]
+    current = start_path if start_path.is_dir() else start_path.parent
+
+    while current != current.parent:
+        # Check for monorepo markers
+        if any((current / marker).exists() for marker in monorepo_markers):
+            # Verify it has node_modules (it's the workspace root)
+            if (current / "node_modules").exists():
+                return current
+        current = current.parent
+
+    return None
+
+
+def _find_jest_config(project_root: Path) -> Path | None:
+    """Find Jest configuration file in the project.
+
+    Searches for common Jest config file names in the project root and parent
+    directories (for monorepo support). This is important for TypeScript projects
+    that require specific transformation configurations (e.g., next/jest, ts-jest, babel-jest).
+
+    Args:
+        project_root: Root of the project to search.
+
+    Returns:
+        Path to Jest config file, or None if not found.
+
+    """
+    # Common Jest config file names, in order of preference
+    config_names = ["jest.config.ts", "jest.config.js", "jest.config.mjs", "jest.config.cjs", "jest.config.json"]
+
+    # First check the project root itself
+    for config_name in config_names:
+        config_path = project_root / config_name
+        if config_path.exists():
+            logger.debug(f"Found Jest config: {config_path}")
+            return config_path
+
+    # For monorepos, search parent directories up to the filesystem root
+    # Stop at common monorepo root indicators (git root, package.json with workspaces)
+    current = project_root.parent
+    max_depth = 5  # Don't search too far up
+    depth = 0
+
+    while current != current.parent and depth < max_depth:
+        for config_name in config_names:
+            config_path = current / config_name
+            if config_path.exists():
+                logger.debug(f"Found Jest config in parent directory: {config_path}")
+                return config_path
+
+        # Check if this looks like a monorepo root
+        package_json = current / "package.json"
+        if package_json.exists():
+            try:
+                import json
+
+                with package_json.open("r") as f:
+                    pkg = json.load(f)
+                    if "workspaces" in pkg:
+                        # This is likely the monorepo root, stop here
+                        break
+            except Exception:
+                pass
+
+        # Check for git root as another stopping point
+        if (current / ".git").exists():
+            break
+
+        current = current.parent
+        depth += 1
+
     return None
 
 
@@ -145,54 +482,28 @@ def _ensure_runtime_files(project_root: Path) -> None:
 
     Installs codeflash package if not already present.
     The package provides all runtime files needed for test instrumentation.
+    Uses the project's detected package manager (npm, pnpm, yarn, or bun).
 
     Args:
         project_root: The project root directory.
 
     """
-    # Check if package is already installed
     node_modules_pkg = project_root / "node_modules" / "codeflash"
     if node_modules_pkg.exists():
         logger.debug("codeflash already installed")
         return
 
-    # Try to install from local package first (for development)
-    local_package_path = Path(__file__).parent.parent.parent.parent / "packages" / "codeflash"
-    if local_package_path.exists():
-        try:
-            result = subprocess.run(
-                ["npm", "install", "--save-dev", str(local_package_path)],
-                check=False,
-                cwd=project_root,
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-            if result.returncode == 0:
-                logger.debug("Installed codeflash from local package")
-                return
-            logger.warning(f"Failed to install local package: {result.stderr}")
-        except Exception as e:
-            logger.warning(f"Error installing local package: {e}")
-
-    # Try to install from npm registry
+    install_cmd = get_package_install_command(project_root, "codeflash", dev=True)
     try:
-        result = subprocess.run(
-            ["npm", "install", "--save-dev", "codeflash"],
-            check=False,
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
+        result = subprocess.run(install_cmd, check=False, cwd=project_root, capture_output=True, text=True, timeout=120)
         if result.returncode == 0:
-            logger.debug("Installed codeflash from npm registry")
+            logger.debug(f"Installed codeflash using {install_cmd[0]}")
             return
-        logger.warning(f"Failed to install from npm: {result.stderr}")
+        logger.warning(f"Failed to install codeflash: {result.stderr}")
     except Exception as e:
-        logger.warning(f"Error installing from npm: {e}")
+        logger.warning(f"Error installing codeflash: {e}")
 
-    logger.error("Could not install codeflash. Please install it manually: npm install --save-dev codeflash")
+    logger.error(f"Could not install codeflash. Please install it manually: {' '.join(install_cmd)}")
 
 
 def run_jest_behavioral_tests(
@@ -251,13 +562,26 @@ def run_jest_behavioral_tests(
         "--forceExit",
     ]
 
+    # Add Jest config if found - needed for TypeScript transformation
+    # Uses codeflash-compatible config if project has bundler moduleResolution
+    jest_config = _get_jest_config_for_project(effective_cwd)
+    if jest_config:
+        jest_cmd.append(f"--config={jest_config}")
+
     # Add coverage flags if enabled
     if enable_coverage:
         jest_cmd.extend(["--coverage", "--coverageReporters=json", f"--coverageDirectory={coverage_dir}"])
 
     if test_files:
         jest_cmd.append("--runTestsByPath")
-        jest_cmd.extend(str(Path(f).resolve()) for f in test_files)
+        resolved_test_files = [str(Path(f).resolve()) for f in test_files]
+        jest_cmd.extend(resolved_test_files)
+        # Add --roots to include directories containing test files
+        # This is needed because some projects configure Jest with restricted roots
+        # (e.g., roots: ["<rootDir>/src"]) which excludes the test directory
+        test_dirs = {str(Path(f).resolve().parent) for f in test_files}
+        for test_dir in sorted(test_dirs):
+            jest_cmd.extend(["--roots", test_dir])
 
     if timeout:
         jest_cmd.append(f"--testTimeout={timeout * 1000}")  # Jest uses milliseconds
@@ -306,6 +630,14 @@ def run_jest_behavioral_tests(
                 args=result.args, returncode=result.returncode, stdout=result.stdout + "\n" + result.stderr, stderr=""
             )
         logger.debug(f"Jest result: returncode={result.returncode}")
+        # Log Jest output at WARNING level if tests fail and no XML output will be created
+        # This helps debug issues like import errors that cause Jest to fail early
+        if result.returncode != 0 and not result_file_path.exists():
+            logger.warning(
+                f"Jest failed with returncode={result.returncode} and no XML output created.\n"
+                f"Jest stdout: {result.stdout[:2000] if result.stdout else '(empty)'}\n"
+                f"Jest stderr: {result.stderr[:500] if result.stderr else '(empty)'}"
+            )
     except subprocess.TimeoutExpired:
         logger.warning(f"Jest tests timed out after {timeout}s")
         result = subprocess.CompletedProcess(args=jest_cmd, returncode=-1, stdout="", stderr="Test execution timed out")
@@ -465,9 +797,20 @@ def run_jest_benchmarking_tests(
         "--runner=codeflash/loop-runner",  # Use custom loop runner for in-process looping
     ]
 
+    # Add Jest config if found - needed for TypeScript transformation
+    # Uses codeflash-compatible config if project has bundler moduleResolution
+    jest_config = _get_jest_config_for_project(effective_cwd)
+    if jest_config:
+        jest_cmd.append(f"--config={jest_config}")
+
     if test_files:
         jest_cmd.append("--runTestsByPath")
-        jest_cmd.extend(str(Path(f).resolve()) for f in test_files)
+        resolved_test_files = [str(Path(f).resolve()) for f in test_files]
+        jest_cmd.extend(resolved_test_files)
+        # Add --roots to include directories containing test files
+        test_dirs = {str(Path(f).resolve().parent) for f in test_files}
+        for test_dir in sorted(test_dirs):
+            jest_cmd.extend(["--roots", test_dir])
 
     if timeout:
         jest_cmd.append(f"--testTimeout={timeout * 1000}")
@@ -481,6 +824,12 @@ def run_jest_benchmarking_tests(
     jest_env["JEST_JUNIT_SUITE_NAME"] = "{filepath}"
     jest_env["JEST_JUNIT_ADD_FILE_ATTRIBUTE"] = "true"
     jest_env["JEST_JUNIT_INCLUDE_CONSOLE_OUTPUT"] = "true"
+
+    # Pass monorepo root to loop-runner for jest-runner resolution
+    monorepo_root = _find_monorepo_root(effective_cwd)
+    if monorepo_root:
+        jest_env["CODEFLASH_MONOREPO_ROOT"] = str(monorepo_root)
+        logger.debug(f"Detected monorepo root: {monorepo_root}")
     codeflash_sqlite_file = get_run_tmp_file(Path("test_return_values_0.sqlite"))
     jest_env["CODEFLASH_OUTPUT_FILE"] = str(codeflash_sqlite_file)
     jest_env["CODEFLASH_TEST_ITERATION"] = "0"
@@ -594,9 +943,20 @@ def run_jest_line_profile_tests(
         "--forceExit",
     ]
 
+    # Add Jest config if found - needed for TypeScript transformation
+    # Uses codeflash-compatible config if project has bundler moduleResolution
+    jest_config = _get_jest_config_for_project(effective_cwd)
+    if jest_config:
+        jest_cmd.append(f"--config={jest_config}")
+
     if test_files:
         jest_cmd.append("--runTestsByPath")
-        jest_cmd.extend(str(Path(f).resolve()) for f in test_files)
+        resolved_test_files = [str(Path(f).resolve()) for f in test_files]
+        jest_cmd.extend(resolved_test_files)
+        # Add --roots to include directories containing test files
+        test_dirs = {str(Path(f).resolve().parent) for f in test_files}
+        for test_dir in sorted(test_dirs):
+            jest_cmd.extend(["--roots", test_dir])
 
     if timeout:
         jest_cmd.append(f"--testTimeout={timeout * 1000}")

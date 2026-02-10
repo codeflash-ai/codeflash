@@ -58,9 +58,6 @@ def set_current_language(language: Language | str) -> None:
 
     """
     global _current_language
-
-    if _current_language is not None:
-        return
     _current_language = Language(language) if isinstance(language, str) else language
 
 

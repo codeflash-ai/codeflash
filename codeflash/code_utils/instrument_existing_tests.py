@@ -721,9 +721,7 @@ def inject_profiling_into_existing_test(
     if is_java():
         from codeflash.languages.java.instrumentation import instrument_existing_test
 
-        return instrument_existing_test(
-            test_path, call_positions, function_to_optimize, tests_project_root, mode.value
-        )
+        return instrument_existing_test(test_path, call_positions, function_to_optimize, tests_project_root, mode.value)
 
     if function_to_optimize.is_async:
         return inject_async_profiling_into_existing_test(

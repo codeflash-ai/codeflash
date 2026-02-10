@@ -58,7 +58,7 @@ public class Calculator {
 
         functions = support.discover_functions(java_file)
         assert len(functions) == 1
-        assert functions[0].name == "add"
+        assert functions[0].function_name == "add"
         assert functions[0].language == Language.JAVA
 
     def test_validate_syntax_valid(self, support):

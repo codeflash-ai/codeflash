@@ -171,7 +171,7 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
                 return potential_path
 
         # 3. Search for the file in base_dir and its subdirectories
-        file_name = test_class_path.split(".")[-1] + ".java"
+        file_name = test_class_path.rsplit(".", maxsplit=1)[-1] + ".java"
         for java_file in base_dir.rglob(file_name):
             return java_file
 
@@ -180,19 +180,31 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
     # Handle file paths (contain slashes and extensions like .js/.ts)
     if "/" in test_class_path or "\\" in test_class_path:
         # This is a file path, not a Python module path
+        # Try the path as-is if it's absolute
+        potential_path = Path(test_class_path)
+        if potential_path.is_absolute() and potential_path.exists():
+            return potential_path
+
         # Try to resolve relative to base_dir's parent (project root)
         project_root = base_dir.parent
         potential_path = project_root / test_class_path
-        if potential_path.exists():
-            return potential_path
+        # Normalize to resolve .. and . components
+        try:
+            potential_path = potential_path.resolve()
+            if potential_path.exists():
+                return potential_path
+        except (OSError, RuntimeError):
+            pass
+
         # Also try relative to base_dir itself
         potential_path = base_dir / test_class_path
-        if potential_path.exists():
-            return potential_path
-        # Try the path as-is if it's absolute
-        potential_path = Path(test_class_path)
-        if potential_path.exists():
-            return potential_path
+        try:
+            potential_path = potential_path.resolve()
+            if potential_path.exists():
+                return potential_path
+        except (OSError, RuntimeError):
+            pass
+
         return None
 
     # First try the full path (Python module path)
@@ -512,8 +524,10 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                         # Check if the file name matches the module path
                         file_stem = test_file.instrumented_behavior_file_path.stem
                         # The instrumented file has __perfinstrumented suffix
-                        original_class = file_stem.replace("__perfinstrumented", "").replace("__perfonlyinstrumented", "")
-                        if original_class == test_module_path or file_stem == test_module_path:
+                        original_class = file_stem.replace("__perfinstrumented", "").replace(
+                            "__perfonlyinstrumented", ""
+                        )
+                        if test_module_path in (original_class, file_stem):
                             test_file_path = test_file.instrumented_behavior_file_path
                             break
                     # Check original file path
@@ -551,7 +565,9 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                 # Default to GENERATED_REGRESSION for Jest/Java tests when test type can't be determined
                 if test_type is None and (is_jest or is_java_test):
                     test_type = TestType.GENERATED_REGRESSION
-                    logger.debug(f"[PARSE-DEBUG]   defaulting to GENERATED_REGRESSION ({'Jest' if is_jest else 'Java'})")
+                    logger.debug(
+                        f"[PARSE-DEBUG]   defaulting to GENERATED_REGRESSION ({'Jest' if is_jest else 'Java'})"
+                    )
                 elif test_type is None:
                     # Skip results where test type cannot be determined
                     logger.debug(f"Skipping result for {test_function_name}: could not determine test type")
@@ -672,7 +688,7 @@ def parse_jest_test_xml(
     test_results = TestResults()
 
     if not test_xml_file_path.exists():
-        logger.warning(f"No Jest test results for {test_xml_file_path} found.")
+        logger.warning(f"No JavaScript test results for {test_xml_file_path} found.")
         return test_results
 
     # Log file size for debugging
@@ -791,16 +807,25 @@ def parse_jest_test_xml(
                         if not test_file_path.exists():
                             test_file_path = base_dir / test_file_name
 
-            if test_file_path is None or not test_file_path.exists():
+            # For Jest tests in monorepos, test files may not exist after cleanup
+            # but we can still parse results and infer test type from the path
+            if test_file_path is None:
                 logger.warning(f"Could not resolve test file for Jest test: {test_class_path}")
                 continue
 
             # Get test type if not already set from lookup
-            if test_type is None:
+            if test_type is None and test_file_path.exists():
                 test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
             if test_type is None:
-                # Default to GENERATED_REGRESSION for Jest tests
-                test_type = TestType.GENERATED_REGRESSION
+                # Infer test type from filename pattern
+                filename = test_file_path.name
+                if "__perf_test_" in filename or "_perf_test_" in filename:
+                    test_type = TestType.GENERATED_PERFORMANCE
+                elif "__unit_test_" in filename or "_unit_test_" in filename:
+                    test_type = TestType.GENERATED_REGRESSION
+                else:
+                    # Default to GENERATED_REGRESSION for Jest tests
+                    test_type = TestType.GENERATED_REGRESSION
 
             # For Jest tests, keep the relative file path with extension intact
             # (Python uses module_name_from_file_path which strips extensions)
@@ -1486,6 +1511,9 @@ def parse_test_results(
     get_run_tmp_file(Path("unittest_results.xml")).unlink(missing_ok=True)
     get_run_tmp_file(Path("jest_results.xml")).unlink(missing_ok=True)
     get_run_tmp_file(Path("jest_perf_results.xml")).unlink(missing_ok=True)
+    get_run_tmp_file(Path("vitest_results.xml")).unlink(missing_ok=True)
+    get_run_tmp_file(Path("vitest_perf_results.xml")).unlink(missing_ok=True)
+    get_run_tmp_file(Path("vitest_line_profile_results.xml")).unlink(missing_ok=True)
 
     # For Jest tests, SQLite cleanup is deferred until after comparison
     # (comparison happens via language_support.compare_test_results)

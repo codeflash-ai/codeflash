@@ -28,7 +28,7 @@ public class Calculator {
 """
         functions = discover_functions_from_source(source)
         assert len(functions) == 1
-        assert functions[0].name == "add"
+        assert functions[0].function_name == "add"
         assert functions[0].language == Language.JAVA
         assert functions[0].is_method is True
         assert functions[0].class_name == "Calculator"
@@ -52,7 +52,7 @@ public class Calculator {
 """
         functions = discover_functions_from_source(source)
         assert len(functions) == 3
-        method_names = {f.name for f in functions}
+        method_names = {f.function_name for f in functions}
         assert method_names == {"add", "subtract", "multiply"}
 
     def test_skip_abstract_methods(self):
@@ -69,7 +69,7 @@ public abstract class Shape {
         functions = discover_functions_from_source(source)
         # Should only find perimeter, not area
         assert len(functions) == 1
-        assert functions[0].name == "perimeter"
+        assert functions[0].function_name == "perimeter"
 
     def test_skip_constructors(self):
         """Test that constructors are skipped."""
@@ -89,7 +89,7 @@ public class Person {
         functions = discover_functions_from_source(source)
         # Should only find getName, not the constructor
         assert len(functions) == 1
-        assert functions[0].name == "getName"
+        assert functions[0].function_name == "getName"
 
     def test_filter_by_pattern(self):
         """Test filtering by include patterns."""
@@ -111,7 +111,7 @@ public class StringUtils {
         criteria = FunctionFilterCriteria(include_patterns=["*Upper*", "*Lower*"])
         functions = discover_functions_from_source(source, filter_criteria=criteria)
         assert len(functions) == 2
-        method_names = {f.name for f in functions}
+        method_names = {f.function_name for f in functions}
         assert method_names == {"toUpperCase", "toLowerCase"}
 
     def test_filter_exclude_pattern(self):
@@ -128,7 +128,7 @@ public class DataService {
             require_return=False,  # Allow void methods
         )
         functions = discover_functions_from_source(source, filter_criteria=criteria)
-        method_names = {f.name for f in functions}
+        method_names = {f.function_name for f in functions}
         assert "setData" not in method_names
 
     def test_filter_require_return(self):
@@ -145,7 +145,7 @@ public class Example {
         criteria = FunctionFilterCriteria(require_return=True)
         functions = discover_functions_from_source(source, filter_criteria=criteria)
         assert len(functions) == 1
-        assert functions[0].name == "getValue"
+        assert functions[0].function_name == "getValue"
 
     def test_filter_by_line_count(self):
         """Test filtering by line count."""
@@ -167,7 +167,7 @@ public class Example {
         functions = discover_functions_from_source(source, filter_criteria=criteria)
         # The 'long' method should be included (>3 lines)
         # The 'short' method should be excluded (1 line)
-        method_names = {f.name for f in functions}
+        method_names = {f.function_name for f in functions}
         assert "long" in method_names or len(functions) >= 1
 
     def test_method_with_javadoc(self):
@@ -189,7 +189,7 @@ public class Example {
         assert len(functions) == 1
         assert functions[0].doc_start_line is not None
         # Doc should start before the method
-        assert functions[0].doc_start_line < functions[0].start_line
+        assert functions[0].doc_start_line < functions[0].starting_line
 
 
 class TestDiscoverTestMethods:
@@ -222,7 +222,7 @@ class CalculatorTest {
 """)
         tests = discover_test_methods(test_file)
         assert len(tests) == 2
-        test_names = {t.name for t in tests}
+        test_names = {t.function_name for t in tests}
         assert test_names == {"testAdd", "testSubtract"}
 
     def test_discover_parameterized_tests(self, tmp_path: Path):
@@ -244,7 +244,7 @@ class StringTest {
 """)
         tests = discover_test_methods(test_file)
         assert len(tests) == 1
-        assert tests[0].name == "testLength"
+        assert tests[0].function_name == "testLength"
 
 
 class TestGetMethodByName:
@@ -266,7 +266,7 @@ public class Calculator {
 """)
         method = get_method_by_name(java_file, "add")
         assert method is not None
-        assert method.name == "add"
+        assert method.function_name == "add"
 
     def test_get_method_not_found(self, tmp_path: Path):
         """Test getting a method that doesn't exist."""
@@ -299,7 +299,7 @@ class Helper {
 """)
         methods = get_class_methods(java_file, "Calculator")
         assert len(methods) == 1
-        assert methods[0].name == "add"
+        assert methods[0].function_name == "add"
 
 
 class TestFileBasedDiscovery:
@@ -321,7 +321,7 @@ class TestFileBasedDiscovery:
 
         functions = discover_functions(calculator_file)
         assert len(functions) > 0
-        method_names = {f.name for f in functions}
+        method_names = {f.function_name for f in functions}
         # Should find methods from Calculator.java
         assert "fibonacci" in method_names or "add" in method_names or len(method_names) > 0
 
