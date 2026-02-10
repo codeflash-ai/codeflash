@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.languages.java.build_tools import (
@@ -22,7 +21,7 @@ from codeflash.languages.java.build_tools import (
 )
 
 if TYPE_CHECKING:
-    pass
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -80,9 +79,7 @@ def detect_java_project(project_root: Path) -> JavaProjectConfig | None:
     project_info = get_project_info(project_root)
 
     # Detect test framework
-    test_framework, has_junit5, has_junit4, has_testng = _detect_test_framework(
-        project_root, build_tool
-    )
+    test_framework, has_junit5, has_junit4, has_testng = _detect_test_framework(project_root, build_tool)
 
     # Detect other dependencies
     has_mockito, has_assertj = _detect_test_dependencies(project_root, build_tool)
@@ -120,9 +117,7 @@ def detect_java_project(project_root: Path) -> JavaProjectConfig | None:
     )
 
 
-def _detect_test_framework(
-    project_root: Path, build_tool: BuildTool
-) -> tuple[str, bool, bool, bool]:
+def _detect_test_framework(project_root: Path, build_tool: BuildTool) -> tuple[str, bool, bool, bool]:
     """Detect which test framework the project uses.
 
     Args:
@@ -210,9 +205,7 @@ def _detect_test_deps_from_pom(project_root: Path) -> tuple[bool, bool, bool]:
                         elif tag == "groupId":
                             group_id = child.text
 
-                    if group_id == "org.junit.jupiter" or (
-                        artifact_id and "junit-jupiter" in artifact_id
-                    ):
+                    if group_id == "org.junit.jupiter" or (artifact_id and "junit-jupiter" in artifact_id):
                         has_junit5 = True
                     elif group_id == "junit" and artifact_id == "junit":
                         has_junit4 = True
@@ -253,9 +246,7 @@ def _detect_test_deps_from_gradle(project_root: Path) -> tuple[bool, bool, bool]
     return has_junit5, has_junit4, has_testng
 
 
-def _detect_test_dependencies(
-    project_root: Path, build_tool: BuildTool
-) -> tuple[bool, bool]:
+def _detect_test_dependencies(project_root: Path, build_tool: BuildTool) -> tuple[bool, bool]:
     """Detect additional test dependencies (Mockito, AssertJ).
 
     Returns:
@@ -289,9 +280,7 @@ def _detect_test_dependencies(
     return has_mockito, has_assertj
 
 
-def _get_compiler_settings(
-    project_root: Path, build_tool: BuildTool
-) -> tuple[str | None, str | None]:
+def _get_compiler_settings(project_root: Path, build_tool: BuildTool) -> tuple[str | None, str | None]:
     """Get compiler source and target settings.
 
     Returns:
@@ -392,11 +381,7 @@ def is_java_project(project_root: Path) -> bool:
         return True
 
     # Check for Java source files
-    for pattern in ["src/**/*.java", "*.java"]:
-        if list(project_root.glob(pattern)):
-            return True
-
-    return False
+    return any(list(project_root.glob(pattern)) for pattern in ["src/**/*.java", "*.java"])
 
 
 def get_test_file_pattern(config: JavaProjectConfig) -> str:

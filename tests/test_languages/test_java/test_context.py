@@ -312,7 +312,7 @@ public class Calculator {
         functions = discover_functions_from_source(
             java_file.read_text(), file_path=java_file
         )
-        add_func = next((f for f in functions if f.name == "add"), None)
+        add_func = next((f for f in functions if f.function_name == "add"), None)
         assert add_func is not None
 
         context = extract_code_context(add_func, tmp_path)
@@ -678,7 +678,7 @@ class TestExtractCodeContextWithHelpers:
         functions = discover_functions_from_source(
             java_file.read_text(), file_path=java_file
         )
-        process_func = next((f for f in functions if f.name == "process"), None)
+        process_func = next((f for f in functions if f.function_name == "process"), None)
         assert process_func is not None
 
         context = extract_code_context(process_func, tmp_path)
@@ -719,7 +719,7 @@ class TestExtractCodeContextWithHelpers:
         functions = discover_functions_from_source(
             java_file.read_text(), file_path=java_file
         )
-        process_func = next((f for f in functions if f.name == "process"), None)
+        process_func = next((f for f in functions if f.function_name == "process"), None)
         assert process_func is not None
 
         context = extract_code_context(process_func, tmp_path)
@@ -756,7 +756,7 @@ class TestExtractCodeContextWithHelpers:
         functions = discover_functions_from_source(
             java_file.read_text(), file_path=java_file
         )
-        process_func = next((f for f in functions if f.name == "process"), None)
+        process_func = next((f for f in functions if f.function_name == "process"), None)
         assert process_func is not None
 
         context = extract_code_context(process_func, tmp_path)
@@ -780,7 +780,7 @@ class TestExtractCodeContextWithHelpers:
         functions = discover_functions_from_source(
             java_file.read_text(), file_path=java_file
         )
-        add_func = next((f for f in functions if f.name == "add"), None)
+        add_func = next((f for f in functions if f.function_name == "add"), None)
         assert add_func is not None
 
         context = extract_code_context(add_func, tmp_path)
@@ -809,7 +809,7 @@ class TestExtractCodeContextWithHelpers:
         functions = discover_functions_from_source(
             java_file.read_text(), file_path=java_file
         )
-        calc_func = next((f for f in functions if f.name == "calculate"), None)
+        calc_func = next((f for f in functions if f.function_name == "calculate"), None)
         assert calc_func is not None
 
         context = extract_code_context(calc_func, tmp_path)
@@ -1392,7 +1392,7 @@ class TestExtractCodeContextWithInheritance:
         )
         assert len(functions) == 2
 
-        run_func = next((f for f in functions if f.name == "run"), None)
+        run_func = next((f for f in functions if f.function_name == "run"), None)
         assert run_func is not None
 
         context = extract_code_context(run_func, tmp_path)
@@ -1417,7 +1417,7 @@ class TestExtractCodeContextWithInheritance:
         functions = discover_functions_from_source(
             java_file.read_text(), file_path=java_file
         )
-        greet_func = next((f for f in functions if f.name == "greet"), None)
+        greet_func = next((f for f in functions if f.function_name == "greet"), None)
         assert greet_func is not None
 
         context = extract_code_context(greet_func, tmp_path)
@@ -1449,7 +1449,7 @@ class TestExtractCodeContextWithInnerClasses:
         functions = discover_functions_from_source(
             java_file.read_text(), file_path=java_file
         )
-        compute_func = next((f for f in functions if f.name == "compute"), None)
+        compute_func = next((f for f in functions if f.function_name == "compute"), None)
         assert compute_func is not None
 
         context = extract_code_context(compute_func, tmp_path)
@@ -1481,7 +1481,7 @@ class TestExtractCodeContextWithInnerClasses:
         functions = discover_functions_from_source(
             java_file.read_text(), file_path=java_file
         )
-        get_func = next((f for f in functions if f.name == "getValue"), None)
+        get_func = next((f for f in functions if f.function_name == "getValue"), None)
         assert get_func is not None
 
         context = extract_code_context(get_func, tmp_path)
@@ -1521,7 +1521,7 @@ class TestExtractCodeContextWithEnumAndInterface:
         functions = discover_functions_from_source(
             java_file.read_text(), file_path=java_file
         )
-        apply_func = next((f for f in functions if f.name == "apply"), None)
+        apply_func = next((f for f in functions if f.function_name == "apply"), None)
         assert apply_func is not None
 
         context = extract_code_context(apply_func, tmp_path)
@@ -1555,7 +1555,7 @@ class TestExtractCodeContextWithEnumAndInterface:
         functions = discover_functions_from_source(
             java_file.read_text(), file_path=java_file
         )
-        greet_func = next((f for f in functions if f.name == "greet"), None)
+        greet_func = next((f for f in functions if f.function_name == "greet"), None)
         assert greet_func is not None
 
         context = extract_code_context(greet_func, tmp_path)
@@ -1581,7 +1581,7 @@ class TestExtractCodeContextWithEnumAndInterface:
         functions = discover_functions_from_source(
             java_file.read_text(), file_path=java_file
         )
-        create_func = next((f for f in functions if f.name == "create"), None)
+        create_func = next((f for f in functions if f.function_name == "create"), None)
         assert create_func is not None
 
         context = extract_code_context(create_func, tmp_path)
@@ -1767,16 +1767,17 @@ class TestExtractCodeContextEdgeCases:
 
     def test_file_not_found(self, tmp_path: Path):
         """Test context extraction for missing file."""
-        from codeflash.languages.base import FunctionInfo
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash.models.function_types import FunctionParent
 
         missing_file = tmp_path / "NonExistent.java"
-        func = FunctionInfo(
-            name="test",
+        func = FunctionToOptimize(
+            function_name="test",
             file_path=missing_file,
-            start_line=1,
-            end_line=5,
-            parents=(ParentInfo(name="Test", type="ClassDef"),),
-            language=Language.JAVA,
+            starting_line=1,
+            ending_line=5,
+            parents=[FunctionParent(name="Test", type="ClassDef")],
+            language="java",
         )
 
         context = extract_code_context(func, tmp_path)
@@ -1801,7 +1802,7 @@ class TestExtractCodeContextEdgeCases:
         functions = discover_functions_from_source(
             java_file.read_text(), file_path=java_file
         )
-        calc_func = next((f for f in functions if f.name == "calculate"), None)
+        calc_func = next((f for f in functions if f.function_name == "calculate"), None)
         assert calc_func is not None
 
         context = extract_code_context(calc_func, tmp_path, max_helper_depth=0)
@@ -1838,7 +1839,7 @@ class TestExtractCodeContextWithConstructor:
         functions = discover_functions_from_source(
             java_file.read_text(), file_path=java_file
         )
-        get_func = next((f for f in functions if f.name == "getName"), None)
+        get_func = next((f for f in functions if f.function_name == "getName"), None)
         assert get_func is not None
 
         context = extract_code_context(get_func, tmp_path)
@@ -1885,7 +1886,7 @@ class TestExtractCodeContextWithConstructor:
         functions = discover_functions_from_source(
             java_file.read_text(), file_path=java_file
         )
-        get_func = next((f for f in functions if f.name == "getName"), None)
+        get_func = next((f for f in functions if f.function_name == "getName"), None)
         assert get_func is not None
 
         context = extract_code_context(get_func, tmp_path)
@@ -1940,7 +1941,7 @@ public class Service {
         functions = discover_functions_from_source(
             java_file.read_text(), file_path=java_file
         )
-        process_func = next((f for f in functions if f.name == "process"), None)
+        process_func = next((f for f in functions if f.function_name == "process"), None)
         assert process_func is not None
 
         context = extract_code_context(process_func, tmp_path)
@@ -2000,7 +2001,7 @@ public class Calculator {
         functions = discover_functions_from_source(
             java_file.read_text(), file_path=java_file
         )
-        sqrt_func = next((f for f in functions if f.name == "sqrtNewton"), None)
+        sqrt_func = next((f for f in functions if f.function_name == "sqrtNewton"), None)
         assert sqrt_func is not None
 
         context = extract_code_context(sqrt_func, tmp_path)

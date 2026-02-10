@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from codeflash.languages.base import Language
+from codeflash.languages.language_enum import Language
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -29,6 +29,33 @@ _LANGUAGE_REGISTRY: dict[Language, type[LanguageSupport]] = {}
 
 # Cache of instantiated language support objects
 _SUPPORT_CACHE: dict[Language, LanguageSupport] = {}
+
+# Flag to track if language modules have been imported
+_languages_registered = False
+
+
+def _ensure_languages_registered() -> None:
+    """Ensure all language support modules are imported and registered.
+
+    This lazily imports the language support modules to avoid circular imports
+    at module load time. The imports trigger the @register_language decorators
+    which populate the registries.
+    """
+    global _languages_registered
+    if _languages_registered:
+        return
+
+    # Import support modules to trigger registration
+    # These imports are deferred to avoid circular imports
+    import contextlib
+
+    with contextlib.suppress(ImportError):
+        from codeflash.languages.python import support as _
+
+    with contextlib.suppress(ImportError):
+        from codeflash.languages.javascript import support as _  # noqa: F401
+
+    _languages_registered = True
 
 
 class UnsupportedLanguageError(Exception):
@@ -123,6 +150,10 @@ def get_language_support(identifier: Path | Language | str) -> LanguageSupport:
     Raises:
         UnsupportedLanguageError: If the language is not supported.
 
+    Note:
+        This function lazily imports language support modules on first call
+        to avoid circular import issues at module load time.
+
     Example:
         # By file path
         lang = get_language_support(Path("example.py"))
@@ -137,6 +168,7 @@ def get_language_support(identifier: Path | Language | str) -> LanguageSupport:
         lang = get_language_support("python")
 
     """
+    _ensure_languages_registered()
     language: Language | None = None
 
     if isinstance(identifier, Language):
@@ -176,6 +208,42 @@ def get_language_support(identifier: Path | Language | str) -> LanguageSupport:
 
 # Cache for test framework to language support mapping
 _FRAMEWORK_CACHE: dict[str, LanguageSupport] = {}
+
+
+def get_language_support_by_common_formatters(formatter_cmd: str | list[str]) -> LanguageSupport | None:
+    _ensure_languages_registered()
+    language: Language | None = None
+    if isinstance(formatter_cmd, str):
+        formatter_cmd = [formatter_cmd]
+
+    if len(formatter_cmd) == 1:
+        formatter_cmd = formatter_cmd[0].split(" ")
+
+    # Try as extension first
+    ext = None
+
+    py_formatters = ["black", "isort", "ruff", "autopep8", "yapf", "pyfmt"]
+    js_ts_formatters = ["prettier", "eslint", "biome", "rome", "deno", "standard", "tslint"]
+
+    if any(cmd in py_formatters for cmd in formatter_cmd):
+        ext = ".py"
+    elif any(cmd in js_ts_formatters for cmd in formatter_cmd):
+        ext = ".js"
+
+    if ext is None:
+        # can't determine language
+        return None
+
+    cls = _EXTENSION_REGISTRY[ext]
+    language = cls().language
+
+    # Return cached instance or create new one
+    if language not in _SUPPORT_CACHE:
+        if language not in _LANGUAGE_REGISTRY:
+            raise UnsupportedLanguageError(str(language), get_supported_languages())
+        _SUPPORT_CACHE[language] = _LANGUAGE_REGISTRY[language]()
+
+    return _SUPPORT_CACHE[language]
 
 
 def get_language_support_by_framework(test_framework: str) -> LanguageSupport | None:
@@ -238,6 +306,7 @@ def detect_project_language(project_root: Path, module_root: Path) -> Language:
         UnsupportedLanguageError: If no supported language is detected.
 
     """
+    _ensure_languages_registered()
     extension_counts: dict[str, int] = {}
 
     # Count files by extension
@@ -265,6 +334,7 @@ def get_supported_languages() -> list[str]:
         List of language name strings.
 
     """
+    _ensure_languages_registered()
     return [lang.value for lang in _LANGUAGE_REGISTRY]
 
 
@@ -275,6 +345,7 @@ def get_supported_extensions() -> list[str]:
         List of extension strings (with leading dots).
 
     """
+    _ensure_languages_registered()
     return list(_EXTENSION_REGISTRY.keys())
 
 
@@ -300,10 +371,12 @@ def clear_registry() -> None:
 
     Primarily useful for testing.
     """
+    global _languages_registered
     _EXTENSION_REGISTRY.clear()
     _LANGUAGE_REGISTRY.clear()
     _SUPPORT_CACHE.clear()
     _FRAMEWORK_CACHE.clear()
+    _languages_registered = False
 
 
 def clear_cache() -> None:

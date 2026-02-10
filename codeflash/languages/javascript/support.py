@@ -12,22 +12,16 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from codeflash.languages.base import (
-    CodeContext,
-    FunctionFilterCriteria,
-    FunctionInfo,
-    HelperFunction,
-    Language,
-    ParentInfo,
-    TestInfo,
-    TestResult,
-)
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, Language, TestInfo, TestResult
 from codeflash.languages.registry import register_language
 from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
+from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from codeflash.languages.base import ReferenceInfo
     from codeflash.languages.treesitter_utils import TypeDefinition
 
 logger = logging.getLogger(__name__)
@@ -54,9 +48,16 @@ class JavaScriptSupport:
         return (".js", ".jsx", ".mjs", ".cjs")
 
     @property
+    def default_file_extension(self) -> str:
+        """Default file extension for JavaScript."""
+        return ".js"
+
+    @property
     def test_framework(self) -> str:
         """Primary test framework for JavaScript."""
-        return "jest"
+        from codeflash.languages.test_framework import get_js_test_framework_or_default
+
+        return get_js_test_framework_or_default()
 
     @property
     def comment_prefix(self) -> str:
@@ -66,7 +67,7 @@ class JavaScriptSupport:
 
     def discover_functions(
         self, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
-    ) -> list[FunctionInfo]:
+    ) -> list[FunctionToOptimize]:
         """Find all optimizable functions in a JavaScript file.
 
         Uses tree-sitter to parse the file and find functions.
@@ -76,7 +77,7 @@ class JavaScriptSupport:
             filter_criteria: Optional criteria to filter functions.
 
         Returns:
-            List of FunctionInfo objects for discovered functions.
+            List of FunctionToOptimize objects for discovered functions.
 
         """
         criteria = filter_criteria or FunctionFilterCriteria()
@@ -93,7 +94,7 @@ class JavaScriptSupport:
                 source, include_methods=criteria.include_methods, include_arrow_functions=True, require_name=True
             )
 
-            functions: list[FunctionInfo] = []
+            functions: list[FunctionToOptimize] = []
             for func in tree_functions:
                 # Check for return statement if required
                 if criteria.require_return and not analyzer.has_return_statement(func, source):
@@ -104,24 +105,24 @@ class JavaScriptSupport:
                     continue
 
                 # Build parents list
-                parents: list[ParentInfo] = []
+                parents: list[FunctionParent] = []
                 if func.class_name:
-                    parents.append(ParentInfo(name=func.class_name, type="ClassDef"))
+                    parents.append(FunctionParent(name=func.class_name, type="ClassDef"))
                 if func.parent_function:
-                    parents.append(ParentInfo(name=func.parent_function, type="FunctionDef"))
+                    parents.append(FunctionParent(name=func.parent_function, type="FunctionDef"))
 
                 functions.append(
-                    FunctionInfo(
-                        name=func.name,
+                    FunctionToOptimize(
+                        function_name=func.name,
                         file_path=file_path,
-                        start_line=func.start_line,
-                        end_line=func.end_line,
-                        start_col=func.start_col,
-                        end_col=func.end_col,
-                        parents=tuple(parents),
+                        parents=parents,
+                        starting_line=func.start_line,
+                        ending_line=func.end_line,
+                        starting_col=func.start_col,
+                        ending_col=func.end_col,
                         is_async=func.is_async,
                         is_method=func.is_method,
-                        language=self.language,
+                        language=str(self.language),
                         doc_start_line=func.doc_start_line,
                     )
                 )
@@ -132,7 +133,7 @@ class JavaScriptSupport:
             logger.warning("Failed to parse %s: %s", file_path, e)
             return []
 
-    def discover_functions_from_source(self, source: str, file_path: Path | None = None) -> list[FunctionInfo]:
+    def discover_functions_from_source(self, source: str, file_path: Path | None = None) -> list[FunctionToOptimize]:
         """Find all functions in source code string.
 
         Uses tree-sitter to parse the source and find functions.
@@ -142,7 +143,7 @@ class JavaScriptSupport:
             file_path: Optional file path for context (used for language detection).
 
         Returns:
-            List of FunctionInfo objects for discovered functions.
+            List of FunctionToOptimize objects for discovered functions.
 
         """
         try:
@@ -156,27 +157,27 @@ class JavaScriptSupport:
                 source, include_methods=True, include_arrow_functions=True, require_name=True
             )
 
-            functions: list[FunctionInfo] = []
+            functions: list[FunctionToOptimize] = []
             for func in tree_functions:
                 # Build parents list
-                parents: list[ParentInfo] = []
+                parents: list[FunctionParent] = []
                 if func.class_name:
-                    parents.append(ParentInfo(name=func.class_name, type="ClassDef"))
+                    parents.append(FunctionParent(name=func.class_name, type="ClassDef"))
                 if func.parent_function:
-                    parents.append(ParentInfo(name=func.parent_function, type="FunctionDef"))
+                    parents.append(FunctionParent(name=func.parent_function, type="FunctionDef"))
 
                 functions.append(
-                    FunctionInfo(
-                        name=func.name,
+                    FunctionToOptimize(
+                        function_name=func.name,
                         file_path=file_path or Path("unknown"),
-                        start_line=func.start_line,
-                        end_line=func.end_line,
-                        start_col=func.start_col,
-                        end_col=func.end_col,
-                        parents=tuple(parents),
+                        parents=parents,
+                        starting_line=func.start_line,
+                        ending_line=func.end_line,
+                        starting_col=func.start_col,
+                        ending_col=func.end_col,
                         is_async=func.is_async,
                         is_method=func.is_method,
-                        language=self.language,
+                        language=str(self.language),
                         doc_start_line=func.doc_start_line,
                     )
                 )
@@ -198,7 +199,9 @@ class JavaScriptSupport:
         """
         return ["*.test.js", "*.test.jsx", "*.spec.js", "*.spec.jsx", "__tests__/**/*.js", "__tests__/**/*.jsx"]
 
-    def discover_tests(self, test_root: Path, source_functions: Sequence[FunctionInfo]) -> dict[str, list[TestInfo]]:
+    def discover_tests(
+        self, test_root: Path, source_functions: Sequence[FunctionToOptimize]
+    ) -> dict[str, list[TestInfo]]:
         """Map source functions to their tests via static analysis.
 
         For JavaScript, this uses static analysis to find test files
@@ -240,7 +243,7 @@ class JavaScriptSupport:
 
                 # Match source functions to tests
                 for func in source_functions:
-                    if func.name in imported_names or func.name in source:
+                    if func.function_name in imported_names or func.function_name in source:
                         if func.qualified_name not in result:
                             result[func.qualified_name] = []
                         for test_name in test_functions:
@@ -282,7 +285,7 @@ class JavaScriptSupport:
 
     # === Code Analysis ===
 
-    def extract_code_context(self, function: FunctionInfo, project_root: Path, module_root: Path) -> CodeContext:
+    def extract_code_context(self, function: FunctionToOptimize, project_root: Path, module_root: Path) -> CodeContext:
         """Extract function code and its dependencies.
 
         Uses tree-sitter to analyze imports and find helper functions.
@@ -309,16 +312,16 @@ class JavaScriptSupport:
         tree_functions = analyzer.find_functions(source, include_methods=True, include_arrow_functions=True)
         target_func = None
         for func in tree_functions:
-            if func.name == function.name and func.start_line == function.start_line:
+            if func.name == function.function_name and func.start_line == function.starting_line:
                 target_func = func
                 break
 
         # Extract the function source, including JSDoc if present
         lines = source.splitlines(keepends=True)
-        if function.start_line and function.end_line:
+        if function.starting_line and function.ending_line:
             # Use doc_start_line if available, otherwise fall back to start_line
-            effective_start = (target_func.doc_start_line if target_func else None) or function.start_line
-            target_lines = lines[effective_start - 1 : function.end_line]
+            effective_start = (target_func.doc_start_line if target_func else None) or function.starting_line
+            target_lines = lines[effective_start - 1 : function.ending_line]
             target_code = "".join(target_lines)
         else:
             target_code = ""
@@ -334,7 +337,7 @@ class JavaScriptSupport:
 
             if class_name:
                 # Find the class definition in the source to get proper indentation, JSDoc, constructor, and fields
-                class_info = self._find_class_definition(source, class_name, analyzer, function.name)
+                class_info = self._find_class_definition(source, class_name, analyzer, function.function_name)
                 if class_info:
                     class_jsdoc, class_indent, constructor_code, fields_code = class_info
                     # Build the class body with fields, constructor, and target method
@@ -395,7 +398,7 @@ class JavaScriptSupport:
         # If not, raise an error to fail the optimization early
         if target_code and not self.validate_syntax(target_code):
             error_msg = (
-                f"Extracted code for {function.name} is not syntactically valid JavaScript. "
+                f"Extracted code for {function.function_name} is not syntactically valid JavaScript. "
                 f"Cannot proceed with optimization."
             )
             logger.error(error_msg)
@@ -544,7 +547,12 @@ class JavaScriptSupport:
         return (constructor_code, fields_code)
 
     def _find_helper_functions(
-        self, function: FunctionInfo, source: str, analyzer: TreeSitterAnalyzer, imports: list[Any], module_root: Path
+        self,
+        function: FunctionToOptimize,
+        source: str,
+        analyzer: TreeSitterAnalyzer,
+        imports: list[Any],
+        module_root: Path,
     ) -> list[HelperFunction]:
         """Find helper functions called by the target function.
 
@@ -569,7 +577,7 @@ class JavaScriptSupport:
         # Find the target function's tree-sitter node
         target_func = None
         for func in all_functions:
-            if func.name == function.name and func.start_line == function.start_line:
+            if func.name == function.function_name and func.start_line == function.starting_line:
                 target_func = func
                 break
 
@@ -585,7 +593,7 @@ class JavaScriptSupport:
 
         # Match calls to functions in the same file
         for func in all_functions:
-            if func.name in calls_set and func.name != function.name:
+            if func.name in calls_set and func.name != function.function_name:
                 # Extract source including JSDoc if present
                 effective_start = func.doc_start_line or func.start_line
                 helper_lines = lines[effective_start - 1 : func.end_line]
@@ -715,7 +723,12 @@ class JavaScriptSupport:
         return "\n".join(global_lines)
 
     def _extract_type_definitions_context(
-        self, function: FunctionInfo, source: str, analyzer: TreeSitterAnalyzer, imports: list[Any], module_root: Path
+        self,
+        function: FunctionToOptimize,
+        source: str,
+        analyzer: TreeSitterAnalyzer,
+        imports: list[Any],
+        module_root: Path,
     ) -> tuple[str, set[str]]:
         """Extract type definitions used by the function for read-only context.
 
@@ -741,7 +754,7 @@ class JavaScriptSupport:
 
         """
         # Extract type names from function parameters and return type
-        type_names = analyzer.extract_type_annotations(source, function.name, function.start_line or 1)
+        type_names = analyzer.extract_type_annotations(source, function.function_name, function.starting_line or 1)
 
         # If this is a class method, also extract types from class fields
         if function.is_method and function.parents:
@@ -939,7 +952,7 @@ class JavaScriptSupport:
 
         return found_definitions
 
-    def find_helper_functions(self, function: FunctionInfo, project_root: Path) -> list[HelperFunction]:
+    def find_helper_functions(self, function: FunctionToOptimize, project_root: Path) -> list[HelperFunction]:
         """Find helper functions called by the target function.
 
         Args:
@@ -956,12 +969,68 @@ class JavaScriptSupport:
             imports = analyzer.find_imports(source)
             return self._find_helper_functions(function, source, analyzer, imports, project_root)
         except Exception as e:
-            logger.warning("Failed to find helpers for %s: %s", function.name, e)
+            logger.warning("Failed to find helpers for %s: %s", function.function_name, e)
+            return []
+
+    def find_references(
+        self, function: FunctionToOptimize, project_root: Path, tests_root: Path | None = None, max_files: int = 500
+    ) -> list[ReferenceInfo]:
+        """Find all references (call sites) to a function across the codebase.
+
+        Uses tree-sitter to find all places where a JavaScript/TypeScript function
+        is called, including direct calls, callbacks, memoized versions, and re-exports.
+
+        Args:
+            function: The function to find references for.
+            project_root: Root of the project to search.
+            tests_root: Root of tests directory (references in tests are excluded).
+            max_files: Maximum number of files to search.
+
+        Returns:
+            List of ReferenceInfo objects describing each reference location.
+
+        """
+        from codeflash.languages.base import ReferenceInfo
+        from codeflash.languages.javascript.find_references import ReferenceFinder
+
+        try:
+            finder = ReferenceFinder(project_root)
+            refs = finder.find_references(function, max_files=max_files)
+
+            # Convert to ReferenceInfo and filter out tests
+            result: list[ReferenceInfo] = []
+            for ref in refs:
+                # Exclude test files if tests_root is provided
+                if tests_root:
+                    try:
+                        ref.file_path.relative_to(tests_root)
+                        continue  # Skip if in tests_root
+                    except ValueError:
+                        pass  # Not in tests_root, include it
+
+                result.append(
+                    ReferenceInfo(
+                        file_path=ref.file_path,
+                        line=ref.line,
+                        column=ref.column,
+                        end_line=ref.end_line,
+                        end_column=ref.end_column,
+                        context=ref.context,
+                        reference_type=ref.reference_type,
+                        import_name=ref.import_name,
+                        caller_function=ref.caller_function,
+                    )
+                )
+
+            return result
+
+        except Exception as e:
+            logger.warning("Failed to find references for %s: %s", function.function_name, e)
             return []
 
     # === Code Transformation ===
 
-    def replace_function(self, source: str, function: FunctionInfo, new_source: str) -> str:
+    def replace_function(self, source: str, function: FunctionToOptimize, new_source: str) -> str:
         """Replace a function in source code with new implementation.
 
         Uses node-based replacement to extract the method body from the optimized code
@@ -973,7 +1042,7 @@ class JavaScriptSupport:
 
         Args:
             source: Original source code.
-            function: FunctionInfo identifying the function to replace.
+            function: FunctionToOptimize identifying the function to replace.
             new_source: New source code containing the optimized function.
 
         Returns:
@@ -981,13 +1050,13 @@ class JavaScriptSupport:
             if new_source is empty or invalid.
 
         """
-        if function.start_line is None or function.end_line is None:
-            logger.error("Function %s has no line information", function.name)
+        if function.starting_line is None or function.ending_line is None:
+            logger.error("Function %s has no line information", function.function_name)
             return source
 
         # If new_source is empty or whitespace-only, return original unchanged
         if not new_source or not new_source.strip():
-            logger.warning("Empty new_source provided for %s, returning original", function.name)
+            logger.warning("Empty new_source provided for %s, returning original", function.function_name)
             return source
 
         # Get analyzer for parsing
@@ -1001,19 +1070,21 @@ class JavaScriptSupport:
         stripped_new_source = new_source.strip()
         if stripped_new_source.startswith("/**"):
             # new_source includes JSDoc, use full replacement to apply the new JSDoc
-            if not self._contains_function_declaration(new_source, function.name, analyzer):
-                logger.warning("new_source does not contain function %s, returning original", function.name)
+            if not self._contains_function_declaration(new_source, function.function_name, analyzer):
+                logger.warning("new_source does not contain function %s, returning original", function.function_name)
                 return source
             return self._replace_function_text_based(source, function, new_source, analyzer)
 
         # Extract just the method body from the new source
-        new_body = self._extract_function_body(new_source, function.name, analyzer)
+        new_body = self._extract_function_body(new_source, function.function_name, analyzer)
         if new_body is None:
-            logger.warning("Could not extract body for %s from optimized code, using full replacement", function.name)
+            logger.warning(
+                "Could not extract body for %s from optimized code, using full replacement", function.function_name
+            )
             # Verify that new_source contains actual code before falling back to text replacement
             # This prevents deletion of the original function when new_source is invalid
-            if not self._contains_function_declaration(new_source, function.name, analyzer):
-                logger.warning("new_source does not contain function %s, returning original", function.name)
+            if not self._contains_function_declaration(new_source, function.function_name, analyzer):
+                logger.warning("new_source does not contain function %s, returning original", function.function_name)
                 return source
             return self._replace_function_text_based(source, function, new_source, analyzer)
 
@@ -1141,7 +1212,7 @@ class JavaScriptSupport:
         return source_bytes[body_node.start_byte : body_node.end_byte].decode("utf8")
 
     def _replace_function_body(
-        self, source: str, function: FunctionInfo, new_body: str, analyzer: TreeSitterAnalyzer
+        self, source: str, function: FunctionToOptimize, new_body: str, analyzer: TreeSitterAnalyzer
     ) -> str:
         """Replace the body of a function in source code with new body content.
 
@@ -1149,7 +1220,7 @@ class JavaScriptSupport:
 
         Args:
             source: Original source code.
-            function: FunctionInfo identifying the function to modify.
+            function: FunctionToOptimize identifying the function to modify.
             new_body: New body content (including braces).
             analyzer: TreeSitterAnalyzer for parsing.
 
@@ -1200,9 +1271,9 @@ class JavaScriptSupport:
 
             return None
 
-        func_node = find_function_at_line(tree.root_node, function.name, function.start_line)
+        func_node = find_function_at_line(tree.root_node, function.function_name, function.starting_line)
         if not func_node:
-            logger.warning("Could not find function %s at line %s", function.name, function.start_line)
+            logger.warning("Could not find function %s at line %s", function.function_name, function.starting_line)
             return source
 
         # Find the body node in the original
@@ -1214,7 +1285,7 @@ class JavaScriptSupport:
                     break
 
         if not body_node:
-            logger.warning("Could not find body for function %s", function.name)
+            logger.warning("Could not find body for function %s", function.function_name)
             return source
 
         # Get the indentation of the original body's opening brace
@@ -1282,7 +1353,7 @@ class JavaScriptSupport:
         return result.decode("utf8")
 
     def _replace_function_text_based(
-        self, source: str, function: FunctionInfo, new_source: str, analyzer: TreeSitterAnalyzer
+        self, source: str, function: FunctionToOptimize, new_source: str, analyzer: TreeSitterAnalyzer
     ) -> str:
         """Fallback text-based replacement when node-based replacement fails.
 
@@ -1290,7 +1361,7 @@ class JavaScriptSupport:
 
         Args:
             source: Original source code.
-            function: FunctionInfo identifying the function to replace.
+            function: FunctionToOptimize identifying the function to replace.
             new_source: New function source code.
             analyzer: TreeSitterAnalyzer for parsing.
 
@@ -1307,16 +1378,16 @@ class JavaScriptSupport:
         tree_functions = analyzer.find_functions(source, include_methods=True, include_arrow_functions=True)
         target_func = None
         for func in tree_functions:
-            if func.name == function.name and func.start_line == function.start_line:
+            if func.name == function.function_name and func.start_line == function.starting_line:
                 target_func = func
                 break
 
         # Use doc_start_line if available, otherwise fall back to start_line
-        effective_start = (target_func.doc_start_line if target_func else None) or function.start_line
+        effective_start = (target_func.doc_start_line if target_func else None) or function.starting_line
 
         # Get indentation from original function's first line
-        if function.start_line <= len(lines):
-            original_first_line = lines[function.start_line - 1]
+        if function.starting_line <= len(lines):
+            original_first_line = lines[function.starting_line - 1]
             original_indent = len(original_first_line) - len(original_first_line.lstrip())
         else:
             original_indent = 0
@@ -1359,7 +1430,7 @@ class JavaScriptSupport:
 
         # Build result
         before = lines[: effective_start - 1]
-        after = lines[function.end_line :]
+        after = lines[function.ending_line :]
 
         result_lines = before + new_lines + after
         return "".join(result_lines)
@@ -1510,7 +1581,7 @@ class JavaScriptSupport:
     # === Instrumentation ===
 
     def instrument_for_behavior(
-        self, source: str, functions: Sequence[FunctionInfo], output_file: Path | None = None
+        self, source: str, functions: Sequence[FunctionToOptimize], output_file: Path | None = None
     ) -> str:
         """Add behavior instrumentation to capture inputs/outputs.
 
@@ -1539,7 +1610,7 @@ class JavaScriptSupport:
         tracer = JavaScriptTracer(output_file)
         return tracer.instrument_source(source, functions[0].file_path, list(functions))
 
-    def instrument_for_benchmarking(self, test_source: str, target_function: FunctionInfo) -> str:
+    def instrument_for_benchmarking(self, test_source: str, target_function: FunctionToOptimize) -> str:
         """Add timing instrumentation to test code.
 
         For JavaScript/Jest, we can use Jest's built-in timing or add custom timing.
@@ -1769,51 +1840,98 @@ class JavaScriptSupport:
             rel_path = source_file.relative_to(project_root)
             return "../" + rel_path.with_suffix("").as_posix()
 
+    def verify_requirements(self, project_root: Path, test_framework: str = "jest") -> tuple[bool, list[str]]:
+        """Verify that all JavaScript requirements are met.
+
+        Checks for:
+        1. Node.js installation
+        2. npm availability
+        3. Test framework (jest/vitest) installation
+        4. node_modules existence
+
+        Args:
+            project_root: The project root directory.
+            test_framework: The test framework to check for ("jest" or "vitest").
+
+        Returns:
+            Tuple of (success, list of error messages).
+
+        """
+        errors: list[str] = []
+
+        # Check Node.js
+        try:
+            result = subprocess.run(["node", "--version"], check=False, capture_output=True, text=True, timeout=10)
+            if result.returncode != 0:
+                errors.append("Node.js is not installed. Please install Node.js 18+ from https://nodejs.org/")
+        except FileNotFoundError:
+            errors.append("Node.js is not installed. Please install Node.js 18+ from https://nodejs.org/")
+        except Exception as e:
+            errors.append(f"Failed to check Node.js: {e}")
+
+        # Check npm
+        try:
+            result = subprocess.run(["npm", "--version"], check=False, capture_output=True, text=True, timeout=10)
+            if result.returncode != 0:
+                errors.append("npm is not available. Please ensure npm is installed with Node.js.")
+        except FileNotFoundError:
+            errors.append("npm is not available. Please ensure npm is installed with Node.js.")
+        except Exception as e:
+            errors.append(f"Failed to check npm: {e}")
+
+        # Check node_modules exists
+        node_modules = project_root / "node_modules"
+        if not node_modules.exists():
+            errors.append(
+                f"node_modules not found in {project_root}. Please run 'npm install' to install dependencies."
+            )
+        else:
+            # Check test framework is installed
+            framework_path = node_modules / test_framework
+            if not framework_path.exists():
+                errors.append(
+                    f"{test_framework} is not installed. "
+                    f"Please run 'npm install --save-dev {test_framework}' to install it."
+                )
+
+        return len(errors) == 0, errors
+
     def ensure_runtime_environment(self, project_root: Path) -> bool:
         """Ensure codeflash npm package is installed.
 
         Attempts to install the npm package for test instrumentation.
-        Falls back to copying files if npm install fails.
 
         Args:
             project_root: The project root directory.
 
         Returns:
-            True if npm package is installed, False if falling back to file copy.
+            True if npm package is installed, False otherwise.
 
         """
-        import subprocess
-
         from codeflash.cli_cmds.console import logger
 
-        # Check if package is already installed
         node_modules_pkg = project_root / "node_modules" / "codeflash"
         if node_modules_pkg.exists():
             logger.debug("codeflash already installed")
             return True
 
-        # Try to install from local package first (for development)
-        local_package_path = Path(__file__).parent.parent.parent.parent / "packages" / "cli"
-        if local_package_path.exists():
-            try:
-                result = subprocess.run(
-                    ["npm", "install", "--save-dev", str(local_package_path)],
-                    check=False,
-                    cwd=project_root,
-                    capture_output=True,
-                    text=True,
-                    timeout=120,
-                )
-                if result.returncode == 0:
-                    logger.debug("Installed codeflash from local package")
-                    return True
-                logger.warning(f"Failed to install local package: {result.stderr}")
-            except Exception as e:
-                logger.warning(f"Error installing local package: {e}")
+        try:
+            result = subprocess.run(
+                ["npm", "install", "--save-dev", "codeflash"],
+                check=False,
+                cwd=project_root,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode == 0:
+                logger.debug("Installed codeflash from npm registry")
+                return True
+            logger.warning(f"Failed to install codeflash: {result.stderr}")
+        except Exception as e:
+            logger.warning(f"Error installing codeflash: {e}")
 
-        # Could try npm registry here in the future:
-        # subprocess.run(["npm", "install", "--save-dev", "codeflash"], ...)
-
+        logger.error("Could not install codeflash. Please run: npm install --save-dev codeflash")
         return False
 
     def instrument_existing_test(
@@ -1853,7 +1971,7 @@ class JavaScriptSupport:
     def instrument_source_for_line_profiler(
         # TODO: use the context to instrument helper files also
         self,
-        func_info: FunctionInfo,
+        func_info: FunctionToOptimize,
         line_profiler_output_file: Path,
     ) -> bool:
         from codeflash.languages.javascript.line_profiler import JavaScriptLineProfiler
@@ -1925,8 +2043,9 @@ class JavaScriptSupport:
         project_root: Path | None = None,
         enable_coverage: bool = False,
         candidate_index: int = 0,
+        test_framework: str | None = None,
     ) -> tuple[Path, Any, Path | None, Path | None]:
-        """Run Jest behavioral tests.
+        """Run behavioral tests using the detected test framework.
 
         Args:
             test_paths: TestFiles object containing test file information.
@@ -1936,11 +2055,29 @@ class JavaScriptSupport:
             project_root: Project root directory.
             enable_coverage: Whether to collect coverage information.
             candidate_index: Index of the candidate being tested.
+            test_framework: Test framework to use ("jest" or "vitest"). If None, uses singleton.
 
         Returns:
             Tuple of (result_file_path, subprocess_result, coverage_path, config_path).
 
         """
+        from codeflash.languages.test_framework import get_js_test_framework_or_default
+
+        framework = test_framework or get_js_test_framework_or_default()
+
+        if framework == "vitest":
+            from codeflash.languages.javascript.vitest_runner import run_vitest_behavioral_tests
+
+            return run_vitest_behavioral_tests(
+                test_paths=test_paths,
+                test_env=test_env,
+                cwd=cwd,
+                timeout=timeout,
+                project_root=project_root,
+                enable_coverage=enable_coverage,
+                candidate_index=candidate_index,
+            )
+
         from codeflash.languages.javascript.test_runner import run_jest_behavioral_tests
 
         return run_jest_behavioral_tests(
@@ -1963,8 +2100,9 @@ class JavaScriptSupport:
         min_loops: int = 5,
         max_loops: int = 100_000,
         target_duration_seconds: float = 10.0,
+        test_framework: str | None = None,
     ) -> tuple[Path, Any]:
-        """Run Jest benchmarking tests.
+        """Run benchmarking tests using the detected test framework.
 
         Args:
             test_paths: TestFiles object containing test file information.
@@ -1975,11 +2113,30 @@ class JavaScriptSupport:
             min_loops: Minimum number of loops for benchmarking.
             max_loops: Maximum number of loops for benchmarking.
             target_duration_seconds: Target duration for benchmarking in seconds.
+            test_framework: Test framework to use ("jest" or "vitest"). If None, uses singleton.
 
         Returns:
             Tuple of (result_file_path, subprocess_result).
 
         """
+        from codeflash.languages.test_framework import get_js_test_framework_or_default
+
+        framework = test_framework or get_js_test_framework_or_default()
+
+        if framework == "vitest":
+            from codeflash.languages.javascript.vitest_runner import run_vitest_benchmarking_tests
+
+            return run_vitest_benchmarking_tests(
+                test_paths=test_paths,
+                test_env=test_env,
+                cwd=cwd,
+                timeout=timeout,
+                project_root=project_root,
+                min_loops=min_loops,
+                max_loops=max_loops,
+                target_duration_ms=int(target_duration_seconds * 1000),
+            )
+
         from codeflash.languages.javascript.test_runner import run_jest_benchmarking_tests
 
         return run_jest_benchmarking_tests(
@@ -2001,8 +2158,9 @@ class JavaScriptSupport:
         timeout: int | None = None,
         project_root: Path | None = None,
         line_profile_output_file: Path | None = None,
+        test_framework: str | None = None,
     ) -> tuple[Path, Any]:
-        """Run Jest tests for line profiling.
+        """Run tests for line profiling using the detected test framework.
 
         Args:
             test_paths: TestFiles object containing test file information.
@@ -2011,11 +2169,28 @@ class JavaScriptSupport:
             timeout: Optional timeout in seconds.
             project_root: Project root directory.
             line_profile_output_file: Path where line profile results will be written.
+            test_framework: Test framework to use ("jest" or "vitest"). If None, uses singleton.
 
         Returns:
             Tuple of (result_file_path, subprocess_result).
 
         """
+        from codeflash.languages.test_framework import get_js_test_framework_or_default
+
+        framework = test_framework or get_js_test_framework_or_default()
+
+        if framework == "vitest":
+            from codeflash.languages.javascript.vitest_runner import run_vitest_line_profile_tests
+
+            return run_vitest_line_profile_tests(
+                test_paths=test_paths,
+                test_env=test_env,
+                cwd=cwd,
+                timeout=timeout,
+                project_root=project_root,
+                line_profile_output_file=line_profile_output_file,
+            )
+
         from codeflash.languages.javascript.test_runner import run_jest_line_profile_tests
 
         return run_jest_line_profile_tests(

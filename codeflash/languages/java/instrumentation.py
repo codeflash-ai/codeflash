@@ -16,30 +16,64 @@ from __future__ import annotations
 
 import logging
 import re
-from pathlib import Path
+from functools import lru_cache
 from typing import TYPE_CHECKING
-
-from codeflash.languages.base import FunctionInfo
-from codeflash.languages.java.parser import JavaAnalyzer
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from pathlib import Path
     from typing import Any
+
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.languages.java.parser import JavaAnalyzer
 
 logger = logging.getLogger(__name__)
 
 
 def _get_function_name(func: Any) -> str:
-    """Get the function name from either FunctionInfo or FunctionToOptimize."""
-    if hasattr(func, "name"):
-        return func.name
+    """Get the function name from FunctionToOptimize."""
     if hasattr(func, "function_name"):
         return func.function_name
-    raise AttributeError(f"Cannot get function name from {type(func)}")
+    if hasattr(func, "name"):
+        return func.name
+    msg = f"Cannot get function name from {type(func)}"
+    raise AttributeError(msg)
+
+
+# Pattern to detect primitive array types in assertions
+_PRIMITIVE_ARRAY_PATTERN = re.compile(r"new\s+(int|long|double|float|short|byte|char|boolean)\s*\[\s*\]")
+
+
+def _infer_array_cast_type(line: str) -> str | None:
+    """Infer the array cast type needed for assertion methods.
+
+    When a line contains an assertion like assertArrayEquals with a primitive array
+    as the first argument, we need to cast the captured Object result back to
+    that primitive array type.
+
+    Args:
+        line: The source line containing the assertion.
+
+    Returns:
+        The cast type (e.g., "int[]") if needed, None otherwise.
+
+    """
+    # Only apply to assertion methods that take arrays
+    assertion_methods = ("assertArrayEquals", "assertArrayNotEquals")
+    if not any(method in line for method in assertion_methods):
+        return None
+
+    # Look for primitive array type in the line (usually the first/expected argument)
+    match = _PRIMITIVE_ARRAY_PATTERN.search(line)
+    if match:
+        primitive_type = match.group(1)
+        return f"{primitive_type}[]"
+
+    return None
 
 
 def _get_qualified_name(func: Any) -> str:
-    """Get the qualified name from either FunctionInfo or FunctionToOptimize."""
+    """Get the qualified name from FunctionToOptimize."""
     if hasattr(func, "qualified_name"):
         return func.qualified_name
     # Build qualified name from function_name and parents
@@ -55,9 +89,7 @@ def _get_qualified_name(func: Any) -> str:
 
 
 def instrument_for_behavior(
-    source: str,
-    functions: Sequence[FunctionInfo],
-    analyzer: JavaAnalyzer | None = None,
+    source: str, functions: Sequence[FunctionToOptimize], analyzer: JavaAnalyzer | None = None
 ) -> str:
     """Add behavior instrumentation to capture inputs/outputs.
 
@@ -83,9 +115,7 @@ def instrument_for_behavior(
 
 
 def instrument_for_benchmarking(
-    test_source: str,
-    target_function: FunctionInfo,
-    analyzer: JavaAnalyzer | None = None,
+    test_source: str, target_function: FunctionToOptimize, analyzer: JavaAnalyzer | None = None
 ) -> str:
     """Add timing instrumentation to test code.
 
@@ -109,7 +139,7 @@ def instrument_for_benchmarking(
 def instrument_existing_test(
     test_path: Path,
     call_positions: Sequence,
-    function_to_optimize: Any,  # FunctionInfo or FunctionToOptimize
+    function_to_optimize: Any,  # FunctionToOptimize or FunctionToOptimize
     tests_project_root: Path,
     mode: str,  # "behavior" or "performance"
     analyzer: JavaAnalyzer | None = None,
@@ -138,7 +168,7 @@ def instrument_existing_test(
     try:
         source = test_path.read_text(encoding="utf-8")
     except Exception as e:
-        logger.error("Failed to read test file %s: %s", test_path, e)
+        logger.exception("Failed to read test file %s: %s", test_path, e)
         return False, f"Failed to read test file: {e}"
 
     func_name = _get_function_name(function_to_optimize)
@@ -168,19 +198,9 @@ def instrument_existing_test(
         )
     else:
         # Behavior mode: add timing instrumentation that also writes to SQLite
-        modified_source = _add_behavior_instrumentation(
-            modified_source,
-            original_class_name,
-            func_name,
-        )
+        modified_source = _add_behavior_instrumentation(modified_source, original_class_name, func_name)
 
-    logger.debug(
-        "Java %s testing for %s: renamed class %s -> %s",
-        mode,
-        func_name,
-        original_class_name,
-        new_class_name,
-    )
+    logger.debug("Java %s testing for %s: renamed class %s -> %s", mode, func_name, original_class_name, new_class_name)
 
     return True, modified_source
 
@@ -240,10 +260,9 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                         result.append(imp)
                 imports_added = True
                 continue
-            if stripped.startswith("public class") or stripped.startswith("class"):
+            if stripped.startswith(("public class", "class")):
                 # No imports found, add before class
-                for imp in import_statements:
-                    result.append(imp)
+                result.extend(import_statements)
                 result.append("")
                 imports_added = True
 
@@ -256,6 +275,10 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
     result = []
     i = 0
     iteration_counter = 0
+    helper_added = False
+
+    # Pre-compile the regex pattern once
+    method_call_pattern = _get_method_call_pattern(func_name)
 
     while i < len(lines):
         line = lines[i]
@@ -263,6 +286,8 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
 
         # Look for @Test annotation
         if stripped.startswith("@Test"):
+            if not helper_added:
+                helper_added = True
             result.append(line)
             i += 1
 
@@ -299,11 +324,10 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
 
             while i < len(lines) and brace_depth > 0:
                 body_line = lines[i]
-                for ch in body_line:
-                    if ch == "{":
-                        brace_depth += 1
-                    elif ch == "}":
-                        brace_depth -= 1
+                # Count braces more efficiently using string methods
+                open_count = body_line.count("{")
+                close_count = body_line.count("}")
+                brace_depth += open_count - close_count
 
                 if brace_depth > 0:
                     body_lines.append(body_line)
@@ -325,13 +349,42 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
             # - new ClassName(args)
             # - this
             method_call_pattern = re.compile(
-                rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)",
-                re.MULTILINE
+                rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)", re.MULTILINE
             )
 
+            # Track lambda block nesting depth to avoid wrapping calls inside lambda bodies.
+            # assertThrows/assertDoesNotThrow expect an Executable (void functional interface),
+            # and wrapping the call in a variable assignment would turn the void-compatible
+            # lambda into a value-returning lambda, causing a compilation error.
+            # Handles both expression lambdas: () -> func()
+            # and block lambdas: () -> { func(); }
+            lambda_brace_depth = 0
+
             for body_line in body_lines:
+                # Detect new block lambda openings: () -> {
+                is_lambda_open = bool(re.search(r"\(\s*\)\s*->\s*\{", body_line))
+
+                # Update lambda brace depth tracking for block lambdas
+                if is_lambda_open or lambda_brace_depth > 0:
+                    open_braces = body_line.count("{")
+                    close_braces = body_line.count("}")
+                    if is_lambda_open and lambda_brace_depth == 0:
+                        # Starting a new lambda block - only count braces from this lambda
+                        lambda_brace_depth = open_braces - close_braces
+                    else:
+                        lambda_brace_depth += open_braces - close_braces
+                    # Ensure depth doesn't go below 0
+                    lambda_brace_depth = max(0, lambda_brace_depth)
+
+                inside_lambda = lambda_brace_depth > 0 or bool(re.search(r"\(\s*\)\s*->", body_line))
+
                 # Check if this line contains a call to the target function
                 if func_name in body_line and "(" in body_line:
+                    # Skip wrapping if the function call is inside a lambda expression
+                    if inside_lambda:
+                        wrapped_body_lines.append(body_line)
+                        continue
+
                     line_indent = len(body_line) - len(body_line.lstrip())
                     line_indent_str = " " * line_indent
 
@@ -345,27 +398,39 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                             var_name = f"_cf_result{iter_id}_{call_counter}"
                             full_call = match.group(0)  # e.g., "new StringUtils().reverse(\"hello\")"
 
-                            # Replace this occurrence with the variable
-                            new_line = new_line[:match.start()] + var_name + new_line[match.end():]
+                            # Check if we need to cast the result for assertions with primitive arrays
+                            # This handles assertArrayEquals(int[], int[]) etc.
+                            cast_type = _infer_array_cast_type(body_line)
+                            var_with_cast = f"({cast_type}){var_name}" if cast_type else var_name
 
-                            # Insert capture line
-                            capture_line = f"{line_indent_str}Object {var_name} = {full_call};"
+                            # Replace this occurrence with the variable (with cast if needed)
+                            new_line = new_line[: match.start()] + var_with_cast + new_line[match.end() :]
+
+                            # Use 'var' instead of 'Object' to preserve the exact return type.
+                            # This avoids boxing mismatches (e.g., assertEquals(int, Object) where
+                            # Object is boxed Long but expected is boxed Integer). Requires Java 10+.
+                            capture_line = f"{line_indent_str}var {var_name} = {full_call};"
                             wrapped_body_lines.append(capture_line)
 
-                        wrapped_body_lines.append(new_line)
+                        # Check if the line is now just a variable reference (invalid statement)
+                        # This happens when the original line was just a void method call
+                        # e.g., "BubbleSort.bubbleSort(original);" becomes "_cf_result1_1;"
+                        stripped_new = new_line.strip().rstrip(";").strip()
+                        if stripped_new and stripped_new not in (var_name, var_with_cast):
+                            wrapped_body_lines.append(new_line)
                     else:
                         wrapped_body_lines.append(body_line)
                 else:
                     wrapped_body_lines.append(body_line)
 
             # Build the serialized return value expression
-            # If we captured any calls, serialize the last one; otherwise serialize null
-            # Note: We use String.valueOf() instead of Gson to avoid external dependencies
+            # If we captured any calls, serialize the last one via Kryo; otherwise null bytes
+            # The (Object) cast ensures primitives get autoboxed before being passed to the method.
             if call_counter > 0:
                 result_var = f"_cf_result{iter_id}_{call_counter}"
-                serialize_expr = f"String.valueOf({result_var})"
+                serialize_expr = f"com.codeflash.Serializer.serialize((Object) {result_var})"
             else:
-                serialize_expr = '"null"'
+                serialize_expr = "null"
 
             # Add behavior instrumentation code
             behavior_start_code = [
@@ -380,7 +445,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 f'{indent}if (_cf_testIteration{iter_id} == null) _cf_testIteration{iter_id} = "0";',
                 f'{indent}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + "######$!");',
                 f"{indent}long _cf_start{iter_id} = System.nanoTime();",
-                f"{indent}String _cf_serializedResult{iter_id} = null;",
+                f"{indent}byte[] _cf_serializedResult{iter_id} = null;",
                 f"{indent}try {{",
             ]
             result.extend(behavior_start_code)
@@ -408,7 +473,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 f'{indent}                    _cf_stmt{iter_id}.execute("CREATE TABLE IF NOT EXISTS test_results (" +',
                 f'{indent}                        "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +',
                 f'{indent}                        "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +',
-                f'{indent}                        "runtime INTEGER, return_value TEXT, verification_type TEXT)");',
+                f'{indent}                        "runtime INTEGER, return_value BLOB, verification_type TEXT)");',
                 f"{indent}                }}",
                 f'{indent}                String _cf_sql{iter_id} = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";',
                 f"{indent}                try (PreparedStatement _cf_pstmt{iter_id} = _cf_conn{iter_id}.prepareStatement(_cf_sql{iter_id})) {{",
@@ -419,7 +484,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 f"{indent}                    _cf_pstmt{iter_id}.setInt(5, _cf_loop{iter_id});",
                 f'{indent}                    _cf_pstmt{iter_id}.setString(6, _cf_iter{iter_id} + "_" + _cf_testIteration{iter_id});',
                 f"{indent}                    _cf_pstmt{iter_id}.setLong(7, _cf_dur{iter_id});",
-                f"{indent}                    _cf_pstmt{iter_id}.setString(8, _cf_serializedResult{iter_id});",  # Serialized return value
+                f"{indent}                    _cf_pstmt{iter_id}.setBytes(8, _cf_serializedResult{iter_id});",  # Kryo-serialized return value
                 f'{indent}                    _cf_pstmt{iter_id}.setString(9, "function_call");',
                 f"{indent}                    _cf_pstmt{iter_id}.executeUpdate();",
                 f"{indent}                }}",
@@ -497,8 +562,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 i += 1
 
             # Add the method signature lines
-            for ml in method_lines:
-                result.append(ml)
+            result.extend(method_lines)
             i += 1
 
             # We're now inside the method body
@@ -573,10 +637,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
 
 
 def create_benchmark_test(
-    target_function: FunctionInfo,
-    test_setup_code: str,
-    invocation_code: str,
-    iterations: int = 1000,
+    target_function: FunctionToOptimize, test_setup_code: str, invocation_code: str, iterations: int = 1000
 ) -> str:
     """Create a benchmark test for a function.
 
@@ -594,7 +655,7 @@ def create_benchmark_test(
     method_id = _get_qualified_name(target_function)
     class_name = getattr(target_function, "class_name", None) or "Target"
 
-    benchmark_code = f"""
+    return f"""
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 
@@ -628,7 +689,6 @@ public class {class_name}Benchmark {{
     }}
 }}
 """
-    return benchmark_code
 
 
 def remove_instrumentation(source: str) -> str:
@@ -654,6 +714,11 @@ def instrument_generated_java_test(
 ) -> str:
     """Instrument a generated Java test for behavior or performance testing.
 
+    For generated tests (AI-generated), this function:
+    1. Removes assertions and captures function return values (for regression testing)
+    2. Renames the class to include mode suffix
+    3. Adds timing instrumentation for performance mode
+
     Args:
         test_code: The generated test source code.
         function_name: Name of the function being tested.
@@ -664,6 +729,13 @@ def instrument_generated_java_test(
         Instrumented test source code.
 
     """
+    from codeflash.languages.java.remove_asserts import transform_java_assertions
+
+    # For behavior mode, remove assertions and capture function return values
+    # This converts the generated test into a regression test that captures outputs
+    if mode == "behavior":
+        test_code = transform_java_assertions(test_code, function_name, qualified_name)
+
     # Extract class name from the test code
     # Use pattern that starts at beginning of line to avoid matching words in comments
     class_match = re.search(r"^(?:public\s+)?class\s+(\w+)", test_code, re.MULTILINE)
@@ -681,9 +753,7 @@ def instrument_generated_java_test(
 
     # Rename the class in the source
     modified_code = re.sub(
-        rf"\b(public\s+)?class\s+{re.escape(original_class_name)}\b",
-        rf"\1class {new_class_name}",
-        test_code,
+        rf"\b(public\s+)?class\s+{re.escape(original_class_name)}\b", rf"\1class {new_class_name}", test_code
     )
 
     # For performance mode, add timing instrumentation
@@ -716,7 +786,7 @@ def _add_import(source: str, import_statement: str) -> str:
     # Find the last import or package statement
     for i, line in enumerate(lines):
         stripped = line.strip()
-        if stripped.startswith("import ") or stripped.startswith("package "):
+        if stripped.startswith(("import ", "package ")):
             insert_idx = i + 1
         elif stripped and not stripped.startswith("//") and not stripped.startswith("/*"):
             # First non-import, non-comment line
@@ -726,3 +796,11 @@ def _add_import(source: str, import_statement: str) -> str:
 
     lines.insert(insert_idx, import_statement + "\n")
     return "".join(lines)
+
+
+@lru_cache(maxsize=128)
+def _get_method_call_pattern(func_name: str):
+    """Cache compiled regex patterns for method call matching."""
+    return re.compile(
+        rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)", re.MULTILINE
+    )

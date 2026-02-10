@@ -23,8 +23,7 @@ from codeflash.context.unused_definition_remover import (
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize  # noqa: TC001
 
 # Language support imports for multi-language code context extraction
-from codeflash.languages import is_python
-from codeflash.languages.base import Language
+from codeflash.languages import Language, is_python
 from codeflash.models.models import (
     CodeContextType,
     CodeOptimizationContext,
@@ -234,27 +233,13 @@ def get_code_optimization_context_for_language(
 
     """
     from codeflash.languages import get_language_support
-    from codeflash.languages.base import FunctionInfo, ParentInfo
 
     # Get language support for this function
     language = Language(function_to_optimize.language)
     lang_support = get_language_support(language)
 
-    # Convert FunctionToOptimize to FunctionInfo for language support
-    parents = tuple(ParentInfo(name=p.name, type=p.type) for p in function_to_optimize.parents)
-    func_info = FunctionInfo(
-        name=function_to_optimize.function_name,
-        file_path=function_to_optimize.file_path,
-        start_line=function_to_optimize.starting_line or 1,
-        end_line=function_to_optimize.ending_line or 1,
-        parents=parents,
-        is_async=function_to_optimize.is_async,
-        is_method=len(function_to_optimize.parents) > 0,
-        language=language,
-    )
-
     # Extract code context using language support
-    code_context = lang_support.extract_code_context(func_info, project_root_path, project_root_path)
+    code_context = lang_support.extract_code_context(function_to_optimize, project_root_path, project_root_path)
 
     # Build imports string if available
     imports_code = "\n".join(code_context.imports) if code_context.imports else ""
@@ -294,10 +279,9 @@ def get_code_optimization_context_for_language(
         helper_code = "\n\n".join(h.source_code for h in same_file_helpers)
         target_file_code = target_file_code + "\n\n" + helper_code
 
-    # Add global variables (module-level declarations) referenced by the function and helpers
-    # These should be included in read-writable context so AI can modify them if needed
-    if code_context.read_only_context:
-        target_file_code = code_context.read_only_context + "\n\n" + target_file_code
+    # Note: code_context.read_only_context contains type definitions and global variables
+    # These should be passed as read-only context to the AI, not prepended to the target code
+    # If prepended to target code, the AI treats them as code to optimize and includes them in output
 
     # Add imports to target file code
     if imports_code:
@@ -350,8 +334,9 @@ def get_code_optimization_context_for_language(
     return CodeOptimizationContext(
         testgen_context=testgen_context,
         read_writable_code=read_writable_code,
-        # Global variables are now included in read-writable code, so don't duplicate in read-only
-        read_only_context_code="",
+        # Pass type definitions and globals as read-only context for the AI
+        # This way the AI sees them as context but doesn't include them in optimized output
+        read_only_context_code=code_context.read_only_context,
         hashing_code_context=read_writable_code.flat,
         hashing_code_context_hash=code_hash,
         helper_functions=helper_function_sources,
@@ -761,7 +746,11 @@ def get_external_base_class_inits(code_context: CodeStringsMarkdown, project_roo
         return CodeStringsMarkdown(code_strings=[])
 
     imported_names: dict[str, str] = {}
-    external_bases: list[tuple[str, str]] = []
+    # Use a set to deduplicate external base entries to avoid repeated expensive checks/imports.
+    external_bases_set: set[tuple[str, str]] = set()
+    # Local cache to avoid repeated _is_project_module calls for the same module_name.
+    is_project_cache: dict[str, bool] = {}
+
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module:
             for alias in node.names:
@@ -778,21 +767,31 @@ def get_external_base_class_inits(code_context: CodeStringsMarkdown, project_roo
 
                 if base_name and base_name in imported_names:
                     module_name = imported_names[base_name]
-                    if not _is_project_module(module_name, project_root_path):
-                        external_bases.append((base_name, module_name))
+                    # Check cache first to avoid repeated expensive checks.
+                    cached = is_project_cache.get(module_name)
+                    if cached is None:
+                        is_project = _is_project_module(module_name, project_root_path)
+                        is_project_cache[module_name] = is_project
+                    else:
+                        is_project = cached
 
-    if not external_bases:
+                    if not is_project:
+                        external_bases_set.add((base_name, module_name))
+
+    if not external_bases_set:
         return CodeStringsMarkdown(code_strings=[])
 
     code_strings: list[CodeString] = []
-    extracted: set[tuple[str, str]] = set()
+    # Cache imported modules to avoid repeated importlib.import_module calls.
+    imported_module_cache: dict[str, object] = {}
 
-    for base_name, module_name in external_bases:
-        if (module_name, base_name) in extracted:
-            continue
-
+    for base_name, module_name in external_bases_set:
         try:
-            module = importlib.import_module(module_name)
+            module = imported_module_cache.get(module_name)
+            if module is None:
+                module = importlib.import_module(module_name)
+                imported_module_cache[module_name] = module
+
             base_class = getattr(module, base_name, None)
             if base_class is None:
                 continue
@@ -814,7 +813,6 @@ def get_external_base_class_inits(code_context: CodeStringsMarkdown, project_roo
 
             class_source = f"class {base_name}:\n" + textwrap.indent(init_source, "    ")
             code_strings.append(CodeString(code=class_source, file_path=class_file))
-            extracted.add((module_name, base_name))
 
         except (ImportError, ModuleNotFoundError, AttributeError):
             logger.debug(f"Failed to extract __init__ for {module_name}.{base_name}")
@@ -869,12 +867,13 @@ def extract_imports_for_class(module_tree: ast.Module, class_node: ast.ClassDef,
                 needed_names.add(decorator.func.value.id)
 
     # Get type annotation names from class body (for dataclass fields)
-    for item in ast.walk(class_node):
+    for item in class_node.body:
         if isinstance(item, ast.AnnAssign) and item.annotation:
             collect_names_from_annotation(item.annotation, needed_names)
         # Also check for field() calls which are common in dataclasses
-        if isinstance(item, ast.Call) and isinstance(item.func, ast.Name):
-            needed_names.add(item.func.id)
+        elif isinstance(item, ast.Assign) and isinstance(item.value, ast.Call):
+            if isinstance(item.value.func, ast.Name):
+                needed_names.add(item.value.func.id)
 
     # Find imports that provide these names
     import_lines: list[str] = []

@@ -20,19 +20,99 @@
  *
  * Usage:
  *   npx jest --runner=codeflash/loop-runner
+ *
+ * NOTE: This runner requires jest-runner to be installed in your project.
+ *       It is a Jest-specific feature and does not work with Vitest.
+ *       For Vitest projects, capturePerf() does all loops internally in a single call.
  */
 
 'use strict';
 
 const { createRequire } = require('module');
 const path = require('path');
+const fs = require('fs');
 
-const jestRunnerPath = require.resolve('jest-runner');
-const internalRequire = createRequire(jestRunnerPath);
-const runTest = internalRequire('./runTest').default;
+/**
+ * Resolve jest-runner with monorepo support.
+ * Uses CODEFLASH_MONOREPO_ROOT environment variable if available,
+ * otherwise walks up the directory tree looking for node_modules/jest-runner.
+ */
+function resolveJestRunner() {
+    // Try standard resolution first (works in simple projects)
+    try {
+        return require.resolve('jest-runner');
+    } catch (e) {
+        // Standard resolution failed - try monorepo-aware resolution
+    }
+
+    // If Python detected a monorepo root, check there first
+    const monorepoRoot = process.env.CODEFLASH_MONOREPO_ROOT;
+    if (monorepoRoot) {
+        const jestRunnerPath = path.join(monorepoRoot, 'node_modules', 'jest-runner');
+        if (fs.existsSync(jestRunnerPath)) {
+            const packageJsonPath = path.join(jestRunnerPath, 'package.json');
+            if (fs.existsSync(packageJsonPath)) {
+                return jestRunnerPath;
+            }
+        }
+    }
+
+    // Fallback: Walk up from cwd looking for node_modules/jest-runner
+    const monorepoMarkers = ['yarn.lock', 'pnpm-workspace.yaml', 'lerna.json', 'package-lock.json'];
+    let currentDir = process.cwd();
+    const visitedDirs = new Set();
+
+    while (currentDir !== path.dirname(currentDir)) {
+        // Avoid infinite loops
+        if (visitedDirs.has(currentDir)) break;
+        visitedDirs.add(currentDir);
+
+        // Try node_modules/jest-runner at this level
+        const jestRunnerPath = path.join(currentDir, 'node_modules', 'jest-runner');
+        if (fs.existsSync(jestRunnerPath)) {
+            const packageJsonPath = path.join(jestRunnerPath, 'package.json');
+            if (fs.existsSync(packageJsonPath)) {
+                return jestRunnerPath;
+            }
+        }
+
+        // Check if this is a workspace root (has monorepo markers)
+        const isWorkspaceRoot = monorepoMarkers.some(marker =>
+            fs.existsSync(path.join(currentDir, marker))
+        );
+
+        if (isWorkspaceRoot) {
+            // Found workspace root but no jest-runner - stop searching
+            break;
+        }
+
+        currentDir = path.dirname(currentDir);
+    }
+
+    throw new Error('jest-runner not found');
+}
+
+// Try to load jest-runner - it's a peer dependency that must be installed by the user
+let runTest;
+let jestRunnerAvailable = false;
+
+try {
+    const jestRunnerPath = resolveJestRunner();
+    const internalRequire = createRequire(jestRunnerPath);
+    runTest = internalRequire('./runTest').default;
+    jestRunnerAvailable = true;
+} catch (e) {
+    // jest-runner not installed - this is expected for Vitest projects
+    // The runner will throw a helpful error if someone tries to use it without jest-runner
+    jestRunnerAvailable = false;
+}
 
 // Configuration
-const MAX_BATCHES = parseInt(process.env.CODEFLASH_PERF_LOOP_COUNT || '10000', 10);
+const PERF_LOOP_COUNT = parseInt(process.env.CODEFLASH_PERF_LOOP_COUNT || '10000', 10);
+const PERF_BATCH_SIZE = parseInt(process.env.CODEFLASH_PERF_BATCH_SIZE || '10', 10);
+// MAX_BATCHES = how many batches needed to reach PERF_LOOP_COUNT iterations
+// Add 1 to handle any rounding, but cap at PERF_LOOP_COUNT to avoid excessive batches
+const MAX_BATCHES = Math.min(Math.ceil(PERF_LOOP_COUNT / PERF_BATCH_SIZE) + 1, PERF_LOOP_COUNT);
 const TARGET_DURATION_MS = parseInt(process.env.CODEFLASH_PERF_TARGET_DURATION_MS || '10000', 10);
 const MIN_BATCHES = parseInt(process.env.CODEFLASH_PERF_MIN_LOOPS || '5', 10);
 
@@ -90,6 +170,14 @@ function deepCopy(obj, seen = new WeakMap()) {
  */
 class CodeflashLoopRunner {
     constructor(globalConfig, context) {
+        if (!jestRunnerAvailable) {
+            throw new Error(
+                'codeflash/loop-runner requires jest-runner to be installed.\n' +
+                'Please install it: npm install --save-dev jest-runner\n\n' +
+                'If you are using Vitest, the loop-runner is not needed - ' +
+                'Vitest projects use external looping handled by the Python runner.'
+            );
+        }
         this._globalConfig = globalConfig;
         this._context = context || {};
         this._eventEmitter = new SimpleEventEmitter();

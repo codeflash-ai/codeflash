@@ -17,11 +17,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from codeflash.languages.base import FunctionInfo
-from codeflash.languages.java.parser import JavaAnalyzer, JavaMethodNode, get_java_analyzer
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.languages.java.parser import get_java_analyzer
 
 if TYPE_CHECKING:
-    pass
+    from codeflash.languages.java.parser import JavaAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -35,11 +35,7 @@ class ParsedOptimization:
     new_helper_methods: list[str]  # Source text of new helper methods to add
 
 
-def _parse_optimization_source(
-    new_source: str,
-    target_method_name: str,
-    analyzer: JavaAnalyzer,
-) -> ParsedOptimization:
+def _parse_optimization_source(new_source: str, target_method_name: str, analyzer: JavaAnalyzer) -> ParsedOptimization:
     """Parse optimization source to extract method and additional class members.
 
     The new_source may contain:
@@ -96,18 +92,12 @@ def _parse_optimization_source(
                 new_fields.append(field.source_text)
 
     return ParsedOptimization(
-        target_method_source=target_method_source,
-        new_fields=new_fields,
-        new_helper_methods=new_helper_methods,
+        target_method_source=target_method_source, new_fields=new_fields, new_helper_methods=new_helper_methods
     )
 
 
 def _insert_class_members(
-    source: str,
-    class_name: str,
-    fields: list[str],
-    methods: list[str],
-    analyzer: JavaAnalyzer,
+    source: str, class_name: str, fields: list[str], methods: list[str], analyzer: JavaAnalyzer
 ) -> str:
     """Insert new class members (fields and methods) into a class.
 
@@ -212,10 +202,7 @@ def _insert_class_members(
 
 
 def replace_function(
-    source: str,
-    function: FunctionInfo,
-    new_source: str,
-    analyzer: JavaAnalyzer | None = None,
+    source: str, function: FunctionToOptimize, new_source: str, analyzer: JavaAnalyzer | None = None
 ) -> str:
     """Replace a function in source code with new implementation.
 
@@ -233,7 +220,7 @@ def replace_function(
 
     Args:
         source: Original source code.
-        function: FunctionInfo identifying the function to replace.
+        function: FunctionToOptimize identifying the function to replace.
         new_source: New function source code (may include class with helpers).
         analyzer: Optional JavaAnalyzer instance.
 
@@ -243,8 +230,12 @@ def replace_function(
     """
     analyzer = analyzer or get_java_analyzer()
 
+    func_name = function.function_name
+    func_start_line = function.starting_line
+    func_end_line = function.ending_line
+
     # Parse the optimization to extract components
-    parsed = _parse_optimization_source(new_source, function.name, analyzer)
+    parsed = _parse_optimization_source(new_source, func_name, analyzer)
 
     # Find the method in the original source
     methods = analyzer.find_methods(source)
@@ -253,9 +244,9 @@ def replace_function(
 
     # Find all methods matching the name (there may be overloads)
     matching_methods = [
-        m for m in methods
-        if m.name == function.name
-        and (function.class_name is None or m.class_name == function.class_name)
+        m
+        for m in methods
+        if m.name == func_name and (function.class_name is None or m.class_name == function.class_name)
     ]
 
     if len(matching_methods) == 1:
@@ -267,18 +258,18 @@ def replace_function(
         logger.debug(
             "Found %d overloads of %s. Function start_line=%s, end_line=%s",
             len(matching_methods),
-            function.name,
-            function.start_line,
-            function.end_line,
+            func_name,
+            func_start_line,
+            func_end_line,
         )
         for i, m in enumerate(matching_methods):
             logger.debug("  Overload %d: lines %d-%d", i, m.start_line, m.end_line)
-        if function.start_line and function.end_line:
+        if func_start_line and func_end_line:
             for i, method in enumerate(matching_methods):
                 # Check if the line numbers are close (account for minor differences
                 # that can occur due to different parsing or file transformations)
                 # Use a tolerance of 5 lines to handle edge cases
-                if abs(method.start_line - function.start_line) <= 5:
+                if abs(method.start_line - func_start_line) <= 5:
                     target_method = method
                     target_overload_index = i
                     logger.debug(
@@ -286,21 +277,18 @@ def replace_function(
                         i,
                         method.start_line,
                         method.end_line,
-                        function.start_line,
-                        function.end_line,
+                        func_start_line,
+                        func_end_line,
                     )
                     break
         if not target_method:
             # Fallback: use the first match
-            logger.warning(
-                "Multiple overloads of %s found but no line match, using first match",
-                function.name,
-            )
+            logger.warning("Multiple overloads of %s found but no line match, using first match", func_name)
             target_method = matching_methods[0]
             target_overload_index = 0
 
     if not target_method:
-        logger.error("Could not find method %s in source", function.name)
+        logger.error("Could not find method %s in source", func_name)
         return source
 
     # Get the class name for inserting new members
@@ -338,18 +326,16 @@ def replace_function(
                 len(new_helpers_to_add),
                 class_name,
             )
-            source = _insert_class_members(
-                source, class_name, new_fields_to_add, new_helpers_to_add, analyzer
-            )
+            source = _insert_class_members(source, class_name, new_fields_to_add, new_helpers_to_add, analyzer)
 
             # Re-find the target method after modifications
             # Line numbers have shifted, but the relative order of overloads is preserved
             # Use the target_overload_index we saved earlier
             methods = analyzer.find_methods(source)
             matching_methods = [
-                m for m in methods
-                if m.name == function.name
-                and (function.class_name is None or m.class_name == function.class_name)
+                m
+                for m in methods
+                if m.name == func_name and (function.class_name is None or m.class_name == function.class_name)
             ]
 
             if matching_methods and target_overload_index < len(matching_methods):
@@ -363,7 +349,7 @@ def replace_function(
             else:
                 logger.error(
                     "Lost target method %s after adding members (had index %d, found %d overloads)",
-                    function.name,
+                    func_name,
                     target_overload_index,
                     len(matching_methods),
                 )
@@ -394,9 +380,7 @@ def replace_function(
     before = lines[: start_line - 1]  # Lines before the method
     after = lines[end_line:]  # Lines after the method
 
-    result = "".join(before) + indented_new_source + "".join(after)
-
-    return result
+    return "".join(before) + indented_new_source + "".join(after)
 
 
 def _get_indentation(line: str) -> str:
@@ -456,16 +440,13 @@ def _apply_indentation(lines: list[str], base_indent: str) -> str:
 
 
 def replace_method_body(
-    source: str,
-    function: FunctionInfo,
-    new_body: str,
-    analyzer: JavaAnalyzer | None = None,
+    source: str, function: FunctionToOptimize, new_body: str, analyzer: JavaAnalyzer | None = None
 ) -> str:
     """Replace just the body of a method, preserving signature.
 
     Args:
         source: Original source code.
-        function: FunctionInfo identifying the function.
+        function: FunctionToOptimize identifying the function.
         new_body: New method body (code between braces).
         analyzer: Optional JavaAnalyzer instance.
 
@@ -476,24 +457,26 @@ def replace_method_body(
     analyzer = analyzer or get_java_analyzer()
     source_bytes = source.encode("utf8")
 
+    func_name = function.function_name
+
     # Find the method
     methods = analyzer.find_methods(source)
     target_method = None
 
     for method in methods:
-        if method.name == function.name:
+        if method.name == func_name:
             if function.class_name is None or method.class_name == function.class_name:
                 target_method = method
                 break
 
     if not target_method:
-        logger.error("Could not find method %s", function.name)
+        logger.error("Could not find method %s", func_name)
         return source
 
     # Find the body node
     body_node = target_method.node.child_by_field_name("body")
     if not body_node:
-        logger.error("Method %s has no body (abstract?)", function.name)
+        logger.error("Method %s has no body (abstract?)", func_name)
         return source
 
     # Get the body's byte positions
@@ -588,22 +571,18 @@ def insert_method(
     before = source_bytes[:insert_point]
     after = source_bytes[insert_point:]
 
-    # Use single newline as separator; for start position we need newline after opening brace
-    separator = "\n" if position == "end" else "\n"
+    # Use single newline as separator
+    separator = "\n"
 
     return (before + separator.encode("utf8") + indented_method.encode("utf8") + after).decode("utf8")
 
 
-def remove_method(
-    source: str,
-    function: FunctionInfo,
-    analyzer: JavaAnalyzer | None = None,
-) -> str:
+def remove_method(source: str, function: FunctionToOptimize, analyzer: JavaAnalyzer | None = None) -> str:
     """Remove a method from source code.
 
     Args:
         source: The source code.
-        function: FunctionInfo identifying the method to remove.
+        function: FunctionToOptimize identifying the method to remove.
         analyzer: Optional JavaAnalyzer instance.
 
     Returns:
@@ -612,18 +591,20 @@ def remove_method(
     """
     analyzer = analyzer or get_java_analyzer()
 
+    func_name = function.function_name
+
     # Find the method
     methods = analyzer.find_methods(source)
     target_method = None
 
     for method in methods:
-        if method.name == function.name:
+        if method.name == func_name:
             if function.class_name is None or method.class_name == function.class_name:
                 target_method = method
                 break
 
     if not target_method:
-        logger.error("Could not find method %s", function.name)
+        logger.error("Could not find method %s", func_name)
         return source
 
     # Determine removal range (include Javadoc)
@@ -640,9 +621,7 @@ def remove_method(
 
 
 def remove_test_functions(
-    test_source: str,
-    functions_to_remove: list[str],
-    analyzer: JavaAnalyzer | None = None,
+    test_source: str, functions_to_remove: list[str], analyzer: JavaAnalyzer | None = None
 ) -> str:
     """Remove specific test functions from test source code.
 
@@ -661,22 +640,21 @@ def remove_test_functions(
     methods = analyzer.find_methods(test_source)
 
     # Sort by start line in reverse order (remove from end first)
-    methods_to_remove = [
-        m for m in methods if m.name in functions_to_remove
-    ]
+    methods_to_remove = [m for m in methods if m.name in functions_to_remove]
     methods_to_remove.sort(key=lambda m: m.start_line, reverse=True)
 
     result = test_source
 
     for method in methods_to_remove:
-        # Create a FunctionInfo for removal
-        func_info = FunctionInfo(
-            name=method.name,
+        # Create a FunctionToOptimize for removal
+        func_info = FunctionToOptimize(
+            function_name=method.name,
             file_path=Path("temp.java"),
-            start_line=method.start_line,
-            end_line=method.end_line,
-            parents=(),
+            starting_line=method.start_line,
+            ending_line=method.end_line,
+            parents=[],
             is_method=True,
+            language="java",
         )
         result = remove_method(result, func_info, analyzer)
 
@@ -719,9 +697,7 @@ def add_runtime_comments(
 
         if original_ns > 0:
             speedup = ((original_ns - optimized_ns) / original_ns) * 100
-            summary_lines.append(
-                f"// {inv_id}: {original_ms:.3f}ms -> {optimized_ms:.3f}ms ({speedup:.1f}% faster)"
-            )
+            summary_lines.append(f"// {inv_id}: {original_ms:.3f}ms -> {optimized_ms:.3f}ms ({speedup:.1f}% faster)")
 
     # Insert after imports
     lines = test_source.splitlines(keepends=True)

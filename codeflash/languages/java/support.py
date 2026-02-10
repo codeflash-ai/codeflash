@@ -7,23 +7,16 @@ required methods for Java language support in codeflash.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from codeflash.languages.base import (
-    CodeContext,
-    FunctionFilterCriteria,
-    FunctionInfo,
-    HelperFunction,
-    Language,
-    LanguageSupport,
-    TestInfo,
-    TestResult,
-)
-from codeflash.languages.registry import register_language
+from codeflash.languages.base import Language, LanguageSupport
 from codeflash.languages.java.build_tools import find_test_root
 from codeflash.languages.java.comparator import compare_test_results as _compare_test_results
 from codeflash.languages.java.config import detect_java_project
+from codeflash.languages.java.concurrency_analyzer import (
+    JavaConcurrencyAnalyzer,
+    analyze_function_concurrency,
+)
 from codeflash.languages.java.context import extract_code_context, find_helper_functions
 from codeflash.languages.java.discovery import discover_functions, discover_functions_from_source
 from codeflash.languages.java.formatter import format_java_code, normalize_java_code
@@ -33,11 +26,7 @@ from codeflash.languages.java.instrumentation import (
     instrument_for_benchmarking,
 )
 from codeflash.languages.java.parser import get_java_analyzer
-from codeflash.languages.java.replacement import (
-    add_runtime_comments,
-    remove_test_functions,
-    replace_function,
-)
+from codeflash.languages.java.replacement import add_runtime_comments, remove_test_functions, replace_function
 from codeflash.languages.java.test_discovery import discover_tests
 from codeflash.languages.java.test_runner import (
     parse_test_results,
@@ -45,9 +34,14 @@ from codeflash.languages.java.test_runner import (
     run_benchmarking_tests,
     run_tests,
 )
+from codeflash.languages.registry import register_language
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from pathlib import Path
+
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, TestInfo, TestResult
 
 logger = logging.getLogger(__name__)
 
@@ -94,41 +88,48 @@ class JavaSupport(LanguageSupport):
 
     def discover_functions(
         self, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
-    ) -> list[FunctionInfo]:
+    ) -> list[FunctionToOptimize]:
         """Find all optimizable functions in a Java file."""
         return discover_functions(file_path, filter_criteria, self._analyzer)
 
     def discover_functions_from_source(
         self, source: str, file_path: Path | None = None, filter_criteria: FunctionFilterCriteria | None = None
-    ) -> list[FunctionInfo]:
+    ) -> list[FunctionToOptimize]:
         """Find all optimizable functions in Java source code."""
         return discover_functions_from_source(source, file_path, filter_criteria, self._analyzer)
 
     def discover_tests(
-        self, test_root: Path, source_functions: Sequence[FunctionInfo]
+        self, test_root: Path, source_functions: Sequence[FunctionToOptimize]
     ) -> dict[str, list[TestInfo]]:
         """Map source functions to their tests."""
         return discover_tests(test_root, source_functions, self._analyzer)
 
     # === Code Analysis ===
 
-    def extract_code_context(
-        self, function: FunctionInfo, project_root: Path, module_root: Path
-    ) -> CodeContext:
+    def extract_code_context(self, function: FunctionToOptimize, project_root: Path, module_root: Path) -> CodeContext:
         """Extract function code and its dependencies."""
         return extract_code_context(function, project_root, module_root, analyzer=self._analyzer)
 
-    def find_helper_functions(
-        self, function: FunctionInfo, project_root: Path
-    ) -> list[HelperFunction]:
+    def find_helper_functions(self, function: FunctionToOptimize, project_root: Path) -> list[HelperFunction]:
         """Find helper functions called by the target function."""
         return find_helper_functions(function, project_root, analyzer=self._analyzer)
 
+    def analyze_concurrency(self, function: FunctionInfo, source: str | None = None):
+        """Analyze a function for concurrency patterns.
+
+        Args:
+            function: Function to analyze.
+            source: Optional source code (will read from file if not provided).
+
+        Returns:
+            ConcurrencyInfo with detected concurrent patterns.
+
+        """
+        return analyze_function_concurrency(function, source, self._analyzer)
+
     # === Code Transformation ===
 
-    def replace_function(
-        self, source: str, function: FunctionInfo, new_source: str
-    ) -> str:
+    def replace_function(self, source: str, function: FunctionToOptimize, new_source: str) -> str:
         """Replace a function in source code with new implementation."""
         return replace_function(source, function, new_source, self._analyzer)
 
@@ -140,11 +141,7 @@ class JavaSupport(LanguageSupport):
     # === Test Execution ===
 
     def run_tests(
-        self,
-        test_files: Sequence[Path],
-        cwd: Path,
-        env: dict[str, str],
-        timeout: int,
+        self, test_files: Sequence[Path], cwd: Path, env: dict[str, str], timeout: int
     ) -> tuple[list[TestResult], Path]:
         """Run tests and return results."""
         return run_tests(list(test_files), cwd, env, timeout)
@@ -155,15 +152,11 @@ class JavaSupport(LanguageSupport):
 
     # === Instrumentation ===
 
-    def instrument_for_behavior(
-        self, source: str, functions: Sequence[FunctionInfo]
-    ) -> str:
+    def instrument_for_behavior(self, source: str, functions: Sequence[FunctionToOptimize]) -> str:
         """Add behavior instrumentation to capture inputs/outputs."""
         return instrument_for_behavior(source, functions, self._analyzer)
 
-    def instrument_for_benchmarking(
-        self, test_source: str, target_function: FunctionInfo
-    ) -> str:
+    def instrument_for_benchmarking(self, test_source: str, target_function: FunctionToOptimize) -> str:
         """Add timing instrumentation to test code."""
         return instrument_for_benchmarking(test_source, target_function, self._analyzer)
 
@@ -180,32 +173,22 @@ class JavaSupport(LanguageSupport):
     # === Test Editing ===
 
     def add_runtime_comments(
-        self,
-        test_source: str,
-        original_runtimes: dict[str, int],
-        optimized_runtimes: dict[str, int],
+        self, test_source: str, original_runtimes: dict[str, int], optimized_runtimes: dict[str, int]
     ) -> str:
         """Add runtime performance comments to test source code."""
         return add_runtime_comments(test_source, original_runtimes, optimized_runtimes, self._analyzer)
 
-    def remove_test_functions(
-        self, test_source: str, functions_to_remove: list[str]
-    ) -> str:
+    def remove_test_functions(self, test_source: str, functions_to_remove: list[str]) -> str:
         """Remove specific test functions from test source code."""
         return remove_test_functions(test_source, functions_to_remove, self._analyzer)
 
     # === Test Result Comparison ===
 
     def compare_test_results(
-        self,
-        original_results_path: Path,
-        candidate_results_path: Path,
-        project_root: Path | None = None,
+        self, original_results_path: Path, candidate_results_path: Path, project_root: Path | None = None
     ) -> tuple[bool, list]:
         """Compare test results between original and candidate code."""
-        return _compare_test_results(
-            original_results_path, candidate_results_path, project_root=project_root
-        )
+        return _compare_test_results(original_results_path, candidate_results_path, project_root=project_root)
 
     # === Configuration ===
 
@@ -308,16 +291,11 @@ class JavaSupport(LanguageSupport):
     ) -> tuple[bool, str | None]:
         """Inject profiling code into an existing test file."""
         return instrument_existing_test(
-            test_path,
-            call_positions,
-            function_to_optimize,
-            tests_project_root,
-            mode,
-            self._analyzer,
+            test_path, call_positions, function_to_optimize, tests_project_root, mode, self._analyzer
         )
 
     def instrument_source_for_line_profiler(
-        self, func_info: FunctionInfo, line_profiler_output_file: Path
+        self, func_info: FunctionToOptimize, line_profiler_output_file: Path
     ) -> bool:
         """Instrument source code for line profiling.
 
@@ -372,15 +350,7 @@ class JavaSupport(LanguageSupport):
         candidate_index: int = 0,
     ) -> tuple[Path, Any, Path | None, Path | None]:
         """Run behavioral tests for Java."""
-        return run_behavioral_tests(
-            test_paths,
-            test_env,
-            cwd,
-            timeout,
-            project_root,
-            enable_coverage,
-            candidate_index,
-        )
+        return run_behavioral_tests(test_paths, test_env, cwd, timeout, project_root, enable_coverage, candidate_index)
 
     def run_benchmarking_tests(
         self,

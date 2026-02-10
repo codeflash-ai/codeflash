@@ -114,10 +114,13 @@ class TestConfig:
     def test_framework(self) -> str:
         """Returns the appropriate test framework based on language.
 
-        Returns 'jest' for JavaScript/TypeScript, detected JUnit version for Java, 'pytest' for Python (default).
+        For JavaScript/TypeScript: uses the configured framework (vitest, jest, or mocha).
+        For Python: uses pytest as default.
         """
         if is_javascript():
-            return "jest"
+            from codeflash.languages.test_framework import get_js_test_framework_or_default
+
+            return get_js_test_framework_or_default()
         if is_java():
             return self._detect_java_test_framework()
         return "pytest"
@@ -143,7 +146,9 @@ class TestConfig:
                 pom_path = current / "pom.xml"
                 if pom_path.exists():
                     parent_config = detect_java_project(current)
-                    if parent_config and (parent_config.has_junit4 or parent_config.has_junit5 or parent_config.has_testng):
+                    if parent_config and (
+                        parent_config.has_junit4 or parent_config.has_junit5 or parent_config.has_testng
+                    ):
                         return parent_config.test_framework
                 current = current.parent
 

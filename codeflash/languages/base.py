@@ -2,112 +2,36 @@
 
 This module defines the core abstractions that all language implementations must follow.
 The LanguageSupport protocol defines the interface that each language must implement,
-while the dataclasses define language-agnostic representations of code constructs.
+while FunctionToOptimize is the canonical representation of functions across all languages.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from pathlib import Path
 
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
-class Language(str, Enum):
-    """Supported programming languages."""
+from codeflash.languages.language_enum import Language
+from codeflash.models.function_types import FunctionParent
 
-    PYTHON = "python"
-    JAVASCRIPT = "javascript"
-    TYPESCRIPT = "typescript"
-    JAVA = "java"
-
-    def __str__(self) -> str:
-        return self.value
+# Backward compatibility aliases - ParentInfo is now FunctionParent
+ParentInfo = FunctionParent
 
 
-@dataclass(frozen=True)
-class ParentInfo:
-    """Parent scope information for nested functions/methods.
+# Lazy import for FunctionInfo to avoid circular imports
+# This allows `from codeflash.languages.base import FunctionInfo` to work at runtime
+def __getattr__(name: str) -> Any:
+    if name == "FunctionInfo":
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
-    Represents the parent class or function that contains a nested function.
-    Used to construct the qualified name of a function.
-
-    Attributes:
-        name: The name of the parent scope (class name or function name).
-        type: The type of parent ("ClassDef", "FunctionDef", "AsyncFunctionDef", etc.).
-
-    """
-
-    name: str
-    type: str  # "ClassDef", "FunctionDef", "AsyncFunctionDef", etc.
-
-    def __str__(self) -> str:
-        return f"{self.type}:{self.name}"
-
-
-@dataclass(frozen=True)
-class FunctionInfo:
-    """Language-agnostic representation of a function to optimize.
-
-    This class captures all the information needed to identify, locate, and
-    work with a function across different programming languages.
-
-    Attributes:
-        name: The simple function name (e.g., "add").
-        file_path: Absolute path to the file containing the function.
-        start_line: Starting line number (1-indexed).
-        end_line: Ending line number (1-indexed, inclusive).
-        parents: List of parent scopes (for nested functions/methods).
-        is_async: Whether this is an async function.
-        is_method: Whether this is a method (belongs to a class).
-        language: The programming language.
-        start_col: Starting column (0-indexed), optional for more precise location.
-        end_col: Ending column (0-indexed), optional.
-
-    """
-
-    name: str
-    file_path: Path
-    start_line: int
-    end_line: int
-    parents: tuple[ParentInfo, ...] = ()
-    is_async: bool = False
-    is_method: bool = False
-    language: Language = Language.PYTHON
-    start_col: int | None = None
-    end_col: int | None = None
-    doc_start_line: int | None = None  # Line where docstring/JSDoc starts (or None if no doc comment)
-
-    @property
-    def qualified_name(self) -> str:
-        """Full qualified name including parent scopes.
-
-        For a method `add` in class `Calculator`, returns "Calculator.add".
-        For nested functions, includes all parent scopes.
-        """
-        if not self.parents:
-            return self.name
-        parent_path = ".".join(parent.name for parent in self.parents)
-        return f"{parent_path}.{self.name}"
-
-    @property
-    def class_name(self) -> str | None:
-        """Get the immediate parent class name, if any."""
-        for parent in reversed(self.parents):
-            if parent.type == "ClassDef":
-                return parent.name
-        return None
-
-    @property
-    def top_level_parent_name(self) -> str:
-        """Get the top-level parent name, or function name if no parents."""
-        return self.parents[0].name if self.parents else self.name
-
-    def __str__(self) -> str:
-        return f"FunctionInfo({self.qualified_name} at {self.file_path}:{self.start_line}-{self.end_line})"
+        return FunctionToOptimize
+    msg = f"module {__name__!r} has no attribute {name!r}"
+    raise AttributeError(msg)
 
 
 @dataclass
@@ -237,6 +161,37 @@ class FunctionFilterCriteria:
     max_lines: int | None = None
 
 
+@dataclass
+class ReferenceInfo:
+    """Information about a reference (call site) to a function.
+
+    This class captures information about where a function is called
+    from, including the file, line number, context, and caller function.
+
+    Attributes:
+        file_path: Path to the file containing the reference.
+        line: Line number (1-indexed).
+        column: Column number (0-indexed).
+        end_line: End line number (1-indexed).
+        end_column: End column number (0-indexed).
+        context: The line of code containing the reference.
+        reference_type: Type of reference ("call", "callback", "memoized", "import", "reexport").
+        import_name: Name used to import the function (may differ from original).
+        caller_function: Name of the function containing this reference (or None for module-level).
+
+    """
+
+    file_path: Path
+    line: int
+    column: int
+    end_line: int
+    end_column: int
+    context: str
+    reference_type: str
+    import_name: str | None
+    caller_function: str | None = None
+
+
 @runtime_checkable
 class LanguageSupport(Protocol):
     """Protocol defining what a language implementation must provide.
@@ -280,6 +235,11 @@ class LanguageSupport(Protocol):
         ...
 
     @property
+    def default_file_extension(self) -> str:
+        """Default file extension for this language."""
+        ...
+
+    @property
     def test_framework(self) -> str:
         """Primary test framework name.
 
@@ -298,7 +258,7 @@ class LanguageSupport(Protocol):
 
     def discover_functions(
         self, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
-    ) -> list[FunctionInfo]:
+    ) -> list[FunctionToOptimize]:
         """Find all optimizable functions in a file.
 
         Args:
@@ -306,12 +266,14 @@ class LanguageSupport(Protocol):
             filter_criteria: Optional criteria to filter functions.
 
         Returns:
-            List of FunctionInfo objects for discovered functions.
+            List of FunctionToOptimize objects for discovered functions.
 
         """
         ...
 
-    def discover_tests(self, test_root: Path, source_functions: Sequence[FunctionInfo]) -> dict[str, list[TestInfo]]:
+    def discover_tests(
+        self, test_root: Path, source_functions: Sequence[FunctionToOptimize]
+    ) -> dict[str, list[TestInfo]]:
         """Map source functions to their tests via static analysis.
 
         Args:
@@ -326,7 +288,7 @@ class LanguageSupport(Protocol):
 
     # === Code Analysis ===
 
-    def extract_code_context(self, function: FunctionInfo, project_root: Path, module_root: Path) -> CodeContext:
+    def extract_code_context(self, function: FunctionToOptimize, project_root: Path, module_root: Path) -> CodeContext:
         """Extract function code and its dependencies.
 
         Args:
@@ -340,7 +302,7 @@ class LanguageSupport(Protocol):
         """
         ...
 
-    def find_helper_functions(self, function: FunctionInfo, project_root: Path) -> list[HelperFunction]:
+    def find_helper_functions(self, function: FunctionToOptimize, project_root: Path) -> list[HelperFunction]:
         """Find helper functions called by the target function.
 
         Args:
@@ -353,14 +315,37 @@ class LanguageSupport(Protocol):
         """
         ...
 
+    def find_references(
+        self, function: FunctionToOptimize, project_root: Path, tests_root: Path | None = None, max_files: int = 500
+    ) -> list[ReferenceInfo]:
+        """Find all references (call sites) to a function across the codebase.
+
+        This method finds all places where a function is called, including:
+        - Direct calls
+        - Callbacks (passed to other functions)
+        - Memoized versions
+        - Re-exports
+
+        Args:
+            function: The function to find references for.
+            project_root: Root of the project to search.
+            tests_root: Root of tests directory (references in tests are excluded).
+            max_files: Maximum number of files to search.
+
+        Returns:
+            List of ReferenceInfo objects describing each reference location.
+
+        """
+        ...
+
     # === Code Transformation ===
 
-    def replace_function(self, source: str, function: FunctionInfo, new_source: str) -> str:
+    def replace_function(self, source: str, function: FunctionToOptimize, new_source: str) -> str:
         """Replace a function in source code with new implementation.
 
         Args:
             source: Original source code.
-            function: FunctionInfo identifying the function to replace.
+            function: FunctionToOptimize identifying the function to replace.
             new_source: New function source code.
 
         Returns:
@@ -416,7 +401,7 @@ class LanguageSupport(Protocol):
 
     # === Instrumentation ===
 
-    def instrument_for_behavior(self, source: str, functions: Sequence[FunctionInfo]) -> str:
+    def instrument_for_behavior(self, source: str, functions: Sequence[FunctionToOptimize]) -> str:
         """Add behavior instrumentation to capture inputs/outputs.
 
         Args:
@@ -429,7 +414,7 @@ class LanguageSupport(Protocol):
         """
         ...
 
-    def instrument_for_benchmarking(self, test_source: str, target_function: FunctionInfo) -> str:
+    def instrument_for_benchmarking(self, test_source: str, target_function: FunctionToOptimize) -> str:
         """Add timing instrumentation to test code.
 
         Args:
@@ -606,7 +591,9 @@ class LanguageSupport(Protocol):
         """
         ...
 
-    def instrument_source_for_line_profiler(self, func_info: FunctionInfo, line_profiler_output_file: Path) -> bool:
+    def instrument_source_for_line_profiler(
+        self, func_info: FunctionToOptimize, line_profiler_output_file: Path
+    ) -> bool:
         """Instrument source code before line profiling."""
         ...
 
@@ -675,17 +662,14 @@ class LanguageSupport(Protocol):
         ...
 
 
-def convert_parents_to_tuple(parents: list | tuple) -> tuple[ParentInfo, ...]:
-    """Convert a list of parent objects to a tuple of ParentInfo.
-
-    This helper handles conversion from the existing FunctionParent
-    dataclass to the new ParentInfo dataclass.
+def convert_parents_to_tuple(parents: list | tuple) -> tuple[FunctionParent, ...]:
+    """Convert a list of parent objects to a tuple of FunctionParent.
 
     Args:
         parents: List or tuple of parent objects with name and type attributes.
 
     Returns:
-        Tuple of ParentInfo objects.
+        Tuple of FunctionParent objects.
 
     """
-    return tuple(ParentInfo(name=p.name, type=p.type) for p in parents)
+    return tuple(FunctionParent(name=p.name, type=p.type) for p in parents)

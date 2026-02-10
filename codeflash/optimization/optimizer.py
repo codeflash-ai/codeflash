@@ -90,6 +90,33 @@ class Optimizer:
             current = current.parent
         return None
 
+    def _verify_js_requirements(self) -> None:
+        """Verify JavaScript/TypeScript requirements before optimization.
+
+        Checks that Node.js, npm, and the test framework are available.
+        Logs warnings if requirements are not met but does not abort.
+
+        """
+        from codeflash.languages import get_language_support
+        from codeflash.languages.base import Language
+        from codeflash.languages.test_framework import get_js_test_framework_or_default
+
+        js_project_root = self.test_cfg.js_project_root
+        if not js_project_root:
+            return
+
+        try:
+            js_support = get_language_support(Language.JAVASCRIPT)
+            test_framework = get_js_test_framework_or_default()
+            success, errors = js_support.verify_requirements(js_project_root, test_framework)
+
+            if not success:
+                logger.warning("JavaScript requirements check found issues:")
+                for error in errors:
+                    logger.warning(f"  - {error}")
+        except Exception as e:
+            logger.debug(f"Failed to verify JS requirements: {e}")
+
     def run_benchmarks(
         self, file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]], num_optimizable_functions: int
     ) -> tuple[dict[str, dict[BenchmarkKey, float]], dict[BenchmarkKey, float]]:
@@ -466,6 +493,8 @@ class Optimizer:
                     # For JavaScript, also set js_project_root for test execution
                     if is_javascript():
                         self.test_cfg.js_project_root = self._find_js_project_root(file_path)
+                        # Verify JS requirements before proceeding
+                        self._verify_js_requirements()
                     break
 
         if self.args.all:
@@ -607,6 +636,12 @@ class Optimizer:
         - '*__perfinstrumented.spec.{js,ts,jsx,tsx}'
         - '*__perfonlyinstrumented.spec.{js,ts,jsx,tsx}'
 
+        Java patterns:
+        - '*Test__perfinstrumented.java'
+        - '*Test__perfonlyinstrumented.java'
+        - '*Test__perfinstrumented_{n}.java' (with optional numeric suffix)
+        - '*Test__perfonlyinstrumented_{n}.java' (with optional numeric suffix)
+
         Returns a list of matching file paths.
         """
         import re
@@ -616,7 +651,9 @@ class Optimizer:
             # Python patterns
             r"test.*__perf_test_\d?\.py|test_.*__unit_test_\d?\.py|test_.*__perfinstrumented\.py|test_.*__perfonlyinstrumented\.py|"
             # JavaScript/TypeScript patterns (new naming with .test/.spec preserved)
-            r".*__perfinstrumented\.(?:test|spec)\.(?:js|ts|jsx|tsx)|.*__perfonlyinstrumented\.(?:test|spec)\.(?:js|ts|jsx|tsx)"
+            r".*__perfinstrumented\.(?:test|spec)\.(?:js|ts|jsx|tsx)|.*__perfonlyinstrumented\.(?:test|spec)\.(?:js|ts|jsx|tsx)|"
+            # Java patterns (with optional numeric suffix _2, _3, etc.)
+            r".*Test__perfinstrumented(?:_\d+)?\.java|.*Test__perfonlyinstrumented(?:_\d+)?\.java"
             r")$"
         )
 

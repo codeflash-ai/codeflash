@@ -13,8 +13,6 @@ from typing import TYPE_CHECKING
 from tree_sitter import Language, Parser
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from tree_sitter import Node, Tree
 
 logger = logging.getLogger(__name__)
@@ -222,9 +220,7 @@ class JavaAnalyzer:
                 current_class=new_class if node.type in type_declarations else current_class,
             )
 
-    def _extract_method_info(
-        self, node: Node, source_bytes: bytes, current_class: str | None
-    ) -> JavaMethodNode | None:
+    def _extract_method_info(self, node: Node, source_bytes: bytes, current_class: str | None) -> JavaMethodNode | None:
         """Extract method information from a method_declaration node."""
         name = ""
         is_static = False
@@ -347,9 +343,7 @@ class JavaAnalyzer:
         for child in node.children:
             self._walk_tree_for_classes(child, source_bytes, classes, is_inner)
 
-    def _extract_class_info(
-        self, node: Node, source_bytes: bytes, is_inner: bool
-    ) -> JavaClassNode | None:
+    def _extract_class_info(self, node: Node, source_bytes: bytes, is_inner: bool) -> JavaClassNode | None:
         """Extract class information from a class_declaration node."""
         name = ""
         is_public = False

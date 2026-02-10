@@ -8,16 +8,20 @@ and other dependencies.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING
 
-from codeflash.languages.base import CodeContext, FunctionInfo, HelperFunction, Language
+from codeflash.languages.base import CodeContext, HelperFunction, Language
 from codeflash.languages.java.discovery import discover_functions_from_source
-from codeflash.languages.java.import_resolver import JavaImportResolver, find_helper_files
-from codeflash.languages.java.parser import JavaAnalyzer, JavaClassNode, get_java_analyzer
+from codeflash.languages.java.import_resolver import find_helper_files
+from codeflash.languages.java.parser import get_java_analyzer
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from tree_sitter import Node
+
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.languages.java.parser import JavaAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +29,9 @@ logger = logging.getLogger(__name__)
 class InvalidJavaSyntaxError(Exception):
     """Raised when extracted Java code is not syntactically valid."""
 
-    pass
-
 
 def extract_code_context(
-    function: FunctionInfo,
+    function: FunctionToOptimize,
     project_root: Path,
     module_root: Path | None = None,
     max_helper_depth: int = 2,
@@ -66,12 +68,8 @@ def extract_code_context(
     try:
         source = function.file_path.read_text(encoding="utf-8")
     except Exception as e:
-        logger.error("Failed to read %s: %s", function.file_path, e)
-        return CodeContext(
-            target_code="",
-            target_file=function.file_path,
-            language=Language.JAVA,
-        )
+        logger.exception("Failed to read %s: %s", function.file_path, e)
+        return CodeContext(target_code="", target_file=function.file_path, language=Language.JAVA)
 
     # Extract target function code
     target_code = extract_function_source(source, function)
@@ -83,7 +81,7 @@ def extract_code_context(
     # This provides necessary context for optimization
     parent_type_name = _get_parent_type_name(function)
     if parent_type_name:
-        type_skeleton = _extract_type_skeleton(source, parent_type_name, function.name, analyzer)
+        type_skeleton = _extract_type_skeleton(source, parent_type_name, function.function_name, analyzer)
         if type_skeleton:
             target_code = _wrap_method_in_type_skeleton(target_code, type_skeleton)
             wrapped_in_skeleton = True
@@ -93,9 +91,7 @@ def extract_code_context(
     import_statements = [_import_to_statement(imp) for imp in imports]
 
     # Extract helper functions
-    helper_functions = find_helper_functions(
-        function, project_root, max_helper_depth, analyzer
-    )
+    helper_functions = find_helper_functions(function, project_root, max_helper_depth, analyzer)
 
     # Extract read-only context only if fields are NOT already in the skeleton
     # Avoid duplication between target_code and read_only_context
@@ -106,9 +102,8 @@ def extract_code_context(
     # Validate syntax - extracted code must always be valid Java
     if validate_syntax and target_code:
         if not analyzer.validate_syntax(target_code):
-            raise InvalidJavaSyntaxError(
-                f"Extracted code for {function.name} is not syntactically valid Java:\n{target_code}"
-            )
+            msg = f"Extracted code for {function.function_name} is not syntactically valid Java:\n{target_code}"
+            raise InvalidJavaSyntaxError(msg)
 
     return CodeContext(
         target_code=target_code,
@@ -120,7 +115,7 @@ def extract_code_context(
     )
 
 
-def _get_parent_type_name(function: FunctionInfo) -> str | None:
+def _get_parent_type_name(function: FunctionToOptimize) -> str | None:
     """Get the parent type name (class, interface, or enum) for a function.
 
     Args:
@@ -155,7 +150,7 @@ class TypeSkeleton:
         enum_constants: str,
         type_indent: str,
         type_kind: str,  # "class", "interface", or "enum"
-        outer_type_skeleton: "TypeSkeleton | None" = None,
+        outer_type_skeleton: TypeSkeleton | None = None,
     ) -> None:
         self.type_declaration = type_declaration
         self.type_javadoc = type_javadoc
@@ -172,10 +167,7 @@ ClassSkeleton = TypeSkeleton
 
 
 def _extract_type_skeleton(
-    source: str,
-    type_name: str,
-    target_method_name: str,
-    analyzer: JavaAnalyzer,
+    source: str, type_name: str, target_method_name: str, analyzer: JavaAnalyzer
 ) -> TypeSkeleton | None:
     """Extract the type skeleton (class, interface, or enum) for wrapping a method.
 
@@ -253,11 +245,7 @@ def _find_type_node(node: Node, type_name: str, source_bytes: bytes) -> tuple[No
         Tuple of (node, type_kind) where type_kind is "class", "interface", or "enum".
 
     """
-    type_declarations = {
-        "class_declaration": "class",
-        "interface_declaration": "interface",
-        "enum_declaration": "enum",
-    }
+    type_declarations = {"class_declaration": "class", "interface_declaration": "interface", "enum_declaration": "enum"}
 
     if node.type in type_declarations:
         name_node = node.child_by_field_name("name")
@@ -282,11 +270,7 @@ def _find_class_node(node: Node, class_name: str, source_bytes: bytes) -> Node |
 
 
 def _get_outer_type_skeleton(
-    inner_type_node: Node,
-    source_bytes: bytes,
-    lines: list[str],
-    target_method_name: str,
-    analyzer: JavaAnalyzer,
+    inner_type_node: Node, source_bytes: bytes, lines: list[str], target_method_name: str, analyzer: JavaAnalyzer
 ) -> TypeSkeleton | None:
     """Get the outer type skeleton if this is an inner type.
 
@@ -355,11 +339,7 @@ def _extract_type_declaration(type_node: Node, source_bytes: bytes, type_kind: s
     parts: list[str] = []
 
     # Determine which body node type to look for
-    body_types = {
-        "class": "class_body",
-        "interface": "interface_body",
-        "enum": "enum_body",
-    }
+    body_types = {"class": "class_body", "interface": "interface_body", "enum": "enum_body"}
     body_type = body_types.get(type_kind, "class_body")
 
     for child in type_node.children:
@@ -373,7 +353,8 @@ def _extract_type_declaration(type_node: Node, source_bytes: bytes, type_kind: s
 
 
 # Keep old function name for backwards compatibility
-_extract_class_declaration = lambda node, source_bytes: _extract_type_declaration(node, source_bytes, "class")
+def _extract_class_declaration(node, source_bytes):
+    return _extract_type_declaration(node, source_bytes, "class")
 
 
 def _find_javadoc(node: Node, source_bytes: bytes) -> str | None:
@@ -389,11 +370,7 @@ def _find_javadoc(node: Node, source_bytes: bytes) -> str | None:
 
 
 def _extract_type_body_context(
-    body_node: Node,
-    source_bytes: bytes,
-    lines: list[str],
-    target_method_name: str,
-    type_kind: str,
+    body_node: Node, source_bytes: bytes, lines: list[str], target_method_name: str, type_kind: str
 ) -> tuple[str, str, str]:
     """Extract fields, constructors, and enum constants from a type body.
 
@@ -472,15 +449,10 @@ def _extract_type_body_context(
 
 # Keep old function name for backwards compatibility
 def _extract_class_body_context(
-    body_node: Node,
-    source_bytes: bytes,
-    lines: list[str],
-    target_method_name: str,
+    body_node: Node, source_bytes: bytes, lines: list[str], target_method_name: str
 ) -> tuple[str, str]:
     """Extract fields and constructors from a class body."""
-    fields, constructors, _ = _extract_type_body_context(
-        body_node, source_bytes, lines, target_method_name, "class"
-    )
+    fields, constructors, _ = _extract_type_body_context(body_node, source_bytes, lines, target_method_name, "class")
     return (fields, constructors)
 
 
@@ -558,7 +530,7 @@ def _wrap_method_in_type_skeleton(method_code: str, skeleton: TypeSkeleton) -> s
 _wrap_method_in_class_skeleton = _wrap_method_in_type_skeleton
 
 
-def extract_function_source(source: str, function: FunctionInfo) -> str:
+def extract_function_source(source: str, function: FunctionToOptimize) -> str:
     """Extract the source code of a function from the full file source.
 
     Args:
@@ -572,8 +544,8 @@ def extract_function_source(source: str, function: FunctionInfo) -> str:
     lines = source.splitlines(keepends=True)
 
     # Include Javadoc if present
-    start_line = function.doc_start_line or function.start_line
-    end_line = function.end_line
+    start_line = function.doc_start_line or function.starting_line
+    end_line = function.ending_line
 
     # Convert from 1-indexed to 0-indexed
     start_idx = start_line - 1
@@ -583,10 +555,7 @@ def extract_function_source(source: str, function: FunctionInfo) -> str:
 
 
 def find_helper_functions(
-    function: FunctionInfo,
-    project_root: Path,
-    max_depth: int = 2,
-    analyzer: JavaAnalyzer | None = None,
+    function: FunctionToOptimize, project_root: Path, max_depth: int = 2, analyzer: JavaAnalyzer | None = None
 ) -> list[HelperFunction]:
     """Find helper functions that the target function depends on.
 
@@ -605,11 +574,9 @@ def find_helper_functions(
     visited_functions: set[str] = set()
 
     # Find helper files through imports
-    helper_files = find_helper_files(
-        function.file_path, project_root, max_depth, analyzer
-    )
+    helper_files = find_helper_files(function.file_path, project_root, max_depth, analyzer)
 
-    for file_path, class_names in helper_files.items():
+    for file_path in helper_files:
         try:
             source = file_path.read_text(encoding="utf-8")
             file_functions = discover_functions_from_source(source, file_path, analyzer=analyzer)
@@ -624,12 +591,12 @@ def find_helper_functions(
 
                     helpers.append(
                         HelperFunction(
-                            name=func.name,
+                            name=func.function_name,
                             qualified_name=func.qualified_name,
                             file_path=file_path,
                             source_code=func_source,
-                            start_line=func.start_line,
-                            end_line=func.end_line,
+                            start_line=func.starting_line,
+                            end_line=func.ending_line,
                         )
                     )
 
@@ -647,10 +614,7 @@ def find_helper_functions(
     return helpers
 
 
-def _find_same_class_helpers(
-    function: FunctionInfo,
-    analyzer: JavaAnalyzer,
-) -> list[HelperFunction]:
+def _find_same_class_helpers(function: FunctionToOptimize, analyzer: JavaAnalyzer) -> list[HelperFunction]:
     """Find helper methods in the same class as the target function.
 
     Args:
@@ -676,7 +640,7 @@ def _find_same_class_helpers(
         # Find which methods the target function calls
         target_method = None
         for method in methods:
-            if method.name == function.name and method.class_name == function.class_name:
+            if method.name == function.function_name and method.class_name == function.class_name:
                 target_method = method
                 break
 
@@ -689,13 +653,11 @@ def _find_same_class_helpers(
         # Add called methods from the same class as helpers
         for method in methods:
             if (
-                method.name != function.name
+                method.name != function.function_name
                 and method.class_name == function.class_name
                 and method.name in called_methods
             ):
-                func_source = source_bytes[
-                    method.node.start_byte : method.node.end_byte
-                ].decode("utf8")
+                func_source = source_bytes[method.node.start_byte : method.node.end_byte].decode("utf8")
 
                 helpers.append(
                     HelperFunction(
@@ -714,11 +676,7 @@ def _find_same_class_helpers(
     return helpers
 
 
-def extract_read_only_context(
-    source: str,
-    function: FunctionInfo,
-    analyzer: JavaAnalyzer,
-) -> str:
+def extract_read_only_context(source: str, function: FunctionToOptimize, analyzer: JavaAnalyzer) -> str:
     """Extract read-only context (fields, constants, inner classes).
 
     This extracts class-level context that the function might depend on
@@ -766,11 +724,7 @@ def _import_to_statement(import_info) -> str:
     return f"{prefix}{import_info.import_path}{suffix};"
 
 
-def extract_class_context(
-    file_path: Path,
-    class_name: str,
-    analyzer: JavaAnalyzer | None = None,
-) -> str:
+def extract_class_context(file_path: Path, class_name: str, analyzer: JavaAnalyzer | None = None) -> str:
     """Extract the full context of a class.
 
     Args:
@@ -812,5 +766,5 @@ def extract_class_context(
         return package_stmt + "\n".join(import_statements) + "\n\n" + class_source
 
     except Exception as e:
-        logger.error("Failed to extract class context: %s", e)
+        logger.exception("Failed to extract class context: %s", e)
         return ""
