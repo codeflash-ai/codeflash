@@ -21,7 +21,11 @@ public class Fibonacci {
         if (n <= 1) {
             return n;
         }
-        return fibonacci(n - 1) + fibonacci(n - 2);
+        // Use memoization to cache computed values
+        long[] memo = new long[n + 1];
+        memo[0] = 0;
+        memo[1] = 1;
+        return fibonacciMemo(n, memo);
     }
 
     /**
@@ -172,4 +176,12 @@ public class Fibonacci {
 
         return Math.abs(indexA - indexB) == 1;
     }
+
+    private static long fibonacciMemo(int n, long[] memo) {
+            if (memo[n] != 0 || n == 0) {
+                return memo[n];
+            }
+            memo[n] = fibonacciMemo(n - 1, memo) + fibonacciMemo(n - 2, memo);
+            return memo[n];
+        }
 }
