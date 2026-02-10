@@ -139,17 +139,28 @@ public class Fibonacci {
             return result;
         }
 
-        int index = 0;
-        while (true) {
-            long fib = fibonacci(index);
+        // Generate Fibonacci numbers iteratively up to index 50 (inclusive),
+        // stopping early if a value reaches or exceeds the limit.
+        long a = 0L; // F(0)
+        long b = 1L; // F(1)
+
+        for (int index = 0; index <= 50; index++) {
+            long fib;
+            if (index == 0) {
+                fib = a;
+            } else if (index == 1) {
+                fib = b;
+            } else {
+                long next = a + b;
+                a = b;
+                b = next;
+                fib = b;
+            }
+
             if (fib >= limit) {
                 break;
             }
             result.add(fib);
-            index++;
-            if (index > 50) {
-                break;
-            }
         }
 
         return result;
@@ -172,4 +183,25 @@ public class Fibonacci {
 
         return Math.abs(indexA - indexB) == 1;
     }
+
+    private static long[] fibPair(int n) {
+            if (n == 0) {
+                return new long[] {0L, 1L};
+            }
+            long[] half = fibPair(n >>> 1);
+            long a = half[0]; // F(k)
+            long b = half[1]; // F(k+1)
+
+            // c = F(2k) = F(k) * (2*F(k+1) - F(k))
+            long twoBMinusA = 2L * b - a;
+            long c = a * twoBMinusA;
+            // d = F(2k+1) = F(k)^2 + F(k+1)^2
+            long d = a * a + b * b;
+
+            if ((n & 1) == 0) {
+                return new long[] {c, d};
+            } else {
+                return new long[] {d, c + d};
+            }
+        }
 }
