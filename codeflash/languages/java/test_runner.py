@@ -27,6 +27,10 @@ from codeflash.languages.java.build_tools import (
     is_jacoco_configured,
 )
 
+_MAVEN_NS = "http://maven.apache.org/POM/4.0.0"
+
+_M_MODULES_TAG = f"{{{_MAVEN_NS}}}modules"
+
 logger = logging.getLogger(__name__)
 
 # Regex pattern for valid Java class names (package.ClassName format)
@@ -54,15 +58,16 @@ def _extract_modules_from_pom_content(content: str) -> list[str]:
 
     Handles both namespaced and non-namespaced POMs.
     """
+    if "modules" not in content:
+        return []
+
     try:
         root = ET.fromstring(content)
     except ET.ParseError:
         logger.debug("Failed to parse POM XML for module extraction")
         return []
 
-    ns = {"m": "http://maven.apache.org/POM/4.0.0"}
-
-    modules_elem = root.find("m:modules", ns)
+    modules_elem = root.find(_M_MODULES_TAG)
     if modules_elem is None:
         modules_elem = root.find("modules")
 
