@@ -693,3 +693,131 @@ export const publicFunc = (x: number) => {
         is_public_exported, name = ts_analyzer.is_function_exported(code, "publicFunc")
         assert is_public_exported is True
         assert name == "publicFunc"
+
+
+class TestWrappedDefaultExports:
+    """Tests for wrapped default export pattern - Issue #9.
+
+    Handles patterns like:
+    - export default curry(traverseEntity)
+    - export default compose(fn1, fn2)
+    - export default wrapper(myFunc)
+
+    These must be correctly recognized so the wrapped function is exportable.
+    """
+
+    @pytest.fixture
+    def ts_analyzer(self):
+        """Create a TypeScript analyzer."""
+        return TreeSitterAnalyzer(TreeSitterLanguage.TYPESCRIPT)
+
+    def test_curry_wrapped_export(self, ts_analyzer):
+        """Test export default curry(fn) pattern."""
+        code = """import { curry } from 'lodash/fp';
+
+const traverseEntity = async (visitor, options, entity) => {
+    return entity;
+};
+
+export default curry(traverseEntity);"""
+
+        # Check exports parsing
+        exports = ts_analyzer.find_exports(code)
+        assert len(exports) == 1
+        assert exports[0].default_export == "default"
+        assert exports[0].wrapped_default_args == ["traverseEntity"]
+
+        # Check is_function_exported
+        is_exported, export_name = ts_analyzer.is_function_exported(code, "traverseEntity")
+        assert is_exported is True
+        assert export_name == "default"
+
+    def test_compose_wrapped_export(self, ts_analyzer):
+        """Test export default compose(fn1, fn2) pattern with multiple args."""
+        code = """import { compose } from 'lodash/fp';
+
+function validateInput(data) { return data; }
+function processData(data) { return data; }
+
+export default compose(validateInput, processData);"""
+
+        exports = ts_analyzer.find_exports(code)
+        assert len(exports) == 1
+        assert exports[0].wrapped_default_args == ["validateInput", "processData"]
+
+        # Both functions should be recognized as exported
+        is_exported1, _ = ts_analyzer.is_function_exported(code, "validateInput")
+        is_exported2, _ = ts_analyzer.is_function_exported(code, "processData")
+        assert is_exported1 is True
+        assert is_exported2 is True
+
+    def test_nested_wrapper_export(self, ts_analyzer):
+        """Test nested wrapper: export default compose(curry(fn))."""
+        code = """export default compose(curry(myFunc));"""
+
+        exports = ts_analyzer.find_exports(code)
+        assert len(exports) == 1
+        assert "myFunc" in exports[0].wrapped_default_args
+
+        is_exported, _ = ts_analyzer.is_function_exported(code, "myFunc")
+        assert is_exported is True
+
+    def test_generic_wrapper_export(self, ts_analyzer):
+        """Test generic wrapper function."""
+        code = """const myFunction = (x: number) => x * 2;
+
+export default someWrapper(myFunction);"""
+
+        is_exported, export_name = ts_analyzer.is_function_exported(code, "myFunction")
+        assert is_exported is True
+        assert export_name == "default"
+
+    def test_non_wrapped_function_not_exported(self, ts_analyzer):
+        """Test that functions not in the wrapper call are not exported."""
+        code = """const helper = (x: number) => x + 1;
+const main = (x: number) => helper(x) * 2;
+
+export default curry(main);"""
+
+        # main is wrapped, so it's exported
+        is_main_exported, _ = ts_analyzer.is_function_exported(code, "main")
+        assert is_main_exported is True
+
+        # helper is NOT in the wrapper call, so not exported
+        is_helper_exported, _ = ts_analyzer.is_function_exported(code, "helper")
+        assert is_helper_exported is False
+
+    def test_direct_default_export_still_works(self, ts_analyzer):
+        """Test that direct default exports still work."""
+        code = """function myFunc() { return 1; }
+export default myFunc;"""
+
+        is_exported, export_name = ts_analyzer.is_function_exported(code, "myFunc")
+        assert is_exported is True
+        assert export_name == "default"
+
+    def test_strapi_traverse_entity_pattern(self, ts_analyzer):
+        """Test the exact strapi pattern that was failing."""
+        code = """import { curry } from 'lodash/fp';
+
+const traverseEntity = async (visitor: Visitor, options: TraverseOptions, entity: Data) => {
+    const { path = { raw: null }, schema, getModel } = options;
+    // ... implementation
+    return copy;
+};
+
+const createVisitorUtils = ({ data }: { data: Data }) => ({
+    remove(key: string) { delete data[key]; },
+    set(key: string, value: Data) { data[key] = value; },
+});
+
+export default curry(traverseEntity);"""
+
+        # traverseEntity should be recognized as exported
+        is_exported, export_name = ts_analyzer.is_function_exported(code, "traverseEntity")
+        assert is_exported is True
+        assert export_name == "default"
+
+        # createVisitorUtils is NOT wrapped, so not exported via default
+        is_utils_exported, _ = ts_analyzer.is_function_exported(code, "createVisitorUtils")
+        assert is_utils_exported is False
