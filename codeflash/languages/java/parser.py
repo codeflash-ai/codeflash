@@ -111,6 +111,11 @@ class JavaAnalyzer:
         """Initialize the Java analyzer."""
         self._parser: Parser | None = None
 
+        # Small cache mapping source bytes -> parsed Tree to avoid repeated parsing
+        # for identical source content. This helps when the same source is queried
+        # multiple times by callers (common in the codebase).
+        self._tree_cache: dict[bytes, Tree] = {}
+
     @property
     def parser(self) -> Parser:
         """Get the parser, creating it lazily."""
@@ -159,8 +164,8 @@ class JavaAnalyzer:
             List of JavaMethodNode objects describing found methods.
 
         """
-        source_bytes = source.encode("utf8")
-        tree = self.parse(source_bytes)
+        # Use cached parse tree when possible to avoid repeated expensive parse
+        tree, source_bytes = self._get_cached_tree(source)
         methods: list[JavaMethodNode] = []
 
         self._walk_tree_for_methods(
@@ -314,8 +319,7 @@ class JavaAnalyzer:
             List of JavaClassNode objects.
 
         """
-        source_bytes = source.encode("utf8")
-        tree = self.parse(source_bytes)
+        tree, source_bytes = self._get_cached_tree(source)
         classes: list[JavaClassNode] = []
 
         self._walk_tree_for_classes(tree.root_node, source_bytes, classes, is_inner=False)
@@ -479,8 +483,7 @@ class JavaAnalyzer:
             List of JavaFieldInfo objects.
 
         """
-        source_bytes = source.encode("utf8")
-        tree = self.parse(source_bytes)
+        tree, source_bytes = self._get_cached_tree(source)
         fields: list[JavaFieldInfo] = []
 
         self._walk_tree_for_fields(tree.root_node, source_bytes, fields, current_class=None, target_class=class_name)
@@ -677,6 +680,24 @@ class JavaAnalyzer:
                         return self.get_node_text(pkg_child, source_bytes)
 
         return None
+
+    def _get_cached_tree(self, source: str | bytes) -> tuple[Tree, bytes]:
+        """Return a cached parse tree for source or parse and cache it.
+
+        This avoids reparsing identical source multiple times while the analyzer
+        instance lives, which is a major performance win when callers query
+        classes/fields/methods repeatedly for the same source.
+        """
+        if isinstance(source, str):
+            source_bytes = source.encode("utf8")
+        else:
+            source_bytes = source
+        tree = self._tree_cache.get(source_bytes)
+        if tree is None:
+            tree = self.parse(source_bytes)
+            # Cache the tree for future calls
+            self._tree_cache[source_bytes] = tree
+        return tree, source_bytes
 
 
 def get_java_analyzer() -> JavaAnalyzer:
