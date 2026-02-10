@@ -74,6 +74,12 @@ It will then try to optimize the new code for the benchmark and calculate the im
    codeflash --file test_file.py --benchmark --benchmarks-root path/to/benchmarks
    ```
 
+   <Note>
+     If you see **"benchmarks-root must be specified"**, either set
+     `benchmarks-root` in your `pyproject.toml` or pass
+     `--benchmarks-root` on the CLI.
+   </Note>
+
 4. **Run Codeflash :**
 
    Benchmark mode is best used together with Codeflash as a GitHub Action. This way,

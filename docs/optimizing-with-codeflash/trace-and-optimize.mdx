@@ -100,6 +100,12 @@ Codeflash script optimizer can be used in three ways:
 
    - `--timeout`: The maximum time in seconds to trace the entire workflow. Default is indefinite. This is useful while tracing really long workflows.
 
+   <Note>
+     Replay test files are named based on the traced script path. If you are
+     unsure where they were written, list files like
+     `tests/test_*replay*.py` in your tests directory.
+   </Note>
+
 3. **As a Context Manager -**
 
    To trace only specific sections of your code, You can also use the Codeflash Tracer as a context manager.
