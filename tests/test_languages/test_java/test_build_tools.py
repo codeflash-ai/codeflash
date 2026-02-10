@@ -1,9 +1,7 @@
 """Tests for Java build tool detection and integration."""
 
-import tempfile
+import os
 from pathlib import Path
-
-import pytest
 
 from codeflash.languages.java.build_tools import (
     BuildTool,
@@ -13,6 +11,7 @@ from codeflash.languages.java.build_tools import (
     find_test_root,
     get_project_info,
 )
+from codeflash.languages.java.test_runner import _extract_modules_from_pom_content
 
 
 class TestBuildToolDetection:
@@ -46,7 +45,7 @@ class TestBuildToolDetection:
     def test_detect_gradle_kotlin_project(self, tmp_path: Path):
         """Test detecting a Gradle Kotlin DSL project."""
         # Create build.gradle.kts
-        (tmp_path / "build.gradle.kts").write_text('plugins { java }')
+        (tmp_path / "build.gradle.kts").write_text("plugins { java }")
 
         assert detect_build_tool(tmp_path) == BuildTool.GRADLE
 
@@ -277,3 +276,181 @@ version = '1.0.0'
         assert info.build_tool == BuildTool.GRADLE
         assert len(info.source_roots) == 1
         assert len(info.test_roots) == 1
+
+class TestXmlModuleExtraction:
+    """Tests for XML-based module extraction replacing regex."""
+
+    def test_namespaced_pom_modules(self):
+        content = """<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <modules>
+        <module>core</module>
+        <module>service</module>
+        <module>app</module>
+    </modules>
+</project>
+"""
+        modules = _extract_modules_from_pom_content(content)
+        assert modules == ["core", "service", "app"]
+
+    def test_non_namespaced_pom_modules(self):
+        content = """<?xml version="1.0" encoding="UTF-8"?>
+<project>
+    <modules>
+        <module>api</module>
+        <module>impl</module>
+    </modules>
+</project>
+"""
+        modules = _extract_modules_from_pom_content(content)
+        assert modules == ["api", "impl"]
+
+    def test_empty_modules_element(self):
+        content = """<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modules>
+    </modules>
+</project>
+"""
+        modules = _extract_modules_from_pom_content(content)
+        assert modules == []
+
+    def test_no_modules_element(self):
+        content = """<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+</project>
+"""
+        modules = _extract_modules_from_pom_content(content)
+        assert modules == []
+
+    def test_malformed_xml_handled_gracefully(self):
+        content = "this is not valid xml <<<<"
+        modules = _extract_modules_from_pom_content(content)
+        assert modules == []
+
+    def test_partial_xml_handled_gracefully(self):
+        content = "<project><modules><module>core</module>"
+        modules = _extract_modules_from_pom_content(content)
+        assert modules == []
+
+    def test_nested_module_paths(self):
+        content = """<?xml version="1.0" encoding="UTF-8"?>
+<project>
+    <modules>
+        <module>libs/core</module>
+        <module>apps/web</module>
+    </modules>
+</project>
+"""
+        modules = _extract_modules_from_pom_content(content)
+        assert modules == ["libs/core", "apps/web"]
+
+
+class TestMavenProfiles:
+    """Tests for Maven profile support in test commands."""
+
+    def test_profile_env_var_read(self, monkeypatch):
+        monkeypatch.setenv("CODEFLASH_MAVEN_PROFILES", "test-profile")
+        profiles = os.environ.get("CODEFLASH_MAVEN_PROFILES", "").strip()
+        assert profiles == "test-profile"
+
+    def test_no_profile_when_env_not_set(self, monkeypatch):
+        monkeypatch.delenv("CODEFLASH_MAVEN_PROFILES", raising=False)
+        profiles = os.environ.get("CODEFLASH_MAVEN_PROFILES", "").strip()
+        assert profiles == ""
+
+    def test_multiple_profiles_comma_separated(self, monkeypatch):
+        monkeypatch.setenv("CODEFLASH_MAVEN_PROFILES", "profile1,profile2")
+        profiles = os.environ.get("CODEFLASH_MAVEN_PROFILES", "").strip()
+        assert profiles == "profile1,profile2"
+        cmd_parts = ["-P", profiles]
+        assert cmd_parts == ["-P", "profile1,profile2"]
+
+    def test_whitespace_stripped_from_profiles(self, monkeypatch):
+        monkeypatch.setenv("CODEFLASH_MAVEN_PROFILES", "  my-profile  ")
+        profiles = os.environ.get("CODEFLASH_MAVEN_PROFILES", "").strip()
+        assert profiles == "my-profile"
+
+class TestMavenExecutableWithProjectRoot:
+    """Tests for find_maven_executable with project_root parameter."""
+
+    def test_find_wrapper_in_project_root(self, tmp_path):
+        mvnw_path = tmp_path / "mvnw"
+        mvnw_path.write_text("#!/bin/bash\necho Maven Wrapper")
+        mvnw_path.chmod(0o755)
+
+        result = find_maven_executable(project_root=tmp_path)
+        assert result is not None
+        assert str(tmp_path / "mvnw") in result
+
+    def test_fallback_to_cwd_when_no_project_root(self):
+        result = find_maven_executable()
+        # Should not crash even without project_root
+
+    def test_project_root_none_uses_cwd(self):
+        result = find_maven_executable(project_root=None)
+        # Should not crash
+
+
+class TestCustomSourceDirectoryDetection:
+    """Tests for custom source directory detection from pom.xml."""
+
+    def test_detects_custom_source_directory(self, tmp_path):
+        pom_content = """<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>my-app</artifactId>
+    <version>1.0.0</version>
+    <build>
+        <sourceDirectory>src/main/custom</sourceDirectory>
+    </build>
+</project>
+"""
+        (tmp_path / "pom.xml").write_text(pom_content)
+        (tmp_path / "src" / "main" / "java").mkdir(parents=True)
+        (tmp_path / "src" / "main" / "custom").mkdir(parents=True)
+
+        info = get_project_info(tmp_path)
+        assert info is not None
+        source_strs = [str(s) for s in info.source_roots]
+        assert any("custom" in s for s in source_strs)
+
+    def test_standard_dirs_still_detected(self, tmp_path):
+        pom_content = """<?xml version="1.0" encoding="UTF-8"?>
+<project>
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>my-app</artifactId>
+    <version>1.0.0</version>
+</project>
+"""
+        (tmp_path / "pom.xml").write_text(pom_content)
+        (tmp_path / "src" / "main" / "java").mkdir(parents=True)
+        (tmp_path / "src" / "test" / "java").mkdir(parents=True)
+
+        info = get_project_info(tmp_path)
+        assert info is not None
+        assert len(info.source_roots) == 1
+        assert len(info.test_roots) == 1
+
+    def test_nonexistent_custom_dir_ignored(self, tmp_path):
+        pom_content = """<?xml version="1.0" encoding="UTF-8"?>
+<project>
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>my-app</artifactId>
+    <version>1.0.0</version>
+    <build>
+        <sourceDirectory>src/main/nonexistent</sourceDirectory>
+    </build>
+</project>
+"""
+        (tmp_path / "pom.xml").write_text(pom_content)
+        (tmp_path / "src" / "main" / "java").mkdir(parents=True)
+
+        info = get_project_info(tmp_path)
+        assert info is not None
+        assert len(info.source_roots) == 1

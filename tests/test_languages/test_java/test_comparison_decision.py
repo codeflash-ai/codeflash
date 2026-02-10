@@ -1,13 +1,8 @@
 """Tests for the comparison decision logic in function_optimizer.py.
 
-Validates the routing between:
-1. SQLite-based comparison (via language_support.compare_test_results) when both
-   original and candidate SQLite files exist
-2. pass_fail_only fallback (via equivalence.compare_test_results with pass_fail_only=True)
-   when SQLite files are missing
-
-Also validates the Python equivalence.compare_test_results behavior with pass_fail_only
-flag to ensure the fallback path works correctly.
+Validates SQLite-based comparison (via language_support.compare_test_results) when both
+original and candidate SQLite files exist. If SQLite files are missing, optimization will
+fail with an error to maintain strict correctness guarantees.
 """
 
 import inspect
@@ -205,151 +200,6 @@ class TestSqlitePathSelection:
         assert diffs == []
 
 
-class TestPassFailFallbackBehavior:
-    """Tests for pass_fail_only fallback comparison.
-
-    When SQLite files don't exist, function_optimizer.py:2834-2836 calls:
-        compare_test_results(baseline, candidate, pass_fail_only=True)
-
-    With pass_fail_only=True, the comparator from equivalence.py only checks
-    did_pass status, ignoring return values entirely (lines 105-106).
-    """
-
-    def test_pass_fail_only_ignores_return_values(self):
-        """With pass_fail_only=True, different return values are ignored.
-
-        This is the key behavior of the fallback path: when SQLite comparison
-        is unavailable, only test pass/fail status is checked. Return value
-        differences are silently ignored.
-        """
-        original = make_test_results([
-            make_invocation(
-                iteration_id="1_0",
-                did_pass=True,
-                return_value=42,
-            ),
-        ])
-        candidate = make_test_results([
-            make_invocation(
-                iteration_id="1_0",
-                did_pass=True,
-                return_value=999,  # Different return value
-            ),
-        ])
-
-        match, diffs = python_compare_test_results(original, candidate, pass_fail_only=True)
-
-        assert match is True
-        assert len(diffs) == 0
-
-    def test_pass_fail_only_detects_failure_change(self):
-        """With pass_fail_only=True, a pass-to-fail change is detected.
-
-        Even in fallback mode, if a test that originally passed now fails,
-        that is a real behavioral change that must be caught.
-        """
-        original = make_test_results([
-            make_invocation(
-                iteration_id="1_0",
-                did_pass=True,
-                return_value=42,
-            ),
-        ])
-        candidate = make_test_results([
-            make_invocation(
-                iteration_id="1_0",
-                did_pass=False,  # Test now fails
-                return_value=42,
-            ),
-        ])
-
-        match, diffs = python_compare_test_results(original, candidate, pass_fail_only=True)
-
-        assert match is False
-        assert len(diffs) == 1
-        assert diffs[0].scope == TestDiffScope.DID_PASS
-
-    def test_pass_fail_only_with_empty_results(self):
-        """Empty results return (False, []) -- the function treats empty as not equal."""
-        original = TestResults()
-        candidate = TestResults()
-
-        match, diffs = python_compare_test_results(original, candidate, pass_fail_only=True)
-
-        # equivalence.py:34 -- empty results return False
-        assert match is False
-        assert len(diffs) == 0
-
-    def test_pass_fail_only_multiple_tests_mixed(self):
-        """Multiple tests with same pass/fail status match, even with different return values."""
-        original = make_test_results([
-            make_invocation(
-                iteration_id="1_0",
-                did_pass=True,
-                return_value=10,
-            ),
-            make_invocation(
-                iteration_id="2_0",
-                did_pass=True,
-                return_value=20,
-            ),
-            make_invocation(
-                iteration_id="3_0",
-                did_pass=True,
-                return_value=30,
-            ),
-        ])
-        candidate = make_test_results([
-            make_invocation(
-                iteration_id="1_0",
-                did_pass=True,
-                return_value=100,  # Different
-            ),
-            make_invocation(
-                iteration_id="2_0",
-                did_pass=True,
-                return_value=200,  # Different
-            ),
-            make_invocation(
-                iteration_id="3_0",
-                did_pass=True,
-                return_value=300,  # Different
-            ),
-        ])
-
-        match, diffs = python_compare_test_results(original, candidate, pass_fail_only=True)
-
-        assert match is True
-        assert len(diffs) == 0
-
-    def test_full_comparison_detects_return_value_difference(self):
-        """Without pass_fail_only, different return values ARE detected.
-
-        This contrasts with test_pass_fail_only_ignores_return_values to show
-        the behavioral difference between the two paths.
-        """
-        original = make_test_results([
-            make_invocation(
-                iteration_id="1_0",
-                did_pass=True,
-                return_value=42,
-            ),
-        ])
-        candidate = make_test_results([
-            make_invocation(
-                iteration_id="1_0",
-                did_pass=True,
-                return_value=999,  # Different return value
-            ),
-        ])
-
-        match, diffs = python_compare_test_results(original, candidate, pass_fail_only=False)
-
-        assert match is False
-        assert len(diffs) == 1
-        assert diffs[0].scope == TestDiffScope.RETURN_VALUE
-
-
 class TestDecisionPointDocumentation:
     """Canary tests that validate the decision logic code pattern exists.
 
@@ -363,7 +213,7 @@ class TestDecisionPointDocumentation:
         The comparison decision at lines ~2816-2836 checks:
         1. if not is_python() -> enters non-Python path
         2. original_sqlite.exists() and candidate_sqlite.exists() -> SQLite path
-        3. else -> pass_fail_only fallback
+        3. else -> fail with error (strict correctness)
 
         This is a canary test: if the pattern is refactored, this test fails
         to alert that the routing logic has changed.
@@ -384,12 +234,6 @@ class TestDecisionPointDocumentation:
             "The SQLite comparison routing may have been refactored."
         )
 
-        # Verify pass_fail_only fallback
-        assert "pass_fail_only=True" in source, (
-            "pass_fail_only=True fallback not found. "
-            "The comparison fallback logic may have been refactored."
-        )
-
         # Verify the SQLite file naming pattern
         assert "test_return_values_0.sqlite" in source, (
             "SQLite file naming pattern 'test_return_values_0.sqlite' not found. "
@@ -407,17 +251,10 @@ class TestDecisionPointDocumentation:
         assert callable(compare_test_results)
 
     def test_python_equivalence_import_path(self):
-        """Verify the Python equivalence module is importable with pass_fail_only parameter.
+        """Verify the Python equivalence module is importable.
 
-        The fallback at function_optimizer.py:2834 calls equivalence.compare_test_results
-        with pass_fail_only=True.
+        Python uses equivalence.compare_test_results for behavioral verification.
         """
         from codeflash.verification.equivalence import compare_test_results
 
         assert callable(compare_test_results)
-
-        # Verify pass_fail_only parameter exists in function signature
-        sig = inspect.signature(compare_test_results)
-        assert "pass_fail_only" in sig.parameters, (
-            "pass_fail_only parameter not found in equivalence.compare_test_results signature"
-        )

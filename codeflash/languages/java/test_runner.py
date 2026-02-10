@@ -21,14 +21,15 @@ from typing import Any
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.languages.base import TestResult
 from codeflash.languages.java.build_tools import (
-    add_codeflash_dependency_to_pom,
     add_jacoco_plugin_to_pom,
     find_maven_executable,
     get_jacoco_xml_path,
-    install_codeflash_runtime,
     is_jacoco_configured,
 )
-from codeflash.languages.java.comparator import _find_comparator_jar
+
+_MAVEN_NS = "http://maven.apache.org/POM/4.0.0"
+
+_M_MODULES_TAG = f"{{{_MAVEN_NS}}}modules"
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,30 @@ def _validate_java_class_name(class_name: str) -> bool:
 
     """
     return bool(_VALID_JAVA_CLASS_NAME.match(class_name))
+
+
+def _extract_modules_from_pom_content(content: str) -> list[str]:
+    """Extract module names from Maven POM XML content using proper XML parsing.
+
+    Handles both namespaced and non-namespaced POMs.
+    """
+    if "modules" not in content:
+        return []
+
+    try:
+        root = ET.fromstring(content)
+    except ET.ParseError:
+        logger.debug("Failed to parse POM XML for module extraction")
+        return []
+
+    modules_elem = root.find(_M_MODULES_TAG)
+    if modules_elem is None:
+        modules_elem = root.find("modules")
+
+    if modules_elem is None:
+        return []
+
+    return [m.text for m in modules_elem if m.text]
 
 
 def _validate_test_filter(test_filter: str) -> str:
@@ -226,44 +251,6 @@ class JavaTestRunResult:
     returncode: int
 
 
-def _ensure_runtime_on_classpath(maven_root: Path, test_module: str | None = None) -> None:
-    """Ensure codeflash-runtime JAR is installed and added as a dependency.
-
-    This installs the fat JAR (with Kryo, sqlite-jdbc) to the local Maven repository
-    and adds it as a test-scoped dependency in the project's pom.xml.
-    Required for com.codeflash.Serializer (Kryo binary serialization) in instrumented tests.
-    """
-    jar_path = _find_comparator_jar()
-    if not jar_path:
-        logger.warning("codeflash-runtime JAR not found, Kryo serialization will not be available")
-        return
-
-    # Check if already installed in local Maven repo
-    m2_jar = (
-        Path.home()
-        / ".m2"
-        / "repository"
-        / "com"
-        / "codeflash"
-        / "codeflash-runtime"
-        / "1.0.0"
-        / "codeflash-runtime-1.0.0.jar"
-    )
-    if not m2_jar.exists():
-        if not install_codeflash_runtime(maven_root, jar_path):
-            logger.warning("Failed to install codeflash-runtime to local Maven repository")
-            return
-
-    # Add dependency to the pom.xml where tests are compiled
-    if test_module:
-        pom_path = maven_root / test_module / "pom.xml"
-    else:
-        pom_path = maven_root / "pom.xml"
-
-    if pom_path.exists():
-        add_codeflash_dependency_to_pom(pom_path)
-
-
 def run_behavioral_tests(
     test_paths: Any,
     test_env: dict[str, str],
@@ -296,10 +283,6 @@ def run_behavioral_tests(
 
     # Detect multi-module Maven projects where tests are in a different module
     maven_root, test_module = _find_multi_module_root(project_root, test_paths)
-
-    # Ensure codeflash-runtime JAR is available on the test classpath
-    # This provides com.codeflash.Serializer for Kryo binary serialization
-    _ensure_runtime_on_classpath(maven_root, test_module)
 
     # Create SQLite database path for behavior capture - use standard path that parse_test_results expects
     sqlite_db_path = get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite"))
@@ -386,7 +369,7 @@ def run_behavioral_tests(
 def _compile_tests(
     project_root: Path, env: dict[str, str], test_module: str | None = None, timeout: int = 120
 ) -> subprocess.CompletedProcess:
-    """Compile production and test code using Maven (without running tests).
+    """Compile test code using Maven (without running tests).
 
     Args:
         project_root: Root directory of the Maven project.
@@ -403,7 +386,7 @@ def _compile_tests(
         logger.error("Maven not found")
         return subprocess.CompletedProcess(args=["mvn"], returncode=-1, stdout="", stderr="Maven not found")
 
-    cmd = [mvn, "compile", "test-compile", "-e"]  # Compile production + test code
+    cmd = [mvn, "test-compile", "-e"]  # Show errors but not verbose output
 
     if test_module:
         cmd.extend(["-pl", test_module, "-am"])
@@ -1105,15 +1088,6 @@ def _run_maven_tests(
     maven_goal = "verify" if enable_coverage else "test"
     cmd = [mvn, maven_goal, "-fae"]  # Fail at end to run all tests
 
-    # Add --add-opens for Kryo serialization on Java 16+ (module system restrictions)
-    add_opens = (
-        "--add-opens java.base/java.util=ALL-UNNAMED "
-        "--add-opens java.base/java.lang=ALL-UNNAMED "
-        "--add-opens java.base/java.math=ALL-UNNAMED "
-        "--add-opens java.base/java.time=ALL-UNNAMED"
-    )
-    cmd.append(f'-DargLine={add_opens}')
-
     # When coverage is enabled, continue build even if tests fail so JaCoCo report is generated
     if enable_coverage:
         cmd.append("-Dmaven.test.failure.ignore=true")
@@ -1457,6 +1431,43 @@ def _parse_surefire_xml(xml_file: Path) -> list[TestResult]:
         logger.warning("Failed to parse Surefire report %s: %s", xml_file, e)
 
     return results
+
+
+def _extract_source_dirs_from_pom(project_root: Path) -> list[str]:
+    """Extract custom source and test source directories from pom.xml."""
+    pom_path = project_root / "pom.xml"
+    if not pom_path.exists():
+        return []
+
+    try:
+        content = pom_path.read_text(encoding="utf-8")
+        root = ET.fromstring(content)
+        ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+
+        source_dirs: list[str] = []
+        standard_dirs = {
+            "src/main/java",
+            "src/test/java",
+            "${project.basedir}/src/main/java",
+            "${project.basedir}/src/test/java",
+        }
+
+        for build in [root.find("m:build", ns), root.find("build")]:
+            if build is not None:
+                for tag in ("sourceDirectory", "testSourceDirectory"):
+                    for elem in [build.find(f"m:{tag}", ns), build.find(tag)]:
+                        if elem is not None and elem.text:
+                            dir_text = elem.text.strip()
+                            if dir_text not in standard_dirs:
+                                source_dirs.append(dir_text)
+
+        return source_dirs
+    except ET.ParseError:
+        logger.debug("Failed to parse pom.xml for source directories")
+        return []
+    except Exception:
+        logger.debug("Error reading pom.xml for source directories")
+        return []
 
 
 def run_line_profile_tests(

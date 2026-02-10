@@ -13,7 +13,10 @@ import subprocess
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +184,17 @@ def _get_maven_project_info(project_root: Path) -> JavaProjectInfo | None:
         if test_src.exists():
             test_roots.append(test_src)
 
+
+        # Check for custom source directories in pom.xml <build> section
+        for build in [root.find("m:build", ns), root.find("build")]:
+            if build is not None:
+                for tag, roots_list in [("sourceDirectory", source_roots), ("testSourceDirectory", test_roots)]:
+                    for elem in [build.find(f"m:{tag}", ns), build.find(tag)]:
+                        if elem is not None and elem.text:
+                            custom_dir = project_root / elem.text.strip()
+                            if custom_dir.exists() and custom_dir not in roots_list:
+                                roots_list.append(custom_dir)
+
         target_dir = project_root / "target"
 
         return JavaProjectInfo(
@@ -281,17 +295,26 @@ def _get_gradle_project_info(project_root: Path) -> JavaProjectInfo | None:
     )
 
 
-def find_maven_executable() -> str | None:
+def find_maven_executable(project_root: Path | None = None) -> str | None:
     """Find the Maven executable.
 
     Returns:
         Path to mvn executable, or None if not found.
 
     """
-    # Check for Maven wrapper first
-    if Path("mvnw").exists():
+    # Check for Maven wrapper in project root first
+    if project_root is not None:
+        mvnw_path = project_root / "mvnw"
+        if mvnw_path.exists():
+            return str(mvnw_path)
+        mvnw_cmd_path = project_root / "mvnw.cmd"
+        if mvnw_cmd_path.exists():
+            return str(mvnw_cmd_path)
+
+    # Check for Maven wrapper in current directory
+    if os.path.exists("mvnw"):
         return "./mvnw"
-    if Path("mvnw.cmd").exists():
+    if os.path.exists("mvnw.cmd"):
         return "mvnw.cmd"
 
     # Check system Maven
@@ -302,17 +325,32 @@ def find_maven_executable() -> str | None:
     return None
 
 
-def find_gradle_executable() -> str | None:
+def find_gradle_executable(project_root: Path | None = None) -> str | None:
     """Find the Gradle executable.
+
+    Checks for Gradle wrapper in the project root and current directory,
+    then falls back to system Gradle.
+
+    Args:
+        project_root: Optional project root directory to search for Gradle wrapper.
 
     Returns:
         Path to gradle executable, or None if not found.
 
     """
-    # Check for Gradle wrapper first
-    if Path("gradlew").exists():
+    # Check for Gradle wrapper in project root first
+    if project_root is not None:
+        gradlew_path = project_root / "gradlew"
+        if gradlew_path.exists():
+            return str(gradlew_path)
+        gradlew_bat_path = project_root / "gradlew.bat"
+        if gradlew_bat_path.exists():
+            return str(gradlew_bat_path)
+
+    # Check for Gradle wrapper in current directory
+    if os.path.exists("gradlew"):
         return "./gradlew"
-    if Path("gradlew.bat").exists():
+    if os.path.exists("gradlew.bat"):
         return "gradlew.bat"
 
     # Check system Gradle
