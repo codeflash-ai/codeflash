@@ -863,7 +863,8 @@ class JavaAssertTransformer:
         code_to_run = None
         if assertion.lambda_body:
             code_to_run = assertion.lambda_body
-            if not code_to_run.endswith(";"):
+            # Use a direct last-character check instead of .endswith for lower overhead
+            if code_to_run and code_to_run[-1] != ";":
                 code_to_run += ";"
         elif assertion.target_calls:
             call = assertion.target_calls[0]
