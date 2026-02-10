@@ -21,7 +21,14 @@ public class Fibonacci {
         if (n <= 1) {
             return n;
         }
-        return fibonacci(n - 1) + fibonacci(n - 2);
+        long prev = 0L;
+        long curr = 1L;
+        for (int i = 2; i <= n; i++) {
+            long next = prev + curr;
+            prev = curr;
+            curr = next;
+        }
+        return curr;
     }
 
     /**
@@ -172,4 +179,15 @@ public class Fibonacci {
 
         return Math.abs(indexA - indexB) == 1;
     }
+
+    private static long fibonacciHelper(int n, long[] memo) {
+            if (n <= 1) {
+                return n;
+            }
+            if (memo[n] != 0) {
+                return memo[n];
+            }
+            memo[n] = fibonacciHelper(n - 1, memo) + fibonacciHelper(n - 2, memo);
+            return memo[n];
+        }
 }
