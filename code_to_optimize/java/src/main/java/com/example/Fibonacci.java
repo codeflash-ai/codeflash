@@ -119,11 +119,8 @@ public class Fibonacci {
             return 0;
         }
 
-        long sum = 0;
-        for (int i = 0; i < n; i++) {
-            sum = sum + fibonacci(i);
-        }
-        return sum;
+        // Use identity: sum_{i=0}^{n-1} F(i) = F(n+1) - 1
+        return fibonacci(n + 1) - 1;
     }
 
     /**
