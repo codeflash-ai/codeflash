@@ -74,7 +74,7 @@ def get_current_branch(repo: Repo | None = None) -> str:
     :return: The name of the current branch, or "main" if HEAD is detached or
              the branch cannot be determined.
     """
-    repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
+    repository: Repo = repo or git.Repo(search_parent_directories=True)
 
     # Check if HEAD is detached (active_branch will be None)
     if repository.head.is_detached:
@@ -106,12 +106,12 @@ def get_current_branch(repo: Repo | None = None) -> str:
 
 
 def get_remote_url(repo: Repo | None = None, git_remote: str | None = "origin") -> str:
-    repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
+    repository: Repo = repo or git.Repo(search_parent_directories=True)
     return repository.remote(name=git_remote).url
 
 
 def get_git_remotes(repo: Repo) -> list[str]:
-    repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
+    repository: Repo = repo or git.Repo(search_parent_directories=True)
     return [remote.name for remote in repository.remotes]
 
 
@@ -128,7 +128,7 @@ def get_repo_owner_and_name(repo: Repo | None = None, git_remote: str | None = "
 
 
 def git_root_dir(repo: Repo | None = None) -> Path:
-    repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
+    repository: Repo = repo or git.Repo(search_parent_directories=True)
     return Path(repository.working_dir)
 
 
@@ -199,7 +199,7 @@ def get_last_commit_author_if_pr_exists(repo: Repo | None = None) -> str | None:
     if "PR_NUMBER" not in os.environ:
         return None
     try:
-        repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
+        repository: Repo = repo or git.Repo(search_parent_directories=True)
         last_commit = repository.head.commit
     except Exception:
         logger.exception("Failed to get last commit author.")

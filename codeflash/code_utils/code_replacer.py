@@ -686,7 +686,7 @@ def _get_existing_names(original_declarations: list, analyzer: TreeSitterAnalyze
         if imp.default_import:
             existing_names.add(imp.default_import)
         for name, alias in imp.named_imports:
-            existing_names.add(alias if alias else name)
+            existing_names.add(alias or name)
         if imp.namespace_import:
             existing_names.add(imp.namespace_import)
 

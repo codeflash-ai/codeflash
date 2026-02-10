@@ -542,7 +542,7 @@ def run_jest_behavioral_tests(
         project_root = _find_node_project_root(first_test_file)
 
     # Use the project root, or fall back to provided cwd
-    effective_cwd = project_root if project_root else cwd
+    effective_cwd = project_root or cwd
     logger.debug(f"Jest working directory: {effective_cwd}")
 
     # Ensure the codeflash npm package is installed
@@ -780,7 +780,7 @@ def run_jest_benchmarking_tests(
         first_test_file = Path(test_files[0])
         project_root = _find_node_project_root(first_test_file)
 
-    effective_cwd = project_root if project_root else cwd
+    effective_cwd = project_root or cwd
     logger.debug(f"Jest benchmarking working directory: {effective_cwd}")
 
     # Ensure the codeflash npm package is installed
@@ -927,7 +927,7 @@ def run_jest_line_profile_tests(
         first_test_file = Path(test_files[0])
         project_root = _find_node_project_root(first_test_file)
 
-    effective_cwd = project_root if project_root else cwd
+    effective_cwd = project_root or cwd
     logger.debug(f"Jest line profiling working directory: {effective_cwd}")
 
     # Ensure the codeflash npm package is installed
