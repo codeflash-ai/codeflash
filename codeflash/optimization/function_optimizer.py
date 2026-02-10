@@ -758,6 +758,17 @@ class FunctionOptimizer:
         tests_root = self.test_cfg.tests_root
         parts = tests_root.parts
 
+        # Check if tests_root already ends with src/test/java (Maven-standard)
+        if len(parts) >= 3 and parts[-3:] == ("src", "test", "java"):
+            logger.debug(f"[JAVA] tests_root already is Maven-standard test directory: {tests_root}")
+            return tests_root
+
+        # Check for Maven-standard src/test/java structure as subdirectory
+        maven_test_dir = tests_root / "src" / "test" / "java"
+        if maven_test_dir.exists() and maven_test_dir.is_dir():
+            logger.debug(f"[JAVA] Found Maven-standard test directory as subdirectory: {maven_test_dir}")
+            return maven_test_dir
+
         # Look for standard Java package prefixes that indicate the start of package structure
         standard_package_prefixes = ("com", "org", "net", "io", "edu", "gov")
 
