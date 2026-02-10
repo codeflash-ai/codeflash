@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * impact on benchmark measurements.
  *
  * Database schema:
- * - invocations: call_id, method_id, args_json, result_json, error_json, start_time, end_time
+ * - invocations: call_id, method_id, args_blob, result_blob, error_blob, start_time, end_time
  * - benchmarks: method_id, duration_ns, timestamp
  * - benchmark_results: method_id, mean_ns, stddev_ns, min_ns, max_ns, p50_ns, p90_ns, p99_ns, iterations
  */
@@ -65,14 +65,14 @@ public final class ResultWriter {
 
     private void initializeSchema() throws SQLException {
         try (Statement stmt = connection.createStatement()) {
-            // Invocations table - stores input/output/error for each function call
+            // Invocations table - stores input/output/error for each function call as BLOBs
             stmt.execute(
                 "CREATE TABLE IF NOT EXISTS invocations (" +
                 "call_id INTEGER PRIMARY KEY, " +
                 "method_id TEXT NOT NULL, " +
-                "args_json TEXT, " +
-                "result_json TEXT, " +
-                "error_json TEXT, " +
+                "args_blob BLOB, " +
+                "result_blob BLOB, " +
+                "error_blob BLOB, " +
                 "start_time INTEGER, " +
                 "end_time INTEGER)"
             );
@@ -109,13 +109,13 @@ public final class ResultWriter {
 
     private void prepareStatements() throws SQLException {
         insertInvocationInput = connection.prepareStatement(
-            "INSERT INTO invocations (call_id, method_id, args_json, start_time) VALUES (?, ?, ?, ?)"
+            "INSERT INTO invocations (call_id, method_id, args_blob, start_time) VALUES (?, ?, ?, ?)"
         );
         updateInvocationOutput = connection.prepareStatement(
-            "UPDATE invocations SET result_json = ?, end_time = ? WHERE call_id = ?"
+            "UPDATE invocations SET result_blob = ?, end_time = ? WHERE call_id = ?"
         );
         updateInvocationError = connection.prepareStatement(
-            "UPDATE invocations SET error_json = ?, end_time = ? WHERE call_id = ?"
+            "UPDATE invocations SET error_blob = ?, end_time = ? WHERE call_id = ?"
         );
         insertBenchmark = connection.prepareStatement(
             "INSERT INTO benchmarks (method_id, duration_ns, timestamp) VALUES (?, ?, ?)"
@@ -130,22 +130,22 @@ public final class ResultWriter {
     /**
      * Record function input (beginning of invocation).
      */
-    public void recordInput(long callId, String methodId, String argsJson, long startTime) {
-        writeQueue.offer(new WriteTask(WriteType.INPUT, callId, methodId, argsJson, null, null, startTime, 0, null));
+    public void recordInput(long callId, String methodId, byte[] argsBlob, long startTime) {
+        writeQueue.offer(new WriteTask(WriteType.INPUT, callId, methodId, argsBlob, null, null, startTime, 0, null));
     }
 
     /**
      * Record function output (successful completion).
      */
-    public void recordOutput(long callId, String methodId, String resultJson, long endTime) {
-        writeQueue.offer(new WriteTask(WriteType.OUTPUT, callId, methodId, null, resultJson, null, 0, endTime, null));
+    public void recordOutput(long callId, String methodId, byte[] resultBlob, long endTime) {
+        writeQueue.offer(new WriteTask(WriteType.OUTPUT, callId, methodId, null, resultBlob, null, 0, endTime, null));
     }
 
     /**
      * Record function error (exception thrown).
      */
-    public void recordError(long callId, String methodId, String errorJson, long endTime) {
-        writeQueue.offer(new WriteTask(WriteType.ERROR, callId, methodId, null, null, errorJson, 0, endTime, null));
+    public void recordError(long callId, String methodId, byte[] errorBlob, long endTime) {
+        writeQueue.offer(new WriteTask(WriteType.ERROR, callId, methodId, null, null, errorBlob, 0, endTime, null));
     }
 
     /**
@@ -196,20 +196,20 @@ public final class ResultWriter {
             case INPUT:
                 insertInvocationInput.setLong(1, task.callId);
                 insertInvocationInput.setString(2, task.methodId);
-                insertInvocationInput.setString(3, task.argsJson);
+                insertInvocationInput.setBytes(3, task.argsBlob);
                 insertInvocationInput.setLong(4, task.startTime);
                 insertInvocationInput.executeUpdate();
                 break;
 
             case OUTPUT:
-                updateInvocationOutput.setString(1, task.resultJson);
+                updateInvocationOutput.setBytes(1, task.resultBlob);
                 updateInvocationOutput.setLong(2, task.endTime);
                 updateInvocationOutput.setLong(3, task.callId);
                 updateInvocationOutput.executeUpdate();
                 break;
 
             case ERROR:
-                updateInvocationError.setString(1, task.errorJson);
+                updateInvocationError.setBytes(1, task.errorBlob);
                 updateInvocationError.setLong(2, task.endTime);
                 updateInvocationError.setLong(3, task.callId);
                 updateInvocationError.executeUpdate();
@@ -294,22 +294,22 @@ public final class ResultWriter {
         final WriteType type;
         final long callId;
         final String methodId;
-        final String argsJson;
-        final String resultJson;
-        final String errorJson;
+        final byte[] argsBlob;
+        final byte[] resultBlob;
+        final byte[] errorBlob;
         final long startTime;
         final long endTime;
         final BenchmarkResult benchmarkResult;
 
-        WriteTask(WriteType type, long callId, String methodId, String argsJson,
-                  String resultJson, String errorJson, long startTime, long endTime,
+        WriteTask(WriteType type, long callId, String methodId, byte[] argsBlob,
+                  byte[] resultBlob, byte[] errorBlob, long startTime, long endTime,
                   BenchmarkResult benchmarkResult) {
             this.type = type;
             this.callId = callId;
             this.methodId = methodId;
-            this.argsJson = argsJson;
-            this.resultJson = resultJson;
-            this.errorJson = errorJson;
+            this.argsBlob = argsBlob;
+            this.resultBlob = resultBlob;
+            this.errorBlob = errorBlob;
             this.startTime = startTime;
             this.endTime = endTime;
             this.benchmarkResult = benchmarkResult;

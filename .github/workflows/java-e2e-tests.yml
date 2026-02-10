@@ -51,6 +51,12 @@ jobs:
           java -version
           mvn --version
 
+      - name: Build codeflash-runtime JAR
+        run: |
+          cd codeflash-java-runtime
+          mvn clean package -q -DskipTests
+          mvn install -q -DskipTests
+
       - name: Build Java sample project
         run: |
           cd code_to_optimize/java

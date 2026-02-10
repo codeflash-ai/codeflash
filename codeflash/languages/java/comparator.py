@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import subprocess
 from pathlib import Path
@@ -59,6 +60,11 @@ def _find_comparator_jar(project_root: Path | None = None) -> Path | None:
         )
         if m2_jar.exists():
             return m2_jar
+
+    # Check bundled JAR in package resources
+    resources_jar = Path(__file__).parent / "resources" / "codeflash-runtime-1.0.0.jar"
+    if resources_jar.exists():
+        return resources_jar
 
     return None
 
@@ -127,11 +133,11 @@ def compare_test_results(
         return False, []
 
     if not original_sqlite_path.exists():
-        logger.error(f"Original SQLite database not found: {original_sqlite_path}")
+        logger.error("Original SQLite database not found: %s", original_sqlite_path)
         return False, []
 
     if not candidate_sqlite_path.exists():
-        logger.error(f"Candidate SQLite database not found: {candidate_sqlite_path}")
+        logger.error("Candidate SQLite database not found: %s", candidate_sqlite_path)
         return False, []
 
     cwd = project_root or Path.cwd()
@@ -158,27 +164,27 @@ def compare_test_results(
             if not result.stdout or not result.stdout.strip():
                 logger.error("Java comparator returned empty output")
                 if result.stderr:
-                    logger.error(f"stderr: {result.stderr}")
+                    logger.error("stderr: %s", result.stderr)
                 return False, []
 
             comparison = json.loads(result.stdout)
         except json.JSONDecodeError as e:
-            logger.exception(f"Failed to parse Java comparator output: {e}")
-            logger.exception(f"stdout: {result.stdout[:500] if result.stdout else '(empty)'}")
+            logger.exception("Failed to parse Java comparator output: %s", e)
+            logger.exception("stdout: %s", result.stdout[:500] if result.stdout else "(empty)")
             if result.stderr:
-                logger.exception(f"stderr: {result.stderr[:500]}")
+                logger.exception("stderr: %s", result.stderr[:500])
             return False, []
 
         # Check for errors in the JSON response
         if comparison.get("error"):
-            logger.error(f"Java comparator error: {comparison['error']}")
+            logger.error("Java comparator error: %s", comparison["error"])
             return False, []
 
         # Check for unexpected exit codes
         if result.returncode not in {0, 1}:
-            logger.error(f"Java comparator failed with exit code {result.returncode}")
+            logger.error("Java comparator failed with exit code %s", result.returncode)
             if result.stderr:
-                logger.error(f"stderr: {result.stderr}")
+                logger.error("stderr: %s", result.stderr)
             return False, []
 
         # Convert diffs to TestDiff objects
@@ -208,19 +214,21 @@ def compare_test_results(
             )
 
             logger.debug(
-                f"Java test diff:\n"
-                f"  Method: {method_id}\n"
-                f"  Call ID: {call_id}\n"
-                f"  Scope: {scope_str}\n"
-                f"  Original: {str(diff.get('originalValue', 'N/A'))[:100]}\n"
-                f"  Candidate: {str(diff.get('candidateValue', 'N/A'))[:100]}"
+                "Java test diff:\n  Method: %s\n  Call ID: %s\n  Scope: %s\n  Original: %s\n  Candidate: %s",
+                method_id,
+                call_id,
+                scope_str,
+                str(diff.get("originalValue", "N/A"))[:100],
+                str(diff.get("candidateValue", "N/A"))[:100],
             )
 
         equivalent = comparison.get("equivalent", False)
 
         logger.info(
-            f"Java comparison: {'equivalent' if equivalent else 'DIFFERENT'} "
-            f"({comparison.get('totalInvocations', 0)} invocations, {len(test_diffs)} diffs)"
+            "Java comparison: %s (%s invocations, %s diffs)",
+            "equivalent" if equivalent else "DIFFERENT",
+            comparison.get("totalInvocations", 0),
+            len(test_diffs),
         )
 
         return equivalent, test_diffs
@@ -232,8 +240,28 @@ def compare_test_results(
         logger.exception("Java not found. Please install Java to compare test results.")
         return False, []
     except Exception as e:
-        logger.exception(f"Error running Java comparator: {e}")
+        logger.exception("Error running Java comparator: %s", e)
         return False, []
+
+
+def values_equal(orig: str | None, cand: str | None) -> bool:
+    """Compare two serialized values with numeric-aware equality.
+
+    Handles boxing mismatches where Integer(0) and Long(0) serialize to different strings
+    (e.g., "0" vs "0.0") but represent the same numeric value.
+    """
+    if orig == cand:
+        return True
+    if orig is None or cand is None:
+        return False
+    try:
+        orig_num = float(orig)
+        cand_num = float(cand)
+        if math.isnan(orig_num) and math.isnan(cand_num):
+            return True
+        return orig_num == cand_num or math.isclose(orig_num, cand_num, rel_tol=1e-9)
+    except (ValueError, TypeError):
+        return False
 
 
 def compare_invocations_directly(original_results: dict, candidate_results: dict) -> tuple[bool, list]:
@@ -311,7 +339,7 @@ def compare_invocations_directly(original_results: dict, candidate_results: dict
                         original_pytest_error=orig_error,
                     )
                 )
-            elif orig_result != cand_result:
+            elif not values_equal(orig_result, cand_result):
                 # Results differ
                 test_diffs.append(
                     TestDiff(
@@ -329,8 +357,10 @@ def compare_invocations_directly(original_results: dict, candidate_results: dict
     equivalent = len(test_diffs) == 0
 
     logger.info(
-        f"Python comparison: {'equivalent' if equivalent else 'DIFFERENT'} "
-        f"({len(all_call_ids)} invocations, {len(test_diffs)} diffs)"
+        "Python comparison: %s (%s invocations, %s diffs)",
+        "equivalent" if equivalent else "DIFFERENT",
+        len(all_call_ids),
+        len(test_diffs),
     )
 
     return equivalent, test_diffs

@@ -11,6 +11,7 @@ import pytest
 from codeflash.languages.java.comparator import (
     compare_invocations_directly,
     compare_test_results,
+    values_equal,
 )
 from codeflash.models.models import TestDiffScope
 
@@ -113,6 +114,174 @@ class TestDirectComparison:
 
         assert equivalent is True
         assert len(diffs) == 0
+
+
+class TestNumericValueEquality:
+    """Tests for numeric-aware value comparison."""
+
+    def test_identical_strings(self):
+        assert values_equal("0", "0") is True
+        assert values_equal("42", "42") is True
+        assert values_equal("hello", "hello") is True
+
+    def test_integer_long_equivalence(self):
+        assert values_equal("0", "0.0") is True
+        assert values_equal("42", "42.0") is True
+        assert values_equal("-5", "-5.0") is True
+
+    def test_float_double_equivalence(self):
+        assert values_equal("3.14", "3.14") is True
+        assert values_equal("3.14", "3.1400000000000001") is True
+
+    def test_nan_handling(self):
+        assert values_equal("NaN", "NaN") is True
+
+    def test_infinity_handling(self):
+        assert values_equal("Infinity", "Infinity") is True
+        assert values_equal("-Infinity", "-Infinity") is True
+        assert values_equal("Infinity", "-Infinity") is False
+
+    def test_none_handling(self):
+        assert values_equal(None, None) is True
+        assert values_equal(None, "0") is False
+        assert values_equal("0", None) is False
+
+    def test_non_numeric_strings_differ(self):
+        assert values_equal("hello", "world") is False
+        assert values_equal("abc", "123") is False
+
+    def test_numeric_comparison_in_direct_invocation(self):
+        """Test that compare_invocations_directly uses numeric-aware comparison."""
+        original = {
+            "1": {"result_json": "0", "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": "0.0", "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is True
+        assert len(diffs) == 0
+
+    def test_integer_long_mismatch_resolved(self):
+        """Test that Integer(42) vs Long(42) serialized differently are still equal."""
+        original = {
+            "1": {"result_json": "42", "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": "42.0", "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is True
+        assert len(diffs) == 0
+
+    def test_boolean_string_equality(self):
+        """Test that boolean serialized strings compare correctly."""
+        assert values_equal("true", "true") is True
+        assert values_equal("false", "false") is True
+        assert values_equal("true", "false") is False
+
+    def test_boolean_not_numeric(self):
+        """Test that boolean strings are not treated as numeric values."""
+        assert values_equal("true", "1") is False
+        assert values_equal("false", "0") is False
+
+    def test_character_as_int_equality(self):
+        """Test that characters serialized as int codepoints compare correctly.
+
+        _cfSerialize converts Character('A') to "65", so both sides should match.
+        """
+        assert values_equal("65", "65") is True
+        assert values_equal("65", "65.0") is True  # int vs float representation
+        assert values_equal("65", "66") is False
+
+    def test_array_string_equality(self):
+        """Test that array serialized strings compare correctly.
+
+        Arrays.toString produces strings like '[1, 2, 3]' which are compared as strings.
+        """
+        assert values_equal("[1, 2, 3]", "[1, 2, 3]") is True
+        assert values_equal("[1, 2, 3]", "[3, 2, 1]") is False
+        assert values_equal("[true, false]", "[true, false]") is True
+
+    def test_array_string_not_numeric(self):
+        """Test that array strings are not treated as numeric."""
+        assert values_equal("[1, 2]", "12") is False
+        assert values_equal("[]", "0") is False
+
+    def test_null_string_equality(self):
+        """Test that 'null' strings compare correctly."""
+        assert values_equal("null", "null") is True
+        assert values_equal("null", "0") is False
+
+    def test_byte_short_int_long_all_equivalent(self):
+        """Test that Byte(5), Short(5), Integer(5), Long(5) all serialize equivalently.
+
+        _cfSerialize normalizes all integer Number types to long representation.
+        """
+        assert values_equal("5", "5") is True
+        assert values_equal("5", "5.0") is True
+        assert values_equal("-128", "-128.0") is True
+
+    def test_float_double_precision(self):
+        """Test float vs double precision differences are handled."""
+        assert values_equal("3.14", "3.14") is True
+        # Float(3.14f).doubleValue() may give 3.140000104904175
+        assert values_equal("3.140000104904175", "3.14") is False  # too far apart
+        # But very close values should match
+        assert values_equal("1.0000000001", "1.0") is True
+
+    def test_negative_zero(self):
+        """Test that -0.0 and 0.0 are treated as equal."""
+        assert values_equal("0.0", "-0.0") is True
+        assert values_equal("0", "-0.0") is True
+
+    def test_boolean_invocation_comparison(self):
+        """Test boolean return values in full invocation comparison."""
+        original = {
+            "1": {"result_json": "true", "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": "true", "error_json": None},
+        }
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is True
+
+    def test_boolean_mismatch_invocation_comparison(self):
+        """Test boolean mismatch is correctly detected."""
+        original = {
+            "1": {"result_json": "true", "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": "false", "error_json": None},
+        }
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is False
+        assert len(diffs) == 1
+
+    def test_array_invocation_comparison(self):
+        """Test array return values in full invocation comparison."""
+        original = {
+            "1": {"result_json": "[1, 2, 3]", "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": "[1, 2, 3]", "error_json": None},
+        }
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is True
+
+    def test_array_mismatch_invocation_comparison(self):
+        """Test array mismatch is correctly detected."""
+        original = {
+            "1": {"result_json": "[1, 2, 3]", "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": "[1, 2, 4]", "error_json": None},
+        }
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is False
+        assert len(diffs) == 1
 
 
 class TestSqliteComparison:

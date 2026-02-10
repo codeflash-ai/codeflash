@@ -6,10 +6,7 @@ regression test code that captures function return values.
 All tests assert for full string equality, no substring matching.
 """
 
-from codeflash.languages.java.remove_asserts import (
-    JavaAssertTransformer,
-    transform_java_assertions,
-)
+from codeflash.languages.java.remove_asserts import JavaAssertTransformer, transform_java_assertions
 
 
 class TestBasicJUnit5Assertions:

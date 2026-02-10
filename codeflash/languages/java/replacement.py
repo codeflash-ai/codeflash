@@ -571,8 +571,8 @@ def insert_method(
     before = source_bytes[:insert_point]
     after = source_bytes[insert_point:]
 
-    # Use single newline as separator; for start position we need newline after opening brace
-    separator = "\n" if position == "end" else "\n"
+    # Use single newline as separator
+    separator = "\n"
 
     return (before + separator.encode("utf8") + indented_method.encode("utf8") + after).decode("utf8")
 

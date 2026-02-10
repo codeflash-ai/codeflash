@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import pickle
 import subprocess
@@ -31,8 +32,43 @@ from codeflash.tracing.pytest_parallelization import pytest_split
 if TYPE_CHECKING:
     from argparse import Namespace
 
+logger = logging.getLogger(__name__)
+
 
 def main(args: Namespace | None = None) -> ArgumentParser:
+    # For non-Python languages, detect early and route to Optimizer
+    # Java, JavaScript, and TypeScript use their own test runners (Maven/JUnit, Jest)
+    # and should not go through Python tracing
+    if args is None and "--file" in sys.argv:
+        try:
+            file_idx = sys.argv.index("--file")
+            if file_idx + 1 < len(sys.argv):
+                file_path = Path(sys.argv[file_idx + 1])
+                if file_path.exists():
+                    from codeflash.languages import Language, get_language_support
+
+                    lang_support = get_language_support(file_path)
+                    detected_language = lang_support.language
+
+                    if detected_language in (Language.JAVA, Language.JAVASCRIPT, Language.TYPESCRIPT):
+                        # Parse and process args like main.py does
+                        from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
+
+                        full_args = parse_args()
+                        full_args = process_pyproject_config(full_args)
+                        # Set checkpoint functions to None (no checkpoint for single-file optimization)
+                        full_args.previous_checkpoint_functions = None
+
+                        from codeflash.optimization import optimizer
+
+                        logger.info(
+                            "Detected %s file, routing to Optimizer instead of Python tracer", detected_language.value
+                        )
+                        optimizer.run_with_args(full_args)
+                        return ArgumentParser()  # Return dummy parser since we're done
+        except (IndexError, OSError, Exception):
+            pass  # Fall through to normal tracing if detection fails
+
     parser = ArgumentParser(allow_abbrev=False)
     parser.add_argument("-o", "--outfile", dest="outfile", help="Save trace to <outfile>", default="codeflash.trace")
     parser.add_argument("--only-functions", help="Trace only these functions", nargs="+", default=None)

@@ -168,6 +168,8 @@ cython_debug/
 !tests/test_languages/fixtures/**/pom.xml
 # Allow pom.xml in Java sample project
 !code_to_optimize/java/pom.xml
+# Allow pom.xml in codeflash-java-runtime
+!codeflash-java-runtime/pom.xml
 *.pem
 
 # Ruff cache
