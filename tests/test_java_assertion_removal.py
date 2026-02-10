@@ -1255,3 +1255,106 @@ void testSynchronizedMethodWithAssertJ() {
 }"""
         result = transform_java_assertions(source, "incrementAndGet")
         assert result == expected
+
+
+class TestAssertThrowsVariableAssignment:
+    """Tests for assertThrows with variable assignment (Issue: exception handling instrumentation bug)."""
+
+    def test_assert_throws_with_variable_assignment_expression_lambda(self):
+        """Test assertThrows assigned to variable with expression lambda."""
+        source = """\
+@Test
+void testNegativeInput() {
+    IllegalArgumentException exception = assertThrows(
+        IllegalArgumentException.class,
+        () -> calculator.fibonacci(-1)
+    );
+    assertEquals("Negative input not allowed", exception.getMessage());
+}"""
+        expected = """\
+@Test
+void testNegativeInput() {
+    IllegalArgumentException exception = null;
+    try { calculator.fibonacci(-1); } catch (IllegalArgumentException _cf_caught1) { exception = _cf_caught1; } catch (Exception _cf_ignored1) {}
+    assertEquals("Negative input not allowed", exception.getMessage());
+}"""
+        result = transform_java_assertions(source, "fibonacci")
+        assert result == expected
+
+    def test_assert_throws_with_variable_assignment_block_lambda(self):
+        """Test assertThrows assigned to variable with block lambda."""
+        source = """\
+@Test
+void testInvalidOperation() {
+    ArithmeticException ex = assertThrows(ArithmeticException.class, () -> {
+        calculator.divide(10, 0);
+    });
+    assertEquals("Division by zero", ex.getMessage());
+}"""
+        expected = """\
+@Test
+void testInvalidOperation() {
+    ArithmeticException ex = null;
+    try { calculator.divide(10, 0); } catch (ArithmeticException _cf_caught1) { ex = _cf_caught1; } catch (Exception _cf_ignored1) {}
+    assertEquals("Division by zero", ex.getMessage());
+}"""
+        result = transform_java_assertions(source, "divide")
+        assert result == expected
+
+    def test_assert_throws_with_variable_assignment_generic_exception(self):
+        """Test assertThrows with generic Exception type."""
+        source = """\
+@Test
+void testGenericException() {
+    Exception e = assertThrows(Exception.class, () -> processor.process(null));
+    assertNotNull(e.getMessage());
+}"""
+        expected = """\
+@Test
+void testGenericException() {
+    Exception e = null;
+    try { processor.process(null); } catch (Exception _cf_caught1) { e = _cf_caught1; } catch (Exception _cf_ignored1) {}
+    assertNotNull(e.getMessage());
+}"""
+        result = transform_java_assertions(source, "process")
+        assert result == expected
+
+    def test_assert_throws_without_variable_assignment(self):
+        """Test assertThrows without variable assignment still works (no regression)."""
+        source = """\
+@Test
+void testThrowsException() {
+    assertThrows(IllegalArgumentException.class, () -> calculator.fibonacci(-1));
+}"""
+        expected = """\
+@Test
+void testThrowsException() {
+    try { calculator.fibonacci(-1); } catch (Exception _cf_ignored1) {}
+}"""
+        result = transform_java_assertions(source, "fibonacci")
+        assert result == expected
+
+    def test_assert_throws_with_variable_and_multi_line_lambda(self):
+        """Test assertThrows with variable assignment and multi-line lambda."""
+        source = """\
+@Test
+void testComplexException() {
+    IllegalStateException exception = assertThrows(
+        IllegalStateException.class,
+        () -> {
+            processor.initialize();
+            processor.execute();
+        }
+    );
+    assertTrue(exception.getMessage().contains("not initialized"));
+}"""
+        expected = """\
+@Test
+void testComplexException() {
+    IllegalStateException exception = null;
+    try { processor.initialize();
+            processor.execute(); } catch (IllegalStateException _cf_caught1) { exception = _cf_caught1; } catch (Exception _cf_ignored1) {}
+    assertTrue(exception.getMessage().contains("not initialized"));
+}"""
+        result = transform_java_assertions(source, "execute")
+        assert result == expected
