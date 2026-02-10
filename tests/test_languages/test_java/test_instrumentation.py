@@ -25,6 +25,7 @@ from codeflash.models.function_types import FunctionParent
 from codeflash.languages.java.build_tools import find_maven_executable
 from codeflash.languages.java.discovery import discover_functions_from_source
 from codeflash.languages.java.instrumentation import (
+    _add_behavior_instrumentation,
     _add_timing_instrumentation,
     create_benchmark_test,
     instrument_existing_test,
@@ -144,6 +145,106 @@ public class CalculatorTest {
         assert "_cf_loop1" in result
         assert "_cf_iter1" in result
         assert "System.nanoTime()" in result
+        assert "com.codeflash.Serializer.serialize((Object)" in result
+
+    def test_instrument_behavior_mode_assert_throws_expression_lambda(self, tmp_path: Path):
+        """Test that assertThrows expression lambdas are not broken by behavior instrumentation.
+
+        When a target function call is inside an expression lambda (e.g., () -> Fibonacci.fibonacci(-1)),
+        the instrumentation must NOT wrap it in a variable assignment, as that would turn
+        the void-compatible lambda into a value-returning lambda and break compilation.
+        """
+        test_file = tmp_path / "FibonacciTest.java"
+        source = """import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class FibonacciTest {
+    @Test
+    void testNegativeInput_ThrowsIllegalArgumentException() {
+        assertThrows(IllegalArgumentException.class, () -> Fibonacci.fibonacci(-1));
+    }
+
+    @Test
+    void testZeroInput_ReturnsZero() {
+        assertEquals(0L, Fibonacci.fibonacci(0));
+    }
+}
+"""
+        test_file.write_text(source)
+
+        func = FunctionToOptimize(
+            function_name="fibonacci",
+            file_path=tmp_path / "Fibonacci.java",
+            starting_line=1,
+            ending_line=10,
+            parents=[],
+            is_method=True,
+            language="java",
+        )
+
+        success, result = instrument_existing_test(
+            test_file,
+            call_positions=[],
+            function_to_optimize=func,
+            tests_project_root=tmp_path,
+            mode="behavior",
+        )
+
+        assert success is True
+        # The assertThrows lambda line should remain unchanged (not wrapped in variable assignment)
+        assert "() -> Fibonacci.fibonacci(-1)" in result
+        # The non-lambda call should still be wrapped
+        assert "_cf_result" in result
+
+    def test_instrument_behavior_mode_assert_throws_block_lambda(self, tmp_path: Path):
+        """Test that assertThrows block lambdas are not broken by behavior instrumentation.
+
+        When a target function call is inside a block lambda (e.g., () -> { func(); }),
+        the instrumentation must NOT wrap it in a variable assignment.
+        """
+        test_file = tmp_path / "FibonacciTest.java"
+        source = """import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class FibonacciTest {
+    @Test
+    void testNegativeInput_ThrowsIllegalArgumentException() {
+        assertThrows(IllegalArgumentException.class, () -> {
+            Fibonacci.fibonacci(-1);
+        });
+    }
+
+    @Test
+    void testZeroInput_ReturnsZero() {
+        assertEquals(0L, Fibonacci.fibonacci(0));
+    }
+}
+"""
+        test_file.write_text(source)
+
+        func = FunctionToOptimize(
+            function_name="fibonacci",
+            file_path=tmp_path / "Fibonacci.java",
+            starting_line=1,
+            ending_line=10,
+            parents=[],
+            is_method=True,
+            language="java",
+        )
+
+        success, result = instrument_existing_test(
+            test_file,
+            call_positions=[],
+            function_to_optimize=func,
+            tests_project_root=tmp_path,
+            mode="behavior",
+        )
+
+        assert success is True
+        assert "Fibonacci.fibonacci(-1);" in result
+        assert "() -> {" in result
+        lines_with_cf_result = [l for l in result.split("\n") if "var _cf_result" in l and "Fibonacci.fibonacci(0)" in l]
+        assert len(lines_with_cf_result) > 0, "Non-lambda call to fibonacci(0) should be wrapped"
 
     def test_instrument_performance_mode_simple(self, tmp_path: Path):
         """Test instrumenting a simple test in performance mode with inner loop."""
@@ -415,6 +516,107 @@ public class ServiceTest__perfonlyinstrumented {
         )
 
         assert success is False
+
+
+class TestKryoSerializerUsage:
+    """Tests for Kryo Serializer usage in behavior mode."""
+
+    def test_serializer_used_for_return_values(self):
+        """Test that captured return values use com.codeflash.Serializer.serialize()."""
+        source = """import org.junit.jupiter.api.Test;
+
+public class MyTest {
+    @Test
+    public void testFoo() {
+        assertEquals(0, obj.foo());
+    }
+}
+"""
+        result = _add_behavior_instrumentation(source, "MyTest", "foo")
+
+        assert "com.codeflash.Serializer.serialize((Object)" in result
+        # Should NOT use old _cfSerialize helper
+        assert "_cfSerialize" not in result
+
+    def test_byte_array_result_variable(self):
+        """Test that the serialized result variable is byte[] not String."""
+        source = """import org.junit.jupiter.api.Test;
+
+public class MyTest {
+    @Test
+    public void testFoo() {
+        assertEquals(0, obj.foo());
+    }
+}
+"""
+        result = _add_behavior_instrumentation(source, "MyTest", "foo")
+
+        assert "byte[] _cf_serializedResult" in result
+        assert "String _cf_serializedResult" not in result
+
+    def test_blob_column_in_schema(self):
+        """Test that the SQLite schema uses BLOB for return_value column."""
+        source = """import org.junit.jupiter.api.Test;
+
+public class MyTest {
+    @Test
+    public void testFoo() {
+        assertEquals(0, obj.foo());
+    }
+}
+"""
+        result = _add_behavior_instrumentation(source, "MyTest", "foo")
+
+        assert "return_value BLOB" in result
+        assert "return_value TEXT" not in result
+
+    def test_set_bytes_for_blob_write(self):
+        """Test that setBytes is used to write BLOB data to SQLite."""
+        source = """import org.junit.jupiter.api.Test;
+
+public class MyTest {
+    @Test
+    public void testFoo() {
+        assertEquals(0, obj.foo());
+    }
+}
+"""
+        result = _add_behavior_instrumentation(source, "MyTest", "foo")
+
+        assert "setBytes(8, _cf_serializedResult" in result
+        # Should NOT use setString for return value
+        assert "setString(8, _cf_serializedResult" not in result
+
+    def test_no_inline_helper_injected(self):
+        """Test that no inline _cfSerialize helper method is injected."""
+        source = """import org.junit.jupiter.api.Test;
+
+public class MyTest {
+    @Test
+    public void testFoo() {
+        assertEquals(0, obj.foo());
+    }
+}
+"""
+        result = _add_behavior_instrumentation(source, "MyTest", "foo")
+
+        assert "private static String _cfSerialize" not in result
+
+    def test_serializer_not_used_in_performance_mode(self):
+        """Test that Serializer is NOT used in performance mode (only behavior)."""
+        source = """import org.junit.jupiter.api.Test;
+
+public class MyTest {
+    @Test
+    public void testFoo() {
+        assertEquals(0, obj.foo());
+    }
+}
+"""
+        result = _add_timing_instrumentation(source, "MyTest", "foo")
+
+        assert "Serializer.serialize" not in result
+        assert "_cfSerialize" not in result
 
 
 class TestAddTimingInstrumentation:
@@ -1344,6 +1546,12 @@ class TestRunAndParseTests:
             <version>2.10.1</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>com.codeflash</groupId>
+            <artifactId>codeflash-runtime</artifactId>
+            <version>1.0.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
     <build>
         <plugins>
@@ -1992,11 +2200,9 @@ public class CounterTest {
             assert loop_index == 1
             assert runtime > 0, f"Should have a positive runtime, got {runtime}"
             assert verification_type == "function_call"  # Updated from "output"
-
-            # Verify return value is serialized (not null)
             assert return_value is not None, "Return value should be serialized, not null"
-            # The return value should be a JSON representation of an integer (1)
-            assert return_value == "1", f"Expected serialized integer '1', got: {return_value}"
+            assert isinstance(return_value, bytes), f"Expected bytes (Kryo binary), got: {type(return_value)}"
+            assert len(return_value) > 0, "Kryo-serialized return value should not be empty"
 
         conn.close()
 
