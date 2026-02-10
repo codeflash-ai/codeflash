@@ -23,7 +23,8 @@ class IndexResult:
     file_path: Path
     cached: bool
     num_edges: int
-    edges: tuple[tuple[str, str], ...]  # (caller_qn, callee_name) pairs
+    edges: tuple[tuple[str, str, bool], ...]  # (caller_qn, callee_name, is_cross_file)
+    cross_file_edges: int
     error: bool
 
 
@@ -134,12 +135,12 @@ class CallGraph:
         try:
             content = file_path.read_text(encoding="utf-8")
         except Exception:
-            return IndexResult(file_path=file_path, cached=False, num_edges=0, edges=(), error=True)
+            return IndexResult(file_path=file_path, cached=False, num_edges=0, edges=(), cross_file_edges=0, error=True)
         file_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
 
         cached_hash = self.indexed_file_hashes.get(resolved)
         if cached_hash == file_hash:
-            return IndexResult(file_path=file_path, cached=True, num_edges=0, edges=(), error=False)
+            return IndexResult(file_path=file_path, cached=True, num_edges=0, edges=(), cross_file_edges=0, error=False)
 
         # Check DB for stored hash
         row = self.conn.execute(
@@ -148,7 +149,7 @@ class CallGraph:
         ).fetchone()
         if row and row[0] == file_hash:
             self.indexed_file_hashes[resolved] = file_hash
-            return IndexResult(file_path=file_path, cached=True, num_edges=0, edges=(), error=False)
+            return IndexResult(file_path=file_path, cached=True, num_edges=0, edges=(), cross_file_edges=0, error=False)
 
         return self.index_file(file_path, file_hash)
 
@@ -177,7 +178,7 @@ class CallGraph:
             )
             self.conn.commit()
             self.indexed_file_hashes[resolved] = file_hash
-            return IndexResult(file_path=file_path, cached=False, num_edges=0, edges=(), error=True)
+            return IndexResult(file_path=file_path, cached=False, num_edges=0, edges=(), cross_file_edges=0, error=True)
 
         edges: set[tuple[str, str, str, str, str, str, str, str]] = set()
 
@@ -249,8 +250,19 @@ class CallGraph:
         self.conn.commit()
         self.indexed_file_hashes[resolved] = file_hash
 
-        edges_summary = tuple((caller_qn, callee_name) for (_, caller_qn, _, _, _, callee_name, _, _) in edges)
-        return IndexResult(file_path=file_path, cached=False, num_edges=len(edges), edges=edges_summary, error=False)
+        edges_summary = tuple(
+            (caller_qn, callee_name, caller_file != callee_file)
+            for (caller_file, caller_qn, callee_file, _, _, callee_name, _, _) in edges
+        )
+        cross_file_count = sum(1 for e in edges_summary if e[2])
+        return IndexResult(
+            file_path=file_path,
+            cached=False,
+            num_edges=len(edges),
+            edges=edges_summary,
+            cross_file_edges=cross_file_count,
+            error=False,
+        )
 
     def _resolve_definitions(self, ref: Name) -> list[Name]:
         try:

@@ -25,10 +25,12 @@ from codeflash.lsp.lsp_message import LspCodeMessage, LspTextMessage
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
+    from pathlib import Path
 
     from rich.progress import TaskID
 
-    from codeflash.context.call_graph import IndexResult
+    from codeflash.context.call_graph import CallGraph, IndexResult
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.lsp.lsp_message import LspMessage
 
 DEBUG_MODE = logging.getLogger().getEffectiveLevel() == logging.DEBUG
@@ -200,7 +202,6 @@ def test_files_progress_bar(total: int, description: str) -> Generator[tuple[Pro
 
 
 MAX_TREE_ENTRIES = 8
-MAX_EDGE_CHILDREN = 3
 
 
 @contextmanager
@@ -231,10 +232,11 @@ def call_graph_live_display(total: int) -> Generator[Callable[[IndexResult], Non
     stats_indexed = 0
     stats_cached = 0
     stats_edges = 0
+    stats_external = 0
     stats_errors = 0
 
     def make_display() -> Panel:
-        tree = Tree("[bold]Call Graph[/bold]")
+        tree = Tree("[bold]Dependencies[/bold]")
         for result in results[-MAX_TREE_ENTRIES:]:
             name = result.file_path.name
             if result.error:
@@ -242,29 +244,35 @@ def call_graph_live_display(total: int) -> Generator[Callable[[IndexResult], Non
             elif result.cached:
                 tree.add(f"[dim]{name}  (cached)[/dim]")
             else:
-                branch = tree.add(f"[cyan]{name}[/cyan]  [dim]({result.num_edges} edges)[/dim]")
-                for caller, callee in result.edges[:MAX_EDGE_CHILDREN]:
-                    branch.add(f"[dim]{caller} -> {callee}[/dim]")
-                remaining = len(result.edges) - MAX_EDGE_CHILDREN
-                if remaining > 0:
-                    branch.add(f"[dim italic]...and {remaining} more[/dim italic]")
+                local = result.num_edges - result.cross_file_edges
+                parts = []
+                if local:
+                    parts.append(f"{local} in same file")
+                if result.cross_file_edges:
+                    parts.append(f"{result.cross_file_edges} from other modules")
+                label = ", ".join(parts) if parts else "no dependencies"
+                tree.add(f"[cyan]{name}[/cyan]  [dim]{label}[/dim]")
 
         parts: list[str] = []
         if stats_indexed:
-            parts.append(f"{stats_indexed} indexed")
+            parts.append(f"{stats_indexed} files analyzed")
         if stats_cached:
             parts.append(f"{stats_cached} cached")
         if stats_errors:
             parts.append(f"{stats_errors} errors")
-        parts.append(f"{stats_edges} edges")
-        stats_text = Text(" . ".join(parts), style="dim")
+        parts.append(f"{stats_edges} dependencies found")
+        if stats_external:
+            parts.append(f"{stats_external} from other modules")
+        stats_text = Text(" · ".join(parts), style="dim")
 
         return Panel(
-            Group(progress, Text(""), tree, Text(""), stats_text), title="Building Call Graph", border_style="cyan"
+            Group(progress, Text(""), tree, Text(""), stats_text),
+            title="Building Call Graph",
+            border_style="cyan",
         )
 
     def update(result: IndexResult) -> None:
-        nonlocal stats_indexed, stats_cached, stats_edges, stats_errors
+        nonlocal stats_indexed, stats_cached, stats_edges, stats_external, stats_errors
         results.append(result)
         if result.error:
             stats_errors += 1
@@ -273,8 +281,46 @@ def call_graph_live_display(total: int) -> Generator[Callable[[IndexResult], Non
         else:
             stats_indexed += 1
             stats_edges += result.num_edges
+            stats_external += result.cross_file_edges
         progress.advance(task_id)
         live.update(make_display())
 
     with Live(make_display(), console=console, transient=True, refresh_per_second=8) as live:
         yield update
+
+
+def call_graph_summary(call_graph: CallGraph, file_to_funcs: dict[Path, list[FunctionToOptimize]]) -> None:
+    from rich.panel import Panel
+
+    total_functions = sum(len(funcs) for funcs in file_to_funcs.values())
+    if total_functions == 0:
+        return
+
+    total_callees = 0
+    with_context = 0
+    leaf_functions = 0
+
+    for file_path, funcs in file_to_funcs.items():
+        for func in funcs:
+            _, func_callees = call_graph.get_callees({file_path: {func.qualified_name}})
+            count = len(func_callees)
+            total_callees += count
+            if count > 0:
+                with_context += 1
+            else:
+                leaf_functions += 1
+
+    avg_callees = total_callees / total_functions if total_functions > 0 else 0
+
+    summary = (
+        f"{total_functions} functions ready for optimization · "
+        f"avg {avg_callees:.1f} dependencies/function\n"
+        f"{with_context} call other functions · "
+        f"{leaf_functions} are self-contained"
+    )
+
+    if is_LSP_enabled():
+        lsp_log(LspTextMessage(text=summary))
+        return
+
+    console.print(Panel(summary, title="Dependency Summary", border_style="cyan"))

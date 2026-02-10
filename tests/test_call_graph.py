@@ -325,6 +325,7 @@ def caller_b():
             assert not result.cached
             assert result.num_edges > 0
             assert len(result.edges) == result.num_edges
+            assert result.cross_file_edges >= 0
 
         # Files are now indexed — get_callees should return correct results
         _, result_list = cg.get_callees({project / "a.py": {"caller_a"}})
@@ -373,5 +374,67 @@ def caller_b():
             assert not result.error
             assert result.num_edges == 0
             assert result.edges == ()
+            assert result.cross_file_edges == 0
+    finally:
+        cg.close()
+
+
+def test_cross_file_edges_tracked(project: Path, db_path: Path) -> None:
+    write_file(
+        project,
+        "utils.py",
+        """\
+def utility():
+    return 42
+""",
+    )
+    write_file(
+        project,
+        "main.py",
+        """\
+from utils import utility
+
+def caller():
+    return utility()
+""",
+    )
+
+    cg = CallGraph(project, db_path=db_path)
+    try:
+        progress_calls: list[IndexResult] = []
+        cg.build_index([project / "utils.py", project / "main.py"], on_progress=progress_calls.append)
+
+        # main.py should have cross-file edges (calls into utils.py)
+        main_result = next(r for r in progress_calls if r.file_path.name == "main.py")
+        assert main_result.cross_file_edges > 0
+        # At least one edge tuple should have is_cross_file=True
+        assert any(is_cross_file for _, _, is_cross_file in main_result.edges)
+    finally:
+        cg.close()
+
+
+def test_same_file_edges_not_cross_file(project: Path, db_path: Path) -> None:
+    write_file(
+        project,
+        "mod.py",
+        """\
+def helper():
+    return 1
+
+def caller():
+    return helper()
+""",
+    )
+
+    cg = CallGraph(project, db_path=db_path)
+    try:
+        progress_calls: list[IndexResult] = []
+        cg.build_index([project / "mod.py"], on_progress=progress_calls.append)
+
+        assert len(progress_calls) == 1
+        result = progress_calls[0]
+        assert result.cross_file_edges == 0
+        # All edges should have is_cross_file=False
+        assert all(not is_cross_file for _, _, is_cross_file in result.edges)
     finally:
         cg.close()
