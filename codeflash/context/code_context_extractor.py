@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from jedi.api.classes import Name
     from libcst import CSTNode
 
+    from codeflash.context.call_graph import CallGraph
     from codeflash.context.unused_definition_remover import UsageInfo
     from codeflash.languages.base import HelperFunction
 
@@ -78,6 +79,7 @@ def get_code_optimization_context(
     project_root_path: Path,
     optim_token_limit: int = OPTIMIZATION_CONTEXT_TOKEN_LIMIT,
     testgen_token_limit: int = TESTGEN_CONTEXT_TOKEN_LIMIT,
+    call_graph: CallGraph | None = None,
 ) -> CodeOptimizationContext:
     # Route to language-specific implementation for non-Python languages
     if not is_python():
@@ -86,9 +88,11 @@ def get_code_optimization_context(
         )
 
     # Get FunctionSource representation of helpers of FTO
-    helpers_of_fto_dict, helpers_of_fto_list = get_function_sources_from_jedi(
-        {function_to_optimize.file_path: {function_to_optimize.qualified_name}}, project_root_path
-    )
+    fto_input = {function_to_optimize.file_path: {function_to_optimize.qualified_name}}
+    if call_graph is not None:
+        helpers_of_fto_dict, helpers_of_fto_list = call_graph.get_callees(fto_input)
+    else:
+        helpers_of_fto_dict, helpers_of_fto_list = get_function_sources_from_jedi(fto_input, project_root_path)
 
     # Add function to optimize into helpers of FTO dict, as they'll be processed together
     fto_as_function_source = get_function_to_optimize_as_function_source(function_to_optimize, project_root_path)
@@ -105,9 +109,12 @@ def get_code_optimization_context(
         qualified_names.update({f"{qn.rsplit('.', 1)[0]}.__init__" for qn in qualified_names if "." in qn})
 
     # Get FunctionSource representation of helpers of helpers of FTO
-    helpers_of_helpers_dict, _helpers_of_helpers_list = get_function_sources_from_jedi(
-        helpers_of_fto_qualified_names_dict, project_root_path
-    )
+    if call_graph is not None:
+        helpers_of_helpers_dict, _helpers_of_helpers_list = call_graph.get_callees(helpers_of_fto_qualified_names_dict)
+    else:
+        helpers_of_helpers_dict, _helpers_of_helpers_list = get_function_sources_from_jedi(
+            helpers_of_fto_qualified_names_dict, project_root_path
+        )
 
     # Extract code context for optimization
     final_read_writable_code = extract_code_markdown_context_from_files(

@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 
     from codeflash.benchmarking.function_ranker import FunctionRanker
     from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
+    from codeflash.context.call_graph import CallGraph
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.models import BenchmarkKey, FunctionCalledInTest
     from codeflash.optimization.function_optimizer import FunctionOptimizer
@@ -205,6 +206,7 @@ class Optimizer:
         total_benchmark_timings: dict[BenchmarkKey, float] | None = None,
         original_module_ast: ast.Module | None = None,
         original_module_path: Path | None = None,
+        call_graph: CallGraph | None = None,
     ) -> FunctionOptimizer | None:
         from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
         from codeflash.optimization.function_optimizer import FunctionOptimizer
@@ -243,6 +245,7 @@ class Optimizer:
             function_benchmark_timings=function_specific_timings,
             total_benchmark_timings=total_benchmark_timings if function_specific_timings else None,
             replay_tests_dir=self.replay_tests_dir,
+            call_graph=call_graph,
         )
 
     def prepare_module_for_optimization(
@@ -510,6 +513,19 @@ class Optimizer:
         function_benchmark_timings, total_benchmark_timings = self.run_benchmarks(
             file_to_funcs_to_optimize, num_optimizable_functions
         )
+
+        # Create persistent call graph for Python runs to cache Jedi analysis across functions
+        call_graph: CallGraph | None = None
+        from codeflash.languages import is_python
+
+        if is_python():
+            from codeflash.context.call_graph import CallGraph
+
+            try:
+                call_graph = CallGraph(self.args.project_root)
+            except Exception:
+                logger.debug("Failed to initialize CallGraph, falling back to per-function Jedi analysis")
+
         optimizations_found: int = 0
         self.test_cfg.concolic_test_root_dir = Path(
             tempfile.mkdtemp(dir=self.args.tests_root, prefix="codeflash_concolic_")
@@ -557,6 +573,7 @@ class Optimizer:
                         total_benchmark_timings=total_benchmark_timings,
                         original_module_ast=original_module_ast,
                         original_module_path=original_module_path,
+                        call_graph=call_graph,
                     )
                     if function_optimizer is None:
                         continue
@@ -615,6 +632,9 @@ class Optimizer:
                 else:
                     logger.warning("⚠️ Failed to send completion email. Status")
         finally:
+            if call_graph is not None:
+                call_graph.close()
+
             if function_optimizer:
                 function_optimizer.cleanup_generated_files()
 

@@ -132,6 +132,7 @@ from codeflash.verification.verifier import generate_tests
 if TYPE_CHECKING:
     from argparse import Namespace
 
+    from codeflash.context.call_graph import CallGraph
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.either import Result
     from codeflash.models.models import (
@@ -437,6 +438,7 @@ class FunctionOptimizer:
         total_benchmark_timings: dict[BenchmarkKey, int] | None = None,
         args: Namespace | None = None,
         replay_tests_dir: Path | None = None,
+        call_graph: CallGraph | None = None,
     ) -> None:
         self.project_root = test_cfg.project_root_path
         self.test_cfg = test_cfg
@@ -479,6 +481,7 @@ class FunctionOptimizer:
         self.function_benchmark_timings = function_benchmark_timings if function_benchmark_timings else {}
         self.total_benchmark_timings = total_benchmark_timings if total_benchmark_timings else {}
         self.replay_tests_dir = replay_tests_dir if replay_tests_dir else None
+        self.call_graph = call_graph
         n_tests = get_effort_value(EffortKeys.N_GENERATED_TESTS, self.effort)
         self.executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=n_tests + 3 if self.experiment_id is None else n_tests + 4
@@ -1523,7 +1526,7 @@ class FunctionOptimizer:
     def get_code_optimization_context(self) -> Result[CodeOptimizationContext, str]:
         try:
             new_code_ctx = code_context_extractor.get_code_optimization_context(
-                self.function_to_optimize, self.project_root
+                self.function_to_optimize, self.project_root, call_graph=self.call_graph
             )
         except ValueError as e:
             return Failure(str(e))
