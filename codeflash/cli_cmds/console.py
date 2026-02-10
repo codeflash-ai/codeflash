@@ -266,9 +266,7 @@ def call_graph_live_display(total: int) -> Generator[Callable[[IndexResult], Non
         stats_text = Text(" · ".join(parts), style="dim")
 
         return Panel(
-            Group(progress, Text(""), tree, Text(""), stats_text),
-            title="Building Call Graph",
-            border_style="cyan",
+            Group(progress, Text(""), tree, Text(""), stats_text), title="Building Call Graph", border_style="cyan"
         )
 
     def update(result: IndexResult) -> None:

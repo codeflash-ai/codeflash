@@ -389,7 +389,10 @@ class Optimizer:
             console.print(f"[dim]... and {len(globally_ranked) - display_count} more functions[/dim]")
 
     def rank_all_functions_globally(
-        self, file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]], trace_file_path: Path | None
+        self,
+        file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]],
+        trace_file_path: Path | None,
+        call_graph: CallGraph | None = None,
     ) -> list[tuple[Path, FunctionToOptimize]]:
         """Rank all functions globally across all files based on trace data.
 
@@ -409,8 +412,10 @@ class Optimizer:
         for file_path, functions in file_to_funcs_to_optimize.items():
             all_functions.extend((file_path, func) for func in functions)
 
-        # If no trace file, return in original order
+        # If no trace file, rank by dependency count if call graph is available
         if not trace_file_path or not trace_file_path.exists():
+            if call_graph is not None:
+                return self.rank_by_dependency_count(all_functions, call_graph)
             logger.debug("No trace file available, using original function order")
             return all_functions
 
@@ -460,6 +465,17 @@ class Optimizer:
             return all_functions
         else:
             return globally_ranked
+
+    def rank_by_dependency_count(
+        self, all_functions: list[tuple[Path, FunctionToOptimize]], call_graph: CallGraph
+    ) -> list[tuple[Path, FunctionToOptimize]]:
+        counts: list[tuple[int, int, tuple[Path, FunctionToOptimize]]] = []
+        for idx, (file_path, func) in enumerate(all_functions):
+            _, callee_list = call_graph.get_callees({file_path: {func.qualified_name}})
+            counts.append((len(callee_list), idx, (file_path, func)))
+        counts.sort(key=lambda x: (-x[0], x[1]))
+        logger.debug(f"Ranked {len(counts)} functions by dependency count (most complex first)")
+        return [item for _, _, item in counts]
 
     def run(self) -> None:
         from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
@@ -531,7 +547,6 @@ class Optimizer:
             with call_graph_live_display(len(source_files)) as on_progress:
                 call_graph.build_index(source_files, on_progress=on_progress)
             call_graph_summary(call_graph, file_to_funcs_to_optimize)
-            raise SystemExit
 
         optimizations_found: int = 0
         self.test_cfg.concolic_test_root_dir = Path(
@@ -548,7 +563,9 @@ class Optimizer:
                 self.functions_checkpoint = CodeflashRunCheckpoint(self.args.module_root)
 
             # GLOBAL RANKING: Rank all functions together before optimizing
-            globally_ranked_functions = self.rank_all_functions_globally(file_to_funcs_to_optimize, trace_file_path)
+            globally_ranked_functions = self.rank_all_functions_globally(
+                file_to_funcs_to_optimize, trace_file_path, call_graph=call_graph
+            )
             # Cache for module preparation (avoid re-parsing same files)
             prepared_modules: dict[Path, tuple[dict[Path, ValidCode], ast.Module | None]] = {}
 
