@@ -1146,9 +1146,38 @@ def _run_maven_tests(
     logger.debug("Running Maven command: %s in %s", " ".join(cmd), project_root)
 
     try:
-        return subprocess.run(
+        result = subprocess.run(
             cmd, check=False, cwd=project_root, env=env, capture_output=True, text=True, timeout=timeout
         )
+
+        # Check if Maven failed due to compilation errors (not just test failures)
+        if result.returncode != 0:
+            # Maven compilation errors contain specific markers in output
+            compilation_error_indicators = [
+                "[ERROR] COMPILATION ERROR",
+                "[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin",
+                "compilation failure",
+                "cannot find symbol",
+                "package .* does not exist",
+            ]
+
+            combined_output = (result.stdout or "") + (result.stderr or "")
+            has_compilation_error = any(
+                indicator.lower() in combined_output.lower() for indicator in compilation_error_indicators
+            )
+
+            if has_compilation_error:
+                logger.error(
+                    f"Maven compilation failed for {mode} tests. "
+                    f"Check that generated test code is syntactically valid Java. "
+                    f"Return code: {result.returncode}"
+                )
+                # Log first 50 lines of output to help diagnose compilation errors
+                output_lines = combined_output.split("\n")
+                error_context = "\n".join(output_lines[:50]) if len(output_lines) > 50 else combined_output
+                logger.error(f"Maven compilation error output:\n{error_context}")
+
+        return result
 
     except subprocess.TimeoutExpired:
         logger.exception("Maven test execution timed out after %d seconds", timeout)
