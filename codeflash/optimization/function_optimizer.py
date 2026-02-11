@@ -2369,6 +2369,12 @@ class FunctionOptimizer:
             )
         console.rule()
         with progress_bar("Running performance benchmarks..."):
+            logger.debug(
+                f"[BENCHMARK-START] Starting benchmarking tests with {len(self.test_files.test_files)} test files"
+            )
+            for idx, tf in enumerate(self.test_files.test_files):
+                logger.debug(f"[BENCHMARK-FILES] Test file {idx}: perf_file={tf.benchmarking_file_path}")
+
             if self.function_to_optimize.is_async and is_python():
                 from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
@@ -2386,6 +2392,7 @@ class FunctionOptimizer:
                     enable_coverage=False,
                     code_context=code_context,
                 )
+                logger.debug(f"[BENCHMARK-DONE] Got {len(benchmarking_results.test_results)} benchmark results")
             finally:
                 if self.function_to_optimize.is_async:
                     self.write_code_and_helpers(
