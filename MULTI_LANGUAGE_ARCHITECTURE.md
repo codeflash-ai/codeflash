@@ -386,7 +386,7 @@ class JavaScriptTransformer:
 
 from pathlib import Path
 from codeflash.languages.base import LanguageSupport, FunctionInfo, CodeContext
-from codeflash.languages.treesitter_utils import TreeSitterAnalyzer
+from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer
 from codeflash.languages.javascript.transformer import JavaScriptTransformer
 
 class JavaScriptSupport(LanguageSupport):
@@ -523,7 +523,7 @@ class JavaScriptSupport(LanguageSupport):
 # codeflash/languages/javascript/test_discovery.py
 
 from pathlib import Path
-from codeflash.languages.treesitter_utils import TreeSitterAnalyzer
+from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer
 
 class JestTestDiscovery:
     """Static analysis-based test discovery for Jest."""

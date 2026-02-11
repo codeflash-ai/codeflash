@@ -325,6 +325,7 @@ def run_benchmarking_tests(
     pytest_max_loops: int = 100_000,
     js_project_root: Path | None = None,
 ) -> tuple[Path, subprocess.CompletedProcess]:
+    logger.debug(f"run_benchmarking_tests called: framework={test_framework}, num_files={len(test_paths.test_files)}")
     # Check if there's a language support for this test framework that implements run_benchmarking_tests
     language_support = get_language_support_by_framework(test_framework)
     if language_support is not None and hasattr(language_support, "run_benchmarking_tests"):

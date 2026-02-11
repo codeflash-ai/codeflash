@@ -14,15 +14,15 @@ from typing import TYPE_CHECKING, Any
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, Language, TestInfo, TestResult
+from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
 from codeflash.languages.registry import register_language
-from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
 from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from codeflash.languages.base import ReferenceInfo
-    from codeflash.languages.treesitter_utils import TypeDefinition
+    from codeflash.languages.javascript.treesitter import TypeDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -2134,6 +2134,7 @@ class JavaScriptSupport:
         from codeflash.languages.test_framework import get_js_test_framework_or_default
 
         framework = test_framework or get_js_test_framework_or_default()
+        logger.debug("run_benchmarking_tests called with framework=%s", framework)
 
         # Use JS-specific high max_loops - actual loop count is limited by target_duration
         effective_max_loops = self.JS_BENCHMARKING_MAX_LOOPS
@@ -2141,6 +2142,7 @@ class JavaScriptSupport:
         if framework == "vitest":
             from codeflash.languages.javascript.vitest_runner import run_vitest_benchmarking_tests
 
+            logger.debug("Dispatching to run_vitest_benchmarking_tests")
             return run_vitest_benchmarking_tests(
                 test_paths=test_paths,
                 test_env=test_env,
