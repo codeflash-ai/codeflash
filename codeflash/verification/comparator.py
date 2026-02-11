@@ -452,10 +452,10 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
                 return orig == new
 
         if HAS_NUMBA:
-            import numba  # noqa: PGH003
-            from numba.core.dispatcher import Dispatcher  # noqa: PGH003
-            from numba.typed import Dict as NumbaDict  # noqa: PGH003
-            from numba.typed import List as NumbaList  # noqa: PGH003
+            import numba
+            from numba.core.dispatcher import Dispatcher
+            from numba.typed import Dict as NumbaDict
+            from numba.typed import List as NumbaList
 
             # Handle numba typed List
             if isinstance(orig, NumbaList):
