@@ -627,7 +627,7 @@ it('third test', () => {});
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -652,7 +652,7 @@ describe('Suite B', () => {
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -676,7 +676,7 @@ describe('Outer', () => {
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -700,7 +700,7 @@ describe.skip('skipped describe', () => {
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -721,7 +721,7 @@ describe.only('only describe', () => {
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -739,7 +739,7 @@ describe('describe single', () => {});
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -758,7 +758,7 @@ describe("describe double", () => {});
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -774,7 +774,7 @@ describe("describe double", () => {});
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -1020,7 +1020,7 @@ describe('日本語テスト', () => {
             file_path = Path(f.name)
 
             source = file_path.read_text(encoding="utf-8")
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -1048,7 +1048,7 @@ test.each([
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -1074,7 +1074,7 @@ describe.each([
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -1099,7 +1099,7 @@ describe('Math operations', () => {
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -1457,7 +1457,7 @@ testCases.forEach(name => {
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -1485,7 +1485,7 @@ describe('conditional tests', () => {
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -1509,7 +1509,7 @@ test('slow test', () => {
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -1532,7 +1532,7 @@ test.todo('also needs implementation');
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -1555,7 +1555,7 @@ test.concurrent('concurrent test 2', async () => {
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -1654,7 +1654,7 @@ describe('Array', function() {
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -1685,7 +1685,7 @@ describe('User', () => {
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)

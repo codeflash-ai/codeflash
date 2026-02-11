@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import Language, LanguageSupport
-    from codeflash.languages.treesitter_utils import TreeSitterAnalyzer
+    from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer
     from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, OptimizedCandidate, ValidCode
 
 ASTNodeT = TypeVar("ASTNodeT", bound=ast.AST)
@@ -640,7 +640,7 @@ def _add_global_declarations_for_language(
         return original_source
 
     try:
-        from codeflash.languages.treesitter_utils import get_analyzer_for_file
+        from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
         analyzer = get_analyzer_for_file(module_abspath)
 
