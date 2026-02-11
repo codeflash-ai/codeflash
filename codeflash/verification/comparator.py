@@ -26,6 +26,7 @@ HAS_JAX = find_spec("jax") is not None
 HAS_XARRAY = find_spec("xarray") is not None
 HAS_TENSORFLOW = find_spec("tensorflow") is not None
 HAS_NUMBA = find_spec("numba") is not None
+HAS_PYARROW = find_spec("pyarrow") is not None
 
 # Pattern to match pytest temp directories: /tmp/pytest-of-<user>/pytest-<N>/
 # These paths vary between test runs but are logically equivalent
@@ -354,13 +355,57 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
                 return False
             return (orig != new).nnz == 0
 
+        if HAS_PYARROW:
+            import pyarrow as pa  # type: ignore  # noqa: PGH003
+
+            if isinstance(orig, pa.Table):
+                if orig.schema != new.schema:
+                    return False
+                if orig.num_rows != new.num_rows:
+                    return False
+                return bool(orig.equals(new))
+
+            if isinstance(orig, pa.RecordBatch):
+                if orig.schema != new.schema:
+                    return False
+                if orig.num_rows != new.num_rows:
+                    return False
+                return bool(orig.equals(new))
+
+            if isinstance(orig, pa.ChunkedArray):
+                if orig.type != new.type:
+                    return False
+                if len(orig) != len(new):
+                    return False
+                return bool(orig.equals(new))
+
+            if isinstance(orig, pa.Array):
+                if orig.type != new.type:
+                    return False
+                if len(orig) != len(new):
+                    return False
+                return bool(orig.equals(new))
+
+            if isinstance(orig, pa.Scalar):
+                if orig.type != new.type:
+                    return False
+                # Handle null scalars
+                if not orig.is_valid and not new.is_valid:
+                    return True
+                if not orig.is_valid or not new.is_valid:
+                    return False
+                return bool(orig.equals(new))
+
+            if isinstance(orig, (pa.Schema, pa.Field, pa.DataType)):
+                return bool(orig.equals(new))
+
         if HAS_PANDAS:
             import pandas  # noqa: ICN001
 
             if isinstance(
                 orig, (pandas.DataFrame, pandas.Series, pandas.Index, pandas.Categorical, pandas.arrays.SparseArray)
             ):
-                return orig.equals(new)
+                return bool(orig.equals(new))
 
             if isinstance(orig, (pandas.CategoricalDtype, pandas.Interval, pandas.Period)):
                 return orig == new
@@ -407,10 +452,10 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
                 return orig == new
 
         if HAS_NUMBA:
-            import numba  # type: ignore  # noqa: PGH003
-            from numba.core.dispatcher import Dispatcher  # type: ignore  # noqa: PGH003
-            from numba.typed import Dict as NumbaDict  # type: ignore  # noqa: PGH003
-            from numba.typed import List as NumbaList  # type: ignore  # noqa: PGH003
+            import numba
+            from numba.core.dispatcher import Dispatcher
+            from numba.typed import Dict as NumbaDict
+            from numba.typed import List as NumbaList
 
             # Handle numba typed List
             if isinstance(orig, NumbaList):

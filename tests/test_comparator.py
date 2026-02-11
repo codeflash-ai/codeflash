@@ -802,6 +802,137 @@ def test_pandas():
     assert comparator(filtered1, filtered2)
 
 
+def test_pyarrow():
+    try:
+        import pyarrow as pa
+    except ImportError:
+        pytest.skip()
+
+    # Test PyArrow Table
+    table1 = pa.table({"a": [1, 2, 3], "b": [4, 5, 6]})
+    table2 = pa.table({"a": [1, 2, 3], "b": [4, 5, 6]})
+    table3 = pa.table({"a": [1, 2, 3], "b": [4, 5, 7]})
+    table4 = pa.table({"a": [1, 2, 3, 4], "b": [4, 5, 6, 7]})
+    table5 = pa.table({"a": [1, 2, 3], "c": [4, 5, 6]})  # different column name
+
+    assert comparator(table1, table2)
+    assert not comparator(table1, table3)
+    assert not comparator(table1, table4)
+    assert not comparator(table1, table5)
+
+    # Test PyArrow RecordBatch
+    batch1 = pa.RecordBatch.from_pydict({"x": [1, 2], "y": [3.0, 4.0]})
+    batch2 = pa.RecordBatch.from_pydict({"x": [1, 2], "y": [3.0, 4.0]})
+    batch3 = pa.RecordBatch.from_pydict({"x": [1, 2], "y": [3.0, 5.0]})
+    batch4 = pa.RecordBatch.from_pydict({"x": [1, 2, 3], "y": [3.0, 4.0, 5.0]})
+
+    assert comparator(batch1, batch2)
+    assert not comparator(batch1, batch3)
+    assert not comparator(batch1, batch4)
+
+    # Test PyArrow Array
+    arr1 = pa.array([1, 2, 3])
+    arr2 = pa.array([1, 2, 3])
+    arr3 = pa.array([1, 2, 4])
+    arr4 = pa.array([1, 2, 3, 4])
+    arr5 = pa.array([1.0, 2.0, 3.0])  # different type
+
+    assert comparator(arr1, arr2)
+    assert not comparator(arr1, arr3)
+    assert not comparator(arr1, arr4)
+    assert not comparator(arr1, arr5)
+
+    # Test PyArrow Array with nulls
+    arr_null1 = pa.array([1, None, 3])
+    arr_null2 = pa.array([1, None, 3])
+    arr_null3 = pa.array([1, 2, 3])
+
+    assert comparator(arr_null1, arr_null2)
+    assert not comparator(arr_null1, arr_null3)
+
+    # Test PyArrow ChunkedArray
+    chunked1 = pa.chunked_array([[1, 2], [3, 4]])
+    chunked2 = pa.chunked_array([[1, 2], [3, 4]])
+    chunked3 = pa.chunked_array([[1, 2], [3, 5]])
+    chunked4 = pa.chunked_array([[1, 2, 3], [4, 5]])
+
+    assert comparator(chunked1, chunked2)
+    assert not comparator(chunked1, chunked3)
+    assert not comparator(chunked1, chunked4)
+
+    # Test PyArrow Scalar
+    scalar1 = pa.scalar(42)
+    scalar2 = pa.scalar(42)
+    scalar3 = pa.scalar(43)
+    scalar4 = pa.scalar(42.0)  # different type
+
+    assert comparator(scalar1, scalar2)
+    assert not comparator(scalar1, scalar3)
+    assert not comparator(scalar1, scalar4)
+
+    # Test null scalars
+    null_scalar1 = pa.scalar(None, type=pa.int64())
+    null_scalar2 = pa.scalar(None, type=pa.int64())
+    null_scalar3 = pa.scalar(None, type=pa.float64())
+
+    assert comparator(null_scalar1, null_scalar2)
+    assert not comparator(null_scalar1, null_scalar3)
+
+    # Test PyArrow Schema
+    schema1 = pa.schema([("a", pa.int64()), ("b", pa.float64())])
+    schema2 = pa.schema([("a", pa.int64()), ("b", pa.float64())])
+    schema3 = pa.schema([("a", pa.int64()), ("c", pa.float64())])
+    schema4 = pa.schema([("a", pa.int32()), ("b", pa.float64())])
+
+    assert comparator(schema1, schema2)
+    assert not comparator(schema1, schema3)
+    assert not comparator(schema1, schema4)
+
+    # Test PyArrow Field
+    field1 = pa.field("name", pa.int64())
+    field2 = pa.field("name", pa.int64())
+    field3 = pa.field("other", pa.int64())
+    field4 = pa.field("name", pa.float64())
+
+    assert comparator(field1, field2)
+    assert not comparator(field1, field3)
+    assert not comparator(field1, field4)
+
+    # Test PyArrow DataType
+    type1 = pa.int64()
+    type2 = pa.int64()
+    type3 = pa.int32()
+    type4 = pa.float64()
+
+    assert comparator(type1, type2)
+    assert not comparator(type1, type3)
+    assert not comparator(type1, type4)
+
+    # Test string arrays
+    str_arr1 = pa.array(["hello", "world"])
+    str_arr2 = pa.array(["hello", "world"])
+    str_arr3 = pa.array(["hello", "there"])
+
+    assert comparator(str_arr1, str_arr2)
+    assert not comparator(str_arr1, str_arr3)
+
+    # Test nested types (struct)
+    struct_arr1 = pa.array([{"x": 1, "y": 2}, {"x": 3, "y": 4}])
+    struct_arr2 = pa.array([{"x": 1, "y": 2}, {"x": 3, "y": 4}])
+    struct_arr3 = pa.array([{"x": 1, "y": 2}, {"x": 3, "y": 5}])
+
+    assert comparator(struct_arr1, struct_arr2)
+    assert not comparator(struct_arr1, struct_arr3)
+
+    # Test list arrays
+    list_arr1 = pa.array([[1, 2], [3, 4, 5]])
+    list_arr2 = pa.array([[1, 2], [3, 4, 5]])
+    list_arr3 = pa.array([[1, 2], [3, 4, 6]])
+
+    assert comparator(list_arr1, list_arr2)
+    assert not comparator(list_arr1, list_arr3)
+
+
 def test_pyrsistent():
     try:
         from pyrsistent import PBag, PClass, PRecord, field, pdeque, pmap, pset, pvector  # type: ignore
@@ -2794,7 +2925,6 @@ def test_torch_runtime_error_wrapping():
     # Create a mock TorchRuntimeError class that mimics torch._dynamo.exc.TorchRuntimeError
     class TorchRuntimeError(Exception):
         """Mock TorchRuntimeError for testing."""
-
 
     # Monkey-patch the __module__ to match torch._dynamo.exc
     TorchRuntimeError.__module__ = "torch._dynamo.exc"
