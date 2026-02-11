@@ -182,7 +182,9 @@ class TestBenchmarkingTestsDispatch:
 
             call_kwargs = mock_vitest_runner.call_args.kwargs
             assert call_kwargs["min_loops"] == 10
-            assert call_kwargs["max_loops"] == 50
+            # JS/TS always uses high max_loops (100_000) regardless of passed value
+            # Actual loop count is limited by target_duration, not max_loops
+            assert call_kwargs["max_loops"] == 100_000
             assert call_kwargs["target_duration_ms"] == 5000
 
 

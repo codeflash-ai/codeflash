@@ -23,8 +23,13 @@ if TYPE_CHECKING:
 def _find_vitest_project_root(file_path: Path) -> Path | None:
     """Find the Vitest project root by looking for vitest/vite config or package.json.
 
-    Traverses up from the given file path to find the nearest directory
-    containing vitest.config.js/ts, vite.config.js/ts, or package.json.
+    Traverses up from the given file path to find the directory containing
+    vitest.config.js/ts or vite.config.js/ts. Falls back to package.json only
+    if no vitest/vite config is found in any parent directory.
+
+    In monorepos, package.json may exist at multiple levels (e.g., packages/lib/package.json),
+    but the vitest config with setupFiles is typically at the monorepo root.
+    We need to prioritize finding the actual vitest config to ensure paths resolve correctly.
 
     Args:
         file_path: A file path within the Vitest project.
@@ -34,8 +39,10 @@ def _find_vitest_project_root(file_path: Path) -> Path | None:
 
     """
     current = file_path.parent if file_path.is_file() else file_path
+    package_json_dir = None  # Track first package.json found (fallback)
+
     while current != current.parent:  # Stop at filesystem root
-        # Check for Vitest-specific config files first
+        # Check for Vitest-specific config files first - these should take priority
         if (
             (current / "vitest.config.js").exists()
             or (current / "vitest.config.ts").exists()
@@ -45,27 +52,40 @@ def _find_vitest_project_root(file_path: Path) -> Path | None:
             or (current / "vite.config.ts").exists()
             or (current / "vite.config.mjs").exists()
             or (current / "vite.config.mts").exists()
-            or (current / "package.json").exists()
         ):
             return current
+        # Remember first package.json as fallback, but keep looking for vitest config
+        if package_json_dir is None and (current / "package.json").exists():
+            package_json_dir = current
         current = current.parent
-    return None
+
+    # No vitest config found, fall back to package.json directory if found
+    return package_json_dir
 
 
 def _is_vitest_coverage_available(project_root: Path) -> bool:
     """Check if Vitest coverage package is available.
 
+    In monorepos, dependencies may be hoisted to the root node_modules.
+    This function searches up the directory tree for the coverage package.
+
     Args:
-        project_root: The project root directory.
+        project_root: The project root directory (may be a package in a monorepo).
 
     Returns:
         True if @vitest/coverage-v8 or @vitest/coverage-istanbul is installed.
 
     """
-    node_modules = project_root / "node_modules"
-    return (node_modules / "@vitest" / "coverage-v8").exists() or (
-        node_modules / "@vitest" / "coverage-istanbul"
-    ).exists()
+    current = project_root
+    while current != current.parent:  # Stop at filesystem root
+        node_modules = current / "node_modules"
+        if node_modules.exists():
+            if (node_modules / "@vitest" / "coverage-v8").exists() or (
+                node_modules / "@vitest" / "coverage-istanbul"
+            ).exists():
+                return True
+        current = current.parent
+    return False
 
 
 def _ensure_runtime_files(project_root: Path) -> None:
@@ -97,8 +117,146 @@ def _ensure_runtime_files(project_root: Path) -> None:
     logger.error(f"Could not install codeflash. Please install it manually: {' '.join(install_cmd)}")
 
 
+def _find_monorepo_root(start_path: Path) -> Path | None:
+    """Find the monorepo root by looking for workspace markers.
+
+    Args:
+        start_path: A path within the monorepo.
+
+    Returns:
+        The monorepo root directory, or None if not found.
+
+    """
+    monorepo_markers = ["pnpm-workspace.yaml", "yarn.lock", "lerna.json", "package-lock.json"]
+    current = start_path if start_path.is_dir() else start_path.parent
+
+    while current != current.parent:
+        # Check for monorepo markers
+        if any((current / marker).exists() for marker in monorepo_markers):
+            # Verify it has node_modules or package.json (it's a real root)
+            if (current / "node_modules").exists() or (current / "package.json").exists():
+                return current
+        current = current.parent
+
+    return None
+
+
+def _is_vitest_workspace(project_root: Path) -> bool:
+    """Check if the project uses vitest workspace configuration.
+
+    Vitest workspaces have a special structure where the root config
+    points to package-level configs. We shouldn't override these.
+
+    Args:
+        project_root: The project root directory.
+
+    Returns:
+        True if the project appears to use vitest workspace.
+
+    """
+    vitest_config = project_root / "vitest.config.ts"
+    if not vitest_config.exists():
+        vitest_config = project_root / "vitest.config.js"
+    if not vitest_config.exists():
+        return False
+
+    try:
+        content = vitest_config.read_text()
+        # Check for workspace indicators
+        return "workspace" in content.lower() or "defineWorkspace" in content
+    except Exception:
+        return False
+
+
+def _ensure_codeflash_vitest_config(project_root: Path) -> Path | None:
+    """Create or find a Codeflash-compatible Vitest config.
+
+    Vitest configs often have restrictive include patterns like 'test/**/*.test.ts'
+    which filter out our generated test files. This function creates a config
+    that overrides the include pattern to accept all test files.
+
+    Note: For workspace projects, we skip creating a custom config as it would
+    conflict with the workspace setup. In those cases, tests should be placed
+    in the correct package's test directory.
+
+    Args:
+        project_root: The project root directory.
+
+    Returns:
+        Path to the Codeflash Vitest config, or None if creation failed/not needed.
+
+    """
+    # Check for workspace configuration - don't override these
+    monorepo_root = _find_monorepo_root(project_root)
+    if monorepo_root and _is_vitest_workspace(monorepo_root):
+        logger.debug("Detected vitest workspace configuration - skipping custom config")
+        return None
+
+    codeflash_config_path = project_root / "codeflash.vitest.config.mjs"
+
+    # If already exists, use it
+    if codeflash_config_path.exists():
+        logger.debug(f"Using existing Codeflash Vitest config: {codeflash_config_path}")
+        return codeflash_config_path
+
+    # Find the original vitest config to extend
+    original_config = None
+    for config_name in ["vitest.config.ts", "vitest.config.js", "vitest.config.mts", "vitest.config.mjs"]:
+        config_path = project_root / config_name
+        if config_path.exists():
+            original_config = config_name
+            break
+
+    # Also check for vite config with vitest settings
+    if not original_config:
+        for config_name in ["vite.config.ts", "vite.config.js", "vite.config.mts", "vite.config.mjs"]:
+            config_path = project_root / config_name
+            if config_path.exists():
+                original_config = config_name
+                break
+
+    # Create a config that extends the original and overrides include pattern
+    if original_config:
+        config_content = f"""// Auto-generated by Codeflash for test file pattern compatibility
+import {{ mergeConfig }} from 'vitest/config';
+import originalConfig from './{original_config}';
+
+export default mergeConfig(originalConfig, {{
+  test: {{
+    // Override include pattern to match all test files including generated ones
+    include: ['**/*.test.ts', '**/*.test.js', '**/*.test.tsx', '**/*.test.jsx'],
+  }},
+}});
+"""
+    else:
+        # No original config found, create a minimal one
+        config_content = """// Auto-generated by Codeflash for test file pattern compatibility
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    // Include all test files including generated ones
+    include: ['**/*.test.ts', '**/*.test.js', '**/*.test.tsx', '**/*.test.jsx'],
+    // Exclude common non-test directories
+    exclude: ['**/node_modules/**', '**/dist/**'],
+  },
+});
+"""
+
+    try:
+        codeflash_config_path.write_text(config_content)
+        logger.debug(f"Created Codeflash Vitest config: {codeflash_config_path}")
+        return codeflash_config_path
+    except Exception as e:
+        logger.warning(f"Failed to create Codeflash Vitest config: {e}")
+        return None
+
+
 def _build_vitest_behavioral_command(
-    test_files: list[Path], timeout: int | None = None, output_file: Path | None = None
+    test_files: list[Path],
+    timeout: int | None = None,
+    output_file: Path | None = None,
+    project_root: Path | None = None,
 ) -> list[str]:
     """Build Vitest command for behavioral tests.
 
@@ -106,6 +264,7 @@ def _build_vitest_behavioral_command(
         test_files: List of test files to run.
         timeout: Optional timeout in seconds.
         output_file: Optional path for JUnit XML output.
+        project_root: Project root directory for --root flag.
 
     Returns:
         Command list for subprocess execution.
@@ -119,6 +278,14 @@ def _build_vitest_behavioral_command(
         "--reporter=junit",
         "--no-file-parallelism",  # Serial execution for deterministic timing
     ]
+
+    # For monorepos with restrictive vitest configs (e.g., include: test/**/*.test.ts),
+    # we need to create a custom config that allows all test patterns.
+    # This is done by creating a codeflash.vitest.config.mjs file.
+    if project_root:
+        codeflash_vitest_config = _ensure_codeflash_vitest_config(project_root)
+        if codeflash_vitest_config:
+            cmd.append(f"--config={codeflash_vitest_config}")
 
     if output_file:
         # Use dot notation for junit reporter output file when multiple reporters are used
@@ -135,7 +302,10 @@ def _build_vitest_behavioral_command(
 
 
 def _build_vitest_benchmarking_command(
-    test_files: list[Path], timeout: int | None = None, output_file: Path | None = None
+    test_files: list[Path],
+    timeout: int | None = None,
+    output_file: Path | None = None,
+    project_root: Path | None = None,
 ) -> list[str]:
     """Build Vitest command for benchmarking tests.
 
@@ -143,6 +313,7 @@ def _build_vitest_benchmarking_command(
         test_files: List of test files to run.
         timeout: Optional timeout in seconds.
         output_file: Optional path for JUnit XML output.
+        project_root: Project root directory for --root flag.
 
     Returns:
         Command list for subprocess execution.
@@ -156,6 +327,12 @@ def _build_vitest_benchmarking_command(
         "--reporter=junit",
         "--no-file-parallelism",  # Serial execution for consistent benchmarking
     ]
+
+    # Use codeflash vitest config to override restrictive include patterns
+    if project_root:
+        codeflash_vitest_config = _ensure_codeflash_vitest_config(project_root)
+        if codeflash_vitest_config:
+            cmd.append(f"--config={codeflash_vitest_config}")
 
     if output_file:
         # Use dot notation for junit reporter output file when multiple reporters are used
@@ -220,11 +397,20 @@ def run_vitest_behavioral_tests(
         logger.debug("Vitest coverage package not installed, running without coverage")
 
     # Build Vitest command
-    vitest_cmd = _build_vitest_behavioral_command(test_files=test_files, timeout=timeout, output_file=result_file_path)
+    vitest_cmd = _build_vitest_behavioral_command(
+        test_files=test_files, timeout=timeout, output_file=result_file_path, project_root=effective_cwd
+    )
 
     # Add coverage flags only if coverage is available
     if coverage_available:
+        # Don't pre-create the coverage directory - vitest should create it
+        # Pre-creating an empty directory may cause vitest to delete it
+        logger.debug(f"Coverage will be written to: {coverage_dir}")
+
         vitest_cmd.extend(["--coverage", "--coverage.reporter=json", f"--coverage.reportsDirectory={coverage_dir}"])
+        # Note: Removed --coverage.enabled=true (redundant) and --coverage.all false
+        # The version mismatch between vitest and @vitest/coverage-v8 can cause
+        # issues with coverage flag parsing. Let vitest use default settings.
 
     # Set up environment
     vitest_env = test_env.copy()
@@ -251,6 +437,7 @@ def run_vitest_behavioral_tests(
             cwd=effective_cwd, env=vitest_env, timeout=subprocess_timeout, check=False, text=True, capture_output=True
         )
         result = subprocess.run(vitest_cmd, **run_args)  # noqa: PLW1510
+
         # Combine stderr into stdout for timing markers
         if result.stderr and not result.stdout:
             result = subprocess.CompletedProcess(
@@ -288,14 +475,33 @@ def run_vitest_behavioral_tests(
         logger.debug(f"Vitest JUnit XML created: {result_file_path} ({file_size} bytes)")
         if file_size < 200:  # Suspiciously small - likely empty or just headers
             logger.warning(
-                f"Vitest JUnit XML is very small ({file_size} bytes). "
-                f"Content: {result_file_path.read_text()[:500]}"
+                f"Vitest JUnit XML is very small ({file_size} bytes). Content: {result_file_path.read_text()[:500]}"
             )
     else:
         logger.warning(
             f"Vitest JUnit XML not created at {result_file_path}. "
             f"Vitest stdout: {result.stdout[:1000] if result.stdout else '(empty)'}"
         )
+
+    # Check if coverage file was created
+    if coverage_available and coverage_json_path:
+        if coverage_json_path.exists():
+            cov_size = coverage_json_path.stat().st_size
+            logger.debug(f"Vitest coverage JSON created: {coverage_json_path} ({cov_size} bytes)")
+        else:
+            # Check if the parent directory exists and list its contents
+            cov_parent = coverage_json_path.parent
+            if cov_parent.exists():
+                contents = list(cov_parent.iterdir())
+                logger.warning(
+                    f"Vitest coverage JSON not created at {coverage_json_path}. "
+                    f"Directory exists with contents: {[f.name for f in contents]}"
+                )
+            else:
+                logger.warning(
+                    f"Vitest coverage JSON not created at {coverage_json_path}. "
+                    f"Coverage directory does not exist: {cov_parent}"
+                )
 
     return result_file_path, result, coverage_json_path, None
 
@@ -313,6 +519,9 @@ def run_vitest_benchmarking_tests(
     stability_check: bool = True,
 ) -> tuple[Path, subprocess.CompletedProcess]:
     """Run Vitest benchmarking tests with external looping from Python.
+
+    NOTE: This function MUST use benchmarking_file_path (perf tests with capturePerf),
+    NOT instrumented_behavior_file_path (behavior tests with capture).
 
     Uses external process-level looping to run tests multiple times and
     collect timing data. This matches the Python pytest approach where
@@ -338,6 +547,26 @@ def run_vitest_benchmarking_tests(
     # Get performance test files
     test_files = [Path(file.benchmarking_file_path) for file in test_paths.test_files if file.benchmarking_file_path]
 
+    # Log test file selection
+    total_test_files = len(test_paths.test_files)
+    perf_test_files = len(test_files)
+    logger.debug(
+        f"Vitest benchmark test file selection: {perf_test_files}/{total_test_files} have benchmarking_file_path"
+    )
+    if perf_test_files == 0:
+        logger.warning("No perf test files found! Cannot run benchmarking tests.")
+        for tf in test_paths.test_files:
+            logger.warning(
+                f"Test file: behavior={tf.instrumented_behavior_file_path}, perf={tf.benchmarking_file_path}"
+            )
+    elif perf_test_files < total_test_files:
+        for tf in test_paths.test_files:
+            if not tf.benchmarking_file_path:
+                logger.warning(f"Missing benchmarking_file_path: behavior={tf.instrumented_behavior_file_path}")
+    else:
+        for tf in test_files[:3]:  # Log first 3 perf test files
+            logger.debug(f"Using perf test file: {tf}")
+
     # Use provided project_root, or detect it as fallback
     if project_root is None and test_files:
         project_root = _find_vitest_project_root(test_files[0])
@@ -350,7 +579,7 @@ def run_vitest_benchmarking_tests(
 
     # Build Vitest command for performance tests
     vitest_cmd = _build_vitest_benchmarking_command(
-        test_files=test_files, timeout=timeout, output_file=result_file_path
+        test_files=test_files, timeout=timeout, output_file=result_file_path, project_root=effective_cwd
     )
 
     # Base environment setup
@@ -368,14 +597,25 @@ def run_vitest_benchmarking_tests(
     vitest_env["CODEFLASH_PERF_STABILITY_CHECK"] = "true" if stability_check else "false"
     vitest_env["CODEFLASH_LOOP_INDEX"] = "1"
 
+    # Set test module for marker identification (use first test file as reference)
+    if test_files:
+        test_module_path = str(
+            test_files[0].relative_to(effective_cwd)
+            if test_files[0].is_relative_to(effective_cwd)
+            else test_files[0].name
+        )
+        vitest_env["CODEFLASH_TEST_MODULE"] = test_module_path
+        logger.debug(f"[VITEST-BENCH] Set CODEFLASH_TEST_MODULE={test_module_path}")
+
     # Total timeout for the entire benchmark run
     total_timeout = max(120, (target_duration_ms // 1000) + 60, timeout or 120)
 
-    logger.debug(f"Running Vitest benchmarking tests: {' '.join(vitest_cmd)}")
+    logger.debug(f"[VITEST-BENCH] Running Vitest benchmarking tests: {' '.join(vitest_cmd)}")
     logger.debug(
-        f"Vitest benchmarking config: min_loops={min_loops}, max_loops={max_loops}, "
+        f"[VITEST-BENCH] Config: min_loops={min_loops}, max_loops={max_loops}, "
         f"target_duration={target_duration_ms}ms, stability_check={stability_check}"
     )
+    logger.debug(f"[VITEST-BENCH] Environment: CODEFLASH_PERF_LOOP_COUNT={vitest_env.get('CODEFLASH_PERF_LOOP_COUNT')}")
 
     total_start_time = time.time()
 
@@ -400,7 +640,27 @@ def run_vitest_benchmarking_tests(
         result = subprocess.CompletedProcess(args=vitest_cmd, returncode=-1, stdout="", stderr="Vitest not found")
 
     wall_clock_seconds = time.time() - total_start_time
-    logger.debug(f"Vitest benchmarking completed in {wall_clock_seconds:.2f}s")
+    logger.debug(f"[VITEST-BENCH] Completed in {wall_clock_seconds:.2f}s, returncode={result.returncode}")
+
+    # Debug: Check for END markers with duration (perf test format)
+    if result.stdout:
+        import re
+
+        perf_end_pattern = re.compile(r"!######[^:]+:[^:]+:[^:]+:(\d+):[^:]+:(\d+)######!")
+        perf_matches = list(perf_end_pattern.finditer(result.stdout))
+        if perf_matches:
+            loop_indices = [int(m.group(1)) for m in perf_matches]
+            logger.debug(
+                f"[VITEST-BENCH] Found {len(perf_matches)} perf END markers in stdout, "
+                f"loop_index range: {min(loop_indices)}-{max(loop_indices)}"
+            )
+        else:
+            logger.debug(f"[VITEST-BENCH] No perf END markers found in stdout (len={len(result.stdout)})")
+            # Check if there are behavior END markers instead
+            behavior_end_pattern = re.compile(r"!######[^:]+:[^:]+:[^:]+:\d+:[^#]+######!")
+            behavior_matches = list(behavior_end_pattern.finditer(result.stdout))
+            if behavior_matches:
+                logger.debug(f"[VITEST-BENCH] Found {len(behavior_matches)} behavior END markers instead (no duration)")
 
     return result_file_path, result
 
@@ -460,6 +720,12 @@ def run_vitest_line_profile_tests(
         "--reporter=junit",
         "--no-file-parallelism",  # Serial execution for consistent line profiling
     ]
+
+    # Use codeflash vitest config to override restrictive include patterns
+    if effective_cwd:
+        codeflash_vitest_config = _ensure_codeflash_vitest_config(effective_cwd)
+        if codeflash_vitest_config:
+            vitest_cmd.append(f"--config={codeflash_vitest_config}")
 
     # Use dot notation for junit reporter output file when multiple reporters are used
     vitest_cmd.append(f"--outputFile.junit={result_file_path}")

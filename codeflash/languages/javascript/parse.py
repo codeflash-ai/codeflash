@@ -16,12 +16,7 @@ from typing import TYPE_CHECKING
 from junitparser.xunit2 import JUnitXml
 
 from codeflash.cli_cmds.console import logger
-from codeflash.models.models import (
-    FunctionTestInvocation,
-    InvocationId,
-    TestResults,
-    TestType,
-)
+from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults, TestType
 
 if TYPE_CHECKING:
     import subprocess
@@ -127,6 +122,7 @@ def parse_jest_test_xml(
     # This handles cases where instrumented files are in temp directories
     instrumented_path_lookup: dict[str, tuple[Path, TestType]] = {}
     for test_file in test_files.test_files:
+        # Add behavior instrumented file paths
         if test_file.instrumented_behavior_file_path:
             # Store both the absolute path and resolved path as keys
             abs_path = str(test_file.instrumented_behavior_file_path.resolve())
@@ -137,18 +133,35 @@ def parse_jest_test_xml(
                 test_file.test_type,
             )
             logger.debug(f"Jest XML lookup: registered {abs_path}")
+        # Also add benchmarking file paths (perf-only instrumented tests)
+        if test_file.benchmarking_file_path:
+            bench_abs_path = str(test_file.benchmarking_file_path.resolve())
+            instrumented_path_lookup[bench_abs_path] = (test_file.benchmarking_file_path, test_file.test_type)
+            instrumented_path_lookup[str(test_file.benchmarking_file_path)] = (
+                test_file.benchmarking_file_path,
+                test_file.test_type,
+            )
+            logger.debug(f"Jest XML lookup: registered benchmark {bench_abs_path}")
 
     # Also build a filename-only lookup for fallback matching
     # This handles cases where JUnit XML has relative paths that don't match absolute paths
     # e.g., JUnit has "test/utils__perfinstrumented.test.ts" but lookup has absolute paths
     filename_lookup: dict[str, tuple[Path, TestType]] = {}
     for test_file in test_files.test_files:
+        # Add instrumented_behavior_file_path (behavior tests)
         if test_file.instrumented_behavior_file_path:
             filename = test_file.instrumented_behavior_file_path.name
             # Only add if not already present (avoid overwrites in case of duplicate filenames)
             if filename not in filename_lookup:
                 filename_lookup[filename] = (test_file.instrumented_behavior_file_path, test_file.test_type)
                 logger.debug(f"Jest XML filename lookup: registered {filename}")
+        # Also add benchmarking_file_path (perf-only tests) - these have different filenames
+        # e.g., utils__perfonlyinstrumented.test.ts vs utils__perfinstrumented.test.ts
+        if test_file.benchmarking_file_path:
+            bench_filename = test_file.benchmarking_file_path.name
+            if bench_filename not in filename_lookup:
+                filename_lookup[bench_filename] = (test_file.benchmarking_file_path, test_file.test_type)
+                logger.debug(f"Jest XML filename lookup: registered benchmark file {bench_filename}")
 
     # Fallback: if JUnit XML doesn't have system-out, use subprocess stdout directly
     global_stdout = ""
@@ -162,6 +175,19 @@ def parse_jest_test_xml(
                     logger.debug(f"Found {marker_count} timing start markers in Jest stdout")
                 else:
                     logger.debug(f"No timing start markers found in Jest stdout (len={len(global_stdout)})")
+                # Check for END markers with duration (perf test markers)
+                end_marker_count = len(jest_end_pattern.findall(global_stdout))
+                if end_marker_count > 0:
+                    logger.debug(
+                        f"[PERF-DEBUG] Found {end_marker_count} END timing markers with duration in Jest stdout"
+                    )
+                    # Sample a few markers to verify loop indices
+                    end_samples = list(jest_end_pattern.finditer(global_stdout))[:5]
+                    for sample in end_samples:
+                        groups = sample.groups()
+                        logger.debug(f"[PERF-DEBUG] Sample END marker: loopIndex={groups[3]}, duration={groups[5]}")
+                else:
+                    logger.debug("[PERF-DEBUG] No END markers with duration found in Jest stdout")
         except (AttributeError, UnicodeDecodeError):
             global_stdout = ""
 
@@ -183,6 +209,29 @@ def parse_jest_test_xml(
             # Key: (testName, testName2, funcName, loopIndex, lineId)
             key = match.groups()[:5]
             end_matches_dict[key] = match
+
+        # Debug: log suite-level END marker parsing for perf tests
+        if end_matches_dict:
+            # Get unique loop indices from the parsed END markers
+            loop_indices = sorted({int(k[3]) if k[3].isdigit() else 1 for k in end_matches_dict})
+            logger.debug(
+                f"[PERF-DEBUG] Suite {suite_count}: parsed {len(end_matches_dict)} END markers from suite_stdout, loop_index range: {min(loop_indices)}-{max(loop_indices)}"
+            )
+
+        # Also collect timing markers from testcase-level system-out (Vitest puts output at testcase level)
+        for tc in suite:
+            tc_system_out = tc._elem.find("system-out")  # noqa: SLF001
+            if tc_system_out is not None and tc_system_out.text:
+                tc_stdout = tc_system_out.text.strip()
+                logger.debug(f"Vitest testcase system-out found: {len(tc_stdout)} chars, first 200: {tc_stdout[:200]}")
+                end_marker_count = 0
+                for match in jest_end_pattern.finditer(tc_stdout):
+                    key = match.groups()[:5]
+                    end_matches_dict[key] = match
+                    end_marker_count += 1
+                if end_marker_count > 0:
+                    logger.debug(f"Found {end_marker_count} END timing markers in testcase system-out")
+                start_matches.extend(jest_start_pattern.finditer(tc_stdout))
 
         for testcase in suite:
             testcase_count += 1
@@ -299,6 +348,13 @@ def parse_jest_test_xml(
             sanitized_test_name = re.sub(r"[!#: ()\[\]{}|\\/*?^$.+\-]", "_", test_name)
             matching_starts = [m for m in start_matches if sanitized_test_name in m.group(2)]
 
+            # Debug: log which branch we're taking
+            logger.debug(
+                f"[FLOW-DEBUG] Testcase '{test_name[:50]}': "
+                f"total_start_matches={len(start_matches)}, matching_starts={len(matching_starts)}, "
+                f"total_end_matches={len(end_matches_dict)}"
+            )
+
             # For performance tests (capturePerf), there are no START markers - only END markers with duration
             # Check for END markers directly if no START markers found
             matching_ends_direct = []
@@ -309,9 +365,42 @@ def parse_jest_test_xml(
                     # end_key is (module, testName, funcName, loopIndex, invocationId)
                     if len(end_key) >= 2 and sanitized_test_name in end_key[1]:
                         matching_ends_direct.append(end_match)
+                # Debug: log matching results for perf tests
+                if matching_ends_direct:
+                    loop_indices = [int(m.groups()[3]) if m.groups()[3].isdigit() else 1 for m in matching_ends_direct]
+                    logger.debug(
+                        f"[PERF-MATCH] Testcase '{test_name[:40]}': matched {len(matching_ends_direct)} END markers, "
+                        f"loop_index range: {min(loop_indices)}-{max(loop_indices)}"
+                    )
+                elif end_matches_dict:
+                    # No matches but we have END markers - check why
+                    sample_keys = list(end_matches_dict.keys())[:3]
+                    logger.debug(
+                        f"[PERF-MISMATCH] Testcase '{test_name[:40]}': no matches found. "
+                        f"sanitized_test_name='{sanitized_test_name[:50]}', "
+                        f"sample end_keys={[k[1][:30] if len(k) >= 2 else k for k in sample_keys]}"
+                    )
+
+            # Log if we're skipping the matching_ends_direct branch
+            if matching_starts and end_matches_dict:
+                logger.debug(
+                    f"[FLOW-SKIP] Testcase '{test_name[:40]}': has {len(matching_starts)} START markers, "
+                    f"skipping {len(end_matches_dict)} END markers (behavior test mode)"
+                )
 
             if not matching_starts and not matching_ends_direct:
-                # No timing markers found - add basic result
+                # No timing markers found - use JUnit XML time attribute as fallback
+                # The time attribute is in seconds (e.g., "0.00077875"), convert to nanoseconds
+                runtime = None
+                try:
+                    time_attr = testcase._elem.attrib.get("time")  # noqa: SLF001
+                    if time_attr:
+                        time_seconds = float(time_attr)
+                        runtime = int(time_seconds * 1_000_000_000)  # Convert seconds to nanoseconds
+                        logger.debug(f"Jest XML: using time attribute for {test_name}: {time_seconds}s = {runtime}ns")
+                except (ValueError, TypeError) as e:
+                    logger.debug(f"Jest XML: could not parse time attribute: {e}")
+
                 test_results.add(
                     FunctionTestInvocation(
                         loop_index=1,
@@ -323,7 +412,7 @@ def parse_jest_test_xml(
                             iteration_id="",
                         ),
                         file_name=test_file_path,
-                        runtime=None,
+                        runtime=runtime,
                         test_framework=test_config.test_framework,
                         did_pass=result,
                         test_type=test_type,
@@ -334,11 +423,13 @@ def parse_jest_test_xml(
                 )
             elif matching_ends_direct:
                 # Performance test format: process END markers directly (no START markers)
+                loop_indices_found = []
                 for end_match in matching_ends_direct:
                     groups = end_match.groups()
                     # groups: (module, testName, funcName, loopIndex, invocationId, durationNs)
                     func_name = groups[2]
                     loop_index = int(groups[3]) if groups[3].isdigit() else 1
+                    loop_indices_found.append(loop_index)
                     line_id = groups[4]
                     try:
                         runtime = int(groups[5])
@@ -363,6 +454,12 @@ def parse_jest_test_xml(
                             timed_out=timed_out,
                             stdout="",
                         )
+                    )
+                if loop_indices_found:
+                    logger.debug(
+                        f"[LOOP-DEBUG] Testcase '{test_name}': processed {len(matching_ends_direct)} END markers, "
+                        f"loop_index range: {min(loop_indices_found)}-{max(loop_indices_found)}, "
+                        f"total results so far: {len(test_results.test_results)}"
                     )
             else:
                 # Process each timing marker
@@ -415,5 +512,19 @@ def parse_jest_test_xml(
             f"Jest XML parsing complete: {len(test_results.test_results)} results "
             f"from {suite_count} suites, {testcase_count} testcases"
         )
+        # Debug: show loop_index distribution for perf analysis
+        if test_results.test_results:
+            loop_indices = [r.loop_index for r in test_results.test_results]
+            unique_loop_indices = sorted(set(loop_indices))
+            min_idx, max_idx = min(unique_loop_indices), max(unique_loop_indices)
+            logger.debug(
+                f"[LOOP-SUMMARY] Results loop_index: min={min_idx}, max={max_idx}, "
+                f"unique_count={len(unique_loop_indices)}, total_results={len(loop_indices)}"
+            )
+            if max_idx == 1 and len(loop_indices) > 1:
+                logger.warning(
+                    f"[LOOP-WARNING] All {len(loop_indices)} results have loop_index=1. "
+                    "Perf test markers may not have been parsed correctly."
+                )
 
     return test_results

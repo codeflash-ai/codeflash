@@ -201,7 +201,7 @@ def _is_js_ts_function_exported(file_path: Path, function_name: str) -> tuple[bo
         Tuple of (is_exported, export_name). export_name may be 'default' for default exports.
 
     """
-    from codeflash.languages.treesitter_utils import get_analyzer_for_file
+    from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
     try:
         source = file_path.read_text(encoding="utf-8")

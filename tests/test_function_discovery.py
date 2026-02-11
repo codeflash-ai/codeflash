@@ -950,3 +950,203 @@ def test_filter_functions_non_overlapping_tests_root():
 
         # Strict check: exactly 2 functions remaining
         assert count == 2, f"Expected exactly 2 functions, got {count}"
+
+
+def test_filter_functions_project_inside_tests_folder():
+    """Test that source files are not filtered when project is inside a folder named 'tests'.
+
+    This is a critical regression test for projects located at paths like:
+    - /home/user/tests/myproject/
+    - /Users/dev/tests/n8n/
+
+    The fix ensures that directory pattern matching (e.g., /tests/) is only checked
+    on the relative path from project_root, not on the full absolute path.
+    """
+    with tempfile.TemporaryDirectory() as outer_temp_dir_str:
+        outer_temp_dir = Path(outer_temp_dir_str)
+
+        # Create a "tests" folder to simulate /home/user/tests/
+        tests_parent_folder = outer_temp_dir / "tests"
+        tests_parent_folder.mkdir()
+
+        # Create project inside the "tests" folder - simulates /home/user/tests/myproject/
+        project_dir = tests_parent_folder / "myproject"
+        project_dir.mkdir()
+
+        # Create source file inside the project
+        src_dir = project_dir / "src"
+        src_dir.mkdir()
+        source_file = src_dir / "utils.py"
+        with source_file.open("w") as f:
+            f.write("""
+def deep_copy(obj):
+    \"\"\"Deep copy an object.\"\"\"
+    import copy
+    return copy.deepcopy(obj)
+
+def compare_values(a, b):
+    \"\"\"Compare two values.\"\"\"
+    return a == b
+""")
+
+        # Create another source file directly in project root
+        root_source_file = project_dir / "main.py"
+        with root_source_file.open("w") as f:
+            f.write("""
+def main():
+    \"\"\"Main entry point.\"\"\"
+    return 0
+""")
+
+        # Create actual test files that should be filtered
+        project_tests_dir = project_dir / "test"
+        project_tests_dir.mkdir()
+        test_file = project_tests_dir / "test_utils.py"
+        with test_file.open("w") as f:
+            f.write("""
+def test_deep_copy():
+    return True
+""")
+
+        # Discover functions
+        all_functions = {}
+        for file_path in [source_file, root_source_file, test_file]:
+            discovered = find_all_functions_in_file(file_path)
+            all_functions.update(discovered)
+
+        # Test: project at /outer/tests/myproject with tests_root overlapping
+        # This simulates: /home/user/tests/n8n with tests_root = /home/user/tests/n8n
+        with unittest.mock.patch(
+            "codeflash.discovery.functions_to_optimize.get_blocklisted_functions", return_value={}
+        ):
+            filtered, count = filter_functions(
+                all_functions,
+                tests_root=project_dir,  # Same as project_root (overlapping)
+                ignore_paths=[],
+                project_root=project_dir,  # /outer/tests/myproject
+                module_root=project_dir,
+            )
+
+        # Strict check: source files should NOT be filtered even though
+        # the full path contains "/tests/" in the parent directory
+        expected_files = {source_file, root_source_file}
+        actual_files = set(filtered.keys())
+
+        assert actual_files == expected_files, (
+            f"Source files were incorrectly filtered when project is inside 'tests' folder.\n"
+            f"Expected files: {expected_files}\n"
+            f"Got files: {actual_files}\n"
+            f"Project path: {project_dir}\n"
+            f"This indicates the /tests/ pattern matched the parent directory path."
+        )
+
+        # Verify the correct functions are present
+        source_functions = sorted([fn.function_name for fn in filtered.get(source_file, [])])
+        assert source_functions == ["compare_values", "deep_copy"], (
+            f"Expected ['compare_values', 'deep_copy'], got {source_functions}"
+        )
+
+        root_functions = [fn.function_name for fn in filtered.get(root_source_file, [])]
+        assert root_functions == ["main"], (
+            f"Expected ['main'], got {root_functions}"
+        )
+
+        # Strict check: exactly 3 functions (2 from utils.py + 1 from main.py)
+        assert count == 3, (
+            f"Expected exactly 3 functions, got {count}. "
+            f"Some source files may have been incorrectly filtered."
+        )
+
+        # Verify test file was properly filtered (should not be in results)
+        assert test_file not in filtered, (
+            f"Test file {test_file} should have been filtered but wasn't"
+        )
+
+
+def test_filter_functions_typescript_project_in_tests_folder():
+    """Test TypeScript-like project structure inside a folder named 'tests'.
+
+    This simulates the n8n project structure:
+    /home/user/tests/n8n/packages/workflow/src/utils.ts
+
+    Ensures that TypeScript source files are not incorrectly filtered
+    when the parent directory happens to be named 'tests'.
+    """
+    with tempfile.TemporaryDirectory() as outer_temp_dir_str:
+        outer_temp_dir = Path(outer_temp_dir_str)
+
+        # Simulate: /home/user/tests/n8n
+        tests_folder = outer_temp_dir / "tests"
+        tests_folder.mkdir()
+        n8n_project = tests_folder / "n8n"
+        n8n_project.mkdir()
+
+        # Simulate: packages/workflow/src/utils.py (using .py for testing)
+        packages_dir = n8n_project / "packages"
+        packages_dir.mkdir()
+        workflow_dir = packages_dir / "workflow"
+        workflow_dir.mkdir()
+        src_dir = workflow_dir / "src"
+        src_dir.mkdir()
+
+        # Source file deep in the monorepo structure
+        utils_file = src_dir / "utils.py"
+        with utils_file.open("w") as f:
+            f.write("""
+def deep_copy(source):
+    \"\"\"Create a deep copy of the source object.\"\"\"
+    if source is None:
+        return None
+    return source.copy() if hasattr(source, 'copy') else source
+
+def is_object_empty(obj):
+    \"\"\"Check if an object is empty.\"\"\"
+    return len(obj) == 0 if obj else True
+""")
+
+        # Create test directory inside the package (simulating packages/workflow/test/)
+        test_dir = workflow_dir / "test"
+        test_dir.mkdir()
+        test_file = test_dir / "utils.test.py"
+        with test_file.open("w") as f:
+            f.write("""
+def test_deep_copy():
+    return True
+
+def test_is_object_empty():
+    return True
+""")
+
+        # Discover functions
+        all_functions = {}
+        for file_path in [utils_file, test_file]:
+            discovered = find_all_functions_in_file(file_path)
+            all_functions.update(discovered)
+
+        # Test with module_root = packages (typical TypeScript monorepo setup)
+        with unittest.mock.patch(
+            "codeflash.discovery.functions_to_optimize.get_blocklisted_functions", return_value={}
+        ):
+            filtered, count = filter_functions(
+                all_functions,
+                tests_root=packages_dir,  # Overlapping with module_root
+                ignore_paths=[],
+                project_root=n8n_project,  # /outer/tests/n8n
+                module_root=packages_dir,  # /outer/tests/n8n/packages
+            )
+
+        # Strict check: only the source file should remain
+        assert set(filtered.keys()) == {utils_file}, (
+            f"Expected only {utils_file} but got {set(filtered.keys())}.\n"
+            f"Source files in /outer/tests/n8n/packages/workflow/src/ were incorrectly filtered.\n"
+            f"The /tests/ pattern in the parent path should not affect filtering."
+        )
+
+        # Verify the correct functions are present
+        filtered_functions = sorted([fn.function_name for fn in filtered.get(utils_file, [])])
+        assert filtered_functions == ["deep_copy", "is_object_empty"], (
+            f"Expected ['deep_copy', 'is_object_empty'], got {filtered_functions}"
+        )
+
+        # Strict check: exactly 2 functions
+        assert count == 2, f"Expected exactly 2 functions, got {count}"

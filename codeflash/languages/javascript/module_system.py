@@ -416,8 +416,10 @@ def ensure_module_system_compatibility(code: str, target_module_system: str, pro
     is_esm = has_import or has_export
 
     # Convert if needed
-    if target_module_system == ModuleSystem.ES_MODULE and is_commonjs and not is_esm:
-        logger.debug("Converting CommonJS to ES Module syntax")
+    # For ESM target: convert any require statements, even if there are also import statements
+    # This handles generated tests that have ESM imports for test globals but CommonJS for the function
+    if target_module_system == ModuleSystem.ES_MODULE and has_require:
+        logger.debug("Converting CommonJS require statements to ES Module syntax")
         return convert_commonjs_to_esm(code)
 
     if target_module_system == ModuleSystem.COMMONJS and is_esm and not is_commonjs:

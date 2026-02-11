@@ -94,6 +94,9 @@ class ExportInfo:
     reexport_source: str | None  # Module path for re-exports
     start_line: int
     end_line: int
+    # Functions passed as arguments to wrapper calls in default exports
+    # e.g., export default curry(traverseEntity) -> ["traverseEntity"]
+    wrapped_default_args: list[str] | None = None
 
 
 @dataclass
@@ -707,6 +710,7 @@ class TreeSitterAnalyzer:
         default_export: str | None = None
         is_reexport = False
         reexport_source: str | None = None
+        wrapped_default_args: list[str] | None = None
 
         # Check for re-export source (export { x } from './other')
         source_node = node.child_by_field_name("source")
@@ -726,6 +730,12 @@ class TreeSitterAnalyzer:
                         default_export = self.get_node_text(sibling, source_bytes)
                     elif sibling.type in ("arrow_function", "function_expression", "object", "array"):
                         default_export = "default"
+                    elif sibling.type == "call_expression":
+                        # Handle wrapped exports: export default curry(traverseEntity)
+                        # The default export is the result of the call, but we track
+                        # the wrapped function names for export checking
+                        default_export = "default"
+                        wrapped_default_args = self._extract_call_expression_identifiers(sibling, source_bytes)
                 break
 
             # Handle named exports: export { a, b as c }
@@ -773,7 +783,36 @@ class TreeSitterAnalyzer:
             reexport_source=reexport_source,
             start_line=node.start_point[0] + 1,
             end_line=node.end_point[0] + 1,
+            wrapped_default_args=wrapped_default_args,
         )
+
+    def _extract_call_expression_identifiers(self, node: Node, source_bytes: bytes) -> list[str]:
+        """Extract identifier names from arguments of a call expression.
+
+        For patterns like curry(traverseEntity) or compose(fn1, fn2), this extracts
+        the function names passed as arguments: ["traverseEntity"] or ["fn1", "fn2"].
+
+        Args:
+            node: A call_expression node.
+            source_bytes: The source code as bytes.
+
+        Returns:
+            List of identifier names found in the call arguments.
+
+        """
+        identifiers: list[str] = []
+
+        # Get the arguments node
+        args_node = node.child_by_field_name("arguments")
+        if args_node:
+            for child in args_node.children:
+                if child.type == "identifier":
+                    identifiers.append(self.get_node_text(child, source_bytes))
+                # Also handle nested call expressions: compose(curry(fn))
+                elif child.type == "call_expression":
+                    identifiers.extend(self._extract_call_expression_identifiers(child, source_bytes))
+
+        return identifiers
 
     def _extract_commonjs_export(self, node: Node, source_bytes: bytes) -> ExportInfo | None:
         """Extract export information from CommonJS module.exports or exports.* patterns.
@@ -876,6 +915,7 @@ class TreeSitterAnalyzer:
         """Check if a function is exported and get its export name.
 
         For class methods, also checks if the containing class is exported.
+        Also handles wrapped exports like: export default curry(traverseEntity)
 
         Args:
             source: The source code to analyze.
@@ -900,6 +940,11 @@ class TreeSitterAnalyzer:
             for name, alias in export.exported_names:
                 if name == function_name:
                     return (True, alias if alias else name)
+
+            # Check wrapped default exports: export default curry(traverseEntity)
+            # The function is exported via wrapper, so it's accessible as "default"
+            if export.wrapped_default_args and function_name in export.wrapped_default_args:
+                return (True, "default")
 
         # For class methods, check if the containing class is exported
         if class_name:
@@ -1580,9 +1625,9 @@ def get_analyzer_for_file(file_path: Path) -> TreeSitterAnalyzer:
     """
     suffix = file_path.suffix.lower()
 
-    if suffix in (".ts",):
+    if suffix == ".ts":
         return TreeSitterAnalyzer(TreeSitterLanguage.TYPESCRIPT)
-    if suffix in (".tsx",):
+    if suffix == ".tsx":
         return TreeSitterAnalyzer(TreeSitterLanguage.TSX)
     # Default to JavaScript for .js, .jsx, .mjs, .cjs
     return TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
