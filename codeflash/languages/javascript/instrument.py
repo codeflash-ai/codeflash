@@ -82,6 +82,11 @@ class StandaloneCallTransformer:
         # Captures: (whitespace)(await )?(object.)*func_name(
         # We'll filter out expect() and codeflash. cases in the transform loop
         self._call_pattern = re.compile(rf"(\s*)(await\s+)?((?:\w+\.)*){re.escape(self.func_name)}\s*\(")
+        # Pattern to match bracket notation: obj['func_name']( or obj["func_name"](
+        # Captures: (whitespace)(await )?(obj)['|"]func_name['|"](
+        self._bracket_call_pattern = re.compile(
+            rf"(\s*)(await\s+)?(\w+)\[['\"]({re.escape(self.func_name)})['\"]]\s*\("
+        )
 
     def transform(self, code: str) -> str:
         """Transform all standalone calls in the code."""
@@ -89,7 +94,25 @@ class StandaloneCallTransformer:
         pos = 0
 
         while pos < len(code):
-            match = self._call_pattern.search(code, pos)
+            # Try both dot notation and bracket notation patterns
+            dot_match = self._call_pattern.search(code, pos)
+            bracket_match = self._bracket_call_pattern.search(code, pos)
+
+            # Choose the first match (by position)
+            match = None
+            is_bracket_notation = False
+            if dot_match and bracket_match:
+                if dot_match.start() <= bracket_match.start():
+                    match = dot_match
+                else:
+                    match = bracket_match
+                    is_bracket_notation = True
+            elif dot_match:
+                match = dot_match
+            elif bracket_match:
+                match = bracket_match
+                is_bracket_notation = True
+
             if not match:
                 result.append(code[pos:])
                 break
@@ -106,7 +129,11 @@ class StandaloneCallTransformer:
             result.append(code[pos:match_start])
 
             # Try to parse the full standalone call
-            standalone_match = self._parse_standalone_call(code, match)
+            if is_bracket_notation:
+                standalone_match = self._parse_bracket_standalone_call(code, match)
+            else:
+                standalone_match = self._parse_standalone_call(code, match)
+
             if standalone_match is None:
                 # Couldn't parse, skip this match
                 result.append(code[match_start : match.end()])
@@ -115,7 +142,7 @@ class StandaloneCallTransformer:
 
             # Generate the transformed code
             self.invocation_counter += 1
-            transformed = self._generate_transformed_call(standalone_match)
+            transformed = self._generate_transformed_call(standalone_match, is_bracket_notation)
             result.append(transformed)
             pos = standalone_match.end_pos
 
@@ -276,17 +303,59 @@ class StandaloneCallTransformer:
 
         return code[open_paren_pos + 1 : pos - 1], pos
 
-    def _generate_transformed_call(self, match: StandaloneCallMatch) -> str:
+    def _parse_bracket_standalone_call(self, code: str, match: re.Match) -> StandaloneCallMatch | None:
+        """Parse a complete standalone obj['func'](...) call with bracket notation."""
+        leading_ws = match.group(1)
+        prefix = match.group(2) or ""  # "await " or ""
+        obj_name = match.group(3)  # The object name before bracket
+        # match.group(4) is the function name inside brackets
+
+        # Find the opening paren position
+        match_text = match.group(0)
+        paren_offset = match_text.rfind("(")
+        open_paren_pos = match.start() + paren_offset
+
+        # Find the arguments (content inside parens)
+        func_args, close_pos = self._find_balanced_parens(code, open_paren_pos)
+        if func_args is None:
+            return None
+
+        # Check for trailing semicolon
+        end_pos = close_pos
+        # Skip whitespace
+        while end_pos < len(code) and code[end_pos] in " \t":
+            end_pos += 1
+
+        has_trailing_semicolon = end_pos < len(code) and code[end_pos] == ";"
+        if has_trailing_semicolon:
+            end_pos += 1
+
+        return StandaloneCallMatch(
+            start_pos=match.start(),
+            end_pos=end_pos,
+            leading_whitespace=leading_ws,
+            func_args=func_args,
+            prefix=prefix,
+            object_prefix=f"{obj_name}.",  # Use dot notation format for consistency
+            has_trailing_semicolon=has_trailing_semicolon,
+        )
+
+    def _generate_transformed_call(self, match: StandaloneCallMatch, is_bracket_notation: bool = False) -> str:
         """Generate the transformed code for a standalone call."""
         line_id = str(self.invocation_counter)
         args_str = match.func_args.strip()
         semicolon = ";" if match.has_trailing_semicolon else ""
 
-        # Handle method calls on objects (e.g., calc.fibonacci, this.method)
+        # Handle method calls on objects (e.g., calc.fibonacci, this.method, instance['method'])
         if match.object_prefix:
             # Remove trailing dot from object prefix for the bind call
             obj = match.object_prefix.rstrip(".")
-            full_method = f"{obj}.{self.func_name}"
+
+            # For bracket notation, use bracket access syntax for the bind
+            if is_bracket_notation:
+                full_method = f"{obj}['{self.func_name}']"
+            else:
+                full_method = f"{obj}.{self.func_name}"
 
             if args_str:
                 return (

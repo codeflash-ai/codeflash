@@ -8,6 +8,7 @@ import libcst as cst
 from rich.tree import Tree
 
 from codeflash.cli_cmds.console import DEBUG_MODE, lsp_log
+from codeflash.languages.current import is_javascript
 from codeflash.languages.registry import get_language_support
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table
 from codeflash.lsp.lsp_message import LspMarkdownMessage
@@ -895,6 +896,9 @@ class TestResults(BaseModel):  # noqa: PLW1641
     def number_of_loops(self) -> int:
         if not self.test_results:
             return 0
+        # TODO: Fix this. timings are not accurate something is off with either loop runner or capturePerf
+        if is_javascript():
+            return self.effective_loop_count()
         return max(test_result.loop_index for test_result in self.test_results)
 
     def get_test_pass_fail_report_by_type(self) -> dict[TestType, dict[str, int]]:
@@ -963,6 +967,28 @@ class TestResults(BaseModel):  # noqa: PLW1641
         return sum(
             [min(usable_runtime_data) for _, usable_runtime_data in self.usable_runtime_data_by_test_case().items()]
         )
+
+    def effective_loop_count(self) -> int:
+        """Calculate the effective number of complete loops.
+
+        For consistent behavior across Python and JavaScript tests, this returns
+        the maximum loop_index seen across all test results. This represents
+        the number of timing iterations that were performed.
+
+        Note: For JavaScript tests without the loop-runner, each test case may have
+        different iteration counts due to internal looping in capturePerf. We use
+        max() to report the highest iteration count achieved.
+
+        :return: The effective loop count, or 0 if no test results.
+        """
+        if not self.test_results:
+            return 0
+        # Get all loop indices from results that have timing data
+        loop_indices = {result.loop_index for result in self.test_results if result.runtime is not None}
+        if not loop_indices:
+            # Fallback: use all loop indices even without runtime
+            loop_indices = {result.loop_index for result in self.test_results}
+        return max(loop_indices) if loop_indices else 0
 
     def file_to_no_of_tests(self, test_functions_to_remove: list[str]) -> Counter[Path]:
         map_gen_test_file_to_no_of_tests = Counter()

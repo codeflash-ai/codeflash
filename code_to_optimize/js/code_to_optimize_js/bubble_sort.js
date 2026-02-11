@@ -7,7 +7,7 @@
  * @param {number[]} arr - The array to sort
  * @returns {number[]} - The sorted array
  */
-export function bubbleSort(arr) {
+function bubbleSort(arr) {
     const result = arr.slice();
     const n = result.length;
 
@@ -29,7 +29,7 @@ export function bubbleSort(arr) {
  * @param {number[]} arr - The array to sort
  * @returns {number[]} - The sorted array in descending order
  */
-export function bubbleSortDescending(arr) {
+function bubbleSortDescending(arr) {
     const n = arr.length;
     const result = [...arr];
 
