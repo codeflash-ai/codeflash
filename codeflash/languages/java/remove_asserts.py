@@ -166,9 +166,9 @@ class AssertionMatch:
     original_text: str = ""
     is_exception_assertion: bool = False
     lambda_body: str | None = None  # For assertThrows lambda content
-    variable_type: str | None = None  # Type of assigned variable (e.g., "IllegalArgumentException")
-    variable_name: str | None = None  # Name of assigned variable (e.g., "exception")
-    exception_class: str | None = None  # Exception class from assertThrows args
+    assigned_var_type: str | None = None  # Type of assigned variable (e.g., "IllegalArgumentException")
+    assigned_var_name: str | None = None  # Name of assigned variable (e.g., "exception")
+    exception_class: str | None = None  # Exception class from assertThrows args (e.g., "IllegalArgumentException")
 
 
 class JavaAssertTransformer:
@@ -306,8 +306,11 @@ class JavaAssertTransformer:
         # - assertEquals (static import)
         # - Assert.assertEquals (JUnit 4)
         # - Assertions.assertEquals (JUnit 5)
+        # - org.junit.jupiter.api.Assertions.assertEquals (fully qualified)
         all_assertions = "|".join(JUNIT5_ALL_ASSERTIONS)
-        pattern = re.compile(rf"(\s*)((?:Assert(?:ions)?\.)?({all_assertions}))\s*\(", re.MULTILINE)
+        pattern = re.compile(
+            rf"(\s*)((?:(?:\w+\.)*Assert(?:ions)?\.)?({all_assertions}))\s*\(", re.MULTILINE
+        )
 
         for match in pattern.finditer(source):
             leading_ws = match.group(1)
@@ -332,32 +335,41 @@ class JavaAssertTransformer:
             target_calls = self._extract_target_calls(args_content, match.end())
             is_exception = assertion_method in JUNIT5_EXCEPTION_ASSERTIONS
 
-            # For assertThrows, extract the lambda body and exception class
+            # For exception assertions, extract the lambda body
             lambda_body = None
             exception_class = None
-            if is_exception and assertion_method == "assertThrows":
+            if is_exception:
                 lambda_body = self._extract_lambda_body(args_content)
-                exception_class = self._extract_exception_class(args_content)
+                # Extract exception class specifically for assertThrows
+                if assertion_method == "assertThrows":
+                    exception_class = self._extract_exception_class(args_content)
 
             # Check if assertion is assigned to a variable
-            var_type, var_name = self._detect_variable_assignment(source, start_pos)
+            # Detect variable assignment: Type var = assertXxx(...)
+            # This applies to all assertions (assertThrows, assertTimeout, etc.)
+            assigned_var_type = None
+            assigned_var_name = None
+            original_text = source[start_pos:end_pos]
 
-            # If variable assignment detected, adjust start_pos to include the entire line
-            actual_start = start_pos
-            actual_leading_ws = leading_ws
-            if var_type:
-                # Find the start of the line (beginning of variable declaration)
-                line_start = source.rfind("\n", 0, start_pos)
-                if line_start == -1:
-                    line_start = 0
+            before = source[:start_pos]
+            last_nl_idx = before.rfind("\n")
+            if last_nl_idx >= 0:
+                line_prefix = source[last_nl_idx + 1 : start_pos]
+            else:
+                line_prefix = source[:start_pos]
+
+            var_match = re.match(r"([ \t]*)(?:final\s+)?([\w.<>\[\]]+)\s+(\w+)\s*=\s*$", line_prefix)
+            if var_match:
+                if last_nl_idx >= 0:
+                    start_pos = last_nl_idx
+                    leading_ws = "\n" + var_match.group(1)
                 else:
-                    line_start += 1
-                actual_start = line_start
-                # Extract the actual leading whitespace from the start of the line
-                line_content = source[line_start:start_pos]
-                actual_leading_ws = line_content[:len(line_content) - len(line_content.lstrip())]
+                    start_pos = 0
+                    leading_ws = var_match.group(1)
 
-            original_text = source[actual_start:end_pos]
+                assigned_var_type = var_match.group(2)
+                assigned_var_name = var_match.group(3)
+                original_text = source[start_pos:end_pos]  # Update with adjusted range
 
             # Determine statement type based on detected framework
             detected = self._detected_framework or "junit5"
@@ -368,17 +380,17 @@ class JavaAssertTransformer:
 
             assertions.append(
                 AssertionMatch(
-                    start_pos=actual_start,
+                    start_pos=start_pos,
                     end_pos=end_pos,
                     statement_type=stmt_type,
                     assertion_method=assertion_method,
                     target_calls=target_calls,
-                    leading_whitespace=actual_leading_ws,
+                    leading_whitespace=leading_ws,
                     original_text=original_text,
                     is_exception_assertion=is_exception,
                     lambda_body=lambda_body,
-                    variable_type=var_type,
-                    variable_name=var_name,
+                    assigned_var_type=assigned_var_type,
+                    assigned_var_name=assigned_var_name,
                     exception_class=exception_class,
                 )
             )
@@ -709,9 +721,9 @@ class JavaAssertTransformer:
                 return brace_content.strip()
         else:
             # Expression lambda: () -> expr
-            # Find the end (before the closing paren of assertThrows)
+            # Find the end (before the closing paren of assertThrows, or comma at depth 0)
             depth = 0
-            end = body_start
+            end = len(content)
             for i, ch in enumerate(content[body_start:]):
                 if ch == "(":
                     depth += 1
@@ -720,6 +732,9 @@ class JavaAssertTransformer:
                         end = body_start + i
                         break
                     depth -= 1
+                elif ch == "," and depth == 0:
+                    end = body_start + i
+                    break
             return content[body_start:end].strip()
 
         return None
@@ -851,14 +866,17 @@ class JavaAssertTransformer:
         To:
             try { calculator.divide(1, 0); } catch (Exception _cf_ignored1) {}
 
-        For variable assignments:
+        When assigned to a variable:
             IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> code());
         To:
             IllegalArgumentException ex = null;
-            try { code(); } catch (IllegalArgumentException e) { ex = e; } catch (Exception _cf_ignored1) {}
+            try { code(); } catch (IllegalArgumentException _cf_caught1) { ex = _cf_caught1; } catch (Exception _cf_ignored1) {}
 
         """
         self.invocation_counter += 1
+        counter = self.invocation_counter
+        ws = assertion.leading_whitespace
+        base_indent = ws.lstrip("\n\r")
 
         # Extract code to run from lambda body or target calls
         code_to_run = None
@@ -867,38 +885,39 @@ class JavaAssertTransformer:
             # Use a direct last-character check instead of .endswith for lower overhead
             if code_to_run and code_to_run[-1] != ";":
                 code_to_run += ";"
-        elif assertion.target_calls:
-            call = assertion.target_calls[0]
-            code_to_run = call.full_call + ";"
 
-        if not code_to_run:
-            # Fallback: comment out the assertion
-            return f"{assertion.leading_whitespace}// Removed assertThrows: could not extract callable"
-
-        # Check if assertion is assigned to a variable
-        if assertion.variable_name and assertion.variable_type:
-            # Generate proper exception capture with variable assignment
-            exception_type = assertion.exception_class or assertion.variable_type
-            var_name = assertion.variable_name
-
-            # Use a unique catch variable name to avoid conflicts
-            catch_var = f"_cf_caught{self.invocation_counter}"
-
-            # Get base indentation from leading whitespace (without newlines)
-            base_indent = assertion.leading_whitespace.lstrip("\n\r")
+            # Handle variable assignment: Type var = assertThrows(...)
+            if assertion.assigned_var_name and assertion.assigned_var_type:
+                var_type = assertion.assigned_var_type
+                var_name = assertion.assigned_var_name
+                if assertion.assertion_method == "assertDoesNotThrow":
+                    if ";" not in assertion.lambda_body.strip():
+                        return f"{ws}{var_type} {var_name} = {assertion.lambda_body.strip()};"
+                    return f"{ws}{code_to_run}"
+                # For assertThrows with variable assignment, use exception_class if available
+                exception_type = assertion.exception_class or var_type
+                return (
+                    f"{ws}{var_type} {var_name} = null;\n"
+                    f"{base_indent}try {{ {code_to_run} }} "
+                    f"catch ({exception_type} _cf_caught{counter}) {{ {var_name} = _cf_caught{counter}; }} "
+                    f"catch (Exception _cf_ignored{counter}) {{}}"
+                )
 
             return (
-                f"{assertion.leading_whitespace}{assertion.variable_type} {var_name} = null;\n"
-                f"{base_indent}try {{ {code_to_run} }} "
-                f"catch ({exception_type} {catch_var}) {{ {var_name} = {catch_var}; }} "
-                f"catch (Exception _cf_ignored{self.invocation_counter}) {{}}"
+                f"{ws}try {{ {code_to_run} }} "
+                f"catch (Exception _cf_ignored{counter}) {{}}"
             )
 
-        # No variable assignment, use simple try-catch
-        return (
-            f"{assertion.leading_whitespace}try {{ {code_to_run} }} "
-            f"catch (Exception _cf_ignored{self.invocation_counter}) {{}}"
-        )
+        # If no lambda body found, try to extract from target calls
+        if assertion.target_calls:
+            call = assertion.target_calls[0]
+            return (
+                f"{ws}try {{ {call.full_call}; }} "
+                f"catch (Exception _cf_ignored{counter}) {{}}"
+            )
+
+        # Fallback: comment out the assertion
+        return f"{ws}// Removed assertThrows: could not extract callable"
 
 
 def transform_java_assertions(source: str, function_name: str, qualified_name: str | None = None) -> str:
