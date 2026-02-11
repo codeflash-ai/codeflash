@@ -46,7 +46,7 @@ dependencies = [
     "pygls>=2.0.0,<3.0.0",
     "codeflash-benchmark",
     "filelock",
-    "pytest-asyncio>=1.2.0",
+    "pytest-asyncio>=0.18.0",
 ]
 
 [project.urls]

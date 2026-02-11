@@ -233,7 +233,7 @@ class JavaScriptNormalizer(CodeNormalizer):
 
         """
         try:
-            from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage
+            from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage
 
             lang_map = {"javascript": TreeSitterLanguage.JAVASCRIPT, "typescript": TreeSitterLanguage.TYPESCRIPT}
             lang = lang_map.get(self._get_tree_sitter_language(), TreeSitterLanguage.JAVASCRIPT)
