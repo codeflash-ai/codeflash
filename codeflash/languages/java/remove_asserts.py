@@ -166,8 +166,9 @@ class AssertionMatch:
     original_text: str = ""
     is_exception_assertion: bool = False
     lambda_body: str | None = None  # For assertThrows lambda content
-    assigned_var_type: str | None = None  # For Type var = assertThrows(...)
-    assigned_var_name: str | None = None
+    assigned_var_type: str | None = None  # Type of assigned variable (e.g., "IllegalArgumentException")
+    assigned_var_name: str | None = None  # Name of assigned variable (e.g., "exception")
+    exception_class: str | None = None  # Exception class from assertThrows args (e.g., "IllegalArgumentException")
 
 
 class JavaAssertTransformer:
@@ -186,6 +187,9 @@ class JavaAssertTransformer:
         self.qualified_name = qualified_name or function_name
         self.invocation_counter = 0
         self._detected_framework: str | None = None
+
+        # Precompile the assignment-detection regex to avoid recompiling on each call.
+        self._assign_re = re.compile(r"(\w+(?:<[^>]+>)?)\s+(\w+)\s*=\s*$")
 
     def transform(self, source: str) -> str:
         """Remove assertions from source code, preserving target function calls.
@@ -333,15 +337,19 @@ class JavaAssertTransformer:
 
             # For exception assertions, extract the lambda body
             lambda_body = None
+            exception_class = None
             if is_exception:
                 lambda_body = self._extract_lambda_body(args_content)
+                # Extract exception class specifically for assertThrows
+                if assertion_method == "assertThrows":
+                    exception_class = self._extract_exception_class(args_content)
 
-            original_text = source[start_pos:end_pos]
-
+            # Check if assertion is assigned to a variable
             # Detect variable assignment: Type var = assertXxx(...)
             # This applies to all assertions (assertThrows, assertTimeout, etc.)
             assigned_var_type = None
             assigned_var_name = None
+            original_text = source[start_pos:end_pos]
 
             before = source[:start_pos]
             last_nl_idx = before.rfind("\n")
@@ -361,7 +369,7 @@ class JavaAssertTransformer:
 
                 assigned_var_type = var_match.group(2)
                 assigned_var_name = var_match.group(3)
-                original_text = source[start_pos:end_pos]
+                original_text = source[start_pos:end_pos]  # Update with adjusted range
 
             # Determine statement type based on detected framework
             detected = self._detected_framework or "junit5"
@@ -383,6 +391,7 @@ class JavaAssertTransformer:
                     lambda_body=lambda_body,
                     assigned_var_type=assigned_var_type,
                     assigned_var_name=assigned_var_name,
+                    exception_class=exception_class,
                 )
             )
 
@@ -612,6 +621,83 @@ class JavaAssertTransformer:
 
         return target_calls
 
+    def _detect_variable_assignment(self, source: str, assertion_start: int) -> tuple[str | None, str | None]:
+        """Check if assertion is assigned to a variable.
+
+        Detects patterns like:
+            IllegalArgumentException exception = assertThrows(...)
+            Exception ex = assertThrows(...)
+
+        Args:
+            source: The full source code.
+            assertion_start: Start position of the assertion.
+
+        Returns:
+            Tuple of (variable_type, variable_name) or (None, None).
+
+        """
+        # Look backwards from assertion_start to beginning of line
+        line_start = source.rfind("\n", 0, assertion_start)
+        if line_start == -1:
+            line_start = 0
+        else:
+            line_start += 1
+
+        # Pattern: Type varName = assertXxx(...)
+        # Handle generic types: Type<Generic> varName = ...
+        match = self._assign_re.search(source, line_start, assertion_start)
+
+
+        if match:
+            var_type = match.group(1).strip()
+            var_name = match.group(2).strip()
+            return var_type, var_name
+
+        return None, None
+
+    def _extract_exception_class(self, args_content: str) -> str | None:
+        """Extract exception class from assertThrows arguments.
+
+        Args:
+            args_content: Content inside assertThrows parentheses.
+
+        Returns:
+            Exception class name (e.g., "IllegalArgumentException") or None.
+
+        Example:
+            assertThrows(IllegalArgumentException.class, ...) -> "IllegalArgumentException"
+
+        """
+        # First argument is the exception class reference (e.g., "IllegalArgumentException.class")
+        # Split by comma, but respect nested parentheses and generics
+        depth = 0
+        current = []
+        parts = []
+
+        for char in args_content:
+            if char in "(<":
+                depth += 1
+                current.append(char)
+            elif char in ")>":
+                depth -= 1
+                current.append(char)
+            elif char == "," and depth == 0:
+                parts.append("".join(current).strip())
+                current = []
+            else:
+                current.append(char)
+
+        if current:
+            parts.append("".join(current).strip())
+
+        if parts:
+            exception_arg = parts[0].strip()
+            # Remove .class suffix
+            if exception_arg.endswith(".class"):
+                return exception_arg[:-6].strip()
+
+        return None
+
     def _extract_lambda_body(self, content: str) -> str | None:
         """Extract the body of a lambda expression from assertThrows arguments.
 
@@ -781,10 +867,10 @@ class JavaAssertTransformer:
             try { calculator.divide(1, 0); } catch (Exception _cf_ignored1) {}
 
         When assigned to a variable:
-            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> calc.divide(1, 0));
+            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> code());
         To:
             IllegalArgumentException ex = null;
-            try { calc.divide(1, 0); } catch (IllegalArgumentException _cf_caught1) { ex = _cf_caught1; }
+            try { code(); } catch (IllegalArgumentException _cf_caught1) { ex = _cf_caught1; } catch (Exception _cf_ignored1) {}
 
         """
         self.invocation_counter += 1
@@ -792,9 +878,12 @@ class JavaAssertTransformer:
         ws = assertion.leading_whitespace
         base_indent = ws.lstrip("\n\r")
 
+        # Extract code to run from lambda body or target calls
+        code_to_run = None
         if assertion.lambda_body:
             code_to_run = assertion.lambda_body
-            if not code_to_run.endswith(";"):
+            # Use a direct last-character check instead of .endswith for lower overhead
+            if code_to_run and code_to_run[-1] != ";":
                 code_to_run += ";"
 
             # Handle variable assignment: Type var = assertThrows(...)
@@ -805,10 +894,13 @@ class JavaAssertTransformer:
                     if ";" not in assertion.lambda_body.strip():
                         return f"{ws}{var_type} {var_name} = {assertion.lambda_body.strip()};"
                     return f"{ws}{code_to_run}"
+                # For assertThrows with variable assignment, use exception_class if available
+                exception_type = assertion.exception_class or var_type
                 return (
                     f"{ws}{var_type} {var_name} = null;\n"
                     f"{base_indent}try {{ {code_to_run} }} "
-                    f"catch ({var_type} _cf_caught{counter}) {{ {var_name} = _cf_caught{counter}; }}"
+                    f"catch ({exception_type} _cf_caught{counter}) {{ {var_name} = _cf_caught{counter}; }} "
+                    f"catch (Exception _cf_ignored{counter}) {{}}"
                 )
 
             return (
