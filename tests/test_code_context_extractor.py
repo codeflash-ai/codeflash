@@ -768,7 +768,7 @@ class HelperClass:
 
 def test_example_class_token_limit_1(tmp_path: Path) -> None:
     docstring_filler = " ".join(
-        ["This is a long docstring that will be used to fill up the token limit." for _ in range(1000)]
+        ["This is a long docstring that will be used to fill up the token limit." for _ in range(4000)]
     )
     code = f"""
 class MyClass:
@@ -813,7 +813,7 @@ class HelperClass:
         ending_line=None,
     )
 
-    code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root, optim_token_limit=16000)
+    code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     hashing_context = code_ctx.hashing_code_context
     # In this scenario, the read-only code context is too long, so the read-only docstrings are removed.
@@ -961,7 +961,7 @@ class HelperClass:
 
 def test_example_class_token_limit_3(tmp_path: Path) -> None:
     string_filler = " ".join(
-        ["This is a long string that will be used to fill up the token limit." for _ in range(1000)]
+        ["This is a long string that will be used to fill up the token limit." for _ in range(4000)]
     )
     code = f"""
 class MyClass:
@@ -1006,12 +1006,12 @@ class HelperClass:
     )
     # In this scenario, the read-writable code is too long, so we abort.
     with pytest.raises(ValueError, match="Read-writable code has exceeded token limit, cannot proceed"):
-        code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root, optim_token_limit=16000)
+        code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
 
 
 def test_example_class_token_limit_4(tmp_path: Path) -> None:
     string_filler = " ".join(
-        ["This is a long string that will be used to fill up the token limit." for _ in range(1000)]
+        ["This is a long string that will be used to fill up the token limit." for _ in range(4000)]
     )
     code = f"""
 class MyClass:
@@ -1059,7 +1059,7 @@ class HelperClass:
 
     # In this scenario, the read-writable code context becomes too large because the __init__ function is referencing the global x variable instead of the class attribute self.x, so we abort.
     with pytest.raises(ValueError, match="Read-writable code has exceeded token limit, cannot proceed"):
-        code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root, optim_token_limit=16000)
+        code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
 
 
 def test_example_class_token_limit_5(tmp_path: Path) -> None:
