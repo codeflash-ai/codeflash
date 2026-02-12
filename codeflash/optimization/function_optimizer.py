@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 import libcst as cst
-import sentry_sdk
 from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
