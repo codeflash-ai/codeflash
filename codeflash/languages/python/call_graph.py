@@ -47,7 +47,8 @@ def _resolve_definitions(ref: Name) -> list[Name]:
         pass
 
     try:
-        return ref.goto(follow_imports=True, follow_builtin_imports=False)
+        result: list[Name] = ref.goto(follow_imports=True, follow_builtin_imports=False)
+        return result
     except Exception:
         return []
 
@@ -111,7 +112,7 @@ def _analyze_file(file_path: Path, jedi_project: object, project_root_str: str) 
     except Exception:
         return set(), True
 
-    edges: set[tuple[str, str, str, str, str, str, str, str]] = set()
+    edges: set[tuple[str, ...]] = set()
 
     for ref in refs:
         try:
@@ -170,6 +171,7 @@ def _analyze_file(file_path: Path, jedi_project: object, project_root_str: str) 
 def _index_file_worker(args: tuple[str, str]) -> tuple[str, str, set[tuple[str, ...]], bool]:
     """Worker entry point for ProcessPoolExecutor."""
     file_path_str, file_hash = args
+    assert _worker_project_root_str is not None
     edges, had_error = _analyze_file(Path(file_path_str), _worker_jedi_project, _worker_project_root_str)
     return file_path_str, file_hash, edges, had_error
 
