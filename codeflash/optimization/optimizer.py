@@ -469,13 +469,13 @@ class Optimizer:
     def rank_by_dependency_count(
         self, all_functions: list[tuple[Path, FunctionToOptimize]], call_graph: DependencyResolver
     ) -> list[tuple[Path, FunctionToOptimize]]:
-        counts: list[tuple[int, int, tuple[Path, FunctionToOptimize]]] = []
-        for idx, (file_path, func) in enumerate(all_functions):
-            _, callee_list = call_graph.get_callees({file_path: {func.qualified_name}})
-            counts.append((len(callee_list), idx, (file_path, func)))
-        counts.sort(key=lambda x: (-x[0], x[1]))
-        logger.debug(f"Ranked {len(counts)} functions by dependency count (most complex first)")
-        return [item for _, _, item in counts]
+        file_to_qns: dict[Path, set[str]] = defaultdict(set)
+        for file_path, func in all_functions:
+            file_to_qns[file_path].add(func.qualified_name)
+        callee_counts = call_graph.count_callees_per_function(dict(file_to_qns))
+        ranked = sorted(enumerate(all_functions), key=lambda x: (-callee_counts.get(x[1][1].qualified_name, 0), x[0]))
+        logger.debug(f"Ranked {len(ranked)} functions by dependency count (most complex first)")
+        return [item for _, item in ranked]
 
     def run(self) -> None:
         from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint

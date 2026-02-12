@@ -414,6 +414,39 @@ def caller():
         cg.close()
 
 
+def test_count_callees_per_function(project: Path, db_path: Path) -> None:
+    write_file(
+        project,
+        "mod.py",
+        """\
+def helper_a():
+    return 1
+
+def helper_b():
+    return 2
+
+def caller_one():
+    return helper_a() + helper_b()
+
+def caller_two():
+    return helper_a()
+
+def leaf():
+    return 42
+""",
+    )
+
+    cg = CallGraph(project, db_path=db_path)
+    try:
+        cg.build_index([project / "mod.py"])
+        counts = cg.count_callees_per_function({project / "mod.py": {"caller_one", "caller_two", "leaf"}})
+        assert counts["caller_one"] == 2
+        assert counts["caller_two"] == 1
+        assert counts["leaf"] == 0
+    finally:
+        cg.close()
+
+
 def test_same_file_edges_not_cross_file(project: Path, db_path: Path) -> None:
     write_file(
         project,
