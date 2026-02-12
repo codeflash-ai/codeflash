@@ -6,6 +6,7 @@ test files, similar to Python's inject_profiling_into_existing_test.
 
 from __future__ import annotations
 
+import bisect
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -487,14 +488,18 @@ class ExpectCallTransformer:
         result: list[str] = []
         pos = 0
 
-        while pos < len(code):
+        # Precompute string spans once per transform invocation for fast lookups
+        starts, ends = self._compute_string_spans(code)
+
+        n = len(code)
+        while pos < n:
             match = self._expect_pattern.search(code, pos)
             if not match:
                 result.append(code[pos:])
                 break
 
             # Skip if inside a string literal (e.g., test description)
-            if is_inside_string(code, match.start()):
+            if self._pos_inside_spans(match.start(), starts, ends):
                 result.append(code[pos : match.end()])
                 pos = match.end()
                 continue
@@ -728,6 +733,69 @@ class ExpectCallTransformer:
             f"{match.leading_whitespace}expect(codeflash.{self.capture_func}('{self.qualified_name}', "
             f"'{line_id}', {func_ref})){match.assertion_chain}{semicolon}"
         )
+
+
+    def _compute_string_spans(self, code: str) -> tuple[list[int], list[int]]:
+        """Compute inclusive/exclusive spans for string contents.
+
+        Spans represent the region of code that would be considered 'inside' a string
+        by the original is_inside_string behavior: start is the first position after
+        the opening quote, end is the position after the closing quote (or len(code)
+        if no closing quote is found). A position pos is considered inside a string
+        if start <= pos < end.
+
+        This function handles escapes (\\) similarly to the original function and
+        treats backticks (`) like other quotes (no special ${} handling to match original).
+        """
+        starts: list[int] = []
+        ends: list[int] = []
+        i = 0
+        n = len(code)
+
+        while i < n:
+            ch = code[i]
+            if ch in "\"'`":
+                # Determine if this quote is escaped
+                # A quote is escaped if the preceding char is an odd number of backslashes.
+                # Simpler: check immediate preceding char only (original code only checked immediate preceding char).
+                # To preserve behavior, we follow original: only treat as escaped if code[i-1] == '\\'
+                if i > 0 and code[i - 1] == "\\":
+                    i += 1
+                    continue
+
+                start = i + 1  # start of content (pos equal to quote itself is considered outside)
+                quote_char = ch
+                i += 1
+                # Scan until closing quote or end
+                while i < n:
+                    c = code[i]
+                    if c == "\\" and i + 1 < n:
+                        i += 2
+                        continue
+                    if c == quote_char:
+                        i += 1
+                        break
+                    i += 1
+                end = i  # position after closing quote or n if not closed
+                starts.append(start)
+                ends.append(end)
+            else:
+                i += 1
+
+        return starts, ends
+
+    def _pos_inside_spans(self, pos: int, starts: list[int], ends: list[int]) -> bool:
+        """Return True if pos is inside any (start, end) span using binary search.
+
+        Spans are expected to be non-overlapping and sorted by start.
+        """
+        if not starts:
+            return False
+        idx = bisect.bisect_right(starts, pos)
+        if idx == 0:
+            return False
+        si = idx - 1
+        return pos < ends[si]
 
 
 def transform_expect_calls(
