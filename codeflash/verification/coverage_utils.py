@@ -351,7 +351,9 @@ class CoverageUtils:
                 for file in files:
                     functions = files[file]["functions"]
                     for function in functions:
-                        if dependent_function_name in function:
+                        if function == dependent_function_name or (
+                            "." in dependent_function_name and function.endswith(f".{dependent_function_name}")
+                        ):
                             return FunctionCoverage(
                                 name=dependent_function_name,
                                 coverage=functions[function]["summary"]["percent_covered"],
