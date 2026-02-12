@@ -543,7 +543,7 @@ class Optimizer:
                 logger.debug("Failed to initialize CallGraph, falling back to per-function Jedi analysis")
 
         if call_graph is not None and file_to_funcs_to_optimize:
-            source_files = list(file_to_funcs_to_optimize.keys())
+            source_files = [f for f in file_to_funcs_to_optimize if f.suffix in (".py", ".pyw")]
             with call_graph_live_display(len(source_files)) as on_progress:
                 call_graph.build_index(source_files, on_progress=on_progress)
             call_graph_summary(call_graph, file_to_funcs_to_optimize)

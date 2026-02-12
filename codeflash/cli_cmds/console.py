@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections import deque
 from contextlib import contextmanager
 from itertools import cycle
 from typing import TYPE_CHECKING, Optional
@@ -214,7 +215,7 @@ def call_graph_live_display(total: int) -> Generator[Callable[[IndexResult], Non
 
     if is_LSP_enabled():
         lsp_log(LspTextMessage(text="Building call graph", takes_time=True))
-        yield lambda _result: None
+        yield lambda _: None
         return
 
     progress = Progress(
@@ -228,87 +229,114 @@ def call_graph_live_display(total: int) -> Generator[Callable[[IndexResult], Non
     )
     task_id = progress.add_task("Analyzing files", total=total)
 
-    results: list[IndexResult] = []
-    stats_indexed = 0
-    stats_cached = 0
-    stats_edges = 0
-    stats_external = 0
-    stats_errors = 0
+    results: deque[IndexResult] = deque(maxlen=MAX_TREE_ENTRIES)
+    stats = {
+        "indexed": 0,
+        "cached": 0,
+        "edges": 0,
+        "external": 0,
+        "errors": 0,
+    }
 
-    def make_display() -> Panel:
-        tree = Tree("[bold]Dependencies[/bold]")
-        for result in results[-MAX_TREE_ENTRIES:]:
-            name = result.file_path.name
+    tree = Tree("[bold]Dependencies[/bold]")
+    stats_text = Text("0 dependencies found", style="dim")
+    panel = Panel(
+        Group(progress, Text(""), tree, Text(""), stats_text),
+        title="Building Call Graph",
+        border_style="cyan",
+    )
+
+    def create_tree_node(result: IndexResult) -> Tree:
+        name = f"{result.file_path.parent.name}/{result.file_path.name}"
+
+        if result.error:
+            return Tree(f"[red]{name}  (error)[/red]")
+
+        if result.cached:
+            return Tree(f"[dim]{name}  (cached)[/dim]")
+
+        local_edges = result.num_edges - result.cross_file_edges
+        edge_info = []
+
+        if local_edges:
+            edge_info.append(f"{local_edges} in same file")
+        if result.cross_file_edges:
+            edge_info.append(f"{result.cross_file_edges} from other modules")
+
+        label = ", ".join(edge_info) if edge_info else "no dependencies"
+        return Tree(f"[cyan]{name}[/cyan]  [dim]{label}[/dim]")
+
+    def refresh_display() -> None:
+        tree.children = [create_tree_node(r) for r in results]
+        tree.children.extend([Tree(" ")] * (MAX_TREE_ENTRIES - len(results)))
+
+        # Update stats
+        stat_parts = []
+        if stats["indexed"]:
+            stat_parts.append(f"{stats['indexed']} files analyzed")
+        if stats["cached"]:
+            stat_parts.append(f"{stats['cached']} cached")
+        if stats["errors"]:
+            stat_parts.append(f"{stats['errors']} errors")
+        stat_parts.append(f"{stats['edges']} dependencies found")
+        if stats["external"]:
+            stat_parts.append(f"{stats['external']} from other modules")
+
+        stats_text.truncate(0)
+        stats_text.append(" · ".join(stat_parts), style="dim")
+
+    batch: list[IndexResult] = []
+
+    def process_batch() -> None:
+        for result in batch:
+            results.append(result)
+
             if result.error:
-                tree.add(f"[red]{name}  (error)[/red]")
+                stats["errors"] += 1
             elif result.cached:
-                tree.add(f"[dim]{name}  (cached)[/dim]")
+                stats["cached"] += 1
             else:
-                local = result.num_edges - result.cross_file_edges
-                parts = []
-                if local:
-                    parts.append(f"{local} in same file")
-                if result.cross_file_edges:
-                    parts.append(f"{result.cross_file_edges} from other modules")
-                label = ", ".join(parts) if parts else "no dependencies"
-                tree.add(f"[cyan]{name}[/cyan]  [dim]{label}[/dim]")
+                stats["indexed"] += 1
+                stats["edges"] += result.num_edges
+                stats["external"] += result.cross_file_edges
 
-        parts: list[str] = []
-        if stats_indexed:
-            parts.append(f"{stats_indexed} files analyzed")
-        if stats_cached:
-            parts.append(f"{stats_cached} cached")
-        if stats_errors:
-            parts.append(f"{stats_errors} errors")
-        parts.append(f"{stats_edges} dependencies found")
-        if stats_external:
-            parts.append(f"{stats_external} from other modules")
-        stats_text = Text(" · ".join(parts), style="dim")
+            progress.advance(task_id)
 
-        return Panel(
-            Group(progress, Text(""), tree, Text(""), stats_text), title="Building Call Graph", border_style="cyan"
-        )
+        batch.clear()
+        refresh_display()
+        live.refresh()
 
     def update(result: IndexResult) -> None:
-        nonlocal stats_indexed, stats_cached, stats_edges, stats_external, stats_errors
-        results.append(result)
-        if result.error:
-            stats_errors += 1
-        elif result.cached:
-            stats_cached += 1
-        else:
-            stats_indexed += 1
-            stats_edges += result.num_edges
-            stats_external += result.cross_file_edges
-        progress.advance(task_id)
-        live.update(make_display())
+        batch.append(result)
+        if len(batch) >= 8:
+            process_batch()
 
-    with Live(make_display(), console=console, transient=True, refresh_per_second=8) as live:
+    with Live(panel, console=console, transient=True, auto_refresh=False) as live:
         yield update
+        if batch:
+            process_batch()
 
 
 def call_graph_summary(call_graph: CallGraph, file_to_funcs: dict[Path, list[FunctionToOptimize]]) -> None:
     from rich.panel import Panel
 
     total_functions = sum(len(funcs) for funcs in file_to_funcs.values())
-    if total_functions == 0:
+    if not total_functions:
         return
 
     total_callees = 0
     with_context = 0
-    leaf_functions = 0
 
     for file_path, funcs in file_to_funcs.items():
         for func in funcs:
             _, func_callees = call_graph.get_callees({file_path: {func.qualified_name}})
-            count = len(func_callees)
-            total_callees += count
-            if count > 0:
+            callee_count = len(func_callees)
+            total_callees += callee_count
+            if callee_count > 0:
                 with_context += 1
-            else:
-                leaf_functions += 1
 
-    avg_callees = total_callees / total_functions if total_functions > 0 else 0
+    leaf_functions = total_functions - with_context
+    avg_callees = total_callees / total_functions
 
     summary = (
         f"{total_functions} functions ready for optimization · "
