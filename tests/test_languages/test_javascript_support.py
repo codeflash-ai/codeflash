@@ -654,7 +654,7 @@ describe('Math functions', () => {
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)

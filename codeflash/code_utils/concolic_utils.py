@@ -105,12 +105,12 @@ def clean_concolic_tests(test_suite_code: str) -> str:
         can_parse = False
         tree = None
 
-    if not can_parse:
+    if not can_parse or tree is None:
         return AssertCleanup().transform_asserts(test_suite_code)
 
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
-            new_body = []
+            new_body: list[ast.stmt] = []
             for stmt in node.body:
                 if isinstance(stmt, ast.Assert):
                     if isinstance(stmt.test, ast.Compare) and isinstance(stmt.test.left, ast.Call):

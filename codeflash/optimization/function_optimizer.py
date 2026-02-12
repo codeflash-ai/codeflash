@@ -2793,7 +2793,7 @@ class FunctionOptimizer:
                 test_config=self.test_cfg,
                 optimization_iteration=optimization_iteration,
                 run_result=run_result,
-                function_name=self.function_to_optimize.function_name,
+                function_name=self.function_to_optimize.qualified_name,
                 source_file=self.function_to_optimize.file_path,
                 code_context=code_context,
                 coverage_database_file=coverage_database_file,

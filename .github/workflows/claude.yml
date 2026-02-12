@@ -48,7 +48,7 @@ jobs:
         with:
           use_foundry: "true"
           use_sticky_comment: true
-          allowed_bots: "claude[bot]"
+          allowed_bots: "claude[bot],codeflash-ai[bot]"
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}

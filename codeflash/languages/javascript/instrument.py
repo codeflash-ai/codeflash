@@ -861,7 +861,7 @@ def validate_and_fix_import_style(test_code: str, source_file_path: Path, functi
         Fixed test code with correct import style.
 
     """
-    from codeflash.languages.treesitter_utils import get_analyzer_for_file
+    from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
     # Read source file to determine export style
     try:

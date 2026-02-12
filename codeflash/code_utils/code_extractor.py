@@ -1772,7 +1772,7 @@ def _extract_calling_function_js(source_code: str, function_name: str, ref_line:
 
     """
     try:
-        from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage
+        from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage
 
         # Try TypeScript first, fall back to JavaScript
         for lang in [TreeSitterLanguage.TYPESCRIPT, TreeSitterLanguage.TSX, TreeSitterLanguage.JAVASCRIPT]:
