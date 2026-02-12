@@ -975,5 +975,3 @@ def function_is_a_property(function_node: FunctionDef | AsyncFunctionDef) -> boo
         if isinstance(node, _ast_name) and node.id == _property_id:
             return True
     return False
-
-
