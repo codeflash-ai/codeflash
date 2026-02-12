@@ -35,7 +35,7 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(msg)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class IndexResult:
     file_path: Path
     cached: bool
