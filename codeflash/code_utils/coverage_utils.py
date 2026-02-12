@@ -19,8 +19,10 @@ def extract_dependent_function(main_function: str, code_context: CodeOptimizatio
             {node.name for node in ast_tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
         )
 
-    if main_function in dependent_functions:
-        dependent_functions.discard(main_function)
+    # Compare using bare name since AST extracts bare function names
+    bare_main = main_function.rsplit(".", 1)[-1] if "." in main_function else main_function
+    if bare_main in dependent_functions:
+        dependent_functions.discard(bare_main)
 
     if not dependent_functions:
         return False
@@ -32,6 +34,9 @@ def extract_dependent_function(main_function: str, code_context: CodeOptimizatio
 
 
 def build_fully_qualified_name(function_name: str, code_context: CodeOptimizationContext) -> str:
+    # If the name is already qualified (contains a dot), return as-is
+    if "." in function_name:
+        return function_name
     full_name = function_name
     for obj_name, parents in code_context.preexisting_objects:
         if obj_name == function_name:
