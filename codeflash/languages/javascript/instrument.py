@@ -128,6 +128,10 @@ class StandaloneCallTransformer:
             rf"(\s*)(await\s+)?(\w+)\[['\"]({re.escape(self.func_name)})['\"]]\s*\("
         )
 
+        # Compiled regex to find the next character of interest (quotes, parentheses, backslash).
+        # This lets us skip large stretches of irrelevant characters in C instead of Python.
+        self._special_char_re = re.compile(r'["\'`()\\]')
+
     def transform(self, code: str) -> str:
         """Transform all standalone calls in the code."""
         result: list[str] = []
@@ -327,13 +331,21 @@ class StandaloneCallTransformer:
         s_len = len(s)
         quotes = "\"'`"
 
+        special_re = self._special_char_re
+
+        # Use regex to jump to the next special character (quote, parenthesis, backslash).
+        # This reduces Python-level iterations by leveraging C-level scanning.
         while pos < s_len and depth > 0:
-            char = s[pos]
+            m = special_re.search(s, pos)
+            if not m:
+                return None, -1
+            i = m.start()
+            char = m.group(0)
 
             # Handle string literals
             # Note: preserve original escaping semantics (only checks immediate preceding char)
             if char in quotes:
-                prev_char = s[pos - 1] if pos > 0 else None
+                prev_char = s[i - 1] if i > 0 else None
                 if prev_char != "\\":
                     if not in_string:
                         in_string = True
@@ -347,7 +359,8 @@ class StandaloneCallTransformer:
                 elif char == ")":
                     depth -= 1
 
-            pos += 1
+            pos = i + 1
+
 
         if depth != 0:
             return None, -1
