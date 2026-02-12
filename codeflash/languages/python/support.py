@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import (
     CodeContext,
+    DependencyResolver,
     FunctionFilterCriteria,
     HelperFunction,
     Language,
@@ -800,6 +801,15 @@ class PythonSupport:
 
         """
         return True
+
+    def create_dependency_resolver(self, project_root: Path) -> DependencyResolver | None:
+        from codeflash.languages.python.call_graph import CallGraph
+
+        try:
+            return CallGraph(project_root)
+        except Exception:
+            logger.debug("Failed to initialize CallGraph, falling back to per-function Jedi analysis")
+            return None
 
     def instrument_existing_test(
         self,

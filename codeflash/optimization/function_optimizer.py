@@ -132,9 +132,9 @@ from codeflash.verification.verifier import generate_tests
 if TYPE_CHECKING:
     from argparse import Namespace
 
-    from codeflash.context.call_graph import CallGraph
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.either import Result
+    from codeflash.languages.base import DependencyResolver
     from codeflash.models.models import (
         BenchmarkKey,
         CodeStringsMarkdown,
@@ -438,7 +438,7 @@ class FunctionOptimizer:
         total_benchmark_timings: dict[BenchmarkKey, int] | None = None,
         args: Namespace | None = None,
         replay_tests_dir: Path | None = None,
-        call_graph: CallGraph | None = None,
+        call_graph: DependencyResolver | None = None,
     ) -> None:
         self.project_root = test_cfg.project_root_path
         self.test_cfg = test_cfg

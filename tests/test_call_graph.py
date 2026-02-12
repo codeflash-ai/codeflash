@@ -7,7 +7,8 @@ import pytest
 if TYPE_CHECKING:
     from pathlib import Path
 
-from codeflash.context.call_graph import CallGraph, IndexResult
+from codeflash.languages.base import IndexResult
+from codeflash.languages.python.call_graph import CallGraph
 
 
 @pytest.fixture

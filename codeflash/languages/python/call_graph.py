@@ -4,28 +4,18 @@ import hashlib
 import os
 import sqlite3
 from collections import defaultdict
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_qualified_name, path_belongs_to_site_packages
+from codeflash.languages.base import IndexResult
 from codeflash.models.models import FunctionSource
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
     from jedi.api.classes import Name
-
-
-@dataclass(frozen=True, slots=True)
-class IndexResult:
-    file_path: Path
-    cached: bool
-    num_edges: int
-    edges: tuple[tuple[str, str, bool], ...]  # (caller_qn, callee_name, is_cross_file)
-    cross_file_edges: int
-    error: bool
 
 
 # ---------------------------------------------------------------------------

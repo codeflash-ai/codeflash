@@ -30,8 +30,8 @@ if TYPE_CHECKING:
 
     from rich.progress import TaskID
 
-    from codeflash.context.call_graph import CallGraph, IndexResult
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.languages.base import DependencyResolver, IndexResult
     from codeflash.lsp.lsp_message import LspMessage
 
 DEBUG_MODE = logging.getLogger().getEffectiveLevel() == logging.DEBUG
@@ -230,20 +230,12 @@ def call_graph_live_display(total: int) -> Generator[Callable[[IndexResult], Non
     task_id = progress.add_task("Analyzing files", total=total)
 
     results: deque[IndexResult] = deque(maxlen=MAX_TREE_ENTRIES)
-    stats = {
-        "indexed": 0,
-        "cached": 0,
-        "edges": 0,
-        "external": 0,
-        "errors": 0,
-    }
+    stats = {"indexed": 0, "cached": 0, "edges": 0, "external": 0, "errors": 0}
 
     tree = Tree("[bold]Dependencies[/bold]")
     stats_text = Text("0 dependencies found", style="dim")
     panel = Panel(
-        Group(progress, Text(""), tree, Text(""), stats_text),
-        title="Building Call Graph",
-        border_style="cyan",
+        Group(progress, Text(""), tree, Text(""), stats_text), title="Building Call Graph", border_style="cyan"
     )
 
     def create_tree_node(result: IndexResult) -> Tree:
@@ -317,7 +309,7 @@ def call_graph_live_display(total: int) -> Generator[Callable[[IndexResult], Non
             process_batch()
 
 
-def call_graph_summary(call_graph: CallGraph, file_to_funcs: dict[Path, list[FunctionToOptimize]]) -> None:
+def call_graph_summary(call_graph: DependencyResolver, file_to_funcs: dict[Path, list[FunctionToOptimize]]) -> None:
     from rich.panel import Panel
 
     total_functions = sum(len(funcs) for funcs in file_to_funcs.values())

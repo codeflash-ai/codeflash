@@ -37,9 +37,8 @@ if TYPE_CHECKING:
     from jedi.api.classes import Name
     from libcst import CSTNode
 
-    from codeflash.context.call_graph import CallGraph
     from codeflash.context.unused_definition_remover import UsageInfo
-    from codeflash.languages.base import HelperFunction
+    from codeflash.languages.base import DependencyResolver, HelperFunction
 
 
 def build_testgen_context(
@@ -79,7 +78,7 @@ def get_code_optimization_context(
     project_root_path: Path,
     optim_token_limit: int = OPTIMIZATION_CONTEXT_TOKEN_LIMIT,
     testgen_token_limit: int = TESTGEN_CONTEXT_TOKEN_LIMIT,
-    call_graph: CallGraph | None = None,
+    call_graph: DependencyResolver | None = None,
 ) -> CodeOptimizationContext:
     # Route to language-specific implementation for non-Python languages
     if not is_python():
