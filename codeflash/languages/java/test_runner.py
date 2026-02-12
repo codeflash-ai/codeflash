@@ -1513,7 +1513,7 @@ def run_line_profile_tests(
         maven_root,
         test_paths,
         run_env,
-        timeout=timeout or 120,
+        timeout=max(timeout or 0, 120),
         mode="line_profile",
         test_module=test_module,
     )

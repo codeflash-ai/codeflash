@@ -284,11 +284,15 @@ def run_line_profile_tests(
     # Check if there's a language support for this test framework that implements run_line_profile_tests
     language_support = get_language_support_by_framework(test_framework)
     if language_support is not None and hasattr(language_support, "run_line_profile_tests"):
+        effective_timeout = pytest_timeout
+        if test_framework in ("junit4", "junit5", "testng") and pytest_timeout is not None:
+            # For Java, use a minimum timeout to account for Maven overhead
+            effective_timeout = max(pytest_timeout, JAVA_TESTCASE_TIMEOUT)
         return language_support.run_line_profile_tests(
             test_paths=test_paths,
             test_env=test_env,
             cwd=cwd,
-            timeout=pytest_timeout,
+            timeout=effective_timeout,
             project_root=js_project_root,
             line_profile_output_file=line_profiler_output_file,
         )
