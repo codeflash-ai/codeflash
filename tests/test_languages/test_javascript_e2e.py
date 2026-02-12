@@ -129,7 +129,13 @@ class TestJavaScriptCodeContext:
         assert len(context.read_writable_code.code_strings) > 0
 
         code = context.read_writable_code.code_strings[0].code
-        expected_code = """export function fibonacci(n) {
+        expected_code = """/**
+ * Calculate the nth Fibonacci number using naive recursion.
+ * This is intentionally slow to demonstrate optimization potential.
+ * @param {number} n - The index of the Fibonacci number to calculate
+ * @returns {number} - The nth Fibonacci number
+ */
+function fibonacci(n) {
     if (n <= 1) {
         return n;
     }
