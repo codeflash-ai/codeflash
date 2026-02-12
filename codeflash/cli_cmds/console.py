@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Optional
 
 from rich.console import Console
 from rich.logging import RichHandler
+from rich.panel import Panel
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -318,22 +319,19 @@ def call_graph_live_display(
 
 
 def call_graph_summary(call_graph: DependencyResolver, file_to_funcs: dict[Path, list[FunctionToOptimize]]) -> None:
-    from rich.panel import Panel
-
-    total_functions = sum(len(funcs) for funcs in file_to_funcs.values())
+    total_functions = sum(map(len, file_to_funcs.values()))
     if not total_functions:
         return
 
-    total_callees = 0
-    with_context = 0
+    # Build the mapping expected by the dependency resolver
+    file_items = file_to_funcs.items()
+    mapping = {file_path: {func.qualified_name for func in funcs} for file_path, funcs in file_items}
 
-    callee_counts = call_graph.count_callees_per_function(
-        {file_path: {func.qualified_name for func in funcs} for file_path, funcs in file_to_funcs.items()}
-    )
-    for count in callee_counts.values():
-        total_callees += count
-        if count > 0:
-            with_context += 1
+    callee_counts = call_graph.count_callees_per_function(mapping)
+
+    # Use built-in sum for C-level loops to reduce Python overhead
+    total_callees = sum(callee_counts.values())
+    with_context = sum(1 for count in callee_counts.values() if count > 0)
 
     leaf_functions = total_functions - with_context
     avg_callees = total_callees / total_functions
