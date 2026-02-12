@@ -75,7 +75,7 @@ from codeflash.context import code_context_extractor
 from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
 from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
 from codeflash.either import Failure, Success, is_successful
-from codeflash.languages import is_java, is_python
+from codeflash.languages import is_java, is_javascript, is_python
 from codeflash.languages.base import Language
 from codeflash.languages.current import current_language_support, is_typescript
 from codeflash.languages.javascript.module_system import detect_module_system
@@ -635,7 +635,7 @@ class FunctionOptimizer:
         count_tests, generated_tests, function_to_concolic_tests, concolic_test_str = test_results.unwrap()
 
         # Normalize codeflash imports in JS/TS tests to use npm package
-        if not is_python():
+        if is_javascript():
             module_system = detect_module_system(self.project_root, self.function_to_optimize.file_path)
             if module_system == "esm":
                 generated_tests = inject_test_globals(generated_tests)
@@ -820,6 +820,33 @@ class FunctionOptimizer:
         # Extract package from behavior source
         package_match = re.search(r"^\s*package\s+([\w.]+)\s*;", behavior_source, re.MULTILINE)
         package_name = package_match.group(1) if package_match else ""
+
+        # JPMS: If a test module-info.java exists, remap the package to the
+        # test module namespace to avoid split-package errors.
+        # E.g., io.questdb.cairo -> io.questdb.test.cairo
+        test_dir = self._get_java_sources_root()
+        test_module_info = test_dir / "module-info.java"
+        if package_name and test_module_info.exists():
+            mi_content = test_module_info.read_text()
+            mi_match = re.search(r"module\s+([\w.]+)", mi_content)
+            if mi_match:
+                test_module_name = mi_match.group(1)
+                main_dir = test_dir.parent.parent / "main" / "java"
+                main_module_info = main_dir / "module-info.java"
+                if main_module_info.exists():
+                    main_content = main_module_info.read_text()
+                    main_match = re.search(r"module\s+([\w.]+)", main_content)
+                    if main_match:
+                        main_module_name = main_match.group(1)
+                        if package_name.startswith(main_module_name):
+                            suffix = package_name[len(main_module_name):]
+                            new_package = test_module_name + suffix
+                            old_decl = f"package {package_name};"
+                            new_decl = f"package {new_package};"
+                            behavior_source = behavior_source.replace(old_decl, new_decl, 1)
+                            perf_source = perf_source.replace(old_decl, new_decl, 1)
+                            package_name = new_package
+                            logger.debug(f"[JPMS] Remapped package: {old_decl} -> {new_decl}")
 
         # Extract class name from behavior source
         # Use more specific pattern to avoid matching words like "command" or text in comments

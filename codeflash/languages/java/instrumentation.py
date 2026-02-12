@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import logging
 import re
-from functools import lru_cache
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -42,6 +41,102 @@ def _get_function_name(func: Any) -> str:
 
 # Pattern to detect primitive array types in assertions
 _PRIMITIVE_ARRAY_PATTERN = re.compile(r"new\s+(int|long|double|float|short|byte|char|boolean)\s*\[\s*\]")
+
+# Pattern to match @Test annotation exactly (not @TestOnly, @TestFactory, etc.)
+_TEST_ANNOTATION_RE = re.compile(r"^@Test(?:\s*\(.*\))?(?:\s.*)?$")
+
+
+def _is_test_annotation(stripped_line: str) -> bool:
+    """Check if a stripped line is an @Test annotation (not @TestOnly, @TestFactory, etc.).
+
+    Matches:
+        @Test
+        @Test(expected = ...)
+        @Test(timeout = 5000)
+    Does NOT match:
+        @TestOnly
+        @TestFactory
+        @TestTemplate
+    """
+    return bool(_TEST_ANNOTATION_RE.match(stripped_line))
+
+
+def _find_balanced_end(text: str, start: int) -> int:
+    """Find the position after the closing paren that balances the opening paren at start.
+
+    Args:
+        text: The source text.
+        start: Index of the opening parenthesis '('.
+
+    Returns:
+        Index one past the matching closing ')', or -1 if not found.
+
+    """
+    if start >= len(text) or text[start] != "(":
+        return -1
+    depth = 1
+    pos = start + 1
+    in_string = False
+    string_char = None
+    in_char = False
+    while pos < len(text) and depth > 0:
+        ch = text[pos]
+        prev = text[pos - 1] if pos > 0 else ""
+        if ch == "'" and not in_string and prev != "\\":
+            in_char = not in_char
+        elif ch == '"' and not in_char and prev != "\\":
+            if not in_string:
+                in_string = True
+                string_char = ch
+            elif ch == string_char:
+                in_string = False
+                string_char = None
+        elif not in_string and not in_char:
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+        pos += 1
+    return pos if depth == 0 else -1
+
+
+def _find_method_calls_balanced(line: str, func_name: str):
+    """Find method calls to func_name with properly balanced parentheses.
+
+    Handles nested parentheses in arguments correctly, unlike a pure regex approach.
+    Returns a list of (start, end, full_call) tuples where start/end are positions
+    in the line and full_call is the matched text (receiver.funcName(args)).
+
+    Args:
+        line: A single line of Java source code.
+        func_name: The method name to look for.
+
+    Returns:
+        List of (start_pos, end_pos, full_call_text) tuples.
+
+    """
+    # First find all occurrences of .funcName( in the line using regex
+    # to locate the method name, then use balanced paren finding for args
+    prefix_pattern = re.compile(
+        rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*{re.escape(func_name)}\s*\("
+    )
+    results = []
+    search_start = 0
+    while search_start < len(line):
+        m = prefix_pattern.search(line, search_start)
+        if not m:
+            break
+        # m.end() - 1 is the position of the opening paren
+        open_paren_pos = m.end() - 1
+        close_pos = _find_balanced_end(line, open_paren_pos)
+        if close_pos == -1:
+            # Unbalanced parens - skip this match
+            search_start = m.end()
+            continue
+        full_call = line[m.start():close_pos]
+        results.append((m.start(), close_pos, full_call))
+        search_start = close_pos
+    return results
 
 
 def _infer_array_cast_type(line: str) -> str | None:
@@ -182,11 +277,13 @@ def instrument_existing_test(
     else:
         new_class_name = f"{original_class_name}__perfonlyinstrumented"
 
-    # Rename the class declaration in the source
-    # Pattern: "public class ClassName" or "class ClassName"
-    pattern = rf"\b(public\s+)?class\s+{re.escape(original_class_name)}\b"
-    replacement = rf"\1class {new_class_name}"
-    modified_source = re.sub(pattern, replacement, source)
+    # Rename all references to the original class name in the source.
+    # This includes the class declaration, return types, constructor calls,
+    # variable declarations, etc. We use word-boundary matching to avoid
+    # replacing substrings of other identifiers.
+    modified_source = re.sub(
+        rf"\b{re.escape(original_class_name)}\b", new_class_name, source
+    )
 
     # Add timing instrumentation to test methods
     # Use original class name (without suffix) in timing markers for consistency with Python
@@ -277,15 +374,12 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
     iteration_counter = 0
     helper_added = False
 
-    # Pre-compile the regex pattern once
-    method_call_pattern = _get_method_call_pattern(func_name)
-
     while i < len(lines):
         line = lines[i]
         stripped = line.strip()
 
-        # Look for @Test annotation
-        if stripped.startswith("@Test"):
+        # Look for @Test annotation (not @TestOnly, @TestFactory, etc.)
+        if _is_test_annotation(stripped):
             if not helper_added:
                 helper_added = True
             result.append(line)
@@ -342,27 +436,20 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
             call_counter = 0
             wrapped_body_lines = []
 
-            # Use regex to find method calls with the target function
-            # Pattern matches: receiver.funcName(args) where receiver can be:
-            # - identifier (counter, calc, etc.)
-            # - new ClassName()
-            # - new ClassName(args)
-            # - this
-            method_call_pattern = re.compile(
-                rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)", re.MULTILINE
-            )
-
             # Track lambda block nesting depth to avoid wrapping calls inside lambda bodies.
             # assertThrows/assertDoesNotThrow expect an Executable (void functional interface),
             # and wrapping the call in a variable assignment would turn the void-compatible
             # lambda into a value-returning lambda, causing a compilation error.
-            # Handles both expression lambdas: () -> func()
-            # and block lambdas: () -> { func(); }
+            # Also, variables declared outside lambdas cannot be reassigned inside them
+            # (Java requires effectively final variables in lambda captures).
+            # Handles both no-arg lambdas: () -> { func(); }
+            # and parameterized lambdas: (a, b, c) -> { func(); }
             lambda_brace_depth = 0
 
             for body_line in body_lines:
-                # Detect new block lambda openings: () -> {
-                is_lambda_open = bool(re.search(r"\(\s*\)\s*->\s*\{", body_line))
+                # Detect block lambda openings: (...) -> { or () -> {
+                # Matches both () -> { and (a, b, c) -> {
+                is_lambda_open = bool(re.search(r"->\s*\{", body_line))
 
                 # Update lambda brace depth tracking for block lambdas
                 if is_lambda_open or lambda_brace_depth > 0:
@@ -376,7 +463,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                     # Ensure depth doesn't go below 0
                     lambda_brace_depth = max(0, lambda_brace_depth)
 
-                inside_lambda = lambda_brace_depth > 0 or bool(re.search(r"\(\s*\)\s*->", body_line))
+                inside_lambda = lambda_brace_depth > 0 or bool(re.search(r"->\s+\S", body_line))
 
                 # Check if this line contains a call to the target function
                 if func_name in body_line and "(" in body_line:
@@ -388,15 +475,16 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                     line_indent = len(body_line) - len(body_line.lstrip())
                     line_indent_str = " " * line_indent
 
-                    # Find all matches in the line
-                    matches = list(method_call_pattern.finditer(body_line))
+                    # Find all matches using balanced parenthesis matching
+                    # This correctly handles nested parens like:
+                    #   obj.func(a, Rows.toRowID(frame.getIndex(), row))
+                    matches = _find_method_calls_balanced(body_line, func_name)
                     if matches:
                         # Process matches in reverse order to maintain correct positions
                         new_line = body_line
-                        for match in reversed(matches):
+                        for start_pos, end_pos, full_call in reversed(matches):
                             call_counter += 1
                             var_name = f"_cf_result{iter_id}_{call_counter}"
-                            full_call = match.group(0)  # e.g., "new StringUtils().reverse(\"hello\")"
 
                             # Check if we need to cast the result for assertions with primitive arrays
                             # This handles assertArrayEquals(int[], int[]) etc.
@@ -404,13 +492,23 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                             var_with_cast = f"({cast_type}){var_name}" if cast_type else var_name
 
                             # Replace this occurrence with the variable (with cast if needed)
-                            new_line = new_line[: match.start()] + var_with_cast + new_line[match.end() :]
+                            new_line = new_line[:start_pos] + var_with_cast + new_line[end_pos:]
 
                             # Use 'var' instead of 'Object' to preserve the exact return type.
                             # This avoids boxing mismatches (e.g., assertEquals(int, Object) where
                             # Object is boxed Long but expected is boxed Integer). Requires Java 10+.
                             capture_line = f"{line_indent_str}var {var_name} = {full_call};"
                             wrapped_body_lines.append(capture_line)
+
+                            # Immediately serialize the captured result while the variable
+                            # is still in scope. This is necessary because the variable may
+                            # be declared inside a nested block (while/for/if/try) and would
+                            # be out of scope at the end of the method body.
+                            serialize_line = (
+                                f"{line_indent_str}_cf_serializedResult{iter_id} = "
+                                f"com.codeflash.Serializer.serialize((Object) {var_name});"
+                            )
+                            wrapped_body_lines.append(serialize_line)
 
                         # Check if the line is now just a variable reference (invalid statement)
                         # This happens when the original line was just a void method call
@@ -422,15 +520,6 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                         wrapped_body_lines.append(body_line)
                 else:
                     wrapped_body_lines.append(body_line)
-
-            # Build the serialized return value expression
-            # If we captured any calls, serialize the last one via Kryo; otherwise null bytes
-            # The (Object) cast ensures primitives get autoboxed before being passed to the method.
-            if call_counter > 0:
-                result_var = f"_cf_result{iter_id}_{call_counter}"
-                serialize_expr = f"com.codeflash.Serializer.serialize((Object) {result_var})"
-            else:
-                serialize_expr = "null"
 
             # Add behavior instrumentation code
             behavior_start_code = [
@@ -450,12 +539,12 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
             ]
             result.extend(behavior_start_code)
 
-            # Add the wrapped body lines with extra indentation
+            # Add the wrapped body lines with extra indentation.
+            # Serialization of captured results is already done inline (immediately
+            # after each capture) so the _cf_serializedResult variable is always
+            # assigned while the captured variable is still in scope.
             for bl in wrapped_body_lines:
                 result.append("    " + bl)
-
-            # Add serialization after the body (before finally)
-            result.append(f"{indent}    _cf_serializedResult{iter_id} = {serialize_expr};")
 
             # Add finally block with SQLite write
             method_close_indent = " " * base_indent
@@ -543,8 +632,8 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         line = lines[i]
         stripped = line.strip()
 
-        # Look for @Test annotation
-        if stripped.startswith("@Test"):
+        # Look for @Test annotation (not @TestOnly, @TestFactory, etc.)
+        if _is_test_annotation(stripped):
             result.append(line)
             i += 1
 
@@ -751,9 +840,10 @@ def instrument_generated_java_test(
     else:
         new_class_name = f"{original_class_name}__perfonlyinstrumented"
 
-    # Rename the class in the source
+    # Rename all references to the original class name in the source.
+    # This includes the class declaration, return types, constructor calls, etc.
     modified_code = re.sub(
-        rf"\b(public\s+)?class\s+{re.escape(original_class_name)}\b", rf"\1class {new_class_name}", test_code
+        rf"\b{re.escape(original_class_name)}\b", new_class_name, test_code
     )
 
     # For performance mode, add timing instrumentation
@@ -798,9 +888,3 @@ def _add_import(source: str, import_statement: str) -> str:
     return "".join(lines)
 
 
-@lru_cache(maxsize=128)
-def _get_method_call_pattern(func_name: str):
-    """Cache compiled regex patterns for method call matching."""
-    return re.compile(
-        rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)", re.MULTILINE
-    )
