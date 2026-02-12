@@ -131,7 +131,6 @@ def _analyze_file(file_path: Path, jedi_project: object, project_root_str: str) 
             if not _is_valid_definition(definition, caller_qn, project_root_str):
                 continue
 
-            # Extract common edge components
             edge_base = (resolved, caller_qn, str(definition_path))
 
             if definition.type == "function":

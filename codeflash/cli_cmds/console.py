@@ -206,7 +206,9 @@ MAX_TREE_ENTRIES = 8
 
 
 @contextmanager
-def call_graph_live_display(total: int) -> Generator[Callable[[IndexResult], None], None, None]:
+def call_graph_live_display(
+    total: int, project_root: Path | None = None
+) -> Generator[Callable[[IndexResult], None], None, None]:
     from rich.console import Group
     from rich.live import Live
     from rich.panel import Panel
@@ -239,7 +241,13 @@ def call_graph_live_display(total: int) -> Generator[Callable[[IndexResult], Non
     )
 
     def create_tree_node(result: IndexResult) -> Tree:
-        name = f"{result.file_path.parent.name}/{result.file_path.name}"
+        if project_root:
+            try:
+                name = str(result.file_path.resolve().relative_to(project_root.resolve()))
+            except ValueError:
+                name = f"{result.file_path.parent.name}/{result.file_path.name}"
+        else:
+            name = f"{result.file_path.parent.name}/{result.file_path.name}"
 
         if result.error:
             return Tree(f"[red]{name}  (error)[/red]")

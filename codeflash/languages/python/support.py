@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import (
     CodeContext,
-    DependencyResolver,
     FunctionFilterCriteria,
     HelperFunction,
     Language,
@@ -21,6 +20,8 @@ from codeflash.languages.registry import register_language
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+    from codeflash.languages.base import DependencyResolver
 
 logger = logging.getLogger(__name__)
 

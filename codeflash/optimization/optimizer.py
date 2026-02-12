@@ -531,14 +531,13 @@ class Optimizer:
         )
 
         # Create a language-specific dependency resolver (e.g. Jedi-based call graph for Python)
-        resolver: DependencyResolver | None = None
         lang_support = current_language_support()
-        if hasattr(lang_support, "create_dependency_resolver"):
-            resolver = lang_support.create_dependency_resolver(self.args.project_root)
+        resolver = lang_support.create_dependency_resolver(self.args.project_root) if lang_support else None
 
         if resolver is not None and file_to_funcs_to_optimize:
-            source_files = list(file_to_funcs_to_optimize.keys())
-            with call_graph_live_display(len(source_files)) as on_progress:
+            supported_exts = lang_support.file_extensions
+            source_files = [f for f in file_to_funcs_to_optimize if f.suffix in supported_exts]
+            with call_graph_live_display(len(source_files), project_root=self.args.project_root) as on_progress:
                 resolver.build_index(source_files, on_progress=on_progress)
             call_graph_summary(resolver, file_to_funcs_to_optimize)
 
