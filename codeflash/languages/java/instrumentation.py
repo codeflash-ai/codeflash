@@ -440,13 +440,16 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
             # assertThrows/assertDoesNotThrow expect an Executable (void functional interface),
             # and wrapping the call in a variable assignment would turn the void-compatible
             # lambda into a value-returning lambda, causing a compilation error.
-            # Handles both expression lambdas: () -> func()
-            # and block lambdas: () -> { func(); }
+            # Also, variables declared outside lambdas cannot be reassigned inside them
+            # (Java requires effectively final variables in lambda captures).
+            # Handles both no-arg lambdas: () -> { func(); }
+            # and parameterized lambdas: (a, b, c) -> { func(); }
             lambda_brace_depth = 0
 
             for body_line in body_lines:
-                # Detect new block lambda openings: () -> {
-                is_lambda_open = bool(re.search(r"\(\s*\)\s*->\s*\{", body_line))
+                # Detect block lambda openings: (...) -> { or () -> {
+                # Matches both () -> { and (a, b, c) -> {
+                is_lambda_open = bool(re.search(r"->\s*\{", body_line))
 
                 # Update lambda brace depth tracking for block lambdas
                 if is_lambda_open or lambda_brace_depth > 0:
@@ -460,7 +463,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                     # Ensure depth doesn't go below 0
                     lambda_brace_depth = max(0, lambda_brace_depth)
 
-                inside_lambda = lambda_brace_depth > 0 or bool(re.search(r"\(\s*\)\s*->", body_line))
+                inside_lambda = lambda_brace_depth > 0 or bool(re.search(r"->\s+\S", body_line))
 
                 # Check if this line contains a call to the target function
                 if func_name in body_line and "(" in body_line:
