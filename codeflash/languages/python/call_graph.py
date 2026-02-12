@@ -302,6 +302,32 @@ class CallGraph:
 
         return file_path_to_function_source, function_source_list
 
+    def count_callees_per_function(
+        self, file_path_to_qualified_names: dict[Path, set[str]]
+    ) -> dict[str, int]:
+        all_caller_keys: list[tuple[str, str]] = []
+        for file_path, qualified_names in file_path_to_qualified_names.items():
+            self.ensure_file_indexed(file_path)
+            resolved = str(file_path.resolve())
+            all_caller_keys.extend((resolved, qn) for qn in qualified_names)
+
+        if not all_caller_keys:
+            return {}
+
+        counts: dict[str, int] = {}
+        cur = self.conn.cursor()
+        for caller_file, caller_qn in all_caller_keys:
+            row = cur.execute(
+                """
+                SELECT COUNT(*) FROM call_edges
+                WHERE project_root = ? AND language = ? AND caller_file = ? AND caller_qualified_name = ?
+                """,
+                (self.project_root_str, self.language, caller_file, caller_qn),
+            ).fetchone()
+            counts[caller_qn] = row[0] if row else 0
+
+        return counts
+
     def ensure_file_indexed(self, file_path: Path) -> IndexResult:
         resolved = str(file_path.resolve())
 

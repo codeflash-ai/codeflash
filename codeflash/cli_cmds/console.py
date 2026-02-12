@@ -327,13 +327,13 @@ def call_graph_summary(call_graph: DependencyResolver, file_to_funcs: dict[Path,
     total_callees = 0
     with_context = 0
 
-    for file_path, funcs in file_to_funcs.items():
-        for func in funcs:
-            _, func_callees = call_graph.get_callees({file_path: {func.qualified_name}})
-            callee_count = len(func_callees)
-            total_callees += callee_count
-            if callee_count > 0:
-                with_context += 1
+    callee_counts = call_graph.count_callees_per_function(
+        {file_path: {func.qualified_name for func in funcs} for file_path, funcs in file_to_funcs.items()}
+    )
+    for count in callee_counts.values():
+        total_callees += count
+        if count > 0:
+            with_context += 1
 
     leaf_functions = total_functions - with_context
     avg_callees = total_callees / total_functions
