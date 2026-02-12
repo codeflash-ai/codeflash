@@ -1066,7 +1066,12 @@ def parse_test_xml(
             if not test_file_path.exists():
                 logger.warning(f"Could not find the test for file name - {test_file_path} ")
                 continue
+            # Try to match by instrumented file path first (for generated/instrumented tests)
             test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
+            if test_type is None:
+                # Fallback: try to match by original file path (for existing unit tests that were instrumented)
+                # JUnit XML may reference the original class name, resolving to the original file path
+                test_type = test_files.get_test_type_by_original_file_path(test_file_path)
             if test_type is None:
                 # Log registered paths for debugging
                 registered_paths = [str(tf.instrumented_behavior_file_path) for tf in test_files.test_files]
