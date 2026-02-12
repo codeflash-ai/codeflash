@@ -857,3 +857,120 @@ jest.doMock('../environment', () => ({ isTest: jest.fn() }));
 
             assert fix_jest_mock_paths("", test_file, source_file, tests_dir) == ""
             assert fix_jest_mock_paths("   ", test_file, source_file, tests_dir) == "   "
+
+
+class TestFunctionCallsInStrings:
+    """Tests for skipping function calls inside string literals."""
+
+    def test_skip_function_in_test_description_single_quotes(self):
+        """Test that function calls in single-quoted test descriptions are not transformed."""
+        from codeflash.languages.javascript.instrument import transform_standalone_calls
+
+        func = make_func("fibonacci")
+        code = """
+test('should compute fibonacci(20) and fibonacci(30) to known values', () => {
+    const result = fibonacci(10);
+    expect(result).toBe(55);
+});
+"""
+        transformed, _counter = transform_standalone_calls(code, func, "capture")
+
+        # The function call in the test description should NOT be transformed
+        assert "fibonacci(20)" in transformed
+        assert "fibonacci(30)" in transformed
+        # The actual call should be transformed
+        assert "codeflash.capture('fibonacci'" in transformed
+
+    def test_skip_function_in_test_description_double_quotes(self):
+        """Test that function calls in double-quoted test descriptions are not transformed."""
+        from codeflash.languages.javascript.instrument import transform_standalone_calls
+
+        func = make_func("fibonacci")
+        code = '''
+test("should compute fibonacci(20) correctly", () => {
+    const result = fibonacci(10);
+});
+'''
+        transformed, _counter = transform_standalone_calls(code, func, "capture")
+
+        # The function call in the test description should NOT be transformed
+        assert 'fibonacci(20)' in transformed
+        # The actual call should be transformed
+        assert "codeflash.capture('fibonacci'" in transformed
+
+    def test_skip_function_in_template_literal(self):
+        """Test that function calls in template literals are not transformed."""
+        from codeflash.languages.javascript.instrument import transform_standalone_calls
+
+        func = make_func("fibonacci")
+        code = """
+test(`should compute fibonacci(20) correctly`, () => {
+    const result = fibonacci(10);
+});
+"""
+        transformed, _counter = transform_standalone_calls(code, func, "capture")
+
+        # The function call in the template literal should NOT be transformed
+        assert "fibonacci(20)" in transformed
+        # The actual call should be transformed
+        assert "codeflash.capture('fibonacci'" in transformed
+
+    def test_skip_expect_in_string_literal(self):
+        """Test that expect(func()) in string literals is not transformed."""
+        from codeflash.languages.javascript.instrument import transform_expect_calls
+
+        func = make_func("fibonacci")
+        code = """
+describe('testing expect(fibonacci(n)) patterns', () => {
+    test('works', () => {
+        expect(fibonacci(10)).toBe(55);
+    });
+});
+"""
+        transformed, _counter = transform_expect_calls(code, func, "capture")
+
+        # The expect in the describe string should NOT be transformed
+        assert "expect(fibonacci(n))" in transformed
+        # The actual expect call should be transformed
+        assert "codeflash.capture('fibonacci'" in transformed
+
+    def test_handle_escaped_quotes_in_string(self):
+        """Test that escaped quotes in strings are handled correctly."""
+        from codeflash.languages.javascript.instrument import transform_standalone_calls
+
+        func = make_func("fibonacci")
+        code = """
+test('test \\'fibonacci(5)\\' escaping', () => {
+    const result = fibonacci(10);
+});
+"""
+        transformed, _counter = transform_standalone_calls(code, func, "capture")
+
+        # The function call in the escaped string should NOT be transformed
+        assert "fibonacci(5)" in transformed
+        # The actual call should be transformed
+        assert "codeflash.capture('fibonacci'" in transformed
+
+    def test_is_inside_string_helper(self):
+        """Test the is_inside_string helper function directly."""
+        from codeflash.languages.javascript.instrument import is_inside_string
+
+        # Position inside single-quoted string
+        code1 = "test('fibonacci(5)', () => {})"
+        assert is_inside_string(code1, 10) is True  # Inside the string
+
+        # Position outside string
+        assert is_inside_string(code1, 0) is False  # Before string
+        assert is_inside_string(code1, 25) is False  # After string
+
+        # Double quotes
+        code2 = 'test("fibonacci(5)", () => {})'
+        assert is_inside_string(code2, 10) is True
+
+        # Template literal
+        code3 = "test(`fibonacci(5)`, () => {})"
+        assert is_inside_string(code3, 10) is True
+
+        # Escaped quote doesn't end string
+        code4 = "test('fib\\'s result', () => {})"
+        assert is_inside_string(code4, 15) is True  # Still inside after escaped quote

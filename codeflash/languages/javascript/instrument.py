@@ -56,6 +56,46 @@ codeflash_import_pattern = re.compile(
 )
 
 
+def is_inside_string(code: str, pos: int) -> bool:
+    """Check if a position in code is inside a string literal.
+
+    Handles single quotes, double quotes, and template literals (backticks).
+    Properly handles escaped quotes.
+
+    Args:
+        code: The source code.
+        pos: The position to check.
+
+    Returns:
+        True if the position is inside a string literal.
+
+    """
+    in_string = False
+    string_char = None
+    i = 0
+
+    while i < pos:
+        char = code[i]
+
+        if in_string:
+            # Check for escape sequence
+            if char == "\\" and i + 1 < len(code):
+                i += 2  # Skip escaped character
+                continue
+            # Check for end of string
+            if char == string_char:
+                in_string = False
+                string_char = None
+        # Check for start of string
+        elif char in "\"'`":
+            in_string = True
+            string_char = char
+
+        i += 1
+
+    return in_string
+
+
 class StandaloneCallTransformer:
     """Transforms standalone func(...) calls in JavaScript test code.
 
@@ -150,6 +190,10 @@ class StandaloneCallTransformer:
 
     def _should_skip_match(self, code: str, start: int, match: re.Match) -> bool:
         """Check if the match should be skipped (inside expect, already transformed, etc.)."""
+        # Skip if inside a string literal (e.g., test description)
+        if is_inside_string(code, start):
+            return True
+
         # Look backwards to check context
         lookback_start = max(0, start - 200)
         lookback = code[lookback_start:start]
@@ -438,6 +482,12 @@ class ExpectCallTransformer:
             if not match:
                 result.append(code[pos:])
                 break
+
+            # Skip if inside a string literal (e.g., test description)
+            if is_inside_string(code, match.start()):
+                result.append(code[pos : match.end()])
+                pos = match.end()
+                continue
 
             # Add everything before the match
             result.append(code[pos : match.start()])
