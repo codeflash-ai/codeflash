@@ -75,7 +75,7 @@ from codeflash.context import code_context_extractor
 from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
 from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
 from codeflash.either import Failure, Success, is_successful
-from codeflash.languages import is_java, is_python
+from codeflash.languages import is_java, is_javascript, is_python
 from codeflash.languages.base import Language
 from codeflash.languages.current import current_language_support, is_typescript
 from codeflash.languages.javascript.module_system import detect_module_system
@@ -831,7 +831,7 @@ class FunctionOptimizer:
             mi_match = re.search(r"module\s+([\w.]+)", mi_content)
             if mi_match:
                 test_module_name = mi_match.group(1)
-                main_dir = test_dir.parent.parent.parent / "main" / "java"
+                main_dir = test_dir.parent.parent / "main" / "java"
                 main_module_info = main_dir / "module-info.java"
                 if main_module_info.exists():
                     main_content = main_module_info.read_text()
@@ -846,6 +846,7 @@ class FunctionOptimizer:
                             behavior_source = behavior_source.replace(old_decl, new_decl, 1)
                             perf_source = perf_source.replace(old_decl, new_decl, 1)
                             package_name = new_package
+                            logger.debug(f"[JPMS] Remapped package: {old_decl} -> {new_decl}")
 
         # Extract class name from behavior source
         # Use more specific pattern to avoid matching words like "command" or text in comments
