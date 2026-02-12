@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import logging
 import re
-from functools import lru_cache
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -42,6 +41,102 @@ def _get_function_name(func: Any) -> str:
 
 # Pattern to detect primitive array types in assertions
 _PRIMITIVE_ARRAY_PATTERN = re.compile(r"new\s+(int|long|double|float|short|byte|char|boolean)\s*\[\s*\]")
+
+# Pattern to match @Test annotation exactly (not @TestOnly, @TestFactory, etc.)
+_TEST_ANNOTATION_RE = re.compile(r"^@Test(?:\s*\(.*\))?(?:\s.*)?$")
+
+
+def _is_test_annotation(stripped_line: str) -> bool:
+    """Check if a stripped line is an @Test annotation (not @TestOnly, @TestFactory, etc.).
+
+    Matches:
+        @Test
+        @Test(expected = ...)
+        @Test(timeout = 5000)
+    Does NOT match:
+        @TestOnly
+        @TestFactory
+        @TestTemplate
+    """
+    return bool(_TEST_ANNOTATION_RE.match(stripped_line))
+
+
+def _find_balanced_end(text: str, start: int) -> int:
+    """Find the position after the closing paren that balances the opening paren at start.
+
+    Args:
+        text: The source text.
+        start: Index of the opening parenthesis '('.
+
+    Returns:
+        Index one past the matching closing ')', or -1 if not found.
+
+    """
+    if start >= len(text) or text[start] != "(":
+        return -1
+    depth = 1
+    pos = start + 1
+    in_string = False
+    string_char = None
+    in_char = False
+    while pos < len(text) and depth > 0:
+        ch = text[pos]
+        prev = text[pos - 1] if pos > 0 else ""
+        if ch == "'" and not in_string and prev != "\\":
+            in_char = not in_char
+        elif ch == '"' and not in_char and prev != "\\":
+            if not in_string:
+                in_string = True
+                string_char = ch
+            elif ch == string_char:
+                in_string = False
+                string_char = None
+        elif not in_string and not in_char:
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+        pos += 1
+    return pos if depth == 0 else -1
+
+
+def _find_method_calls_balanced(line: str, func_name: str):
+    """Find method calls to func_name with properly balanced parentheses.
+
+    Handles nested parentheses in arguments correctly, unlike a pure regex approach.
+    Returns a list of (start, end, full_call) tuples where start/end are positions
+    in the line and full_call is the matched text (receiver.funcName(args)).
+
+    Args:
+        line: A single line of Java source code.
+        func_name: The method name to look for.
+
+    Returns:
+        List of (start_pos, end_pos, full_call_text) tuples.
+
+    """
+    # First find all occurrences of .funcName( in the line using regex
+    # to locate the method name, then use balanced paren finding for args
+    prefix_pattern = re.compile(
+        rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*{re.escape(func_name)}\s*\("
+    )
+    results = []
+    search_start = 0
+    while search_start < len(line):
+        m = prefix_pattern.search(line, search_start)
+        if not m:
+            break
+        # m.end() - 1 is the position of the opening paren
+        open_paren_pos = m.end() - 1
+        close_pos = _find_balanced_end(line, open_paren_pos)
+        if close_pos == -1:
+            # Unbalanced parens - skip this match
+            search_start = m.end()
+            continue
+        full_call = line[m.start():close_pos]
+        results.append((m.start(), close_pos, full_call))
+        search_start = close_pos
+    return results
 
 
 def _infer_array_cast_type(line: str) -> str | None:
@@ -277,15 +372,12 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
     iteration_counter = 0
     helper_added = False
 
-    # Pre-compile the regex pattern once
-    method_call_pattern = _get_method_call_pattern(func_name)
-
     while i < len(lines):
         line = lines[i]
         stripped = line.strip()
 
-        # Look for @Test annotation
-        if stripped.startswith("@Test"):
+        # Look for @Test annotation (not @TestOnly, @TestFactory, etc.)
+        if _is_test_annotation(stripped):
             if not helper_added:
                 helper_added = True
             result.append(line)
@@ -342,16 +434,6 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
             call_counter = 0
             wrapped_body_lines = []
 
-            # Use regex to find method calls with the target function
-            # Pattern matches: receiver.funcName(args) where receiver can be:
-            # - identifier (counter, calc, etc.)
-            # - new ClassName()
-            # - new ClassName(args)
-            # - this
-            method_call_pattern = re.compile(
-                rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)", re.MULTILINE
-            )
-
             # Track lambda block nesting depth to avoid wrapping calls inside lambda bodies.
             # assertThrows/assertDoesNotThrow expect an Executable (void functional interface),
             # and wrapping the call in a variable assignment would turn the void-compatible
@@ -388,15 +470,16 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                     line_indent = len(body_line) - len(body_line.lstrip())
                     line_indent_str = " " * line_indent
 
-                    # Find all matches in the line
-                    matches = list(method_call_pattern.finditer(body_line))
+                    # Find all matches using balanced parenthesis matching
+                    # This correctly handles nested parens like:
+                    #   obj.func(a, Rows.toRowID(frame.getIndex(), row))
+                    matches = _find_method_calls_balanced(body_line, func_name)
                     if matches:
                         # Process matches in reverse order to maintain correct positions
                         new_line = body_line
-                        for match in reversed(matches):
+                        for start_pos, end_pos, full_call in reversed(matches):
                             call_counter += 1
                             var_name = f"_cf_result{iter_id}_{call_counter}"
-                            full_call = match.group(0)  # e.g., "new StringUtils().reverse(\"hello\")"
 
                             # Check if we need to cast the result for assertions with primitive arrays
                             # This handles assertArrayEquals(int[], int[]) etc.
@@ -404,7 +487,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                             var_with_cast = f"({cast_type}){var_name}" if cast_type else var_name
 
                             # Replace this occurrence with the variable (with cast if needed)
-                            new_line = new_line[: match.start()] + var_with_cast + new_line[match.end() :]
+                            new_line = new_line[:start_pos] + var_with_cast + new_line[end_pos:]
 
                             # Use 'var' instead of 'Object' to preserve the exact return type.
                             # This avoids boxing mismatches (e.g., assertEquals(int, Object) where
@@ -543,8 +626,8 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         line = lines[i]
         stripped = line.strip()
 
-        # Look for @Test annotation
-        if stripped.startswith("@Test"):
+        # Look for @Test annotation (not @TestOnly, @TestFactory, etc.)
+        if _is_test_annotation(stripped):
             result.append(line)
             i += 1
 
@@ -798,9 +881,3 @@ def _add_import(source: str, import_statement: str) -> str:
     return "".join(lines)
 
 
-@lru_cache(maxsize=128)
-def _get_method_call_pattern(func_name: str):
-    """Cache compiled regex patterns for method call matching."""
-    return re.compile(
-        rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)", re.MULTILINE
-    )
