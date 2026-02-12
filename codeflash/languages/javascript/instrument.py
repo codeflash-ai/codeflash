@@ -279,17 +279,24 @@ class StandaloneCallTransformer:
         in_string = False
         string_char = None
 
-        while pos < len(code) and depth > 0:
-            char = code[pos]
+        s = code  # local alias for speed
+        s_len = len(s)
+        quotes = "\"'`"
+
+        while pos < s_len and depth > 0:
+            char = s[pos]
 
             # Handle string literals
-            if char in "\"'`" and (pos == 0 or code[pos - 1] != "\\"):
-                if not in_string:
-                    in_string = True
-                    string_char = char
-                elif char == string_char:
-                    in_string = False
-                    string_char = None
+            # Note: preserve original escaping semantics (only checks immediate preceding char)
+            if char in quotes:
+                prev_char = s[pos - 1] if pos > 0 else None
+                if prev_char != "\\":
+                    if not in_string:
+                        in_string = True
+                        string_char = char
+                    elif char == string_char:
+                        in_string = False
+                        string_char = None
             elif not in_string:
                 if char == "(":
                     depth += 1
@@ -301,7 +308,8 @@ class StandaloneCallTransformer:
         if depth != 0:
             return None, -1
 
-        return code[open_paren_pos + 1 : pos - 1], pos
+        # slice once
+        return s[open_paren_pos + 1 : pos - 1], pos
 
     def _parse_bracket_standalone_call(self, code: str, match: re.Match) -> StandaloneCallMatch | None:
         """Parse a complete standalone obj['func'](...) call with bracket notation."""
@@ -323,10 +331,12 @@ class StandaloneCallTransformer:
         # Check for trailing semicolon
         end_pos = close_pos
         # Skip whitespace
-        while end_pos < len(code) and code[end_pos] in " \t":
+        s = code
+        s_len = len(s)
+        while end_pos < s_len and s[end_pos] in " \t":
             end_pos += 1
 
-        has_trailing_semicolon = end_pos < len(code) and code[end_pos] == ";"
+        has_trailing_semicolon = end_pos < s_len and s[end_pos] == ";"
         if has_trailing_semicolon:
             end_pos += 1
 
