@@ -307,7 +307,6 @@ class CodeflashLoopRunner {
             allConsoleOutput += batchResult.consoleOutput;
 
             // if (batchResult.hasFailure) {
-            //     console.log(`[codeflash] There is a failure in batch #${batchCount}`)
             //     hasFailure = true;
             //     break;
             // }
