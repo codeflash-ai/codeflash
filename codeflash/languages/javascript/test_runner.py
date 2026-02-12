@@ -336,10 +336,9 @@ module.exports = {{
 def _get_jest_config_for_project(project_root: Path) -> Path | None:
     """Get the appropriate Jest config for the project.
 
-    Creates a codeflash-compatible Jest config that handles:
-    - ESM packages in node_modules that need transformation
-    - TypeScript files with proper ts-jest configuration
-    - bundler moduleResolution compatibility
+    If the project uses bundler moduleResolution, creates and returns a
+    codeflash-compatible Jest config. Otherwise, returns the project's
+    existing Jest config.
 
     Args:
         project_root: Root of the project.
@@ -356,12 +355,10 @@ def _get_jest_config_for_project(project_root: Path) -> Path | None:
         logger.info("Detected bundler moduleResolution - creating compatible config")
         # Create codeflash-compatible tsconfig
         _create_codeflash_tsconfig(project_root)
-
-    # Always create a codeflash Jest config to handle ESM packages properly
-    # Many modern NPM packages are ESM-only and need transformation
-    codeflash_jest_config = _create_codeflash_jest_config(project_root, original_jest_config, for_esm=True)
-    if codeflash_jest_config:
-        return codeflash_jest_config
+        # Create codeflash Jest config that uses it
+        codeflash_jest_config = _create_codeflash_jest_config(project_root, original_jest_config)
+        if codeflash_jest_config:
+            return codeflash_jest_config
 
     return original_jest_config
 
