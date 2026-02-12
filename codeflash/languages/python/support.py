@@ -807,7 +807,7 @@ class PythonSupport:
         from codeflash.languages.python.call_graph import CallGraph
 
         try:
-            return CallGraph(project_root)
+            return CallGraph(project_root, language=self.language.value)
         except Exception:
             logger.debug("Failed to initialize CallGraph, falling back to per-function Jedi analysis")
             return None

@@ -178,13 +178,14 @@ def _index_file_worker(args: tuple[str, str]) -> tuple[str, str, set[tuple[str, 
 
 
 class CallGraph:
-    SCHEMA_VERSION = 1
+    SCHEMA_VERSION = 2
 
-    def __init__(self, project_root: Path, db_path: Path | None = None) -> None:
+    def __init__(self, project_root: Path, language: str = "python", db_path: Path | None = None) -> None:
         import jedi
 
         self.project_root = project_root.resolve()
         self.project_root_str = str(self.project_root)
+        self.language = language
         self.jedi_project = jedi.Project(path=self.project_root)
 
         if db_path is None:
@@ -200,27 +201,35 @@ class CallGraph:
     def _init_schema(self) -> None:
         cur = self.conn.cursor()
         cur.execute("CREATE TABLE IF NOT EXISTS cg_schema_version (version INTEGER PRIMARY KEY)")
+
         row = cur.execute("SELECT version FROM cg_schema_version LIMIT 1").fetchone()
         if row is None:
             cur.execute("INSERT INTO cg_schema_version (version) VALUES (?)", (self.SCHEMA_VERSION,))
         elif row[0] != self.SCHEMA_VERSION:
-            # Schema mismatch — drop all cg_ tables and recreate
-            cur.execute("DROP TABLE IF EXISTS cg_call_edges")
-            cur.execute("DROP TABLE IF EXISTS cg_indexed_files")
+            for table in [
+                "cg_call_edges", "cg_indexed_files", "cg_languages", "cg_projects", "cg_project_meta",
+                "indexed_files", "call_edges",
+            ]:
+                cur.execute(f"DROP TABLE IF EXISTS {table}")
             cur.execute("DELETE FROM cg_schema_version")
             cur.execute("INSERT INTO cg_schema_version (version) VALUES (?)", (self.SCHEMA_VERSION,))
 
         cur.execute(
-            """CREATE TABLE IF NOT EXISTS cg_indexed_files (
+            """
+            CREATE TABLE IF NOT EXISTS indexed_files (
                 project_root TEXT NOT NULL,
+                language     TEXT NOT NULL,
                 file_path    TEXT NOT NULL,
                 file_hash    TEXT NOT NULL,
-                PRIMARY KEY (project_root, file_path)
-            )"""
+                PRIMARY KEY (project_root, language, file_path)
+            )
+            """
         )
         cur.execute(
-            """CREATE TABLE IF NOT EXISTS cg_call_edges (
+            """
+            CREATE TABLE IF NOT EXISTS call_edges (
                 project_root                TEXT NOT NULL,
+                language                    TEXT NOT NULL,
                 caller_file                 TEXT NOT NULL,
                 caller_qualified_name       TEXT NOT NULL,
                 callee_file                 TEXT NOT NULL,
@@ -229,13 +238,16 @@ class CallGraph:
                 callee_only_function_name   TEXT NOT NULL,
                 callee_definition_type      TEXT NOT NULL,
                 callee_source_line          TEXT NOT NULL,
-                PRIMARY KEY (project_root, caller_file, caller_qualified_name,
+                PRIMARY KEY (project_root, language, caller_file, caller_qualified_name,
                              callee_file, callee_qualified_name)
-            )"""
+            )
+            """
         )
         cur.execute(
-            """CREATE INDEX IF NOT EXISTS idx_cg_edges_caller
-               ON cg_call_edges (project_root, caller_file, caller_qualified_name)"""
+            """
+            CREATE INDEX IF NOT EXISTS idx_call_edges_caller
+            ON call_edges (project_root, language, caller_file, caller_qualified_name)
+            """
         )
         self.conn.commit()
 
@@ -259,11 +271,13 @@ class CallGraph:
         cur = self.conn.cursor()
         for caller_file, caller_qn in all_caller_keys:
             rows = cur.execute(
-                """SELECT callee_file, callee_qualified_name, callee_fully_qualified_name,
-                          callee_only_function_name, callee_definition_type, callee_source_line
-                   FROM cg_call_edges
-                   WHERE project_root = ? AND caller_file = ? AND caller_qualified_name = ?""",
-                (self.project_root_str, caller_file, caller_qn),
+                """
+                SELECT callee_file, callee_qualified_name, callee_fully_qualified_name,
+                       callee_only_function_name, callee_definition_type, callee_source_line
+                FROM call_edges
+                WHERE project_root = ? AND language = ? AND caller_file = ? AND caller_qualified_name = ?
+                """,
+                (self.project_root_str, self.language, caller_file, caller_qn),
             ).fetchall()
 
             for callee_file, callee_qn, callee_fqn, callee_name, callee_type, callee_src in rows:
@@ -291,18 +305,7 @@ class CallGraph:
 
         file_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
 
-        # Check in-memory cache first
-        if self.indexed_file_hashes.get(resolved) == file_hash:
-            return IndexResult(file_path=file_path, cached=True, num_edges=0, edges=(), cross_file_edges=0, error=False)
-
-        # Check DB for stored hash
-        row = self.conn.execute(
-            "SELECT file_hash FROM cg_indexed_files WHERE project_root = ? AND file_path = ?",
-            (self.project_root_str, resolved),
-        ).fetchone()
-
-        if row and row[0] == file_hash:
-            self.indexed_file_hashes[resolved] = file_hash
+        if self._is_file_cached(resolved, file_hash):
             return IndexResult(file_path=file_path, cached=True, num_edges=0, edges=(), cross_file_edges=0, error=False)
 
         return self.index_file(file_path, file_hash)
@@ -318,30 +321,35 @@ class CallGraph:
         self, file_path: Path, resolved: str, file_hash: str, edges: set[tuple[str, ...]], had_error: bool
     ) -> IndexResult:
         cur = self.conn.cursor()
+        scope = (self.project_root_str, self.language)
 
         # Clear existing data for this file
         cur.execute(
-            "DELETE FROM cg_call_edges WHERE project_root = ? AND caller_file = ?", (self.project_root_str, resolved)
+            "DELETE FROM call_edges WHERE project_root = ? AND language = ? AND caller_file = ?",
+            (*scope, resolved),
         )
         cur.execute(
-            "DELETE FROM cg_indexed_files WHERE project_root = ? AND file_path = ?", (self.project_root_str, resolved)
+            "DELETE FROM indexed_files WHERE project_root = ? AND language = ? AND file_path = ?",
+            (*scope, resolved),
         )
 
         # Insert new edges if parsing succeeded
         if not had_error and edges:
             cur.executemany(
-                """INSERT OR REPLACE INTO cg_call_edges
-                   (project_root, caller_file, caller_qualified_name,
-                    callee_file, callee_qualified_name, callee_fully_qualified_name,
-                    callee_only_function_name, callee_definition_type, callee_source_line)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                [(self.project_root_str, *edge) for edge in edges],
+                """
+                INSERT OR REPLACE INTO call_edges
+                (project_root, language, caller_file, caller_qualified_name,
+                 callee_file, callee_qualified_name, callee_fully_qualified_name,
+                 callee_only_function_name, callee_definition_type, callee_source_line)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [(*scope, *edge) for edge in edges],
             )
 
         # Record that this file has been indexed
         cur.execute(
-            "INSERT OR REPLACE INTO cg_indexed_files (project_root, file_path, file_hash) VALUES (?, ?, ?)",
-            (self.project_root_str, resolved, file_hash),
+            "INSERT OR REPLACE INTO indexed_files (project_root, language, file_path, file_hash) VALUES (?, ?, ?, ?)",
+            (*scope, resolved, file_hash),
         )
 
         self.conn.commit()
@@ -408,14 +416,12 @@ class CallGraph:
 
     def _is_file_cached(self, resolved: str, file_hash: str) -> bool:
         """Check if file is cached in memory or DB."""
-        # Check in-memory cache
         if self.indexed_file_hashes.get(resolved) == file_hash:
             return True
 
-        # Check DB cache
         row = self.conn.execute(
-            "SELECT file_hash FROM cg_indexed_files WHERE project_root = ? AND file_path = ?",
-            (self.project_root_str, resolved),
+            "SELECT file_hash FROM indexed_files WHERE project_root = ? AND language = ? AND file_path = ?",
+            (self.project_root_str, self.language, resolved),
         ).fetchone()
 
         if row and row[0] == file_hash:
