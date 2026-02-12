@@ -671,7 +671,6 @@ def _analyze_imports_in_optimized_code(
                                 imported_set.add(helper.qualified_name)
                                 imported_set.add(helper.fully_qualified_name)
 
-
         elif isinstance(node, ast.Import):
             # Handle "import module" statements
             for alias in node.names:
