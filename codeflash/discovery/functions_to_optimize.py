@@ -78,10 +78,23 @@ class FunctionVisitor(cst.CSTVisitor):
         self.file_path: str = file_path
         self.functions: list[FunctionToOptimize] = []
 
+    @staticmethod
+    def is_pytest_fixture(node: cst.FunctionDef) -> bool:
+        for decorator in node.decorators:
+            dec = decorator.decorator
+            if isinstance(dec, cst.Call):
+                dec = dec.func
+            if isinstance(dec, cst.Attribute) and dec.attr.value == "fixture":
+                if isinstance(dec.value, cst.Name) and dec.value.value == "pytest":
+                    return True
+            if isinstance(dec, cst.Name) and dec.value == "fixture":
+                return True
+        return False
+
     def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
         return_visitor: ReturnStatementVisitor = ReturnStatementVisitor()
         node.visit(return_visitor)
-        if return_visitor.has_return_statement:
+        if return_visitor.has_return_statement and not self.is_pytest_fixture(node):
             pos: CodeRange = self.get_metadata(cst.metadata.PositionProvider, node)
             parents: CSTNode | None = self.get_metadata(cst.metadata.ParentNodeProvider, node)
             ast_parents: list[FunctionParent] = []
@@ -108,14 +121,12 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
         self.file_path: Path = file_path
 
     def visit_FunctionDef(self, node: FunctionDef) -> None:
-        # Check if the function has a return statement and add it to the list
         if function_has_return_statement(node) and not function_is_a_property(node):
             self.functions.append(
                 FunctionToOptimize(function_name=node.name, file_path=self.file_path, parents=self.ast_path[:])
             )
 
     def visit_AsyncFunctionDef(self, node: AsyncFunctionDef) -> None:
-        # Check if the async function has a return statement and add it to the list
         if function_has_return_statement(node) and not function_is_a_property(node):
             self.functions.append(
                 FunctionToOptimize(
@@ -831,22 +842,17 @@ def filter_functions(
     test_dir_patterns = (os.sep + "test" + os.sep, os.sep + "tests" + os.sep, os.sep + "__tests__" + os.sep)
 
     def is_test_file(file_path_normalized: str) -> bool:
-        """Check if a file is a test file based on patterns."""
         if tests_root_overlaps_source:
-            # Use file pattern matching when tests_root overlaps with source
             file_lower = file_path_normalized.lower()
-            # Check filename patterns (e.g., .test.ts, .spec.ts)
+            basename = Path(file_lower).name
+            if basename.startswith("test_") or basename == "conftest.py":
+                return True
             if any(pattern in file_lower for pattern in test_file_name_patterns):
                 return True
-            # Check directory patterns, but only within the project root
-            # to avoid false positives from parent directories (e.g., project at /home/user/tests/myproject)
             if project_root_str and file_lower.startswith(project_root_str.lower()):
                 relative_path = file_lower[len(project_root_str) :]
                 return any(pattern in relative_path for pattern in test_dir_patterns)
-            # If we can't compute relative path from project root, don't check directory patterns
-            # This avoids false positives when project is inside a folder named "tests"
             return False
-        # Use directory-based filtering when tests are in a separate directory
         return file_path_normalized.startswith(tests_root_str + os.sep)
 
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
@@ -969,3 +975,5 @@ def function_is_a_property(function_node: FunctionDef | AsyncFunctionDef) -> boo
         if isinstance(node, _ast_name) and node.id == _property_id:
             return True
     return False
+
+
