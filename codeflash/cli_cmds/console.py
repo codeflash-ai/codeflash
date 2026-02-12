@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Optional
 
 from rich.console import Console
 from rich.logging import RichHandler
+from rich.panel import Panel
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -23,7 +24,6 @@ from codeflash.cli_cmds.logging_config import BARE_LOGGING_FORMAT
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.lsp.lsp_logger import enhanced_log
 from codeflash.lsp.lsp_message import LspCodeMessage, LspTextMessage
-from rich.panel import Panel
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
@@ -332,7 +332,6 @@ def call_graph_summary(call_graph: DependencyResolver, file_to_funcs: dict[Path,
     # Use built-in sum for C-level loops to reduce Python overhead
     total_callees = sum(callee_counts.values())
     with_context = sum(1 for count in callee_counts.values() if count > 0)
-
 
     leaf_functions = total_functions - with_context
     avg_callees = total_callees / total_functions
