@@ -638,7 +638,9 @@ def _analyze_imports_in_optimized_code(
             helpers_by_file_and_func[module_name].setdefault(func_name, []).append(helper)
             helpers_by_file[module_name].append(helper)
 
-    for node in ast.walk(optimized_ast):
+    # Only traverse top-level statements instead of entire AST
+    body = getattr(optimized_ast, 'body', [])
+    for node in body:
         if isinstance(node, ast.ImportFrom):
             # Handle "from module import function" statements
             module_name = node.module
@@ -765,7 +767,6 @@ def detect_unused_helper_functions(
                             # self.method_name() -> add both method_name and ClassName.method_name
                             called_function_names.add(attr_name)
                             # For class methods, also add the qualified name
-                            # For class methods, also add the qualified name
                             if hasattr(function_to_optimize, "parents") and function_to_optimize.parents:
                                 class_name = function_to_optimize.parents[0].name
                                 called_function_names.add(f"{class_name}.{attr_name}")
@@ -778,9 +779,9 @@ def detect_unused_helper_functions(
                             if mapped_names:
                                 called_function_names.update(mapped_names)
                     # Handle nested attribute access like obj.attr.method()
-                    # Handle nested attribute access like obj.attr.method()
                     else:
                         called_function_names.add(node.func.attr)
+
 
         logger.debug(f"Functions called in optimized entrypoint: {called_function_names}")
         logger.debug(f"Imported names mapping: {imported_names_map}")
