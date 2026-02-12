@@ -519,12 +519,12 @@ class Optimizer:
         if self.args.all:
             three_min_in_ns = int(1.8e11)
             console.rule()
-            pr_message = (
-                "\nCodeflash will keep opening pull requests as it finds optimizations." if not self.args.no_pr else ""
-            )
             logger.info(
-                f"It might take about {humanize_runtime(num_optimizable_functions * three_min_in_ns)} to fully optimize this project.{pr_message}"
+                f"It might take about {humanize_runtime(num_optimizable_functions * three_min_in_ns)} to fully optimize this project."
             )
+            if not self.args.no_pr:
+                logger.info("Codeflash will keep opening pull requests as it finds optimizations.")
+            console.rule()
 
         function_benchmark_timings, total_benchmark_timings = self.run_benchmarks(
             file_to_funcs_to_optimize, num_optimizable_functions
@@ -539,6 +539,7 @@ class Optimizer:
             source_files = [f for f in file_to_funcs_to_optimize if f.suffix in supported_exts]
             with call_graph_live_display(len(source_files), project_root=self.args.project_root) as on_progress:
                 resolver.build_index(source_files, on_progress=on_progress)
+            console.rule()
             call_graph_summary(resolver, file_to_funcs_to_optimize)
 
         optimizations_found: int = 0
