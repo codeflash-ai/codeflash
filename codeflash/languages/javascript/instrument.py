@@ -76,7 +76,6 @@ def is_inside_string(code: str, pos: int) -> bool:
     string_char = None
     i = 0
 
-
     # Quick check to preserve original behavior that accessing beyond the end
     # of code raises IndexError (original loop would raise when i == len(code)).
     if pos > len(code):
@@ -95,7 +94,6 @@ def is_inside_string(code: str, pos: int) -> bool:
 
         j = m.start()
         char = s[j]
-
 
         if in_string:
             # Check for escape sequence
