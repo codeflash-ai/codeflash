@@ -1508,12 +1508,16 @@ def run_line_profile_tests(
         run_env["CODEFLASH_LINE_PROFILE_OUTPUT"] = str(line_profile_output_file)
 
     # Run tests once with profiling
-    logger.debug("Running line profiling tests (single run)")
+    # Maven needs substantial timeout for JVM startup + test execution
+    # Use minimum of 120s to account for Maven overhead, or larger if specified
+    min_timeout = 120
+    effective_timeout = max(timeout or min_timeout, min_timeout)
+    logger.debug("Running line profiling tests (single run) with timeout=%ds", effective_timeout)
     result = _run_maven_tests(
         maven_root,
         test_paths,
         run_env,
-        timeout=max(timeout or 0, 120),
+        timeout=effective_timeout,
         mode="line_profile",
         test_module=test_module,
     )
