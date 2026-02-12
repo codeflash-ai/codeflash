@@ -655,7 +655,7 @@ def _run_benchmarking_tests_maven(
     loop_count = 0
     last_result = None
 
-    per_loop_timeout = timeout or max(120, 60 + inner_iterations)
+    per_loop_timeout = max(timeout or 0, 120, 60 + inner_iterations)
 
     logger.debug("Using Maven-based benchmarking (fallback mode)")
 

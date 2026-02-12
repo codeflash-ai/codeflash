@@ -284,6 +284,8 @@ def run_line_profile_tests(
     # Check if there's a language support for this test framework that implements run_line_profile_tests
     language_support = get_language_support_by_framework(test_framework)
     if language_support is not None and hasattr(language_support, "run_line_profile_tests"):
+        from codeflash.code_utils.config_consts import JAVA_TESTCASE_TIMEOUT
+
         effective_timeout = pytest_timeout
         if test_framework in ("junit4", "junit5", "testng") and pytest_timeout is not None:
             # For Java, use a minimum timeout to account for Maven overhead
