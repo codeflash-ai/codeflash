@@ -207,8 +207,13 @@ class CallGraph:
             cur.execute("INSERT INTO cg_schema_version (version) VALUES (?)", (self.SCHEMA_VERSION,))
         elif row[0] != self.SCHEMA_VERSION:
             for table in [
-                "cg_call_edges", "cg_indexed_files", "cg_languages", "cg_projects", "cg_project_meta",
-                "indexed_files", "call_edges",
+                "cg_call_edges",
+                "cg_indexed_files",
+                "cg_languages",
+                "cg_projects",
+                "cg_project_meta",
+                "indexed_files",
+                "call_edges",
             ]:
                 cur.execute(f"DROP TABLE IF EXISTS {table}")
             cur.execute("DELETE FROM cg_schema_version")
@@ -325,12 +330,10 @@ class CallGraph:
 
         # Clear existing data for this file
         cur.execute(
-            "DELETE FROM call_edges WHERE project_root = ? AND language = ? AND caller_file = ?",
-            (*scope, resolved),
+            "DELETE FROM call_edges WHERE project_root = ? AND language = ? AND caller_file = ?", (*scope, resolved)
         )
         cur.execute(
-            "DELETE FROM indexed_files WHERE project_root = ? AND language = ? AND file_path = ?",
-            (*scope, resolved),
+            "DELETE FROM indexed_files WHERE project_root = ? AND language = ? AND file_path = ?", (*scope, resolved)
         )
 
         # Insert new edges if parsing succeeded

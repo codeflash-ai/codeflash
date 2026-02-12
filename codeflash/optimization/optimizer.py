@@ -531,8 +531,11 @@ class Optimizer:
         )
 
         # Create a language-specific dependency resolver (e.g. Jedi-based call graph for Python)
+        # Skip in CI — the cache DB doesn't persist between runs on ephemeral runners
         lang_support = current_language_support()
-        resolver = lang_support.create_dependency_resolver(self.args.project_root) if lang_support else None
+        resolver = None
+        if lang_support and not env_utils.is_ci():
+            resolver = lang_support.create_dependency_resolver(self.args.project_root)
 
         if resolver is not None and file_to_funcs_to_optimize:
             supported_exts = lang_support.file_extensions
