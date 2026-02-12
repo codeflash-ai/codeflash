@@ -17,6 +17,8 @@ if TYPE_CHECKING:
     from codeflash.code_utils.code_position import CodePosition
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
+_SPECIAL_RE = re.compile(r'["\'`\\]')
+
 
 class TestingMode:
     """Testing mode constants."""
@@ -74,24 +76,47 @@ def is_inside_string(code: str, pos: int) -> bool:
     string_char = None
     i = 0
 
+
+    # Quick check to preserve original behavior that accessing beyond the end
+    # of code raises IndexError (original loop would raise when i == len(code)).
+    if pos > len(code):
+        raise IndexError("string index out of range")
+
+    s = code
+    search = _SPECIAL_RE.search
+    n = len(s)
+
     while i < pos:
-        char = code[i]
+        # Find next special character (quote or backslash) up to pos.
+        m = search(s, i, pos)
+        if not m:
+            # No special characters before pos; we're done.
+            break
+
+        j = m.start()
+        char = s[j]
+
 
         if in_string:
             # Check for escape sequence
-            if char == "\\" and i + 1 < len(code):
-                i += 2  # Skip escaped character
+            if char == "\\" and j + 1 < n:
+                # Skip escaped character
+                i = j + 2
                 continue
             # Check for end of string
             if char == string_char:
                 in_string = False
                 string_char = None
+            # Move past this special character
+            i = j + 1
+            continue
+
         # Check for start of string
-        elif char in "\"'`":
+        if char in "\"'`":
             in_string = True
             string_char = char
 
-        i += 1
+        i = j + 1
 
     return in_string
 
