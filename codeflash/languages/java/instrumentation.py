@@ -277,11 +277,13 @@ def instrument_existing_test(
     else:
         new_class_name = f"{original_class_name}__perfonlyinstrumented"
 
-    # Rename the class declaration in the source
-    # Pattern: "public class ClassName" or "class ClassName"
-    pattern = rf"\b(public\s+)?class\s+{re.escape(original_class_name)}\b"
-    replacement = rf"\1class {new_class_name}"
-    modified_source = re.sub(pattern, replacement, source)
+    # Rename all references to the original class name in the source.
+    # This includes the class declaration, return types, constructor calls,
+    # variable declarations, etc. We use word-boundary matching to avoid
+    # replacing substrings of other identifiers.
+    modified_source = re.sub(
+        rf"\b{re.escape(original_class_name)}\b", new_class_name, source
+    )
 
     # Add timing instrumentation to test methods
     # Use original class name (without suffix) in timing markers for consistency with Python
@@ -495,6 +497,16 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                             capture_line = f"{line_indent_str}var {var_name} = {full_call};"
                             wrapped_body_lines.append(capture_line)
 
+                            # Immediately serialize the captured result while the variable
+                            # is still in scope. This is necessary because the variable may
+                            # be declared inside a nested block (while/for/if/try) and would
+                            # be out of scope at the end of the method body.
+                            serialize_line = (
+                                f"{line_indent_str}_cf_serializedResult{iter_id} = "
+                                f"com.codeflash.Serializer.serialize((Object) {var_name});"
+                            )
+                            wrapped_body_lines.append(serialize_line)
+
                         # Check if the line is now just a variable reference (invalid statement)
                         # This happens when the original line was just a void method call
                         # e.g., "BubbleSort.bubbleSort(original);" becomes "_cf_result1_1;"
@@ -505,15 +517,6 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                         wrapped_body_lines.append(body_line)
                 else:
                     wrapped_body_lines.append(body_line)
-
-            # Build the serialized return value expression
-            # If we captured any calls, serialize the last one via Kryo; otherwise null bytes
-            # The (Object) cast ensures primitives get autoboxed before being passed to the method.
-            if call_counter > 0:
-                result_var = f"_cf_result{iter_id}_{call_counter}"
-                serialize_expr = f"com.codeflash.Serializer.serialize((Object) {result_var})"
-            else:
-                serialize_expr = "null"
 
             # Add behavior instrumentation code
             behavior_start_code = [
@@ -533,12 +536,12 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
             ]
             result.extend(behavior_start_code)
 
-            # Add the wrapped body lines with extra indentation
+            # Add the wrapped body lines with extra indentation.
+            # Serialization of captured results is already done inline (immediately
+            # after each capture) so the _cf_serializedResult variable is always
+            # assigned while the captured variable is still in scope.
             for bl in wrapped_body_lines:
                 result.append("    " + bl)
-
-            # Add serialization after the body (before finally)
-            result.append(f"{indent}    _cf_serializedResult{iter_id} = {serialize_expr};")
 
             # Add finally block with SQLite write
             method_close_indent = " " * base_indent
@@ -834,9 +837,10 @@ def instrument_generated_java_test(
     else:
         new_class_name = f"{original_class_name}__perfonlyinstrumented"
 
-    # Rename the class in the source
+    # Rename all references to the original class name in the source.
+    # This includes the class declaration, return types, constructor calls, etc.
     modified_code = re.sub(
-        rf"\b(public\s+)?class\s+{re.escape(original_class_name)}\b", rf"\1class {new_class_name}", test_code
+        rf"\b{re.escape(original_class_name)}\b", new_class_name, test_code
     )
 
     # For performance mode, add timing instrumentation
