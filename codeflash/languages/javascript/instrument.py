@@ -361,7 +361,6 @@ class StandaloneCallTransformer:
 
             pos = i + 1
 
-
         if depth != 0:
             return None, -1
 
