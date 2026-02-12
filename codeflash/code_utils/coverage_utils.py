@@ -36,7 +36,6 @@ def extract_dependent_function(main_function: str, code_context: CodeOptimizatio
                 if len(dependent_functions) > 1:
                     return False
 
-
     if not dependent_functions:
         return False
 
