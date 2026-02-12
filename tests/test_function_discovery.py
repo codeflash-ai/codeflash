@@ -1207,7 +1207,7 @@ def sample_data():
                 all_functions,
                 tests_root=temp_dir,  # Overlapping case
                 ignore_paths=[],
-                                project_root=temp_dir,
+                project_root=temp_dir,
                 module_root=temp_dir,
             )
 
