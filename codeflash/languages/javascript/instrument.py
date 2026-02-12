@@ -734,9 +734,8 @@ class ExpectCallTransformer:
             f"'{line_id}', {func_ref})){match.assertion_chain}{semicolon}"
         )
 
-
     def _compute_string_spans(self, code: str) -> tuple[list[int], list[int]]:
-        """Compute inclusive/exclusive spans for string contents.
+        r"""Compute inclusive/exclusive spans for string contents.
 
         Spans represent the region of code that would be considered 'inside' a string
         by the original is_inside_string behavior: start is the first position after
