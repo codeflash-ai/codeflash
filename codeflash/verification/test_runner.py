@@ -136,7 +136,7 @@ def run_behavioral_tests(
         from codeflash.code_utils.config_consts import JAVA_TESTCASE_TIMEOUT
 
         effective_timeout = pytest_timeout
-        if test_framework == "junit5" and pytest_timeout is not None:
+        if test_framework in ("junit4", "junit5", "testng") and pytest_timeout is not None:
             # For Java, use a minimum timeout to account for Maven overhead
             effective_timeout = max(pytest_timeout, JAVA_TESTCASE_TIMEOUT)
             if effective_timeout != pytest_timeout:
@@ -353,7 +353,7 @@ def run_benchmarking_tests(
         from codeflash.code_utils.config_consts import JAVA_TESTCASE_TIMEOUT
 
         effective_timeout = pytest_timeout
-        if test_framework == "junit5" and pytest_timeout is not None:
+        if test_framework in ("junit4", "junit5", "testng") and pytest_timeout is not None:
             # For Java, use a minimum timeout to account for Maven overhead
             effective_timeout = max(pytest_timeout, JAVA_TESTCASE_TIMEOUT)
             if effective_timeout != pytest_timeout:
