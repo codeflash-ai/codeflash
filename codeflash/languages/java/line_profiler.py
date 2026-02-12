@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -89,17 +90,19 @@ class JavaLineProfiler:
             end_idx = func.ending_line
             lines = lines[:start_idx] + func_lines + lines[end_idx:]
 
-        instrumented_source = "".join(lines)
-
         # Add profiler class and initialization
         profiler_class_code = self._generate_profiler_class()
 
         # Insert profiler class before the package's first class
-        # Find the first class declaration
+        # Find the first class/interface/enum/record declaration
+        # Must handle any combination of modifiers: public final class, abstract class, etc.
+        class_pattern = re.compile(
+            r"^(?:(?:public|private|protected|final|abstract|static|sealed|non-sealed)\s+)*"
+            r"(?:class|interface|enum|record)\s+"
+        )
         import_end_idx = 0
         for i, line in enumerate(lines):
-            stripped = line.strip()
-            if stripped.startswith("public class ") or stripped.startswith("class "):
+            if class_pattern.match(line.strip()):
                 import_end_idx = i
                 break
 
