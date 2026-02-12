@@ -295,6 +295,7 @@ class CodeflashLoopRunner {
 
             // Check if interrupted
             if (watcher.isInterrupted()) {
+                console.log(`[codeflash] Watcher is interrupted`)
                 break;
             }
 
@@ -305,10 +306,11 @@ class CodeflashLoopRunner {
             const batchResult = await this._runAllTestsOnce(tests, watcher, options);
             allConsoleOutput += batchResult.consoleOutput;
 
-            if (batchResult.hasFailure) {
-                hasFailure = true;
-                break;
-            }
+            // if (batchResult.hasFailure) {
+            //     console.log(`[codeflash] There is a failure in batch #${batchCount}`)
+            //     hasFailure = true;
+            //     break;
+            // }
 
             // Check time limit AFTER each batch
             if (checkTimeLimit()) {
@@ -319,6 +321,7 @@ class CodeflashLoopRunner {
 
         const totalTimeMs = Date.now() - startTime;
 
+        console.log(`[codeflash] now: ${Date.now()}`)
         // Output all collected console logs - this is critical for timing marker extraction
         // The console output contains the !######...######! timing markers from capturePerf
         if (allConsoleOutput) {

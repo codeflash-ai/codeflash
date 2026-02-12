@@ -100,10 +100,10 @@ const sharedPerfState = process[PERF_STATE_KEY];
 function checkSharedTimeLimit() {
     if (sharedPerfState.shouldStop) return true;
     if (sharedPerfState.startTime === null) {
-        sharedPerfState.startTime = Date.now();
+        sharedPerfState.startTime = _ORIGINAL_DATE_NOW();
         return false;
     }
-    const elapsed = Date.now() - sharedPerfState.startTime;
+    const elapsed = _ORIGINAL_DATE_NOW() - sharedPerfState.startTime;
     if (elapsed >= getPerfTargetDurationMs() && sharedPerfState.totalLoopsCompleted >= getPerfMinLoops()) {
         sharedPerfState.shouldStop = true;
         return true;
@@ -113,25 +113,33 @@ function checkSharedTimeLimit() {
 
 /**
  * Get the current loop index for a specific invocation.
- * Each invocation tracks its own loop count independently within a batch.
- * The actual loop index is computed as: (batch - 1) * BATCH_SIZE + localIndex
- * This ensures continuous loop indices even when Jest resets module state.
+ * The loop index represents how many times ALL test files have been run through.
+ * This is the batch count from the loop-runner.
  * @param {string} invocationKey - Unique key for this test invocation
- * @returns {number} The next global loop index for this invocation
+ * @returns {number} The current batch number (loop index)
  */
 function getInvocationLoopIndex(invocationKey) {
-    // Track local loop count within this batch (starts at 0)
+    // Track local loop count for stopping logic (increments on each call)
     if (!sharedPerfState.invocationLoopCounts[invocationKey]) {
         sharedPerfState.invocationLoopCounts[invocationKey] = 0;
     }
-    const localIndex = ++sharedPerfState.invocationLoopCounts[invocationKey];
+    ++sharedPerfState.invocationLoopCounts[invocationKey];
 
-    // Calculate global loop index using batch number from environment
-    // PERF_CURRENT_BATCH is 1-based (set by loop-runner before each batch)
+    // Return the batch number as the loop index for timing markers
+    // This represents how many times all test files have been run through
+    return parseInt(process.env.CODEFLASH_PERF_CURRENT_BATCH || '1', 10);
+}
+
+/**
+ * Get the total number of iterations for a specific invocation.
+ * Used for stopping logic to check against max loop count.
+ * @param {string} invocationKey - Unique key for this test invocation
+ * @returns {number} Total iterations across all batches for this invocation
+ */
+function getTotalIterations(invocationKey) {
+    const localCount = sharedPerfState.invocationLoopCounts[invocationKey] || 0;
     const currentBatch = parseInt(process.env.CODEFLASH_PERF_CURRENT_BATCH || '1', 10);
-    const globalIndex = (currentBatch - 1) * getPerfBatchSize() + localIndex;
-
-    return globalIndex;
+    return (currentBatch - 1) * getPerfBatchSize() + localCount;
 }
 
 /**
@@ -166,6 +174,8 @@ function createSeededRandom(seed) {
         return ((t ^ t >>> 14) >>> 0) / 4294967296;
     };
 }
+let _ORIGINAL_DATE = Date
+let _ORIGINAL_DATE_NOW = Date.now
 
 // Override non-deterministic APIs with seeded versions if seed is provided
 // NOTE: We do NOT seed performance.now() or process.hrtime() as those are used
@@ -178,8 +188,8 @@ if (RANDOM_SEED !== 0) {
     // Seed Date.now() and new Date() - use fixed base timestamp that increments
     const SEEDED_BASE_TIME = 1700000000000; // Nov 14, 2023 - fixed reference point
     let dateOffset = 0;
-    const OriginalDate = Date;
-    const originalDateNow = Date.now;
+    _ORIGINAL_DATE = Date;
+    _ORIGINAL_DATE_NOW = Date.now;
 
     Date.now = function() {
         return SEEDED_BASE_TIME + (dateOffset++);
@@ -189,15 +199,15 @@ if (RANDOM_SEED !== 0) {
     function SeededDate(...args) {
         if (args.length === 0) {
             // No arguments: use seeded current time
-            return new OriginalDate(SEEDED_BASE_TIME + (dateOffset++));
+            return new _ORIGINAL_DATE(SEEDED_BASE_TIME + (dateOffset++));
         }
         // With arguments: use original behavior
-        return new OriginalDate(...args);
+        return new _ORIGINAL_DATE(...args);
     }
-    SeededDate.prototype = OriginalDate.prototype;
+    SeededDate.prototype = _ORIGINAL_DATE.prototype;
     SeededDate.now = Date.now;
-    SeededDate.parse = OriginalDate.parse;
-    SeededDate.UTC = OriginalDate.UTC;
+    SeededDate.parse = _ORIGINAL_DATE.parse;
+    SeededDate.UTC = _ORIGINAL_DATE.UTC;
     global.Date = SeededDate;
 
     // Seed crypto.randomUUID() and crypto.getRandomValues()
@@ -709,11 +719,12 @@ function capturePerf(funcName, lineId, fn, ...args) {
             break;
         }
 
-        // Get the global loop index for this invocation (increments across batches)
+        // Get the loop index (batch number) for timing markers
         const loopIndex = getInvocationLoopIndex(invocationKey);
 
         // Check if we've exceeded max loops for this invocation
-        if (loopIndex > getPerfLoopCount()) {
+        const totalIterations = getTotalIterations(invocationKey);
+        if (totalIterations > getPerfLoopCount()) {
             break;
         }
 
@@ -864,8 +875,12 @@ async function _capturePerfAsync(
             break;
         }
 
+        // Get the loop index (batch number) for timing markers
         const loopIndex = getInvocationLoopIndex(invocationKey);
-        if (loopIndex > getPerfLoopCount()) {
+
+        // Check if we've exceeded max loops for this invocation
+        const totalIterations = getTotalIterations(invocationKey);
+        if (totalIterations > getPerfLoopCount()) {
             break;
         }
 
@@ -940,7 +955,7 @@ function writeResults() {
         const output = {
             version: '1.0.0',
             loopIndex: LOOP_INDEX,
-            timestamp: Date.now(),
+            timestamp: _ORIGINAL_DATE_NOW(),
             results
         };
         fs.writeFileSync(jsonPath, JSON.stringify(output, null, 2));

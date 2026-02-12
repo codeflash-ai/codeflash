@@ -788,7 +788,7 @@ def run_jest_behavioral_tests(
         logger.debug(f"Jest result: returncode={result.returncode}")
         # Log Jest output at WARNING level if tests fail and no XML output will be created
         # This helps debug issues like import errors that cause Jest to fail early
-        if result.returncode != 0:
+        if result.returncode != 0 and not result_file_path.exists():
             logger.warning(
                 f"Jest failed with returncode={result.returncode}.\n"
                 f"Jest stdout: {result.stdout[:2000] if result.stdout else '(empty)'}\n"
@@ -1057,8 +1057,6 @@ def run_jest_benchmarking_tests(
 
     wall_clock_seconds = time.time() - total_start_time
     logger.debug(f"Jest benchmarking completed in {wall_clock_seconds:.2f}s")
-    Path("/home/mohammed/Work/codeflash/output.log").write_text(result.stdout)
-
     return result_file_path, result
 
 

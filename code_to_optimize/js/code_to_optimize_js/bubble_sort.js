@@ -11,14 +11,21 @@ function bubbleSort(arr) {
     const result = arr.slice();
     const n = result.length;
 
-    for (let i = 0; i < n; i++) {
-        for (let j = 0; j < n - 1; j++) {
-            if (result[j] > result[j + 1]) {
-                const temp = result[j];
-                result[j] = result[j + 1];
-                result[j + 1] = temp;
+    if (n <= 1) return result;
+
+    for (let i = 0; i < n - 1; i++) {
+        let swapped = false;
+        const limit = n - i - 1;
+        for (let j = 0; j < limit; j++) {
+            const a = result[j];
+            const b = result[j + 1];
+            if (a > b) {
+                result[j] = b;
+                result[j + 1] = a;
+                swapped = true;
             }
         }
+        if (!swapped) break;
     }
 
     return result;

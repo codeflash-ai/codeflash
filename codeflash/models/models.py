@@ -8,7 +8,6 @@ import libcst as cst
 from rich.tree import Tree
 
 from codeflash.cli_cmds.console import DEBUG_MODE, lsp_log
-from codeflash.languages.current import is_javascript
 from codeflash.languages.registry import get_language_support
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table
 from codeflash.lsp.lsp_message import LspMarkdownMessage
@@ -896,9 +895,6 @@ class TestResults(BaseModel):  # noqa: PLW1641
     def number_of_loops(self) -> int:
         if not self.test_results:
             return 0
-        # TODO: Fix this. timings are not accurate something is off with either loop runner or capturePerf
-        if is_javascript():
-            return self.effective_loop_count()
         return max(test_result.loop_index for test_result in self.test_results)
 
     def get_test_pass_fail_report_by_type(self) -> dict[TestType, dict[str, int]]:
