@@ -537,7 +537,7 @@ class Optimizer:
         if lang_support and not env_utils.is_ci():
             resolver = lang_support.create_dependency_resolver(self.args.project_root)
 
-        if resolver is not None and file_to_funcs_to_optimize:
+        if resolver is not None and lang_support is not None and file_to_funcs_to_optimize:
             supported_exts = lang_support.file_extensions
             source_files = [f for f in file_to_funcs_to_optimize if f.suffix in supported_exts]
             with call_graph_live_display(len(source_files), project_root=self.args.project_root) as on_progress:
