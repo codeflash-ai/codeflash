@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from codeflash.code_utils.coverage_utils import build_fully_qualified_name, extract_dependent_function
 from codeflash.models.function_types import FunctionParent
 from codeflash.models.models import CodeOptimizationContext, CodeString, CodeStringsMarkdown
@@ -140,7 +142,7 @@ class TestExtractDependentFunction:
 
 
 class TestGrabDependentFunctionFromCoverageData:
-    def _make_func_data(self, coverage_pct: float = 80.0) -> dict:
+    def _make_func_data(self, coverage_pct: float = 80.0) -> dict[str, Any]:
         return {
             "summary": {"percent_covered": coverage_pct},
             "executed_lines": [1, 2, 3],
