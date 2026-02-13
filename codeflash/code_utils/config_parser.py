@@ -133,7 +133,9 @@ def parse_config_file(
     try:
         tool = data["tool"]
         assert isinstance(tool, dict)
-        config = tool["codeflash"]
+        codeflash_config = tool["codeflash"]
+        assert isinstance(codeflash_config, dict)
+        config = dict(codeflash_config)
     except tomlkit.exceptions.NonExistentKey as e:
         if lsp_mode:
             # don't fail in lsp mode if codeflash config is not found.
@@ -157,24 +159,24 @@ def parse_config_file(
     }
     list_str_keys = {"formatter-cmds": ["black $file"]}
 
-    for key, default_value in str_keys.items():
+    for key, str_default in str_keys.items():
         if key in config:
             config[key] = str(config[key])
         else:
-            config[key] = default_value
-    for key, default_value in bool_keys.items():
+            config[key] = str_default
+    for key, bool_default in bool_keys.items():
         if key in config:
             config[key] = bool(config[key])
         else:
-            config[key] = default_value
+            config[key] = bool_default
     for key in path_keys:
         if key in config:
             config[key] = str((Path(config_file_path).parent / Path(config[key])).resolve())
-    for key, default_value in list_str_keys.items():
+    for key, list_default in list_str_keys.items():
         if key in config:
             config[key] = [str(cmd) for cmd in config[key]]
         else:
-            config[key] = default_value
+            config[key] = list_default
 
     for key in path_list_keys:
         if key in config:
@@ -183,8 +185,9 @@ def parse_config_file(
             config[key] = []
 
     # see if this is happening during GitHub actions setup
-    if config.get("formatter-cmds") and len(config.get("formatter-cmds")) > 0 and not override_formatter_check:
-        assert config.get("formatter-cmds")[0] != "your-formatter $file", (
+    formatter_cmds = config.get("formatter-cmds")
+    if formatter_cmds and len(formatter_cmds) > 0 and not override_formatter_check:
+        assert formatter_cmds[0] != "your-formatter $file", (
             "The formatter command is not set correctly in pyproject.toml. Please set the "
             "formatter command in the 'formatter-cmds' key. More info - https://docs.codeflash.ai/configuration"
         )
