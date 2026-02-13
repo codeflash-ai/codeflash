@@ -303,17 +303,41 @@ class {self.profiler_class} {{
                 continue
 
             # Skip empty lines, comments, closing braces
-            # Also skip lines starting with keywords that must follow closing braces
-            # (else, else if, catch, finally) to avoid breaking if-else/try-catch chains
-            is_continuation_keyword = (
-                stripped.startswith("else ")
-                or stripped.startswith("else{")
-                or stripped == "else"
-                or stripped.startswith("catch ")
-                or stripped.startswith("catch(")
-                or stripped.startswith("finally ")
-                or stripped.startswith("finally{")
-            )
+            # Match Python's line_profiler behavior:
+            # - Track: if, elif (else if), try, catch (except), while, for
+            # - Skip: else (standalone), finally
+
+            # Check if this is an else-if statement (like Python's elif)
+            # Tree-sitter marks "} else if" lines as executable (contains if_statement)
+            # We should track these, not skip them (matches Python's elif tracking)
+            is_else_if = "else if" in stripped
+
+            # Skip standalone else and finally (matches Python behavior)
+            # But NOT else-if, which should be tracked
+            is_standalone_else_or_finally = False
+            if not is_else_if:  # Only check if it's not else-if
+                # Check for standalone else
+                if (stripped.startswith("else{") or stripped.startswith("else {") or
+                    stripped.startswith("} else{") or stripped.startswith("} else {") or
+                    stripped == "else"):
+                    is_standalone_else_or_finally = True
+                # Check for finally
+                elif (stripped.startswith("finally{") or stripped.startswith("finally {") or
+                      stripped.startswith("} finally{") or stripped.startswith("} finally {") or
+                      stripped == "finally"):
+                    is_standalone_else_or_finally = True
+
+            # For catch: Cannot instrument before it (syntax error), but should track it
+            # Python tracks "except" lines, so we should track "catch" lines
+            # Solution: Detect catch and handle it specially (see below)
+            is_catch = (stripped.startswith("catch ") or stripped.startswith("catch(") or
+                       stripped.startswith("} catch ") or stripped.startswith("} catch("))
+
+            # Determine if we should skip instrumenting BEFORE this line
+            # Skip standalone else/finally (matches Python)
+            # Also skip else-if - it's tracked by tree-sitter marking it as executable,
+            # but we can't insert code before it (syntax error)
+            should_skip = is_standalone_else_or_finally or is_else_if
 
             if (
                 local_line_num in executable_lines
@@ -323,7 +347,7 @@ class {self.profiler_class} {{
                 and not stripped.startswith("*")
                 and stripped != "}"
                 and stripped != "};"
-                and not is_continuation_keyword
+                and not should_skip
             ):
                 # Get indentation
                 indent = len(line) - len(line.lstrip())
@@ -333,12 +357,37 @@ class {self.profiler_class} {{
                 content_key = f"{file_path.as_posix()}:{global_line_num}"
                 self.line_contents[content_key] = stripped
 
-                # Add hit() call before the line
-                profiled_line = (
-                    f"{indent_str}{self.profiler_class}.hit("
-                    f'"{file_path.as_posix()}", {global_line_num});\n{line}'
-                )
-                instrumented_lines.append(profiled_line)
+                # Special handling for catch and else-if blocks
+                # Cannot instrument before these (syntax error), so instrument inside
+                # - catch: Like Python's except
+                # - else if: Like Python's elif
+                if is_catch or is_else_if:
+                    # Add the keyword line as-is (catch or else-if)
+                    instrumented_lines.append(line)
+                    # Find indentation for catch block body
+                    # Look ahead to find proper indentation, or default to indent + 4 spaces
+                    body_indent = indent_str + "    "
+                    if local_idx + 1 < len(func_lines):
+                        next_line = func_lines[local_idx + 1]
+                        if next_line.strip() and not next_line.strip().startswith("}"):
+                            # Use next line's indentation if it's a statement
+                            body_indent = " " * (len(next_line) - len(next_line.lstrip()))
+
+                    # Add hit() as first line inside block with keyword line number
+                    # This matches Python's behavior:
+                    # - catch → except (Python tracks except lines)
+                    # - else if → elif (Python tracks elif lines)
+                    instrumented_lines.append(
+                        f"{body_indent}{self.profiler_class}.hit("
+                        f'"{file_path.as_posix()}", {global_line_num});\n'
+                    )
+                else:
+                    # Normal case: Add hit() call before the line
+                    profiled_line = (
+                        f"{indent_str}{self.profiler_class}.hit("
+                        f'"{file_path.as_posix()}", {global_line_num});\n{line}'
+                    )
+                    instrumented_lines.append(profiled_line)
             else:
                 instrumented_lines.append(line)
 
