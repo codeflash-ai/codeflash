@@ -964,6 +964,28 @@ class TestResults(BaseModel):  # noqa: PLW1641
             [min(usable_runtime_data) for _, usable_runtime_data in self.usable_runtime_data_by_test_case().items()]
         )
 
+    def effective_loop_count(self) -> int:
+        """Calculate the effective number of complete loops.
+
+        For consistent behavior across Python and JavaScript tests, this returns
+        the maximum loop_index seen across all test results. This represents
+        the number of timing iterations that were performed.
+
+        Note: For JavaScript tests without the loop-runner, each test case may have
+        different iteration counts due to internal looping in capturePerf. We use
+        max() to report the highest iteration count achieved.
+
+        :return: The effective loop count, or 0 if no test results.
+        """
+        if not self.test_results:
+            return 0
+        # Get all loop indices from results that have timing data
+        loop_indices = {result.loop_index for result in self.test_results if result.runtime is not None}
+        if not loop_indices:
+            # Fallback: use all loop indices even without runtime
+            loop_indices = {result.loop_index for result in self.test_results}
+        return max(loop_indices) if loop_indices else 0
+
     def file_to_no_of_tests(self, test_functions_to_remove: list[str]) -> Counter[Path]:
         map_gen_test_file_to_no_of_tests = Counter()
         for gen_test_result in self.test_results:

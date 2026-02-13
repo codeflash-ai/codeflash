@@ -285,7 +285,7 @@ class TestTypeScriptPipelineIntegration:
 
         with tempfile.NamedTemporaryFile(suffix=".ts", mode="w", delete=False) as f:
             f.write("""
-class Calculator {
+export class Calculator {
     add(a: number, b: number): number {
         return a + b;
     }
@@ -295,7 +295,7 @@ class Calculator {
     }
 }
 
-function standalone(x: number): number {
+export function standalone(x: number): number {
     return x * 2;
 }
 """)
