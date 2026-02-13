@@ -23,12 +23,12 @@ def get_test_file_path(
 
     # For JavaScript/TypeScript, place generated tests in a subdirectory that matches
     # Vitest/Jest include patterns (e.g., test/**/*.test.ts)
-    if is_javascript():
-        # For monorepos, first try to find the package directory from the source file path
-        # e.g., packages/workflow/src/utils.ts -> packages/workflow/test/codeflash-generated/
-        package_test_dir = _find_js_package_test_dir(test_dir, source_file_path)
-        if package_test_dir:
-            test_dir = package_test_dir
+    # if is_javascript():
+    #     # For monorepos, first try to find the package directory from the source file path
+    #     # e.g., packages/workflow/src/utils.ts -> packages/workflow/test/codeflash-generated/
+    #     package_test_dir = _find_js_package_test_dir(test_dir, source_file_path)
+    #     if package_test_dir:
+    #         test_dir = package_test_dir
 
     path = test_dir / f"test_{function_name}__{test_type}_test_{iteration}{extension}"
     if path.exists():

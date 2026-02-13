@@ -10,9 +10,7 @@ class TestType(Enum):
     INIT_STATE_TEST = 6
 
     def to_name(self) -> str:
-        if self is TestType.INIT_STATE_TEST:
-            return ""
-        return _TO_NAME_MAP[self]
+        return _TO_NAME_MAP.get(self, "")
 
 
 _TO_NAME_MAP: dict[TestType, str] = {

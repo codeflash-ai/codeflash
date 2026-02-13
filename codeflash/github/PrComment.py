@@ -45,8 +45,8 @@ class PrComment:
         }
 
         if self.original_async_throughput is not None and self.best_async_throughput is not None:
-            result["original_async_throughput"] = str(self.original_async_throughput)
-            result["best_async_throughput"] = str(self.best_async_throughput)
+            result["original_async_throughput"] = self.original_async_throughput
+            result["best_async_throughput"] = self.best_async_throughput
 
         return result
 

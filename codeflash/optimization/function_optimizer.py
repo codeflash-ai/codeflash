@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 import libcst as cst
-import sentry_sdk
 from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -70,6 +69,7 @@ from codeflash.code_utils.formatter import format_code, format_generated_code, s
 from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.line_profile_utils import add_decorator_imports, contains_jit_decorator
+from codeflash.code_utils.shell_utils import make_env_with_project_root
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.context import code_context_extractor
@@ -80,6 +80,7 @@ from codeflash.languages import is_python
 from codeflash.languages.base import Language
 from codeflash.languages.current import current_language_support, is_typescript
 from codeflash.languages.javascript.module_system import detect_module_system
+from codeflash.languages.javascript.test_runner import clear_created_config_files, get_created_config_files
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree_to_markdown
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
@@ -607,6 +608,11 @@ class FunctionOptimizer:
                 f.write(generated_test.instrumented_behavior_test_source)
             logger.debug(f"[PIPELINE] Wrote behavioral test to {generated_test.behavior_file_path}")
 
+            # Save perf test source for debugging
+            debug_file_path = get_run_tmp_file(Path("perf_test_debug.test.ts"))
+            with debug_file_path.open("w", encoding="utf-8") as debug_f:
+                debug_f.write(generated_test.instrumented_perf_test_source)
+
             with generated_test.perf_file_path.open("w", encoding="utf8") as f:
                 f.write(generated_test.instrumented_perf_test_source)
             logger.debug(f"[PIPELINE] Wrote perf test to {generated_test.perf_file_path}")
@@ -683,30 +689,6 @@ class FunctionOptimizer:
         ):
             console.rule()
             new_code_context = code_context
-            if (
-                self.is_numerical_code and not self.args.no_jit_opts
-            ):  # if the code is numerical in nature (uses numpy/tensorflow/math/pytorch/jax)
-                jit_compiled_opt_candidate = self.aiservice_client.get_jit_rewritten_code(
-                    code_context.read_writable_code.markdown, self.function_trace_id
-                )
-                if jit_compiled_opt_candidate:  # jit rewrite was successful
-                    # write files
-                    # Try to replace function with optimized code
-                    self.replace_function_and_helpers_with_optimized_code(
-                        code_context=code_context,
-                        optimized_code=jit_compiled_opt_candidate[0].source_code,
-                        original_helper_code=original_helper_code,
-                    )
-                    # get code context
-                    try:
-                        new_code_context = self.get_code_optimization_context().unwrap()
-                    except Exception as e:
-                        sentry_sdk.capture_exception(e)
-                        logger.debug("!lsp|Getting new code context failed, revert to original one")
-                    # unwrite files
-                    self.write_code_and_helpers(
-                        self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
-                    )
             # Generate tests and optimizations in parallel
             future_tests = self.executor.submit(self.generate_and_instrument_tests, new_code_context)
             future_optimizations = self.executor.submit(
@@ -2106,7 +2088,7 @@ class FunctionOptimizer:
             formatted_generated_test = format_generated_code(concolic_test_str, self.args.formatter_cmds)
             generated_tests_str += f"```{code_lang}\n{formatted_generated_test}\n```\n\n"
 
-        existing_tests, replay_tests, _ = existing_tests_source_for(
+        existing_tests, replay_tests, _concolic_tests = existing_tests_source_for(
             self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root),
             function_to_all_tests,
             test_cfg=self.test_cfg,
@@ -2421,7 +2403,7 @@ class FunctionOptimizer:
         if not success:
             return Failure("Failed to establish a baseline for the original code.")
 
-        loop_count = max([int(result.loop_index) for result in benchmarking_results.test_results])
+        loop_count = benchmarking_results.effective_loop_count()
         logger.info(
             f"h3|⌚ Original code summed runtime measured over '{loop_count}' loop{'s' if loop_count > 1 else ''}: "
             f"'{humanize_runtime(total_timing)}' per full loop"
@@ -2644,11 +2626,10 @@ class FunctionOptimizer:
                     self.write_code_and_helpers(
                         candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
                     )
-            loop_count = (
-                max(all_loop_indices)
-                if (all_loop_indices := {result.loop_index for result in candidate_benchmarking_results.test_results})
-                else 0
-            )
+            # Use effective_loop_count which represents the minimum number of timing samples
+            # across all test cases. This is more accurate for JavaScript tests where
+            # capturePerf does internal looping with potentially different iteration counts per test.
+            loop_count = candidate_benchmarking_results.effective_loop_count()
 
             if (total_candidate_timing := candidate_benchmarking_results.total_passed_runtime()) == 0:
                 logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
@@ -2844,19 +2825,22 @@ class FunctionOptimizer:
             paths_to_cleanup.append(test_file.instrumented_behavior_file_path)
             paths_to_cleanup.append(test_file.benchmarking_file_path)
 
+        # Clean up created config files (jest.codeflash.config.js, tsconfig.codeflash.json)
+        config_files = get_created_config_files()
+        if config_files:
+            paths_to_cleanup.extend(config_files)
+            logger.debug(f"Cleaning up {len(config_files)} codeflash config file(s)")
+            clear_created_config_files()
+
         cleanup_paths(paths_to_cleanup)
 
     def get_test_env(
         self, codeflash_loop_index: int, codeflash_test_iteration: int, codeflash_tracer_disable: int = 1
     ) -> dict:
-        test_env = os.environ.copy()
+        test_env = make_env_with_project_root(self.args.project_root)
         test_env["CODEFLASH_TEST_ITERATION"] = str(codeflash_test_iteration)
         test_env["CODEFLASH_TRACER_DISABLE"] = str(codeflash_tracer_disable)
         test_env["CODEFLASH_LOOP_INDEX"] = str(codeflash_loop_index)
-        if "PYTHONPATH" not in test_env:
-            test_env["PYTHONPATH"] = str(self.args.project_root)
-        else:
-            test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
         return test_env
 
     def line_profiler_step(

@@ -198,14 +198,20 @@ def parse_jest_test_xml(
         # Extract console output from suite-level system-out (Jest specific)
         suite_stdout = _extract_jest_console_output(suite._elem)  # noqa: SLF001
 
-        # Fallback: use subprocess stdout if XML system-out is empty
-        if not suite_stdout and global_stdout:
-            suite_stdout = global_stdout
+        # Combine suite stdout with global stdout to ensure we capture all timing markers
+        # Jest-junit may not capture all console.log output in the XML, so we also need
+        # to check the subprocess stdout directly for timing markers
+        combined_stdout = suite_stdout
+        if global_stdout:
+            if combined_stdout:
+                combined_stdout = combined_stdout + "\n" + global_stdout
+            else:
+                combined_stdout = global_stdout
 
-        # Parse timing markers from the suite's console output
-        start_matches = list(jest_start_pattern.finditer(suite_stdout))
+        # Parse timing markers from the combined console output
+        start_matches = list(jest_start_pattern.finditer(combined_stdout))
         end_matches_dict = {}
-        for match in jest_end_pattern.finditer(suite_stdout):
+        for match in jest_end_pattern.finditer(combined_stdout):
             # Key: (testName, testName2, funcName, loopIndex, lineId)
             key = match.groups()[:5]
             end_matches_dict[key] = match
@@ -318,7 +324,7 @@ def parse_jest_test_xml(
                 # Infer test type from filename pattern
                 filename = test_file_path.name
                 if "__perf_test_" in filename or "_perf_test_" in filename:
-                    test_type = TestType.GENERATED_PERFORMANCE
+                    test_type = TestType.GENERATED_REGRESSION  # Performance tests are still generated regression tests
                 elif "__unit_test_" in filename or "_unit_test_" in filename:
                     test_type = TestType.GENERATED_REGRESSION
                 else:

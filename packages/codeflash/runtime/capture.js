@@ -87,6 +87,8 @@ if (!process[PERF_STATE_KEY]) {
         shouldStop: false,         // Flag to stop all further looping
         currentBatch: 0,           // Current batch number (incremented by runner)
         invocationLoopCounts: {},  // Track loops per invocation: {invocationKey: loopCount}
+        invocationRuntimes: {},    // Track runtimes per invocation for stability: {invocationKey: [runtimes]}
+        stableInvocations: {},     // Invocations that have reached stability: {invocationKey: true}
     };
 }
 const sharedPerfState = process[PERF_STATE_KEY];
@@ -98,10 +100,10 @@ const sharedPerfState = process[PERF_STATE_KEY];
 function checkSharedTimeLimit() {
     if (sharedPerfState.shouldStop) return true;
     if (sharedPerfState.startTime === null) {
-        sharedPerfState.startTime = Date.now();
+        sharedPerfState.startTime = _ORIGINAL_DATE_NOW();
         return false;
     }
-    const elapsed = Date.now() - sharedPerfState.startTime;
+    const elapsed = _ORIGINAL_DATE_NOW() - sharedPerfState.startTime;
     if (elapsed >= getPerfTargetDurationMs() && sharedPerfState.totalLoopsCompleted >= getPerfMinLoops()) {
         sharedPerfState.shouldStop = true;
         return true;
@@ -111,25 +113,33 @@ function checkSharedTimeLimit() {
 
 /**
  * Get the current loop index for a specific invocation.
- * Each invocation tracks its own loop count independently within a batch.
- * The actual loop index is computed as: (batch - 1) * BATCH_SIZE + localIndex
- * This ensures continuous loop indices even when Jest resets module state.
+ * The loop index represents how many times ALL test files have been run through.
+ * This is the batch count from the loop-runner.
  * @param {string} invocationKey - Unique key for this test invocation
- * @returns {number} The next global loop index for this invocation
+ * @returns {number} The current batch number (loop index)
  */
 function getInvocationLoopIndex(invocationKey) {
-    // Track local loop count within this batch (starts at 0)
+    // Track local loop count for stopping logic (increments on each call)
     if (!sharedPerfState.invocationLoopCounts[invocationKey]) {
         sharedPerfState.invocationLoopCounts[invocationKey] = 0;
     }
-    const localIndex = ++sharedPerfState.invocationLoopCounts[invocationKey];
+    ++sharedPerfState.invocationLoopCounts[invocationKey];
 
-    // Calculate global loop index using batch number from environment
-    // PERF_CURRENT_BATCH is 1-based (set by loop-runner before each batch)
+    // Return the batch number as the loop index for timing markers
+    // This represents how many times all test files have been run through
+    return parseInt(process.env.CODEFLASH_PERF_CURRENT_BATCH || '1', 10);
+}
+
+/**
+ * Get the total number of iterations for a specific invocation.
+ * Used for stopping logic to check against max loop count.
+ * @param {string} invocationKey - Unique key for this test invocation
+ * @returns {number} Total iterations across all batches for this invocation
+ */
+function getTotalIterations(invocationKey) {
+    const localCount = sharedPerfState.invocationLoopCounts[invocationKey] || 0;
     const currentBatch = parseInt(process.env.CODEFLASH_PERF_CURRENT_BATCH || '1', 10);
-    const globalIndex = (currentBatch - 1) * getPerfBatchSize() + localIndex;
-
-    return globalIndex;
+    return (currentBatch - 1) * getPerfBatchSize() + localCount;
 }
 
 /**
@@ -164,6 +174,8 @@ function createSeededRandom(seed) {
         return ((t ^ t >>> 14) >>> 0) / 4294967296;
     };
 }
+let _ORIGINAL_DATE = Date
+let _ORIGINAL_DATE_NOW = Date.now
 
 // Override non-deterministic APIs with seeded versions if seed is provided
 // NOTE: We do NOT seed performance.now() or process.hrtime() as those are used
@@ -176,8 +188,8 @@ if (RANDOM_SEED !== 0) {
     // Seed Date.now() and new Date() - use fixed base timestamp that increments
     const SEEDED_BASE_TIME = 1700000000000; // Nov 14, 2023 - fixed reference point
     let dateOffset = 0;
-    const OriginalDate = Date;
-    const originalDateNow = Date.now;
+    _ORIGINAL_DATE = Date;
+    _ORIGINAL_DATE_NOW = Date.now;
 
     Date.now = function() {
         return SEEDED_BASE_TIME + (dateOffset++);
@@ -187,15 +199,15 @@ if (RANDOM_SEED !== 0) {
     function SeededDate(...args) {
         if (args.length === 0) {
             // No arguments: use seeded current time
-            return new OriginalDate(SEEDED_BASE_TIME + (dateOffset++));
+            return new _ORIGINAL_DATE(SEEDED_BASE_TIME + (dateOffset++));
         }
         // With arguments: use original behavior
-        return new OriginalDate(...args);
+        return new _ORIGINAL_DATE(...args);
     }
-    SeededDate.prototype = OriginalDate.prototype;
+    SeededDate.prototype = _ORIGINAL_DATE.prototype;
     SeededDate.now = Date.now;
-    SeededDate.parse = OriginalDate.parse;
-    SeededDate.UTC = OriginalDate.UTC;
+    SeededDate.parse = _ORIGINAL_DATE.parse;
+    SeededDate.UTC = _ORIGINAL_DATE.UTC;
     global.Date = SeededDate;
 
     // Seed crypto.randomUUID() and crypto.getRandomValues()
@@ -265,26 +277,40 @@ const results = [];
 let db = null;
 
 /**
- * Check if performance has stabilized (for internal looping).
- * Matches Python's pytest_plugin.should_stop() logic.
+ * Check if performance has stabilized, allowing early stopping of benchmarks.
+ * Matches Python's pytest_plugin.should_stop() logic for consistency.
+ *
+ * Performance is considered stable when BOTH conditions are met:
+ * 1. CENTER: All recent measurements are within ±10% of the median
+ * 2. SPREAD: The range (max-min) is within 10% of the minimum
+ *
+ * @param {Array<number>} runtimes - Array of runtime measurements in microseconds
+ * @param {number} window - Number of recent measurements to check
+ * @param {number} minWindowSize - Minimum samples required before checking
+ * @returns {boolean} True if performance has stabilized
  */
 function shouldStopStability(runtimes, window, minWindowSize) {
     if (runtimes.length < window || runtimes.length < minWindowSize) {
         return false;
     }
+
     const recent = runtimes.slice(-window);
     const recentSorted = [...recent].sort((a, b) => a - b);
     const mid = Math.floor(window / 2);
     const median = window % 2 ? recentSorted[mid] : (recentSorted[mid - 1] + recentSorted[mid]) / 2;
 
+    // Check CENTER: all recent points must be close to median
     for (const r of recent) {
         if (Math.abs(r - median) / median > STABILITY_CENTER_TOLERANCE) {
             return false;
         }
     }
+
+    // Check SPREAD: range must be small relative to minimum
     const rMin = recentSorted[0];
     const rMax = recentSorted[recentSorted.length - 1];
     if (rMin === 0) return false;
+
     return (rMax - rMin) / rMin <= STABILITY_SPREAD_TOLERANCE;
 }
 
@@ -673,17 +699,32 @@ function capturePerf(funcName, lineId, fn, ...args) {
         ? (hasExternalLoopRunner ? getPerfBatchSize() : getPerfLoopCount())
         : 1;
 
+    // Initialize runtime tracking for this invocation if needed
+    if (!sharedPerfState.invocationRuntimes[invocationKey]) {
+        sharedPerfState.invocationRuntimes[invocationKey] = [];
+    }
+    const runtimes = sharedPerfState.invocationRuntimes[invocationKey];
+
+    // Calculate stability window size based on collected runtimes
+    const getStabilityWindow = () => Math.max(getPerfMinLoops(), Math.ceil(runtimes.length * STABILITY_WINDOW_SIZE));
+
     for (let batchIndex = 0; batchIndex < batchSize; batchIndex++) {
         // Check shared time limit BEFORE each iteration
         if (shouldLoop && checkSharedTimeLimit()) {
             break;
         }
 
-        // Get the global loop index for this invocation (increments across batches)
+        // Check if this invocation has already reached stability
+        if (getPerfStabilityCheck() && sharedPerfState.stableInvocations[invocationKey]) {
+            break;
+        }
+
+        // Get the loop index (batch number) for timing markers
         const loopIndex = getInvocationLoopIndex(invocationKey);
 
         // Check if we've exceeded max loops for this invocation
-        if (loopIndex > getPerfLoopCount()) {
+        const totalIterations = getTotalIterations(invocationKey);
+        if (totalIterations > getPerfLoopCount()) {
             break;
         }
 
@@ -703,23 +744,17 @@ function capturePerf(funcName, lineId, fn, ...args) {
             const endTime = getTimeNs();
             durationNs = getDurationNs(startTime, endTime);
 
-            // Handle promises - for async functions, run once and return
+            // Handle promises - for async functions, we need to handle looping differently
+            // Since we can't use await in the sync loop, delegate to async helper
             if (lastReturnValue instanceof Promise) {
-                return lastReturnValue.then(
-                    (resolved) => {
-                        const asyncEndTime = getTimeNs();
-                        const asyncDurationNs = getDurationNs(startTime, asyncEndTime);
-                        console.log(`!######${testStdoutTag}:${asyncDurationNs}######!`);
-                        sharedPerfState.totalLoopsCompleted++;
-                        return resolved;
-                    },
-                    (err) => {
-                        const asyncEndTime = getTimeNs();
-                        const asyncDurationNs = getDurationNs(startTime, asyncEndTime);
-                        console.log(`!######${testStdoutTag}:${asyncDurationNs}######!`);
-                        sharedPerfState.totalLoopsCompleted++;
-                        throw err;
-                    }
+                // For async functions, delegate to the async looping helper
+                // Pass along all the context needed for continued looping
+                return _capturePerfAsync(
+                    funcName, lineId, fn, args,
+                    lastReturnValue, startTime, testStdoutTag,
+                    safeModulePath, testClassName, safeTestFunctionName,
+                    invocationKey, runtimes, batchSize, batchIndex,
+                    shouldLoop, getStabilityWindow
                 );
             }
 
@@ -735,6 +770,20 @@ function capturePerf(funcName, lineId, fn, ...args) {
         // Update shared loop counter
         sharedPerfState.totalLoopsCompleted++;
 
+        // Track runtime for stability check (convert to microseconds)
+        if (durationNs > 0) {
+            runtimes.push(durationNs / 1000);
+        }
+
+        // Check stability after accumulating enough samples
+        if (getPerfStabilityCheck() && runtimes.length >= getPerfMinLoops()) {
+            const window = getStabilityWindow();
+            if (shouldStopStability(runtimes, window, getPerfMinLoops())) {
+                sharedPerfState.stableInvocations[invocationKey] = true;
+                break;
+            }
+        }
+
         // If we had an error, stop looping
         if (lastError) {
             break;
@@ -748,6 +797,123 @@ function capturePerf(funcName, lineId, fn, ...args) {
         return fn(...args);
     }
 
+    return lastReturnValue;
+}
+
+/**
+ * Helper to record async timing and update state.
+ * @private
+ */
+function _recordAsyncTiming(startTime, testStdoutTag, durationNs, runtimes) {
+    console.log(`!######${testStdoutTag}:${durationNs}######!`);
+    sharedPerfState.totalLoopsCompleted++;
+    if (durationNs > 0) {
+        runtimes.push(durationNs / 1000);
+    }
+}
+
+/**
+ * Async helper for capturePerf to handle async function looping.
+ * This function awaits promises and continues the benchmark loop properly.
+ *
+ * @private
+ * @param {string} funcName - Name of the function being benchmarked
+ * @param {string} lineId - Line identifier for this capture point
+ * @param {Function} fn - The async function to benchmark
+ * @param {Array} args - Arguments to pass to fn
+ * @param {Promise} firstPromise - The first promise that was already started
+ * @param {number} firstStartTime - Start time of the first execution
+ * @param {string} firstTestStdoutTag - Timing marker tag for the first execution
+ * @param {string} safeModulePath - Sanitized module path
+ * @param {string|null} testClassName - Test class name (if any)
+ * @param {string} safeTestFunctionName - Sanitized test function name
+ * @param {string} invocationKey - Unique key for this invocation
+ * @param {Array<number>} runtimes - Array to collect runtimes for stability checking
+ * @param {number} batchSize - Number of iterations per batch
+ * @param {number} startBatchIndex - Index where async looping started
+ * @param {boolean} shouldLoop - Whether to continue looping
+ * @param {Function} getStabilityWindow - Function to get stability window size
+ * @returns {Promise} The last return value from fn
+ */
+async function _capturePerfAsync(
+    funcName, lineId, fn, args,
+    firstPromise, firstStartTime, firstTestStdoutTag,
+    safeModulePath, testClassName, safeTestFunctionName,
+    invocationKey, runtimes, batchSize, startBatchIndex,
+    shouldLoop, getStabilityWindow
+) {
+    let lastReturnValue;
+    let lastError = null;
+
+    // Handle the first promise that was already started
+    try {
+        lastReturnValue = await firstPromise;
+        const asyncEndTime = getTimeNs();
+        const asyncDurationNs = getDurationNs(firstStartTime, asyncEndTime);
+        _recordAsyncTiming(firstStartTime, firstTestStdoutTag, asyncDurationNs, runtimes);
+    } catch (err) {
+        const asyncEndTime = getTimeNs();
+        const asyncDurationNs = getDurationNs(firstStartTime, asyncEndTime);
+        _recordAsyncTiming(firstStartTime, firstTestStdoutTag, asyncDurationNs, runtimes);
+        lastError = err;
+        // Don't throw yet - we want to record the timing first
+    }
+
+    // If first iteration failed, stop and throw
+    if (lastError) {
+        throw lastError;
+    }
+
+    // Continue looping for remaining iterations
+    for (let batchIndex = startBatchIndex + 1; batchIndex < batchSize; batchIndex++) {
+        // Check exit conditions before starting next iteration
+        if (shouldLoop && checkSharedTimeLimit()) {
+            break;
+        }
+
+        if (getPerfStabilityCheck() && sharedPerfState.stableInvocations[invocationKey]) {
+            break;
+        }
+
+        // Get the loop index (batch number) for timing markers
+        const loopIndex = getInvocationLoopIndex(invocationKey);
+
+        // Check if we've exceeded max loops for this invocation
+        const totalIterations = getTotalIterations(invocationKey);
+        if (totalIterations > getPerfLoopCount()) {
+            break;
+        }
+
+        // Generate timing marker identifiers
+        const testId = `${safeModulePath}:${testClassName}:${safeTestFunctionName}:${lineId}:${loopIndex}`;
+        const invocationIndex = getInvocationIndex(testId);
+        const invocationId = `${lineId}_${invocationIndex}`;
+        const testStdoutTag = `${safeModulePath}:${testClassName ? testClassName + '.' : ''}${safeTestFunctionName}:${funcName}:${loopIndex}:${invocationId}`;
+
+        // Execute and time the function
+        try {
+            const startTime = getTimeNs();
+            lastReturnValue = await fn(...args);
+            const endTime = getTimeNs();
+            const durationNs = getDurationNs(startTime, endTime);
+
+            _recordAsyncTiming(startTime, testStdoutTag, durationNs, runtimes);
+
+            // Check if we've reached performance stability
+            if (getPerfStabilityCheck() && runtimes.length >= getPerfMinLoops()) {
+                const window = getStabilityWindow();
+                if (shouldStopStability(runtimes, window, getPerfMinLoops())) {
+                    sharedPerfState.stableInvocations[invocationKey] = true;
+                    break;
+                }
+            }
+        } catch (e) {
+            lastError = e;
+            break;
+        }
+    }
+
+    if (lastError) throw lastError;
     return lastReturnValue;
 }
 
@@ -789,7 +955,7 @@ function writeResults() {
         const output = {
             version: '1.0.0',
             loopIndex: LOOP_INDEX,
-            timestamp: Date.now(),
+            timestamp: _ORIGINAL_DATE_NOW(),
             results
         };
         fs.writeFileSync(jsonPath, JSON.stringify(output, null, 2));
@@ -806,6 +972,8 @@ function resetPerfState() {
     sharedPerfState.startTime = null;
     sharedPerfState.totalLoopsCompleted = 0;
     sharedPerfState.shouldStop = false;
+    sharedPerfState.invocationRuntimes = {};
+    sharedPerfState.stableInvocations = {};
 }
 
 /**
