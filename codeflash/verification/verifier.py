@@ -109,7 +109,7 @@ def generate_tests(
 
             # Instrument for behavior verification (renames class)
             instrumented_behavior_test_source = instrument_generated_java_test(
-                test_code=generated_test_source, function_name=func_name, qualified_name=qualified_name, mode="behavior"
+                test_code=generated_test_source, function_name=func_name, qualified_name=qualified_name, mode="behavior", function_to_optimize=function_to_optimize
             )
 
             # Instrument for performance measurement (adds timing markers)
@@ -118,6 +118,7 @@ def generate_tests(
                 function_name=func_name,
                 qualified_name=qualified_name,
                 mode="performance",
+                function_to_optimize=function_to_optimize
             )
 
             logger.debug(f"Instrumented Java tests locally for {func_name}")

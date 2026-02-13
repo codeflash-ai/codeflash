@@ -232,13 +232,11 @@ def instrument_for_benchmarking(
 
 
 def instrument_existing_test(
-    test_path: Path,
-    call_positions: Sequence,
+    test_string: str,
     function_to_optimize: Any,  # FunctionToOptimize or FunctionToOptimize
-    tests_project_root: Path,
     mode: str,  # "behavior" or "performance"
-    analyzer: JavaAnalyzer | None = None,
-    output_class_suffix: str | None = None,  # Suffix for renamed class
+    test_path: Path | None = None,
+    test_class_name: str | None = None,
 ) -> tuple[bool, str | None]:
     """Inject profiling code into an existing test file.
 
@@ -248,7 +246,7 @@ def instrument_existing_test(
     3. For performance mode: adds timing instrumentation with stdout markers
 
     Args:
-        test_path: Path to the test file.
+        test_string: String to the test file.
         call_positions: List of code positions where the function is called.
         function_to_optimize: The function being optimized.
         tests_project_root: Root directory of tests.
@@ -260,16 +258,16 @@ def instrument_existing_test(
         Tuple of (success, modified_source).
 
     """
-    try:
-        source = test_path.read_text(encoding="utf-8")
-    except Exception as e:
-        logger.exception("Failed to read test file %s: %s", test_path, e)
-        return False, f"Failed to read test file: {e}"
-
+    source = test_string
     func_name = _get_function_name(function_to_optimize)
 
     # Get the original class name from the file name
-    original_class_name = test_path.stem  # e.g., "AlgorithmsTest"
+    if test_path:
+        original_class_name = test_path.stem  # e.g., "AlgorithmsTest"
+    elif test_class_name is not None:
+        original_class_name = test_class_name
+    else:
+        raise ValueError("test_path or test_class_name must be provided")
 
     # Determine the new class name based on mode
     if mode == "behavior":
@@ -298,7 +296,7 @@ def instrument_existing_test(
         modified_source = _add_behavior_instrumentation(modified_source, original_class_name, func_name)
 
     logger.debug("Java %s testing for %s: renamed class %s -> %s", mode, func_name, original_class_name, new_class_name)
-
+    # Why return True here?
     return True, modified_source
 
 
@@ -800,6 +798,7 @@ def instrument_generated_java_test(
     function_name: str,
     qualified_name: str,
     mode: str,  # "behavior" or "performance"
+    function_to_optimize: FunctionToOptimize,
 ) -> str:
     """Instrument a generated Java test for behavior or performance testing.
 
@@ -834,26 +833,31 @@ def instrument_generated_java_test(
 
     original_class_name = class_match.group(1)
 
-    # Rename class based on mode
-    if mode == "behavior":
-        new_class_name = f"{original_class_name}__perfinstrumented"
-    else:
-        new_class_name = f"{original_class_name}__perfonlyinstrumented"
-
-    # Rename all references to the original class name in the source.
-    # This includes the class declaration, return types, constructor calls, etc.
-    modified_code = re.sub(
-        rf"\b{re.escape(original_class_name)}\b", new_class_name, test_code
-    )
 
     # For performance mode, add timing instrumentation
     # Use original class name (without suffix) in timing markers for consistency with Python
     if mode == "performance":
+
+
+        # Rename class based on mode
+        if mode == "behavior":
+            new_class_name = f"{original_class_name}__perfinstrumented"
+        else:
+            new_class_name = f"{original_class_name}__perfonlyinstrumented"
+
+        # Rename all references to the original class name in the source.
+        # This includes the class declaration, return types, constructor calls, etc.
+        modified_code = re.sub(
+            rf"\b{re.escape(original_class_name)}\b", new_class_name, test_code
+        )
+
         modified_code = _add_timing_instrumentation(
             modified_code,
             original_class_name,  # Use original name in markers, not the renamed class
             function_name,
         )
+    elif mode == "behavior":
+        _ , modified_code = instrument_existing_test(test_string=test_code, mode=mode, function_to_optimize=function_to_optimize, test_class_name=original_class_name)
 
     logger.debug("Instrumented generated Java test for %s (mode=%s)", function_name, mode)
     return modified_code

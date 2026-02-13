@@ -1936,11 +1936,12 @@ class JavaScriptSupport:
 
     def instrument_existing_test(
         self,
-        test_path: Path,
+        test_string: str,
         call_positions: Sequence[Any],
         function_to_optimize: Any,
         tests_project_root: Path,
         mode: str,
+        test_path: Path|None,
     ) -> tuple[bool, str | None]:
         """Inject profiling code into an existing JavaScript test file.
 
@@ -1961,6 +1962,7 @@ class JavaScriptSupport:
         from codeflash.languages.javascript.instrument import inject_profiling_into_existing_js_test
 
         return inject_profiling_into_existing_js_test(
+            test_string=test_string,
             test_path=test_path,
             call_positions=list(call_positions),
             function_to_optimize=function_to_optimize,

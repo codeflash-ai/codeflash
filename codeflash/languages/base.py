@@ -567,11 +567,12 @@ class LanguageSupport(Protocol):
 
     def instrument_existing_test(
         self,
-        test_path: Path,
+        test_string: str,
         call_positions: Sequence[Any],
         function_to_optimize: Any,
         tests_project_root: Path,
         mode: str,
+        test_path: Path | None
     ) -> tuple[bool, str | None]:
         """Inject profiling code into an existing test file.
 
@@ -579,6 +580,7 @@ class LanguageSupport(Protocol):
         behavioral verification and performance benchmarking.
 
         Args:
+            test_string: String containing the test file contents.
             test_path: Path to the test file.
             call_positions: List of code positions where the function is called.
             function_to_optimize: The function being optimized.

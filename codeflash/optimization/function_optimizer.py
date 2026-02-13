@@ -1849,13 +1849,15 @@ class FunctionOptimizer:
                     logger.debug(f"Failed to instrument test file {test_file} for behavior testing")
                     continue
 
-                success, injected_perf_test = self.language_support.instrument_existing_test(
-                    test_path=path_obj_test_file,
-                    call_positions=[test.position for test in tests_in_file_list],
-                    function_to_optimize=self.function_to_optimize,
-                    tests_project_root=self.test_cfg.tests_project_rootdir,
-                    mode="performance",
-                )
+                with path_obj_test_file.open("r", encoding="utf8") as f:
+                    injected_behavior_test_source = f.read()
+                    success, injected_perf_test = self.language_support.instrument_existing_test(
+                        test_string=injected_behavior_test_source,
+                        call_positions=[test.position for test in tests_in_file_list],
+                        function_to_optimize=self.function_to_optimize,
+                        tests_project_root=self.test_cfg.tests_project_rootdir,
+                        mode="performance",
+                    )
                 if not success:
                     logger.debug(f"Failed to instrument test file {test_file} for performance testing")
                     continue
