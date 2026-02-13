@@ -757,7 +757,7 @@ class TestSimpleFunctionReplacement:
     def test_replace_simple_function_body(self, js_support, temp_project):
         """Test replacing a simple function body preserves structure exactly."""
         original_source = """\
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }
 """
@@ -769,7 +769,7 @@ function add(a, b) {
 
         # Optimized version with different body
         optimized_code = """\
-function add(a, b) {
+export function add(a, b) {
     // Optimized: direct return
     return a + b;
 }
@@ -778,7 +778,7 @@ function add(a, b) {
         result = js_support.replace_function(original_source, func, optimized_code)
 
         expected_result = """\
-function add(a, b) {
+export function add(a, b) {
     // Optimized: direct return
     return a + b;
 }
@@ -789,7 +789,7 @@ function add(a, b) {
     def test_replace_function_with_multiple_statements(self, js_support, temp_project):
         """Test replacing function with complex multi-statement body."""
         original_source = """\
-function processData(data) {
+export function processData(data) {
     const result = [];
     for (let i = 0; i < data.length; i++) {
         result.push(data[i] * 2);
@@ -805,7 +805,7 @@ function processData(data) {
 
         # Optimized version using map
         optimized_code = """\
-function processData(data) {
+export function processData(data) {
     return data.map(x => x * 2);
 }
 """
@@ -813,7 +813,7 @@ function processData(data) {
         result = js_support.replace_function(original_source, func, optimized_code)
 
         expected_result = """\
-function processData(data) {
+export function processData(data) {
     return data.map(x => x * 2);
 }
 """
@@ -825,12 +825,12 @@ function processData(data) {
         original_source = """\
 const CONFIG = { debug: true };
 
-function targetFunction(x) {
+export function targetFunction(x) {
     console.log(x);
     return x * 2;
 }
 
-function otherFunction(y) {
+export function otherFunction(y) {
     return y + 1;
 }
 
@@ -843,7 +843,7 @@ module.exports = { targetFunction, otherFunction };
         target_func = next(f for f in functions if f.function_name == "targetFunction")
 
         optimized_code = """\
-function targetFunction(x) {
+export function targetFunction(x) {
     return x << 1;
 }
 """
@@ -853,11 +853,11 @@ function targetFunction(x) {
         expected_result = """\
 const CONFIG = { debug: true };
 
-function targetFunction(x) {
+export function targetFunction(x) {
     return x << 1;
 }
 
-function otherFunction(y) {
+export function otherFunction(y) {
     return y + 1;
 }
 
@@ -873,7 +873,7 @@ class TestClassMethodReplacement:
     def test_replace_class_method_body(self, js_support, temp_project):
         """Test replacing a class method body preserves class structure."""
         original_source = """\
-class Calculator {
+export class Calculator {
     constructor(precision = 2) {
         this.precision = precision;
     }
@@ -896,7 +896,7 @@ class Calculator {
 
         # Optimized version provided in class context
         optimized_code = """\
-class Calculator {
+export class Calculator {
     constructor(precision = 2) {
         this.precision = precision;
     }
@@ -910,7 +910,7 @@ class Calculator {
         result = js_support.replace_function(original_source, add_method, optimized_code)
 
         expected_result = """\
-class Calculator {
+export class Calculator {
     constructor(precision = 2) {
         this.precision = precision;
     }
@@ -930,7 +930,7 @@ class Calculator {
     def test_replace_method_calling_sibling_methods(self, js_support, temp_project):
         """Test replacing method that calls other methods in same class."""
         original_source = """\
-class DataProcessor {
+export class DataProcessor {
     constructor() {
         this.cache = new Map();
     }
@@ -958,7 +958,7 @@ class DataProcessor {
         process_method = next(f for f in functions if f.function_name == "process")
 
         optimized_code = """\
-class DataProcessor {
+export class DataProcessor {
     constructor() {
         this.cache = new Map();
     }
@@ -975,7 +975,7 @@ class DataProcessor {
         result = js_support.replace_function(original_source, process_method, optimized_code)
 
         expected_result = """\
-class DataProcessor {
+export class DataProcessor {
     constructor() {
         this.cache = new Map();
     }
@@ -1008,7 +1008,7 @@ class TestJSDocPreservation:
  * @param {number} b - Second number
  * @returns {number} The sum
  */
-function add(a, b) {
+export function add(a, b) {
     const sum = a + b;
     return sum;
 }
@@ -1020,13 +1020,7 @@ function add(a, b) {
         func = functions[0]
 
         optimized_code = """\
-/**
- * Calculates the sum of two numbers.
- * @param {number} a - First number
- * @param {number} b - Second number
- * @returns {number} The sum
- */
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }
 """
@@ -1040,7 +1034,7 @@ function add(a, b) {
  * @param {number} b - Second number
  * @returns {number} The sum
  */
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }
 """
@@ -1054,7 +1048,7 @@ function add(a, b) {
  * A simple cache implementation.
  * @class Cache
  */
-class Cache {
+export class Cache {
     constructor() {
         this.data = new Map();
     }
@@ -1103,7 +1097,7 @@ class Cache {
  * A simple cache implementation.
  * @class Cache
  */
-class Cache {
+export class Cache {
     constructor() {
         this.data = new Map();
     }
@@ -1128,7 +1122,7 @@ class TestAsyncFunctionReplacement:
     def test_replace_async_function_body(self, js_support, temp_project):
         """Test replacing async function preserves async keyword."""
         original_source = """\
-async function fetchData(url) {
+export async function fetchData(url) {
     const response = await fetch(url);
     const data = await response.json();
     return data;
@@ -1141,7 +1135,7 @@ async function fetchData(url) {
         func = functions[0]
 
         optimized_code = """\
-async function fetchData(url) {
+export async function fetchData(url) {
     return (await fetch(url)).json();
 }
 """
@@ -1149,7 +1143,7 @@ async function fetchData(url) {
         result = js_support.replace_function(original_source, func, optimized_code)
 
         expected_result = """\
-async function fetchData(url) {
+export async function fetchData(url) {
     return (await fetch(url)).json();
 }
 """
@@ -1159,7 +1153,7 @@ async function fetchData(url) {
     def test_replace_async_class_method(self, js_support, temp_project):
         """Test replacing async class method."""
         original_source = """\
-class ApiClient {
+export class ApiClient {
     constructor(baseUrl) {
         this.baseUrl = baseUrl;
     }
@@ -1198,7 +1192,7 @@ class ApiClient {
         result = js_support.replace_function(original_source, get_method, optimized_code)
 
         expected_result = """\
-class ApiClient {
+export class ApiClient {
     constructor(baseUrl) {
         this.baseUrl = baseUrl;
     }
@@ -1220,7 +1214,7 @@ class TestGeneratorFunctionReplacement:
     def test_replace_generator_function_body(self, js_support, temp_project):
         """Test replacing generator function preserves generator syntax."""
         original_source = """\
-function* range(start, end) {
+export function* range(start, end) {
     for (let i = start; i < end; i++) {
         yield i;
     }
@@ -1233,7 +1227,7 @@ function* range(start, end) {
         func = functions[0]
 
         optimized_code = """\
-function* range(start, end) {
+export function* range(start, end) {
     let i = start;
     while (i < end) yield i++;
 }
@@ -1242,7 +1236,7 @@ function* range(start, end) {
         result = js_support.replace_function(original_source, func, optimized_code)
 
         expected_result = """\
-function* range(start, end) {
+export function* range(start, end) {
     let i = start;
     while (i < end) yield i++;
 }
@@ -1257,7 +1251,7 @@ class TestTypeScriptReplacement:
     def test_replace_typescript_function_with_types(self, ts_support, temp_project):
         """Test replacing TypeScript function preserves type annotations."""
         original_source = """\
-function processArray(items: number[]): number {
+export function processArray(items: number[]): number {
     let sum = 0;
     for (let i = 0; i < items.length; i++) {
         sum += items[i];
@@ -1272,7 +1266,7 @@ function processArray(items: number[]): number {
         func = functions[0]
 
         optimized_code = """\
-function processArray(items: number[]): number {
+export function processArray(items: number[]): number {
     return items.reduce((a, b) => a + b, 0);
 }
 """
@@ -1280,7 +1274,7 @@ function processArray(items: number[]): number {
         result = ts_support.replace_function(original_source, func, optimized_code)
 
         expected_result = """\
-function processArray(items: number[]): number {
+export function processArray(items: number[]): number {
     return items.reduce((a, b) => a + b, 0);
 }
 """
@@ -1290,7 +1284,7 @@ function processArray(items: number[]): number {
     def test_replace_typescript_class_method_with_generics(self, ts_support, temp_project):
         """Test replacing TypeScript generic class method."""
         original_source = """\
-class Container<T> {
+export class Container<T> {
     private items: T[] = [];
 
     add(item: T): void {
@@ -1325,7 +1319,7 @@ class Container<T> {
         result = ts_support.replace_function(original_source, get_all_method, optimized_code)
 
         expected_result = """\
-class Container<T> {
+export class Container<T> {
     private items: T[] = [];
 
     add(item: T): void {
@@ -1349,7 +1343,7 @@ interface User {
     email: string;
 }
 
-function createUser(name: string, email: string): User {
+export function createUser(name: string, email: string): User {
     const id = Math.random().toString(36).substring(2, 15);
     const user: User = {
         id: id,
@@ -1366,7 +1360,7 @@ function createUser(name: string, email: string): User {
         func = next(f for f in functions if f.function_name == "createUser")
 
         optimized_code = """\
-function createUser(name: string, email: string): User {
+export function createUser(name: string, email: string): User {
     return {
         id: Math.random().toString(36).substring(2, 15),
         name,
@@ -1384,7 +1378,7 @@ interface User {
     email: string;
 }
 
-function createUser(name: string, email: string): User {
+export function createUser(name: string, email: string): User {
     return {
         id: Math.random().toString(36).substring(2, 15),
         name,
@@ -1402,7 +1396,7 @@ class TestComplexReplacements:
     def test_replace_function_with_nested_functions(self, js_support, temp_project):
         """Test replacing function that contains nested function definitions."""
         original_source = """\
-function processItems(items) {
+export function processItems(items) {
     function helper(item) {
         return item * 2;
     }
@@ -1421,7 +1415,7 @@ function processItems(items) {
         process_func = next(f for f in functions if f.function_name == "processItems")
 
         optimized_code = """\
-function processItems(items) {
+export function processItems(items) {
     const helper = x => x * 2;
     return items.map(helper);
 }
@@ -1430,7 +1424,7 @@ function processItems(items) {
         result = js_support.replace_function(original_source, process_func, optimized_code)
 
         expected_result = """\
-function processItems(items) {
+export function processItems(items) {
     const helper = x => x * 2;
     return items.map(helper);
 }
@@ -1441,7 +1435,7 @@ function processItems(items) {
     def test_replace_multiple_methods_sequentially(self, js_support, temp_project):
         """Test replacing multiple methods in the same class sequentially."""
         original_source = """\
-class MathUtils {
+export class MathUtils {
     static sum(arr) {
         let total = 0;
         for (let i = 0; i < arr.length; i++) {
@@ -1478,7 +1472,7 @@ class MathUtils {
         result = js_support.replace_function(original_source, sum_method, optimized_sum)
 
         expected_after_first = """\
-class MathUtils {
+export class MathUtils {
     static sum(arr) {
         return arr.reduce((a, b) => a + b, 0);
     }
@@ -1499,7 +1493,7 @@ class MathUtils {
     def test_replace_function_with_complex_destructuring(self, js_support, temp_project):
         """Test replacing function with complex parameter destructuring."""
         original_source = """\
-function processConfig({ server: { host, port }, database: { url, poolSize } }) {
+export function processConfig({ server: { host, port }, database: { url, poolSize } }) {
     const serverUrl = host + ':' + port;
     const dbConnection = url + '?poolSize=' + poolSize;
     return {
@@ -1515,7 +1509,7 @@ function processConfig({ server: { host, port }, database: { url, poolSize } }) 
         func = functions[0]
 
         optimized_code = """\
-function processConfig({ server: { host, port }, database: { url, poolSize } }) {
+export function processConfig({ server: { host, port }, database: { url, poolSize } }) {
     return {
         server: `${host}:${port}`,
         db: `${url}?poolSize=${poolSize}`
@@ -1526,7 +1520,7 @@ function processConfig({ server: { host, port }, database: { url, poolSize } }) 
         result = js_support.replace_function(original_source, func, optimized_code)
 
         expected_result = """\
-function processConfig({ server: { host, port }, database: { url, poolSize } }) {
+export function processConfig({ server: { host, port }, database: { url, poolSize } }) {
     return {
         server: `${host}:${port}`,
         db: `${url}?poolSize=${poolSize}`
@@ -1543,7 +1537,7 @@ class TestEdgeCases:
     def test_replace_minimal_function_body(self, js_support, temp_project):
         """Test replacing function with minimal body."""
         original_source = """\
-function minimal() {
+export function minimal() {
     return null;
 }
 """
@@ -1554,7 +1548,7 @@ function minimal() {
         func = functions[0]
 
         optimized_code = """\
-function minimal() {
+export function minimal() {
     return { initialized: true, timestamp: Date.now() };
 }
 """
@@ -1562,7 +1556,7 @@ function minimal() {
         result = js_support.replace_function(original_source, func, optimized_code)
 
         expected_result = """\
-function minimal() {
+export function minimal() {
     return { initialized: true, timestamp: Date.now() };
 }
 """
@@ -1572,7 +1566,7 @@ function minimal() {
     def test_replace_single_line_function(self, js_support, temp_project):
         """Test replacing single-line function."""
         original_source = """\
-function identity(x) { return x; }
+export function identity(x) { return x; }
 """
         file_path = temp_project / "utils.js"
         file_path.write_text(original_source, encoding="utf-8")
@@ -1581,13 +1575,13 @@ function identity(x) { return x; }
         func = functions[0]
 
         optimized_code = """\
-function identity(x) { return x ?? null; }
+export function identity(x) { return x ?? null; }
 """
 
         result = js_support.replace_function(original_source, func, optimized_code)
 
         expected_result = """\
-function identity(x) { return x ?? null; }
+export function identity(x) { return x ?? null; }
 """
         assert result == expected_result
         assert js_support.validate_syntax(result) is True
@@ -1595,7 +1589,7 @@ function identity(x) { return x ?? null; }
     def test_replace_function_with_special_characters_in_strings(self, js_support, temp_project):
         """Test replacing function containing special characters in strings."""
         original_source = """\
-function formatMessage(name) {
+export function formatMessage(name) {
     const greeting = 'Hello, ' + name + '!';
     const special = "Contains \\"quotes\\" and \\n newlines";
     return greeting + ' ' + special;
@@ -1608,7 +1602,7 @@ function formatMessage(name) {
         func = functions[0]
 
         optimized_code = """\
-function formatMessage(name) {
+export function formatMessage(name) {
     return `Hello, ${name}! Contains "quotes" and
  newlines`;
 }
@@ -1617,7 +1611,7 @@ function formatMessage(name) {
         result = js_support.replace_function(original_source, func, optimized_code)
 
         expected_result = """\
-function formatMessage(name) {
+export function formatMessage(name) {
     return `Hello, ${name}! Contains "quotes" and
  newlines`;
 }
@@ -1628,7 +1622,7 @@ function formatMessage(name) {
     def test_replace_function_with_regex(self, js_support, temp_project):
         """Test replacing function containing regex patterns."""
         original_source = """\
-function validateEmail(email) {
+export function validateEmail(email) {
     const pattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$/;
     if (pattern.test(email)) {
         return true;
@@ -1643,7 +1637,7 @@ function validateEmail(email) {
         func = functions[0]
 
         optimized_code = """\
-function validateEmail(email) {
+export function validateEmail(email) {
     return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$/.test(email);
 }
 """
@@ -1651,7 +1645,7 @@ function validateEmail(email) {
         result = js_support.replace_function(original_source, func, optimized_code)
 
         expected_result = """\
-function validateEmail(email) {
+export function validateEmail(email) {
     return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$/.test(email);
 }
 """
@@ -1665,11 +1659,11 @@ class TestModuleExportHandling:
     def test_replace_exported_function_commonjs(self, js_support, temp_project):
         """Test replacing function in CommonJS module preserves exports."""
         original_source = """\
-function helper(x) {
+export function helper(x) {
     return x * 2;
 }
 
-function main(data) {
+export function main(data) {
     const results = [];
     for (let i = 0; i < data.length; i++) {
         results.push(helper(data[i]));
@@ -1686,7 +1680,7 @@ module.exports = { main, helper };
         main_func = next(f for f in functions if f.function_name == "main")
 
         optimized_code = """\
-function main(data) {
+export function main(data) {
     return data.map(helper);
 }
 """
@@ -1694,11 +1688,11 @@ function main(data) {
         result = js_support.replace_function(original_source, main_func, optimized_code)
 
         expected_result = """\
-function helper(x) {
+export function helper(x) {
     return x * 2;
 }
 
-function main(data) {
+export function main(data) {
     return data.map(helper);
 }
 
@@ -1757,18 +1751,18 @@ class TestSyntaxValidation:
         test_cases = [
             # (original, optimized, description)
             (
-                "function f(x) { return x + 1; }",
-                "function f(x) { return ++x; }",
+                "export function f(x) { return x + 1; }",
+                "export function f(x) { return ++x; }",
                 "increment replacement"
             ),
             (
-                "function f(arr) { return arr.length > 0; }",
-                "function f(arr) { return !!arr.length; }",
+                "export function f(arr) { return arr.length > 0; }",
+                "export function f(arr) { return !!arr.length; }",
                 "boolean conversion"
             ),
             (
-                "function f(a, b) { if (a) { return a; } return b; }",
-                "function f(a, b) { return a || b; }",
+                "export function f(a, b) { if (a) { return a; } return b; }",
+                "export function f(a, b) { return a || b; }",
                 "logical OR replacement"
             ),
         ]

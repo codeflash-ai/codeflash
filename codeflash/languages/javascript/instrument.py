@@ -56,6 +56,46 @@ codeflash_import_pattern = re.compile(
 )
 
 
+def is_inside_string(code: str, pos: int) -> bool:
+    """Check if a position in code is inside a string literal.
+
+    Handles single quotes, double quotes, and template literals (backticks).
+    Properly handles escaped quotes.
+
+    Args:
+        code: The source code.
+        pos: The position to check.
+
+    Returns:
+        True if the position is inside a string literal.
+
+    """
+    in_string = False
+    string_char = None
+    i = 0
+
+    while i < pos:
+        char = code[i]
+
+        if in_string:
+            # Check for escape sequence
+            if char == "\\" and i + 1 < len(code):
+                i += 2  # Skip escaped character
+                continue
+            # Check for end of string
+            if char == string_char:
+                in_string = False
+                string_char = None
+        # Check for start of string
+        elif char in "\"'`":
+            in_string = True
+            string_char = char
+
+        i += 1
+
+    return in_string
+
+
 class StandaloneCallTransformer:
     """Transforms standalone func(...) calls in JavaScript test code.
 
@@ -82,6 +122,11 @@ class StandaloneCallTransformer:
         # Captures: (whitespace)(await )?(object.)*func_name(
         # We'll filter out expect() and codeflash. cases in the transform loop
         self._call_pattern = re.compile(rf"(\s*)(await\s+)?((?:\w+\.)*){re.escape(self.func_name)}\s*\(")
+        # Pattern to match bracket notation: obj['func_name']( or obj["func_name"](
+        # Captures: (whitespace)(await )?(obj)['|"]func_name['|"](
+        self._bracket_call_pattern = re.compile(
+            rf"(\s*)(await\s+)?(\w+)\[['\"]({re.escape(self.func_name)})['\"]]\s*\("
+        )
 
     def transform(self, code: str) -> str:
         """Transform all standalone calls in the code."""
@@ -89,7 +134,25 @@ class StandaloneCallTransformer:
         pos = 0
 
         while pos < len(code):
-            match = self._call_pattern.search(code, pos)
+            # Try both dot notation and bracket notation patterns
+            dot_match = self._call_pattern.search(code, pos)
+            bracket_match = self._bracket_call_pattern.search(code, pos)
+
+            # Choose the first match (by position)
+            match = None
+            is_bracket_notation = False
+            if dot_match and bracket_match:
+                if dot_match.start() <= bracket_match.start():
+                    match = dot_match
+                else:
+                    match = bracket_match
+                    is_bracket_notation = True
+            elif dot_match:
+                match = dot_match
+            elif bracket_match:
+                match = bracket_match
+                is_bracket_notation = True
+
             if not match:
                 result.append(code[pos:])
                 break
@@ -106,7 +169,11 @@ class StandaloneCallTransformer:
             result.append(code[pos:match_start])
 
             # Try to parse the full standalone call
-            standalone_match = self._parse_standalone_call(code, match)
+            if is_bracket_notation:
+                standalone_match = self._parse_bracket_standalone_call(code, match)
+            else:
+                standalone_match = self._parse_standalone_call(code, match)
+
             if standalone_match is None:
                 # Couldn't parse, skip this match
                 result.append(code[match_start : match.end()])
@@ -115,7 +182,7 @@ class StandaloneCallTransformer:
 
             # Generate the transformed code
             self.invocation_counter += 1
-            transformed = self._generate_transformed_call(standalone_match)
+            transformed = self._generate_transformed_call(standalone_match, is_bracket_notation)
             result.append(transformed)
             pos = standalone_match.end_pos
 
@@ -123,6 +190,10 @@ class StandaloneCallTransformer:
 
     def _should_skip_match(self, code: str, start: int, match: re.Match) -> bool:
         """Check if the match should be skipped (inside expect, already transformed, etc.)."""
+        # Skip if inside a string literal (e.g., test description)
+        if is_inside_string(code, start):
+            return True
+
         # Look backwards to check context
         lookback_start = max(0, start - 200)
         lookback = code[lookback_start:start]
@@ -252,17 +323,24 @@ class StandaloneCallTransformer:
         in_string = False
         string_char = None
 
-        while pos < len(code) and depth > 0:
-            char = code[pos]
+        s = code  # local alias for speed
+        s_len = len(s)
+        quotes = "\"'`"
+
+        while pos < s_len and depth > 0:
+            char = s[pos]
 
             # Handle string literals
-            if char in "\"'`" and (pos == 0 or code[pos - 1] != "\\"):
-                if not in_string:
-                    in_string = True
-                    string_char = char
-                elif char == string_char:
-                    in_string = False
-                    string_char = None
+            # Note: preserve original escaping semantics (only checks immediate preceding char)
+            if char in quotes:
+                prev_char = s[pos - 1] if pos > 0 else None
+                if prev_char != "\\":
+                    if not in_string:
+                        in_string = True
+                        string_char = char
+                    elif char == string_char:
+                        in_string = False
+                        string_char = None
             elif not in_string:
                 if char == "(":
                     depth += 1
@@ -274,19 +352,64 @@ class StandaloneCallTransformer:
         if depth != 0:
             return None, -1
 
-        return code[open_paren_pos + 1 : pos - 1], pos
+        # slice once
+        return s[open_paren_pos + 1 : pos - 1], pos
 
-    def _generate_transformed_call(self, match: StandaloneCallMatch) -> str:
+    def _parse_bracket_standalone_call(self, code: str, match: re.Match) -> StandaloneCallMatch | None:
+        """Parse a complete standalone obj['func'](...) call with bracket notation."""
+        leading_ws = match.group(1)
+        prefix = match.group(2) or ""  # "await " or ""
+        obj_name = match.group(3)  # The object name before bracket
+        # match.group(4) is the function name inside brackets
+
+        # Find the opening paren position
+        match_text = match.group(0)
+        paren_offset = match_text.rfind("(")
+        open_paren_pos = match.start() + paren_offset
+
+        # Find the arguments (content inside parens)
+        func_args, close_pos = self._find_balanced_parens(code, open_paren_pos)
+        if func_args is None:
+            return None
+
+        # Check for trailing semicolon
+        end_pos = close_pos
+        # Skip whitespace
+        s = code
+        s_len = len(s)
+        while end_pos < s_len and s[end_pos] in " \t":
+            end_pos += 1
+
+        has_trailing_semicolon = end_pos < s_len and s[end_pos] == ";"
+        if has_trailing_semicolon:
+            end_pos += 1
+
+        return StandaloneCallMatch(
+            start_pos=match.start(),
+            end_pos=end_pos,
+            leading_whitespace=leading_ws,
+            func_args=func_args,
+            prefix=prefix,
+            object_prefix=f"{obj_name}.",  # Use dot notation format for consistency
+            has_trailing_semicolon=has_trailing_semicolon,
+        )
+
+    def _generate_transformed_call(self, match: StandaloneCallMatch, is_bracket_notation: bool = False) -> str:
         """Generate the transformed code for a standalone call."""
         line_id = str(self.invocation_counter)
         args_str = match.func_args.strip()
         semicolon = ";" if match.has_trailing_semicolon else ""
 
-        # Handle method calls on objects (e.g., calc.fibonacci, this.method)
+        # Handle method calls on objects (e.g., calc.fibonacci, this.method, instance['method'])
         if match.object_prefix:
             # Remove trailing dot from object prefix for the bind call
             obj = match.object_prefix.rstrip(".")
-            full_method = f"{obj}.{self.func_name}"
+
+            # For bracket notation, use bracket access syntax for the bind
+            if is_bracket_notation:
+                full_method = f"{obj}['{self.func_name}']"
+            else:
+                full_method = f"{obj}.{self.func_name}"
 
             if args_str:
                 return (
@@ -369,6 +492,12 @@ class ExpectCallTransformer:
             if not match:
                 result.append(code[pos:])
                 break
+
+            # Skip if inside a string literal (e.g., test description)
+            if is_inside_string(code, match.start()):
+                result.append(code[pos : match.end()])
+                pos = match.end()
+                continue
 
             # Add everything before the match
             result.append(code[pos : match.start()])
@@ -1071,3 +1200,173 @@ def instrument_generated_js_test(
         mode=mode,
         remove_assertions=True,
     )
+
+
+def fix_imports_inside_test_blocks(test_code: str) -> str:
+    """Fix import statements that appear inside test/it blocks.
+
+    JavaScript/TypeScript `import` statements must be at the top level of a module.
+    The AI sometimes generates imports inside test functions, which is invalid syntax.
+
+    This function detects such patterns and converts them to dynamic require() calls
+    which are valid inside functions.
+
+    Args:
+        test_code: The generated test code.
+
+    Returns:
+        Fixed test code with imports converted to require() inside functions.
+
+    """
+    if not test_code or not test_code.strip():
+        return test_code
+
+    # Pattern to match import statements inside functions
+    # This captures imports that appear after function/test block openings
+    # We look for lines that:
+    # 1. Start with whitespace (indicating they're inside a block)
+    # 2. Have an import statement
+
+    lines = test_code.split("\n")
+    result_lines = []
+    brace_depth = 0
+    in_test_block = False
+
+    for line in lines:
+        stripped = line.strip()
+
+        # Track brace depth to know if we're inside a block
+        # Count braces, but ignore braces in strings (simplified check)
+        for char in stripped:
+            if char == "{":
+                brace_depth += 1
+            elif char == "}":
+                brace_depth -= 1
+
+        # Check if we're entering a test/it/describe block
+        if re.match(r"^(test|it|describe|beforeEach|afterEach|beforeAll|afterAll)\s*\(", stripped):
+            in_test_block = True
+
+        # Check for import statement inside a block (brace_depth > 0 means we're inside a function/block)
+        if brace_depth > 0 and stripped.startswith("import "):
+            # Convert ESM import to require
+            # Pattern: import { name } from 'module' -> const { name } = require('module')
+            # Pattern: import name from 'module' -> const name = require('module')
+
+            named_import = re.match(r"import\s+\{([^}]+)\}\s+from\s+['\"]([^'\"]+)['\"]", stripped)
+            default_import = re.match(r"import\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"]", stripped)
+            namespace_import = re.match(r"import\s+\*\s+as\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"]", stripped)
+
+            leading_whitespace = line[: len(line) - len(line.lstrip())]
+
+            if named_import:
+                names = named_import.group(1)
+                module = named_import.group(2)
+                new_line = f"{leading_whitespace}const {{{names}}} = require('{module}');"
+                result_lines.append(new_line)
+                logger.debug(f"Fixed import inside block: {stripped} -> {new_line.strip()}")
+                continue
+            if default_import:
+                name = default_import.group(1)
+                module = default_import.group(2)
+                new_line = f"{leading_whitespace}const {name} = require('{module}');"
+                result_lines.append(new_line)
+                logger.debug(f"Fixed import inside block: {stripped} -> {new_line.strip()}")
+                continue
+            if namespace_import:
+                name = namespace_import.group(1)
+                module = namespace_import.group(2)
+                new_line = f"{leading_whitespace}const {name} = require('{module}');"
+                result_lines.append(new_line)
+                logger.debug(f"Fixed import inside block: {stripped} -> {new_line.strip()}")
+                continue
+
+        result_lines.append(line)
+
+    return "\n".join(result_lines)
+
+
+def fix_jest_mock_paths(test_code: str, test_file_path: Path, source_file_path: Path, tests_root: Path) -> str:
+    """Fix relative paths in jest.mock() calls to be correct from the test file's location.
+
+    The AI sometimes generates jest.mock() calls with paths relative to the source file
+    instead of the test file. For example:
+    - Source at `src/queue/queue.ts` imports `../environment` (-> src/environment)
+    - Test at `tests/test.test.ts` generates `jest.mock('../environment')` (-> ./environment, wrong!)
+    - Should generate `jest.mock('../src/environment')`
+
+    This function detects relative mock paths and adjusts them based on the test file's
+    location relative to the source file's directory.
+
+    Args:
+        test_code: The generated test code.
+        test_file_path: Path to the test file being generated.
+        source_file_path: Path to the source file being tested.
+        tests_root: Root directory of the tests.
+
+    Returns:
+        Fixed test code with corrected mock paths.
+
+    """
+    if not test_code or not test_code.strip():
+        return test_code
+
+    import os
+
+    # Get the directory containing the source file and the test file
+    source_dir = source_file_path.resolve().parent
+    test_dir = test_file_path.resolve().parent
+    project_root = tests_root.resolve().parent if tests_root.name == "tests" else tests_root.resolve()
+
+    # Pattern to match jest.mock() or jest.doMock() with relative paths
+    mock_pattern = re.compile(r"(jest\.(?:mock|doMock)\s*\(\s*['\"])(\.\./[^'\"]+|\.\/[^'\"]+)(['\"])")
+
+    def fix_mock_path(match: re.Match[str]) -> str:
+        original = match.group(0)
+        prefix = match.group(1)
+        rel_path = match.group(2)
+        suffix = match.group(3)
+
+        # Resolve the path as if it were relative to the source file's directory
+        # (which is how the AI often generates it)
+        source_relative_resolved = (source_dir / rel_path).resolve()
+
+        # Check if this resolved path exists or if adjusting it would make more sense
+        # Calculate what the correct relative path from the test file should be
+        try:
+            # First, try to find if the path makes sense from the test directory
+            test_relative_resolved = (test_dir / rel_path).resolve()
+
+            # If the path exists relative to test dir, keep it
+            if test_relative_resolved.exists() or (
+                test_relative_resolved.with_suffix(".ts").exists()
+                or test_relative_resolved.with_suffix(".js").exists()
+                or test_relative_resolved.with_suffix(".tsx").exists()
+                or test_relative_resolved.with_suffix(".jsx").exists()
+            ):
+                return original  # Keep original, it's valid
+
+            # If path exists relative to source dir, recalculate from test dir
+            if source_relative_resolved.exists() or (
+                source_relative_resolved.with_suffix(".ts").exists()
+                or source_relative_resolved.with_suffix(".js").exists()
+                or source_relative_resolved.with_suffix(".tsx").exists()
+                or source_relative_resolved.with_suffix(".jsx").exists()
+            ):
+                # Calculate the correct relative path from test_dir to source_relative_resolved
+                new_rel_path = os.path.relpath(str(source_relative_resolved), str(test_dir))
+                # Ensure it starts with ./ or ../
+                if not new_rel_path.startswith("../") and not new_rel_path.startswith("./"):
+                    new_rel_path = f"./{new_rel_path}"
+                # Use forward slashes
+                new_rel_path = new_rel_path.replace("\\", "/")
+
+                logger.debug(f"Fixed jest.mock path: {rel_path} -> {new_rel_path}")
+                return f"{prefix}{new_rel_path}{suffix}"
+
+        except (ValueError, OSError):
+            pass  # Path resolution failed, keep original
+
+        return original  # Keep original if we can't fix it
+
+    return mock_pattern.sub(fix_mock_path, test_code)
