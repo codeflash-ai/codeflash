@@ -32,6 +32,7 @@ from codeflash.models.models import (
     FunctionSource,
 )
 from codeflash.optimization.function_context import belongs_to_function_qualified
+import re
 
 if TYPE_CHECKING:
     from jedi.api.classes import Name
@@ -39,6 +40,8 @@ if TYPE_CHECKING:
 
     from codeflash.context.unused_definition_remover import UsageInfo
     from codeflash.languages.base import HelperFunction
+
+_RE_JAVADOC = re.compile(r"/\*\*.*?\*/\s*", re.DOTALL)
 
 
 def build_testgen_context(
@@ -213,9 +216,7 @@ def _strip_javadoc_comments(source: str) -> str:
 
     Preserves single-line comments (//) and regular block comments (/* ... */).
     """
-    import re
-
-    return re.sub(r"/\*\*.*?\*/\s*", "", source, flags=re.DOTALL)
+    return _RE_JAVADOC.sub("", source)
 
 
 def _build_code_strings_for_language(
@@ -245,9 +246,26 @@ def _build_code_strings_for_language(
 
     # Get relative path for target file
     try:
-        target_relative_path = function_to_optimize.file_path.resolve().relative_to(project_root_path.resolve())
-    except ValueError:
-        target_relative_path = function_to_optimize.file_path
+        project_root_resolved = project_root_path.resolve()
+    except Exception:
+        # If resolve fails for some reason, fall back to using the original path object
+        project_root_resolved = project_root_path
+
+    # Get relative path for target file (resolve target file once)
+    try:
+        target_file_resolved = function_to_optimize.file_path.resolve()
+        try:
+            target_relative_path = target_file_resolved.relative_to(project_root_resolved)
+        except ValueError:
+            target_relative_path = function_to_optimize.file_path
+    except Exception:
+        # If resolve fails, fall back to original path and attempt relative_to once
+        try:
+            target_relative_path = function_to_optimize.file_path.relative_to(project_root_resolved)
+        except Exception:
+            target_relative_path = function_to_optimize.file_path
+
+    # Group helpers by file path
 
     # Group helpers by file path
     helpers_by_file: dict[Path, list] = defaultdict(list)
@@ -281,7 +299,7 @@ def _build_code_strings_for_language(
     if include_same_file_helpers:
         same_file_helpers = helpers_by_file.get(function_to_optimize.file_path, [])
         if same_file_helpers:
-            helper_code = "\n\n".join(h.source_code for h in same_file_helpers)
+            helper_code = "\n\n".join([h.source_code for h in same_file_helpers])
             target_file_code = target_file_code + "\n\n" + helper_code
 
     # Add imports to target file code
@@ -302,11 +320,16 @@ def _build_code_strings_for_language(
                 continue  # Already included in target file
 
             try:
-                helper_relative_path = file_path.resolve().relative_to(project_root_path.resolve())
-            except ValueError:
+                helper_file_resolved = file_path.resolve()
+                try:
+                    helper_relative_path = helper_file_resolved.relative_to(project_root_resolved)
+                except ValueError:
+                    helper_relative_path = file_path
+            except Exception:
+                # Fall back if resolve fails
                 helper_relative_path = file_path
 
-            combined_helper_code = "\n\n".join(h.source_code for h in file_helpers)
+            combined_helper_code = "\n\n".join([h.source_code for h in file_helpers])
             if strip_javadoc:
                 combined_helper_code = _strip_javadoc_comments(combined_helper_code)
 
