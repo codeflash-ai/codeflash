@@ -136,6 +136,7 @@ def parse_config_file(
     if config == {} and lsp_mode:
         return {}, config_file_path
 
+    # Preserve language field if present (important for Java/JS projects using codeflash.toml)
     # default values:
     path_keys = ["module-root", "tests-root", "benchmarks-root"]
     path_list_keys = ["ignore-paths"]

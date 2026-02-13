@@ -57,6 +57,10 @@ class CodeflashConfig(BaseModel):
         """
         config: dict[str, Any] = {}
 
+        # Include language if not Python (since Python is the default)
+        if self.language and self.language != "python":
+            config["language"] = self.language
+
         # Always include required fields
         config["module-root"] = self.module_root
         if self.tests_root:

@@ -36,7 +36,7 @@ class DetectedProject:
     """
 
     # Core detection results
-    language: str  # "python" | "javascript" | "typescript"
+    language: str  # "python" | "javascript" | "typescript" | "java"
     project_root: Path
     module_root: Path
     tests_root: Path | None
@@ -164,7 +164,7 @@ def _find_project_root(start_path: Path) -> Path | None:
 
     while current != current.parent:
         # Check for project markers
-        markers = [".git", "pyproject.toml", "package.json", "Cargo.toml"]
+        markers = [".git", "pyproject.toml", "package.json", "Cargo.toml", "pom.xml", "build.gradle", "build.gradle.kts"]
         for marker in markers:
             if (current / marker).exists():
                 return current
@@ -193,6 +193,14 @@ def _detect_language(project_root: Path) -> tuple[str, float, str]:
     has_pyproject = (project_root / "pyproject.toml").exists()
     has_setup_py = (project_root / "setup.py").exists()
     has_package_json = (project_root / "package.json").exists()
+    has_pom_xml = (project_root / "pom.xml").exists()
+    has_build_gradle = (project_root / "build.gradle").exists() or (project_root / "build.gradle.kts").exists()
+
+    # Java (pom.xml or build.gradle is definitive)
+    if has_pom_xml:
+        return "java", 1.0, "pom.xml found"
+    if has_build_gradle:
+        return "java", 1.0, "build.gradle found"
 
     # TypeScript (tsconfig.json is definitive)
     if has_tsconfig:
@@ -218,7 +226,10 @@ def _detect_language(project_root: Path) -> tuple[str, float, str]:
     py_count = len(list(project_root.rglob("*.py")))
     js_count = len(list(project_root.rglob("*.js")))
     ts_count = len(list(project_root.rglob("*.ts")))
+    java_count = len(list(project_root.rglob("*.java")))
 
+    if java_count > 0 and java_count >= max(py_count, js_count, ts_count):
+        return "java", 0.5, f"found {java_count} .java files"
     if ts_count > 0:
         return "typescript", 0.5, f"found {ts_count} .ts files"
     if js_count > py_count:
@@ -243,6 +254,8 @@ def _detect_module_root(project_root: Path, language: str) -> tuple[Path, str]:
     """
     if language in ("javascript", "typescript"):
         return _detect_js_module_root(project_root)
+    if language == "java":
+        return _detect_java_module_root(project_root)
     return _detect_python_module_root(project_root)
 
 
@@ -382,6 +395,44 @@ def _detect_js_module_root(project_root: Path) -> tuple[Path, str]:
     return project_root, "project root"
 
 
+def _detect_java_module_root(project_root: Path) -> tuple[Path, str]:
+    """Detect Java source root directory.
+
+    Priority:
+    1. src/main/java (standard Maven/Gradle layout)
+    2. src/ directory
+    3. Project root
+
+    """
+    # Standard Maven/Gradle layout
+    standard_src = project_root / "src" / "main" / "java"
+    if standard_src.is_dir():
+        return standard_src, "src/main/java (Maven/Gradle standard)"
+
+    # Try to detect from pom.xml
+    import xml.etree.ElementTree as ET
+
+    pom_path = project_root / "pom.xml"
+    if pom_path.exists():
+        try:
+            tree = ET.parse(pom_path)
+            root = tree.getroot()
+            ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+            source_dir = root.find(".//m:sourceDirectory", ns)
+            if source_dir is not None and source_dir.text:
+                src_path = project_root / source_dir.text
+                if src_path.is_dir():
+                    return src_path, f"{source_dir.text} (from pom.xml)"
+        except ET.ParseError:
+            pass
+
+    # Fallback to src directory
+    if (project_root / "src").is_dir():
+        return project_root / "src", "src/ directory"
+
+    return project_root, "project root"
+
+
 def is_build_output_dir(path: Path) -> bool:
     """Check if a path is within a common build output directory.
 
@@ -415,6 +466,45 @@ def _detect_tests_root(project_root: Path, language: str) -> tuple[Path | None, 
     - spec/ (Ruby/JavaScript)
 
     """
+    # Java: standard Maven/Gradle test layout
+    if language == "java":
+        import xml.etree.ElementTree as ET
+
+        standard_test = project_root / "src" / "test" / "java"
+        if standard_test.is_dir():
+            return standard_test, "src/test/java (Maven/Gradle standard)"
+
+        # Check for multi-module Maven project with a test module
+        # that has a custom testSourceDirectory
+        for test_module_name in ["test", "tests"]:
+            test_module_dir = project_root / test_module_name
+            test_module_pom = test_module_dir / "pom.xml"
+            if test_module_pom.exists():
+                try:
+                    tree = ET.parse(test_module_pom)
+                    root = tree.getroot()
+                    ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+                    for build in [root.find("m:build", ns), root.find("build")]:
+                        if build is not None:
+                            for elem in [build.find("m:testSourceDirectory", ns), build.find("testSourceDirectory")]:
+                                if elem is not None and elem.text:
+                                    # Resolve ${project.basedir}/src -> test_module_dir/src
+                                    dir_text = elem.text.strip().replace("${project.basedir}/", "").replace("${project.basedir}", ".")
+                                    resolved = test_module_dir / dir_text
+                                    if resolved.is_dir():
+                                        return resolved, f"{test_module_name}/{dir_text} (from {test_module_name}/pom.xml testSourceDirectory)"
+                except ET.ParseError:
+                    pass
+                # Test module exists but no custom testSourceDirectory - use the module root
+                if test_module_dir.is_dir():
+                    return test_module_dir, f"{test_module_name}/ directory (Maven test module)"
+
+        if (project_root / "test").is_dir():
+            return project_root / "test", "test/ directory"
+        if (project_root / "tests").is_dir():
+            return project_root / "tests", "tests/ directory"
+        return project_root / "src" / "test" / "java", "src/test/java (default)"
+
     # Common test directory names
     test_dirs = ["tests", "test", "__tests__", "spec"]
 
@@ -451,7 +541,44 @@ def _detect_test_runner(project_root: Path, language: str) -> tuple[str, str]:
     """
     if language in ("javascript", "typescript"):
         return _detect_js_test_runner(project_root)
+    if language == "java":
+        return _detect_java_test_runner(project_root)
     return _detect_python_test_runner(project_root)
+
+
+def _detect_java_test_runner(project_root: Path) -> tuple[str, str]:
+    """Detect Java test framework."""
+    import xml.etree.ElementTree as ET
+
+    pom_path = project_root / "pom.xml"
+    if pom_path.exists():
+        try:
+            content = pom_path.read_text(encoding="utf-8")
+            if "junit-jupiter" in content or "junit.jupiter" in content:
+                return "junit5", "from pom.xml (JUnit Jupiter)"
+            if "testng" in content.lower():
+                return "testng", "from pom.xml (TestNG)"
+            if "junit" in content.lower():
+                return "junit4", "from pom.xml (JUnit)"
+        except Exception:
+            pass
+
+    gradle_file = project_root / "build.gradle"
+    if not gradle_file.exists():
+        gradle_file = project_root / "build.gradle.kts"
+    if gradle_file.exists():
+        try:
+            content = gradle_file.read_text(encoding="utf-8")
+            if "junit-jupiter" in content or "useJUnitPlatform" in content:
+                return "junit5", "from build.gradle (JUnit 5)"
+            if "testng" in content.lower():
+                return "testng", "from build.gradle (TestNG)"
+            if "junit" in content.lower():
+                return "junit4", "from build.gradle (JUnit)"
+        except Exception:
+            pass
+
+    return "junit5", "default (JUnit 5)"
 
 
 def _detect_python_test_runner(project_root: Path) -> tuple[str, str]:
@@ -695,6 +822,7 @@ def _detect_ignore_paths(project_root: Path, language: str) -> tuple[list[Path],
         ],
         "javascript": ["node_modules", "dist", "build", ".next", ".nuxt", "coverage", ".cache"],
         "typescript": ["node_modules", "dist", "build", ".next", ".nuxt", "coverage", ".cache"],
+        "java": ["target", "build", ".gradle", ".idea", "out"],
     }
 
     # Add default ignores

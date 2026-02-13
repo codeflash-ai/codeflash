@@ -21,9 +21,11 @@ from typing import Any
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.languages.base import TestResult
 from codeflash.languages.java.build_tools import (
+    add_codeflash_dependency_to_pom,
     add_jacoco_plugin_to_pom,
     find_maven_executable,
     get_jacoco_xml_path,
+    install_codeflash_runtime,
     is_jacoco_configured,
 )
 
@@ -51,6 +53,92 @@ def _validate_java_class_name(class_name: str) -> bool:
 
     """
     return bool(_VALID_JAVA_CLASS_NAME.match(class_name))
+
+
+def _find_runtime_jar() -> Path | None:
+    """Find the codeflash-runtime JAR file.
+
+    Checks local Maven repo, package resources, and development build directory.
+    """
+    # Check local Maven repository first (fastest)
+    m2_jar = (
+        Path.home()
+        / ".m2"
+        / "repository"
+        / "com"
+        / "codeflash"
+        / "codeflash-runtime"
+        / "1.0.0"
+        / "codeflash-runtime-1.0.0.jar"
+    )
+    if m2_jar.exists():
+        return m2_jar
+
+    # Check bundled JAR in package resources
+    resources_jar = Path(__file__).parent / "resources" / "codeflash-runtime-1.0.0.jar"
+    if resources_jar.exists():
+        return resources_jar
+
+    # Check development build directory
+    dev_jar = Path(__file__).parent.parent.parent.parent / "codeflash-java-runtime" / "target" / "codeflash-runtime-1.0.0.jar"
+    if dev_jar.exists():
+        return dev_jar
+
+    return None
+
+
+def _ensure_codeflash_runtime(maven_root: Path, test_module: str | None) -> bool:
+    """Ensure codeflash-runtime JAR is installed and added as a dependency.
+
+    This must be called before running any Maven tests that use generated
+    instrumented test code, since the generated tests import
+    com.codeflash.CodeflashHelper from the codeflash-runtime JAR.
+
+    Args:
+        maven_root: Root directory of the Maven project.
+        test_module: For multi-module projects, the test module name.
+
+    Returns:
+        True if runtime is available, False otherwise.
+
+    """
+    runtime_jar = _find_runtime_jar()
+    if runtime_jar is None:
+        logger.error("codeflash-runtime JAR not found. Generated tests will fail to compile.")
+        return False
+
+    # Install to local Maven repo if not already there
+    m2_jar = (
+        Path.home()
+        / ".m2"
+        / "repository"
+        / "com"
+        / "codeflash"
+        / "codeflash-runtime"
+        / "1.0.0"
+        / "codeflash-runtime-1.0.0.jar"
+    )
+    if not m2_jar.exists():
+        logger.info("Installing codeflash-runtime JAR to local Maven repository")
+        if not install_codeflash_runtime(maven_root, runtime_jar):
+            logger.error("Failed to install codeflash-runtime to local Maven repository")
+            return False
+
+    # Add dependency to the appropriate pom.xml
+    if test_module:
+        pom_path = maven_root / test_module / "pom.xml"
+    else:
+        pom_path = maven_root / "pom.xml"
+
+    if pom_path.exists():
+        if not add_codeflash_dependency_to_pom(pom_path):
+            logger.error("Failed to add codeflash-runtime dependency to %s", pom_path)
+            return False
+    else:
+        logger.warning("pom.xml not found at %s, cannot add codeflash-runtime dependency", pom_path)
+        return False
+
+    return True
 
 
 def _extract_modules_from_pom_content(content: str) -> list[str]:
@@ -284,6 +372,9 @@ def run_behavioral_tests(
     # Detect multi-module Maven projects where tests are in a different module
     maven_root, test_module = _find_multi_module_root(project_root, test_paths)
 
+    # Ensure codeflash-runtime is installed and added as dependency before compilation
+    _ensure_codeflash_runtime(maven_root, test_module)
+
     # Create SQLite database path for behavior capture - use standard path that parse_test_results expects
     sqlite_db_path = get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite"))
 
@@ -505,14 +596,10 @@ def _run_tests_direct(
         CompletedProcess with test results.
 
     """
-    # Find java executable
-    java_home = os.environ.get("JAVA_HOME")
-    if java_home:
-        java = Path(java_home) / "bin" / "java"
-        if not java.exists():
-            java = "java"
-    else:
-        java = "java"
+    # Find java executable (reuse comparator's robust finder for macOS compatibility)
+    from codeflash.languages.java.comparator import _find_java_executable
+
+    java = _find_java_executable() or "java"
 
     # Build command using JUnit Platform Console Launcher
     # The launcher is included in junit-platform-console-standalone or junit-jupiter
@@ -766,6 +853,9 @@ def run_benchmarking_tests(
 
     # Detect multi-module Maven projects where tests are in a different module
     maven_root, test_module = _find_multi_module_root(project_root, test_paths)
+
+    # Ensure codeflash-runtime is installed and added as dependency before compilation
+    _ensure_codeflash_runtime(maven_root, test_module)
 
     # Get test class names
     test_classes = _get_test_class_names(test_paths, mode="performance")
@@ -1088,6 +1178,22 @@ def _run_maven_tests(
     maven_goal = "verify" if enable_coverage else "test"
     cmd = [mvn, maven_goal, "-fae"]  # Fail at end to run all tests
 
+    # Add --add-opens flags for Java 16+ module system compatibility.
+    # The codeflash-runtime Serializer uses Kryo which needs reflective access to
+    # java.base internals for serializing test inputs/outputs to SQLite.
+    # These flags are safe no-ops on older Java versions.
+    # Note: This overrides JaCoCo's argLine for the forked JVM, but JaCoCo coverage
+    # is handled separately via enable_coverage and the verify phase.
+    add_opens_flags = " ".join([
+        "--add-opens java.base/java.util=ALL-UNNAMED",
+        "--add-opens java.base/java.lang=ALL-UNNAMED",
+        "--add-opens java.base/java.lang.reflect=ALL-UNNAMED",
+        "--add-opens java.base/java.io=ALL-UNNAMED",
+        "--add-opens java.base/java.math=ALL-UNNAMED",
+        "--add-opens java.base/java.net=ALL-UNNAMED",
+    ])
+    cmd.append(f"-DargLine={add_opens_flags}")
+
     # When coverage is enabled, continue build even if tests fail so JaCoCo report is generated
     if enable_coverage:
         cmd.append("-Dmaven.test.failure.ignore=true")
@@ -1296,6 +1402,21 @@ def _path_to_class_name(path: Path) -> str | None:
         class_parts[-1] = class_parts[-1].replace(".java", "")
         return ".".join(class_parts)
 
+    # For non-standard source directories (e.g., test/src/com/...),
+    # read the package declaration from the Java file itself
+    try:
+        if path.exists():
+            content = path.read_text(encoding="utf-8")
+            for line in content.split("\n"):
+                line = line.strip()
+                if line.startswith("package "):
+                    package = line[8:].rstrip(";").strip()
+                    return f"{package}.{path.stem}"
+                if line and not line.startswith("//") and not line.startswith("/*") and not line.startswith("*"):
+                    break
+    except Exception:
+        pass
+
     # Fallback: just use the file name
     return path.stem
 
@@ -1499,6 +1620,9 @@ def run_line_profile_tests(
 
     # Detect multi-module Maven projects
     maven_root, test_module = _find_multi_module_root(project_root, test_paths)
+
+    # Ensure codeflash-runtime is installed and added as dependency before compilation
+    _ensure_codeflash_runtime(maven_root, test_module)
 
     # Set up environment with profiling mode
     run_env = os.environ.copy()
