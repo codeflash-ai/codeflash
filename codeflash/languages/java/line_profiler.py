@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -93,18 +92,18 @@ class JavaLineProfiler:
         # Add profiler class and initialization
         profiler_class_code = self._generate_profiler_class()
 
-        # Insert profiler class before the package's first class
-        # Find the first class/interface/enum/record declaration
-        # Must handle any combination of modifiers: public final class, abstract class, etc.
-        class_pattern = re.compile(
-            r"^(?:(?:public|private|protected|final|abstract|static|sealed|non-sealed)\s+)*"
-            r"(?:class|interface|enum|record)\s+"
-        )
+        # Insert profiler class before the package's first class declaration.
+        # Uses tree-sitter find_classes() to handle any modifier combination
+        # (public final class, abstract class, etc.).
+        from codeflash.languages.java.parser import get_java_analyzer
+
+        analyzer = get_java_analyzer()
+        source_text = "".join(lines)
+        classes = analyzer.find_classes(source_text)
         import_end_idx = 0
-        for i, line in enumerate(lines):
-            if class_pattern.match(line.strip()):
-                import_end_idx = i
-                break
+        if classes:
+            # find_classes returns 1-indexed start_line; convert to 0-indexed
+            import_end_idx = classes[0].start_line - 1
 
         lines_with_profiler = (
             lines[:import_end_idx] + [profiler_class_code + "\n"] + lines[import_end_idx:]

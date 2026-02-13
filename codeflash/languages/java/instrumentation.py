@@ -42,102 +42,6 @@ def _get_function_name(func: Any) -> str:
 # Pattern to detect primitive array types in assertions
 _PRIMITIVE_ARRAY_PATTERN = re.compile(r"new\s+(int|long|double|float|short|byte|char|boolean)\s*\[\s*\]")
 
-# Pattern to match @Test annotation exactly (not @TestOnly, @TestFactory, etc.)
-_TEST_ANNOTATION_RE = re.compile(r"^@Test(?:\s*\(.*\))?(?:\s.*)?$")
-
-
-def _is_test_annotation(stripped_line: str) -> bool:
-    """Check if a stripped line is an @Test annotation (not @TestOnly, @TestFactory, etc.).
-
-    Matches:
-        @Test
-        @Test(expected = ...)
-        @Test(timeout = 5000)
-    Does NOT match:
-        @TestOnly
-        @TestFactory
-        @TestTemplate
-    """
-    return bool(_TEST_ANNOTATION_RE.match(stripped_line))
-
-
-def _find_balanced_end(text: str, start: int) -> int:
-    """Find the position after the closing paren that balances the opening paren at start.
-
-    Args:
-        text: The source text.
-        start: Index of the opening parenthesis '('.
-
-    Returns:
-        Index one past the matching closing ')', or -1 if not found.
-
-    """
-    if start >= len(text) or text[start] != "(":
-        return -1
-    depth = 1
-    pos = start + 1
-    in_string = False
-    string_char = None
-    in_char = False
-    while pos < len(text) and depth > 0:
-        ch = text[pos]
-        prev = text[pos - 1] if pos > 0 else ""
-        if ch == "'" and not in_string and prev != "\\":
-            in_char = not in_char
-        elif ch == '"' and not in_char and prev != "\\":
-            if not in_string:
-                in_string = True
-                string_char = ch
-            elif ch == string_char:
-                in_string = False
-                string_char = None
-        elif not in_string and not in_char:
-            if ch == "(":
-                depth += 1
-            elif ch == ")":
-                depth -= 1
-        pos += 1
-    return pos if depth == 0 else -1
-
-
-def _find_method_calls_balanced(line: str, func_name: str):
-    """Find method calls to func_name with properly balanced parentheses.
-
-    Handles nested parentheses in arguments correctly, unlike a pure regex approach.
-    Returns a list of (start, end, full_call) tuples where start/end are positions
-    in the line and full_call is the matched text (receiver.funcName(args)).
-
-    Args:
-        line: A single line of Java source code.
-        func_name: The method name to look for.
-
-    Returns:
-        List of (start_pos, end_pos, full_call_text) tuples.
-
-    """
-    # First find all occurrences of .funcName( in the line using regex
-    # to locate the method name, then use balanced paren finding for args
-    prefix_pattern = re.compile(
-        rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*{re.escape(func_name)}\s*\("
-    )
-    results = []
-    search_start = 0
-    while search_start < len(line):
-        m = prefix_pattern.search(line, search_start)
-        if not m:
-            break
-        # m.end() - 1 is the position of the opening paren
-        open_paren_pos = m.end() - 1
-        close_pos = _find_balanced_end(line, open_paren_pos)
-        if close_pos == -1:
-            # Unbalanced parens - skip this match
-            search_start = m.end()
-            continue
-        full_call = line[m.start():close_pos]
-        results.append((m.start(), close_pos, full_call))
-        search_start = close_pos
-    return results
-
 
 def _infer_array_cast_type(line: str) -> str | None:
     """Infer the array cast type needed for assertion methods.
@@ -278,12 +182,21 @@ def instrument_existing_test(
         new_class_name = f"{original_class_name}__perfonlyinstrumented"
 
     # Rename all references to the original class name in the source.
-    # This includes the class declaration, return types, constructor calls,
-    # variable declarations, etc. We use word-boundary matching to avoid
-    # replacing substrings of other identifiers.
-    modified_source = re.sub(
-        rf"\b{re.escape(original_class_name)}\b", new_class_name, source
-    )
+    # Uses tree-sitter to find identifier/type_identifier AST nodes,
+    # which correctly excludes matches inside string literals and comments.
+    if analyzer is None:
+        from codeflash.languages.java.parser import get_java_analyzer
+        analyzer = get_java_analyzer()
+
+    refs = analyzer.find_identifier_references(source, original_class_name)
+    if refs:
+        source_bytes = source.encode("utf8")
+        new_name_bytes = new_class_name.encode("utf8")
+        for start, end in reversed(refs):
+            source_bytes = source_bytes[:start] + new_name_bytes + source_bytes[end:]
+        modified_source = source_bytes.decode("utf8")
+    else:
+        modified_source = source
 
     # Add timing instrumentation to test methods
     # Use original class name (without suffix) in timing markers for consistency with Python
@@ -305,8 +218,11 @@ def instrument_existing_test(
 def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) -> str:
     """Add behavior instrumentation to test methods.
 
+    Uses tree-sitter to find @Test methods, their body boundaries, and
+    method invocations of func_name (with lambda-awareness via parent-chain walk).
+
     For behavior mode, this adds:
-    1. Gson import for JSON serialization
+    1. SQL imports for SQLite database writes
     2. SQLite database connection setup
     3. Function call wrapping to capture return values
     4. SQLite insert with serialized return values
@@ -320,281 +236,209 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
         Instrumented source code.
 
     """
-    # Add necessary imports at the top of the file
-    # Note: We don't import java.sql.Statement because it can conflict with
-    # other Statement classes (e.g., com.aerospike.client.query.Statement).
-    # Instead, we use the fully qualified name java.sql.Statement in the code.
-    # Note: We don't use Gson because it may not be available as a dependency.
-    # Instead, we use String.valueOf() for serialization.
+    from codeflash.languages.java.parser import get_java_analyzer
+
+    analyzer = get_java_analyzer()
+
+    # ── Step 1: Add imports ──────────────────────────────────────────────
     import_statements = [
         "import java.sql.Connection;",
         "import java.sql.DriverManager;",
         "import java.sql.PreparedStatement;",
     ]
 
-    # Find position to insert imports (after package, before class)
     lines = source.split("\n")
-    result = []
+    result_lines: list[str] = []
     imports_added = False
-    i = 0
+    idx = 0
 
-    while i < len(lines):
-        line = lines[i]
+    while idx < len(lines):
+        line = lines[idx]
         stripped = line.strip()
 
-        # Add imports after the last existing import or before the class declaration
         if not imports_added:
             if stripped.startswith("import "):
-                result.append(line)
-                i += 1
-                # Find end of imports
-                while i < len(lines) and lines[i].strip().startswith("import "):
-                    result.append(lines[i])
-                    i += 1
-                # Add our imports
+                result_lines.append(line)
+                idx += 1
+                while idx < len(lines) and lines[idx].strip().startswith("import "):
+                    result_lines.append(lines[idx])
+                    idx += 1
                 for imp in import_statements:
                     if imp not in source:
-                        result.append(imp)
+                        result_lines.append(imp)
                 imports_added = True
                 continue
-            if stripped.startswith(("public class", "class")):
-                # No imports found, add before class
-                result.extend(import_statements)
-                result.append("")
+            # Use tree-sitter class detection: any class/interface/enum keyword
+            if stripped.startswith(("public class", "class", "public final class",
+                                   "final class", "abstract class", "public abstract class")):
+                result_lines.extend(import_statements)
+                result_lines.append("")
                 imports_added = True
 
-        result.append(line)
-        i += 1
+        result_lines.append(line)
+        idx += 1
 
-    # Now add timing and SQLite instrumentation to test methods
-    source = "\n".join(result)
+    source = "\n".join(result_lines)
+
+    # ── Step 2: Find @Test methods and wrap their bodies ─────────────────
+    source_bytes = source.encode("utf8")
+    test_methods = analyzer.find_test_methods(source)
+
+    if not test_methods:
+        return source
+
     lines = source.split("\n")
-    result = []
-    i = 0
-    iteration_counter = 0
-    helper_added = False
+    replacements: list[tuple[int, int, str]] = []
 
-    while i < len(lines):
-        line = lines[i]
-        stripped = line.strip()
+    for iter_id, method_info in enumerate(test_methods, start=1):
+        body_node = method_info.body_node
 
-        # Look for @Test annotation (not @TestOnly, @TestFactory, etc.)
-        if _is_test_annotation(stripped):
-            if not helper_added:
-                helper_added = True
-            result.append(line)
-            i += 1
+        # Extract body lines (between { and })
+        body_start_line = body_node.start_point[0]
+        body_end_line = body_node.end_point[0]
+        body_lines = lines[body_start_line + 1 : body_end_line]
 
-            # Collect any additional annotations
-            while i < len(lines) and lines[i].strip().startswith("@"):
-                result.append(lines[i])
-                i += 1
+        brace_line = lines[body_start_line]
+        base_indent = len(brace_line) - len(brace_line.lstrip())
+        indent = " " * (base_indent + 4)
 
-            # Now find the method signature and opening brace
-            method_lines = []
-            while i < len(lines):
-                method_lines.append(lines[i])
-                if "{" in lines[i]:
-                    break
-                i += 1
+        # ── Find method invocations via tree-sitter ──────────────────────
+        invocations = analyzer.find_method_invocations(body_node, source_bytes, func_name)
 
-            # Add the method signature lines
-            for ml in method_lines:
-                result.append(ml)
-            i += 1
+        # Group invocations by their 0-indexed source line
+        invocations_by_line: dict[int, list] = {}
+        for inv in invocations:
+            inv_line = inv.node.start_point[0]
+            invocations_by_line.setdefault(inv_line, []).append(inv)
 
-            # We're now inside the method body
-            iteration_counter += 1
-            iter_id = iteration_counter
+        # ── Wrap function calls per body line ────────────────────────────
+        call_counter = 0
+        wrapped_body_lines: list[str] = []
 
-            # Detect indentation
-            method_sig_line = method_lines[-1] if method_lines else ""
-            base_indent = len(method_sig_line) - len(method_sig_line.lstrip())
-            indent = " " * (base_indent + 4)
+        for local_idx, body_line in enumerate(body_lines):
+            source_line_idx = body_start_line + 1 + local_idx
+            line_invocations = invocations_by_line.get(source_line_idx, [])
 
-            # Collect method body until we find matching closing brace
-            brace_depth = 1
-            body_lines = []
-
-            while i < len(lines) and brace_depth > 0:
-                body_line = lines[i]
-                # Count braces more efficiently using string methods
-                open_count = body_line.count("{")
-                close_count = body_line.count("}")
-                brace_depth += open_count - close_count
-
-                if brace_depth > 0:
-                    body_lines.append(body_line)
-                    i += 1
-                else:
-                    # We've hit the closing brace
-                    i += 1
-                    break
-
-            # Wrap function calls to capture return values
-            # Look for patterns like: obj.funcName(args) or new Class().funcName(args)
-            call_counter = 0
-            wrapped_body_lines = []
-
-            # Track lambda block nesting depth to avoid wrapping calls inside lambda bodies.
-            # assertThrows/assertDoesNotThrow expect an Executable (void functional interface),
-            # and wrapping the call in a variable assignment would turn the void-compatible
-            # lambda into a value-returning lambda, causing a compilation error.
-            # Also, variables declared outside lambdas cannot be reassigned inside them
-            # (Java requires effectively final variables in lambda captures).
-            # Handles both no-arg lambdas: () -> { func(); }
-            # and parameterized lambdas: (a, b, c) -> { func(); }
-            lambda_brace_depth = 0
-
-            for body_line in body_lines:
-                # Detect block lambda openings: (...) -> { or () -> {
-                # Matches both () -> { and (a, b, c) -> {
-                is_lambda_open = bool(re.search(r"->\s*\{", body_line))
-
-                # Update lambda brace depth tracking for block lambdas
-                if is_lambda_open or lambda_brace_depth > 0:
-                    open_braces = body_line.count("{")
-                    close_braces = body_line.count("}")
-                    if is_lambda_open and lambda_brace_depth == 0:
-                        # Starting a new lambda block - only count braces from this lambda
-                        lambda_brace_depth = open_braces - close_braces
-                    else:
-                        lambda_brace_depth += open_braces - close_braces
-                    # Ensure depth doesn't go below 0
-                    lambda_brace_depth = max(0, lambda_brace_depth)
-
-                inside_lambda = lambda_brace_depth > 0 or bool(re.search(r"->\s+\S", body_line))
-
-                # Check if this line contains a call to the target function
-                if func_name in body_line and "(" in body_line:
-                    # Skip wrapping if the function call is inside a lambda expression
-                    if inside_lambda:
-                        wrapped_body_lines.append(body_line)
-                        continue
-
-                    line_indent = len(body_line) - len(body_line.lstrip())
-                    line_indent_str = " " * line_indent
-
-                    # Find all matches using balanced parenthesis matching
-                    # This correctly handles nested parens like:
-                    #   obj.func(a, Rows.toRowID(frame.getIndex(), row))
-                    matches = _find_method_calls_balanced(body_line, func_name)
-                    if matches:
-                        # Process matches in reverse order to maintain correct positions
-                        new_line = body_line
-                        for start_pos, end_pos, full_call in reversed(matches):
-                            call_counter += 1
-                            var_name = f"_cf_result{iter_id}_{call_counter}"
-
-                            # Check if we need to cast the result for assertions with primitive arrays
-                            # This handles assertArrayEquals(int[], int[]) etc.
-                            cast_type = _infer_array_cast_type(body_line)
-                            var_with_cast = f"({cast_type}){var_name}" if cast_type else var_name
-
-                            # Replace this occurrence with the variable (with cast if needed)
-                            new_line = new_line[:start_pos] + var_with_cast + new_line[end_pos:]
-
-                            # Use 'var' instead of 'Object' to preserve the exact return type.
-                            # This avoids boxing mismatches (e.g., assertEquals(int, Object) where
-                            # Object is boxed Long but expected is boxed Integer). Requires Java 10+.
-                            capture_line = f"{line_indent_str}var {var_name} = {full_call};"
-                            wrapped_body_lines.append(capture_line)
-
-                            # Immediately serialize the captured result while the variable
-                            # is still in scope. This is necessary because the variable may
-                            # be declared inside a nested block (while/for/if/try) and would
-                            # be out of scope at the end of the method body.
-                            serialize_line = (
-                                f"{line_indent_str}_cf_serializedResult{iter_id} = "
-                                f"com.codeflash.Serializer.serialize((Object) {var_name});"
-                            )
-                            wrapped_body_lines.append(serialize_line)
-
-                        # Check if the line is now just a variable reference (invalid statement)
-                        # This happens when the original line was just a void method call
-                        # e.g., "BubbleSort.bubbleSort(original);" becomes "_cf_result1_1;"
-                        stripped_new = new_line.strip().rstrip(";").strip()
-                        if stripped_new and stripped_new not in (var_name, var_with_cast):
-                            wrapped_body_lines.append(new_line)
-                    else:
-                        wrapped_body_lines.append(body_line)
-                else:
-                    wrapped_body_lines.append(body_line)
-
-            # Add behavior instrumentation code
-            behavior_start_code = [
-                f"{indent}// Codeflash behavior instrumentation",
-                f'{indent}int _cf_loop{iter_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
-                f"{indent}int _cf_iter{iter_id} = {iter_id};",
-                f'{indent}String _cf_mod{iter_id} = "{class_name}";',
-                f'{indent}String _cf_cls{iter_id} = "{class_name}";',
-                f'{indent}String _cf_fn{iter_id} = "{func_name}";',
-                f'{indent}String _cf_outputFile{iter_id} = System.getenv("CODEFLASH_OUTPUT_FILE");',
-                f'{indent}String _cf_testIteration{iter_id} = System.getenv("CODEFLASH_TEST_ITERATION");',
-                f'{indent}if (_cf_testIteration{iter_id} == null) _cf_testIteration{iter_id} = "0";',
-                f'{indent}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + "######$!");',
-                f"{indent}long _cf_start{iter_id} = System.nanoTime();",
-                f"{indent}byte[] _cf_serializedResult{iter_id} = null;",
-                f"{indent}try {{",
+            # Filter to non-lambda invocations on a single line
+            actionable = [
+                inv for inv in line_invocations
+                if not inv.in_lambda and inv.node.start_point[0] == inv.node.end_point[0]
             ]
-            result.extend(behavior_start_code)
 
-            # Add the wrapped body lines with extra indentation.
-            # Serialization of captured results is already done inline (immediately
-            # after each capture) so the _cf_serializedResult variable is always
-            # assigned while the captured variable is still in scope.
-            for bl in wrapped_body_lines:
-                result.append("    " + bl)
+            if actionable:
+                line_indent = len(body_line) - len(body_line.lstrip())
+                line_indent_str = " " * line_indent
 
-            # Add finally block with SQLite write
-            method_close_indent = " " * base_indent
-            behavior_end_code = [
-                f"{indent}}} finally {{",
-                f"{indent}    long _cf_end{iter_id} = System.nanoTime();",
-                f"{indent}    long _cf_dur{iter_id} = _cf_end{iter_id} - _cf_start{iter_id};",
-                f'{indent}    System.out.println("!######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + ":" + _cf_dur{iter_id} + "######!");',
-                f"{indent}    // Write to SQLite if output file is set",
-                f"{indent}    if (_cf_outputFile{iter_id} != null && !_cf_outputFile{iter_id}.isEmpty()) {{",
-                f"{indent}        try {{",
-                f'{indent}            Class.forName("org.sqlite.JDBC");',
-                f'{indent}            try (Connection _cf_conn{iter_id} = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile{iter_id})) {{',
-                f"{indent}                try (java.sql.Statement _cf_stmt{iter_id} = _cf_conn{iter_id}.createStatement()) {{",
-                f'{indent}                    _cf_stmt{iter_id}.execute("CREATE TABLE IF NOT EXISTS test_results (" +',
-                f'{indent}                        "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +',
-                f'{indent}                        "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +',
-                f'{indent}                        "runtime INTEGER, return_value BLOB, verification_type TEXT)");',
-                f"{indent}                }}",
-                f'{indent}                String _cf_sql{iter_id} = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";',
-                f"{indent}                try (PreparedStatement _cf_pstmt{iter_id} = _cf_conn{iter_id}.prepareStatement(_cf_sql{iter_id})) {{",
-                f"{indent}                    _cf_pstmt{iter_id}.setString(1, _cf_mod{iter_id});",
-                f"{indent}                    _cf_pstmt{iter_id}.setString(2, _cf_cls{iter_id});",
-                f'{indent}                    _cf_pstmt{iter_id}.setString(3, "{class_name}Test");',
-                f"{indent}                    _cf_pstmt{iter_id}.setString(4, _cf_fn{iter_id});",
-                f"{indent}                    _cf_pstmt{iter_id}.setInt(5, _cf_loop{iter_id});",
-                f'{indent}                    _cf_pstmt{iter_id}.setString(6, _cf_iter{iter_id} + "_" + _cf_testIteration{iter_id});',
-                f"{indent}                    _cf_pstmt{iter_id}.setLong(7, _cf_dur{iter_id});",
-                f"{indent}                    _cf_pstmt{iter_id}.setBytes(8, _cf_serializedResult{iter_id});",  # Kryo-serialized return value
-                f'{indent}                    _cf_pstmt{iter_id}.setString(9, "function_call");',
-                f"{indent}                    _cf_pstmt{iter_id}.executeUpdate();",
-                f"{indent}                }}",
-                f"{indent}            }}",
-                f"{indent}        }} catch (Exception _cf_e{iter_id}) {{",
-                f'{indent}            System.err.println("CodeflashHelper: SQLite error: " + _cf_e{iter_id}.getMessage());',
-                f"{indent}        }}",
-                f"{indent}    }}",
-                f"{indent}}}",
-                f"{method_close_indent}}}",  # Method closing brace
-            ]
-            result.extend(behavior_end_code)
-        else:
-            result.append(line)
-            i += 1
+                # Process matches in reverse column order to preserve positions
+                actionable.sort(key=lambda inv: inv.node.start_point[1], reverse=True)
+                new_line = body_line
+                last_var_name = None
+                last_var_with_cast = None
 
-    return "\n".join(result)
+                for inv in actionable:
+                    call_counter += 1
+                    var_name = f"_cf_result{iter_id}_{call_counter}"
+                    last_var_name = var_name
+
+                    cast_type = _infer_array_cast_type(body_line)
+                    var_with_cast = f"({cast_type}){var_name}" if cast_type else var_name
+                    last_var_with_cast = var_with_cast
+
+                    start_col = inv.node.start_point[1]
+                    end_col = inv.node.end_point[1]
+                    new_line = new_line[:start_col] + var_with_cast + new_line[end_col:]
+
+                    capture_line = f"{line_indent_str}var {var_name} = {inv.full_text};"
+                    wrapped_body_lines.append(capture_line)
+
+                    serialize_line = (
+                        f"{line_indent_str}_cf_serializedResult{iter_id} = "
+                        f"com.codeflash.Serializer.serialize((Object) {var_name});"
+                    )
+                    wrapped_body_lines.append(serialize_line)
+
+                # Skip line if it collapsed to just a bare variable reference
+                stripped_new = new_line.strip().rstrip(";").strip()
+                if stripped_new and stripped_new not in (last_var_name, last_var_with_cast):
+                    wrapped_body_lines.append(new_line)
+            else:
+                wrapped_body_lines.append(body_line)
+
+        # ── Build replacement body ───────────────────────────────────────
+        method_close_indent = " " * base_indent
+        behavior_lines = [
+            "{",
+            f"{indent}// Codeflash behavior instrumentation",
+            f'{indent}int _cf_loop{iter_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
+            f"{indent}int _cf_iter{iter_id} = {iter_id};",
+            f'{indent}String _cf_mod{iter_id} = "{class_name}";',
+            f'{indent}String _cf_cls{iter_id} = "{class_name}";',
+            f'{indent}String _cf_fn{iter_id} = "{func_name}";',
+            f'{indent}String _cf_outputFile{iter_id} = System.getenv("CODEFLASH_OUTPUT_FILE");',
+            f'{indent}String _cf_testIteration{iter_id} = System.getenv("CODEFLASH_TEST_ITERATION");',
+            f'{indent}if (_cf_testIteration{iter_id} == null) _cf_testIteration{iter_id} = "0";',
+            f'{indent}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + "######$!");',
+            f"{indent}long _cf_start{iter_id} = System.nanoTime();",
+            f"{indent}byte[] _cf_serializedResult{iter_id} = null;",
+            f"{indent}try {{",
+        ]
+
+        for bl in wrapped_body_lines:
+            behavior_lines.append("    " + bl)
+
+        behavior_lines.extend([
+            f"{indent}}} finally {{",
+            f"{indent}    long _cf_end{iter_id} = System.nanoTime();",
+            f"{indent}    long _cf_dur{iter_id} = _cf_end{iter_id} - _cf_start{iter_id};",
+            f'{indent}    System.out.println("!######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + ":" + _cf_dur{iter_id} + "######!");',
+            f"{indent}    // Write to SQLite if output file is set",
+            f"{indent}    if (_cf_outputFile{iter_id} != null && !_cf_outputFile{iter_id}.isEmpty()) {{",
+            f"{indent}        try {{",
+            f'{indent}            Class.forName("org.sqlite.JDBC");',
+            f'{indent}            try (Connection _cf_conn{iter_id} = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile{iter_id})) {{',
+            f"{indent}                try (java.sql.Statement _cf_stmt{iter_id} = _cf_conn{iter_id}.createStatement()) {{",
+            f'{indent}                    _cf_stmt{iter_id}.execute("CREATE TABLE IF NOT EXISTS test_results (" +',
+            f'{indent}                        "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +',
+            f'{indent}                        "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +',
+            f'{indent}                        "runtime INTEGER, return_value BLOB, verification_type TEXT)");',
+            f"{indent}                }}",
+            f'{indent}                String _cf_sql{iter_id} = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";',
+            f"{indent}                try (PreparedStatement _cf_pstmt{iter_id} = _cf_conn{iter_id}.prepareStatement(_cf_sql{iter_id})) {{",
+            f"{indent}                    _cf_pstmt{iter_id}.setString(1, _cf_mod{iter_id});",
+            f"{indent}                    _cf_pstmt{iter_id}.setString(2, _cf_cls{iter_id});",
+            f'{indent}                    _cf_pstmt{iter_id}.setString(3, "{class_name}Test");',
+            f"{indent}                    _cf_pstmt{iter_id}.setString(4, _cf_fn{iter_id});",
+            f"{indent}                    _cf_pstmt{iter_id}.setInt(5, _cf_loop{iter_id});",
+            f'{indent}                    _cf_pstmt{iter_id}.setString(6, _cf_iter{iter_id} + "_" + _cf_testIteration{iter_id});',
+            f"{indent}                    _cf_pstmt{iter_id}.setLong(7, _cf_dur{iter_id});",
+            f"{indent}                    _cf_pstmt{iter_id}.setBytes(8, _cf_serializedResult{iter_id});",
+            f'{indent}                    _cf_pstmt{iter_id}.setString(9, "function_call");',
+            f"{indent}                    _cf_pstmt{iter_id}.executeUpdate();",
+            f"{indent}                }}",
+            f"{indent}            }}",
+            f"{indent}        }} catch (Exception _cf_e{iter_id}) {{",
+            f'{indent}            System.err.println("CodeflashHelper: SQLite error: " + _cf_e{iter_id}.getMessage());',
+            f"{indent}        }}",
+            f"{indent}    }}",
+            f"{indent}}}",
+            f"{method_close_indent}}}",
+        ])
+
+        replacement = "\n".join(behavior_lines)
+        replacements.append((body_node.start_byte, body_node.end_byte, replacement))
+
+    # Apply replacements in reverse byte order
+    for start, end, replacement in sorted(replacements, key=lambda x: x[0], reverse=True):
+        source_bytes = source_bytes[:start] + replacement.encode("utf8") + source_bytes[end:]
+
+    return source_bytes.decode("utf8")
 
 
 def _add_timing_instrumentation(source: str, class_name: str, func_name: str) -> str:
     """Add timing instrumentation to test methods with inner loop for JIT warmup.
+
+    Uses tree-sitter to find @Test methods and their body boundaries,
+    then replaces each method body with a timing-wrapped version.
 
     For each @Test method, this adds:
     1. Inner loop that runs N iterations (controlled by CODEFLASH_INNER_ITERATIONS env var)
@@ -619,110 +463,74 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         Instrumented source code.
 
     """
-    # Find all @Test methods and add timing around their bodies
-    # Pattern matches: @Test (with optional parameters) followed by method declaration
-    # We process line by line for cleaner handling
+    from codeflash.languages.java.parser import get_java_analyzer
+
+    analyzer = get_java_analyzer()
+    source_bytes = source.encode("utf8")
+    test_methods = analyzer.find_test_methods(source)
+
+    if not test_methods:
+        return source
 
     lines = source.split("\n")
-    result = []
-    i = 0
-    iteration_counter = 0
 
-    while i < len(lines):
-        line = lines[i]
-        stripped = line.strip()
+    # Build a replacement for each @Test method body.
+    # iter_id is assigned in forward (source) order; replacements are applied in reverse.
+    replacements: list[tuple[int, int, str]] = []
 
-        # Look for @Test annotation (not @TestOnly, @TestFactory, etc.)
-        if _is_test_annotation(stripped):
-            result.append(line)
-            i += 1
+    for iter_id, method_info in enumerate(test_methods, start=1):
+        body_node = method_info.body_node
 
-            # Collect any additional annotations
-            while i < len(lines) and lines[i].strip().startswith("@"):
-                result.append(lines[i])
-                i += 1
+        # Extract body lines (between { and }, exclusive of both brace lines)
+        body_start_line = body_node.start_point[0]  # 0-indexed line of {
+        body_end_line = body_node.end_point[0]  # 0-indexed line of }
+        body_lines = lines[body_start_line + 1 : body_end_line]
 
-            # Now find the method signature and opening brace
-            method_lines = []
-            while i < len(lines):
-                method_lines.append(lines[i])
-                if "{" in lines[i]:
-                    break
-                i += 1
+        # Indentation from the line containing the opening brace
+        brace_line = lines[body_start_line]
+        base_indent = len(brace_line) - len(brace_line.lstrip())
+        indent = " " * (base_indent + 4)
+        inner_indent = " " * (base_indent + 8)
+        method_close_indent = " " * base_indent
 
-            # Add the method signature lines
-            result.extend(method_lines)
-            i += 1
+        # Build the replacement body (opening { through closing })
+        timing_lines = [
+            "{",
+            f"{indent}// Codeflash timing instrumentation with inner loop for JIT warmup",
+            f'{indent}int _cf_loop{iter_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
+            f'{indent}int _cf_innerIterations{iter_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));',
+            f'{indent}String _cf_mod{iter_id} = "{class_name}";',
+            f'{indent}String _cf_cls{iter_id} = "{class_name}";',
+            f'{indent}String _cf_fn{iter_id} = "{func_name}";',
+            "",
+            f"{indent}for (int _cf_i{iter_id} = 0; _cf_i{iter_id} < _cf_innerIterations{iter_id}; _cf_i{iter_id}++) {{",
+            f'{inner_indent}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_i{iter_id} + "######$!");',
+            f"{inner_indent}long _cf_start{iter_id} = System.nanoTime();",
+            f"{inner_indent}try {{",
+        ]
 
-            # We're now inside the method body
-            iteration_counter += 1
-            iter_id = iteration_counter
+        # Original body lines, indented by 8 extra spaces (for loop + try)
+        for bl in body_lines:
+            timing_lines.append("        " + bl)
 
-            # Detect indentation from method signature line (line with opening brace)
-            method_sig_line = method_lines[-1] if method_lines else ""
-            base_indent = len(method_sig_line) - len(method_sig_line.lstrip())
-            indent = " " * (base_indent + 4)  # Add one level of indentation
-            inner_indent = " " * (base_indent + 8)  # Two levels for inside inner loop
-            inner_body_indent = " " * (base_indent + 12)  # Three levels for try block body
+        timing_lines.extend([
+            f"{inner_indent}}} finally {{",
+            f"{inner_indent}    long _cf_end{iter_id} = System.nanoTime();",
+            f"{inner_indent}    long _cf_dur{iter_id} = _cf_end{iter_id} - _cf_start{iter_id};",
+            f'{inner_indent}    System.out.println("!######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_i{iter_id} + ":" + _cf_dur{iter_id} + "######!");',
+            f"{inner_indent}}}",
+            f"{indent}}}",  # Close for loop
+            f"{method_close_indent}}}",  # Method closing brace
+        ])
 
-            # Add timing instrumentation with inner loop
-            # Note: CODEFLASH_LOOP_INDEX must always be set - no null check, crash if missing
-            # CODEFLASH_INNER_ITERATIONS controls inner loop count (default: 100)
-            timing_start_code = [
-                f"{indent}// Codeflash timing instrumentation with inner loop for JIT warmup",
-                f'{indent}int _cf_loop{iter_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
-                f'{indent}int _cf_innerIterations{iter_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));',
-                f'{indent}String _cf_mod{iter_id} = "{class_name}";',
-                f'{indent}String _cf_cls{iter_id} = "{class_name}";',
-                f'{indent}String _cf_fn{iter_id} = "{func_name}";',
-                "",
-                f"{indent}for (int _cf_i{iter_id} = 0; _cf_i{iter_id} < _cf_innerIterations{iter_id}; _cf_i{iter_id}++) {{",
-                f'{inner_indent}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_i{iter_id} + "######$!");',
-                f"{inner_indent}long _cf_start{iter_id} = System.nanoTime();",
-                f"{inner_indent}try {{",
-            ]
-            result.extend(timing_start_code)
+        replacement = "\n".join(timing_lines)
+        replacements.append((body_node.start_byte, body_node.end_byte, replacement))
 
-            # Collect method body until we find matching closing brace
-            brace_depth = 1
-            body_lines = []
+    # Apply replacements in reverse byte order to preserve earlier offsets
+    for start, end, replacement in sorted(replacements, key=lambda x: x[0], reverse=True):
+        source_bytes = source_bytes[:start] + replacement.encode("utf8") + source_bytes[end:]
 
-            while i < len(lines) and brace_depth > 0:
-                body_line = lines[i]
-                # Count braces (simple approach - doesn't handle strings/comments perfectly)
-                for ch in body_line:
-                    if ch == "{":
-                        brace_depth += 1
-                    elif ch == "}":
-                        brace_depth -= 1
-
-                if brace_depth > 0:
-                    body_lines.append(body_line)
-                    i += 1
-                else:
-                    # This line contains the closing brace, but we've hit depth 0
-                    # Add indented body lines (inside try block, inside for loop)
-                    for bl in body_lines:
-                        result.append("        " + bl)  # 8 extra spaces for inner loop + try
-
-                    # Add finally block and close inner loop
-                    method_close_indent = " " * base_indent  # Same level as method signature
-                    timing_end_code = [
-                        f"{inner_indent}}} finally {{",
-                        f"{inner_indent}    long _cf_end{iter_id} = System.nanoTime();",
-                        f"{inner_indent}    long _cf_dur{iter_id} = _cf_end{iter_id} - _cf_start{iter_id};",
-                        f'{inner_indent}    System.out.println("!######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_i{iter_id} + ":" + _cf_dur{iter_id} + "######!");',
-                        f"{inner_indent}}}",
-                        f"{indent}}}",  # Close for loop
-                        f"{method_close_indent}}}",  # Method closing brace
-                    ]
-                    result.extend(timing_end_code)
-                    i += 1
-        else:
-            result.append(line)
-            i += 1
-
-    return "\n".join(result)
+    return source_bytes.decode("utf8")
 
 
 def create_benchmark_test(
@@ -825,14 +633,16 @@ def instrument_generated_java_test(
     if mode == "behavior":
         test_code = transform_java_assertions(test_code, function_name, qualified_name)
 
-    # Extract class name from the test code
-    # Use pattern that starts at beginning of line to avoid matching words in comments
-    class_match = re.search(r"^(?:public\s+)?class\s+(\w+)", test_code, re.MULTILINE)
-    if not class_match:
+    # Extract class name from the test code using tree-sitter
+    from codeflash.languages.java.parser import get_java_analyzer
+
+    analyzer = get_java_analyzer()
+    classes = analyzer.find_classes(test_code)
+    if not classes:
         logger.warning("Could not find class name in generated test")
         return test_code
 
-    original_class_name = class_match.group(1)
+    original_class_name = classes[0].name
 
     # Rename class based on mode
     if mode == "behavior":
@@ -840,11 +650,17 @@ def instrument_generated_java_test(
     else:
         new_class_name = f"{original_class_name}__perfonlyinstrumented"
 
-    # Rename all references to the original class name in the source.
-    # This includes the class declaration, return types, constructor calls, etc.
-    modified_code = re.sub(
-        rf"\b{re.escape(original_class_name)}\b", new_class_name, test_code
-    )
+    # Rename all identifier references to the class name using tree-sitter
+    # (excludes matches inside string literals and comments)
+    refs = analyzer.find_identifier_references(test_code, original_class_name)
+    if refs:
+        code_bytes = test_code.encode("utf8")
+        new_name_bytes = new_class_name.encode("utf8")
+        for start, end in reversed(refs):
+            code_bytes = code_bytes[:start] + new_name_bytes + code_bytes[end:]
+        modified_code = code_bytes.decode("utf8")
+    else:
+        modified_code = test_code
 
     # For performance mode, add timing instrumentation
     # Use original class name (without suffix) in timing markers for consistency with Python
@@ -858,33 +674,5 @@ def instrument_generated_java_test(
     logger.debug("Instrumented generated Java test for %s (mode=%s)", function_name, mode)
     return modified_code
 
-
-def _add_import(source: str, import_statement: str) -> str:
-    """Add an import statement to the source.
-
-    Args:
-        source: The source code.
-        import_statement: The import to add.
-
-    Returns:
-        Source with import added.
-
-    """
-    lines = source.splitlines(keepends=True)
-    insert_idx = 0
-
-    # Find the last import or package statement
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped.startswith(("import ", "package ")):
-            insert_idx = i + 1
-        elif stripped and not stripped.startswith("//") and not stripped.startswith("/*"):
-            # First non-import, non-comment line
-            if insert_idx == 0:
-                insert_idx = i
-            break
-
-    lines.insert(insert_idx, import_statement + "\n")
-    return "".join(lines)
 
 
