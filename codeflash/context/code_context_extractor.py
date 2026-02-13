@@ -208,6 +208,123 @@ def get_code_optimization_context(
     )
 
 
+def _strip_javadoc_comments(source: str) -> str:
+    """Strip Javadoc (/** ... */) comments from Java source code.
+
+    Preserves single-line comments (//) and regular block comments (/* ... */).
+    """
+    import re
+
+    return re.sub(r"/\*\*.*?\*/\s*", "", source, flags=re.DOTALL)
+
+
+def _build_code_strings_for_language(
+    code_context,
+    function_to_optimize: FunctionToOptimize,
+    project_root_path: Path,
+    include_cross_file_helpers: bool = True,
+    strip_javadoc: bool = False,
+    include_same_file_helpers: bool = True,
+) -> tuple[list[CodeString], list[FunctionSource], str]:
+    """Build CodeString list from a CodeContext with configurable reduction.
+
+    Args:
+        code_context: CodeContext from language support.
+        function_to_optimize: The target function.
+        project_root_path: Root of the project.
+        include_cross_file_helpers: Whether to include helpers from other files.
+        strip_javadoc: Whether to strip Javadoc comments from all code.
+        include_same_file_helpers: Whether to include same-file helper methods.
+
+    Returns:
+        Tuple of (code_strings, helper_function_sources, read_only_context).
+
+    """
+    # Build imports string if available
+    imports_code = "\n".join(code_context.imports) if code_context.imports else ""
+
+    # Get relative path for target file
+    try:
+        target_relative_path = function_to_optimize.file_path.resolve().relative_to(project_root_path.resolve())
+    except ValueError:
+        target_relative_path = function_to_optimize.file_path
+
+    # Group helpers by file path
+    helpers_by_file: dict[Path, list] = defaultdict(list)
+    helper_function_sources = []
+
+    for helper in code_context.helper_functions:
+        helpers_by_file[helper.file_path].append(helper)
+
+        # Convert to FunctionSource for pipeline compatibility
+        should_include = (
+            (helper.file_path == function_to_optimize.file_path and include_same_file_helpers)
+            or (helper.file_path != function_to_optimize.file_path and include_cross_file_helpers)
+        )
+        if should_include:
+            helper_function_sources.append(
+                FunctionSource(
+                    file_path=helper.file_path,
+                    qualified_name=helper.qualified_name,
+                    fully_qualified_name=helper.qualified_name,
+                    only_function_name=helper.name,
+                    source_code=helper.source_code,
+                    jedi_definition=None,
+                )
+            )
+
+    # Build read-writable code (target file + same-file helpers)
+    code_strings = []
+
+    # Combine target code with same-file helpers
+    target_file_code = code_context.target_code
+    if include_same_file_helpers:
+        same_file_helpers = helpers_by_file.get(function_to_optimize.file_path, [])
+        if same_file_helpers:
+            helper_code = "\n\n".join(h.source_code for h in same_file_helpers)
+            target_file_code = target_file_code + "\n\n" + helper_code
+
+    # Add imports to target file code
+    if imports_code:
+        target_file_code = imports_code + "\n\n" + target_file_code
+
+    if strip_javadoc:
+        target_file_code = _strip_javadoc_comments(target_file_code)
+
+    code_strings.append(
+        CodeString(code=target_file_code, file_path=target_relative_path, language=function_to_optimize.language)
+    )
+
+    # Add helper files (cross-file helpers)
+    if include_cross_file_helpers:
+        for file_path, file_helpers in helpers_by_file.items():
+            if file_path == function_to_optimize.file_path:
+                continue  # Already included in target file
+
+            try:
+                helper_relative_path = file_path.resolve().relative_to(project_root_path.resolve())
+            except ValueError:
+                helper_relative_path = file_path
+
+            combined_helper_code = "\n\n".join(h.source_code for h in file_helpers)
+            if strip_javadoc:
+                combined_helper_code = _strip_javadoc_comments(combined_helper_code)
+
+            code_strings.append(
+                CodeString(
+                    code=combined_helper_code,
+                    file_path=helper_relative_path,
+                    language=function_to_optimize.language,
+                )
+            )
+
+    read_only_context = code_context.read_only_context
+    if strip_javadoc and read_only_context:
+        read_only_context = _strip_javadoc_comments(read_only_context)
+
+    return code_strings, helper_function_sources, read_only_context
+
+
 def get_code_optimization_context_for_language(
     function_to_optimize: FunctionToOptimize,
     project_root_path: Path,
@@ -221,6 +338,12 @@ def get_code_optimization_context_for_language(
 
     This function supports multi-file context extraction, grouping helpers by file
     and creating proper CodeStringsMarkdown with file paths for multi-file replacement.
+
+    Applies progressive fallback when token limits are exceeded:
+    1. Full context (all helpers, Javadoc intact)
+    2. Remove cross-file helpers
+    3. Strip Javadoc comments
+    4. Remove all helpers (target code only)
 
     Args:
         function_to_optimize: The function to extract context for.
@@ -241,92 +364,80 @@ def get_code_optimization_context_for_language(
     # Extract code context using language support
     code_context = lang_support.extract_code_context(function_to_optimize, project_root_path, project_root_path)
 
-    # Build imports string if available
-    imports_code = "\n".join(code_context.imports) if code_context.imports else ""
+    # Progressive fallback strategies, ordered from most to least context
+    fallback_strategies = [
+        {"include_cross_file_helpers": True, "strip_javadoc": False, "include_same_file_helpers": True},
+        {"include_cross_file_helpers": False, "strip_javadoc": False, "include_same_file_helpers": True},
+        {"include_cross_file_helpers": False, "strip_javadoc": True, "include_same_file_helpers": True},
+        {"include_cross_file_helpers": False, "strip_javadoc": True, "include_same_file_helpers": False},
+    ]
 
-    # Get relative path for target file
-    try:
-        target_relative_path = function_to_optimize.file_path.resolve().relative_to(project_root_path.resolve())
-    except ValueError:
-        target_relative_path = function_to_optimize.file_path
+    fallback_descriptions = [
+        "full context",
+        "without cross-file helpers",
+        "without cross-file helpers and Javadoc",
+        "target code only (no helpers, no Javadoc)",
+    ]
 
-    # Group helpers by file path
-    helpers_by_file: dict[Path, list[HelperFunction]] = defaultdict(list)
-    helper_function_sources = []
+    code_strings = None
+    helper_function_sources = None
+    read_only_context = None
 
-    for helper in code_context.helper_functions:
-        helpers_by_file[helper.file_path].append(helper)
-
-        # Convert to FunctionSource for pipeline compatibility
-        helper_function_sources.append(
-            FunctionSource(
-                file_path=helper.file_path,
-                qualified_name=helper.qualified_name,
-                fully_qualified_name=helper.qualified_name,
-                only_function_name=helper.name,
-                source_code=helper.source_code,
-                jedi_definition=None,
-            )
+    for i, strategy in enumerate(fallback_strategies):
+        code_strings, helper_function_sources, read_only_context = _build_code_strings_for_language(
+            code_context, function_to_optimize, project_root_path, **strategy
         )
 
-    # Build read-writable code (target file + same-file helpers + global variables)
-    read_writable_code_strings = []
-
-    # Combine target code with same-file helpers
-    target_file_code = code_context.target_code
-    same_file_helpers = helpers_by_file.get(function_to_optimize.file_path, [])
-    if same_file_helpers:
-        helper_code = "\n\n".join(h.source_code for h in same_file_helpers)
-        target_file_code = target_file_code + "\n\n" + helper_code
-
-    # Note: code_context.read_only_context contains type definitions and global variables
-    # These should be passed as read-only context to the AI, not prepended to the target code
-    # If prepended to target code, the AI treats them as code to optimize and includes them in output
-
-    # Add imports to target file code
-    if imports_code:
-        target_file_code = imports_code + "\n\n" + target_file_code
-
-    read_writable_code_strings.append(
-        CodeString(code=target_file_code, file_path=target_relative_path, language=function_to_optimize.language)
-    )
-
-    # Add helper files (cross-file helpers)
-    for file_path, file_helpers in helpers_by_file.items():
-        if file_path == function_to_optimize.file_path:
-            continue  # Already included in target file
-
-        try:
-            helper_relative_path = file_path.resolve().relative_to(project_root_path.resolve())
-        except ValueError:
-            helper_relative_path = file_path
-
-        # Combine all helpers from this file
-        combined_helper_code = "\n\n".join(h.source_code for h in file_helpers)
-
-        read_writable_code_strings.append(
-            CodeString(
-                code=combined_helper_code, file_path=helper_relative_path, language=function_to_optimize.language
-            )
+        read_writable_code = CodeStringsMarkdown(
+            code_strings=code_strings, language=function_to_optimize.language
         )
+        read_writable_tokens = encoded_tokens_len(read_writable_code.markdown)
+
+        if read_writable_tokens <= optim_token_limit:
+            if i > 0:
+                logger.debug(
+                    "Code context exceeded token limit, using fallback: %s (%d tokens)",
+                    fallback_descriptions[i],
+                    read_writable_tokens,
+                )
+            break
+    else:
+        raise ValueError("Read-writable code has exceeded token limit even after removing all helpers and Javadoc")
 
     read_writable_code = CodeStringsMarkdown(
-        code_strings=read_writable_code_strings, language=function_to_optimize.language
+        code_strings=code_strings, language=function_to_optimize.language
     )
 
-    # Build testgen context (same as read_writable for non-Python)
+    # Build testgen context with its own progressive fallback
+    # Start from the same strategy level that worked for optim
+    testgen_code_strings = code_strings
+    testgen_helpers = helper_function_sources
+
     testgen_context = CodeStringsMarkdown(
-        code_strings=read_writable_code_strings.copy(), language=function_to_optimize.language
+        code_strings=testgen_code_strings.copy(), language=function_to_optimize.language
     )
-
-    # Check token limits
-    read_writable_tokens = encoded_tokens_len(read_writable_code.markdown)
-    if read_writable_tokens > optim_token_limit:
-        raise ValueError("Read-writable code has exceeded token limit, cannot proceed")
-
     testgen_tokens = encoded_tokens_len(testgen_context.markdown)
+
     if testgen_tokens > testgen_token_limit:
-        raise ValueError("Testgen code context has exceeded token limit, cannot proceed")
+        # Try remaining fallback strategies for testgen
+        for j in range(i + 1, len(fallback_strategies)):
+            testgen_code_strings, testgen_helpers, read_only_context = _build_code_strings_for_language(
+                code_context, function_to_optimize, project_root_path, **fallback_strategies[j]
+            )
+            testgen_context = CodeStringsMarkdown(
+                code_strings=testgen_code_strings.copy(), language=function_to_optimize.language
+            )
+            testgen_tokens = encoded_tokens_len(testgen_context.markdown)
+
+            if testgen_tokens <= testgen_token_limit:
+                logger.debug(
+                    "Testgen context exceeded token limit, using fallback: %s (%d tokens)",
+                    fallback_descriptions[j],
+                    testgen_tokens,
+                )
+                break
+        else:
+            raise ValueError("Testgen code context has exceeded token limit even after removing all helpers and Javadoc")
 
     # Generate code hash from all read-writable code
     code_hash = hashlib.sha256(read_writable_code.flat.encode("utf-8")).hexdigest()
@@ -336,7 +447,7 @@ def get_code_optimization_context_for_language(
         read_writable_code=read_writable_code,
         # Pass type definitions and globals as read-only context for the AI
         # This way the AI sees them as context but doesn't include them in optimized output
-        read_only_context_code=code_context.read_only_context,
+        read_only_context_code=read_only_context,
         hashing_code_context=read_writable_code.flat,
         hashing_code_context_hash=code_hash,
         helper_functions=helper_function_sources,

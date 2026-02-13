@@ -54,6 +54,24 @@ class JavaMethodNode:
 
 
 @dataclass
+class TestMethodInfo:
+    """A @Test-annotated method found by tree-sitter analysis."""
+
+    name: str
+    method_node: Node
+    body_node: Node  # The block (body) of the method
+
+
+@dataclass
+class MethodCallInfo:
+    """A method invocation found within a given AST subtree."""
+
+    node: Node
+    full_text: str
+    in_lambda: bool
+
+
+@dataclass
 class JavaClassNode:
     """Represents a class found by tree-sitter analysis."""
 
@@ -677,6 +695,170 @@ class JavaAnalyzer:
                         return self.get_node_text(pkg_child, source_bytes)
 
         return None
+
+    def find_test_methods(self, source: str) -> list[TestMethodInfo]:
+        """Find all @Test-annotated methods in source code.
+
+        Identifies method_declaration nodes whose modifiers contain a
+        marker_annotation or annotation with name ``Test`` (not ``TestOnly``,
+        ``TestFactory``, etc.).
+
+        Args:
+            source: The source code to analyze.
+
+        Returns:
+            List of TestMethodInfo in source order.
+
+        """
+        source_bytes = source.encode("utf8")
+        tree = self.parse(source_bytes)
+        results: list[TestMethodInfo] = []
+        self._walk_for_test_methods(tree.root_node, source_bytes, results)
+        return results
+
+    def _walk_for_test_methods(
+        self, node: Node, source_bytes: bytes, results: list[TestMethodInfo]
+    ) -> None:
+        """Recursively walk the tree to find @Test methods."""
+        if node.type == "method_declaration":
+            if self._has_test_annotation(node, source_bytes):
+                body = node.child_by_field_name("body")
+                name_node = node.child_by_field_name("name")
+                if body and name_node:
+                    results.append(
+                        TestMethodInfo(
+                            name=self.get_node_text(name_node, source_bytes),
+                            method_node=node,
+                            body_node=body,
+                        )
+                    )
+
+        for child in node.children:
+            self._walk_for_test_methods(child, source_bytes, results)
+
+    def _has_test_annotation(self, method_node: Node, source_bytes: bytes) -> bool:
+        """Check if a method_declaration has an @Test annotation.
+
+        Only matches exact ``Test`` name – not ``TestOnly``, ``TestFactory``, etc.
+        Handles both ``@Test`` (marker_annotation) and ``@Test(...)`` (annotation).
+        """
+        for child in method_node.children:
+            if child.type == "modifiers":
+                for mod_child in child.children:
+                    if mod_child.type in ("marker_annotation", "annotation"):
+                        name_node = mod_child.child_by_field_name("name")
+                        if name_node is None:
+                            # Fallback: search direct children for identifier
+                            for ann_child in mod_child.children:
+                                if ann_child.type == "identifier":
+                                    name_node = ann_child
+                                    break
+                        if name_node and self.get_node_text(name_node, source_bytes) == "Test":
+                            return True
+        return False
+
+    def find_method_invocations(
+        self, body_node: Node, source_bytes: bytes, func_name: str
+    ) -> list[MethodCallInfo]:
+        """Find all invocations of *func_name* within a given AST subtree.
+
+        Checks the parent chain for ``lambda_expression`` nodes to set the
+        ``in_lambda`` flag.
+
+        Args:
+            body_node: The subtree to search within (typically a method body block).
+            source_bytes: The full source code as bytes.
+            func_name: The method name to match.
+
+        Returns:
+            List of MethodCallInfo in source order.
+
+        """
+        results: list[MethodCallInfo] = []
+        self._walk_for_invocations(body_node, source_bytes, func_name, results, in_lambda=False)
+        return results
+
+    def _walk_for_invocations(
+        self,
+        node: Node,
+        source_bytes: bytes,
+        func_name: str,
+        results: list[MethodCallInfo],
+        in_lambda: bool,
+    ) -> None:
+        """Recursively find method invocations matching func_name."""
+        if node.type == "lambda_expression":
+            in_lambda = True
+
+        if node.type == "method_invocation":
+            name_node = node.child_by_field_name("name")
+            if name_node and self.get_node_text(name_node, source_bytes) == func_name:
+                results.append(
+                    MethodCallInfo(
+                        node=node,
+                        full_text=self.get_node_text(node, source_bytes),
+                        in_lambda=in_lambda,
+                    )
+                )
+
+        for child in node.children:
+            self._walk_for_invocations(child, source_bytes, func_name, results, in_lambda)
+
+    def find_identifier_references(self, source: str, name: str) -> list[tuple[int, int]]:
+        """Find all ``identifier`` / ``type_identifier`` AST nodes matching *name*.
+
+        Tree-sitter naturally excludes matches inside string literals and comments,
+        making this safer than ``re.sub(r"\\b...\\b", ...)``.
+
+        Args:
+            source: The source code to analyze.
+            name: The identifier name to match.
+
+        Returns:
+            List of ``(start_byte, end_byte)`` pairs in source order.
+
+        """
+        source_bytes = source.encode("utf8")
+        tree = self.parse(source_bytes)
+        refs: list[tuple[int, int]] = []
+        self._walk_for_identifiers(tree.root_node, source_bytes, name, refs)
+        return refs
+
+    def _walk_for_identifiers(
+        self, node: Node, source_bytes: bytes, name: str, refs: list[tuple[int, int]]
+    ) -> None:
+        """Recursively find identifier/type_identifier nodes matching name."""
+        if node.type in ("identifier", "type_identifier"):
+            if self.get_node_text(node, source_bytes) == name:
+                refs.append((node.start_byte, node.end_byte))
+        for child in node.children:
+            self._walk_for_identifiers(child, source_bytes, name, refs)
+
+    def find_import_insertion_point(self, source: str) -> int:
+        """Find the 0-indexed line after the last import or package declaration.
+
+        Returns the line index where new import statements should be inserted.
+        If no imports or package found, returns 0.
+
+        Args:
+            source: The source code to analyze.
+
+        Returns:
+            0-indexed line number for insertion.
+
+        """
+        source_bytes = source.encode("utf8")
+        tree = self.parse(source_bytes)
+        last_line = 0
+
+        for child in tree.root_node.children:
+            if child.type in ("import_declaration", "package_declaration"):
+                # end_point[0] is 0-indexed last line of the node
+                candidate = child.end_point[0] + 1
+                if candidate > last_line:
+                    last_line = candidate
+
+        return last_line
 
 
 def get_java_analyzer() -> JavaAnalyzer:
