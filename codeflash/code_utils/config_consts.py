@@ -10,6 +10,7 @@ INDIVIDUAL_TESTCASE_TIMEOUT = 15  # For Python pytest
 JAVA_TESTCASE_TIMEOUT = 120  # Java Maven tests need more time due to startup overhead
 MAX_FUNCTION_TEST_SECONDS = 60
 MIN_IMPROVEMENT_THRESHOLD = 0.05
+MIN_IMPROVEMENT_THRESHOLD_JAVA = 0.02
 MIN_THROUGHPUT_IMPROVEMENT_THRESHOLD = 0.10  # 10% minimum improvement for async throughput
 MIN_CONCURRENCY_IMPROVEMENT_THRESHOLD = 0.20  # 20% concurrency ratio improvement required
 CONCURRENCY_FACTOR = 10  # Number of concurrent executions for concurrency benchmark

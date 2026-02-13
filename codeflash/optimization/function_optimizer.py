@@ -48,6 +48,7 @@ from codeflash.code_utils.config_consts import (
     COVERAGE_THRESHOLD,
     INDIVIDUAL_TESTCASE_TIMEOUT,
     MIN_CORRECT_CANDIDATES,
+    MIN_IMPROVEMENT_THRESHOLD_JAVA,
     OPTIMIZATION_CONTEXT_TOKEN_LIMIT,
     REFINED_CANDIDATE_RANKING_WEIGHTS,
     REPEAT_OPTIMIZATION_PROBABILITY,
@@ -1364,6 +1365,8 @@ class FunctionOptimizer:
         eval_ctx.record_successful_candidate(candidate.optimization_id, candidate_result.best_test_runtime, perf_gain)
 
         # Check if this is a successful optimization
+        # Use a lower threshold for Java where I/O-bound functions have smaller optimization margins
+        java_override = MIN_IMPROVEMENT_THRESHOLD_JAVA if self.language_support.language == "java" else None
         is_successful_opt = speedup_critic(
             candidate_result,
             original_code_baseline.runtime,
@@ -1372,6 +1375,7 @@ class FunctionOptimizer:
             best_throughput_until_now=None,
             original_concurrency_metrics=original_code_baseline.concurrency_metrics,
             best_concurrency_ratio_until_now=None,
+            min_improvement_override=java_override,
         ) and quantity_of_tests_critic(candidate_result)
 
         tree = self.build_runtime_info_tree(
@@ -2272,6 +2276,7 @@ class FunctionOptimizer:
                         fto_benchmark_timings=self.function_benchmark_timings,
                         total_benchmark_timings=self.total_benchmark_timings,
                     )
+                java_override = MIN_IMPROVEMENT_THRESHOLD_JAVA if self.language_support.language == "java" else None
                 acceptance_reason = get_acceptance_reason(
                     original_runtime_ns=original_code_baseline.runtime,
                     optimized_runtime_ns=best_optimization.runtime,
@@ -2279,6 +2284,7 @@ class FunctionOptimizer:
                     optimized_async_throughput=best_optimization.async_throughput,
                     original_concurrency_metrics=original_code_baseline.concurrency_metrics,
                     optimized_concurrency_metrics=best_optimization.concurrency_metrics,
+                    min_improvement_override=java_override,
                 )
                 explanation = Explanation(
                     raw_explanation_message=best_optimization.candidate.explanation,

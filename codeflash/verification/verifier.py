@@ -122,6 +122,21 @@ def generate_tests(
             )
 
             logger.debug(f"Instrumented Java tests locally for {func_name}")
+            logger.debug(
+                f"=== Java Generated Tests (raw) for {func_name} ===\n"
+                f"{generated_test_source}\n"
+                f"=== End Java Generated Tests ==="
+            )
+            logger.debug(
+                f"=== Java Instrumented Behavior Tests for {func_name} ===\n"
+                f"{instrumented_behavior_test_source}\n"
+                f"=== End Java Instrumented Behavior Tests ==="
+            )
+            logger.debug(
+                f"=== Java Instrumented Perf Tests for {func_name} ===\n"
+                f"{instrumented_perf_test_source}\n"
+                f"=== End Java Instrumented Perf Tests ==="
+            )
         else:
             # Python: instrumentation is done by aiservice, just replace temp dir placeholders
             instrumented_behavior_test_source = instrumented_behavior_test_source.replace(

@@ -117,6 +117,38 @@ class Optimizer:
         except Exception as e:
             logger.debug(f"Failed to verify JS requirements: {e}")
 
+    def _setup_java_runtime(self) -> None:
+        from pathlib import Path as _Path
+
+        from codeflash.languages.java.build_tools import add_codeflash_dependency_to_pom, install_codeflash_runtime
+
+        runtime_jar = _Path(__file__).parent.parent / "languages" / "java" / "resources" / "codeflash-runtime-1.0.0.jar"
+        project_root = self.args.project_root
+
+        if not runtime_jar.exists():
+            logger.warning("codeflash-runtime JAR not found at %s, behavior capture may not work", runtime_jar)
+            return
+
+        if not install_codeflash_runtime(project_root, runtime_jar):
+            logger.warning("Failed to install codeflash-runtime to local Maven repo")
+            return
+
+        # Add dependency to the test module's pom.xml (or root pom.xml)
+        test_root = _Path(self.args.tests_root) if hasattr(self.args, "tests_root") and self.args.tests_root else None
+        pom_path = project_root / "pom.xml"
+
+        # For multi-module projects, find the test module's pom.xml
+        if test_root and test_root != project_root:
+            candidate = test_root
+            while candidate != project_root and candidate != candidate.parent:
+                if (candidate / "pom.xml").exists():
+                    pom_path = candidate / "pom.xml"
+                    break
+                candidate = candidate.parent
+
+        if pom_path.exists():
+            add_codeflash_dependency_to_pom(pom_path)
+
     def run_benchmarks(
         self, file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]], num_optimizable_functions: int
     ) -> tuple[dict[str, dict[BenchmarkKey, float]], dict[BenchmarkKey, float]]:
@@ -495,6 +527,8 @@ class Optimizer:
                         self.test_cfg.js_project_root = self._find_js_project_root(file_path)
                         # Verify JS requirements before proceeding
                         self._verify_js_requirements()
+                    elif is_java():
+                        self._setup_java_runtime()
                     break
 
         if self.args.all:

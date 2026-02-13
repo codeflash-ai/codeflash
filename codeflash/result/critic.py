@@ -72,6 +72,7 @@ def speedup_critic(
     best_throughput_until_now: int | None = None,
     original_concurrency_metrics: ConcurrencyMetrics | None = None,
     best_concurrency_ratio_until_now: float | None = None,
+    min_improvement_override: float | None = None,
 ) -> bool:
     """Take in a correct optimized Test Result and decide if the optimization should actually be surfaced to the user.
 
@@ -92,7 +93,8 @@ def speedup_critic(
     - Concurrency improvements detect when blocking calls are replaced with non-blocking equivalents
     """
     # Runtime performance evaluation
-    noise_floor = 3 * MIN_IMPROVEMENT_THRESHOLD if original_code_runtime < 10000 else MIN_IMPROVEMENT_THRESHOLD
+    threshold = min_improvement_override if min_improvement_override is not None else MIN_IMPROVEMENT_THRESHOLD
+    noise_floor = 3 * threshold if original_code_runtime < 10000 else threshold
     if not disable_gh_action_noise and env_utils.is_ci():
         noise_floor = noise_floor * 2  # Increase the noise floor in GitHub Actions mode
 
@@ -146,13 +148,15 @@ def get_acceptance_reason(
     optimized_async_throughput: int | None = None,
     original_concurrency_metrics: ConcurrencyMetrics | None = None,
     optimized_concurrency_metrics: ConcurrencyMetrics | None = None,
+    min_improvement_override: float | None = None,
 ) -> AcceptanceReason:
     """Determine why an optimization was accepted.
 
     Returns the primary reason for acceptance, with priority:
     concurrency > throughput > runtime (for async code).
     """
-    noise_floor = 3 * MIN_IMPROVEMENT_THRESHOLD if original_runtime_ns < 10000 else MIN_IMPROVEMENT_THRESHOLD
+    threshold = min_improvement_override if min_improvement_override is not None else MIN_IMPROVEMENT_THRESHOLD
+    noise_floor = 3 * threshold if original_runtime_ns < 10000 else threshold
     if env_utils.is_ci():
         noise_floor = noise_floor * 2
 

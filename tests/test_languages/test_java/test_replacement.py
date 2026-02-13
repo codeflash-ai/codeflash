@@ -647,7 +647,8 @@ public class NullChecker {{
 
         assert result is True
         new_code = java_file.read_text(encoding="utf-8")
-        expected = """public class NullChecker {
+        expected = """import java.util.Objects;
+public class NullChecker {
     public boolean isEqual(String s1, String s2) {
         return Objects.equals(s1, s2);
     }

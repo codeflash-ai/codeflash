@@ -33,10 +33,11 @@ class ParsedOptimization:
     target_method_source: str
     new_fields: list[str]  # Source text of new fields to add
     new_helper_methods: list[str]  # Source text of new helper methods to add
+    new_imports: list[str]  # Import statements to add (e.g., "import java.nio.file.Files;")
 
 
 def _parse_optimization_source(new_source: str, target_method_name: str, analyzer: JavaAnalyzer) -> ParsedOptimization:
-    """Parse optimization source to extract method and additional class members.
+    """Parse optimization source to extract method, imports, and additional class members.
 
     The new_source may contain:
     - Just a method definition
@@ -48,12 +49,19 @@ def _parse_optimization_source(new_source: str, target_method_name: str, analyze
         analyzer: JavaAnalyzer instance.
 
     Returns:
-        ParsedOptimization with the method and any additional members.
+        ParsedOptimization with the method, imports, and any additional members.
 
     """
     new_fields: list[str] = []
     new_helper_methods: list[str] = []
     target_method_source = new_source  # Default to the whole source
+
+    # Extract import statements from the candidate code
+    new_imports: list[str] = []
+    for imp in analyzer.find_imports(new_source):
+        prefix = "import static " if imp.is_static else "import "
+        suffix = ".*" if imp.is_wildcard else ""
+        new_imports.append(f"{prefix}{imp.import_path}{suffix};")
 
     # Check if this is a full class or just a method
     classes = analyzer.find_classes(new_source)
@@ -92,8 +100,55 @@ def _parse_optimization_source(new_source: str, target_method_name: str, analyze
                 new_fields.append(field.source_text)
 
     return ParsedOptimization(
-        target_method_source=target_method_source, new_fields=new_fields, new_helper_methods=new_helper_methods
+        target_method_source=target_method_source,
+        new_fields=new_fields,
+        new_helper_methods=new_helper_methods,
+        new_imports=new_imports,
     )
+
+
+def _add_missing_imports(source: str, candidate_imports: list[str], analyzer: JavaAnalyzer) -> str:
+    """Add import statements from the optimization candidate that are missing in the original source.
+
+    Args:
+        source: The original source code.
+        candidate_imports: Import statements from the candidate (e.g., ["import java.nio.file.Files;"]).
+        analyzer: JavaAnalyzer instance.
+
+    Returns:
+        Source code with missing imports added.
+
+    """
+    existing_imports = analyzer.find_imports(source)
+    existing_import_strs = set()
+    for imp in existing_imports:
+        prefix = "import static " if imp.is_static else "import "
+        suffix = ".*" if imp.is_wildcard else ""
+        existing_import_strs.add(f"{prefix}{imp.import_path}{suffix};")
+
+    missing_imports = [imp for imp in candidate_imports if imp not in existing_import_strs]
+    if not missing_imports:
+        return source
+
+    logger.debug("Adding %d missing imports: %s", len(missing_imports), missing_imports)
+
+    # Insert after the last existing import, or after the package declaration
+    lines = source.splitlines(keepends=True)
+    insert_line = 0
+
+    if existing_imports:
+        insert_line = max(imp.end_line for imp in existing_imports)
+    else:
+        # No existing imports — insert after package declaration
+        for i, line in enumerate(lines):
+            if line.strip().startswith("package "):
+                insert_line = i + 1
+                break
+
+    import_block = "".join(imp + "\n" for imp in missing_imports)
+    before = lines[:insert_line]
+    after = lines[insert_line:]
+    return "".join(before) + import_block + "".join(after)
 
 
 def _insert_class_members(
@@ -236,6 +291,10 @@ def replace_function(
 
     # Parse the optimization to extract components
     parsed = _parse_optimization_source(new_source, func_name, analyzer)
+
+    # Add any new imports from the optimization candidate
+    if parsed.new_imports:
+        source = _add_missing_imports(source, parsed.new_imports, analyzer)
 
     # Find the method in the original source
     methods = analyzer.find_methods(source)

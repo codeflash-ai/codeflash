@@ -508,11 +508,23 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                             )
                             wrapped_body_lines.append(serialize_line)
 
-                        # Check if the line is now just a variable reference (invalid statement)
-                        # This happens when the original line was just a void method call
-                        # e.g., "BubbleSort.bubbleSort(original);" becomes "_cf_result1_1;"
+                        # Check if the line is now just a variable reference (invalid statement).
+                        # This happens when the original line was just a void method call:
+                        #   "BubbleSort.bubbleSort(original);" becomes "_cf_result1_1;"
+                        # It also happens when assertThrows was transformed to try-catch:
+                        #   "try { func(args); } catch (...) {}" becomes
+                        #   "try { _cf_result1_1; } catch (...) {}"
+                        # A bare variable is not a valid Java statement.
                         stripped_new = new_line.strip().rstrip(";").strip()
-                        if stripped_new and stripped_new not in (var_name, var_with_cast):
+                        is_bare_var = stripped_new in (var_name, var_with_cast)
+                        is_try_with_bare_var = bool(re.match(
+                            r"try\s*\{\s*(?:"
+                            + re.escape(var_name)
+                            + (r"|" + re.escape(var_with_cast) if var_with_cast != var_name else "")
+                            + r")\s*;\s*\}\s*catch\s*\(",
+                            stripped_new,
+                        ))
+                        if stripped_new and not is_bare_var and not is_try_with_bare_var:
                             wrapped_body_lines.append(new_line)
                     else:
                         wrapped_body_lines.append(body_line)
@@ -834,7 +846,7 @@ def instrument_generated_java_test(
     original_class_name = class_match.group(1)
 
 
-    # For performance mode, add timing instrumentation
+    # Add mode-specific instrumentation
     # Use original class name (without suffix) in timing markers for consistency with Python
     if mode == "performance":
 

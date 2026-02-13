@@ -915,6 +915,7 @@ class TestInstrumentGeneratedJavaTest:
         1. Remove assertions containing the target function call
         2. Capture the function return value instead
         3. Rename the class with __perfinstrumented suffix
+        4. Add SQLite behavior instrumentation to capture return values
         """
         test_code = """import org.junit.jupiter.api.Test;
 
@@ -932,17 +933,16 @@ public class CalculatorTest {
             mode="behavior",
         )
 
-        # Behavior mode transforms assertions to capture return values
-        expected = """import org.junit.jupiter.api.Test;
-
-public class CalculatorTest__perfinstrumented {
-    @Test
-    public void testAdd() {
-        Object _cf_result1 = new Calculator().add(2, 2);
-    }
-}
-"""
-        assert result == expected
+        # Behavior mode transforms assertions, renames class, and adds SQLite instrumentation
+        assert "class CalculatorTest__perfinstrumented" in result
+        assert "import java.sql.Connection;" in result
+        assert "import java.sql.DriverManager;" in result
+        assert "import java.sql.PreparedStatement;" in result
+        assert "CODEFLASH_OUTPUT_FILE" in result
+        assert "CREATE TABLE IF NOT EXISTS test_results" in result
+        assert "INSERT INTO test_results VALUES" in result
+        assert "_cf_serializedResult1" in result
+        assert "com.codeflash.Serializer.serialize" in result
 
     def test_instrument_generated_test_performance_mode(self):
         """Test instrumenting generated test in performance mode with inner loop."""
