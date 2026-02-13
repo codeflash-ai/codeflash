@@ -303,6 +303,18 @@ class {self.profiler_class} {{
                 continue
 
             # Skip empty lines, comments, closing braces
+            # Also skip lines starting with keywords that must follow closing braces
+            # (else, else if, catch, finally) to avoid breaking if-else/try-catch chains
+            is_continuation_keyword = (
+                stripped.startswith("else ")
+                or stripped.startswith("else{")
+                or stripped == "else"
+                or stripped.startswith("catch ")
+                or stripped.startswith("catch(")
+                or stripped.startswith("finally ")
+                or stripped.startswith("finally{")
+            )
+
             if (
                 local_line_num in executable_lines
                 and stripped
@@ -311,6 +323,7 @@ class {self.profiler_class} {{
                 and not stripped.startswith("*")
                 and stripped != "}"
                 and stripped != "};"
+                and not is_continuation_keyword
             ):
                 # Get indentation
                 indent = len(line) - len(line.lstrip())
