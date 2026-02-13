@@ -763,11 +763,24 @@ class FunctionOptimizer:
         tests_root = self.test_cfg.tests_root
         parts = tests_root.parts
 
+        # Check if tests_root already ends with "src" (already a Java sources root)
+        if tests_root.name == "src":
+            logger.debug(f"[JAVA] tests_root already ends with 'src': {tests_root}")
+            logger.debug(f"[JAVA-ROOT] Returning Java sources root: {tests_root}, tests_root was: {tests_root}")
+            return tests_root
+
         # Check if tests_root already ends with src/test/java (Maven-standard)
         if len(parts) >= 3 and parts[-3:] == ("src", "test", "java"):
             logger.debug(f"[JAVA] tests_root already is Maven-standard test directory: {tests_root}")
             logger.debug(f"[JAVA-ROOT] Returning Java sources root: {tests_root}, tests_root was: {tests_root}")
             return tests_root
+
+        # Check for simple "src" subdirectory (handles test/src, test-module/src, etc.)
+        src_subdir = tests_root / "src"
+        if src_subdir.exists() and src_subdir.is_dir():
+            logger.debug(f"[JAVA] Found 'src' subdirectory: {src_subdir}")
+            logger.debug(f"[JAVA-ROOT] Returning Java sources root: {src_subdir}, tests_root was: {tests_root}")
+            return src_subdir
 
         # Check for Maven-standard src/test/java structure as subdirectory
         maven_test_dir = tests_root / "src" / "test" / "java"
