@@ -69,6 +69,7 @@ from codeflash.code_utils.formatter import format_code, format_generated_code, s
 from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.line_profile_utils import add_decorator_imports, contains_jit_decorator
+from codeflash.code_utils.shell_utils import make_env_with_project_root
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.context import code_context_extractor
@@ -2821,14 +2822,10 @@ class FunctionOptimizer:
     def get_test_env(
         self, codeflash_loop_index: int, codeflash_test_iteration: int, codeflash_tracer_disable: int = 1
     ) -> dict:
-        test_env = os.environ.copy()
+        test_env = make_env_with_project_root(self.args.project_root)
         test_env["CODEFLASH_TEST_ITERATION"] = str(codeflash_test_iteration)
         test_env["CODEFLASH_TRACER_DISABLE"] = str(codeflash_tracer_disable)
         test_env["CODEFLASH_LOOP_INDEX"] = str(codeflash_loop_index)
-        if "PYTHONPATH" not in test_env:
-            test_env["PYTHONPATH"] = str(self.args.project_root)
-        else:
-            test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
         return test_env
 
     def line_profiler_step(
