@@ -703,6 +703,11 @@ class FunctionOptimizer:
             logger.debug(
                 f"[PIPELINE] Added test file to collection: behavior={test_file_obj.instrumented_behavior_file_path}, perf={test_file_obj.benchmarking_file_path}"
             )
+            logger.debug(
+                f"[REGISTER] TestFile added: behavior={test_file_obj.instrumented_behavior_file_path}, "
+                f"exists={test_file_obj.instrumented_behavior_file_path.exists()}, "
+                f"original={test_file_obj.original_file_path}, test_type={test_file_obj.test_type}"
+            )
 
             logger.info(f"Generated test {i + 1}/{count_tests}:")
             # Use correct extension based on language
@@ -758,15 +763,30 @@ class FunctionOptimizer:
         tests_root = self.test_cfg.tests_root
         parts = tests_root.parts
 
+        # Check if tests_root already ends with "src" (already a Java sources root)
+        if tests_root.name == "src":
+            logger.debug(f"[JAVA] tests_root already ends with 'src': {tests_root}")
+            logger.debug(f"[JAVA-ROOT] Returning Java sources root: {tests_root}, tests_root was: {tests_root}")
+            return tests_root
+
         # Check if tests_root already ends with src/test/java (Maven-standard)
         if len(parts) >= 3 and parts[-3:] == ("src", "test", "java"):
             logger.debug(f"[JAVA] tests_root already is Maven-standard test directory: {tests_root}")
+            logger.debug(f"[JAVA-ROOT] Returning Java sources root: {tests_root}, tests_root was: {tests_root}")
             return tests_root
+
+        # Check for simple "src" subdirectory (handles test/src, test-module/src, etc.)
+        src_subdir = tests_root / "src"
+        if src_subdir.exists() and src_subdir.is_dir():
+            logger.debug(f"[JAVA] Found 'src' subdirectory: {src_subdir}")
+            logger.debug(f"[JAVA-ROOT] Returning Java sources root: {src_subdir}, tests_root was: {tests_root}")
+            return src_subdir
 
         # Check for Maven-standard src/test/java structure as subdirectory
         maven_test_dir = tests_root / "src" / "test" / "java"
         if maven_test_dir.exists() and maven_test_dir.is_dir():
             logger.debug(f"[JAVA] Found Maven-standard test directory as subdirectory: {maven_test_dir}")
+            logger.debug(f"[JAVA-ROOT] Returning Java sources root: {maven_test_dir}, tests_root was: {tests_root}")
             return maven_test_dir
 
         # Look for standard Java package prefixes that indicate the start of package structure
@@ -780,6 +800,7 @@ class FunctionOptimizer:
                     logger.debug(
                         f"[JAVA] Detected Java sources root: {java_sources_root} (from tests_root: {tests_root})"
                     )
+                    logger.debug(f"[JAVA-ROOT] Returning Java sources root: {java_sources_root}, tests_root was: {tests_root}")
                     return java_sources_root
 
         # If no standard package prefix found, check if there's a 'java' directory
@@ -789,10 +810,12 @@ class FunctionOptimizer:
                 # Return up to and including 'java'
                 java_sources_root = Path(*parts[: i + 1])
                 logger.debug(f"[JAVA] Detected Maven-style Java sources root: {java_sources_root}")
+                logger.debug(f"[JAVA-ROOT] Returning Java sources root: {java_sources_root}, tests_root was: {tests_root}")
                 return java_sources_root
 
         # Default: return tests_root as-is (original behavior)
         logger.debug(f"[JAVA] Using tests_root as Java sources root: {tests_root}")
+        logger.debug(f"[JAVA-ROOT] Returning Java sources root: {tests_root}, tests_root was: {tests_root}")
         return tests_root
 
     def _fix_java_test_paths(
@@ -913,6 +936,10 @@ class FunctionOptimizer:
         perf_path.parent.mkdir(parents=True, exist_ok=True)
 
         logger.debug(f"[JAVA] Fixed paths: behavior={behavior_path}, perf={perf_path}")
+        logger.debug(
+            f"[WRITE-PATH] Writing test to behavior_path={behavior_path}, perf_path={perf_path}, "
+            f"package={package_name}, behavior_class={behavior_class}, perf_class={perf_class}"
+        )
         return behavior_path, perf_path, modified_behavior_source, modified_perf_source
 
     # note: this isn't called by the lsp, only called by cli
@@ -1838,26 +1865,30 @@ class FunctionOptimizer:
                     raise ValueError(msg)
 
                 # Use language-specific instrumentation
+                # Read the test file first
+                with path_obj_test_file.open("r", encoding="utf8") as f:
+                    original_test_source = f.read()
+
                 success, injected_behavior_test = self.language_support.instrument_existing_test(
-                    test_path=path_obj_test_file,
+                    test_string=original_test_source,
                     call_positions=[test.position for test in tests_in_file_list],
                     function_to_optimize=self.function_to_optimize,
                     tests_project_root=self.test_cfg.tests_project_rootdir,
                     mode="behavior",
+                    test_path=path_obj_test_file,
                 )
                 if not success:
                     logger.debug(f"Failed to instrument test file {test_file} for behavior testing")
                     continue
 
-                with path_obj_test_file.open("r", encoding="utf8") as f:
-                    injected_behavior_test_source = f.read()
-                    success, injected_perf_test = self.language_support.instrument_existing_test(
-                        test_string=injected_behavior_test_source,
-                        call_positions=[test.position for test in tests_in_file_list],
-                        function_to_optimize=self.function_to_optimize,
-                        tests_project_root=self.test_cfg.tests_project_rootdir,
-                        mode="performance",
-                    )
+                success, injected_perf_test = self.language_support.instrument_existing_test(
+                    test_string=original_test_source,
+                    call_positions=[test.position for test in tests_in_file_list],
+                    function_to_optimize=self.function_to_optimize,
+                    tests_project_root=self.test_cfg.tests_project_rootdir,
+                    mode="performance",
+                    test_path=path_obj_test_file,
+                )
                 if not success:
                     logger.debug(f"Failed to instrument test file {test_file} for performance testing")
                     continue
