@@ -871,8 +871,7 @@ def resolve_transitive_type_deps(cls: type) -> list[type]:
     import typing
 
     try:
-        init_attr = "__init__"
-        init_method = getattr(cls, init_attr)
+        init_method = getattr(cls, "__init__")
         hints = typing.get_type_hints(init_method)
     except Exception:
         return []
