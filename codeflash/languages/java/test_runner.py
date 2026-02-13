@@ -80,7 +80,9 @@ def _find_runtime_jar() -> Path | None:
         return resources_jar
 
     # Check development build directory
-    dev_jar = Path(__file__).parent.parent.parent.parent / "codeflash-java-runtime" / "target" / "codeflash-runtime-1.0.0.jar"
+    dev_jar = (
+        Path(__file__).parent.parent.parent.parent / "codeflash-java-runtime" / "target" / "codeflash-runtime-1.0.0.jar"
+    )
     if dev_jar.exists():
         return dev_jar
 
@@ -432,7 +434,9 @@ def run_behavioral_tests(
     if enable_coverage:
         logger.info(f"Maven verify completed with return code: {result.returncode}")
         if result.returncode != 0:
-            logger.warning(f"Maven verify had non-zero return code: {result.returncode}. Coverage data may be incomplete.")
+            logger.warning(
+                f"Maven verify had non-zero return code: {result.returncode}. Coverage data may be incomplete."
+            )
 
     # Log coverage file status after Maven verify
     if enable_coverage and coverage_xml_path:
@@ -446,7 +450,7 @@ def run_behavioral_tests(
             file_size = coverage_xml_path.stat().st_size
             logger.info(f"JaCoCo XML report exists: {coverage_xml_path} ({file_size} bytes)")
             if file_size == 0:
-                logger.warning(f"JaCoCo XML report is empty - report generation may have failed")
+                logger.warning("JaCoCo XML report is empty - report generation may have failed")
         else:
             logger.warning(f"JaCoCo XML report not found: {coverage_xml_path} - verify phase may not have completed")
 
@@ -605,6 +609,14 @@ def _run_tests_direct(
     # The launcher is included in junit-platform-console-standalone or junit-jupiter
     cmd = [
         str(java),
+        # Java 16+ module system: Kryo needs reflective access to internal JDK classes
+        "--add-opens", "java.base/java.util=ALL-UNNAMED",
+        "--add-opens", "java.base/java.lang=ALL-UNNAMED",
+        "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED",
+        "--add-opens", "java.base/java.io=ALL-UNNAMED",
+        "--add-opens", "java.base/java.math=ALL-UNNAMED",
+        "--add-opens", "java.base/java.net=ALL-UNNAMED",
+        "--add-opens", "java.base/java.util.zip=ALL-UNNAMED",
         "-cp",
         classpath,
         "org.junit.platform.console.ConsoleLauncher",
@@ -963,10 +975,33 @@ def run_benchmarking_tests(
 
         logger.debug("Loop %d completed in %.2fs (returncode=%d)", loop_idx, loop_time, result.returncode)
 
-        # Check if JUnit Console Launcher is not available (JUnit 4 projects)
-        # Fall back to Maven-based execution in this case
-        if loop_idx == 1 and result.returncode != 0 and result.stderr and "ConsoleLauncher" in result.stderr:
-            logger.debug("JUnit Console Launcher not available, falling back to Maven-based execution")
+        # Check if direct JVM execution failed on the first loop.
+        # Fall back to Maven-based execution for:
+        # - JUnit 4 projects (ConsoleLauncher not on classpath or no tests discovered)
+        # - Class not found errors
+        # - No tests executed (JUnit 4 tests invisible to JUnit 5 launcher)
+        should_fallback = False
+        if loop_idx == 1 and result.returncode != 0:
+            combined_output = (result.stderr or "") + (result.stdout or "")
+            fallback_indicators = [
+                "ConsoleLauncher",
+                "ClassNotFoundException",
+                "No tests were executed",
+                "Unable to locate a Java Runtime",
+                "No tests found",
+            ]
+            should_fallback = any(indicator in combined_output for indicator in fallback_indicators)
+            # Also fallback if no timing markers AND no tests actually ran
+            if not should_fallback:
+                import re as _re
+
+                has_markers = bool(_re.search(r"!######", result.stdout or ""))
+                if not has_markers and result.returncode != 0:
+                    should_fallback = True
+                    logger.debug("Direct execution failed with no timing markers, likely JUnit version mismatch")
+
+        if should_fallback:
+            logger.debug("Direct JVM execution failed, falling back to Maven-based execution")
             return _run_benchmarking_tests_maven(
                 test_paths,
                 test_env,
@@ -1184,15 +1219,24 @@ def _run_maven_tests(
     # These flags are safe no-ops on older Java versions.
     # Note: This overrides JaCoCo's argLine for the forked JVM, but JaCoCo coverage
     # is handled separately via enable_coverage and the verify phase.
-    add_opens_flags = " ".join([
-        "--add-opens java.base/java.util=ALL-UNNAMED",
-        "--add-opens java.base/java.lang=ALL-UNNAMED",
-        "--add-opens java.base/java.lang.reflect=ALL-UNNAMED",
-        "--add-opens java.base/java.io=ALL-UNNAMED",
-        "--add-opens java.base/java.math=ALL-UNNAMED",
-        "--add-opens java.base/java.net=ALL-UNNAMED",
-    ])
+    add_opens_flags = " ".join(
+        [
+            "--add-opens java.base/java.util=ALL-UNNAMED",
+            "--add-opens java.base/java.lang=ALL-UNNAMED",
+            "--add-opens java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens java.base/java.io=ALL-UNNAMED",
+            "--add-opens java.base/java.math=ALL-UNNAMED",
+            "--add-opens java.base/java.net=ALL-UNNAMED",
+            "--add-opens java.base/java.util.zip=ALL-UNNAMED",
+        ]
+    )
     cmd.append(f"-DargLine={add_opens_flags}")
+
+    # For performance mode, disable Surefire's file-based output redirection.
+    # By default, Surefire captures System.out.println() to .txt report files,
+    # which prevents timing markers from appearing in Maven's stdout.
+    if mode == "performance":
+        cmd.append("-Dsurefire.useFile=false")
 
     # When coverage is enabled, continue build even if tests fail so JaCoCo report is generated
     if enable_coverage:
@@ -1638,12 +1682,7 @@ def run_line_profile_tests(
     effective_timeout = max(timeout or min_timeout, min_timeout)
     logger.debug("Running line profiling tests (single run) with timeout=%ds", effective_timeout)
     result = _run_maven_tests(
-        maven_root,
-        test_paths,
-        run_env,
-        timeout=effective_timeout,
-        mode="line_profile",
-        test_module=test_module,
+        maven_root, test_paths, run_env, timeout=effective_timeout, mode="line_profile", test_module=test_module
     )
 
     # Get result XML path

@@ -76,6 +76,7 @@ def _find_java_executable() -> str | None:
         Path to java executable, or None if not found.
 
     """
+    import platform
     import shutil
 
     # Check JAVA_HOME
@@ -85,10 +86,41 @@ def _find_java_executable() -> str | None:
         if java_path.exists():
             return str(java_path)
 
-    # Check PATH
+    # On macOS, try to get JAVA_HOME from the system helper or Maven
+    if platform.system() == "Darwin":
+        # Try to extract Java home from Maven (which always finds it)
+        try:
+            result = subprocess.run(["mvn", "--version"], capture_output=True, text=True, timeout=10)
+            for line in result.stdout.split("\n"):
+                if "runtime:" in line:
+                    runtime_path = line.split("runtime:")[-1].strip()
+                    java_path = Path(runtime_path) / "bin" / "java"
+                    if java_path.exists():
+                        return str(java_path)
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+
+        # Check common Homebrew locations
+        for homebrew_java in [
+            "/opt/homebrew/opt/openjdk/bin/java",
+            "/opt/homebrew/opt/openjdk@25/bin/java",
+            "/opt/homebrew/opt/openjdk@21/bin/java",
+            "/opt/homebrew/opt/openjdk@17/bin/java",
+            "/usr/local/opt/openjdk/bin/java",
+        ]:
+            if Path(homebrew_java).exists():
+                return homebrew_java
+
+    # Check PATH (on macOS, /usr/bin/java may be a stub that fails)
     java_path = shutil.which("java")
     if java_path:
-        return java_path
+        # Verify it's a real Java, not a macOS stub
+        try:
+            result = subprocess.run([java_path, "--version"], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                return java_path
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
 
     return None
 
@@ -146,6 +178,14 @@ def compare_test_results(
         result = subprocess.run(
             [
                 java_exe,
+                # Java 16+ module system: Kryo needs reflective access to internal JDK classes
+                "--add-opens", "java.base/java.util=ALL-UNNAMED",
+                "--add-opens", "java.base/java.lang=ALL-UNNAMED",
+                "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED",
+                "--add-opens", "java.base/java.io=ALL-UNNAMED",
+                "--add-opens", "java.base/java.math=ALL-UNNAMED",
+                "--add-opens", "java.base/java.net=ALL-UNNAMED",
+                "--add-opens", "java.base/java.util.zip=ALL-UNNAMED",
                 "-cp",
                 str(jar_path),
                 "com.codeflash.Comparator",
