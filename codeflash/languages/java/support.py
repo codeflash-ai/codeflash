@@ -292,7 +292,10 @@ class JavaSupport(LanguageSupport):
     ) -> tuple[bool, str | None]:
         """Inject profiling code into an existing test file."""
         return instrument_existing_test(
-            test_path, call_positions, function_to_optimize, tests_project_root, mode, self._analyzer
+            test_string=test_string,
+            function_to_optimize=function_to_optimize,
+            mode=mode,
+            test_path=test_path
         )
 
     def instrument_source_for_line_profiler(
