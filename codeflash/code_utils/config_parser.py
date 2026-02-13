@@ -88,9 +88,23 @@ def find_conftest_files(test_paths: list[Path]) -> list[Path]:
 def parse_config_file(
     config_file_path: Path | None = None, override_formatter_check: bool = False
 ) -> tuple[dict[str, Any], Path]:
-    # First try package.json for JS/TS projects
     package_json_path = find_package_json(config_file_path)
+    pyproject_toml_path = find_closest_config_file("pyproject.toml") if config_file_path is None else None
+
+    # When both config files exist, prefer the one closer to CWD.
+    # This prevents a parent-directory package.json (e.g., monorepo root)
+    # from overriding a closer pyproject.toml with [tool.codeflash].
+    use_package_json = False
     if package_json_path:
+        if pyproject_toml_path is None:
+            use_package_json = True
+        else:
+            # Compare depth: more path parts = closer to CWD = more specific
+            package_json_depth = len(package_json_path.parent.parts)
+            pyproject_toml_depth = len(pyproject_toml_path.parent.parts)
+            use_package_json = package_json_depth >= pyproject_toml_depth
+
+    if use_package_json:
         result = parse_package_json_config(package_json_path)
         if result is not None:
             config, path = result
