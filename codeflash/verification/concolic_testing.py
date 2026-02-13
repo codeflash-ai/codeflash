@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.concolic_utils import clean_concolic_tests, is_valid_concolic_test
+from codeflash.code_utils.shell_utils import make_env_with_project_root
 from codeflash.code_utils.static_analysis import has_typed_parameters
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.languages import is_python
@@ -63,6 +64,7 @@ def generate_concolic_tests(
         logger.info("Generating concolic opcode coverage tests for the original code…")
         console.rule()
         try:
+            env = make_env_with_project_root(args.project_root)
             cover_result = subprocess.run(
                 [
                     SAFE_SYS_EXECUTABLE,
@@ -86,6 +88,7 @@ def generate_concolic_tests(
                 cwd=args.project_root,
                 check=False,
                 timeout=600,
+                env=env,
             )
         except subprocess.TimeoutExpired:
             logger.debug("CrossHair Cover test generation timed out")

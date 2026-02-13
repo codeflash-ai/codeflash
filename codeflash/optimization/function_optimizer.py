@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 import libcst as cst
-import sentry_sdk
 from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -70,6 +69,7 @@ from codeflash.code_utils.formatter import format_code, format_generated_code, s
 from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.line_profile_utils import add_decorator_imports, contains_jit_decorator
+from codeflash.code_utils.shell_utils import make_env_with_project_root
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.context import code_context_extractor
@@ -686,30 +686,6 @@ class FunctionOptimizer:
         ):
             console.rule()
             new_code_context = code_context
-            if (
-                self.is_numerical_code and not self.args.no_jit_opts
-            ):  # if the code is numerical in nature (uses numpy/tensorflow/math/pytorch/jax)
-                jit_compiled_opt_candidate = self.aiservice_client.get_jit_rewritten_code(
-                    code_context.read_writable_code.markdown, self.function_trace_id
-                )
-                if jit_compiled_opt_candidate:  # jit rewrite was successful
-                    # write files
-                    # Try to replace function with optimized code
-                    self.replace_function_and_helpers_with_optimized_code(
-                        code_context=code_context,
-                        optimized_code=jit_compiled_opt_candidate[0].source_code,
-                        original_helper_code=original_helper_code,
-                    )
-                    # get code context
-                    try:
-                        new_code_context = self.get_code_optimization_context().unwrap()
-                    except Exception as e:
-                        sentry_sdk.capture_exception(e)
-                        logger.debug("!lsp|Getting new code context failed, revert to original one")
-                    # unwrite files
-                    self.write_code_and_helpers(
-                        self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
-                    )
             # Generate tests and optimizations in parallel
             future_tests = self.executor.submit(self.generate_and_instrument_tests, new_code_context)
             future_optimizations = self.executor.submit(
@@ -2858,14 +2834,10 @@ class FunctionOptimizer:
     def get_test_env(
         self, codeflash_loop_index: int, codeflash_test_iteration: int, codeflash_tracer_disable: int = 1
     ) -> dict:
-        test_env = os.environ.copy()
+        test_env = make_env_with_project_root(self.args.project_root)
         test_env["CODEFLASH_TEST_ITERATION"] = str(codeflash_test_iteration)
         test_env["CODEFLASH_TRACER_DISABLE"] = str(codeflash_tracer_disable)
         test_env["CODEFLASH_LOOP_INDEX"] = str(codeflash_loop_index)
-        if "PYTHONPATH" not in test_env:
-            test_env["PYTHONPATH"] = str(self.args.project_root)
-        else:
-            test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
         return test_env
 
     def line_profiler_step(
