@@ -105,6 +105,7 @@ def parse_config_file(
             use_package_json = package_json_depth >= pyproject_toml_depth
 
     if use_package_json:
+        assert package_json_path is not None
         result = parse_package_json_config(package_json_path)
         if result is not None:
             config, path = result
