@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import os
 import subprocess
 import tempfile
 import time
@@ -63,6 +64,13 @@ def generate_concolic_tests(
         logger.info("Generating concolic opcode coverage tests for the original code…")
         console.rule()
         try:
+            env = os.environ.copy()
+            pythonpath = env.get("PYTHONPATH", "")
+            project_root_str = str(args.project_root)
+            if pythonpath:
+                env["PYTHONPATH"] = f"{project_root_str}{os.pathsep}{pythonpath}"
+            else:
+                env["PYTHONPATH"] = project_root_str
             cover_result = subprocess.run(
                 [
                     SAFE_SYS_EXECUTABLE,
@@ -86,6 +94,7 @@ def generate_concolic_tests(
                 cwd=args.project_root,
                 check=False,
                 timeout=600,
+                env=env,
             )
         except subprocess.TimeoutExpired:
             logger.debug("CrossHair Cover test generation timed out")
