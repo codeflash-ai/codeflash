@@ -671,7 +671,7 @@ def add_codeflash_dependency_to_pom(pom_path: Path) -> bool:
         return False
 
 
-JACOCO_PLUGIN_VERSION = "0.8.11"
+JACOCO_PLUGIN_VERSION = "0.8.13"
 
 
 def is_jacoco_configured(pom_path: Path) -> bool:
