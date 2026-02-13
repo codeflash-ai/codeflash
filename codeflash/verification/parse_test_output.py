@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import os
 import re
 import sqlite3
@@ -22,6 +21,9 @@ from codeflash.code_utils.code_utils import (
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.languages import is_javascript
+
+# Import Jest-specific parsing from the JavaScript language module
+from codeflash.languages.javascript.parse import parse_jest_test_xml as _parse_jest_test_xml
 from codeflash.models.models import (
     ConcurrencyMetrics,
     FunctionTestInvocation,
@@ -31,10 +33,6 @@ from codeflash.models.models import (
     VerificationType,
 )
 from codeflash.verification.coverage_utils import CoverageUtils, JestCoverageUtils
-
-# Import Jest-specific parsing from the JavaScript language module
-from codeflash.languages.javascript.parse import jest_end_pattern, jest_start_pattern
-from codeflash.languages.javascript.parse import parse_jest_test_xml as _parse_jest_test_xml
 
 if TYPE_CHECKING:
     import subprocess

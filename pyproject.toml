@@ -289,6 +289,7 @@ ignore = [
     "SIM108",  # Ternary operator suggestion
     "F841",    # Unused variable (often intentional)
     "ANN202",  # Missing return type for private functions
+    "B009",    # getattr-with-constant - needed to avoid mypy [misc] on dunder access
 ]
 
 [tool.ruff.lint.flake8-type-checking]

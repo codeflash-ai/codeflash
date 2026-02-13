@@ -24,7 +24,10 @@ uv run mypy codeflash/           # Type check
 uv run ruff check codeflash/     # Lint
 uv run ruff format codeflash/    # Format
 
-# Linting (run before committing)
+# Linting (run before committing, checks staged files)
+uv run prek run
+
+# Linting in CI (checks all files changed since main)
 uv run prek run --from-ref origin/main
 
 # Mypy type checking (run on changed files before committing)
