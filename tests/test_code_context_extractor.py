@@ -4640,7 +4640,7 @@ def my_func(opt: Option) -> None:
     code_string = result.code_strings[0]
     assert "class Option:" in code_string.code
     assert "def __init__" in code_string.code
-    assert "click" in code_string.file_path.as_posix()
+    assert code_string.file_path is not None and "click" in code_string.file_path.as_posix()
 
 
 def test_get_external_class_inits_skips_project_classes(tmp_path: Path) -> None:
