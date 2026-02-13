@@ -280,6 +280,12 @@ class {self.profiler_class} {{
         # Add profiling to each executable line
         function_entry_added = False
 
+        
+        # Precompute constants used in loop
+        profiler_class = self.profiler_class
+        file_path_posix = file_path.as_posix()
+        enter_function_call = f"{profiler_class}.enterFunction();\n"
+
         for local_idx, line in enumerate(func_lines):
             local_line_num = local_idx + 1  # 1-indexed within function
             global_line_num = func.starting_line + local_idx  # Global line number
@@ -296,9 +302,7 @@ class {self.profiler_class} {{
 
                 # Add the line with enterFunction() call after it
                 instrumented_lines.append(line)
-                instrumented_lines.append(
-                    f"{body_indent}{self.profiler_class}.enterFunction();\n"
-                )
+                instrumented_lines.append(f"{body_indent}{enter_function_call}")
                 function_entry_added = True
                 continue
 
@@ -317,21 +321,21 @@ class {self.profiler_class} {{
             is_standalone_else_or_finally = False
             if not is_else_if:  # Only check if it's not else-if
                 # Check for standalone else
-                if (stripped.startswith("else{") or stripped.startswith("else {") or
-                    stripped.startswith("} else{") or stripped.startswith("} else {") or
-                    stripped == "else"):
+                if stripped.startswith(("else{", "else {", "} else{", "} else {")) or stripped == "else":
                     is_standalone_else_or_finally = True
                 # Check for finally
-                elif (stripped.startswith("finally{") or stripped.startswith("finally {") or
-                      stripped.startswith("} finally{") or stripped.startswith("} finally {") or
-                      stripped == "finally"):
+                elif stripped.startswith(("finally{", "finally {", "} finally{", "} finally {")) or stripped == "finally":
                     is_standalone_else_or_finally = True
 
             # For catch: Cannot instrument before it (syntax error), but should track it
             # Python tracks "except" lines, so we should track "catch" lines
             # Solution: Detect catch and handle it specially (see below)
-            is_catch = (stripped.startswith("catch ") or stripped.startswith("catch(") or
-                       stripped.startswith("} catch ") or stripped.startswith("} catch("))
+            is_catch = stripped.startswith(("catch ", "catch(", "} catch ", "} catch("))
+
+            # Determine if we should skip instrumenting BEFORE this line
+            # Skip standalone else/finally (matches Python)
+            # Also skip else-if - it's tracked by tree-sitter marking it as executable,
+            # but we can't insert code before it (syntax error)
 
             # Determine if we should skip instrumenting BEFORE this line
             # Skip standalone else/finally (matches Python)
@@ -342,11 +346,8 @@ class {self.profiler_class} {{
             if (
                 local_line_num in executable_lines
                 and stripped
-                and not stripped.startswith("//")
-                and not stripped.startswith("/*")
-                and not stripped.startswith("*")
-                and stripped != "}"
-                and stripped != "};"
+                and not stripped.startswith(("//", "/*", "*"))
+                and stripped not in ("}", "};")
                 and not should_skip
             ):
                 # Get indentation
@@ -354,7 +355,7 @@ class {self.profiler_class} {{
                 indent_str = " " * indent
 
                 # Store line content for profiler output
-                content_key = f"{file_path.as_posix()}:{global_line_num}"
+                content_key = f"{file_path_posix}:{global_line_num}"
                 self.line_contents[content_key] = stripped
 
                 # Special handling for catch and else-if blocks
@@ -378,14 +379,12 @@ class {self.profiler_class} {{
                     # - catch → except (Python tracks except lines)
                     # - else if → elif (Python tracks elif lines)
                     instrumented_lines.append(
-                        f"{body_indent}{self.profiler_class}.hit("
-                        f'"{file_path.as_posix()}", {global_line_num});\n'
+                        f'{body_indent}{profiler_class}.hit("{file_path_posix}", {global_line_num});\n'
                     )
                 else:
                     # Normal case: Add hit() call before the line
                     profiled_line = (
-                        f"{indent_str}{self.profiler_class}.hit("
-                        f'"{file_path.as_posix()}", {global_line_num});\n{line}'
+                        f'{indent_str}{profiler_class}.hit("{file_path_posix}", {global_line_num});\n{line}'
                     )
                     instrumented_lines.append(profiled_line)
             else:
