@@ -26,3 +26,17 @@ codeflash/
 ├── result/                 # Result types and handling
 └── version.py              # Version information
 ```
+
+## Key Entry Points
+
+| Task | Start here |
+|------|------------|
+| CLI arguments & commands | `cli_cmds/cli.py` |
+| Optimization orchestration | `optimization/optimizer.py` → `run()` |
+| Per-function optimization | `optimization/function_optimizer.py` |
+| Function discovery | `discovery/functions_to_optimize.py` |
+| Context extraction | `context/code_context_extractor.py` |
+| Test execution | `verification/test_runner.py`, `verification/pytest_plugin.py` |
+| Performance ranking | `benchmarking/function_ranker.py` |
+| Domain types | `models/models.py`, `models/function_types.py` |
+| Result handling | `either.py` (`Result`, `Success`, `Failure`, `is_successful`) |
