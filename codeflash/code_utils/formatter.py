@@ -15,6 +15,75 @@ import isort
 from codeflash.cli_cmds.console import console, logger
 from codeflash.lsp.helpers import is_LSP_enabled
 
+# Whitelist of allowed formatter executables to prevent arbitrary command execution
+ALLOWED_FORMATTER_EXECUTABLES = frozenset({
+    # Python formatters
+    "black",
+    "ruff",
+    "isort",
+    # JavaScript package manager (used to run formatters)
+    "npx",
+    # JavaScript formatters (may be called directly or via npx)
+    "prettier",
+    "eslint",
+    # Future: Java formatters
+    # "google-java-format",
+})
+
+# Tools that can be run via npx
+ALLOWED_NPX_TOOLS = frozenset({
+    "prettier",
+    "eslint",
+})
+
+
+def validate_formatter_command(command: str) -> None:
+    """Validate that a formatter command uses only whitelisted executables.
+
+    Args:
+        command: Formatter command string (e.g., "black $file", "npx prettier --write $file")
+
+    Raises:
+        ValueError: If the command uses a non-whitelisted executable
+
+    Security: This prevents arbitrary command execution by validating that only
+    known, safe formatter tools are used.
+    """
+    if not command or command.strip() == "":
+        raise ValueError("Formatter command cannot be empty")
+
+    # Parse the command safely
+    try:
+        tokens = shlex.split(command, posix=os.name != "nt")
+    except ValueError as e:
+        raise ValueError(f"Invalid formatter command syntax: {command}") from e
+
+    if not tokens:
+        raise ValueError(f"Formatter command has no executable: {command}")
+
+    # Extract the executable name (first token)
+    executable = tokens[0]
+
+    # Check if executable is in whitelist
+    if executable not in ALLOWED_FORMATTER_EXECUTABLES:
+        allowed_list = ", ".join(sorted(ALLOWED_FORMATTER_EXECUTABLES))
+        raise ValueError(
+            f"Formatter executable '{executable}' is not allowed. "
+            f"Only whitelisted formatters are permitted: {allowed_list}. "
+            f"Rejected command: {command}"
+        )
+
+    # Special validation for npx - ensure the tool being run is also whitelisted
+    if executable == "npx" and len(tokens) > 1:
+        npx_tool = tokens[1]
+        if npx_tool not in ALLOWED_NPX_TOOLS:
+            allowed_npx = ", ".join(sorted(ALLOWED_NPX_TOOLS))
+            raise ValueError(
+                f"NPX tool '{npx_tool}' is not allowed. "
+                f"Only whitelisted npx tools are permitted: {allowed_npx}. "
+                f"Rejected command: {command}"
+            )
+
 
 def generate_unified_diff(original: str, modified: str, from_file: str, to_file: str) -> str:
     line_pattern = re.compile(r"(.*?(?:\r\n|\n|\r|$))")
@@ -58,6 +127,14 @@ def apply_formatter_cmds(
 
     changed = False
     for command in cmds:
+        # Validate command against whitelist before execution (security check)
+        try:
+            validate_formatter_command(command)
+        except ValueError as e:
+            logger.error(f"Security: Rejected formatter command - {e}")
+            if exit_on_failure:
+                raise
+            continue
         formatter_cmd_list = shlex.split(command, posix=os.name != "nt")
         formatter_cmd_list = [file_path.as_posix() if chunk == file_token else chunk for chunk in formatter_cmd_list]
         try:
@@ -93,9 +170,17 @@ def get_diff_lines_count(diff_output: str) -> int:
 def format_generated_code(generated_test_source: str, formatter_cmds: list[str], language: str = "python") -> str:
     from codeflash.languages.registry import get_language_support
 
-    formatter_name = formatter_cmds[0].lower() if formatter_cmds else "disabled"
-    if formatter_name == "disabled":  # nothing to do if no formatter provided
+    # Skip formatting if no formatter configured
+    if not formatter_cmds or formatter_cmds[0] in ("disabled", ""):
         return re.sub(r"\n{2,}", "\n\n", generated_test_source)
+
+    # Validate formatter commands (security check)
+    for cmd in formatter_cmds:
+        try:
+            validate_formatter_command(cmd)
+        except ValueError as e:
+            logger.warning(f"Security: Skipping invalid formatter - {e}")
+            return re.sub(r"\n{2,}", "\n\n", generated_test_source)
     with tempfile.TemporaryDirectory() as test_dir_str:
         # try running formatter, if nothing changes (could be due to formatting failing or no actual formatting needed) return code with 2 or more newlines substituted with 2 newlines
         lang_support = get_language_support(language)
@@ -125,10 +210,20 @@ def format_code(
     if isinstance(path, str):
         path = Path(path)
 
-    # TODO: Only allow a particular whitelist of formatters here to prevent arbitrary code execution
-    formatter_name = formatter_cmds[0].lower() if formatter_cmds else "disabled"
-    if formatter_name == "disabled":
+    # Validate formatter commands against whitelist (security check)
+    # Skip validation if no formatter configured
+    if not formatter_cmds or formatter_cmds[0] in ("disabled", ""):
         return path.read_text(encoding="utf8")
+
+    # Validate all formatter commands before proceeding
+    for cmd in formatter_cmds:
+        try:
+            validate_formatter_command(cmd)
+        except ValueError as e:
+            logger.error(f"Security: Invalid formatter configuration - {e}")
+            if exit_on_failure:
+                raise
+            return path.read_text(encoding="utf8")
 
     with tempfile.TemporaryDirectory() as test_dir_str:
         original_code = path.read_text(encoding="utf8")
