@@ -10,6 +10,9 @@ permissions:
   issues: read
   pull-requests: read
 engine: claude
+env:
+  ANTHROPIC_FOUNDRY_API_KEY: ${{ secrets.AZURE_ANTHROPIC_API_KEY }}
+  ANTHROPIC_FOUNDRY_BASE_URL: ${{ secrets.AZURE_ANTHROPIC_ENDPOINT }}
 tools:
   serena: ["python"]
 safe-outputs:
