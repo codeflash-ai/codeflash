@@ -1,6 +1,6 @@
 {
   "name": "codeflash/codeflash-skills",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "summary": "Procedural workflows for developing and debugging codeflash",
   "private": true,
   "skills": {
