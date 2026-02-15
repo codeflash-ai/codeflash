@@ -25,7 +25,6 @@ from pathlib import Path
 from re import Pattern
 from typing import Any, NamedTuple, Optional, cast
 
-from jedi.api.classes import Name
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, model_validator
 from pydantic.dataclasses import dataclass
 
@@ -136,14 +135,14 @@ class CoverReturnCode(IntEnum):
     ERROR = 2
 
 
-@dataclass(frozen=True, config={"arbitrary_types_allowed": True})
+@dataclass(frozen=True)
 class FunctionSource:
     file_path: Path
     qualified_name: str
     fully_qualified_name: str
     only_function_name: str
     source_code: str
-    jedi_definition: Name | None = None  # None for non-Python languages
+    definition_type: str | None = None  # e.g. "function", "class"; None for non-Python languages
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, FunctionSource):

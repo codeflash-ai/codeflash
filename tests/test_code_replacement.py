@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import dataclasses
 import os
 import re
 from collections import defaultdict
@@ -19,26 +18,11 @@ from codeflash.code_utils.code_replacer import (
     replace_functions_in_file,
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, FunctionParent
+from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, FunctionParent, FunctionSource
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
 os.environ["CODEFLASH_API_KEY"] = "cf-test-key"
-
-
-@dataclasses.dataclass
-class JediDefinition:
-    type: str
-
-
-@dataclasses.dataclass
-class FakeFunctionSource:
-    file_path: Path
-    qualified_name: str
-    fully_qualified_name: str
-    only_function_name: str
-    source_code: str
-    jedi_definition: JediDefinition
 
 
 class Args:
@@ -1137,7 +1121,7 @@ class TestResults(BaseModel):
     preexisting_objects = find_preexisting_objects(original_code)
 
     helper_functions = [
-        FakeFunctionSource(
+        FunctionSource(
             file_path=Path(
                 "/Users/saurabh/Library/CloudStorage/Dropbox/codeflash/cli/codeflash/verification/test_results.py"
             ),
@@ -1145,7 +1129,7 @@ class TestResults(BaseModel):
             fully_qualified_name="codeflash.verification.test_results.TestType",
             only_function_name="TestType",
             source_code="",
-            jedi_definition=JediDefinition(type="class"),
+            definition_type="class",
         )
     ]
 
@@ -1160,7 +1144,7 @@ class TestResults(BaseModel):
 
     helper_functions_by_module_abspath = defaultdict(set)
     for helper_function in helper_functions:
-        if helper_function.jedi_definition.type != "class":
+        if helper_function.definition_type != "class":
             helper_functions_by_module_abspath[helper_function.file_path].add(helper_function.qualified_name)
     for module_abspath, qualified_names in helper_functions_by_module_abspath.items():
         new_code: str = replace_functions_and_add_imports(
@@ -1352,21 +1336,21 @@ def cosine_similarity_top_k(
     preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = find_preexisting_objects(original_code)
 
     helper_functions = [
-        FakeFunctionSource(
+        FunctionSource(
             file_path=(Path(__file__).parent / "code_to_optimize" / "math_utils.py").resolve(),
             qualified_name="Matrix",
             fully_qualified_name="code_to_optimize.math_utils.Matrix",
             only_function_name="Matrix",
             source_code="",
-            jedi_definition=JediDefinition(type="class"),
+            definition_type="class",
         ),
-        FakeFunctionSource(
+        FunctionSource(
             file_path=(Path(__file__).parent / "code_to_optimize" / "math_utils.py").resolve(),
             qualified_name="cosine_similarity",
             fully_qualified_name="code_to_optimize.math_utils.cosine_similarity",
             only_function_name="cosine_similarity",
             source_code="",
-            jedi_definition=JediDefinition(type="function"),
+            definition_type="function",
         ),
     ]
 
@@ -1425,7 +1409,7 @@ def cosine_similarity_top_k(
     )
     helper_functions_by_module_abspath = defaultdict(set)
     for helper_function in helper_functions:
-        if helper_function.jedi_definition.type != "class":
+        if helper_function.definition_type != "class":
             helper_functions_by_module_abspath[helper_function.file_path].add(helper_function.qualified_name)
     for module_abspath, qualified_names in helper_functions_by_module_abspath.items():
         new_helper_code: str = replace_functions_and_add_imports(

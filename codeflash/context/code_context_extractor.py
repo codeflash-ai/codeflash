@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     from libcst import CSTNode
 
     from codeflash.context.unused_definition_remover import UsageInfo
-    from codeflash.languages.base import HelperFunction
+    from codeflash.languages.base import DependencyResolver, HelperFunction
 
 
 def build_testgen_context(
@@ -84,6 +84,7 @@ def get_code_optimization_context(
     project_root_path: Path,
     optim_token_limit: int = OPTIMIZATION_CONTEXT_TOKEN_LIMIT,
     testgen_token_limit: int = TESTGEN_CONTEXT_TOKEN_LIMIT,
+    call_graph: DependencyResolver | None = None,
 ) -> CodeOptimizationContext:
     # Route to language-specific implementation for non-Python languages
     if not is_python():
@@ -92,9 +93,11 @@ def get_code_optimization_context(
         )
 
     # Get FunctionSource representation of helpers of FTO
-    helpers_of_fto_dict, helpers_of_fto_list = get_function_sources_from_jedi(
-        {function_to_optimize.file_path: {function_to_optimize.qualified_name}}, project_root_path
-    )
+    fto_input = {function_to_optimize.file_path: {function_to_optimize.qualified_name}}
+    if call_graph is not None:
+        helpers_of_fto_dict, helpers_of_fto_list = call_graph.get_callees(fto_input)
+    else:
+        helpers_of_fto_dict, helpers_of_fto_list = get_function_sources_from_jedi(fto_input, project_root_path)
 
     # Add function to optimize into helpers of FTO dict, as they'll be processed together
     fto_as_function_source = get_function_to_optimize_as_function_source(function_to_optimize, project_root_path)
@@ -111,9 +114,12 @@ def get_code_optimization_context(
         qualified_names.update({f"{qn.rsplit('.', 1)[0]}.__init__" for qn in qualified_names if "." in qn})
 
     # Get FunctionSource representation of helpers of helpers of FTO
-    helpers_of_helpers_dict, _helpers_of_helpers_list = get_function_sources_from_jedi(
-        helpers_of_fto_qualified_names_dict, project_root_path
-    )
+    if call_graph is not None:
+        helpers_of_helpers_dict, _helpers_of_helpers_list = call_graph.get_callees(helpers_of_fto_qualified_names_dict)
+    else:
+        helpers_of_helpers_dict, _helpers_of_helpers_list = get_function_sources_from_jedi(
+            helpers_of_fto_qualified_names_dict, project_root_path
+        )
 
     # Extract code context for optimization
     final_read_writable_code = extract_code_markdown_context_from_files(
@@ -271,7 +277,7 @@ def get_code_optimization_context_for_language(
                 fully_qualified_name=helper.qualified_name,
                 only_function_name=helper.name,
                 source_code=helper.source_code,
-                jedi_definition=None,
+                definition_type=None,
             )
         )
 
@@ -494,7 +500,7 @@ def get_function_to_optimize_as_function_source(
                     fully_qualified_name=name.full_name,
                     only_function_name=name.name,
                     source_code=name.get_line_code(),
-                    jedi_definition=name,
+                    definition_type=name.type,
                 )
         except Exception as e:
             logger.exception(f"Error while getting function source: {e}")
@@ -550,7 +556,7 @@ def get_function_sources_from_jedi(
                                 fully_qualified_name=definition.full_name,
                                 only_function_name=definition.name,
                                 source_code=definition.get_line_code(),
-                                jedi_definition=definition,
+                                definition_type=definition.type,
                             )
                             file_path_to_function_source[definition_path].add(function_source)
                             function_source_list.append(function_source)
@@ -568,7 +574,7 @@ def get_function_sources_from_jedi(
                                 fully_qualified_name=f"{definition.full_name}.__init__",
                                 only_function_name="__init__",
                                 source_code=definition.get_line_code(),
-                                jedi_definition=definition,
+                                definition_type=definition.type,
                             )
                             file_path_to_function_source[definition_path].add(function_source)
                             function_source_list.append(function_source)

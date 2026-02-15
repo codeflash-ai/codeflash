@@ -771,7 +771,7 @@ class HelperClass:
 
 def test_example_class_token_limit_1(tmp_path: Path) -> None:
     docstring_filler = " ".join(
-        ["This is a long docstring that will be used to fill up the token limit." for _ in range(1000)]
+        ["This is a long docstring that will be used to fill up the token limit." for _ in range(4000)]
     )
     code = f"""
 class MyClass:
@@ -964,7 +964,7 @@ class HelperClass:
 
 def test_example_class_token_limit_3(tmp_path: Path) -> None:
     string_filler = " ".join(
-        ["This is a long string that will be used to fill up the token limit." for _ in range(1000)]
+        ["This is a long string that will be used to fill up the token limit." for _ in range(4000)]
     )
     code = f"""
 class MyClass:
@@ -1014,7 +1014,7 @@ class HelperClass:
 
 def test_example_class_token_limit_4(tmp_path: Path) -> None:
     string_filler = " ".join(
-        ["This is a long string that will be used to fill up the token limit." for _ in range(1000)]
+        ["This is a long string that will be used to fill up the token limit." for _ in range(4000)]
     )
     code = f"""
 class MyClass:
