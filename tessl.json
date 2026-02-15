@@ -72,6 +72,9 @@
     },
     "codeflash/codeflash-skills": {
       "version": "0.2.0"
+    },
+    "tessl-labs/tessl-skill-eval-scenarios": {
+      "version": "0.0.5"
     }
   }
 }
