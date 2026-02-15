@@ -63,6 +63,9 @@
     },
     "tessl/pypi-filelock": {
       "version": "3.19.0"
+    },
+    "codeflash/codeflash-skills": {
+      "version": "0.1.0"
     }
   }
 }
