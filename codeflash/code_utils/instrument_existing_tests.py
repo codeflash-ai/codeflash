@@ -79,8 +79,52 @@ class InjectPerfOnly(ast.NodeTransformer):
         self.only_function_name = function.function_name
         self.module_path = module_path
         self.call_positions = call_positions
+        # Track instance variables when optimizing forward methods (PyTorch nn.Module pattern)
+        self.instance_variable_names: set[str] = set()
         if len(function.parents) == 1 and function.parents[0].type == "ClassDef":
             self.class_name = function.top_level_parent_name
+
+    def collect_instance_variables(self, func_node: ast.FunctionDef) -> None:
+        """Collect variable names that are instances of the target class.
+
+        This handles the PyTorch nn.Module pattern where:
+            model = AlexNet(...)
+            model(input_data)  # calls __call__ which invokes forward()
+
+        When optimizing ClassName.forward, we need to track variables assigned
+        from ClassName(...) so we can instrument calls to those variables.
+        """
+        if self.class_name is None or self.only_function_name != "forward":
+            return
+
+        class_name = self.class_name
+        instance_vars = self.instance_variable_names
+
+        # Manually traverse only assignment nodes instead of walking entire tree
+        nodes_to_check = list(func_node.body)
+        while nodes_to_check:
+            node = nodes_to_check.pop()
+
+            # Look for assignments like: model = ClassName(...)
+            if isinstance(node, ast.Assign):
+                value = node.value
+                if isinstance(value, ast.Call):
+                    func = value.func
+                    if isinstance(func, ast.Name) and func.id == class_name:
+                        for target in node.targets:
+                            if isinstance(target, ast.Name):
+                                instance_vars.add(target.id)
+
+            # Add nested statements to check
+            if hasattr(node, "body"):
+                nodes_to_check.extend(node.body)
+            if hasattr(node, "orelse"):
+                nodes_to_check.extend(node.orelse)
+            if hasattr(node, "finalbody"):
+                nodes_to_check.extend(node.finalbody)
+            if hasattr(node, "handlers"):
+                for handler in node.handlers:
+                    nodes_to_check.extend(handler.body)
 
     def find_and_update_line_node(
         self, test_node: ast.stmt, node_name: str, index: str, test_class_name: str | None = None
@@ -122,7 +166,16 @@ class InjectPerfOnly(ast.NodeTransformer):
         codeflash_con = ast.Name(id="codeflash_con", ctx=ast.Load())
 
         for node in iter_ast_calls(test_node):
-            if not node_in_call_position(node, self.call_positions):
+            # Check if this call is at a known position OR is an instance variable call
+            # for forward methods (PyTorch nn.Module pattern)
+            is_at_call_position = node_in_call_position(node, self.call_positions)
+            is_instance_call = (
+                isinstance(node.func, ast.Name)
+                and node.func.id in self.instance_variable_names
+                and self.only_function_name == "forward"
+            )
+
+            if not is_at_call_position and not is_instance_call:
                 continue
 
             call_node = node
@@ -134,7 +187,8 @@ class InjectPerfOnly(ast.NodeTransformer):
                 function_name = node_func.id
 
                 # Check if this is the function we want to instrument
-                if function_name != fn_obj.function_name:
+                # Also match instance variable calls for forward methods
+                if function_name != fn_obj.function_name and function_name not in self.instance_variable_names:
                     continue
 
                 if fn_obj.is_async:
@@ -325,6 +379,9 @@ class InjectPerfOnly(ast.NodeTransformer):
 
     def visit_FunctionDef(self, node: ast.FunctionDef, test_class_name: str | None = None) -> ast.FunctionDef:
         if node.name.startswith("test_"):
+            # Collect instance variables for forward method instrumentation (PyTorch pattern)
+            self.collect_instance_variables(node)
+
             did_update = False
             i = len(node.body) - 1
             while i >= 0:
