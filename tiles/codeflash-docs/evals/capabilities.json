@@ -1,0 +1,118 @@
+{
+  "package_name": "codeflash-docs",
+  "total_capabilities": 16,
+  "capabilities": [
+    {
+      "id": 0,
+      "name": "pipeline-stage-ordering",
+      "description": "Know the correct ordering of codeflash pipeline stages: Discovery → Ranking → Context Extraction → Test Gen + Optimization (concurrent) → Baseline → Candidate Evaluation → PR",
+      "complexity": "basic",
+      "api_elements": ["Optimizer.run()", "FunctionOptimizer.optimize_function()"]
+    },
+    {
+      "id": 1,
+      "name": "function-to-optimize-fields",
+      "description": "Know FunctionToOptimize key fields (function_name, file_path, parents, starting_line/ending_line, is_async, is_method, language) and properties (qualified_name, top_level_parent_name, class_name)",
+      "complexity": "intermediate",
+      "api_elements": ["FunctionToOptimize", "FunctionParent", "models/function_types.py"]
+    },
+    {
+      "id": 2,
+      "name": "code-strings-markdown-format",
+      "description": "Know that code is serialized as markdown fenced blocks with language:filepath syntax (```python:filepath\\ncode\\n```) and parsed via CodeStringsMarkdown.parse_markdown_code()",
+      "complexity": "intermediate",
+      "api_elements": ["CodeStringsMarkdown", "CodeString", ".markdown", ".flat", "parse_markdown_code()"]
+    },
+    {
+      "id": 3,
+      "name": "read-writable-vs-read-only",
+      "description": "Distinguish read_writable_code (LLM can modify) from read_only_context_code (reference only) in CodeOptimizationContext",
+      "complexity": "basic",
+      "api_elements": ["CodeOptimizationContext", "read_writable_code", "read_only_context_code"]
+    },
+    {
+      "id": 4,
+      "name": "candidate-source-types",
+      "description": "Know OptimizedCandidateSource variants: OPTIMIZE, OPTIMIZE_LP, REFINE, REPAIR, ADAPTIVE, JIT_REWRITE and when each is used",
+      "complexity": "intermediate",
+      "api_elements": ["OptimizedCandidateSource", "OptimizedCandidate"]
+    },
+    {
+      "id": 5,
+      "name": "candidate-forest-dag",
+      "description": "Know that candidates form a forest/DAG via parent_id references where refinements and repairs build on previous candidates",
+      "complexity": "intermediate",
+      "api_elements": ["parent_id", "OptimizedCandidate", "CandidateForest"]
+    },
+    {
+      "id": 6,
+      "name": "concurrent-testgen-optimization",
+      "description": "Know that test generation and LLM optimization run concurrently using concurrent.futures, not sequentially",
+      "complexity": "intermediate",
+      "api_elements": ["concurrent.futures", "FunctionOptimizer.optimize_function()"]
+    },
+    {
+      "id": 7,
+      "name": "deterministic-patch-values",
+      "description": "Know the specific fixed values used by deterministic patches: time=1761717605.108106, datetime=2021-01-01 02:05:10 UTC, uuid=12345678-1234-5678-9abc-123456789012, random seeded with 42",
+      "complexity": "advanced",
+      "api_elements": ["_apply_deterministic_patches()", "pytest_plugin.py"]
+    },
+    {
+      "id": 8,
+      "name": "test-type-enum",
+      "description": "Know the 6 TestType variants: EXISTING_UNIT_TEST, INSPIRED_REGRESSION, GENERATED_REGRESSION, REPLAY_TEST, CONCOLIC_COVERAGE_TEST, INIT_STATE_TEST",
+      "complexity": "basic",
+      "api_elements": ["TestType", "models/test_type.py"]
+    },
+    {
+      "id": 9,
+      "name": "ai-service-endpoints",
+      "description": "Know the AI service endpoints: /ai/optimize, /ai/optimize_line_profiler, /ai/refine, /ai/repair, /ai/adaptive_optimize, /ai/rewrite_jit",
+      "complexity": "intermediate",
+      "api_elements": ["AiServiceClient", "api/aiservice.py"]
+    },
+    {
+      "id": 10,
+      "name": "repair-request-structure",
+      "description": "Know that AIServiceCodeRepairRequest includes TestDiff objects with scope (RETURN_VALUE/STDOUT/DID_PASS), original vs candidate values, and test source code",
+      "complexity": "advanced",
+      "api_elements": ["AIServiceCodeRepairRequest", "TestDiff", "TestDiffScope"]
+    },
+    {
+      "id": 11,
+      "name": "effort-level-values",
+      "description": "Know specific effort level values: LOW gets 3 candidates, MEDIUM gets 5, HIGH gets 6 (N_OPTIMIZER_CANDIDATES)",
+      "complexity": "intermediate",
+      "api_elements": ["EffortLevel", "N_OPTIMIZER_CANDIDATES", "EFFORT_VALUES"]
+    },
+    {
+      "id": 12,
+      "name": "context-token-limits",
+      "description": "Know OPTIMIZATION_CONTEXT_TOKEN_LIMIT=16000 and TESTGEN_CONTEXT_TOKEN_LIMIT=16000 and that encoded_tokens_len() is used for counting",
+      "complexity": "basic",
+      "api_elements": ["OPTIMIZATION_CONTEXT_TOKEN_LIMIT", "TESTGEN_CONTEXT_TOKEN_LIMIT", "encoded_tokens_len()"]
+    },
+    {
+      "id": 13,
+      "name": "best-candidate-selection",
+      "description": "Know the selection criteria: highest speedup, then shortest diff for ties, and refinement weighted ranking (2*runtime + 1*diff)",
+      "complexity": "advanced",
+      "api_elements": ["BestOptimization", "REFINED_CANDIDATE_RANKING_WEIGHTS"]
+    },
+    {
+      "id": 14,
+      "name": "plugin-blocklists",
+      "description": "Know behavioral test blocklisted plugins (benchmark, codspeed, xdist, sugar) and benchmarking blocklist (adds cov, profiling)",
+      "complexity": "intermediate",
+      "api_elements": ["BEHAVIORAL_BLOCKLISTED_PLUGINS", "BENCHMARKING_BLOCKLISTED_PLUGINS"]
+    },
+    {
+      "id": 15,
+      "name": "result-type-usage",
+      "description": "Know that Result[L,R] from either.py uses Success(value)/Failure(error) with is_successful() check before unwrap()",
+      "complexity": "basic",
+      "api_elements": ["Result", "Success", "Failure", "is_successful", "either.py"]
+    }
+  ]
+}

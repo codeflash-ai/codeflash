@@ -1,0 +1,40 @@
+{
+  "total_scenarios": 5,
+  "capabilities_coverage": {
+    "total_capabilities": 14,
+    "capabilities_tested": 10,
+    "coverage_percentage": 71.4
+  },
+  "complexity_distribution": {
+    "basic": 2,
+    "intermediate": 2,
+    "advanced": 1
+  },
+  "scenarios": [
+    {
+      "index": 1,
+      "capability": "sequential-pipeline-debugging, token-limit-awareness, improvement-threshold",
+      "complexity": "intermediate"
+    },
+    {
+      "index": 2,
+      "capability": "result-type-pattern, effort-config-pattern",
+      "complexity": "intermediate"
+    },
+    {
+      "index": 3,
+      "capability": "test-patterns, quality-check-commands",
+      "complexity": "basic"
+    },
+    {
+      "index": 4,
+      "capability": "domain-type-conventions, module-to-feature-mapping",
+      "complexity": "basic"
+    },
+    {
+      "index": 5,
+      "capability": "ast-deduplication, repair-trigger-conditions",
+      "complexity": "advanced"
+    }
+  ]
+}

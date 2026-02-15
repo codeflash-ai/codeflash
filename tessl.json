@@ -63,6 +63,18 @@
     },
     "tessl/pypi-filelock": {
       "version": "3.19.0"
+    },
+    "codeflash/codeflash-rules": {
+      "version": "0.1.0"
+    },
+    "codeflash/codeflash-docs": {
+      "version": "0.1.0"
+    },
+    "codeflash/codeflash-skills": {
+      "version": "0.2.0"
+    },
+    "tessl-labs/tessl-skill-eval-scenarios": {
+      "version": "0.0.5"
     }
   }
 }

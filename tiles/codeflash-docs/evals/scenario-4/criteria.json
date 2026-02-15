@@ -1,0 +1,26 @@
+{
+  "context": "Tests whether the agent knows the specific effort level values for candidate generation and the criteria used to select the best optimization candidate.",
+  "type": "weighted_checklist",
+  "checklist": [
+    {
+      "name": "Candidate counts by effort",
+      "description": "States correct N_OPTIMIZER_CANDIDATES values: LOW=3, MEDIUM=5, HIGH=6 (at least 2 of 3 correct)",
+      "max_score": 25
+    },
+    {
+      "name": "Speedup as primary selector",
+      "description": "States that the winning candidate is selected primarily by highest speedup ratio",
+      "max_score": 25
+    },
+    {
+      "name": "Diff length as tiebreaker",
+      "description": "States that for tied speedups, shortest diff length from original is used as tiebreaker",
+      "max_score": 25
+    },
+    {
+      "name": "Refinement ranking weights",
+      "description": "States that refinement candidates use weighted ranking with runtime weighted more heavily than diff (2:1 ratio or REFINED_CANDIDATE_RANKING_WEIGHTS=(2,1))",
+      "max_score": 25
+    }
+  ]
+}

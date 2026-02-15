@@ -1,0 +1,26 @@
+{
+  "context": "Tests whether the agent follows codeflash domain type conventions and correctly identifies the right module when adding a new data type for the optimization pipeline.",
+  "type": "weighted_checklist",
+  "checklist": [
+    {
+      "name": "Placed in models/models.py",
+      "description": "New data type is added to codeflash/models/models.py (NOT models/function_types.py, since it has dependencies on other codeflash modules)",
+      "max_score": 25
+    },
+    {
+      "name": "Uses frozen dataclass",
+      "description": "Immutable data type uses @dataclass(frozen=True) decorator, NOT a regular class or unfrozen dataclass",
+      "max_score": 25
+    },
+    {
+      "name": "BaseModel for serializable",
+      "description": "If a serializable model is needed, uses Pydantic BaseModel (NOT dataclass or dict)",
+      "max_score": 25
+    },
+    {
+      "name": "Correct module for feature",
+      "description": "Places the main logic in the correct module for the feature type (e.g., verification/ for test-related, optimization/ for candidate-related, api/ for service-related)",
+      "max_score": 25
+    }
+  ]
+}

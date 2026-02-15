@@ -1,0 +1,104 @@
+{
+  "package_name": "codeflash-skills",
+  "total_capabilities": 14,
+  "capabilities": [
+    {
+      "id": 0,
+      "name": "sequential-pipeline-debugging",
+      "description": "Debug optimization failures by walking through pipeline stages sequentially and stopping at the first failure found",
+      "complexity": "intermediate",
+      "api_elements": ["discovery", "ranking", "context", "AI service", "verification", "deduplication", "repair"]
+    },
+    {
+      "id": 1,
+      "name": "token-limit-awareness",
+      "description": "Know that OPTIMIZATION_CONTEXT_TOKEN_LIMIT and TESTGEN_CONTEXT_TOKEN_LIMIT are both 16000 tokens and that exceeding them causes function rejection",
+      "complexity": "basic",
+      "api_elements": ["OPTIMIZATION_CONTEXT_TOKEN_LIMIT", "TESTGEN_CONTEXT_TOKEN_LIMIT", "encoded_tokens_len()"]
+    },
+    {
+      "id": 2,
+      "name": "improvement-threshold",
+      "description": "Know that MIN_IMPROVEMENT_THRESHOLD is 0.05 (5%) and candidates below this speedup are rejected",
+      "complexity": "basic",
+      "api_elements": ["MIN_IMPROVEMENT_THRESHOLD", "STABILITY_WINDOW_SIZE"]
+    },
+    {
+      "id": 3,
+      "name": "ast-deduplication",
+      "description": "Know that candidates are deduplicated via AST normalization using normalize_code() and CandidateEvaluationContext.ast_code_to_id",
+      "complexity": "intermediate",
+      "api_elements": ["normalize_code()", "CandidateEvaluationContext.ast_code_to_id", "code_utils/deduplicate_code.py"]
+    },
+    {
+      "id": 4,
+      "name": "repair-trigger-conditions",
+      "description": "Know that repair only triggers when fewer than MIN_CORRECT_CANDIDATES=2 pass, and is skipped when REPAIR_UNMATCHED_PERCENTAGE_LIMIT is exceeded",
+      "complexity": "advanced",
+      "api_elements": ["MIN_CORRECT_CANDIDATES", "REPAIR_UNMATCHED_PERCENTAGE_LIMIT", "AIServiceCodeRepairRequest"]
+    },
+    {
+      "id": 5,
+      "name": "ai-service-error-patterns",
+      "description": "Know specific log patterns to search for when AI service fails: 'Error generating optimized candidates', 'cli-optimize-error-caught', 'cli-optimize-error-response'",
+      "complexity": "intermediate",
+      "api_elements": ["AiServiceClient", "api/aiservice.py"]
+    },
+    {
+      "id": 6,
+      "name": "behavioral-vs-benchmark-failures",
+      "description": "Distinguish between behavioral test failures (return value/stdout/pass-fail mismatches via TestDiffScope) and benchmark failures (speedup below threshold)",
+      "complexity": "intermediate",
+      "api_elements": ["TestDiffScope", "RETURN_VALUE", "STDOUT", "DID_PASS"]
+    },
+    {
+      "id": 7,
+      "name": "result-type-pattern",
+      "description": "Use Result[L, R] from either.py with Success/Failure constructors and is_successful() checks before unwrap()",
+      "complexity": "basic",
+      "api_elements": ["Result", "Success", "Failure", "is_successful", "unwrap()", "either.py"]
+    },
+    {
+      "id": 8,
+      "name": "effort-config-pattern",
+      "description": "Add effort-dependent config via EffortKeys enum, EFFORT_VALUES dict with LOW/MEDIUM/HIGH levels, and get_effort_value()",
+      "complexity": "intermediate",
+      "api_elements": ["EffortKeys", "EffortLevel", "EFFORT_VALUES", "get_effort_value()", "config_consts.py"]
+    },
+    {
+      "id": 9,
+      "name": "module-to-feature-mapping",
+      "description": "Know which codeflash module to modify for different feature types (optimization/ for strategies, api/ for endpoints, languages/ for language support, etc.)",
+      "complexity": "basic",
+      "api_elements": ["MODULE_REFERENCE.md"]
+    },
+    {
+      "id": 10,
+      "name": "domain-type-conventions",
+      "description": "Use @dataclass(frozen=True) for immutable data, BaseModel for serializable models, and keep function_types.py dependency-free",
+      "complexity": "intermediate",
+      "api_elements": ["@dataclass(frozen=True)", "BaseModel", "models/models.py", "models/function_types.py"]
+    },
+    {
+      "id": 11,
+      "name": "test-patterns",
+      "description": "Use tmp_path fixture, .resolve() on Paths, .as_posix() for string conversion, full string equality assertions, and awareness of deterministic patches",
+      "complexity": "basic",
+      "api_elements": ["tmp_path", ".resolve()", ".as_posix()", "pytest_plugin.py"]
+    },
+    {
+      "id": 12,
+      "name": "quality-check-commands",
+      "description": "Run uv run prek run for formatting/linting, uv run mypy for type checking, and uv run pytest for tests",
+      "complexity": "basic",
+      "api_elements": ["uv run prek run", "uv run mypy", "uv run pytest"]
+    },
+    {
+      "id": 13,
+      "name": "language-support-patterns",
+      "description": "Use @register_language decorator, get_language_support() for lookup, singleton pattern via set_current_language()/current_language(), and is_python()/is_javascript() guards",
+      "complexity": "advanced",
+      "api_elements": ["@register_language", "get_language_support()", "set_current_language()", "is_python()", "is_javascript()"]
+    }
+  ]
+}

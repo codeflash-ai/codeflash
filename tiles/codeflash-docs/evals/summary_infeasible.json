@@ -1,0 +1,25 @@
+{
+  "total_infeasible": 4,
+  "infeasible_capabilities": [
+    {
+      "capability": "ai-service-endpoints",
+      "complexity": "intermediate",
+      "reasoning": "Testing knowledge of specific API endpoints requires actual HTTP requests or mocking that bypasses the capability being tested"
+    },
+    {
+      "capability": "context-token-limits",
+      "complexity": "basic",
+      "reasoning": "Already covered by the skills tile eval (scenario-1). Testing token counting requires the actual tokenizer library"
+    },
+    {
+      "capability": "test-type-enum",
+      "complexity": "basic",
+      "reasoning": "Simple enum knowledge is better verified through skills that use test types rather than isolated recall"
+    },
+    {
+      "capability": "result-type-usage",
+      "complexity": "basic",
+      "reasoning": "Already covered by the skills tile eval (scenario-2). Testing Result type usage is better done through implementation tasks"
+    }
+  ]
+}
