@@ -33,3 +33,5 @@ Discovery → Ranking → Context Extraction → Test Gen + Optimization → Bas
 # Agent Rules <!-- tessl-managed -->
 
 @.tessl/RULES.md follow the [instructions](.tessl/RULES.md)
+
+@AGENTS.md
