@@ -57,18 +57,22 @@ def build_testgen_context(
     helpers_of_fto_dict: dict[Path, set[FunctionSource]],
     helpers_of_helpers_dict: dict[Path, set[FunctionSource]],
     project_root_path: Path,
+    *,
+    remove_docstrings: bool = False,
+    include_enrichment: bool = True,
 ) -> CodeStringsMarkdown:
     testgen_context = extract_code_markdown_context_from_files(
         helpers_of_fto_dict,
         helpers_of_helpers_dict,
         project_root_path,
-        remove_docstrings=False,
+        remove_docstrings=remove_docstrings,
         code_context_type=CodeContextType.TESTGEN,
     )
 
-    enrichment = enrich_testgen_context(testgen_context, project_root_path)
-    if enrichment.code_strings:
-        testgen_context = CodeStringsMarkdown(code_strings=testgen_context.code_strings + enrichment.code_strings)
+    if include_enrichment:
+        enrichment = enrich_testgen_context(testgen_context, project_root_path)
+        if enrichment.code_strings:
+            testgen_context = CodeStringsMarkdown(code_strings=testgen_context.code_strings + enrichment.code_strings)
 
     return testgen_context
 
@@ -147,10 +151,39 @@ def get_code_optimization_context(
     )
     read_only_context_code = read_only_code_markdown.markdown
 
+    # Progressive fallback for read-only context token limits
+    read_only_tokens = encoded_tokens_len(read_only_context_code)
+    if final_read_writable_tokens + read_only_tokens > optim_token_limit:
+        logger.debug("Code context has exceeded token limit, removing docstrings from read-only code")
+        read_only_code_no_docstrings = extract_code_markdown_context_from_files(
+            helpers_of_fto_dict, helpers_of_helpers_dict, project_root_path, remove_docstrings=True
+        )
+        read_only_context_code = read_only_code_no_docstrings.markdown
+        if final_read_writable_tokens + encoded_tokens_len(read_only_context_code) > optim_token_limit:
+            logger.debug("Code context has exceeded token limit, removing read-only code")
+            read_only_context_code = ""
+
+    # Progressive fallback for testgen context token limits
     testgen_context = build_testgen_context(helpers_of_fto_dict, helpers_of_helpers_dict, project_root_path)
 
     if encoded_tokens_len(testgen_context.markdown) > testgen_token_limit:
-        raise ValueError(TESTGEN_LIMIT_ERROR)
+        logger.debug("Testgen context exceeded token limit, removing docstrings")
+        testgen_context = build_testgen_context(
+            helpers_of_fto_dict, helpers_of_helpers_dict, project_root_path, remove_docstrings=True
+        )
+
+        if encoded_tokens_len(testgen_context.markdown) > testgen_token_limit:
+            logger.debug("Testgen context still exceeded token limit, removing enrichment")
+            testgen_context = build_testgen_context(
+                helpers_of_fto_dict,
+                helpers_of_helpers_dict,
+                project_root_path,
+                remove_docstrings=True,
+                include_enrichment=False,
+            )
+
+            if encoded_tokens_len(testgen_context.markdown) > testgen_token_limit:
+                raise ValueError(TESTGEN_LIMIT_ERROR)
     code_hash_context = hashing_code_context.markdown
     code_hash = hashlib.sha256(code_hash_context.encode("utf-8")).hexdigest()
 
