@@ -89,7 +89,6 @@ function findJestRunnerRecursive(nodeModulesPath, maxDepth = 5) {
                     entry.name.startsWith('@') ||
                     entry.name === '.pnpm' || entry.name === '.yarn' ||
                     entry.name.startsWith('jest-runner@');
-                    entry.name.startsWith('jest-runner@');
 
                 if (shouldRecurse) {
                     const result = search(entryPath, depth + 1);
@@ -197,9 +196,14 @@ try {
         }
     }
 } catch (e) {
-    // jest-runner not installed - this is expected for Vitest projects
-    // The runner will throw a helpful error if someone tries to use it without jest-runner
-    jestRunnerAvailable = false;
+    // try to directly import jest-runner
+    try {
+        const jestRunner = require('jest-runner');
+        TestRunner = jestRunner.default || jestRunner.TestRunner;
+        jestRunnerAvailable = true;
+    } catch (e2) {
+        jestRunnerAvailable = false;
+    }
 }
 
 // Configuration
