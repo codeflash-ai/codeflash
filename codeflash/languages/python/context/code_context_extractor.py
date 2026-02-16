@@ -589,6 +589,10 @@ def _parse_and_collect_imports(code_context: CodeStringsMarkdown) -> tuple[ast.M
                 if hasattr(node, "handlers"):
                     for handler in node.handlers:
                         collect_imports(handler.body)
+            # Handle match/case statements (Python 3.10+)
+            elif hasattr(ast, "Match") and isinstance(node, ast.Match):
+                for case in node.cases:
+                    collect_imports(case.body)
 
     collect_imports(tree.body)
     return tree, imported_names
