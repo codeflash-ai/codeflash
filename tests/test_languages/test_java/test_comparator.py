@@ -21,6 +21,30 @@ requires_java = pytest.mark.skipif(
     reason="Java not found - skipping Comparator integration tests",
 )
 
+# Kryo-serialized bytes for common test values.
+# Generated via com.codeflash.Serializer.serialize() from codeflash-java-runtime.
+KRYO_INT_1 = bytes([0x02, 0x02])
+KRYO_INT_2 = bytes([0x02, 0x04])
+KRYO_INT_3 = bytes([0x02, 0x06])
+KRYO_INT_4 = bytes([0x02, 0x08])
+KRYO_INT_6 = bytes([0x02, 0x0C])
+KRYO_INT_42 = bytes([0x02, 0x54])
+KRYO_INT_100 = bytes([0x02, 0xC8, 0x01])
+KRYO_STR_OLLEH = bytes([0x03, 0x01, 0x6F, 0x6C, 0x6C, 0x65, 0xE8])
+KRYO_STR_WRONG = bytes([0x03, 0x01, 0x77, 0x72, 0x6F, 0x6E, 0xE7])
+KRYO_STR_RESULT1 = bytes([0x03, 0x01, 0x7B, 0x22, 0x72, 0x65, 0x73, 0x75, 0x6C, 0x74, 0x22, 0x3A, 0x20, 0x31, 0xFD])
+KRYO_STR_RESULT2 = bytes([0x03, 0x01, 0x7B, 0x22, 0x72, 0x65, 0x73, 0x75, 0x6C, 0x74, 0x22, 0x3A, 0x20, 0x32, 0xFD])
+KRYO_STR_RESULT3 = bytes([0x03, 0x01, 0x7B, 0x22, 0x72, 0x65, 0x73, 0x75, 0x6C, 0x74, 0x22, 0x3A, 0x20, 0x33, 0xFD])
+KRYO_STR_VALUE1 = bytes([0x03, 0x01, 0x7B, 0x22, 0x76, 0x61, 0x6C, 0x75, 0x65, 0x22, 0x3A, 0x20, 0x31, 0xFD])
+KRYO_STR_VALUE2 = bytes([0x03, 0x01, 0x7B, 0x22, 0x76, 0x61, 0x6C, 0x75, 0x65, 0x22, 0x3A, 0x20, 0x32, 0xFD])
+KRYO_STR_VALUE42 = bytes([0x03, 0x01, 0x7B, 0x22, 0x76, 0x61, 0x6C, 0x75, 0x65, 0x22, 0x3A, 0x20, 0x34, 0x32, 0xFD])
+KRYO_STR_VALUE100 = bytes([0x03, 0x01, 0x7B, 0x22, 0x76, 0x61, 0x6C, 0x75, 0x65, 0x22, 0x3A, 0x20, 0x31, 0x30, 0x30, 0xFD])
+KRYO_DOUBLE_1_0000000001 = bytes([0x0A, 0x38, 0xDF, 0x06, 0x00, 0x00, 0x00, 0xF0, 0x3F])
+KRYO_DOUBLE_1_0000000002 = bytes([0x0A, 0x70, 0xBE, 0x0D, 0x00, 0x00, 0x00, 0xF0, 0x3F])
+KRYO_NAN = bytes([0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0x7F])
+KRYO_INFINITY = bytes([0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x7F])
+KRYO_NEG_INFINITY = bytes([0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0xFF])
+
 
 class TestDirectComparison:
     """Tests for direct Python-based comparison."""
@@ -556,21 +580,21 @@ class TestTestResultsTableSchema:
         original_path = tmp_path / "original.db"
         candidate_path = tmp_path / "candidate.db"
 
-        # Create databases with identical results
+        # Create databases with identical Kryo-serialized results
         results = [
             {
                 "test_class_name": "CalculatorTest",
                 "function_getting_tested": "add",
                 "loop_index": 1,
                 "iteration_id": "1_0",
-                "return_value": '{"value": 42}',
+                "return_value": KRYO_INT_42,
             },
             {
                 "test_class_name": "CalculatorTest",
                 "function_getting_tested": "add",
                 "loop_index": 1,
                 "iteration_id": "2_0",
-                "return_value": '{"value": 100}',
+                "return_value": KRYO_INT_100,
             },
         ]
 
@@ -596,7 +620,7 @@ class TestTestResultsTableSchema:
                 "function_getting_tested": "reverse",
                 "loop_index": 1,
                 "iteration_id": "1_0",
-                "return_value": '"olleh"',
+                "return_value": KRYO_STR_OLLEH,
             },
         ]
 
@@ -606,7 +630,7 @@ class TestTestResultsTableSchema:
                 "function_getting_tested": "reverse",
                 "loop_index": 1,
                 "iteration_id": "1_0",
-                "return_value": '"wrong"',  # Different result
+                "return_value": KRYO_STR_WRONG,  # Different result
             },
         ]
 
@@ -627,7 +651,9 @@ class TestTestResultsTableSchema:
         original_path = tmp_path / "original.db"
         candidate_path = tmp_path / "candidate.db"
 
-        # Simulate multiple benchmark loops
+        # Simulate multiple benchmark loops with Kryo-serialized integers
+        # loop*iteration: 1*1=1, 1*2=2, 2*1=2, 2*2=4, 3*1=3, 3*2=6
+        kryo_ints = {1: KRYO_INT_1, 2: KRYO_INT_2, 3: KRYO_INT_3, 4: KRYO_INT_4, 6: KRYO_INT_6}
         results = []
         for loop in range(1, 4):  # 3 loops
             for iteration in range(1, 3):  # 2 iterations per loop
@@ -637,7 +663,7 @@ class TestTestResultsTableSchema:
                         "function_getting_tested": "fibonacci",
                         "loop_index": loop,
                         "iteration_id": f"{iteration}_0",
-                        "return_value": str(loop * iteration),
+                        "return_value": kryo_ints[loop * iteration],
                     }
                 )
 
@@ -657,22 +683,22 @@ class TestTestResultsTableSchema:
         original_path = tmp_path / "original.db"
         candidate_path = tmp_path / "candidate.db"
 
-        # Test various iteration_id formats
+        # Test various iteration_id formats with Kryo-serialized values
         results = [
             {
                 "loop_index": 1,
                 "iteration_id": "1_0",  # Standard format
-                "return_value": '{"result": 1}',
+                "return_value": KRYO_INT_1,
             },
             {
                 "loop_index": 1,
                 "iteration_id": "2_5",  # With test iteration
-                "return_value": '{"result": 2}',
+                "return_value": KRYO_INT_2,
             },
             {
                 "loop_index": 2,
                 "iteration_id": "1_0",  # Different loop
-                "return_value": '{"result": 3}',
+                "return_value": KRYO_INT_3,
             },
         ]
 
@@ -696,12 +722,12 @@ class TestTestResultsTableSchema:
             {
                 "loop_index": 1,
                 "iteration_id": "1_0",
-                "return_value": '{"value": 1}',
+                "return_value": KRYO_INT_1,
             },
             {
                 "loop_index": 1,
                 "iteration_id": "2_0",
-                "return_value": '{"value": 2}',
+                "return_value": KRYO_INT_2,
             },
         ]
 
@@ -709,7 +735,7 @@ class TestTestResultsTableSchema:
             {
                 "loop_index": 1,
                 "iteration_id": "1_0",
-                "return_value": '{"value": 1}',
+                "return_value": KRYO_INT_1,
             },
             # Missing second iteration
         ]
@@ -1069,18 +1095,13 @@ class TestComparatorJavaEdgeCases(TestTestResultsTableSchema):
         original_path = tmp_path / "original.db"
         candidate_path = tmp_path / "candidate.db"
 
-        # Kryo-serialized Double(1.0000000001) and Double(1.0000000002)
-        # Generated via: com.codeflash.Serializer.serialize(1.0000000001)
-        kryo_double_1 = bytes([0x0A, 0x38, 0xDF, 0x06, 0x00, 0x00, 0x00, 0xF0, 0x3F])
-        kryo_double_2 = bytes([0x0A, 0x70, 0xBE, 0x0D, 0x00, 0x00, 0x00, 0xF0, 0x3F])
-
         original_results = [
             {
                 "test_class_name": "MathTest",
                 "function_getting_tested": "compute",
                 "loop_index": 1,
                 "iteration_id": "1_0",
-                "return_value": kryo_double_1,
+                "return_value": KRYO_DOUBLE_1_0000000001,
             },
         ]
 
@@ -1090,7 +1111,7 @@ class TestComparatorJavaEdgeCases(TestTestResultsTableSchema):
                 "function_getting_tested": "compute",
                 "loop_index": 1,
                 "iteration_id": "1_0",
-                "return_value": kryo_double_2,
+                "return_value": KRYO_DOUBLE_1_0000000002,
             },
         ]
 
@@ -1116,7 +1137,7 @@ class TestComparatorJavaEdgeCases(TestTestResultsTableSchema):
                 "function_getting_tested": "divide",
                 "loop_index": 1,
                 "iteration_id": "1_0",
-                "return_value": "NaN",
+                "return_value": KRYO_NAN,
             },
         ]
 
@@ -1159,14 +1180,14 @@ class TestComparatorJavaEdgeCases(TestTestResultsTableSchema):
                 "function_getting_tested": "overflow",
                 "loop_index": 1,
                 "iteration_id": "1_0",
-                "return_value": "Infinity",
+                "return_value": KRYO_INFINITY,
             },
             {
                 "test_class_name": "MathTest",
                 "function_getting_tested": "underflow",
                 "loop_index": 1,
                 "iteration_id": "2_0",
-                "return_value": "-Infinity",
+                "return_value": KRYO_NEG_INFINITY,
             },
         ]
 
