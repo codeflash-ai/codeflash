@@ -1354,12 +1354,10 @@ def fix_jest_mock_paths(test_code: str, test_file_path: Path, source_file_path: 
                 or source_relative_resolved.with_suffix(".jsx").exists()
             ):
                 # Calculate the correct relative path from test_dir to source_relative_resolved
-                new_rel_path = os.path.relpath(str(source_relative_resolved), str(test_dir))
+                new_rel_path = Path(os.path.relpath(source_relative_resolved, test_dir)).as_posix()
                 # Ensure it starts with ./ or ../
                 if not new_rel_path.startswith("../") and not new_rel_path.startswith("./"):
                     new_rel_path = f"./{new_rel_path}"
-                # Use forward slashes
-                new_rel_path = new_rel_path.replace("\\", "/")
 
                 logger.debug(f"Fixed jest.mock path: {rel_path} -> {new_rel_path}")
                 return f"{prefix}{new_rel_path}{suffix}"

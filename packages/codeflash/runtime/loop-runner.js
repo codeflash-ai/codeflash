@@ -87,7 +87,10 @@ function findJestRunnerRecursive(nodeModulesPath, maxDepth = 5) {
                 // - pnpm versioned directories (jest-runner@30.0.5)
                 const shouldRecurse = entry.name === 'node_modules' ||
                     entry.name.startsWith('@') ||
-                    entry.name.startsWith('.') ||
+                const shouldRecurse = entry.name === 'node_modules' ||
+                    entry.name.startsWith('@') ||
+                    entry.name === '.pnpm' || entry.name === '.yarn' ||
+                    entry.name.startsWith('jest-runner@');
                     entry.name.startsWith('jest-runner@');
 
                 if (shouldRecurse) {

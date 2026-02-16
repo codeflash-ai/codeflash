@@ -1,0 +1,26 @@
+{
+  "name": "codeflash/codeflash-rules",
+  "version": "0.1.0",
+  "summary": "Coding standards and conventions for the codeflash codebase",
+  "private": true,
+  "rules": {
+    "code-style": {
+      "rules": "rules/code-style.md"
+    },
+    "architecture": {
+      "rules": "rules/architecture.md"
+    },
+    "optimization-patterns": {
+      "rules": "rules/optimization-patterns.md"
+    },
+    "git-conventions": {
+      "rules": "rules/git-conventions.md"
+    },
+    "testing-rules": {
+      "rules": "rules/testing-rules.md"
+    },
+    "language-rules": {
+      "rules": "rules/language-rules.md"
+    }
+  }
+}

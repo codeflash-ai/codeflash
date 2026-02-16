@@ -1,0 +1,26 @@
+{
+  "context": "Tests whether the agent knows the FunctionToOptimize data structure and the concurrent execution model for test generation and optimization.",
+  "type": "weighted_checklist",
+  "checklist": [
+    {
+      "name": "FunctionToOptimize fields",
+      "description": "Includes at least 4 of: function_name, file_path, parents (list of FunctionParent), starting_line, ending_line, is_async, is_method, language",
+      "max_score": 25
+    },
+    {
+      "name": "Qualified name property",
+      "description": "Mentions qualified_name as a property that produces the full dotted name including parent classes (e.g., MyClass.my_method)",
+      "max_score": 25
+    },
+    {
+      "name": "Concurrent execution",
+      "description": "States that test generation and LLM optimization run concurrently (in parallel), NOT sequentially one after the other",
+      "max_score": 25
+    },
+    {
+      "name": "Entry point identification",
+      "description": "Correctly identifies Optimizer.run() as the top-level entry point and FunctionOptimizer.optimize_function() as the per-function entry point",
+      "max_score": 25
+    }
+  ]
+}
