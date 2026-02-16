@@ -571,7 +571,7 @@ def collect_existing_class_names(tree: ast.Module) -> set[str]:
         if isinstance(node, ast.ClassDef):
             class_names.add(node.name)
             stack.extend(node.body)
-        elif isinstance(node, ast.FunctionDef):
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             stack.extend(node.body)
         elif isinstance(node, (ast.If, ast.For, ast.While, ast.With)):
             stack.extend(node.body)
