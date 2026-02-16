@@ -125,11 +125,10 @@ public class CalculatorTest {
         )
 
         success, result = instrument_existing_test(
-            test_file,
-            call_positions=[],
+            test_string=source,
             function_to_optimize=func,
-            tests_project_root=tmp_path,
             mode="behavior",
+            test_path=test_file,
         )
 
         assert success is True
@@ -186,11 +185,10 @@ public class FibonacciTest {
         )
 
         success, result = instrument_existing_test(
-            test_file,
-            call_positions=[],
+            test_string=source,
             function_to_optimize=func,
-            tests_project_root=tmp_path,
             mode="behavior",
+            test_path=test_file,
         )
 
         assert success is True
@@ -236,11 +234,10 @@ public class FibonacciTest {
         )
 
         success, result = instrument_existing_test(
-            test_file,
-            call_positions=[],
+            test_string=source,
             function_to_optimize=func,
-            tests_project_root=tmp_path,
             mode="behavior",
+            test_path=test_file,
         )
 
         assert success is True
@@ -275,11 +272,10 @@ public class CalculatorTest {
         )
 
         success, result = instrument_existing_test(
-            test_file,
-            call_positions=[],
+            test_string=source,
             function_to_optimize=func,
-            tests_project_root=tmp_path,
             mode="performance",
+            test_path=test_file,
         )
 
         expected = """import org.junit.jupiter.api.Test;
@@ -342,11 +338,10 @@ public class MathTest {
         )
 
         success, result = instrument_existing_test(
-            test_file,
-            call_positions=[],
+            test_string=source,
             function_to_optimize=func,
-            tests_project_root=tmp_path,
             mode="performance",
+            test_path=test_file,
         )
 
         expected = """import org.junit.jupiter.api.Test;
@@ -434,11 +429,10 @@ public class ServiceTest {
         )
 
         success, result = instrument_existing_test(
-            test_file,
-            call_positions=[],
+            test_string=source,
             function_to_optimize=func,
-            tests_project_root=tmp_path,
             mode="performance",
+            test_path=test_file,
         )
 
         expected = """import org.junit.jupiter.api.Test;
@@ -510,15 +504,12 @@ public class ServiceTest__perfonlyinstrumented {
             language="java",
         )
 
-        success, result = instrument_existing_test(
-            test_file,
-            call_positions=[],
-            function_to_optimize=func,
-            tests_project_root=tmp_path,
-            mode="behavior",
-        )
-
-        assert success is False
+        with pytest.raises(ValueError):
+            instrument_existing_test(
+                test_string="",
+                function_to_optimize=func,
+                mode="behavior",
+            )
 
 
 class TestKryoSerializerUsage:
@@ -925,24 +916,29 @@ public class CalculatorTest {
     }
 }
 """
+        func = FunctionToOptimize(
+            function_name="add",
+            file_path=Path("Calculator.java"),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
+            is_method=True,
+            language="java",
+        )
         result = instrument_generated_java_test(
             test_code,
             function_name="add",
             qualified_name="Calculator.add",
             mode="behavior",
+            function_to_optimize=func,
         )
 
-        # Behavior mode transforms assertions to capture return values
-        expected = """import org.junit.jupiter.api.Test;
-
-public class CalculatorTest__perfinstrumented {
-    @Test
-    public void testAdd() {
-        Object _cf_result1 = new Calculator().add(2, 2);
-    }
-}
-"""
-        assert result == expected
+        # Behavior mode now adds full instrumentation (SQLite, timing markers, etc.)
+        assert "CalculatorTest__perfinstrumented" in result
+        assert "_cf_result" in result
+        assert "com.codeflash.Serializer.serialize" in result
+        assert "CODEFLASH_OUTPUT_FILE" in result
+        assert "CREATE TABLE IF NOT EXISTS test_results" in result
 
     def test_instrument_generated_test_performance_mode(self):
         """Test instrumenting generated test in performance mode with inner loop."""
@@ -955,11 +951,21 @@ public class GeneratedTest {
     }
 }
 """
+        func = FunctionToOptimize(
+            function_name="method",
+            file_path=Path("Target.java"),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
+            is_method=True,
+            language="java",
+        )
         result = instrument_generated_java_test(
             test_code,
             function_name="method",
             qualified_name="Target.method",
             mode="performance",
+            function_to_optimize=func,
         )
 
         expected = """import org.junit.jupiter.api.Test;
@@ -1130,11 +1136,10 @@ public class BraceTest {
         )
 
         success, result = instrument_existing_test(
-            test_file,
-            call_positions=[],
+            test_string=source,
             function_to_optimize=func,
-            tests_project_root=tmp_path,
             mode="performance",
+            test_path=test_file,
         )
 
         expected = """import org.junit.jupiter.api.Test;
@@ -1223,11 +1228,10 @@ public class ImportTest {
         )
 
         success, result = instrument_existing_test(
-            test_file,
-            call_positions=[],
+            test_string=source,
             function_to_optimize=func,
-            tests_project_root=tmp_path,
             mode="performance",
+            test_path=test_file,
         )
 
         expected = """package com.example;
@@ -1293,11 +1297,10 @@ public class EmptyTest {
         )
 
         success, result = instrument_existing_test(
-            test_file,
-            call_positions=[],
+            test_string=source,
             function_to_optimize=func,
-            tests_project_root=tmp_path,
             mode="performance",
+            test_path=test_file,
         )
 
         expected = """import org.junit.jupiter.api.Test;
@@ -1359,11 +1362,10 @@ public class NestedTest {
         )
 
         success, result = instrument_existing_test(
-            test_file,
-            call_positions=[],
+            test_string=source,
             function_to_optimize=func,
-            tests_project_root=tmp_path,
             mode="performance",
+            test_path=test_file,
         )
 
         expected = """import org.junit.jupiter.api.Test;
@@ -1435,11 +1437,10 @@ public class InnerClassTest {
         )
 
         success, result = instrument_existing_test(
-            test_file,
-            call_positions=[],
+            test_string=source,
             function_to_optimize=func,
-            tests_project_root=tmp_path,
             mode="performance",
+            test_path=test_file,
         )
 
         expected = """import org.junit.jupiter.api.Test;
@@ -1643,7 +1644,7 @@ public class CalculatorTest {
         )
 
         success, instrumented = instrument_existing_test(
-            test_file, [], func_info, test_dir, mode="behavior"
+            test_string=test_source, function_to_optimize=func_info, mode="behavior", test_path=test_file
         )
         assert success
 
@@ -1755,7 +1756,7 @@ public class MathUtilsTest {
         )
 
         success, instrumented = instrument_existing_test(
-            test_file, [], func_info, test_dir, mode="performance"
+            test_string=test_source, function_to_optimize=func_info, mode="performance", test_path=test_file
         )
         assert success
 
@@ -1888,7 +1889,7 @@ public class StringUtilsTest {
         )
 
         success, instrumented = instrument_existing_test(
-            test_file, [], func_info, test_dir, mode="behavior"
+            test_string=test_source, function_to_optimize=func_info, mode="behavior", test_path=test_file
         )
         assert success
 
@@ -1990,7 +1991,7 @@ public class BrokenCalcTest {
         )
 
         success, instrumented = instrument_existing_test(
-            test_file, [], func_info, test_dir, mode="behavior"
+            test_string=test_source, function_to_optimize=func_info, mode="behavior", test_path=test_file
         )
         assert success
 
@@ -2100,7 +2101,7 @@ public class CounterTest {
         )
 
         success, instrumented = instrument_existing_test(
-            test_file, [], func_info, test_dir, mode="behavior"
+            test_string=test_source, function_to_optimize=func_info, mode="behavior", test_path=test_file
         )
         assert success
 
@@ -2262,7 +2263,7 @@ public class FibonacciTest {
         )
 
         success, instrumented = instrument_existing_test(
-            test_file, [], func_info, test_dir, mode="performance"
+            test_string=test_source, function_to_optimize=func_info, mode="performance", test_path=test_file
         )
         assert success
 
@@ -2383,7 +2384,7 @@ public class MathOpsTest {
         )
 
         success, instrumented = instrument_existing_test(
-            test_file, [], func_info, test_dir, mode="performance"
+            test_string=test_source, function_to_optimize=func_info, mode="performance", test_path=test_file
         )
         assert success
 

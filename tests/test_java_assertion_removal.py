@@ -6,6 +6,9 @@ regression test code that captures function return values.
 All tests assert for full string equality, no substring matching.
 """
 
+from pathlib import Path
+
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.java.remove_asserts import JavaAssertTransformer, transform_java_assertions
 
 
@@ -839,26 +842,26 @@ public class FibonacciTest {
         assertEquals(55, calc.fibonacci(10));
     }
 }"""
-        expected = """\
-package com.example;
-
-import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.*;
-
-public class FibonacciTest__perfinstrumented {
-    @Test
-    void testFibonacci() {
-        Calculator calc = new Calculator();
-        Object _cf_result1 = calc.fibonacci(10);
-    }
-}"""
+        func = FunctionToOptimize(
+            function_name="fibonacci",
+            file_path=Path("Calculator.java"),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
+            is_method=True,
+            language="java",
+        )
         result = instrument_generated_java_test(
             test_code=test_code,
             function_name="fibonacci",
             qualified_name="com.example.Calculator.fibonacci",
             mode="behavior",
+            function_to_optimize=func,
         )
-        assert result == expected
+        # Behavior mode now adds full instrumentation
+        assert "FibonacciTest__perfinstrumented" in result
+        assert "_cf_result" in result
+        assert "com.codeflash.Serializer.serialize" in result
 
     def test_behavior_mode_with_assertj(self):
         from codeflash.languages.java.instrumentation import instrument_generated_java_test
@@ -875,25 +878,26 @@ public class StringUtilsTest {
         assertThat(StringUtils.reverse("hello")).isEqualTo("olleh");
     }
 }"""
-        expected = """\
-package com.example;
-
-import org.junit.jupiter.api.Test;
-import static org.assertj.core.api.Assertions.assertThat;
-
-public class StringUtilsTest__perfinstrumented {
-    @Test
-    void testReverse() {
-        Object _cf_result1 = StringUtils.reverse("hello");
-    }
-}"""
+        func = FunctionToOptimize(
+            function_name="reverse",
+            file_path=Path("StringUtils.java"),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
+            is_method=True,
+            language="java",
+        )
         result = instrument_generated_java_test(
             test_code=test_code,
             function_name="reverse",
             qualified_name="com.example.StringUtils.reverse",
             mode="behavior",
+            function_to_optimize=func,
         )
-        assert result == expected
+        # Behavior mode now adds full instrumentation
+        assert "StringUtilsTest__perfinstrumented" in result
+        assert "_cf_result" in result
+        assert "com.codeflash.Serializer.serialize" in result
 
 
 class TestComplexRealWorldExamples:

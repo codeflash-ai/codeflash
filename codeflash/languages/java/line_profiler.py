@@ -110,7 +110,11 @@ class JavaLineProfiler:
             lines[:import_end_idx] + [profiler_class_code + "\n"] + lines[import_end_idx:]
         )
 
-        return "".join(lines_with_profiler)
+        result = "".join(lines_with_profiler)
+        if not analyzer.validate_syntax(result):
+            logger.warning("Line profiler instrumentation produced invalid Java, returning original source")
+            return source
+        return result
 
     def _generate_profiler_class(self) -> str:
         """Generate Java code for profiler class."""

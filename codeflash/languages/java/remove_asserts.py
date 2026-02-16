@@ -539,87 +539,69 @@ class JavaAssertTransformer:
 
         return pos
 
+    # Wrapper template to make assertion argument fragments parseable by tree-sitter.
+    # e.g. content "55, obj.fibonacci(10)" becomes "class _D { void _m() { _d(55, obj.fibonacci(10)); } }"
+    _TS_WRAPPER_PREFIX = "class _D { void _m() { _d("
+    _TS_WRAPPER_SUFFIX = "); } }"
+    _TS_WRAPPER_PREFIX_BYTES = _TS_WRAPPER_PREFIX.encode("utf8")
+
     def _extract_target_calls(self, content: str, base_offset: int) -> list[TargetCall]:
-        """Extract calls to the target function from assertion arguments."""
-        target_calls: list[TargetCall] = []
+        """Find all calls to the target function within assertion argument text using tree-sitter."""
+        if not content or not content.strip():
+            return []
 
-        # Pattern to match method calls with various receiver styles:
-        # - obj.method(args)
-        # - ClassName.staticMethod(args)
-        # - new ClassName().method(args)
-        # - new ClassName(args).method(args)
-        # - method(args) (no receiver)
-        #
-        # Strategy: Find the function name, then look backwards for the receiver
-        pattern = re.compile(rf"({re.escape(self.func_name)})\s*\(", re.MULTILINE)
+        content_bytes = content.encode("utf8")
+        wrapper_bytes = self._TS_WRAPPER_PREFIX_BYTES + content_bytes + self._TS_WRAPPER_SUFFIX.encode("utf8")
+        tree = self.analyzer.parse(wrapper_bytes)
 
-        for match in pattern.finditer(content):
-            method_name = match.group(1)
-            method_start = match.start()
+        results: list[TargetCall] = []
+        self._collect_target_invocations(tree.root_node, wrapper_bytes, content_bytes, base_offset, results)
+        return results
 
-            # Find the arguments
-            paren_pos = match.end() - 1
-            args_content, end_pos = self._find_balanced_parens(content, paren_pos)
-            if args_content is None:
-                continue
+    def _collect_target_invocations(
+        self, node, wrapper_bytes: bytes, content_bytes: bytes,
+        base_offset: int, out: list[TargetCall],
+    ) -> None:
+        """Recursively walk the AST and collect method_invocation nodes that match self.func_name."""
+        prefix_len = len(self._TS_WRAPPER_PREFIX_BYTES)
 
-            # Look backwards from the method name to find the receiver
-            receiver_start = method_start
+        if node.type == "method_invocation":
+            name_node = node.child_by_field_name("name")
+            if name_node and self.analyzer.get_node_text(name_node, wrapper_bytes) == self.func_name:
+                start = node.start_byte - prefix_len
+                end = node.end_byte - prefix_len
+                if 0 <= start and end <= len(content_bytes):
+                    out.append(self._build_target_call(node, wrapper_bytes, content_bytes, start, end, base_offset))
 
-            # Check if there's a dot before the method name (indicating a receiver)
-            before_method = content[:method_start]
-            stripped_before = before_method.rstrip()
-            if stripped_before.endswith("."):
-                dot_pos = len(stripped_before) - 1
-                before_dot = content[:dot_pos]
+        for child in node.children:
+            self._collect_target_invocations(child, wrapper_bytes, content_bytes, base_offset, out)
 
-                # Check for new ClassName() or new ClassName(args)
-                stripped_before_dot = before_dot.rstrip()
-                if stripped_before_dot.endswith(")"):
-                    # Find matching opening paren for constructor args
-                    close_paren_pos = len(stripped_before_dot) - 1
-                    paren_depth = 1
-                    i = close_paren_pos - 1
-                    while i >= 0 and paren_depth > 0:
-                        if stripped_before_dot[i] == ")":
-                            paren_depth += 1
-                        elif stripped_before_dot[i] == "(":
-                            paren_depth -= 1
-                        i -= 1
-                    if paren_depth == 0:
-                        open_paren_pos = i + 1
-                        # Look for "new ClassName" before the opening paren
-                        before_paren = stripped_before_dot[:open_paren_pos].rstrip()
-                        new_match = re.search(r"new\s+[a-zA-Z_]\w*\s*$", before_paren)
-                        if new_match:
-                            receiver_start = new_match.start()
-                        else:
-                            # Could be chained call like something().method()
-                            # For now, just use the part from open paren
-                            receiver_start = open_paren_pos
-                else:
-                    # Simple identifier: obj.method() or Class.method() or pkg.Class.method()
-                    ident_match = re.search(r"[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*\s*$", stripped_before_dot)
-                    if ident_match:
-                        receiver_start = ident_match.start()
+    def _build_target_call(
+        self, node, wrapper_bytes: bytes, content_bytes: bytes,
+        start_byte: int, end_byte: int, base_offset: int,
+    ) -> TargetCall:
+        """Build a TargetCall from a tree-sitter method_invocation node."""
+        get_text = self.analyzer.get_node_text
 
-            full_call = content[receiver_start:end_pos]
-            receiver = (
-                content[receiver_start:method_start].rstrip(".").strip() if receiver_start < method_start else None
-            )
+        object_node = node.child_by_field_name("object")
+        args_node = node.child_by_field_name("arguments")
+        args_text = get_text(args_node, wrapper_bytes) if args_node else ""
+        # argument_list node includes parens, strip them
+        if args_text.startswith("(") and args_text.endswith(")"):
+            args_text = args_text[1:-1]
 
-            target_calls.append(
-                TargetCall(
-                    receiver=receiver,
-                    method_name=method_name,
-                    arguments=args_content,
-                    full_call=full_call,
-                    start_pos=base_offset + receiver_start,
-                    end_pos=base_offset + end_pos,
-                )
-            )
+        # Byte offsets -> char offsets for correct Python string indexing
+        start_char = len(content_bytes[:start_byte].decode("utf8"))
+        end_char = len(content_bytes[:end_byte].decode("utf8"))
 
-        return target_calls
+        return TargetCall(
+            receiver=get_text(object_node, wrapper_bytes) if object_node else None,
+            method_name=self.func_name,
+            arguments=args_text,
+            full_call=get_text(node, wrapper_bytes),
+            start_pos=base_offset + start_char,
+            end_pos=base_offset + end_char,
+        )
 
     def _detect_variable_assignment(self, source: str, assertion_start: int) -> tuple[str | None, str | None]:
         """Check if assertion is assigned to a variable.
