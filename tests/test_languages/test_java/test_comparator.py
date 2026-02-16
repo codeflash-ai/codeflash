@@ -515,7 +515,7 @@ class TestTestResultsTableSchema:
                     loop_index INTEGER,
                     iteration_id TEXT,
                     runtime INTEGER,
-                    return_value TEXT,
+                    return_value BLOB,
                     verification_type TEXT
                 )
             """
@@ -1063,9 +1063,16 @@ class TestComparatorJavaEdgeCases(TestTestResultsTableSchema):
         """Values differing by less than EPSILON (1e-9) should be treated as equivalent.
 
         The Java Comparator uses EPSILON=1e-9 for float comparison.
+        Values must be Kryo-serialized Double bytes for the Comparator to deserialize and
+        apply epsilon-based comparison.
         """
         original_path = tmp_path / "original.db"
         candidate_path = tmp_path / "candidate.db"
+
+        # Kryo-serialized Double(1.0000000001) and Double(1.0000000002)
+        # Generated via: com.codeflash.Serializer.serialize(1.0000000001)
+        kryo_double_1 = bytes([0x0A, 0x38, 0xDF, 0x06, 0x00, 0x00, 0x00, 0xF0, 0x3F])
+        kryo_double_2 = bytes([0x0A, 0x70, 0xBE, 0x0D, 0x00, 0x00, 0x00, 0xF0, 0x3F])
 
         original_results = [
             {
@@ -1073,7 +1080,7 @@ class TestComparatorJavaEdgeCases(TestTestResultsTableSchema):
                 "function_getting_tested": "compute",
                 "loop_index": 1,
                 "iteration_id": "1_0",
-                "return_value": "1.0000000001",
+                "return_value": kryo_double_1,
             },
         ]
 
@@ -1083,7 +1090,7 @@ class TestComparatorJavaEdgeCases(TestTestResultsTableSchema):
                 "function_getting_tested": "compute",
                 "loop_index": 1,
                 "iteration_id": "1_0",
-                "return_value": "1.0000000002",
+                "return_value": kryo_double_2,
             },
         ]
 
