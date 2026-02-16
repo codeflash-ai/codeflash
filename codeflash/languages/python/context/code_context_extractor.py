@@ -556,7 +556,7 @@ def _parse_and_collect_imports(code_context: CodeStringsMarkdown) -> tuple[ast.M
 
     # Directly iterate over the module body and nested structures instead of ast.walk
     # This avoids traversing every single node in the tree
-    def collect_imports(nodes):
+    def collect_imports(nodes: list[ast.stmt]) -> None:
         for node in nodes:
             if isinstance(node, ast.ImportFrom) and node.module:
                 for alias in node.names:
