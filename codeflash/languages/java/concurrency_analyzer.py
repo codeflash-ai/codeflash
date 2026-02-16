@@ -147,13 +147,13 @@ class JavaConcurrencyAnalyzer:
             try:
                 source = func.file_path.read_text(encoding="utf-8")
             except Exception as e:
-                logger.warning("Failed to read source for %s: %s", func.name, e)
+                logger.warning("Failed to read source for %s: %s", func.function_name, e)
                 return ConcurrencyInfo(is_concurrent=False, patterns=[])
 
         # Extract function source
         lines = source.splitlines()
-        func_start = func.start_line - 1  # Convert to 0-indexed
-        func_end = func.end_line
+        func_start = func.starting_line - 1  # Convert to 0-indexed
+        func_end = func.ending_line
         func_source = "\n".join(lines[func_start:func_end])
 
         # Detect patterns

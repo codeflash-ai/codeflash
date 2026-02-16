@@ -1408,11 +1408,13 @@ def _build_test_filter(test_paths: Any, mode: str = "behavior") -> str:
     return ""
 
 
-def _path_to_class_name(path: Path) -> str | None:
+def _path_to_class_name(path: Path, source_dirs: list[str] | None = None) -> str | None:
     """Convert a test file path to a Java class name.
 
     Args:
         path: Path to the test file.
+        source_dirs: Optional list of custom source directory prefixes
+            (e.g., ["src/main/custom", "app/java"]).
 
     Returns:
         Fully qualified class name, or None if unable to determine.
@@ -1421,9 +1423,20 @@ def _path_to_class_name(path: Path) -> str | None:
     if path.suffix != ".java":
         return None
 
-    # Try to extract package from path
-    # e.g., src/test/java/com/example/CalculatorTest.java -> com.example.CalculatorTest
+    path_str = path.as_posix()
     parts = list(path.parts)
+
+    # Try custom source directories first
+    if source_dirs:
+        for src_dir in source_dirs:
+            normalized = src_dir.rstrip("/")
+            # Check if the path contains this source directory
+            if normalized in path_str:
+                idx = path_str.index(normalized) + len(normalized)
+                remainder = path_str[idx:].lstrip("/")
+                if remainder:
+                    class_name = remainder.replace("/", ".").removesuffix(".java")
+                    return class_name
 
     # Look for standard Maven/Gradle source directories
     # Find 'java' that comes after 'main' or 'test'

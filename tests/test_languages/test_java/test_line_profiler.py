@@ -27,12 +27,12 @@ public class Calculator {
 """
         file_path = Path("/tmp/Calculator.java")
         func = FunctionInfo(
-            name="add",
+            function_name="add",
             file_path=file_path,
-            start_line=4,
-            end_line=7,
-            start_col=0,
-            end_col=0,
+            starting_line=4,
+            ending_line=7,
+            starting_col=0,
+            ending_col=0,
             parents=(),
             is_async=False,
             is_method=True,
@@ -74,12 +74,12 @@ public class Calculator {
 """
         file_path = Path("/tmp/Test.java")
         func = FunctionInfo(
-            name="method1",
+            function_name="method1",
             file_path=file_path,
-            start_line=2,
-            end_line=4,
-            start_col=0,
-            end_col=0,
+            starting_line=2,
+            ending_line=4,
+            starting_col=0,
+            ending_col=0,
             parents=(),
             is_async=False,
             is_method=True,
@@ -167,12 +167,12 @@ public class Factorial {
 """
         file_path = Path("/tmp/test_profiler/Factorial.java")
         func = FunctionInfo(
-            name="factorial",
+            function_name="factorial",
             file_path=file_path,
-            start_line=4,
-            end_line=12,
-            start_col=0,
-            end_col=0,
+            starting_line=4,
+            ending_line=12,
+            starting_col=0,
+            ending_col=0,
             parents=(),
             is_async=False,
             is_method=True,
@@ -334,12 +334,12 @@ class TestLineProfilerEdgeCases:
 """
         file_path = Path("/tmp/Test.java")
         func = FunctionInfo(
-            name="method",
+            function_name="method",
             file_path=file_path,
-            start_line=2,
-            end_line=5,
-            start_col=0,
-            end_col=0,
+            starting_line=2,
+            ending_line=5,
+            starting_col=0,
+            ending_col=0,
             parents=(),
             is_async=False,
             is_method=True,

@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.languages.base import FunctionInfo, Language
+from codeflash.languages.base import FunctionInfo
+from codeflash.languages.language_enum import Language
 from codeflash.languages.java.concurrency_analyzer import (
     JavaConcurrencyAnalyzer,
     analyze_function_concurrency,
@@ -30,12 +31,12 @@ class TestCompletableFutureDetection:
             file_path.write_text(source, encoding="utf-8")
 
             func = FunctionInfo(
-                name="fetchData",
+                function_name="fetchData",
                 file_path=file_path,
-                start_line=2,
-                end_line=6,
-                start_col=0,
-                end_col=0,
+                starting_line=2,
+                ending_line=6,
+                starting_col=0,
+                ending_col=0,
                 parents=(),
                 is_async=False,
                 is_method=True,
@@ -64,12 +65,12 @@ class TestCompletableFutureDetection:
             file_path.write_text(source, encoding="utf-8")
 
             func = FunctionInfo(
-                name="process",
+                function_name="process",
                 file_path=file_path,
-                start_line=2,
-                end_line=6,
-                start_col=0,
-                end_col=0,
+                starting_line=2,
+                ending_line=6,
+                starting_col=0,
+                ending_col=0,
                 parents=(),
                 is_async=False,
                 is_method=True,
@@ -103,12 +104,12 @@ class TestParallelStreamDetection:
             file_path.write_text(source, encoding="utf-8")
 
             func = FunctionInfo(
-                name="processData",
+                function_name="processData",
                 file_path=file_path,
-                start_line=2,
-                end_line=6,
-                start_col=0,
-                end_col=0,
+                starting_line=2,
+                ending_line=6,
+                starting_col=0,
+                ending_col=0,
                 parents=(),
                 is_async=False,
                 is_method=True,
@@ -134,12 +135,12 @@ class TestParallelStreamDetection:
             file_path.write_text(source, encoding="utf-8")
 
             func = FunctionInfo(
-                name="count",
+                function_name="count",
                 file_path=file_path,
-                start_line=2,
-                end_line=4,
-                start_col=0,
-                end_col=0,
+                starting_line=2,
+                ending_line=4,
+                starting_col=0,
+                ending_col=0,
                 parents=(),
                 is_async=False,
                 is_method=True,
@@ -170,12 +171,12 @@ class TestExecutorServiceDetection:
             file_path.write_text(source, encoding="utf-8")
 
             func = FunctionInfo(
-                name="runTasks",
+                function_name="runTasks",
                 file_path=file_path,
-                start_line=2,
-                end_line=6,
-                start_col=0,
-                end_col=0,
+                starting_line=2,
+                ending_line=6,
+                starting_col=0,
+                ending_col=0,
                 parents=(),
                 is_async=False,
                 is_method=True,
@@ -206,12 +207,12 @@ class TestVirtualThreadDetection:
             file_path.write_text(source, encoding="utf-8")
 
             func = FunctionInfo(
-                name="runWithVirtualThreads",
+                function_name="runWithVirtualThreads",
                 file_path=file_path,
-                start_line=2,
-                end_line=5,
-                start_col=0,
-                end_col=0,
+                starting_line=2,
+                ending_line=5,
+                starting_col=0,
+                ending_col=0,
                 parents=(),
                 is_async=False,
                 is_method=True,
@@ -241,12 +242,12 @@ class TestSynchronizedDetection:
             file_path.write_text(source, encoding="utf-8")
 
             func = FunctionInfo(
-                name="increment",
+                function_name="increment",
                 file_path=file_path,
-                start_line=2,
-                end_line=4,
-                start_col=0,
-                end_col=0,
+                starting_line=2,
+                ending_line=4,
+                starting_col=0,
+                ending_col=0,
                 parents=(),
                 is_async=False,
                 is_method=True,
@@ -273,12 +274,12 @@ class TestSynchronizedDetection:
             file_path.write_text(source, encoding="utf-8")
 
             func = FunctionInfo(
-                name="increment",
+                function_name="increment",
                 file_path=file_path,
-                start_line=2,
-                end_line=6,
-                start_col=0,
-                end_col=0,
+                starting_line=2,
+                ending_line=6,
+                starting_col=0,
+                ending_col=0,
                 parents=(),
                 is_async=False,
                 is_method=True,
@@ -309,12 +310,12 @@ class TestConcurrentCollectionsDetection:
             file_path.write_text(source, encoding="utf-8")
 
             func = FunctionInfo(
-                name="put",
+                function_name="put",
                 file_path=file_path,
-                start_line=4,
-                end_line=6,
-                start_col=0,
-                end_col=0,
+                starting_line=4,
+                ending_line=6,
+                starting_col=0,
+                ending_col=0,
                 parents=(),
                 is_async=False,
                 is_method=True,
@@ -347,12 +348,12 @@ class TestAtomicOperationsDetection:
             file_path.write_text(source, encoding="utf-8")
 
             func = FunctionInfo(
-                name="increment",
+                function_name="increment",
                 file_path=file_path,
-                start_line=4,
-                end_line=6,
-                start_col=0,
-                end_col=0,
+                starting_line=4,
+                ending_line=6,
+                starting_col=0,
+                ending_col=0,
                 parents=(),
                 is_async=False,
                 is_method=True,
@@ -380,12 +381,12 @@ class TestNonConcurrentCode:
             file_path.write_text(source, encoding="utf-8")
 
             func = FunctionInfo(
-                name="add",
+                function_name="add",
                 file_path=file_path,
-                start_line=2,
-                end_line=4,
-                start_col=0,
-                end_col=0,
+                starting_line=2,
+                ending_line=4,
+                starting_col=0,
+                ending_col=0,
                 parents=(),
                 is_async=False,
                 is_method=True,
@@ -417,12 +418,12 @@ class TestThroughputMeasurement:
             file_path.write_text(source, encoding="utf-8")
 
             func = FunctionInfo(
-                name="fetchData",
+                function_name="fetchData",
                 file_path=file_path,
-                start_line=2,
-                end_line=4,
-                start_col=0,
-                end_col=0,
+                starting_line=2,
+                ending_line=4,
+                starting_col=0,
+                ending_col=0,
                 parents=(),
                 is_async=False,
                 is_method=True,
@@ -446,12 +447,12 @@ class TestThroughputMeasurement:
             file_path.write_text(source, encoding="utf-8")
 
             func = FunctionInfo(
-                name="add",
+                function_name="add",
                 file_path=file_path,
-                start_line=2,
-                end_line=4,
-                start_col=0,
-                end_col=0,
+                starting_line=2,
+                ending_line=4,
+                starting_col=0,
+                ending_col=0,
                 parents=(),
                 is_async=False,
                 is_method=True,
@@ -479,12 +480,12 @@ class TestOptimizationSuggestions:
             file_path.write_text(source, encoding="utf-8")
 
             func = FunctionInfo(
-                name="fetchData",
+                function_name="fetchData",
                 file_path=file_path,
-                start_line=2,
-                end_line=4,
-                start_col=0,
-                end_col=0,
+                starting_line=2,
+                ending_line=4,
+                starting_col=0,
+                ending_col=0,
                 parents=(),
                 is_async=False,
                 is_method=True,
@@ -510,12 +511,12 @@ class TestOptimizationSuggestions:
             file_path.write_text(source, encoding="utf-8")
 
             func = FunctionInfo(
-                name="processData",
+                function_name="processData",
                 file_path=file_path,
-                start_line=2,
-                end_line=4,
-                start_col=0,
-                end_col=0,
+                starting_line=2,
+                ending_line=4,
+                starting_col=0,
+                ending_col=0,
                 parents=(),
                 is_async=False,
                 is_method=True,
