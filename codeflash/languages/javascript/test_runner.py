@@ -1044,6 +1044,10 @@ def run_jest_benchmarking_tests(
 
         # Create result with combined stdout
         result = subprocess.CompletedProcess(args=result.args, returncode=result.returncode, stdout=stdout, stderr="")
+        if result.returncode != 0:
+            logger.debug(f"Jest benchmarking failed with return code {result.returncode}")
+            logger.debug(f"Jest benchmarking stdout: {result.stdout}")
+            logger.debug(f"Jest benchmarking stderr: {result.stderr}")
 
     except subprocess.TimeoutExpired:
         logger.warning(f"Jest benchmarking timed out after {total_timeout}s")
