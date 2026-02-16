@@ -200,7 +200,12 @@ try {
     try {
         const jestRunner = require('jest-runner');
         TestRunner = jestRunner.default || jestRunner.TestRunner;
-        jestRunnerAvailable = true;
+        if (TestRunner && TestRunner.prototype && typeof TestRunner.prototype.runTests === 'function') {
+            jestVersion = 30;
+            jestRunnerAvailable = true;
+        } else {
+            jestRunnerAvailable = false;
+        }
     } catch (e2) {
         jestRunnerAvailable = false;
     }
