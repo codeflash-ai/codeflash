@@ -20,8 +20,9 @@ from codeflash.discovery.functions_to_optimize import FunctionToOptimize  # noqa
 from codeflash.languages import Language, is_python
 from codeflash.languages.python.context.unused_definition_remover import (
     collect_top_level_defs_with_usages,
-    extract_names_from_targets,
     get_section_names,
+    is_assignment_used,
+    recurse_sections,
     remove_unused_definitions_by_function_names,
 )
 from codeflash.models.models import (
@@ -34,8 +35,6 @@ from codeflash.models.models import (
 from codeflash.optimization.function_context import belongs_to_function_qualified
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from jedi.api.classes import Name
 
     from codeflash.languages.base import HelperFunction
@@ -1103,50 +1102,6 @@ def _validate_classdef(node: cst.ClassDef, prefix: str) -> tuple[str, cst.Indent
     return _qualified_name(prefix, node.name.value), node.body
 
 
-def _recurse_sections(
-    node: cst.CSTNode,
-    section_names: list[str],
-    prune_fn: Callable[[cst.CSTNode], tuple[cst.CSTNode | None, bool]],
-    keep_non_target_children: bool = False,
-) -> tuple[cst.CSTNode | None, bool]:
-    updates: dict[str, list[cst.CSTNode] | cst.CSTNode] = {}
-    found_any_target = False
-    for section in section_names:
-        original_content = getattr(node, section, None)
-        if isinstance(original_content, (list, tuple)):
-            new_children = []
-            section_found_target = False
-            for child in original_content:
-                filtered, found_target = prune_fn(child)
-                if filtered:
-                    new_children.append(filtered)
-                section_found_target |= found_target
-            if keep_non_target_children:
-                if section_found_target or new_children:
-                    found_any_target |= section_found_target
-                    updates[section] = new_children
-            elif section_found_target:
-                found_any_target = True
-                updates[section] = new_children
-        elif original_content is not None:
-            filtered, found_target = prune_fn(original_content)
-            if keep_non_target_children:
-                found_any_target |= found_target
-                if filtered:
-                    updates[section] = filtered
-            elif found_target:
-                found_any_target = True
-                if filtered:
-                    updates[section] = filtered
-    if keep_non_target_children:
-        if updates:
-            return node.with_changes(**updates), found_any_target
-        return None, False
-    if not found_any_target:
-        return None, False
-    return (node.with_changes(**updates) if updates else node), True
-
-
 def prune_cst(
     node: cst.CSTNode,
     target_functions: set[str],
@@ -1278,19 +1233,9 @@ def prune_cst(
 
     # Handle assignments for READ_WRITABLE mode
     if defs_with_usages is not None:
-        if isinstance(node, cst.Assign):
-            for target in node.targets:
-                names = extract_names_from_targets(target.target)
-                for name in names:
-                    if name in defs_with_usages and defs_with_usages[name].used_by_qualified_function:
-                        return node, True
-            return None, False
-
-        if isinstance(node, (cst.AnnAssign, cst.AugAssign)):
-            names = extract_names_from_targets(node.target)
-            for name in names:
-                if name in defs_with_usages and defs_with_usages[name].used_by_qualified_function:
-                    return node, True
+        if isinstance(node, (cst.Assign, cst.AnnAssign, cst.AugAssign)):
+            if is_assignment_used(node, defs_with_usages):
+                return node, True
             return None, False
 
     # For other nodes, recursively process children
@@ -1299,7 +1244,7 @@ def prune_cst(
         return node, False
 
     if helpers is not None:
-        return _recurse_sections(
+        return recurse_sections(
             node,
             section_names,
             lambda child: prune_cst(
@@ -1317,7 +1262,7 @@ def prune_cst(
             ),
             keep_non_target_children=True,
         )
-    return _recurse_sections(
+    return recurse_sections(
         node,
         section_names,
         lambda child: prune_cst(

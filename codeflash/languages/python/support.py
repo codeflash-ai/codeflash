@@ -21,7 +21,23 @@ from codeflash.languages.registry import register_language
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from codeflash.models.models import FunctionSource
+
 logger = logging.getLogger(__name__)
+
+
+def function_sources_to_helpers(sources: list[FunctionSource]) -> list[HelperFunction]:
+    return [
+        HelperFunction(
+            name=fs.only_function_name,
+            qualified_name=fs.qualified_name,
+            file_path=fs.file_path,
+            source_code=fs.source_code,
+            start_line=fs.jedi_definition.line if fs.jedi_definition else 1,
+            end_line=fs.jedi_definition.line if fs.jedi_definition else 1,
+        )
+        for fs in sources
+    ]
 
 
 @register_language
@@ -180,17 +196,7 @@ class PythonSupport:
             logger.warning("Failed to extract code context for %s: %s", function.function_name, e)
             return CodeContext(target_code="", target_file=function.file_path, language=Language.PYTHON)
 
-        helpers = [
-            HelperFunction(
-                name=fs.only_function_name,
-                qualified_name=fs.qualified_name,
-                file_path=fs.file_path,
-                source_code=fs.source_code,
-                start_line=fs.jedi_definition.line if fs.jedi_definition else 1,
-                end_line=fs.jedi_definition.line if fs.jedi_definition else 1,
-            )
-            for fs in result.helper_functions
-        ]
+        helpers = function_sources_to_helpers(result.helper_functions)
 
         return CodeContext(
             target_code=result.read_writable_code.markdown,
@@ -213,17 +219,7 @@ class PythonSupport:
             logger.warning("Failed to find helpers for %s: %s", function.function_name, e)
             return []
 
-        return [
-            HelperFunction(
-                name=fs.only_function_name,
-                qualified_name=fs.qualified_name,
-                file_path=fs.file_path,
-                source_code=fs.source_code,
-                start_line=fs.jedi_definition.line if fs.jedi_definition else 1,
-                end_line=fs.jedi_definition.line if fs.jedi_definition else 1,
-            )
-            for fs in sources
-        ]
+        return function_sources_to_helpers(sources)
 
     def find_references(
         self, function: FunctionToOptimize, project_root: Path, tests_root: Path | None = None, max_files: int = 500
@@ -659,15 +655,6 @@ class PythonSupport:
 
         """
         return ".py"
-
-    def get_comment_prefix(self) -> str:
-        """Get the comment prefix for Python.
-
-        Returns:
-            Python single-line comment prefix.
-
-        """
-        return "#"
 
     def find_test_root(self, project_root: Path) -> Path | None:
         """Find the test root directory for a Python project.

@@ -15,6 +15,8 @@ from codeflash.languages import is_javascript
 from codeflash.models.models import CodeString, CodeStringsMarkdown
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.models import CodeOptimizationContext, FunctionSource
 
@@ -47,6 +49,73 @@ def extract_names_from_targets(target: cst.CSTNode) -> list[str]:
             names.extend(extract_names_from_targets(element))
 
     return names
+
+
+def is_assignment_used(
+    node: cst.CSTNode,
+    definitions: dict[str, UsageInfo],
+    name_prefix: str = "",
+) -> bool:
+    if isinstance(node, cst.Assign):
+        for target in node.targets:
+            names = extract_names_from_targets(target.target)
+            for name in names:
+                lookup = f"{name_prefix}{name}" if name_prefix else name
+                if lookup in definitions and definitions[lookup].used_by_qualified_function:
+                    return True
+        return False
+    if isinstance(node, (cst.AnnAssign, cst.AugAssign)):
+        names = extract_names_from_targets(node.target)
+        for name in names:
+            lookup = f"{name_prefix}{name}" if name_prefix else name
+            if lookup in definitions and definitions[lookup].used_by_qualified_function:
+                return True
+        return False
+    return False
+
+
+def recurse_sections(
+    node: cst.CSTNode,
+    section_names: list[str],
+    prune_fn: Callable[[cst.CSTNode], tuple[cst.CSTNode | None, bool]],
+    keep_non_target_children: bool = False,
+) -> tuple[cst.CSTNode | None, bool]:
+    updates: dict[str, list[cst.CSTNode] | cst.CSTNode] = {}
+    found_any_target = False
+    for section in section_names:
+        original_content = getattr(node, section, None)
+        if isinstance(original_content, (list, tuple)):
+            new_children = []
+            section_found_target = False
+            for child in original_content:
+                filtered, found_target = prune_fn(child)
+                if filtered:
+                    new_children.append(filtered)
+                section_found_target |= found_target
+            if keep_non_target_children:
+                if section_found_target or new_children:
+                    found_any_target |= section_found_target
+                    updates[section] = new_children
+            elif section_found_target:
+                found_any_target = True
+                updates[section] = new_children
+        elif original_content is not None:
+            filtered, found_target = prune_fn(original_content)
+            if keep_non_target_children:
+                found_any_target |= found_target
+                if filtered:
+                    updates[section] = filtered
+            elif found_target:
+                found_any_target = True
+                if filtered:
+                    updates[section] = filtered
+    if keep_non_target_children:
+        if updates:
+            return node.with_changes(**updates), found_any_target
+        return None, False
+    if not found_any_target:
+        return None, False
+    return (node.with_changes(**updates) if updates else node), True
 
 
 def collect_top_level_definitions(
@@ -423,27 +492,9 @@ def remove_unused_definitions_recursively(
                 elif isinstance(statement, (cst.Assign, cst.AnnAssign, cst.AugAssign)):
                     var_used = False
 
-                    # Check if any variable in this assignment is used
-                    if isinstance(statement, cst.Assign):
-                        for target in statement.targets:
-                            names = extract_names_from_targets(target.target)
-                            for name in names:
-                                class_var_name = f"{class_name}.{name}"
-                                if (
-                                    class_var_name in definitions
-                                    and definitions[class_var_name].used_by_qualified_function
-                                ):
-                                    var_used = True
-                                    method_or_var_used = True
-                                    break
-                    elif isinstance(statement, (cst.AnnAssign, cst.AugAssign)):
-                        names = extract_names_from_targets(statement.target)
-                        for name in names:
-                            class_var_name = f"{class_name}.{name}"
-                            if class_var_name in definitions and definitions[class_var_name].used_by_qualified_function:
-                                var_used = True
-                                method_or_var_used = True
-                                break
+                    if is_assignment_used(statement, definitions, name_prefix=f"{class_name}."):
+                        var_used = True
+                        method_or_var_used = True
 
                     if var_used or class_has_dependencies:
                         new_statements.append(statement)
@@ -459,56 +510,21 @@ def remove_unused_definitions_recursively(
 
         return node, method_or_var_used or class_has_dependencies
 
-    # Handle assignments (Assign and AnnAssign)
-    if isinstance(node, cst.Assign):
-        for target in node.targets:
-            names = extract_names_from_targets(target.target)
-            for name in names:
-                if name in definitions and definitions[name].used_by_qualified_function:
-                    return node, True
-        return None, False
-
-    if isinstance(node, (cst.AnnAssign, cst.AugAssign)):
-        names = extract_names_from_targets(node.target)
-        for name in names:
-            if name in definitions and definitions[name].used_by_qualified_function:
-                return node, True
+    # Handle assignments (Assign, AnnAssign, AugAssign)
+    if isinstance(node, (cst.Assign, cst.AnnAssign, cst.AugAssign)):
+        if is_assignment_used(node, definitions):
+            return node, True
         return None, False
 
     # For other nodes, recursively process children
     section_names = get_section_names(node)
     if not section_names:
         return node, False
-
-    updates = {}
-    found_used = False
-
-    for section in section_names:
-        original_content = getattr(node, section, None)
-        if isinstance(original_content, (list, tuple)):
-            new_children = []
-            section_found_used = False
-
-            for child in original_content:
-                filtered, used = remove_unused_definitions_recursively(child, definitions)
-                if filtered:
-                    new_children.append(filtered)
-                section_found_used |= used
-
-            if new_children or section_found_used:
-                found_used |= section_found_used
-                updates[section] = new_children
-        elif original_content is not None:
-            filtered, used = remove_unused_definitions_recursively(original_content, definitions)
-            found_used |= used
-            if filtered:
-                updates[section] = filtered
-    if not found_used:
-        return None, False
-    if updates:
-        return node.with_changes(**updates), found_used
-
-    return node, False
+    return recurse_sections(
+        node,
+        section_names,
+        lambda child: remove_unused_definitions_recursively(child, definitions),
+    )
 
 
 def collect_top_level_defs_with_usages(
