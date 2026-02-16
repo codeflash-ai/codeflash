@@ -1180,7 +1180,9 @@ def prune_cst(
 
         # Apply docstring removal to class if needed
         if remove_docstrings and new_class_body:
-            return node.with_changes(body=remove_docstring_from_body(node.body.with_changes(body=new_class_body))), True
+            updated_body = node.body.with_changes(body=new_class_body)
+            assert isinstance(updated_body, cst.IndentedBlock)
+            return node.with_changes(body=remove_docstring_from_body(updated_body)), True
 
         return node.with_changes(body=node.body.with_changes(body=new_class_body)) if new_class_body else None, True
 
