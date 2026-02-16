@@ -51,11 +51,7 @@ def extract_names_from_targets(target: cst.CSTNode) -> list[str]:
     return names
 
 
-def is_assignment_used(
-    node: cst.CSTNode,
-    definitions: dict[str, UsageInfo],
-    name_prefix: str = "",
-) -> bool:
+def is_assignment_used(node: cst.CSTNode, definitions: dict[str, UsageInfo], name_prefix: str = "") -> bool:
     if isinstance(node, cst.Assign):
         for target in node.targets:
             names = extract_names_from_targets(target.target)
@@ -521,9 +517,7 @@ def remove_unused_definitions_recursively(
     if not section_names:
         return node, False
     return recurse_sections(
-        node,
-        section_names,
-        lambda child: remove_unused_definitions_recursively(child, definitions),
+        node, section_names, lambda child: remove_unused_definitions_recursively(child, definitions)
     )
 
 
