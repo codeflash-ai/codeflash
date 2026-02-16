@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from junitparser import JUnitXml
 
-from codeflash.verification.parse_test_output import jest_end_pattern, jest_start_pattern
+from codeflash.languages.javascript.parse import jest_end_pattern, jest_start_pattern
 
 
 class TestVitestJunitXmlFormat:
