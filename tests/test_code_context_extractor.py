@@ -10,7 +10,8 @@ import pytest
 
 from codeflash.code_utils.code_extractor import GlobalAssignmentCollector, add_global_assignments
 from codeflash.code_utils.code_replacer import replace_functions_and_add_imports
-from codeflash.context.code_context_extractor import (
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.languages.python.context.code_context_extractor import (
     collect_names_from_annotation,
     enrich_testgen_context,
     extract_classes_from_type_hint,
@@ -18,7 +19,6 @@ from codeflash.context.code_context_extractor import (
     get_code_optimization_context,
     resolve_transitive_type_deps,
 )
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodeString, CodeStringsMarkdown, FunctionParent
 from codeflash.optimization.optimizer import Optimizer
 

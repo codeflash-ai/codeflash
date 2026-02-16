@@ -14,16 +14,16 @@ from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, find_preexisting_objects
 from codeflash.code_utils.code_utils import encoded_tokens_len, get_qualified_name, path_belongs_to_site_packages
 from codeflash.code_utils.config_consts import OPTIMIZATION_CONTEXT_TOKEN_LIMIT, TESTGEN_CONTEXT_TOKEN_LIMIT
-from codeflash.context.unused_definition_remover import (
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize  # noqa: TC001
+
+# Language support imports for multi-language code context extraction
+from codeflash.languages import Language, is_python
+from codeflash.languages.python.context.unused_definition_remover import (
     collect_top_level_defs_with_usages,
     extract_names_from_targets,
     get_section_names,
     remove_unused_definitions_by_function_names,
 )
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize  # noqa: TC001
-
-# Language support imports for multi-language code context extraction
-from codeflash.languages import Language, is_python
 from codeflash.models.models import (
     CodeContextType,
     CodeOptimizationContext,
@@ -38,8 +38,8 @@ if TYPE_CHECKING:
 
     from jedi.api.classes import Name
 
-    from codeflash.context.unused_definition_remover import UsageInfo
     from codeflash.languages.base import HelperFunction
+    from codeflash.languages.python.context.unused_definition_remover import UsageInfo
 
 # Error message constants
 READ_WRITABLE_LIMIT_ERROR = "Read-writable code has exceeded token limit, cannot proceed"
