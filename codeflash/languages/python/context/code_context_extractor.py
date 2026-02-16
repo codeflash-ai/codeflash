@@ -565,7 +565,7 @@ def _parse_and_collect_imports(code_context: CodeStringsMarkdown) -> tuple[ast.M
 def collect_existing_class_names(tree: ast.Module) -> set[str]:
     class_names = set()
     stack = list(tree.body)
-    
+
     while stack:
         node = stack.pop()
         if isinstance(node, ast.ClassDef):
@@ -575,7 +575,7 @@ def collect_existing_class_names(tree: ast.Module) -> set[str]:
             stack.extend(node.body)
         elif isinstance(node, (ast.If, ast.For, ast.While, ast.With)):
             stack.extend(node.body)
-            if hasattr(node, 'orelse'):
+            if hasattr(node, "orelse"):
                 stack.extend(node.orelse)
         elif isinstance(node, ast.Try):
             stack.extend(node.body)
@@ -583,7 +583,7 @@ def collect_existing_class_names(tree: ast.Module) -> set[str]:
             stack.extend(node.finalbody)
             for handler in node.handlers:
                 stack.extend(handler.body)
-    
+
     return class_names
 
 
