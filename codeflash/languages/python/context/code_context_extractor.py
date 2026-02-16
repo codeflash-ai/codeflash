@@ -553,7 +553,7 @@ def _parse_and_collect_imports(code_context: CodeStringsMarkdown) -> tuple[ast.M
     except SyntaxError:
         return None
     imported_names: dict[str, str] = {}
-    
+
     # Directly iterate over the module body and nested structures instead of ast.walk
     # This avoids traversing every single node in the tree
     def collect_imports(nodes):
@@ -564,19 +564,32 @@ def _parse_and_collect_imports(code_context: CodeStringsMarkdown) -> tuple[ast.M
                         imported_name = alias.asname if alias.asname else alias.name
                         imported_names[imported_name] = node.module
             # Recursively check nested structures (function defs, class defs, if statements, etc.)
-            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, 
-                                   ast.If, ast.For, ast.AsyncFor, ast.While, ast.With, 
-                                   ast.AsyncWith, ast.Try, ast.ExceptHandler)):
-                if hasattr(node, 'body'):
+            elif isinstance(
+                node,
+                (
+                    ast.FunctionDef,
+                    ast.AsyncFunctionDef,
+                    ast.ClassDef,
+                    ast.If,
+                    ast.For,
+                    ast.AsyncFor,
+                    ast.While,
+                    ast.With,
+                    ast.AsyncWith,
+                    ast.Try,
+                    ast.ExceptHandler,
+                ),
+            ):
+                if hasattr(node, "body"):
                     collect_imports(node.body)
-                if hasattr(node, 'orelse'):
+                if hasattr(node, "orelse"):
                     collect_imports(node.orelse)
-                if hasattr(node, 'finalbody'):
+                if hasattr(node, "finalbody"):
                     collect_imports(node.finalbody)
-                if hasattr(node, 'handlers'):
+                if hasattr(node, "handlers"):
                     for handler in node.handlers:
                         collect_imports(handler.body)
-    
+
     collect_imports(tree.body)
     return tree, imported_names
 
