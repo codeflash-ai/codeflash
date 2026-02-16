@@ -35,69 +35,113 @@ const path = require('path');
 const fs = require('fs');
 
 /**
- * Validates that a jest-runner path is valid by checking for package.json.
- * @param {string} jestRunnerPath - Path to check
- * @returns {boolean} True if valid jest-runner package
+ * Recursively find jest-runner package in node_modules.
+ * Works with any package manager (npm, yarn, pnpm) by searching for
+ * jest-runner/package.json anywhere in the tree.
+ *
+ * @param {string} nodeModulesPath - Path to node_modules directory
+ * @param {number} maxDepth - Maximum recursion depth (default: 5)
+ * @returns {string|null} Path to jest-runner or null if not found
  */
-function isValidJestRunnerPath(jestRunnerPath) {
-    if (!fs.existsSync(jestRunnerPath)) {
-        return false;
+function findJestRunnerRecursive(nodeModulesPath, maxDepth = 5) {
+    function search(dir, depth) {
+        if (depth > maxDepth || !fs.existsSync(dir)) return null;
+
+        try {
+            let entries = fs.readdirSync(dir, { withFileTypes: true });
+
+            // Sort entries: prefer higher versions for jest-runner@X.Y.Z directories
+            entries = entries.slice().sort((a, b) => {
+                const aMatch = a.name.match(/^jest-runner@(\d+)/);
+                const bMatch = b.name.match(/^jest-runner@(\d+)/);
+                if (aMatch && bMatch) {
+                    return parseInt(bMatch[1], 10) - parseInt(aMatch[1], 10);
+                }
+                return a.name.localeCompare(b.name);
+            });
+
+            for (const entry of entries) {
+                if (!entry.isDirectory()) continue;
+
+                const entryPath = path.join(dir, entry.name);
+
+                // Found jest-runner directory - check if it's a valid package
+                if (entry.name === 'jest-runner') {
+                    const pkgJsonPath = path.join(entryPath, 'package.json');
+                    if (fs.existsSync(pkgJsonPath)) {
+                        try {
+                            const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
+                            if (pkgJson.name === 'jest-runner') {
+                                return entryPath;
+                            }
+                        } catch (e) {
+                            // Ignore JSON parse errors
+                        }
+                    }
+                }
+
+                // Recurse into:
+                // - node_modules subdirectories
+                // - scoped packages (@org/pkg)
+                // - hidden directories (.pnpm, .yarn, etc.)
+                // - pnpm versioned directories (jest-runner@30.0.5)
+                const shouldRecurse = entry.name === 'node_modules' ||
+                    entry.name.startsWith('@') ||
+                    entry.name.startsWith('.') ||
+                    entry.name.startsWith('jest-runner@');
+
+                if (shouldRecurse) {
+                    const result = search(entryPath, depth + 1);
+                    if (result) return result;
+                }
+            }
+        } catch (e) {
+            // Ignore permission errors
+        }
+
+        return null;
     }
-    const packageJsonPath = path.join(jestRunnerPath, 'package.json');
-    return fs.existsSync(packageJsonPath);
+
+    return search(nodeModulesPath, 0);
 }
 
 /**
- * Resolve jest-runner with monorepo support.
- * Uses CODEFLASH_MONOREPO_ROOT environment variable if available,
- * otherwise walks up the directory tree looking for node_modules/jest-runner.
+ * Resolve jest-runner from the PROJECT's node_modules (not codeflash's).
+ *
+ * Uses recursive search to find jest-runner anywhere in node_modules,
+ * working with any package manager (npm, yarn, pnpm).
  *
  * @returns {string} Path to jest-runner package
  * @throws {Error} If jest-runner cannot be found
  */
 function resolveJestRunner() {
-    // Try standard resolution first (works in simple projects)
-    try {
-        return require.resolve('jest-runner');
-    } catch (e) {
-        // Standard resolution failed - try monorepo-aware resolution
-    }
-
-    // If Python detected a monorepo root, check there first
-    const monorepoRoot = process.env.CODEFLASH_MONOREPO_ROOT;
-    if (monorepoRoot) {
-        const jestRunnerPath = path.join(monorepoRoot, 'node_modules', 'jest-runner');
-        if (isValidJestRunnerPath(jestRunnerPath)) {
-            return jestRunnerPath;
-        }
-    }
-
-    // Fallback: Walk up from cwd looking for node_modules/jest-runner
     const monorepoMarkers = ['yarn.lock', 'pnpm-workspace.yaml', 'lerna.json', 'package-lock.json'];
+
+    // Walk up from cwd to find all potential node_modules locations
     let currentDir = process.cwd();
     const visitedDirs = new Set();
 
+    // If Python detected a monorepo root, check there first
+    const monorepoRoot = process.env.CODEFLASH_MONOREPO_ROOT;
+    if (monorepoRoot && !visitedDirs.has(monorepoRoot)) {
+        visitedDirs.add(monorepoRoot);
+        const result = findJestRunnerRecursive(path.join(monorepoRoot, 'node_modules'));
+        if (result) return result;
+    }
+
     while (currentDir !== path.dirname(currentDir)) {
-        // Avoid infinite loops
         if (visitedDirs.has(currentDir)) break;
         visitedDirs.add(currentDir);
 
-        // Try node_modules/jest-runner at this level
-        const jestRunnerPath = path.join(currentDir, 'node_modules', 'jest-runner');
-        if (isValidJestRunnerPath(jestRunnerPath)) {
-            return jestRunnerPath;
-        }
+        const result = findJestRunnerRecursive(path.join(currentDir, 'node_modules'));
+        if (result) return result;
 
-        // Check if this is a workspace root (has monorepo markers)
+        // Check if this is a workspace root - stop after this
         const isWorkspaceRoot = monorepoMarkers.some(marker =>
             fs.existsSync(path.join(currentDir, marker))
         );
 
-        if (isWorkspaceRoot) {
-            // Found workspace root but no jest-runner - stop searching
-            break;
-        }
-
+        if (isWorkspaceRoot) break;
         currentDir = path.dirname(currentDir);
     }
 
@@ -120,10 +164,15 @@ let jestVersion = 0;
 
 try {
     const jestRunnerPath = resolveJestRunner();
-    const internalRequire = createRequire(jestRunnerPath);
 
-    // Try to get the TestRunner class (Jest 30+)
-    const jestRunner = internalRequire(jestRunnerPath);
+    // Read the package.json to find the actual entry point and version
+    const pkgJsonPath = path.join(jestRunnerPath, 'package.json');
+    const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
+
+    // Require using the full path to the entry point
+    const entryPoint = path.join(jestRunnerPath, pkgJson.main || 'build/index.js');
+    const jestRunner = require(entryPoint);
+
     TestRunner = jestRunner.default || jestRunner.TestRunner;
 
     if (TestRunner && TestRunner.prototype && typeof TestRunner.prototype.runTests === 'function') {
@@ -131,9 +180,11 @@ try {
         jestVersion = 30;
         jestRunnerAvailable = true;
     } else {
-        // Try Jest 29 style import
+        // Try Jest 29 style import - runTest is in build/runTest.js
         try {
-            runTest = internalRequire('./runTest').default;
+            const runTestPath = path.join(jestRunnerPath, 'build', 'runTest.js');
+            const runTestModule = require(runTestPath);
+            runTest = runTestModule.default;
             if (typeof runTest === 'function') {
                 // Jest 29 - use direct runTest function
                 jestVersion = 29;
@@ -141,10 +192,6 @@ try {
             }
         } catch (e29) {
             // Neither Jest 29 nor 30 style import worked
-            const errorMsg = `Found jest-runner at ${jestRunnerPath} but could not load it. ` +
-                `This may indicate an unsupported Jest version. ` +
-                `Supported versions: Jest 29.x and Jest 30.x`;
-            console.error(errorMsg);
             jestRunnerAvailable = false;
         }
     }
@@ -233,15 +280,12 @@ class CodeflashLoopRunner {
         this._context = context || {};
         this._eventEmitter = new SimpleEventEmitter();
 
-        // For Jest 30+, create an instance of the base TestRunner for delegation
-        if (jestVersion >= 30) {
-            if (!TestRunner) {
-                throw new Error(
-                    `Jest ${jestVersion} detected but TestRunner class not available. ` +
-                    `This indicates an internal error in loop-runner initialization.`
-                );
-            }
-            this._baseRunner = new TestRunner(globalConfig, context);
+        // For Jest 30+, verify TestRunner is available (we create fresh instances per batch)
+        if (jestVersion >= 30 && !TestRunner) {
+            throw new Error(
+                `Jest ${jestVersion} detected but TestRunner class not available. ` +
+                `This indicates an internal error in loop-runner initialization.`
+            );
         }
     }
 
@@ -270,7 +314,7 @@ class CodeflashLoopRunner {
      * @param {Object} options - Jest runner options
      * @returns {Promise<void>}
      */
-    async runTests(tests, watcher, options) {
+    async runTests(tests, watcher, ...rest) {
         const startTime = Date.now();
         let batchCount = 0;
         let hasFailure = false;
@@ -289,13 +333,11 @@ class CodeflashLoopRunner {
 
             // Check time limit BEFORE each batch
             if (batchCount > MIN_BATCHES && checkTimeLimit()) {
-                console.log(`[codeflash] Time limit reached after ${batchCount - 1} batches (${Date.now() - startTime}ms elapsed)`);
                 break;
             }
 
             // Check if interrupted
             if (watcher.isInterrupted()) {
-                console.log(`[codeflash] Watcher is interrupted`)
                 break;
             }
 
@@ -303,57 +345,54 @@ class CodeflashLoopRunner {
             process.env.CODEFLASH_PERF_CURRENT_BATCH = String(batchCount);
 
             // Run all test files in this batch
-            const batchResult = await this._runAllTestsOnce(tests, watcher, options);
+            const batchResult = await this._runAllTestsOnce(tests, watcher, ...rest);
             allConsoleOutput += batchResult.consoleOutput;
-
-            // if (batchResult.hasFailure) {
-            //     hasFailure = true;
-            //     break;
-            // }
 
             // Check time limit AFTER each batch
             if (checkTimeLimit()) {
-                console.log(`[codeflash] Time limit reached after ${batchCount} batches (${Date.now() - startTime}ms elapsed)`);
                 break;
             }
         }
 
         const totalTimeMs = Date.now() - startTime;
 
-        console.log(`[codeflash] now: ${Date.now()}`)
         // Output all collected console logs - this is critical for timing marker extraction
         // The console output contains the !######...######! timing markers from capturePerf
         if (allConsoleOutput) {
             process.stdout.write(allConsoleOutput);
         }
-
-        console.log(`[codeflash] Batched runner completed: ${batchCount} batches, ${tests.length} test files, ${totalTimeMs}ms total`);
     }
 
     /**
      * Run all test files once (one batch).
      * Uses different approaches for Jest 29 vs Jest 30.
      */
-    async _runAllTestsOnce(tests, watcher, options) {
+    async _runAllTestsOnce(tests, watcher, ...args) {
         if (jestVersion >= 30) {
-            return this._runAllTestsOnceJest30(tests, watcher, options);
+            return this._runAllTestsOnceJest30(tests, watcher, ...args);
         } else {
             return this._runAllTestsOnceJest29(tests, watcher);
         }
     }
 
     /**
-     * Jest 30+ implementation - delegates to base TestRunner and collects results.
+     * Jest 30+ implementation - creates a fresh TestRunner for each batch to avoid
+     * state corruption issues that occur when reusing runners across batches.
      */
-    async _runAllTestsOnceJest30(tests, watcher, options) {
+    async _runAllTestsOnceJest30(tests, watcher, ...args) {
         let hasFailure = false;
         let allConsoleOutput = '';
 
         // For Jest 30, we need to collect results through event listeners
         const resultsCollector = [];
 
-        // Subscribe to events from the base runner
-        const unsubscribeSuccess = this._baseRunner.on('test-file-success', (testData) => {
+        // Create a FRESH TestRunner instance for each batch
+        // Jest 30's TestRunner corrupts its internal state after running tests,
+        // so we cannot reuse the same instance across multiple batches
+        const batchRunner = new TestRunner(this._globalConfig, this._context);
+
+        // Subscribe to events from the batch runner
+        const unsubscribeSuccess = batchRunner.on('test-file-success', (testData) => {
             const [test, result] = testData;
             resultsCollector.push({ test, result, success: true });
 
@@ -369,7 +408,7 @@ class CodeflashLoopRunner {
             this._eventEmitter.emit('test-file-success', testData);
         });
 
-        const unsubscribeFailure = this._baseRunner.on('test-file-failure', (testData) => {
+        const unsubscribeFailure = batchRunner.on('test-file-failure', (testData) => {
             const [test, error] = testData;
             resultsCollector.push({ test, error, success: false });
             hasFailure = true;
@@ -378,14 +417,14 @@ class CodeflashLoopRunner {
             this._eventEmitter.emit('test-file-failure', testData);
         });
 
-        const unsubscribeStart = this._baseRunner.on('test-file-start', (testData) => {
+        const unsubscribeStart = batchRunner.on('test-file-start', (testData) => {
             // Forward to our event emitter
             this._eventEmitter.emit('test-file-start', testData);
         });
 
         try {
-            // Run tests using the base runner (always serial for benchmarking)
-            await this._baseRunner.runTests(tests, watcher, { ...options, serial: true });
+            // Run tests using the fresh batch runner (always serial for benchmarking)
+            await batchRunner.runTests(tests, watcher, ...args);
         } finally {
             // Cleanup subscriptions
             if (typeof unsubscribeSuccess === 'function') unsubscribeSuccess();
