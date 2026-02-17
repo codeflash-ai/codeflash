@@ -38,5 +38,4 @@ class Success(Result[L, R]):
 
 
 def is_successful(result: Result[L, R]) -> bool:
-    # Test: verify AWS Bedrock workflow triggers correctly
     return result.is_successful()
