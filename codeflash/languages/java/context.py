@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from tree_sitter import Node
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-    from codeflash.languages.java.parser import JavaAnalyzer
+    from codeflash.languages.java.parser import JavaAnalyzer, JavaMethodNode
 
 logger = logging.getLogger(__name__)
 
@@ -71,8 +71,8 @@ def extract_code_context(
         logger.exception("Failed to read %s: %s", function.file_path, e)
         return CodeContext(target_code="", target_file=function.file_path, language=Language.JAVA)
 
-    # Extract target function code
-    target_code = extract_function_source(source, function)
+    # Extract target function code using tree-sitter for resilient name-based lookup
+    target_code = extract_function_source(source, function, analyzer=analyzer)
 
     # Track whether we wrapped in a skeleton (for read_only_context decision)
     wrapped_in_skeleton = False
@@ -530,20 +530,96 @@ def _wrap_method_in_type_skeleton(method_code: str, skeleton: TypeSkeleton) -> s
 _wrap_method_in_class_skeleton = _wrap_method_in_type_skeleton
 
 
-def extract_function_source(source: str, function: FunctionToOptimize) -> str:
+def extract_function_source(source: str, function: FunctionToOptimize, analyzer: JavaAnalyzer | None = None) -> str:
     """Extract the source code of a function from the full file source.
+
+    Uses tree-sitter to locate the function by name in the current source,
+    which is resilient to file modifications (e.g., when a prior optimization
+    in --all mode changed line counts in the same file). Falls back to
+    pre-computed line numbers if tree-sitter lookup fails.
 
     Args:
         source: The full file source code.
         function: The function to extract.
+        analyzer: Optional JavaAnalyzer for tree-sitter based lookup.
 
     Returns:
         The function's source code.
 
     """
+    # Try tree-sitter based extraction first — resilient to stale line numbers
+    if analyzer is not None:
+        result = _extract_function_source_by_name(source, function, analyzer)
+        if result is not None:
+            return result
+
+    # Fallback: use pre-computed line numbers
+    return _extract_function_source_by_lines(source, function)
+
+
+def _extract_function_source_by_name(source: str, function: FunctionToOptimize, analyzer: JavaAnalyzer) -> str | None:
+    """Extract function source using tree-sitter to find the method by name.
+
+    This re-parses the source and finds the method by name and class,
+    so it works correctly even if the file has been modified since
+    the function was originally discovered.
+
+    Args:
+        source: The full file source code.
+        function: The function to extract.
+        analyzer: JavaAnalyzer for parsing.
+
+    Returns:
+        The function's source code including Javadoc, or None if not found.
+
+    """
+    methods = analyzer.find_methods(source)
     lines = source.splitlines(keepends=True)
 
-    # Include Javadoc if present
+    # Find matching methods by name and class
+    matching = [
+        m
+        for m in methods
+        if m.name == function.function_name and (function.class_name is None or m.class_name == function.class_name)
+    ]
+
+    if not matching:
+        logger.debug(
+            "Tree-sitter lookup failed: no method '%s' (class=%s) found in source",
+            function.function_name,
+            function.class_name,
+        )
+        return None
+
+    if len(matching) == 1:
+        method = matching[0]
+    else:
+        # Multiple overloads — use original line number as proximity hint
+        method = _find_closest_overload(matching, function.starting_line)
+
+    # Determine start line (include Javadoc if present)
+    start_line = method.javadoc_start_line or method.start_line
+    end_line = method.end_line
+
+    # Convert from 1-indexed to 0-indexed
+    start_idx = start_line - 1
+    end_idx = end_line
+
+    return "".join(lines[start_idx:end_idx])
+
+
+def _find_closest_overload(methods: list[JavaMethodNode], original_start_line: int | None) -> JavaMethodNode:
+    """Pick the overload whose start_line is closest to the original."""
+    if not original_start_line:
+        return methods[0]
+
+    return min(methods, key=lambda m: abs(m.start_line - original_start_line))
+
+
+def _extract_function_source_by_lines(source: str, function: FunctionToOptimize) -> str:
+    """Extract function source using pre-computed line numbers (fallback)."""
+    lines = source.splitlines(keepends=True)
+
     start_line = function.doc_start_line or function.starting_line
     end_line = function.ending_line
 
@@ -586,8 +662,8 @@ def find_helper_functions(
                 if func_id not in visited_functions:
                     visited_functions.add(func_id)
 
-                    # Extract the function source
-                    func_source = extract_function_source(source, func)
+                    # Extract the function source using tree-sitter for resilient lookup
+                    func_source = extract_function_source(source, func, analyzer=analyzer)
 
                     helpers.append(
                         HelperFunction(
