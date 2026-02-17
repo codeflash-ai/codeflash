@@ -20,14 +20,12 @@ All assertions use strict string equality to verify exact extraction output.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
-from codeflash.context.code_context_extractor import get_code_optimization_context_for_language
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import Language
 from codeflash.languages.javascript.support import JavaScriptSupport, TypeScriptSupport
+from codeflash.languages.python.context.code_context_extractor import get_code_optimization_context_for_language
 
 
 @pytest.fixture
