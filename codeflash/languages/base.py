@@ -572,7 +572,7 @@ class LanguageSupport(Protocol):
         function_to_optimize: Any,
         tests_project_root: Path,
         mode: str,
-        test_path: Path | None
+        test_path: Path | None,
     ) -> tuple[bool, str | None]:
         """Inject profiling code into an existing test file.
 

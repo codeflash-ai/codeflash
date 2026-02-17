@@ -164,7 +164,15 @@ def _find_project_root(start_path: Path) -> Path | None:
 
     while current != current.parent:
         # Check for project markers
-        markers = [".git", "pyproject.toml", "package.json", "Cargo.toml", "pom.xml", "build.gradle", "build.gradle.kts"]
+        markers = [
+            ".git",
+            "pyproject.toml",
+            "package.json",
+            "Cargo.toml",
+            "pom.xml",
+            "build.gradle",
+            "build.gradle.kts",
+        ]
         for marker in markers:
             if (current / marker).exists():
                 return current
@@ -489,10 +497,17 @@ def _detect_tests_root(project_root: Path, language: str) -> tuple[Path | None, 
                             for elem in [build.find("m:testSourceDirectory", ns), build.find("testSourceDirectory")]:
                                 if elem is not None and elem.text:
                                     # Resolve ${project.basedir}/src -> test_module_dir/src
-                                    dir_text = elem.text.strip().replace("${project.basedir}/", "").replace("${project.basedir}", ".")
+                                    dir_text = (
+                                        elem.text.strip()
+                                        .replace("${project.basedir}/", "")
+                                        .replace("${project.basedir}", ".")
+                                    )
                                     resolved = test_module_dir / dir_text
                                     if resolved.is_dir():
-                                        return resolved, f"{test_module_name}/{dir_text} (from {test_module_name}/pom.xml testSourceDirectory)"
+                                        return (
+                                            resolved,
+                                            f"{test_module_name}/{dir_text} (from {test_module_name}/pom.xml testSourceDirectory)",
+                                        )
                 except ET.ParseError:
                     pass
                 # Test module exists but no custom testSourceDirectory - use the module root
@@ -548,8 +563,6 @@ def _detect_test_runner(project_root: Path, language: str) -> tuple[str, str]:
 
 def _detect_java_test_runner(project_root: Path) -> tuple[str, str]:
     """Detect Java test framework."""
-    import xml.etree.ElementTree as ET
-
     pom_path = project_root / "pom.xml"
     if pom_path.exists():
         try:

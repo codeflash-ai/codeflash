@@ -12,11 +12,8 @@ from typing import TYPE_CHECKING, Any
 from codeflash.languages.base import Language, LanguageSupport
 from codeflash.languages.java.build_tools import find_test_root
 from codeflash.languages.java.comparator import compare_test_results as _compare_test_results
+from codeflash.languages.java.concurrency_analyzer import analyze_function_concurrency
 from codeflash.languages.java.config import detect_java_project
-from codeflash.languages.java.concurrency_analyzer import (
-    JavaConcurrencyAnalyzer,
-    analyze_function_concurrency,
-)
 from codeflash.languages.java.context import extract_code_context, find_helper_functions
 from codeflash.languages.java.discovery import discover_functions, discover_functions_from_source
 from codeflash.languages.java.formatter import format_java_code, normalize_java_code
@@ -288,14 +285,11 @@ class JavaSupport(LanguageSupport):
         function_to_optimize: Any,
         tests_project_root: Path,
         mode: str,
-        test_path: Path | None
+        test_path: Path | None,
     ) -> tuple[bool, str | None]:
         """Inject profiling code into an existing test file."""
         return instrument_existing_test(
-            test_string=test_string,
-            function_to_optimize=function_to_optimize,
-            mode=mode,
-            test_path=test_path
+            test_string=test_string, function_to_optimize=function_to_optimize, mode=mode, test_path=test_path
         )
 
     def instrument_source_for_line_profiler(
