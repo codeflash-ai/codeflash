@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 import os
-import shutil
-import subprocess
 import sys
-import tempfile
 import time
 from functools import cache
 from io import StringIO
@@ -16,7 +13,6 @@ from rich.prompt import Confirm
 from unidiff import PatchSet
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.config_consts import N_CANDIDATES_EFFECTIVE
 
 if TYPE_CHECKING:
     from git import Repo
@@ -34,7 +30,7 @@ def get_git_diff(
             only_this_commit + "^1", only_this_commit, ignore_blank_lines=True, ignore_space_at_eol=True
         )
     elif uncommitted_changes:
-        uni_diff_text = repository.git.diff(None, "HEAD", ignore_blank_lines=True, ignore_space_at_eol=True)
+        uni_diff_text = repository.git.diff("HEAD", ignore_blank_lines=True, ignore_space_at_eol=True)
     else:
         uni_diff_text = repository.git.diff(
             commit.hexsha + "^1", commit.hexsha, ignore_blank_lines=True, ignore_space_at_eol=True
@@ -70,12 +66,43 @@ def get_git_diff(
 def get_current_branch(repo: Repo | None = None) -> str:
     """Return the name of the current branch in the given repository.
 
+    Handles detached HEAD state and other edge cases by falling back to
+    the default branch (main or master) or "main" if no default branch exists.
+
     :param repo: An optional Repo object. If not provided, the function will
                  search for a repository in the current and parent directories.
-    :return: The name of the current branch.
+    :return: The name of the current branch, or "main" if HEAD is detached or
+             the branch cannot be determined.
     """
     repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
-    return repository.active_branch.name
+
+    # Check if HEAD is detached (active_branch will be None)
+    if repository.head.is_detached:
+        logger.warning(
+            "HEAD is detached. Cannot determine current branch. Falling back to 'main'. "
+            "Consider checking out a branch before running Codeflash."
+        )
+        # Try to find the default branch (main or master)
+        for default_branch in ["main", "master"]:
+            try:
+                if default_branch in repository.branches:
+                    logger.info(f"Using '{default_branch}' as fallback branch.")
+                    return default_branch
+            except Exception as e:
+                logger.debug(f"Error checking for branch '{default_branch}': {e}")
+                continue
+        # If no default branch found, return "main" as a safe default
+        return "main"
+
+    # HEAD is not detached, safe to access active_branch
+    try:
+        return repository.active_branch.name
+    except (AttributeError, TypeError) as e:
+        logger.warning(
+            f"Could not determine active branch: {e}. Falling back to 'main'. "
+            "This may indicate the repository is in an unusual state."
+        )
+        return "main"
 
 
 def get_remote_url(repo: Repo | None = None, git_remote: str | None = "origin") -> str:
@@ -126,8 +153,19 @@ def confirm_proceeding_with_no_git_repo() -> str | bool:
 
 
 def check_and_push_branch(repo: git.Repo, git_remote: str | None = "origin", *, wait_for_push: bool = False) -> bool:
-    current_branch = repo.active_branch
-    current_branch_name = current_branch.name
+    # Check if HEAD is detached
+    if repo.head.is_detached:
+        logger.warning("⚠️ HEAD is detached. Cannot push branch. Please check out a branch before creating a PR.")
+        return False
+
+    # Safe to access active_branch when HEAD is not detached
+    try:
+        current_branch = repo.active_branch
+        current_branch_name = current_branch.name
+    except (AttributeError, TypeError) as e:
+        logger.warning(f"⚠️ Could not determine active branch: {e}. Cannot push branch.")
+        return False
+
     remote = repo.remote(name=git_remote)
 
     # Check if the branch is pushed
@@ -151,36 +189,6 @@ def check_and_push_branch(repo: git.Repo, git_remote: str | None = "origin", *, 
         return False
     logger.debug(f"The branch '{current_branch_name}' is present in the remote repository.")
     return True
-
-
-def create_worktree_root_dir(module_root: Path) -> tuple[Path | None, Path | None]:
-    git_root = git_root_dir() if check_running_in_git_repo(module_root) else None
-    worktree_root_dir = Path(tempfile.mkdtemp()) if git_root else None
-    return git_root, worktree_root_dir
-
-
-def create_git_worktrees(
-    git_root: Path | None, worktree_root_dir: Path | None, module_root: Path
-) -> tuple[Path | None, list[Path]]:
-    if git_root and worktree_root_dir:
-        worktree_root = Path(tempfile.mkdtemp(dir=worktree_root_dir))
-        worktrees = [Path(tempfile.mkdtemp(dir=worktree_root)) for _ in range(N_CANDIDATES_EFFECTIVE + 1)]
-        for worktree in worktrees:
-            subprocess.run(["git", "worktree", "add", "-d", worktree], cwd=module_root, check=True)
-    else:
-        worktree_root = None
-        worktrees = []
-    return worktree_root, worktrees
-
-
-def remove_git_worktrees(worktree_root: Path | None, worktrees: list[Path]) -> None:
-    try:
-        for worktree in worktrees:
-            subprocess.run(["git", "worktree", "remove", "-f", worktree], check=True)
-    except subprocess.CalledProcessError as e:
-        logger.warning(f"Error removing worktrees: {e}")
-    if worktree_root:
-        shutil.rmtree(worktree_root)
 
 
 def get_last_commit_author_if_pr_exists(repo: Repo | None = None) -> str | None:

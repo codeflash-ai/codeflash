@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 from argparse import SUPPRESS, ArgumentParser, Namespace
 from pathlib import Path
@@ -9,8 +10,9 @@ from codeflash.cli_cmds.cmd_init import init_codeflash, install_github_actions
 from codeflash.cli_cmds.console import logger
 from codeflash.cli_cmds.extension import install_vscode_extension
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.code_utils import exit_with_message
+from codeflash.code_utils.code_utils import exit_with_message, normalize_ignore_paths
 from codeflash.code_utils.config_parser import parse_config_file
+from codeflash.languages.test_framework import set_current_test_framework
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.version import __version__ as version
 
@@ -19,7 +21,7 @@ def parse_args() -> Namespace:
     parser = ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", help="Sub-commands")
 
-    init_parser = subparsers.add_parser("init", help="Initialize Codeflash for a Python project.")
+    init_parser = subparsers.add_parser("init", help="Initialize Codeflash for your project.")
     init_parser.set_defaults(func=init_codeflash)
 
     subparsers.add_parser("vscode-install", help="Install the Codeflash VSCode extension")
@@ -27,7 +29,7 @@ def parse_args() -> Namespace:
     init_actions_parser = subparsers.add_parser("init-actions", help="Initialize GitHub Actions workflow")
     init_actions_parser.set_defaults(func=install_github_actions)
 
-    trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize a Python project.")
+    trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize your project.")
 
     from codeflash.tracer import main as tracer_main
 
@@ -69,17 +71,22 @@ def parse_args() -> Namespace:
     parser.add_argument(
         "--module-root",
         type=str,
-        help="Path to the project's Python module that you want to optimize."
-        " This is the top-level root directory where all the Python source code is located.",
+        help="Path to the project's module that you want to optimize."
+        " This is the top-level root directory where all the source code is located.",
     )
     parser.add_argument(
         "--tests-root", type=str, help="Path to the test directory of the project, where all the tests are located."
     )
-    parser.add_argument("--test-framework", choices=["pytest", "unittest"], default="pytest")
     parser.add_argument("--config-file", type=str, help="Path to the pyproject.toml with codeflash configs.")
     parser.add_argument("--replay-test", type=str, nargs="+", help="Paths to replay test to optimize functions from")
     parser.add_argument(
         "--no-pr", action="store_true", help="Do not create a PR for the optimization, only update the code locally."
+    )
+    parser.add_argument(
+        "--no-gen-tests", action="store_true", help="Do not generate tests, use only existing tests for optimization."
+    )
+    parser.add_argument(
+        "--no-jit-opts", action="store_true", help="Do not generate JIT-compiled optimizations for numerical code."
     )
     parser.add_argument("--staging-review", action="store_true", help="Upload optimizations to staging for review")
     parser.add_argument(
@@ -105,6 +112,24 @@ def parse_args() -> Namespace:
         action="store_true",
         help="(Deprecated) Async function optimization is now enabled by default. This flag is ignored.",
     )
+    parser.add_argument(
+        "--server",
+        type=str,
+        choices=["local", "prod"],
+        help="AI service server to use: 'local' for localhost:8000, 'prod' for app.codeflash.ai",
+    )
+    parser.add_argument(
+        "--effort", type=str, help="Effort level for optimization", choices=["low", "medium", "high"], default="medium"
+    )
+
+    # Config management flags
+    parser.add_argument(
+        "--show-config", action="store_true", help="Show current or auto-detected configuration and exit."
+    )
+    parser.add_argument(
+        "--reset-config", action="store_true", help="Remove codeflash configuration from project config file."
+    )
+    parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompts (useful for CI/scripts).")
 
     args, unknown_args = parser.parse_known_args()
     sys.argv[:] = [sys.argv[0], *unknown_args]
@@ -119,6 +144,9 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
     )
     from codeflash.code_utils.github_utils import require_github_app_or_exit
 
+    if args.server:
+        os.environ["CODEFLASH_AIS_SERVER"] = args.server
+
     is_init: bool = args.command.startswith("init") if args.command else False
     if args.verbose:
         logging_config.set_level(logging.DEBUG, echo_setting=not is_init)
@@ -127,6 +155,16 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
 
     if args.version:
         logger.info(f"Codeflash version {version}")
+        sys.exit()
+
+    # Handle --show-config
+    if getattr(args, "show_config", False):
+        _handle_show_config()
+        sys.exit()
+
+    # Handle --reset-config
+    if getattr(args, "reset_config", False):
+        _handle_reset_config(confirm=not getattr(args, "yes", False))
         sys.exit()
 
     if args.command == "vscode-install":
@@ -172,7 +210,6 @@ def process_pyproject_config(args: Namespace) -> Namespace:
         "module_root",
         "tests_root",
         "benchmarks_root",
-        "test_framework",
         "ignore_paths",
         "pytest_cmd",
         "formatter_cmds",
@@ -189,7 +226,37 @@ def process_pyproject_config(args: Namespace) -> Namespace:
             setattr(args, key.replace("-", "_"), pyproject_config[key])
     assert args.module_root is not None, "--module-root must be specified"
     assert Path(args.module_root).is_dir(), f"--module-root {args.module_root} must be a valid directory"
-    assert args.tests_root is not None, "--tests-root must be specified"
+
+    # For JS/TS projects, tests_root is optional (Jest auto-discovers tests)
+    # Default to module_root if not specified
+    is_js_ts_project = pyproject_config.get("language") in ("javascript", "typescript")
+
+    # Set the test framework singleton for JS/TS projects
+    if is_js_ts_project and pyproject_config.get("test_framework"):
+        set_current_test_framework(pyproject_config["test_framework"])
+
+    if args.tests_root is None:
+        if is_js_ts_project:
+            # Try common JS test directories at project root first
+            for test_dir in ["test", "tests", "__tests__"]:
+                if Path(test_dir).is_dir():
+                    args.tests_root = test_dir
+                    break
+            # If not found at project root, try inside module_root (e.g., src/test, src/__tests__)
+            if args.tests_root is None and args.module_root:
+                module_root_path = Path(args.module_root)
+                for test_dir in ["test", "tests", "__tests__"]:
+                    test_path = module_root_path / test_dir
+                    if test_path.is_dir():
+                        args.tests_root = str(test_path)
+                        break
+            # Final fallback: default to module_root
+            # Note: This may cause issues if tests are colocated with source files
+            # In such cases, the user should explicitly configure testsRoot in package.json
+            if args.tests_root is None:
+                args.tests_root = args.module_root
+        else:
+            raise AssertionError("--tests-root must be specified")
     assert Path(args.tests_root).is_dir(), f"--tests-root {args.tests_root} must be a valid directory"
     if args.benchmark:
         assert args.benchmarks_root is not None, "--benchmarks-root must be specified when running with --benchmark"
@@ -217,15 +284,12 @@ def process_pyproject_config(args: Namespace) -> Namespace:
 
             require_github_app_or_exit(owner, repo_name)
 
-    if hasattr(args, "ignore_paths") and args.ignore_paths is not None:
-        normalized_ignore_paths = []
-        for path in args.ignore_paths:
-            path_obj = Path(path)
-            assert path_obj.exists(), f"ignore-paths config must be a valid path. Path {path} does not exist"
-            normalized_ignore_paths.append(path_obj.resolve())
-        args.ignore_paths = normalized_ignore_paths
     # Project root path is one level above the specified directory, because that's where the module can be imported from
     args.module_root = Path(args.module_root).resolve()
+    if hasattr(args, "ignore_paths") and args.ignore_paths is not None:
+        # Normalize ignore paths, supporting both literal paths and glob patterns
+        # Use module_root as base path for resolving relative paths and patterns
+        args.ignore_paths = normalize_ignore_paths(args.ignore_paths, base_path=args.module_root)
     # If module-root is "." then all imports are relatives to it.
     # in this case, the ".." becomes outside project scope, causing issues with un-importable paths
     args.project_root = project_root_from_module_root(args.module_root, pyproject_file_path)
@@ -278,3 +342,94 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
     else:
         args.all = Path(args.all).resolve()
     return args
+
+
+def _handle_show_config() -> None:
+    """Show current or auto-detected Codeflash configuration."""
+    from rich.table import Table
+
+    from codeflash.cli_cmds.console import console
+    from codeflash.setup.detector import detect_project, has_existing_config
+
+    project_root = Path.cwd()
+    detected = detect_project(project_root)
+
+    # Check if config exists or is auto-detected
+    config_exists, config_file = has_existing_config(project_root)
+    status = "Saved config" if config_exists else "Auto-detected (not saved)"
+
+    console.print()
+    console.print(f"[bold]Codeflash Configuration[/bold] ({status})")
+    if config_exists and config_file:
+        console.print(f"[dim]Config file: {project_root / config_file}[/dim]")
+    console.print()
+
+    table = Table(show_header=True, header_style="bold cyan")
+    table.add_column("Setting", style="dim")
+    table.add_column("Value")
+
+    table.add_row("Language", detected.language)
+    table.add_row("Project root", str(detected.project_root))
+    table.add_row("Module root", str(detected.module_root))
+    table.add_row("Tests root", str(detected.tests_root) if detected.tests_root else "(not detected)")
+    table.add_row("Test runner", detected.test_runner or "(not detected)")
+    table.add_row("Formatter", ", ".join(detected.formatter_cmds) if detected.formatter_cmds else "(not detected)")
+    table.add_row(
+        "Ignore paths", ", ".join(str(p) for p in detected.ignore_paths) if detected.ignore_paths else "(none)"
+    )
+    table.add_row("Confidence", f"{detected.confidence:.0%}")
+
+    console.print(table)
+    console.print()
+
+    if not config_exists:
+        console.print("[dim]Run [bold]codeflash --file <file>[/bold] to auto-save this config.[/dim]")
+
+
+def _handle_reset_config(confirm: bool = True) -> None:
+    """Remove Codeflash configuration from project config file.
+
+    Args:
+        confirm: If True, prompt for confirmation before removing.
+
+    """
+    from codeflash.cli_cmds.console import console
+    from codeflash.setup.config_writer import remove_config
+    from codeflash.setup.detector import detect_project, has_existing_config
+
+    project_root = Path.cwd()
+
+    config_exists, _ = has_existing_config(project_root)
+    if not config_exists:
+        console.print("[yellow]No Codeflash configuration found to remove.[/yellow]")
+        return
+
+    detected = detect_project(project_root)
+
+    if confirm:
+        console.print("[bold]This will remove Codeflash configuration from your project.[/bold]")
+        console.print()
+
+        config_file = "pyproject.toml" if detected.language == "python" else "package.json"
+        console.print(f"  Config file: {project_root / config_file}")
+        console.print()
+
+        try:
+            response = console.input("[bold]Are you sure you want to remove the config? [y/N][/bold] ")
+        except (EOFError, KeyboardInterrupt):
+            console.print("\n[yellow]Cancelled.[/yellow]")
+            return
+
+        if response.lower() not in ("y", "yes"):
+            console.print("[yellow]Cancelled.[/yellow]")
+            return
+
+    success, message = remove_config(project_root, detected.language)
+
+    # Escape brackets in message to prevent Rich markup interpretation
+    escaped_message = message.replace("[", "\\[")
+
+    if success:
+        console.print(f"[green]✓[/green] {escaped_message}")
+    else:
+        console.print(f"[red]✗[/red] {escaped_message}")

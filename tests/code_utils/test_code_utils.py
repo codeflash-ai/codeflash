@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import configparser
 import os
-import stat
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 import tomlkit
 
 from codeflash.code_utils.code_utils import custom_addopts
+
 
 def test_custom_addopts_modifies_and_restores_dotini_file(tmp_path: Path) -> None:
     """Verify that custom_addopts correctly modifies and then restores a pytest.ini file."""
@@ -31,6 +30,7 @@ def test_custom_addopts_modifies_and_restores_dotini_file(tmp_path: Path) -> Non
     # Check that the file is restored after exiting the context
     restored_content = config_file.read_text()
     assert restored_content.strip() == original_content.strip()
+
 
 def test_custom_addopts_modifies_and_restores_ini_file(tmp_path: Path) -> None:
     """Verify that custom_addopts correctly modifies and then restores a pytest.ini file."""
@@ -60,9 +60,7 @@ def test_custom_addopts_modifies_and_restores_toml_file(tmp_path: Path) -> None:
     config_file = tmp_path / "pyproject.toml"
     os.chdir(tmp_path)
     original_addopts = "-v --cov=./src --junitxml=report.xml"
-    original_content_dict = {
-        "tool": {"pytest": {"ini_options": {"addopts": original_addopts}}}
-    }
+    original_content_dict = {"tool": {"pytest": {"ini_options": {"addopts": original_addopts}}}}
     original_content = tomlkit.dumps(original_content_dict)
     config_file.write_text(original_content)
 
@@ -96,6 +94,7 @@ def test_custom_addopts_handles_no_addopts(tmp_path: Path) -> None:
     # The file should remain unchanged
     content_after_context = config_file.read_text()
     assert content_after_context == original_content
+
 
 def test_custom_addopts_handles_no_relevant_files(tmp_path: Path) -> None:
     """Ensure custom_addopts runs without error when no config files are found."""
@@ -151,9 +150,7 @@ def test_custom_addopts_with_multiple_config_files(tmp_path: Path) -> None:
     # Create pyproject.toml
     toml_file = tmp_path / "pyproject.toml"
     toml_original_addopts = "-s -n auto"
-    toml_original_content_dict = {
-        "tool": {"pytest": {"ini_options": {"addopts": toml_original_addopts}}}
-    }
+    toml_original_content_dict = {"tool": {"pytest": {"ini_options": {"addopts": toml_original_addopts}}}}
     toml_original_content = tomlkit.dumps(toml_original_content_dict)
     toml_file.write_text(toml_original_content)
 
@@ -182,9 +179,8 @@ def test_custom_addopts_restores_on_exception(tmp_path: Path) -> None:
     config_file.write_text(original_content)
 
     os.chdir(tmp_path)
-    with pytest.raises(ValueError, match="Test exception"):
-        with custom_addopts():
-            raise ValueError("Test exception")
+    with pytest.raises(ValueError, match="Test exception"), custom_addopts():
+        raise ValueError("Test exception")
 
     restored_content = config_file.read_text()
     assert restored_content.strip() == original_content.strip()

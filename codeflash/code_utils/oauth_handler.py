@@ -702,7 +702,7 @@ def _wait_for_manual_code_input(oauth: OAuthHandler) -> None:
             if not oauth.is_complete:
                 oauth.manual_code = code.strip()
                 oauth.is_complete = True
-    except Exception:  # noqa: S110
+    except Exception:
         pass
 
 

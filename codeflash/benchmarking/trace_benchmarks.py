@@ -1,23 +1,22 @@
 from __future__ import annotations
 
-import os
 import re
 import subprocess
 from pathlib import Path
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
+from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args, make_env_with_project_root
 
 
 def trace_benchmarks_pytest(
     benchmarks_root: Path, tests_root: Path, project_root: Path, trace_file: Path, timeout: int = 300
 ) -> None:
-    benchmark_env = os.environ.copy()
-    if "PYTHONPATH" not in benchmark_env:
-        benchmark_env["PYTHONPATH"] = str(project_root)
-    else:
-        benchmark_env["PYTHONPATH"] += os.pathsep + str(project_root)
-    result = subprocess.run(
+    benchmark_env = make_env_with_project_root(project_root)
+    run_args = get_cross_platform_subprocess_run_args(
+        cwd=project_root, env=benchmark_env, timeout=timeout, check=False, text=True, capture_output=True
+    )
+    result = subprocess.run(  # noqa: PLW1510
         [
             SAFE_SYS_EXECUTABLE,
             Path(__file__).parent / "pytest_new_process_trace_benchmarks.py",
@@ -25,24 +24,25 @@ def trace_benchmarks_pytest(
             tests_root,
             trace_file,
         ],
-        cwd=project_root,
-        check=False,
-        capture_output=True,
-        text=True,
-        env=benchmark_env,
-        timeout=timeout,
+        **run_args,
     )
     if result.returncode != 0:
-        if "ERROR collecting" in result.stdout:
+        # Combine stdout and stderr for error reporting (errors often go to stderr)
+        combined_output = result.stdout
+        if result.stderr:
+            combined_output = combined_output + "\n" + result.stderr if combined_output else result.stderr
+
+        if "ERROR collecting" in combined_output:
             # Pattern matches "===== ERRORS =====" (any number of =) and captures everything after
             error_pattern = r"={3,}\s*ERRORS\s*={3,}\n([\s\S]*?)(?:={3,}|$)"
-            match = re.search(error_pattern, result.stdout)
-            error_section = match.group(1) if match else result.stdout
-        elif "FAILURES" in result.stdout:
+            match = re.search(error_pattern, combined_output)
+            error_section = match.group(1) if match else combined_output
+        elif "FAILURES" in combined_output:
             # Pattern matches "===== FAILURES =====" (any number of =) and captures everything after
             error_pattern = r"={3,}\s*FAILURES\s*={3,}\n([\s\S]*?)(?:={3,}|$)"
-            match = re.search(error_pattern, result.stdout)
-            error_section = match.group(1) if match else result.stdout
+            match = re.search(error_pattern, combined_output)
+            error_section = match.group(1) if match else combined_output
         else:
-            error_section = result.stdout
+            error_section = combined_output
         logger.warning(f"Error collecting benchmarks - Pytest Exit code: {result.returncode}, {error_section}")
+        logger.debug(f"Full pytest output:\n{combined_output}")

@@ -13,13 +13,15 @@ from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import exit_with_message
 from codeflash.code_utils.formatter import format_code
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config, save_api_key_to_rc
+from codeflash.languages.registry import get_language_support_by_common_formatters
 from codeflash.lsp.helpers import is_LSP_enabled
 
 
-def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool = True) -> bool:  # noqa
+def check_formatter_installed(
+    formatter_cmds: list[str], exit_on_failure: bool = True, language: str = "python"
+) -> bool:
     if not formatter_cmds or formatter_cmds[0] == "disabled":
         return True
-
     first_cmd = formatter_cmds[0]
     cmd_tokens = shlex.split(first_cmd) if isinstance(first_cmd, str) else [first_cmd]
 
@@ -36,10 +38,21 @@ def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool =
         )
         return False
 
-    tmp_code = """print("hello world")"""
+    lang_support = get_language_support_by_common_formatters(formatter_cmds)
+    if not lang_support:
+        logger.debug(f"Could not determine language for formatter: {formatter_cmds}")
+        return True
+
+    if str(lang_support.language) == "python":
+        tmp_code = """print("hello world")"""
+    elif str(lang_support.language) in ("javascript", "typescript"):
+        tmp_code = "console.log('hello world');"
+    else:
+        return True
+
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
-            tmp_file = Path(tmpdir) / "test_codeflash_formatter.py"
+            tmp_file = Path(tmpdir) / ("test_codeflash_formatter" + lang_support.default_file_extension)
             tmp_file.write_text(tmp_code, encoding="utf-8")
             format_code(formatter_cmds, tmp_file, print_status=False, exit_on_failure=False)
             return True
@@ -155,8 +168,9 @@ def get_cached_gh_event_data() -> dict[str, Any]:
     event_path = os.getenv("GITHUB_EVENT_PATH")
     if not event_path:
         return {}
-    with Path(event_path).open(encoding="utf-8") as f:
-        return json.load(f)  # type: ignore  # noqa
+    with open(event_path, encoding="utf-8") as f:  # noqa: PTH123
+        result: dict[str, Any] = json.load(f)
+        return result
 
 
 def is_repo_a_fork() -> bool:

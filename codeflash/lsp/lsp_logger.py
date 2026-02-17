@@ -85,11 +85,7 @@ supported_lsp_log_levels = ("info", "debug")
 
 
 def enhanced_log(
-    msg: str | Any,  # noqa: ANN401
-    actual_log_fn: Callable[[str, Any, Any], None],
-    level: str,
-    *args: Any,  # noqa: ANN401
-    **kwargs: Any,  # noqa: ANN401
+    msg: str | Any, actual_log_fn: Callable[[str, Any, Any], None], level: str, *args: Any, **kwargs: Any
 ) -> None:
     if not isinstance(msg, str):
         actual_log_fn(msg, *args, **kwargs)
@@ -131,7 +127,7 @@ def enhanced_log(
 
 # Configure logging to stderr for VS Code output channel
 def setup_logging() -> logging.Logger:
-    global root_logger  # noqa: PLW0603
+    global root_logger
     if root_logger:
         return root_logger
     # Clear any existing handlers to prevent conflicts

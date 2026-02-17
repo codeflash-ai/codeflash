@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, Callable, Optional, final
 
 if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-
 from pydantic.dataclasses import dataclass
 from rich.panel import Panel
 from rich.text import Text
@@ -29,6 +28,7 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
 )
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE, codeflash_cache_db
+from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
 from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInFile, TestType
 
 if TYPE_CHECKING:
@@ -331,7 +331,7 @@ class ImportAnalyzer(ast.NodeVisitor):
             # Be conservative except when an alias is used (which requires exact method matching)
             for target_func in fnames:
                 if "." in target_func:
-                    class_name, method_name = target_func.split(".", 1)
+                    class_name, _method_name = target_func.split(".", 1)
                     if aname == class_name and not alias.asname:
                         self.found_any_target_function = True
                         self.found_qualified_name = target_func
@@ -508,7 +508,7 @@ def analyze_imports_in_test_file(test_file_path: Path | str, target_functions: s
         return True
 
     if analyzer.found_any_target_function:
-        logger.debug(f"Test file {test_file_path} imports target function: {analyzer.found_qualified_name}")
+        # logger.debug(f"Test file {test_file_path} imports target function: {analyzer.found_qualified_name}")
         return True
 
     # Be conservative with dynamic imports - if __import__ is used and a target function
@@ -517,10 +517,10 @@ def analyze_imports_in_test_file(test_file_path: Path | str, target_functions: s
         # Check if any target function name appears as a string literal or direct usage
         for target_func in target_functions:
             if target_func in source_code:
-                logger.debug(f"Test file {test_file_path} has dynamic imports and references {target_func}")
+                # logger.debug(f"Test file {test_file_path} has dynamic imports and references {target_func}")
                 return True
 
-    logger.debug(f"Test file {test_file_path} does not import any target functions.")
+    # logger.debug(f"Test file {test_file_path} does not import any target functions.")
     return False
 
 
@@ -540,7 +540,7 @@ def filter_test_files_by_imports(
     if not target_functions:
         return file_to_test_map
 
-    logger.debug(f"Target functions for import filtering: {target_functions}")
+    # logger.debug(f"Target functions for import filtering: {target_functions}")
 
     filtered_map = {}
     for test_file, test_functions in file_to_test_map.items():
@@ -554,13 +554,109 @@ def filter_test_files_by_imports(
     return filtered_map
 
 
+def _detect_language_from_functions(file_to_funcs: dict[Path, list[FunctionToOptimize]] | None) -> str | None:
+    """Detect language from the functions to optimize.
+
+    Args:
+        file_to_funcs: Dictionary mapping file paths to functions.
+
+    Returns:
+        Language string (e.g., "python", "javascript") or None if not determinable.
+
+    """
+    if not file_to_funcs:
+        return None
+
+    for funcs in file_to_funcs.values():
+        if funcs:
+            return funcs[0].language
+    return None
+
+
+def discover_tests_for_language(
+    cfg: TestConfig, language: str, file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]] | None
+) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
+    """Discover tests using language-specific support.
+
+    Args:
+        cfg: Test configuration.
+        language: Language identifier (e.g., "javascript").
+        file_to_funcs_to_optimize: Dictionary mapping file paths to functions.
+
+    Returns:
+        Tuple of (function_to_tests_map, num_tests, num_replay_tests).
+
+    """
+    from codeflash.languages import get_language_support
+    from codeflash.languages.base import Language
+
+    try:
+        lang_support = get_language_support(Language(language))
+    except Exception:
+        logger.warning(f"Unsupported language {language}, returning empty test map")
+        return {}, 0, 0
+
+    # Collect all functions and build a mapping from simple qualified_name to full qualified_name_with_modules
+    all_functions: list[FunctionToOptimize] = []
+    simple_to_full_name: dict[str, str] = {}
+    if file_to_funcs_to_optimize:
+        for funcs in file_to_funcs_to_optimize.values():
+            for func in funcs:
+                all_functions.append(func)
+                # Map simple qualified_name to full qualified_name_with_modules_from_root
+                simple_to_full_name[func.qualified_name] = func.qualified_name_with_modules_from_root(
+                    cfg.project_root_path
+                )
+
+    # Use language support to discover tests
+    test_map = lang_support.discover_tests(cfg.tests_root, all_functions)
+
+    # Convert TestInfo back to FunctionCalledInTest format
+    # Use the full qualified name (with modules) as the key for consistency with Python
+    function_to_tests: dict[str, set[FunctionCalledInTest]] = defaultdict(set)
+    num_tests = 0
+
+    for qualified_name, test_infos in test_map.items():
+        # Convert simple qualified_name to full qualified_name_with_modules
+        full_qualified_name = simple_to_full_name.get(qualified_name, qualified_name)
+        for test_info in test_infos:
+            function_to_tests[full_qualified_name].add(
+                FunctionCalledInTest(
+                    tests_in_file=TestsInFile(
+                        test_file=test_info.test_file,
+                        test_class=test_info.test_class,
+                        test_function=test_info.test_name,
+                        test_type=TestType.EXISTING_UNIT_TEST,
+                    ),
+                    position=CodePosition(line_no=0, col_no=0),
+                )
+            )
+            num_tests += 1
+
+    return dict(function_to_tests), num_tests, 0
+
+
 def discover_unit_tests(
     cfg: TestConfig,
     discover_only_these_tests: list[Path] | None = None,
     file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]] | None = None,
 ) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
+    from codeflash.languages import is_javascript, is_python
+
+    # Detect language from functions being optimized
+    language = _detect_language_from_functions(file_to_funcs_to_optimize)
+
+    # Route to language-specific test discovery for non-Python languages
+    if not is_python():
+        # For JavaScript/TypeScript, tests_project_rootdir should be tests_root itself
+        # The Jest helper will be configured to NOT include "tests." prefix to match
+        if is_javascript():
+            cfg.tests_project_rootdir = cfg.tests_root
+        return discover_tests_for_language(cfg, language, file_to_funcs_to_optimize)
+
+    # Existing Python logic
     framework_strategies: dict[str, Callable] = {"pytest": discover_tests_pytest, "unittest": discover_tests_unittest}
-    strategy = framework_strategies.get(cfg.test_framework, None)
+    strategy = framework_strategies.get(cfg.test_framework)
     if not strategy:
         error_message = f"Unsupported test framework: {cfg.test_framework}"
         raise ValueError(error_message)
@@ -585,7 +681,10 @@ def discover_tests_pytest(
 
     tmp_pickle_path = get_run_tmp_file("collected_tests.pkl")
     with custom_addopts():
-        result = subprocess.run(
+        run_kwargs = get_cross_platform_subprocess_run_args(
+            cwd=project_root, check=False, text=True, capture_output=True
+        )
+        result = subprocess.run(  # noqa: PLW1510
             [
                 SAFE_SYS_EXECUTABLE,
                 Path(__file__).parent / "pytest_new_process_discovery.py",
@@ -593,10 +692,7 @@ def discover_tests_pytest(
                 str(tests_root),
                 str(tmp_pickle_path),
             ],
-            cwd=project_root,
-            check=False,
-            capture_output=True,
-            text=True,
+            **run_kwargs,
         )
     try:
         with tmp_pickle_path.open(mode="rb") as f:
@@ -751,6 +847,7 @@ def process_test_files(
 
     tests_cache = TestsCache(project_root_path)
     logger.info("!lsp|Discovering tests and processing unit tests")
+    console.rule()
     with test_files_progress_bar(total=len(file_to_test_map), description="Processing test files") as (
         progress,
         task_id,

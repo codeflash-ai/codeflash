@@ -23,6 +23,7 @@ from codeflash.cli_cmds.cmd_init import (
     get_valid_subdirs,
     is_valid_pyproject_toml,
 )
+from codeflash.code_utils.code_utils import validate_relative_directory_path
 from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.git_worktree_utils import create_worktree_snapshot_commit
 from codeflash.code_utils.shell_utils import save_api_key_to_rc
@@ -133,7 +134,7 @@ def get_optimizable_functions(params: OptimizableFunctionsParams) -> dict[str, l
     document_uri = params.textDocument.uri
     document = server.workspace.get_text_document(document_uri)
 
-    file_path = Path(document.path)
+    file_path = Path(document.path).resolve()
 
     if not server.optimizer:
         return {"status": "error", "message": "optimizer not initialized"}
@@ -184,11 +185,47 @@ def write_config(params: WriteConfigParams) -> dict[str, any]:
         # the client provided a config path but it doesn't exist
         create_empty_pyproject_toml(cfg_file)
 
+    # Handle both dict and object access for config
+    def get_config_value(key: str, default: str = "") -> str:
+        if isinstance(cfg, dict):
+            return cfg.get(key, default)
+        return getattr(cfg, key, default)
+
+    tests_root = get_config_value("tests_root", "")
+    # Validate tests_root path format and safety
+    if tests_root:
+        is_valid, error_msg = validate_relative_directory_path(tests_root)
+        if not is_valid:
+            return {
+                "status": "error",
+                "message": f"Invalid 'tests_root': {error_msg}",
+                "field_errors": {"tests_root": error_msg},
+            }
+        # Validate tests_root directory exists if provided
+        base_dir = cfg_file.parent if cfg_file else Path.cwd()
+        tests_root_path = (base_dir / tests_root).resolve()
+        if not tests_root_path.exists() or not tests_root_path.is_dir():
+            return {
+                "status": "error",
+                "message": f"Invalid 'tests_root': directory does not exist at {tests_root_path}",
+                "field_errors": {"tests_root": f"Directory does not exist at {tests_root_path}"},
+            }
+
+    # Validate module_root path format and safety
+    module_root = get_config_value("module_root", "")
+    if module_root:
+        is_valid, error_msg = validate_relative_directory_path(module_root)
+        if not is_valid:
+            return {
+                "status": "error",
+                "message": f"Invalid 'module_root': {error_msg}",
+                "field_errors": {"module_root": error_msg},
+            }
+
     setup_info = VsCodeSetupInfo(
-        module_root=getattr(cfg, "module_root", ""),
-        tests_root=getattr(cfg, "tests_root", ""),
-        test_framework=getattr(cfg, "test_framework", "pytest"),
-        formatter=get_formatter_cmds(getattr(cfg, "formatter_cmds", "disabled")),
+        module_root=module_root,
+        tests_root=tests_root,
+        formatter=get_formatter_cmds(get_config_value("formatter_cmds", "disabled")),
     )
 
     devnull_writer = open(os.devnull, "w")  # noqa
@@ -203,7 +240,6 @@ def write_config(params: WriteConfigParams) -> dict[str, any]:
 def get_config_suggestions(_params: any) -> dict[str, any]:
     module_root_suggestions, default_module_root = get_suggestions(CommonSections.module_root)
     tests_root_suggestions, default_tests_root = get_suggestions(CommonSections.tests_root)
-    test_framework_suggestions, default_test_framework = get_suggestions(CommonSections.test_framework)
     formatter_suggestions, default_formatter = get_suggestions(CommonSections.formatter_cmds)
     get_valid_subdirs.cache_clear()
 
@@ -238,7 +274,6 @@ def get_config_suggestions(_params: any) -> dict[str, any]:
     return {
         "module_root": {"choices": module_root_suggestions, "default": default_module_root},
         "tests_root": {"choices": tests_root_suggestions, "default": default_tests_root},
-        "test_framework": {"choices": test_framework_suggestions, "default": default_test_framework},
         "formatter_cmds": {"choices": formatter_suggestions, "default": default_formatter},
     }
 
@@ -374,7 +409,7 @@ def provide_api_key(params: ProvideApiKeyParams) -> dict[str, str]:
         _init()
         if not is_successful(result):
             return {"status": "error", "message": result.failure()}
-        return {"status": "success", "message": "Api key saved successfully", "user_id": user_id}  # noqa: TRY300
+        return {"status": "success", "message": "Api key saved successfully", "user_id": user_id}
     except Exception:
         return {"status": "error", "message": "something went wrong while saving the api key"}
 
@@ -482,7 +517,7 @@ def initialize_function_optimization(params: FunctionOptimizationInitParams) -> 
         files = [document.path]
 
         _, _, original_helpers = server.current_optimization_init_result
-        files.extend([str(helper_path) for helper_path in original_helpers])
+        files.extend([str(helper_path.resolve()) for helper_path in original_helpers])
 
         return {"functionName": params.functionName, "status": "success", "files_inside_context": files}
 

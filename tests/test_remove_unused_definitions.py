@@ -1,14 +1,6 @@
-import tempfile
-from argparse import Namespace
-from pathlib import Path
 
-import libcst as cst
 
-from codeflash.context.code_context_extractor import get_code_optimization_context
-from codeflash.context.unused_definition_remover import remove_unused_definitions_by_function_names
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import FunctionParent
-from codeflash.optimization.optimizer import Optimizer
+from codeflash.languages.python.context.unused_definition_remover import remove_unused_definitions_by_function_names
 
 
 def test_variable_removal_only() -> None:
@@ -337,6 +329,66 @@ def unused_function():
     result = remove_unused_definitions_by_function_names(code, qualified_functions)
     assert result.strip() == expected.strip()
 
+
+def test_base_class_inheritance() -> None:
+    """Test that base classes used only for inheritance are preserved."""
+    code = """
+class LayoutDumper:
+    def dump(self):
+        raise NotImplementedError
+
+class ObjectDetectionLayoutDumper(LayoutDumper):
+    def __init__(self, data):
+        self.data = data
+    def dump(self):
+        return self.data
+
+class ExtractedLayoutDumper(LayoutDumper):
+    def __init__(self, data):
+        self.data = data
+    def dump(self):
+        return self.data
+
+class UnusedClass:
+    pass
+
+def test_function():
+    dumper = ObjectDetectionLayoutDumper({})
+    return dumper.dump()
+"""
+
+    expected = """
+class LayoutDumper:
+    def dump(self):
+        raise NotImplementedError
+
+class ObjectDetectionLayoutDumper(LayoutDumper):
+    def __init__(self, data):
+        self.data = data
+    def dump(self):
+        return self.data
+
+class ExtractedLayoutDumper(LayoutDumper):
+    def __init__(self, data):
+        self.data = data
+    def dump(self):
+        return self.data
+
+class UnusedClass:
+    pass
+
+def test_function():
+    dumper = ObjectDetectionLayoutDumper({})
+    return dumper.dump()
+"""
+
+    qualified_functions = {"test_function"}
+    result = remove_unused_definitions_by_function_names(code, qualified_functions)
+    # LayoutDumper should be preserved because ObjectDetectionLayoutDumper inherits from it
+    assert "class LayoutDumper" in result
+    assert "class ObjectDetectionLayoutDumper" in result
+
+
 def test_conditional_and_loop_variables() -> None:
     """Test handling of variables defined in if-else and while loops."""
     code = """
@@ -421,4 +473,87 @@ def unused_function():
 
     qualified_functions = {"get_platform_info", "get_loop_result"}
     result = remove_unused_definitions_by_function_names(code, qualified_functions)
+    assert result.strip() == expected.strip()
+
+
+def test_enum_attribute_access_dependency() -> None:
+    """Test that enum/class attribute access like MessageKind.VALUE is tracked as a dependency."""
+    code = """
+from enum import Enum
+
+class MessageKind(Enum):
+    VALUE = "value"
+    OTHER = "other"
+
+class UnusedEnum(Enum):
+    UNUSED = "unused"
+
+UNUSED_VAR = 123
+
+def process_message(kind):
+    match kind:
+        case MessageKind.VALUE:
+            return "got value"
+        case MessageKind.OTHER:
+            return "got other"
+    return "unknown"
+"""
+
+    expected = """
+from enum import Enum
+
+class MessageKind(Enum):
+    VALUE = "value"
+    OTHER = "other"
+
+class UnusedEnum(Enum):
+    UNUSED = "unused"
+
+def process_message(kind):
+    match kind:
+        case MessageKind.VALUE:
+            return "got value"
+        case MessageKind.OTHER:
+            return "got other"
+    return "unknown"
+"""
+
+    qualified_functions = {"process_message"}
+    result = remove_unused_definitions_by_function_names(code, qualified_functions)
+    # MessageKind should be preserved because process_message uses MessageKind.VALUE
+    assert "class MessageKind" in result
+    # UNUSED_VAR should be removed
+    assert "UNUSED_VAR" not in result
+    assert result.strip() == expected.strip()
+
+
+def test_attribute_access_does_not_track_attr_name() -> None:
+    """Test that self.x attribute access doesn't track 'x' as a dependency on module-level x."""
+    code = """
+x = "module_level_x"
+UNUSED_VAR = "unused"
+
+class MyClass:
+    def __init__(self):
+        self.x = 1  # This 'x' is an attribute, not a reference to module-level 'x'
+
+    def get_x(self):
+        return self.x  # This 'x' is also an attribute access
+"""
+
+    expected = """
+class MyClass:
+    def __init__(self):
+        self.x = 1  # This 'x' is an attribute, not a reference to module-level 'x'
+
+    def get_x(self):
+        return self.x  # This 'x' is also an attribute access
+"""
+
+    qualified_functions = {"MyClass.get_x", "MyClass.__init__"}
+    result = remove_unused_definitions_by_function_names(code, qualified_functions)
+    # Module-level x should NOT be kept (self.x doesn't reference it)
+    assert 'x = "module_level_x"' not in result
+    # UNUSED_VAR should also be removed
+    assert "UNUSED_VAR" not in result
     assert result.strip() == expected.strip()

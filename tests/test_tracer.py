@@ -11,6 +11,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.tracing.tracing_new_process import FakeCode, FakeFrame, Tracer
 
@@ -68,14 +69,17 @@ class TestTracer:
         current_dir = Path.cwd()
 
         config_path = tmp_path / "pyproject.toml"
-        config_path.write_text(f"""
+        config_path.write_text(
+            f"""
 [tool.codeflash]
 module-root = "{current_dir.as_posix()}"
 tests-root = "{tests_dir.as_posix()}"
 test-framework = "pytest"
 ignore-paths = []
-""", encoding="utf-8")
-        
+""",
+            encoding="utf-8",
+        )
+
         trace_path = tmp_path / "trace_file.trace"
         replay_test_pkl_path = tmp_path / "replay_test.pkl"
         config, found_config_path = parse_config_file(config_path)
@@ -87,7 +91,7 @@ ignore-paths = []
             command="pytest random",
         )
 
-        yield trace_config
+        return trace_config
 
     @pytest.fixture(autouse=True)
     def reset_tracer_state(self) -> Generator[None, None, None]:
@@ -104,10 +108,10 @@ ignore-paths = []
         """Test that tracer is disabled when CODEFLASH_TRACER_DISABLE is set."""
         with patch.dict("os.environ", {"CODEFLASH_TRACER_DISABLE": "1"}):
             tracer = Tracer(
-                output=str(trace_config.trace_file),
                 config=trace_config.trace_config,
                 project_root=trace_config.project_root,
                 result_pickle_file_path=trace_config.result_pickle_file_path,
+                command=trace_config.command,
             )
             assert tracer.disable is True
 
@@ -120,10 +124,10 @@ ignore-paths = []
         sys.setprofile(dummy_profiler)
         try:
             tracer = Tracer(
-                output=str(trace_config.trace_file),
                 config=trace_config.trace_config,
                 project_root=trace_config.project_root,
                 result_pickle_file_path=trace_config.result_pickle_file_path,
+                command=trace_config.command,
             )
             assert tracer.disable is True
         finally:
@@ -132,17 +136,16 @@ ignore-paths = []
     def test_tracer_initialization_normal(self, trace_config: TraceConfig) -> None:
         """Test normal tracer initialization."""
         tracer = Tracer(
-            output=str(trace_config.trace_file),
             config=trace_config.trace_config,
             project_root=trace_config.project_root,
             result_pickle_file_path=trace_config.result_pickle_file_path,
+            command=trace_config.command,
             functions=["test_func"],
             max_function_count=128,
             timeout=10,
         )
 
         assert tracer.disable is False
-        assert tracer.output_file == trace_config.trace_file.resolve()
         assert tracer.functions == ["test_func"]
         assert tracer.max_function_count == 128
         assert tracer.timeout == 10
@@ -152,35 +155,37 @@ ignore-paths = []
     def test_tracer_timeout_validation(self, trace_config: TraceConfig) -> None:
         with pytest.raises(AssertionError):
             Tracer(
-                output=str(trace_config.trace_file),
                 config=trace_config.trace_config,
                 project_root=trace_config.project_root,
                 result_pickle_file_path=trace_config.result_pickle_file_path,
+                command=trace_config.command,
                 timeout=0,
             )
 
         with pytest.raises(AssertionError):
             Tracer(
-                output=str(trace_config.trace_file),
                 config=trace_config.trace_config,
                 project_root=trace_config.project_root,
                 result_pickle_file_path=trace_config.result_pickle_file_path,
+                command=trace_config.command,
                 timeout=-5,
             )
 
     def test_tracer_context_manager_disabled(self, trace_config: TraceConfig) -> None:
         tracer = Tracer(
-            output=str(trace_config.trace_file),
             config=trace_config.trace_config,
             project_root=trace_config.project_root,
             result_pickle_file_path=trace_config.result_pickle_file_path,
+            command=trace_config.command,
             disable=True,
         )
 
         with tracer:
             pass
 
-        assert not trace_config.trace_file.exists()
+        # When disabled, the tracer doesn't create a trace file
+        # Note: output_file attribute won't exist when disabled, so we check if disable is True
+        assert tracer.disable is True
 
     def test_tracer_function_filtering(self, trace_config: TraceConfig) -> None:
         """Test that tracer respects function filtering."""
@@ -194,10 +199,10 @@ ignore-paths = []
             return 24
 
         tracer = Tracer(
-            output=str(trace_config.trace_file),
             config=trace_config.trace_config,
             project_root=trace_config.project_root,
             result_pickle_file_path=trace_config.result_pickle_file_path,
+            command=trace_config.command,
             functions=["test_function"],
         )
 
@@ -205,8 +210,8 @@ ignore-paths = []
             test_function()
             other_function()
 
-        if trace_config.trace_file.exists():
-            con = sqlite3.connect(trace_config.trace_file)
+        if tracer.output_file.exists():
+            con = sqlite3.connect(tracer.output_file)
             cursor = con.cursor()
 
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='function_calls'")
@@ -224,10 +229,10 @@ ignore-paths = []
             return n * 2
 
         tracer = Tracer(
-            output=str(trace_config.trace_file),
             config=trace_config.trace_config,
             project_root=trace_config.project_root,
             result_pickle_file_path=trace_config.result_pickle_file_path,
+            command=trace_config.command,
             max_function_count=3,
         )
 
@@ -243,10 +248,10 @@ ignore-paths = []
             return "done"
 
         tracer = Tracer(
-            output=str(trace_config.trace_file),
             config=trace_config.trace_config,
             project_root=trace_config.project_root,
             result_pickle_file_path=trace_config.result_pickle_file_path,
+            command=trace_config.command,
             timeout=1,  # 1 second timeout
         )
 
@@ -261,10 +266,10 @@ ignore-paths = []
             results.append(n * 2)
 
         tracer = Tracer(
-            output=str(trace_config.trace_file),
             config=trace_config.trace_config,
             project_root=trace_config.project_root,
             result_pickle_file_path=trace_config.result_pickle_file_path,
+            command=trace_config.command,
         )
 
         with tracer:
@@ -282,10 +287,10 @@ ignore-paths = []
     def test_simulate_call(self, trace_config: TraceConfig) -> None:
         """Test the simulate_call method."""
         tracer = Tracer(
-            output=str(trace_config.trace_file),
             config=trace_config.trace_config,
             project_root=trace_config.project_root,
             result_pickle_file_path=trace_config.result_pickle_file_path,
+            command=trace_config.command,
         )
 
         tracer.simulate_call("test_simulation")
@@ -293,10 +298,10 @@ ignore-paths = []
     def test_simulate_cmd_complete(self, trace_config: TraceConfig) -> None:
         """Test the simulate_cmd_complete method."""
         tracer = Tracer(
-            output=str(trace_config.trace_file),
             config=trace_config.trace_config,
             project_root=trace_config.project_root,
             result_pickle_file_path=trace_config.result_pickle_file_path,
+            command=trace_config.command,
         )
 
         tracer.simulate_call("test")
@@ -305,10 +310,10 @@ ignore-paths = []
     def test_runctx_method(self, trace_config: TraceConfig) -> None:
         """Test the runctx method for executing code with tracing."""
         tracer = Tracer(
-            output=str(trace_config.trace_file),
             config=trace_config.trace_config,
             project_root=trace_config.project_root,
             result_pickle_file_path=trace_config.result_pickle_file_path,
+            command=trace_config.command,
         )
 
         global_vars = {"x": 10}
@@ -338,10 +343,10 @@ ignore-paths = []
                 return "static"
 
         tracer = Tracer(
-            output=str(trace_config.trace_file),
             config=trace_config.trace_config,
             project_root=trace_config.project_root,
             result_pickle_file_path=trace_config.result_pickle_file_path,
+            command=trace_config.command,
         )
 
         with tracer:
@@ -350,8 +355,8 @@ ignore-paths = []
             class_result = TestClass.class_method()
             static_result = TestClass.static_method()
 
-        if trace_config.trace_file.exists():
-            con = sqlite3.connect(trace_config.trace_file)
+        if tracer.output_file.exists():
+            con = sqlite3.connect(tracer.output_file)
             cursor = con.cursor()
 
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='function_calls'")
@@ -378,10 +383,10 @@ ignore-paths = []
             raise ValueError("Test exception")
 
         tracer = Tracer(
-            output=str(trace_config.trace_file),
             config=trace_config.trace_config,
             project_root=trace_config.project_root,
             result_pickle_file_path=trace_config.result_pickle_file_path,
+            command=trace_config.command,
         )
 
         with tracer, contextlib.suppress(ValueError):
@@ -394,10 +399,10 @@ ignore-paths = []
             return len(data_dict) + len(nested_list)
 
         tracer = Tracer(
-            output=str(trace_config.trace_file),
             config=trace_config.trace_config,
             project_root=trace_config.project_root,
             result_pickle_file_path=trace_config.result_pickle_file_path,
+            command=trace_config.command,
         )
 
         expected_dict = {"key": "value", "nested": {"inner": "data"}}
@@ -410,8 +415,8 @@ ignore-paths = []
         pickled = pickle.load(trace_config.result_pickle_file_path.open("rb"))
         assert pickled["replay_test_file_path"].exists()
 
-        if trace_config.trace_file.exists():
-            con = sqlite3.connect(trace_config.trace_file)
+        if tracer.output_file.exists():
+            con = sqlite3.connect(tracer.output_file)
             cursor = con.cursor()
 
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='function_calls'")

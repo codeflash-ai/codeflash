@@ -10,7 +10,6 @@ def run_test(expected_improvement_pct: int) -> bool:
         file_path=pathlib.Path("bubble_sort.py"),
         function_name="sorter",
         benchmarks_root=cwd / "tests" / "pytest" / "benchmarks",
-        test_framework="pytest",
         min_improvement_x=0.70,
         coverage_expectations=[
             CoverageExpectation(

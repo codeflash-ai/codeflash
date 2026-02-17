@@ -71,7 +71,7 @@ class ProfileStats(pstats.Stats):
         time_unit = {"ns": "nanoseconds", "us": "microseconds", "ms": "milliseconds", "s": "seconds"}[self.time_unit]
         print(f"in {self.total_tt:.3f} {time_unit}", file=self.stream)
         print(file=self.stream)
-        width, list_ = self.get_print_list(amount)
+        _width, list_ = self.get_print_list(amount)
         if list_:
             self.print_title()
             for func in list_:

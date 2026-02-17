@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
+import libcst as cst
 from rich.tree import Tree
 
 from codeflash.cli_cmds.console import DEBUG_MODE, lsp_log
+from codeflash.languages.registry import get_language_support
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table
 from codeflash.lsp.lsp_message import LspMarkdownMessage
 from codeflash.models.test_type import TestType
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
 import enum
 import re
 import sys
@@ -19,32 +23,97 @@ from collections.abc import Collection
 from enum import Enum, IntEnum
 from pathlib import Path
 from re import Pattern
-from typing import Annotated, Optional, cast
+from typing import Any, NamedTuple, Optional, cast
 
 from jedi.api.classes import Name
-from pydantic import AfterValidator, BaseModel, ConfigDict, PrivateAttr, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, model_validator
 from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger
-from codeflash.code_utils.code_utils import module_name_from_file_path, validate_python_code
+from codeflash.code_utils.code_utils import diff_length, module_name_from_file_path, validate_python_code
 from codeflash.code_utils.env_utils import is_end_to_end
 from codeflash.verification.comparator import comparator
 
 
 @dataclass(frozen=True)
 class AIServiceRefinerRequest:
+    """Request model for code refinement API.
+
+    Supports multi-language optimization refinement with optional multi-file context.
+    """
+
     optimization_id: str
     original_source_code: str
     read_only_dependency_code: str
-    original_code_runtime: str
+    original_code_runtime: int
     optimized_source_code: str
     optimized_explanation: str
-    optimized_code_runtime: str
+    optimized_code_runtime: int
     speedup: str
     trace_id: str
     original_line_profiler_results: str
     optimized_line_profiler_results: str
     function_references: str | None = None
+    call_sequence: int | None = None
+    # Multi-language support
+    language: str = "python"  # 'python', 'javascript', 'typescript'
+    language_version: str | None = None  # e.g., '3.11.0' for Python, 'ES2022' for JS
+    # Multi-file context support
+    additional_context_files: dict[str, str] | None = None  # {filepath: content} for imported modules
+
+
+# this should be possible to auto serialize
+@dataclass(frozen=True)
+class AdaptiveOptimizedCandidate:
+    optimization_id: str
+    source_code: str
+    # TODO: introduce repair explanation for code repair candidates to help the llm understand the full process
+    explanation: str
+    source: OptimizedCandidateSource
+    speedup: str
+
+
+@dataclass(frozen=True)
+class AIServiceAdaptiveOptimizeRequest:
+    trace_id: str
+    original_source_code: str
+    candidates: list[AdaptiveOptimizedCandidate]
+
+
+class TestDiffScope(str, Enum):
+    RETURN_VALUE = "return_value"
+    STDOUT = "stdout"
+    DID_PASS = "did_pass"  # noqa: S105
+
+
+@dataclass
+class TestDiff:
+    scope: TestDiffScope
+    original_pass: bool
+    candidate_pass: bool
+
+    original_value: str | None = None
+    candidate_value: str | None = None
+    test_src_code: Optional[str] = None
+    candidate_pytest_error: Optional[str] = None
+    original_pytest_error: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class AIServiceCodeRepairRequest:
+    optimization_id: str
+    original_source_code: str
+    modified_source_code: str
+    trace_id: str
+    test_diffs: list[TestDiff]
+    language: str = "python"
+
+
+class OptimizationReviewResult(NamedTuple):
+    """Result from the optimization review API."""
+
+    review: str  # "high", "medium", "low", or ""
+    explanation: str
 
 
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
@@ -74,7 +143,7 @@ class FunctionSource:
     fully_qualified_name: str
     only_function_name: str
     source_code: str
-    jedi_definition: Name
+    jedi_definition: Name | None = None  # None for non-Python languages
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, FunctionSource):
@@ -103,8 +172,9 @@ class BestOptimization(BaseModel):
     winning_behavior_test_results: TestResults
     winning_benchmarking_test_results: TestResults
     winning_replay_benchmarking_test_results: Optional[TestResults] = None
-    line_profiler_test_results: dict
+    line_profiler_test_results: dict[Any, Any]
     async_throughput: Optional[int] = None
+    concurrency_metrics: Optional[ConcurrencyMetrics] = None
 
 
 @dataclass(frozen=True)
@@ -114,6 +184,14 @@ class BenchmarkKey:
 
     def __str__(self) -> str:
         return f"{self.module_path}::{self.function_name}"
+
+
+@dataclass
+class ConcurrencyMetrics:
+    sequential_time_ns: int
+    concurrent_time_ns: int
+    concurrency_factor: int
+    concurrency_ratio: float  # sequential_time / concurrent_time
 
 
 @dataclass
@@ -131,7 +209,7 @@ class BenchmarkDetail:
             f"Benchmark speedup for {self.benchmark_name}::{self.test_function}: {self.speedup_percent:.2f}%\n"
         )
 
-    def to_dict(self) -> dict[str, any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "benchmark_name": self.benchmark_name,
             "test_function": self.test_function,
@@ -154,32 +232,62 @@ class ProcessedBenchmarkInfo:
             result += detail.to_string() + "\n"
         return result
 
-    def to_dict(self) -> dict[str, list[dict[str, any]]]:
+    def to_dict(self) -> dict[str, list[dict[str, Any]]]:
         return {"benchmark_details": [detail.to_dict() for detail in self.benchmark_details]}
 
 
 class CodeString(BaseModel):
-    code: Annotated[str, AfterValidator(validate_python_code)]
+    code: str
     file_path: Optional[Path] = None
+    language: str = "python"  # Language for validation
+
+    @model_validator(mode="after")
+    def validate_code_syntax(self) -> CodeString:
+        """Validate code syntax for the specified language."""
+        if self.language == "python":
+            validate_python_code(self.code)
+        elif self.language in ("javascript", "typescript"):
+            # Validate JavaScript/TypeScript syntax using language support
+            from codeflash.languages.registry import get_language_support
+
+            lang_support = get_language_support(self.language)
+            if not lang_support.validate_syntax(self.code):
+                msg = f"Invalid {self.language.title()} code"
+                raise ValueError(msg)
+        return self
 
 
-def get_code_block_splitter(file_path: Path) -> str:
-    return f"# file: {file_path.as_posix()}"
+def get_comment_prefix(file_path: Path) -> str:
+    """Get the comment prefix for a given language."""
+    support = get_language_support(file_path)
+    return support.comment_prefix
 
 
-markdown_pattern = re.compile(r"```python:([^\n]+)\n(.*?)\n```", re.DOTALL)
+def get_code_block_splitter(file_path: Path | None) -> str:
+    if file_path is None:
+        return ""
+    comment_prefix = get_comment_prefix(file_path)
+    return f"{comment_prefix} file: {file_path.as_posix()}"
+
+
+# Pattern to match markdown code blocks with optional language tag and file path
+# Matches: ```language:filepath\ncode\n``` or ```language\ncode\n```
+markdown_pattern = re.compile(r"```(\w+)(?::([^\n]+))?\n(.*?)\n```", re.DOTALL)
+# Legacy pattern for backward compatibility (only python)
+markdown_pattern_python_only = re.compile(r"```python:([^\n]+)\n(.*?)\n```", re.DOTALL)
 
 
 class CodeStringsMarkdown(BaseModel):
     code_strings: list[CodeString] = []
-    _cache: dict = PrivateAttr(default_factory=dict)
+    language: str = "python"  # Language for markdown code block tags
+    _cache: dict[str, Any] = PrivateAttr(default_factory=dict)
 
     @property
     def flat(self) -> str:
-        """Returns the combined Python module from all code blocks.
+        """Returns the combined source code module from all code blocks.
 
         Each block is prefixed by a file path comment to indicate its origin.
-        This representation is syntactically valid Python code.
+        The comment prefix is determined by the language attribute.
 
         Returns:
             str: The concatenated code of all blocks with file path annotations.
@@ -202,7 +310,9 @@ class CodeStringsMarkdown(BaseModel):
         """Returns a Markdown-formatted string containing all code blocks.
 
         Each block is enclosed in a triple-backtick code block with an optional
-        file path suffix (e.g., ```python:filename.py).
+        file path suffix (e.g., ```python:filename.py or ```javascript:file.js).
+
+        The language tag is determined by the `language` attribute.
 
         Returns:
             str: Markdown representation of the code blocks.
@@ -210,7 +320,7 @@ class CodeStringsMarkdown(BaseModel):
         """
         return "\n".join(
             [
-                f"```python{':' + code_string.file_path.as_posix() if code_string.file_path else ''}\n{code_string.code.strip()}\n```"
+                f"```{self.language}{':' + code_string.file_path.as_posix() if code_string.file_path else ''}\n{code_string.code.strip()}\n```"
                 for code_string in self.code_strings
             ]
         )
@@ -230,28 +340,37 @@ class CodeStringsMarkdown(BaseModel):
         return self._cache["file_to_path"]
 
     @staticmethod
-    def parse_markdown_code(markdown_code: str) -> CodeStringsMarkdown:
+    def parse_markdown_code(markdown_code: str, expected_language: str = "python") -> CodeStringsMarkdown:
         """Parse a Markdown string into a CodeStringsMarkdown object.
 
         Extracts code blocks and their associated file paths and constructs a new CodeStringsMarkdown instance.
 
         Args:
             markdown_code (str): The Markdown-formatted string to parse.
+            expected_language (str): The expected language of code blocks (default: "python").
 
         Returns:
             CodeStringsMarkdown: Parsed object containing code blocks.
 
         """
         matches = markdown_pattern.findall(markdown_code)
-        results = CodeStringsMarkdown()
+        code_string_list = []
+        detected_language = expected_language
         try:
-            for file_path, code in matches:
-                path = file_path.strip()
-                results.code_strings.append(CodeString(code=code, file_path=Path(path)))
-            return results  # noqa: TRY300
+            for language, file_path, code in matches:
+                # Use the first detected language or the expected language
+                if language:
+                    detected_language = language
+                if file_path:
+                    path = file_path.strip()
+                    code_string_list.append(CodeString(code=code, file_path=Path(path), language=detected_language))
+                else:
+                    # No file path specified - skip this block or create with None
+                    code_string_list.append(CodeString(code=code, file_path=None, language=detected_language))
+            return CodeStringsMarkdown(code_strings=code_string_list, language=detected_language)
         except ValidationError:
             # if any file is invalid, return an empty CodeStringsMarkdown for the entire context
-            return CodeStringsMarkdown()
+            return CodeStringsMarkdown(language=expected_language)
 
 
 class CodeOptimizationContext(BaseModel):
@@ -280,6 +399,7 @@ class OptimizedCandidateResult(BaseModel):
     optimization_candidate_index: int
     total_candidate_timing: int
     async_throughput: Optional[int] = None
+    concurrency_metrics: Optional[ConcurrencyMetrics] = None
 
 
 class GeneratedTests(BaseModel):
@@ -296,7 +416,7 @@ class GeneratedTestsList(BaseModel):
 
 class TestFile(BaseModel):
     instrumented_behavior_file_path: Path
-    benchmarking_file_path: Path = None
+    benchmarking_file_path: Optional[Path] = None
     original_file_path: Optional[Path] = None
     original_source: Optional[str] = None
     test_type: TestType
@@ -317,22 +437,64 @@ class TestFiles(BaseModel):
             raise ValueError(msg)
 
     def get_by_original_file_path(self, file_path: Path) -> TestFile | None:
-        return next((test_file for test_file in self.test_files if test_file.original_file_path == file_path), None)
+        normalized = self._normalize_path_for_comparison(file_path)
+        for test_file in self.test_files:
+            if test_file.original_file_path is None:
+                continue
+            normalized_test_path = self._normalize_path_for_comparison(test_file.original_file_path)
+            if normalized == normalized_test_path:
+                return test_file
+        return None
 
     def get_test_type_by_instrumented_file_path(self, file_path: Path) -> TestType | None:
-        return next(
-            (
-                test_file.test_type
-                for test_file in self.test_files
-                if (file_path in (test_file.instrumented_behavior_file_path, test_file.benchmarking_file_path))
-            ),
-            None,
-        )
+        normalized = self._normalize_path_for_comparison(file_path)
+        for test_file in self.test_files:
+            normalized_behavior_path = self._normalize_path_for_comparison(test_file.instrumented_behavior_file_path)
+            if normalized == normalized_behavior_path:
+                return test_file.test_type
+            if test_file.benchmarking_file_path is not None:
+                normalized_benchmark_path = self._normalize_path_for_comparison(test_file.benchmarking_file_path)
+                if normalized == normalized_benchmark_path:
+                    return test_file.test_type
+
+        # Fallback: try filename-only matching for JavaScript/TypeScript
+        # Jest/Vitest JUnit XML may have relative paths that don't match absolute paths
+        file_name = file_path.name
+        for test_file in self.test_files:
+            if (
+                test_file.instrumented_behavior_file_path
+                and test_file.instrumented_behavior_file_path.name == file_name
+            ):
+                return test_file.test_type
+            if test_file.benchmarking_file_path and test_file.benchmarking_file_path.name == file_name:
+                return test_file.test_type
+
+        return None
 
     def get_test_type_by_original_file_path(self, file_path: Path) -> TestType | None:
-        return next(
-            (test_file.test_type for test_file in self.test_files if test_file.original_file_path == file_path), None
-        )
+        normalized = self._normalize_path_for_comparison(file_path)
+        for test_file in self.test_files:
+            if test_file.original_file_path is None:
+                continue
+            normalized_test_path = self._normalize_path_for_comparison(test_file.original_file_path)
+            if normalized == normalized_test_path:
+                return test_file.test_type
+        return None
+
+    @staticmethod
+    @lru_cache(maxsize=4096)
+    def _normalize_path_for_comparison(path: Path) -> str:
+        """Normalize a path for cross-platform comparison.
+
+        Resolves the path to an absolute path and handles Windows case-insensitivity.
+        """
+        try:
+            resolved = str(path.resolve())
+        except (OSError, RuntimeError):
+            # If resolve fails (e.g., file doesn't exist), use absolute path
+            resolved = str(path.absolute())
+        # Only lowercase on Windows where filesystem is case-insensitive
+        return resolved.lower() if sys.platform == "win32" else resolved
 
     def __iter__(self) -> Iterator[TestFile]:
         return iter(self.test_files)
@@ -346,6 +508,79 @@ class OptimizationSet(BaseModel):
     experiment: Optional[list[OptimizedCandidate]]
 
 
+@dataclass
+class CandidateEvaluationContext:
+    """Holds tracking state during candidate evaluation in determine_best_candidate."""
+
+    speedup_ratios: dict[str, float | None] = Field(default_factory=dict)
+    optimized_runtimes: dict[str, float | None] = Field(default_factory=dict)
+    is_correct: dict[str, bool] = Field(default_factory=dict)
+    optimized_line_profiler_results: dict[str, str] = Field(default_factory=dict)
+    ast_code_to_id: dict = Field(default_factory=dict)
+    optimizations_post: dict[str, str] = Field(default_factory=dict)
+    valid_optimizations: list = Field(default_factory=list)
+
+    def record_failed_candidate(self, optimization_id: str) -> None:
+        """Record results for a failed candidate."""
+        self.optimized_runtimes[optimization_id] = None
+        self.is_correct[optimization_id] = False
+        self.speedup_ratios[optimization_id] = None
+
+    def record_successful_candidate(self, optimization_id: str, runtime: float, speedup: float) -> None:
+        """Record results for a successful candidate."""
+        self.optimized_runtimes[optimization_id] = runtime
+        self.is_correct[optimization_id] = True
+        self.speedup_ratios[optimization_id] = speedup
+
+    def record_line_profiler_result(self, optimization_id: str, result: str) -> None:
+        """Record line profiler results for a candidate."""
+        self.optimized_line_profiler_results[optimization_id] = result
+
+    def handle_duplicate_candidate(
+        self, candidate: OptimizedCandidate, normalized_code: str, code_context: CodeOptimizationContext
+    ) -> None:
+        """Handle a candidate that has been seen before."""
+        past_opt_id = self.ast_code_to_id[normalized_code]["optimization_id"]
+
+        # Copy results from the previous evaluation
+        self.speedup_ratios[candidate.optimization_id] = self.speedup_ratios[past_opt_id]
+        self.is_correct[candidate.optimization_id] = self.is_correct[past_opt_id]
+        self.optimized_runtimes[candidate.optimization_id] = self.optimized_runtimes[past_opt_id]
+
+        # Line profiler results only available for successful runs
+        if past_opt_id in self.optimized_line_profiler_results:
+            self.optimized_line_profiler_results[candidate.optimization_id] = self.optimized_line_profiler_results[
+                past_opt_id
+            ]
+
+        self.optimizations_post[candidate.optimization_id] = self.ast_code_to_id[normalized_code][
+            "shorter_source_code"
+        ].markdown
+        self.optimizations_post[past_opt_id] = self.ast_code_to_id[normalized_code]["shorter_source_code"].markdown
+
+        # Update to shorter code if this candidate has a shorter diff
+        new_diff_len = diff_length(candidate.source_code.flat, code_context.read_writable_code.flat)
+        if new_diff_len < self.ast_code_to_id[normalized_code]["diff_len"]:
+            self.ast_code_to_id[normalized_code]["shorter_source_code"] = candidate.source_code
+            self.ast_code_to_id[normalized_code]["diff_len"] = new_diff_len
+
+    def register_new_candidate(
+        self, normalized_code: str, candidate: OptimizedCandidate, code_context: CodeOptimizationContext
+    ) -> None:
+        """Register a new candidate that hasn't been seen before."""
+        self.ast_code_to_id[normalized_code] = {
+            "optimization_id": candidate.optimization_id,
+            "shorter_source_code": candidate.source_code,
+            "diff_len": diff_length(candidate.source_code.flat, code_context.read_writable_code.flat),
+        }
+
+    def get_speedup_ratio(self, optimization_id: str) -> float | None:
+        return self.speedup_ratios.get(optimization_id)
+
+    def get_optimized_runtime(self, optimization_id: str) -> float | None:
+        return self.optimized_runtimes.get(optimization_id)
+
+
 @dataclass(frozen=True)
 class TestsInFile:
     test_file: Path
@@ -354,11 +589,23 @@ class TestsInFile:
     test_type: TestType
 
 
+class OptimizedCandidateSource(str, Enum):
+    OPTIMIZE = "OPTIMIZE"
+    OPTIMIZE_LP = "OPTIMIZE_LP"
+    REFINE = "REFINE"
+    REPAIR = "REPAIR"
+    ADAPTIVE = "ADAPTIVE"
+    JIT_REWRITE = "JIT_REWRITE"
+
+
 @dataclass(frozen=True)
 class OptimizedCandidate:
     source_code: CodeStringsMarkdown
     explanation: str
     optimization_id: str
+    source: OptimizedCandidateSource
+    parent_id: str | None = None
+    model: str | None = None  # Which LLM model generated this candidate
 
 
 @dataclass(frozen=True)
@@ -373,10 +620,8 @@ class CodePosition:
     col_no: int
 
 
-@dataclass(frozen=True)
-class FunctionParent:
-    name: str
-    type: str
+# Re-export FunctionParent for backward compatibility
+from codeflash.models.function_types import FunctionParent  # noqa: E402
 
 
 class OriginalCodeBaseline(BaseModel):
@@ -387,6 +632,7 @@ class OriginalCodeBaseline(BaseModel):
     runtime: int
     coverage_results: Optional[CoverageData]
     async_throughput: Optional[int] = None
+    concurrency_metrics: Optional[ConcurrencyMetrics] = None
 
 
 class CoverageStatus(Enum):
@@ -478,6 +724,7 @@ class TestingMode(enum.Enum):
     BEHAVIOR = "behavior"
     PERFORMANCE = "performance"
     LINE_PROFILE = "line_profile"
+    CONCURRENCY = "concurrency"
 
 
 # TODO this class is duplicated in codeflash_capture
@@ -504,6 +751,44 @@ class InvocationId:
             f"{self.test_module_path}:{class_prefix}{self.test_function_name}:"
             f"{self.function_getting_tested}:{self.iteration_id}"
         )
+
+    # TestSuiteClass.test_function_name
+    def test_fn_qualified_name(self) -> str:
+        # Use f-string with inline conditional to reduce string concatenation operations
+        return (
+            f"{self.test_class_name}.{self.test_function_name}"
+            if self.test_class_name
+            else str(self.test_function_name)
+        )
+
+    def find_func_in_class(self, class_node: cst.ClassDef, func_name: str) -> Optional[cst.FunctionDef]:
+        for stmt in class_node.body.body:
+            if isinstance(stmt, cst.FunctionDef) and stmt.name.value == func_name:
+                return stmt
+        return None
+
+    def get_src_code(self, test_path: Path) -> Optional[str]:
+        if not test_path.exists():
+            return None
+        try:
+            test_src = test_path.read_text(encoding="utf-8")
+            module_node = cst.parse_module(test_src)
+        except Exception:
+            return None
+
+        if self.test_class_name:
+            for stmt in module_node.body:
+                if isinstance(stmt, cst.ClassDef) and stmt.name.value == self.test_class_name:
+                    func_node = self.find_func_in_class(stmt, self.test_function_name)
+                    if func_node:
+                        return module_node.code_for_node(func_node).strip()
+            return None
+
+        # Otherwise, look for a top level function
+        for stmt in module_node.body:
+            if isinstance(stmt, cst.FunctionDef) and stmt.name.value == self.test_function_name:
+                return module_node.code_for_node(stmt).strip()
+        return None
 
     @staticmethod
     def from_str_id(string_id: str, iteration_id: str | None = None) -> InvocationId:
@@ -549,16 +834,21 @@ class TestResults(BaseModel):  # noqa: PLW1641
     # also we don't support deletion of test results elements - caution is advised
     test_results: list[FunctionTestInvocation] = []
     test_result_idx: dict[str, int] = {}
+
     perf_stdout: Optional[str] = None
+    # mapping between test function name and stdout failure message
+    test_failures: Optional[dict[str, str]] = None
 
     def add(self, function_test_invocation: FunctionTestInvocation) -> None:
         unique_id = function_test_invocation.unique_invocation_loop_id
-        if unique_id in self.test_result_idx:
+        test_result_idx = self.test_result_idx
+        if unique_id in test_result_idx:
             if DEBUG_MODE:
                 logger.warning(f"Test result with id {unique_id} already exists. SKIPPING")
             return
-        self.test_result_idx[unique_id] = len(self.test_results)
-        self.test_results.append(function_test_invocation)
+        test_results = self.test_results
+        test_result_idx[unique_id] = len(test_results)
+        test_results.append(function_test_invocation)
 
     def merge(self, other: TestResults) -> None:
         original_len = len(self.test_results)
@@ -608,15 +898,14 @@ class TestResults(BaseModel):  # noqa: PLW1641
         return max(test_result.loop_index for test_result in self.test_results)
 
     def get_test_pass_fail_report_by_type(self) -> dict[TestType, dict[str, int]]:
-        report = {}
-        for test_type in TestType:
-            report[test_type] = {"passed": 0, "failed": 0}
+        report: dict[TestType, dict[str, int]] = {tt: {"passed": 0, "failed": 0} for tt in TestType}
         for test_result in self.test_results:
-            if test_result.loop_index == 1:
-                if test_result.did_pass:
-                    report[test_result.test_type]["passed"] += 1
-                else:
-                    report[test_result.test_type]["failed"] += 1
+            if test_result.loop_index != 1:
+                continue
+            if test_result.did_pass:
+                report[test_result.test_type]["passed"] += 1
+            else:
+                report[test_result.test_type]["failed"] += 1
         return report
 
     @staticmethod
@@ -674,6 +963,28 @@ class TestResults(BaseModel):  # noqa: PLW1641
         return sum(
             [min(usable_runtime_data) for _, usable_runtime_data in self.usable_runtime_data_by_test_case().items()]
         )
+
+    def effective_loop_count(self) -> int:
+        """Calculate the effective number of complete loops.
+
+        For consistent behavior across Python and JavaScript tests, this returns
+        the maximum loop_index seen across all test results. This represents
+        the number of timing iterations that were performed.
+
+        Note: For JavaScript tests without the loop-runner, each test case may have
+        different iteration counts due to internal looping in capturePerf. We use
+        max() to report the highest iteration count achieved.
+
+        :return: The effective loop count, or 0 if no test results.
+        """
+        if not self.test_results:
+            return 0
+        # Get all loop indices from results that have timing data
+        loop_indices = {result.loop_index for result in self.test_results if result.runtime is not None}
+        if not loop_indices:
+            # Fallback: use all loop indices even without runtime
+            loop_indices = {result.loop_index for result in self.test_results}
+        return max(loop_indices) if loop_indices else 0
 
     def file_to_no_of_tests(self, test_functions_to_remove: list[str]) -> Counter[Path]:
         map_gen_test_file_to_no_of_tests = Counter()

@@ -1,13 +1,13 @@
 from argparse import Namespace
 from pathlib import Path
 
-from codeflash.context.code_context_extractor import get_code_optimization_context
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.languages.python.context.code_context_extractor import get_code_optimization_context
 from codeflash.models.models import FunctionParent
 from codeflash.optimization.optimizer import Optimizer
 
 
-def test_benchmark_extract(benchmark)->None:
+def test_benchmark_extract(benchmark) -> None:
     file_path = Path(__file__).parent.parent.parent.resolve() / "codeflash"
     opt = Optimizer(
         Namespace(
@@ -28,4 +28,4 @@ def test_benchmark_extract(benchmark)->None:
         ending_line=None,
     )
 
-    benchmark(get_code_optimization_context,function_to_optimize, opt.args.project_root)
+    benchmark(get_code_optimization_context, function_to_optimize, opt.args.project_root)

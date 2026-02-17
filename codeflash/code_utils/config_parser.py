@@ -5,10 +5,11 @@ from typing import Any
 
 import tomlkit
 
+from codeflash.code_utils.config_js import find_package_json, parse_package_json_config
 from codeflash.lsp.helpers import is_LSP_enabled
 
-PYPROJECT_TOML_CACHE = {}
-ALL_CONFIG_FILES = {}  # map path to closest config file
+PYPROJECT_TOML_CACHE: dict[Path, Path] = {}
+ALL_CONFIG_FILES: dict[Path, dict[str, Path]] = {}
 
 
 def find_pyproject_toml(config_file: Path | None = None) -> Path:
@@ -83,10 +84,42 @@ def find_conftest_files(test_paths: list[Path]) -> list[Path]:
     return list(list_of_conftest_files)
 
 
+# TODO for claude: There should be different functions to parse it per language, which should be chosen during runtime
 def parse_config_file(
-    config_file_path: Path | None = None,
-    override_formatter_check: bool = False,  # noqa: FBT001, FBT002
+    config_file_path: Path | None = None, override_formatter_check: bool = False
 ) -> tuple[dict[str, Any], Path]:
+    package_json_path = find_package_json(config_file_path)
+    pyproject_toml_path = find_closest_config_file("pyproject.toml") if config_file_path is None else None
+
+    # When both config files exist, prefer the one closer to CWD.
+    # This prevents a parent-directory package.json (e.g., monorepo root)
+    # from overriding a closer pyproject.toml with [tool.codeflash].
+    use_package_json = False
+    if package_json_path:
+        if pyproject_toml_path is None:
+            use_package_json = True
+        else:
+            # Compare depth: more path parts = closer to CWD = more specific
+            package_json_depth = len(package_json_path.parent.parts)
+            pyproject_toml_depth = len(pyproject_toml_path.parent.parts)
+            use_package_json = package_json_depth >= pyproject_toml_depth
+
+    if use_package_json:
+        assert package_json_path is not None
+        result = parse_package_json_config(package_json_path)
+        if result is not None:
+            config, path = result
+            # Validate formatter if needed
+            if not override_formatter_check and config.get("formatter_cmds"):
+                formatter_cmds = config.get("formatter_cmds", [])
+                if formatter_cmds and formatter_cmds[0] == "your-formatter $file":
+                    raise ValueError(
+                        "The formatter command is not set correctly in package.json. Please set the "
+                        "formatter command in the 'formatterCmds' key."
+                    )
+            return config, path
+
+    # Fall back to pyproject.toml
     config_file_path = find_pyproject_toml(config_file_path)
     try:
         with config_file_path.open("rb") as f:
@@ -149,10 +182,6 @@ def parse_config_file(
         else:
             config[key] = []
 
-    if config.get("test-framework"):
-        assert config["test-framework"] in {"pytest", "unittest"}, (
-            "In pyproject.toml, Codeflash only supports the 'test-framework' as pytest and unittest."
-        )
     # see if this is happening during GitHub actions setup
     if config.get("formatter-cmds") and len(config.get("formatter-cmds")) > 0 and not override_formatter_check:
         assert config.get("formatter-cmds")[0] != "your-formatter $file", (

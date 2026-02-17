@@ -12,7 +12,6 @@
 from __future__ import annotations
 
 import json
-import os
 import pickle
 import subprocess
 import sys
@@ -24,7 +23,9 @@ from codeflash.cli_cmds.cli import project_root_from_module_root
 from codeflash.cli_cmds.console import console
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
+from codeflash.code_utils.config_consts import EffortLevel
 from codeflash.code_utils.config_parser import parse_config_file
+from codeflash.code_utils.shell_utils import make_env_with_project_root
 from codeflash.tracing.pytest_parallelization import pytest_split
 
 if TYPE_CHECKING:
@@ -56,6 +57,9 @@ def main(args: Namespace | None = None) -> ArgumentParser:
         default=None,
     )
     parser.add_argument("--trace-only", action="store_true", help="Trace and create replay tests only, don't optimize")
+    parser.add_argument(
+        "--limit", type=int, default=None, help="Limit the number of test files to process (for -m pytest mode)"
+    )
 
     if args is not None:
         parsed_args = args
@@ -105,7 +109,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
             test_paths = []
             replay_test_paths = []
             if parsed_args.module and unknown_args[0] == "pytest":
-                pytest_splits, test_paths = pytest_split(unknown_args[1:])
+                pytest_splits, test_paths = pytest_split(unknown_args[1:], limit=parsed_args.limit)
                 if pytest_splits is None or test_paths is None:
                     console.print(f"❌ Could not find test files in the specified paths: {unknown_args[1:]}")
                     console.print(f"Current working directory: {Path.cwd()}")
@@ -120,9 +124,6 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                     result_pickle_file_path = get_run_tmp_file(Path(f"tracer_results_file_{i}.pkl"))
                     result_pickle_file_paths.append(result_pickle_file_path)
                     args_dict["result_pickle_file_path"] = str(result_pickle_file_path)
-                    outpath = parsed_args.outfile
-                    outpath = outpath.parent / f"{outpath.stem}_{i}{outpath.suffix}"
-                    args_dict["output"] = str(outpath)
                     updated_sys_argv = []
                     for elem in sys.argv:
                         if elem in test_paths_set:
@@ -130,13 +131,14 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                         else:
                             updated_sys_argv.append(elem)
                     args_dict["command"] = " ".join(updated_sys_argv)
-                    env = os.environ.copy()
-                    pythonpath = env.get("PYTHONPATH", "")
-                    project_root_str = str(project_root)
-                    if pythonpath:
-                        env["PYTHONPATH"] = f"{project_root_str}{os.pathsep}{pythonpath}"
-                    else:
-                        env["PYTHONPATH"] = project_root_str
+                    env = make_env_with_project_root(project_root)
+                    # Disable JIT compilation to ensure tracing captures all function calls
+                    env["NUMBA_DISABLE_JIT"] = str(1)
+                    env["TORCHDYNAMO_DISABLE"] = str(1)
+                    env["PYTORCH_JIT"] = str(0)
+                    env["TF_XLA_FLAGS"] = "--tf_xla_auto_jit=0"
+                    env["TF_ENABLE_ONEDNN_OPTS"] = str(0)
+                    env["JAX_DISABLE_JIT"] = str(1)
                     processes.append(
                         subprocess.Popen(
                             [
@@ -164,17 +166,16 @@ def main(args: Namespace | None = None) -> ArgumentParser:
             else:
                 result_pickle_file_path = get_run_tmp_file(Path("tracer_results_file.pkl"))
                 args_dict["result_pickle_file_path"] = str(result_pickle_file_path)
-                args_dict["output"] = str(parsed_args.outfile)
                 args_dict["command"] = " ".join(sys.argv)
 
-                env = os.environ.copy()
-                # Add project root to PYTHONPATH so imports work correctly
-                pythonpath = env.get("PYTHONPATH", "")
-                project_root_str = str(project_root)
-                if pythonpath:
-                    env["PYTHONPATH"] = f"{project_root_str}{os.pathsep}{pythonpath}"
-                else:
-                    env["PYTHONPATH"] = project_root_str
+                env = make_env_with_project_root(project_root)
+                # Disable JIT compilation to ensure tracing captures all function calls
+                env["NUMBA_DISABLE_JIT"] = str(1)
+                env["TORCHDYNAMO_DISABLE"] = str(1)
+                env["PYTORCH_JIT"] = str(0)
+                env["TF_XLA_FLAGS"] = "--tf_xla_auto_jit=0"
+                env["TF_ENABLE_ONEDNN_OPTS"] = str(0)
+                env["JAX_DISABLE_JIT"] = str(1)
 
                 subprocess.run(
                     [
@@ -200,8 +201,13 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                 from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
                 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
                 from codeflash.cli_cmds.console import paneled_text
+                from codeflash.languages import set_current_language
+                from codeflash.languages.base import Language
                 from codeflash.telemetry import posthog_cf
                 from codeflash.telemetry.sentry import init_sentry
+
+                # Set the language to Python since the tracer is Python-specific
+                set_current_language(Language.PYTHON)
 
                 sys.argv = ["codeflash", "--replay-test", *replay_test_paths]
                 args = parse_args()
@@ -213,11 +219,12 @@ def main(args: Namespace | None = None) -> ArgumentParser:
 
                 args = process_pyproject_config(args)
                 args.previous_checkpoint_functions = None
-                init_sentry(not args.disable_telemetry, exclude_errors=True)
-                posthog_cf.initialize_posthog(not args.disable_telemetry)
+                init_sentry(enabled=not args.disable_telemetry, exclude_errors=True)
+                posthog_cf.initialize_posthog(enabled=not args.disable_telemetry)
 
                 from codeflash.optimization import optimizer
 
+                args.effort = EffortLevel.HIGH.value
                 optimizer.run_with_args(args)
 
                 # Delete the trace file and the replay test file if they exist

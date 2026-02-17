@@ -1,0 +1,5 @@
+# Codeflash Configuration for CommonJS JavaScript Project
+module_root: "."
+tests_root: "tests"
+test_framework: "jest"
+formatter_cmds: []

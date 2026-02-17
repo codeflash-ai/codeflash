@@ -55,13 +55,17 @@ def make_cfapi_request(
     *,
     api_key: str | None = None,
     suppress_errors: bool = False,
+    params: dict[str, Any] | None = None,
 ) -> Response:
     """Make an HTTP request using the specified method, URL, headers, and JSON payload.
 
     :param endpoint: The endpoint URL to send the request to.
     :param method: The HTTP method to use ('GET', 'POST', etc.).
     :param payload: Optional JSON payload to include in the POST request body.
+    :param extra_headers: Optional extra headers to include in the request.
+    :param api_key: Optional API key to use for authentication.
     :param suppress_errors: If True, suppress error logging for HTTP errors.
+    :param params: Optional query parameters for GET requests.
     :return: The response object from the API.
     """
     url = f"{get_cfapi_base_urls().cfapi_base_url}/cfapi{endpoint}"
@@ -75,9 +79,9 @@ def make_cfapi_request(
             cfapi_headers["Content-Type"] = "application/json"
             response = requests.post(url, data=json_payload, headers=cfapi_headers, timeout=60)
         else:
-            response = requests.get(url, headers=cfapi_headers, timeout=60)
+            response = requests.get(url, headers=cfapi_headers, params=params, timeout=60)
         response.raise_for_status()
-        return response  # noqa: TRY300
+        return response
     except requests.exceptions.HTTPError:
         # response may be either a string or JSON, so we handle both cases
         error_message = ""
@@ -98,7 +102,7 @@ def make_cfapi_request(
 
 
 @lru_cache(maxsize=1)
-def get_user_id(api_key: Optional[str] = None) -> Optional[str]:  # noqa: PLR0911
+def get_user_id(api_key: Optional[str] = None) -> Optional[str]:
     """Retrieve the user's userid by making a request to the /cfapi/cli-get-user endpoint.
 
     :param api_key: The API key to use. If None, uses get_codeflash_api_key().
@@ -167,6 +171,8 @@ def suggest_changes(
     replay_tests: str = "",
     concolic_tests: str = "",
     optimization_review: str = "",
+    original_line_profiler: str | None = None,
+    optimized_line_profiler: str | None = None,
 ) -> Response:
     """Suggest changes to a pull request.
 
@@ -178,6 +184,8 @@ def suggest_changes(
     :param file_changes: A dictionary of file changes.
     :param pr_comment: The pull request comment object, containing the optimization explanation, best runtime, etc.
     :param generated_tests: The generated tests.
+    :param original_line_profiler: Line profiler results for original code (markdown format).
+    :param optimized_line_profiler: Line profiler results for optimized code (markdown format).
     :return: The response object.
     """
     payload = {
@@ -193,7 +201,10 @@ def suggest_changes(
         "replayTests": replay_tests,
         "concolicTests": concolic_tests,
         "optimizationReview": optimization_review,  # impact keyword left for legacy reasons, touches js/ts code
+        "originalLineProfiler": original_line_profiler,
+        "optimizedLineProfiler": optimized_line_profiler,
     }
+
     return make_cfapi_request(endpoint="/suggest-pr-changes", method="POST", payload=payload)
 
 
@@ -210,6 +221,8 @@ def create_pr(
     replay_tests: str = "",
     concolic_tests: str = "",
     optimization_review: str = "",
+    original_line_profiler: str | None = None,
+    optimized_line_profiler: str | None = None,
 ) -> Response:
     """Create a pull request, targeting the specified branch. (usually 'main').
 
@@ -219,6 +232,8 @@ def create_pr(
     :param file_changes: A dictionary of file changes.
     :param pr_comment: The pull request comment object, containing the optimization explanation, best runtime, etc.
     :param generated_tests: The generated tests.
+    :param original_line_profiler: Line profiler results for original code (markdown format).
+    :param optimized_line_profiler: Line profiler results for optimized code (markdown format).
     :return: The response object.
     """
     # convert Path objects to strings
@@ -235,8 +250,25 @@ def create_pr(
         "replayTests": replay_tests,
         "concolicTests": concolic_tests,
         "optimizationReview": optimization_review,  # Impact keyword left for legacy reasons, it touches js/ts codebase
+        "originalLineProfiler": original_line_profiler,
+        "optimizedLineProfiler": optimized_line_profiler,
     }
+
     return make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
+
+
+def setup_github_actions(owner: str, repo: str, base_branch: str, workflow_content: str) -> Response:
+    """Set up GitHub Actions workflow by creating a PR with the workflow file.
+
+    :param owner: Repository owner (username or organization)
+    :param repo: Repository name
+    :param base_branch: Base branch to create PR against (e.g., "main", "master")
+    :param workflow_content: Content of the GitHub Actions workflow file (YAML)
+    :return: Response object with pr_url and pr_number on success
+    """
+    payload = {"owner": owner, "repo": repo, "baseBranch": base_branch, "workflowContent": workflow_content}
+
+    return make_cfapi_request(endpoint="/setup-github-actions", method="POST", payload=payload)
 
 
 def create_staging(
@@ -251,6 +283,9 @@ def create_staging(
     concolic_tests: str,
     root_dir: Path,
     optimization_review: str = "",
+    original_line_profiler: str | None = None,
+    optimized_line_profiler: str | None = None,
+    **_kwargs: Any,  # ignores the language argument TODO Hesham: staging for all langs
 ) -> Response:
     """Create a staging pull request, targeting the specified branch. (usually 'staging').
 
@@ -261,6 +296,8 @@ def create_staging(
     :param generated_original_test_source: Generated tests for the original function.
     :param function_trace_id: Unique identifier for this optimization trace.
     :param coverage_message: Coverage report or summary.
+    :param original_line_profiler: Line profiler results for original code (markdown format).
+    :param optimized_line_profiler: Line profiler results for optimized code (markdown format).
     :return: The response object from the backend.
     """
     relative_path = explanation.file_path.relative_to(root_dir).as_posix()
@@ -292,6 +329,8 @@ def create_staging(
         "replayTests": replay_tests,
         "concolicTests": concolic_tests,
         "optimizationReview": optimization_review,  # Impact keyword left for legacy reasons, it touches js/ts codebase
+        "originalLineProfiler": original_line_profiler,
+        "optimizedLineProfiler": optimized_line_profiler,
     }
 
     return make_cfapi_request(endpoint="/create-staging", method="POST", payload=payload)
@@ -324,20 +363,41 @@ def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
         owner, repo = get_repo_owner_and_name()
         information = {"pr_number": pr_number, "repo_owner": owner, "repo_name": repo}
 
-        req = make_cfapi_request(endpoint="/verify-existing-optimizations", method="POST", payload=information)
-        req.raise_for_status()
+        req = make_cfapi_request(
+            endpoint="/verify-existing-optimizations", method="POST", payload=information, suppress_errors=True
+        )
+
+        if req.status_code >= 500:
+            logger.error(f"Server error getting blocklisted functions: {req.status_code}")
+            sentry_sdk.capture_message(f"Server error in verify-existing-optimizations: {req.status_code}")
+            return {}
+        if not req.ok:
+            if req.status_code == 401:
+                logger.debug(f"Not authorized to check blocklisted functions for {owner}/{repo} PR #{pr_number}")
+            elif req.status_code == 404:
+                logger.debug(f"PR #{pr_number} not found for {owner}/{repo}")
+            else:
+                logger.warning(f"Unexpected response {req.status_code} from verify-existing-optimizations")
+            return {}
+
         content: dict[str, list[str]] = req.json()
+
+        if "error" in content:
+            logger.debug(f"No existing optimizations found for PR #{pr_number}")
+            return {}
+
+        logger.debug(f"Found {len(content)} files with blocklisted functions for PR #{pr_number}")
+        return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}
+
     except Exception as e:
         logger.error(f"Error getting blocklisted functions: {e}")
         sentry_sdk.capture_exception(e)
         return {}
 
-    return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}
-
 
 def is_function_being_optimized_again(
     owner: str, repo: str, pr_number: int, code_contexts: list[dict[str, str]]
-) -> Any:  # noqa: ANN401
+) -> Any:
     """Check if the function being optimized is being optimized again."""
     response = make_cfapi_request(
         "/is-already-optimized",

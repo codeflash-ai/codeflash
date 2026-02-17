@@ -58,6 +58,19 @@ for level in ("info", "debug", "warning", "error"):
     )
 
 
+class DummyTask:
+    def __init__(self) -> None:
+        self.id = 0
+
+
+class DummyProgress:
+    def __init__(self) -> None:
+        pass
+
+    def advance(self, task_id: TaskID, advance: int = 1) -> None:
+        pass
+
+
 def lsp_log(message: LspMessage) -> None:
     if not is_LSP_enabled():
         return
@@ -85,21 +98,39 @@ def code_print(
     file_name: Optional[str] = None,
     function_name: Optional[str] = None,
     lsp_message_id: Optional[str] = None,
+    language: str = "python",
 ) -> None:
+    """Print code with syntax highlighting.
+
+    Args:
+        code_str: The code to print
+        file_name: Optional file name for LSP
+        function_name: Optional function name for LSP
+        lsp_message_id: Optional LSP message ID
+        language: Programming language for syntax highlighting ('python', 'javascript', 'typescript')
+
+    """
     if is_LSP_enabled():
         lsp_log(
             LspCodeMessage(code=code_str, file_name=file_name, function_name=function_name, message_id=lsp_message_id)
         )
         return
-    """Print code with syntax highlighting."""
+
     from rich.syntax import Syntax
 
+    # Map codeflash language names to rich/pygments lexer names
+    lexer_map = {"python": "python", "javascript": "javascript", "typescript": "typescript"}
+    lexer = lexer_map.get(language, "python")
+
     console.rule()
-    console.print(Syntax(code_str, "python", line_numbers=True, theme="github-dark"))
+    console.print(Syntax(code_str, lexer, line_numbers=True, theme="github-dark"))
     console.rule()
 
 
 spinners = cycle(SPINNER_TYPES)
+
+# Track whether a progress bar is already active to prevent nested Live displays
+_progress_bar_active = False
 
 
 @contextmanager
@@ -110,37 +141,50 @@ def progress_bar(
 
     If revert_to_print is True, falls back to printing a single logger.info message
     instead of showing a progress bar.
+
+    If a progress bar is already active, yields a dummy task ID to avoid Rich's
+    LiveError from nested Live displays.
     """
+    global _progress_bar_active
+
     if is_LSP_enabled():
         lsp_log(LspTextMessage(text=message, takes_time=True))
         yield
         return
 
-    if revert_to_print:
-        logger.info(message)
+    if revert_to_print or _progress_bar_active:
+        if revert_to_print:
+            logger.info(message)
 
         # Create a fake task ID since we still need to yield something
-        class DummyTask:
-            def __init__(self) -> None:
-                self.id = 0
-
         yield DummyTask().id
     else:
-        progress = Progress(
-            SpinnerColumn(next(spinners)),
-            *Progress.get_default_columns(),
-            TimeElapsedColumn(),
-            console=console,
-            transient=transient,
-        )
-        task = progress.add_task(message, total=None)
-        with progress:
-            yield task
+        _progress_bar_active = True
+        try:
+            progress = Progress(
+                SpinnerColumn(next(spinners)),
+                *Progress.get_default_columns(),
+                TimeElapsedColumn(),
+                console=console,
+                transient=transient,
+            )
+            task = progress.add_task(message, total=None)
+            with progress:
+                yield task
+        finally:
+            _progress_bar_active = False
 
 
 @contextmanager
 def test_files_progress_bar(total: int, description: str) -> Generator[tuple[Progress, TaskID], None, None]:
     """Progress bar for test files."""
+    if is_LSP_enabled():
+        lsp_log(LspTextMessage(text=description, takes_time=True))
+        dummy_progress = DummyProgress()
+        dummy_task = DummyTask()
+        yield dummy_progress, dummy_task.id
+        return
+
     with Progress(
         SpinnerColumn(next(spinners)),
         TextColumn("[progress.description]{task.description}"),

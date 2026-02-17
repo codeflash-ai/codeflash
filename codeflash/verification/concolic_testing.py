@@ -9,9 +9,11 @@ from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
-from codeflash.code_utils.concolic_utils import clean_concolic_tests
+from codeflash.code_utils.concolic_utils import clean_concolic_tests, is_valid_concolic_test
+from codeflash.code_utils.shell_utils import make_env_with_project_root
 from codeflash.code_utils.static_analysis import has_typed_parameters
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
+from codeflash.languages import is_python
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.verification_utils import TestConfig
@@ -26,9 +28,29 @@ if TYPE_CHECKING:
 def generate_concolic_tests(
     test_cfg: TestConfig, args: Namespace, function_to_optimize: FunctionToOptimize, function_to_optimize_ast: ast.AST
 ) -> tuple[dict[str, set[FunctionCalledInTest]], str]:
+    """Generate concolic tests using CrossHair (Python only).
+
+    CrossHair is a Python-specific symbolic execution tool. For non-Python languages
+    (JavaScript, TypeScript, etc.), this function returns early with empty results.
+
+    Args:
+        test_cfg: Test configuration
+        args: Command line arguments
+        function_to_optimize: The function being optimized
+        function_to_optimize_ast: AST of the function (Python ast.FunctionDef)
+
+    Returns:
+        Tuple of (function_to_tests mapping, concolic test suite code)
+
+    """
     start_time = time.perf_counter()
     function_to_concolic_tests = {}
     concolic_test_suite_code = ""
+
+    # CrossHair is Python-only - skip for other languages
+    if not is_python():
+        logger.debug("Skipping concolic test generation for non-Python languages (CrossHair is Python-only)")
+        return function_to_concolic_tests, concolic_test_suite_code
 
     if is_LSP_enabled():
         logger.debug("Skipping concolic test generation in LSP mode")
@@ -42,6 +64,7 @@ def generate_concolic_tests(
         logger.info("Generating concolic opcode coverage tests for the original code…")
         console.rule()
         try:
+            env = make_env_with_project_root(args.project_root)
             cover_result = subprocess.run(
                 [
                     SAFE_SYS_EXECUTABLE,
@@ -65,6 +88,7 @@ def generate_concolic_tests(
                 cwd=args.project_root,
                 check=False,
                 timeout=600,
+                env=env,
             )
         except subprocess.TimeoutExpired:
             logger.debug("CrossHair Cover test generation timed out")
@@ -72,6 +96,10 @@ def generate_concolic_tests(
 
         if cover_result.returncode == 0:
             generated_concolic_test: str = cover_result.stdout
+            if not is_valid_concolic_test(generated_concolic_test, project_root=str(args.project_root)):
+                logger.debug("CrossHair generated invalid test, skipping")
+                console.rule()
+                return function_to_concolic_tests, concolic_test_suite_code
             concolic_test_suite_code: str = clean_concolic_tests(generated_concolic_test)
             concolic_test_suite_dir = Path(tempfile.mkdtemp(dir=test_cfg.concolic_test_root_dir))
             concolic_test_suite_path = concolic_test_suite_dir / "test_concolic_coverage.py"
@@ -81,8 +109,6 @@ def generate_concolic_tests(
                 tests_root=concolic_test_suite_dir,
                 tests_project_rootdir=test_cfg.concolic_test_root_dir,
                 project_root_path=args.project_root,
-                test_framework=args.test_framework,
-                pytest_cmd=args.pytest_cmd,
             )
             function_to_concolic_tests, num_discovered_concolic_tests, _ = discover_unit_tests(concolic_test_cfg)
             logger.info(

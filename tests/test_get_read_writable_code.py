@@ -1,7 +1,8 @@
 from textwrap import dedent
 
 import pytest
-from codeflash.context.code_context_extractor import  parse_code_and_prune_cst
+
+from codeflash.languages.python.context.code_context_extractor import parse_code_and_prune_cst
 from codeflash.models.models import CodeContextType
 
 
@@ -12,7 +13,7 @@ def test_simple_function() -> None:
         y = 2
         return x + y
     """
-    result = parse_code_and_prune_cst(dedent(code),CodeContextType.READ_WRITABLE, {"target_function"})
+    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"target_function"})
 
     expected = dedent("""
     def target_function():
@@ -55,7 +56,7 @@ def test_class_with_attributes() -> None:
         def other_method(self):
             print("this should be excluded")
     """
-    result = parse_code_and_prune_cst(dedent(code),CodeContextType.READ_WRITABLE, {"MyClass.target_method"})
+    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"MyClass.target_method"})
 
     expected = dedent("""
     class MyClass:
@@ -79,7 +80,7 @@ def test_basic_class_structure() -> None:
             def not_findable(self):
                 return 42
     """
-    result = parse_code_and_prune_cst(dedent(code),CodeContextType.READ_WRITABLE, {"Outer.target_method"})
+    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"Outer.target_method"})
 
     expected = dedent("""
     class Outer:
@@ -99,7 +100,7 @@ def test_top_level_targets() -> None:
     def target_function():
         return 42
     """
-    result = parse_code_and_prune_cst(dedent(code),CodeContextType.READ_WRITABLE, {"target_function"})
+    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"target_function"})
 
     expected = dedent("""
     def target_function():
@@ -122,7 +123,7 @@ def test_multiple_top_level_classes() -> None:
         def process(self):
             return "C"
     """
-    result = parse_code_and_prune_cst(dedent(code),CodeContextType.READ_WRITABLE, {"ClassA.process", "ClassC.process"})
+    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"ClassA.process", "ClassC.process"})
 
     expected = dedent("""
     class ClassA:
@@ -147,7 +148,7 @@ def test_try_except_structure() -> None:
             def handle_error(self):
                 print("error")
     """
-    result = parse_code_and_prune_cst(dedent(code),CodeContextType.READ_WRITABLE, {"TargetClass.target_method"})
+    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"TargetClass.target_method"})
 
     expected = dedent("""
     try:
@@ -174,7 +175,7 @@ def test_init_method() -> None:
         def target_method(self):
             return f"Value: {self.x}"
     """
-    result = parse_code_and_prune_cst(dedent(code),CodeContextType.READ_WRITABLE, {"MyClass.target_method"})
+    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"MyClass.target_method"})
 
     expected = dedent("""
     class MyClass:
@@ -185,6 +186,7 @@ def test_init_method() -> None:
             return f"Value: {self.x}"
     """)
     assert result.strip() == expected.strip()
+
 
 def test_dunder_method() -> None:
     code = """
@@ -198,7 +200,7 @@ def test_dunder_method() -> None:
         def target_method(self):
             return f"Value: {self.x}"
     """
-    result = parse_code_and_prune_cst(dedent(code),CodeContextType.READ_WRITABLE, {"MyClass.target_method"})
+    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"MyClass.target_method"})
 
     expected = dedent("""
     class MyClass:
@@ -207,6 +209,7 @@ def test_dunder_method() -> None:
             return f"Value: {self.x}"
     """)
     assert result.strip() == expected.strip()
+
 
 def test_no_targets_found() -> None:
     code = """
@@ -218,8 +221,28 @@ def test_no_targets_found() -> None:
             def target(self):
                 pass
     """
+    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"MyClass.Inner.target"})
+    expected = dedent("""
+    class MyClass:
+        def method(self):
+            pass
+
+        class Inner:
+            def target(self):
+                pass
+    """)
+    assert result.strip() == expected.strip()
+
+
+def test_no_targets_found_raises_for_nonexistent() -> None:
+    """Test that ValueError is raised when the target function doesn't exist at all."""
+    code = """
+    class MyClass:
+        def method(self):
+            pass
+    """
     with pytest.raises(ValueError, match="No target functions found in the provided code"):
-        parse_code_and_prune_cst(dedent(code),CodeContextType.READ_WRITABLE, {"MyClass.Inner.target"})
+        parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"NonExistent.target"})
 
 
 def test_module_var() -> None:
@@ -243,7 +266,5 @@ def test_module_var() -> None:
         var2 = "test"
     """
 
-    output = parse_code_and_prune_cst(dedent(code),CodeContextType.READ_WRITABLE, {"target_function"})
+    output = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"target_function"})
     assert dedent(expected).strip() == output.strip()
-
-

@@ -3,6 +3,8 @@ from __future__ import annotations
 import contextlib
 import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -11,7 +13,10 @@ from codeflash.code_utils.compat import LF
 from codeflash.either import Failure, Success
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from codeflash.either import Result
+
 
 # PowerShell patterns and prefixes
 POWERSHELL_RC_EXPORT_PATTERN = re.compile(
@@ -231,3 +236,36 @@ def save_api_key_to_rc(api_key: str) -> Result[str, str]:
             f"To ensure your Codeflash API key is automatically loaded into your environment at startup, you can create {shell_rc_path} and add the following line:{LF}"
             f"{LF}{api_key_line}{LF}"
         )
+
+
+def make_env_with_project_root(project_root: Path | str) -> dict[str, str]:
+    """Return a copy of os.environ with project_root prepended to PYTHONPATH."""
+    env = os.environ.copy()
+    project_root_str = str(project_root)
+    pythonpath = env.get("PYTHONPATH", "")
+    if pythonpath:
+        env["PYTHONPATH"] = f"{project_root_str}{os.pathsep}{pythonpath}"
+    else:
+        env["PYTHONPATH"] = project_root_str
+    return env
+
+
+def get_cross_platform_subprocess_run_args(
+    cwd: Path | str | None = None,
+    env: Mapping[str, str] | None = None,
+    timeout: Optional[float] = None,
+    check: bool = False,
+    text: bool = True,
+    capture_output: bool = True,
+) -> dict[str, str]:
+    run_args = {"cwd": cwd, "env": env, "text": text, "timeout": timeout, "check": check}
+    if sys.platform == "win32":
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+        run_args["creationflags"] = creationflags
+        run_args["stdout"] = subprocess.PIPE
+        run_args["stderr"] = subprocess.PIPE
+        run_args["stdin"] = subprocess.DEVNULL
+    else:
+        run_args["capture_output"] = capture_output
+
+    return run_args

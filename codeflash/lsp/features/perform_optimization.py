@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import concurrent.futures
 import contextlib
+import contextvars
 import os
 from typing import TYPE_CHECKING
 
-from codeflash.cli_cmds.console import code_print
+from codeflash.cli_cmds.console import code_print, logger
 from codeflash.code_utils.git_worktree_utils import create_diff_patch_from_worktree
 from codeflash.either import is_successful
 
@@ -23,7 +25,7 @@ def abort_if_cancelled(cancel_event: threading.Event) -> None:
         raise RuntimeError("cancelled")
 
 
-def sync_perform_optimization(server: CodeflashLanguageServer, cancel_event: threading.Event, params) -> dict[str, str]:  # noqa
+def sync_perform_optimization(server: CodeflashLanguageServer, cancel_event: threading.Event, params) -> dict[str, str]:
     server.show_message_log(f"Starting optimization for function: {params.functionName}", "Info")
     should_run_experiment, code_context, original_helper_code = server.current_optimization_init_result
     function_optimizer = server.optimizer.current_function_optimizer
@@ -33,6 +35,7 @@ def sync_perform_optimization(server: CodeflashLanguageServer, cancel_event: thr
         code_context.read_writable_code.flat,
         file_name=current_function.file_path,
         function_name=current_function.function_name,
+        language=current_function.language,
     )
     abort_if_cancelled(cancel_event)
 
@@ -44,24 +47,48 @@ def sync_perform_optimization(server: CodeflashLanguageServer, cancel_event: thr
         function_optimizer.function_to_tests = function_to_tests
 
     abort_if_cancelled(cancel_event)
-    test_setup_result = function_optimizer.generate_and_instrument_tests(
-        code_context, should_run_experiment=should_run_experiment
-    )
+
+    ctx_tests = contextvars.copy_context()
+    ctx_opts = contextvars.copy_context()
+
+    def run_generate_tests():
+        return function_optimizer.generate_and_instrument_tests(code_context)
+
+    def run_generate_optimizations():
+        return function_optimizer.generate_optimizations(
+            read_writable_code=code_context.read_writable_code,
+            read_only_context_code=code_context.read_only_context_code,
+            run_experiment=should_run_experiment,
+        )
+
+    future_tests = function_optimizer.executor.submit(ctx_tests.run, run_generate_tests)
+    future_optimizations = function_optimizer.executor.submit(ctx_opts.run, run_generate_optimizations)
+
+    logger.info(f"loading|Generating new tests and optimizations for function '{params.functionName}'")
+    concurrent.futures.wait([future_tests, future_optimizations])
+
+    test_setup_result = future_tests.result()
+    optimization_result = future_optimizations.result()
+
     abort_if_cancelled(cancel_event)
     if not is_successful(test_setup_result):
         return {"functionName": params.functionName, "status": "error", "message": test_setup_result.failure()}
+    if not is_successful(optimization_result):
+        return {"functionName": params.functionName, "status": "error", "message": optimization_result.failure()}
+
     (
         generated_tests,
         function_to_concolic_tests,
         concolic_test_str,
-        optimizations_set,
         generated_test_paths,
         generated_perf_test_paths,
         instrumented_unittests_created_for_function,
         original_conftest_content,
-        function_references,
     ) = test_setup_result.unwrap()
 
+    optimizations_set, function_references = optimization_result.unwrap()
+
+    logger.info(f"Generated '{len(optimizations_set.control)}' candidate optimizations.")
     baseline_setup_result = function_optimizer.setup_and_establish_baseline(
         code_context=code_context,
         original_helper_code=original_helper_code,
@@ -137,4 +164,6 @@ def sync_perform_optimization(server: CodeflashLanguageServer, cancel_event: thr
         "task_id": params.task_id,
         "explanation": best_optimization.explanation_v2,
         "optimizationReview": function_optimizer.optimization_review.capitalize(),
+        "original_line_profiler": original_code_baseline.line_profile_results.get("str_out", ""),
+        "optimized_line_profiler": best_optimization.line_profiler_test_results.get("str_out", ""),
     }

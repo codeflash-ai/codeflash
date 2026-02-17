@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-import datetime as dt
-import re
-
-import humanize
-
 
 def humanize_runtime(time_in_ns: int) -> str:
     runtime_human: str = str(time_in_ns)
@@ -14,22 +9,32 @@ def humanize_runtime(time_in_ns: int) -> str:
 
     if time_in_ns / 1000 >= 1:
         time_micro = float(time_in_ns) / 1000
-        runtime_human = humanize.precisedelta(dt.timedelta(microseconds=time_micro), minimum_unit="microseconds")
 
-        units = re.split(r",|\s", runtime_human)[1]
-
-        if units in {"microseconds", "microsecond"}:
+        # Direct unit determination and formatting without external library
+        if time_micro < 1000:
             runtime_human = f"{time_micro:.3g}"
-        elif units in {"milliseconds", "millisecond"}:
-            runtime_human = "%.3g" % (time_micro / 1000)
-        elif units in {"seconds", "second"}:
-            runtime_human = "%.3g" % (time_micro / (1000**2))
-        elif units in {"minutes", "minute"}:
-            runtime_human = "%.3g" % (time_micro / (60 * 1000**2))
-        elif units in {"hour", "hours"}:  # hours
-            runtime_human = "%.3g" % (time_micro / (3600 * 1000**2))
+            units = "microseconds" if time_micro >= 2 else "microsecond"
+        elif time_micro < 1000000:
+            time_milli = time_micro / 1000
+            runtime_human = f"{time_milli:.3g}"
+            units = "milliseconds" if time_milli >= 2 else "millisecond"
+        elif time_micro < 60000000:
+            time_sec = time_micro / 1000000
+            runtime_human = f"{time_sec:.3g}"
+            units = "seconds" if time_sec >= 2 else "second"
+        elif time_micro < 3600000000:
+            time_min = time_micro / 60000000
+            runtime_human = f"{time_min:.3g}"
+            units = "minutes" if time_min >= 2 else "minute"
+        elif time_micro < 86400000000:
+            time_hour = time_micro / 3600000000
+            runtime_human = f"{time_hour:.3g}"
+            units = "hours" if time_hour >= 2 else "hour"
         else:  # days
-            runtime_human = "%.3g" % (time_micro / (24 * 3600 * 1000**2))
+            time_day = time_micro / 86400000000
+            runtime_human = f"{time_day:.3g}"
+            units = "days" if time_day >= 2 else "day"
+
     runtime_human_parts = str(runtime_human).split(".")
     if len(runtime_human_parts[0]) == 1:
         if runtime_human_parts[0] == "1" and len(runtime_human_parts) > 1:

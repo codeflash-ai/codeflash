@@ -12,6 +12,7 @@ import sqlite3
 import sys
 import threading
 import time
+import warnings
 from collections import defaultdict
 from importlib.util import find_spec
 from pathlib import Path
@@ -25,6 +26,10 @@ from rich.text import Text
 from codeflash.cli_cmds.console import console
 from codeflash.picklepatch.pickle_patcher import PicklePatcher
 from codeflash.tracing.tracing_utils import FunctionModules, filter_files_optimized, module_name_from_file_path
+
+# Suppress dill PicklingWarning
+warnings.filterwarnings("ignore", message="Cannot locate reference to")
+warnings.filterwarnings("ignore", message="Cannot pickle.*recursive self-references")
 
 if TYPE_CHECKING:
     from types import FrameType, TracebackType
@@ -70,9 +75,9 @@ class Tracer:
         self,
         config: dict,
         result_pickle_file_path: Path,
-        output: str = "codeflash.trace",
         functions: list[str] | None = None,
-        disable: bool = False,  # noqa: FBT001, FBT002
+        *,
+        disable: bool = False,
         project_root: Path | None = None,
         max_function_count: int = 256,
         timeout: int | None = None,  # seconds
@@ -80,7 +85,6 @@ class Tracer:
     ) -> None:
         """Use this class to trace function calls.
 
-        :param output: The path to the output trace file
         :param functions: List of functions to trace. If None, trace all functions
         :param disable: Disable the tracer if True
         :param max_function_count: Maximum number of times to trace one function
@@ -110,7 +114,6 @@ class Tracer:
         self._db_lock = threading.Lock()
 
         self.con = None
-        self.output_file = Path(output).resolve()
         self.functions = functions
         self.function_modules: list[FunctionModules] = []
         self.function_count = defaultdict(int)
@@ -126,6 +129,16 @@ class Tracer:
         self.ignored_functions = {"<listcomp>", "<genexpr>", "<dictcomp>", "<setcomp>", "<lambda>", "<module>"}
 
         self.sanitized_filename = self.sanitize_to_filename(command)
+        # Place trace file next to replay tests in the tests directory
+        from codeflash.verification.verification_utils import get_test_file_path
+
+        function_path = "_".join(functions) if functions else self.sanitized_filename
+        test_file_path = get_test_file_path(
+            test_dir=Path(config["tests_root"]), function_name=function_path, test_type="replay"
+        )
+        test_file_path.parent.mkdir(parents=True, exist_ok=True)
+        trace_filename = test_file_path.stem + ".trace"
+        self.output_file = test_file_path.parent / trace_filename
         self.result_pickle_file_path = result_pickle_file_path
 
         assert timeout is None or timeout > 0, "Timeout should be greater than 0"
@@ -142,7 +155,6 @@ class Tracer:
         self.timer = time.process_time_ns
         self.total_tt = 0
         self.simulate_call("profiler")
-        assert "test_framework" in self.config, "Please specify 'test-framework' in pyproject.toml config file"
         self.t = self.timer()
 
         # Store command information for metadata table
@@ -273,10 +285,7 @@ class Tracer:
         from codeflash.verification.verification_utils import get_test_file_path
 
         replay_test = create_trace_replay_test(
-            trace_file=self.output_file,
-            functions=self.function_modules,
-            test_framework=self.config["test_framework"],
-            max_run_count=self.max_function_count,
+            trace_file=self.output_file, functions=self.function_modules, max_run_count=self.max_function_count
         )
         function_path = "_".join(self.functions) if self.functions else self.sanitized_filename
         test_file_path = get_test_file_path(
@@ -301,7 +310,7 @@ class Tracer:
         with self.result_pickle_file_path.open("wb") as file:
             pickle.dump(pickle_data, file)
 
-    def tracer_logic(self, frame: FrameType, event: str) -> None:  # noqa: PLR0911
+    def tracer_logic(self, frame: FrameType, event: str) -> None:
         if event != "call":
             return
         if None is not self.timeout and (time.time() - self.start_time) > self.timeout:
@@ -462,7 +471,7 @@ class Tracer:
             # In multi-threaded contexts, we need to be more careful about frame comparisons
             if self.cur and frame.f_back is not self.cur[-2]:
                 # This happens when we're in a different thread
-                rpt, rit, ret, rfn, rframe, rcur = self.cur
+                _rpt, _rit, _ret, _rfn, rframe, _rcur = self.cur
 
                 # Only attempt to handle the frame mismatch if we have a valid rframe
                 if (
@@ -486,7 +495,7 @@ class Tracer:
                     class_name = arguments["self"].__class__.__name__
                 elif "cls" in arguments and hasattr(arguments["cls"], "__name__"):
                     class_name = arguments["cls"].__name__
-            except Exception:  # noqa: S110
+            except Exception:
                 pass
 
             fn = (fcode.co_filename, fcode.co_firstlineno, fcode.co_name, class_name)
@@ -497,7 +506,7 @@ class Tracer:
                 timings[fn] = cc, ns + 1, tt, ct, callers
             else:
                 timings[fn] = 0, 0, 0, 0, {}
-            return 1  # noqa: TRY300
+            return 1
         except Exception:
             # Handle any errors gracefully
             return 0
@@ -857,7 +866,6 @@ if __name__ == "__main__":
     args_dict["config"]["tests_root"] = Path(args_dict["config"]["tests_root"])
     tracer = Tracer(
         config=args_dict["config"],
-        output=Path(args_dict["output"]),
         functions=args_dict["functions"],
         max_function_count=args_dict["max_function_count"],
         timeout=args_dict["timeout"],

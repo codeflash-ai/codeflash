@@ -11,8 +11,8 @@ from codeflash.lsp.helpers import is_LSP_enabled, replace_quotes_with_backticks,
 json_primitive_types = (str, float, int, bool)
 max_code_lines_before_collapse = 45
 
-# \u241F is the message delimiter becuase it can be more than one message sent over the same message, so we need something to separate each message
-message_delimiter = "\u241f"
+# \\u241F is the message delimiter because it can be more than one message sent over the same message, so we need something to separate each message
+message_delimiter = "\\u241F"
 
 
 # allow the client to know which message it is receiving
@@ -27,7 +27,7 @@ class LspMessage:
     takes_time: bool = False
     message_id: Optional[str] = None
 
-    def _loop_through(self, obj: Any) -> Any:  # noqa: ANN401
+    def _loop_through(self, obj: Any) -> Any:
         if isinstance(obj, list):
             return [self._loop_through(i) for i in obj]
         if isinstance(obj, dict):

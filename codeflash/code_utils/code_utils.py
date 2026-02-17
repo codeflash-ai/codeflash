@@ -19,9 +19,52 @@ from codeflash.cli_cmds.console import logger, paneled_text
 from codeflash.code_utils.config_parser import find_pyproject_toml, get_all_closest_config_files
 from codeflash.lsp.helpers import is_LSP_enabled
 
+_INVALID_CHARS_NT = {"<", ">", ":", '"', "|", "?", "*"}
+
+_INVALID_CHARS_UNIX = {"\0"}
+
 ImportErrorPattern = re.compile(r"ModuleNotFoundError.*$", re.MULTILINE)
 
 BLACKLIST_ADDOPTS = ("--benchmark", "--sugar", "--codespeed", "--cov", "--profile", "--junitxml", "-n")
+
+# Characters that indicate a glob pattern
+GLOB_PATTERN_CHARS = frozenset("*?[")
+
+
+def is_glob_pattern(path_str: str) -> bool:
+    """Check if a path string contains glob pattern characters."""
+    return any(char in path_str for char in GLOB_PATTERN_CHARS)
+
+
+def normalize_ignore_paths(paths: list[str], base_path: Path | None = None) -> list[Path]:
+    if base_path is None:
+        base_path = Path.cwd()
+
+    base_path = base_path.resolve()
+    normalized: set[Path] = set()
+
+    for path_str in paths:
+        if not path_str:
+            continue
+
+        path_str = str(path_str)
+
+        if is_glob_pattern(path_str):
+            # pathlib requires relative glob patterns
+            path_str = path_str.removeprefix("./")
+            if path_str.startswith("/"):
+                path_str = path_str.lstrip("/")
+
+            for matched_path in base_path.glob(path_str):
+                normalized.add(matched_path.resolve())
+        else:
+            path_obj = Path(path_str)
+            if not path_obj.is_absolute():
+                path_obj = base_path / path_obj
+            if path_obj.exists():
+                normalized.add(path_obj.resolve())
+
+    return list(normalized)
 
 
 def unified_diff_strings(code1: str, code2: str, fromfile: str = "original", tofile: str = "modified") -> str:
@@ -39,6 +82,63 @@ def unified_diff_strings(code1: str, code2: str, fromfile: str = "original", tof
     diff = difflib.unified_diff(code1_lines, code2_lines, fromfile=fromfile, tofile=tofile, lineterm="")
 
     return "".join(diff)
+
+
+def choose_weights(**importance: float) -> list[float]:
+    """Choose normalized weights from relative importance values.
+
+    Example:
+        choose_weights(runtime=3, diff=1)
+        -> [0.75, 0.25]
+
+    Args:
+        **importance: keyword args of metric=importance (relative numbers).
+
+    Returns:
+        A list of weights in the same order as the arguments.
+
+    """
+    total = sum(importance.values())
+    if total == 0:
+        raise ValueError("At least one importance value must be > 0")
+
+    return [v / total for v in importance.values()]
+
+
+def normalize_by_max(values: list[float]) -> list[float]:
+    mx = max(values)
+    if mx == 0:
+        return [0.0] * len(values)
+    return [v / mx for v in values]
+
+
+def create_score_dictionary_from_metrics(weights: list[float], *metrics: list[float]) -> dict[int, int]:
+    """Combine multiple metrics into a single weighted score dictionary.
+
+    Each metric is a list of values (smaller = better).
+    The total score for each index is the weighted sum of its values
+    across all metrics:
+
+        score[index] = Σ (value * weight)
+
+    Args:
+        weights: A list of weights, one per metric. Larger weight = more influence.
+        *metrics: Lists of values (one list per metric, aligned by index).
+
+    Returns:
+        A dictionary mapping each index to its combined weighted score.
+
+    """
+    if len(weights) != len(metrics):
+        raise ValueError("Number of weights must match number of metrics")
+
+    combined: dict[int, float] = {}
+
+    for weight, metric in zip(weights, metrics):
+        for idx, value in enumerate(metric):
+            combined[idx] = combined.get(idx, 0) + value * weight
+
+    return combined
 
 
 def diff_length(a: str, b: str) -> int:
@@ -105,7 +205,7 @@ def filter_args(addopts_args: list[str]) -> list[str]:
     return filtered_args
 
 
-def modify_addopts(config_file: Path) -> tuple[str, bool]:  # noqa : PLR0911
+def modify_addopts(config_file: Path) -> tuple[str, bool]:
     file_type = config_file.suffix.lower()
     filename = config_file.name
     config = None
@@ -362,6 +462,10 @@ def exit_with_message(message: str, *, error_on_exit: bool = False) -> None:
     sys.exit(1 if error_on_exit else 0)
 
 
+def shorten_pytest_error(pytest_error_string: str) -> str:
+    return "\n".join(re.findall(r"^[E>] +(.*)$", pytest_error_string, re.MULTILINE))
+
+
 def extract_unique_errors(pytest_output: str) -> set[str]:
     unique_errors = set()
 
@@ -371,8 +475,56 @@ def extract_unique_errors(pytest_output: str) -> set[str]:
     pattern = r"^E\s+(.*)$"
 
     for error_message in re.findall(pattern, pytest_output, re.MULTILINE):
-        error_message = error_message.strip()  # noqa: PLW2901
+        error_message = error_message.strip()
         if error_message:
             unique_errors.add(error_message)
 
     return unique_errors
+
+
+def validate_relative_directory_path(path: str) -> tuple[bool, str]:
+    """Validate that a path is a safe relative directory path.
+
+    Prevents path traversal attacks and invalid paths.
+    Works cross-platform (Windows, Linux, macOS).
+
+    Args:
+        path: The path string to validate
+
+    Returns:
+        tuple[bool, str]: (is_valid, error_message)
+        - is_valid: True if path is valid, False otherwise
+        - error_message: Empty string if valid, error description if invalid
+
+    """
+    if not path or not path.strip():
+        return False, "Path cannot be empty"
+
+    # Normalize whitespace
+    path = path.strip()
+
+    # Check for path traversal attempts (cross-platform)
+    # Normalize path separators for checking
+    normalized = path.replace("\\", "/")
+    if ".." in normalized:
+        return False, "Path cannot contain '..'. Use a relative path like 'tests' or 'src/app' instead"
+
+    # Check for absolute paths, invalid characters, and validate path format
+    error_msg = ""
+    if Path(path).is_absolute():
+        error_msg = "Path must be relative, not absolute"
+    elif os.name == "nt":  # Windows
+        if any(char in _INVALID_CHARS_NT for char in path):
+            error_msg = "Path contains invalid characters for this operating system"
+    elif "\0" in path:  # Unix-like
+        error_msg = "Path contains invalid characters for this operating system"
+    else:
+        # Validate using pathlib to ensure it's a valid path structure
+        try:
+            Path(path)
+        except (ValueError, OSError) as e:
+            error_msg = f"Invalid path format: {e!s}"
+
+    if error_msg:
+        return False, error_msg
+    return True, ""

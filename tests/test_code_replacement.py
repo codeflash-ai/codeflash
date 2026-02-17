@@ -1,18 +1,22 @@
 from __future__ import annotations
-import re
-import libcst as cst
-from codeflash.code_utils.code_replacer import AutouseFixtureModifier, PytestMarkAdder, AddRequestArgument
+
 import dataclasses
 import os
+import re
 from collections import defaultdict
 from pathlib import Path
 
+import libcst as cst
+
 from codeflash.code_utils.code_extractor import delete___future___aliased_imports, find_preexisting_objects
 from codeflash.code_utils.code_replacer import (
+    AddRequestArgument,
+    AutouseFixtureModifier,
+    OptimFunctionCollector,
+    PytestMarkAdder,
     is_zero_diff,
     replace_functions_and_add_imports,
     replace_functions_in_file,
-    OptimFunctionCollector,
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, FunctionParent
@@ -77,7 +81,9 @@ def sorter(arr):
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code=original_helper_code
+        code_context=code_context,
+        optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_code),
+        original_helper_code=original_helper_code,
     )
     final_output = code_path.read_text(encoding="utf-8")
     assert "inconsequential_var = '123'" in final_output
@@ -1765,7 +1771,9 @@ class NewClass:
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code=original_helper_code
+        code_context=code_context,
+        optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_code),
+        original_helper_code=original_helper_code,
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -1842,7 +1850,9 @@ a=2
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code=original_helper_code
+        code_context=code_context,
+        optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_code),
+        original_helper_code=original_helper_code,
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -1920,7 +1930,9 @@ class NewClass:
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code=original_helper_code
+        code_context=code_context,
+        optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_code),
+        original_helper_code=original_helper_code,
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -1997,7 +2009,9 @@ class NewClass:
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code=original_helper_code
+        code_context=code_context,
+        optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_code),
+        original_helper_code=original_helper_code,
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -2075,7 +2089,9 @@ class NewClass:
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code=original_helper_code
+        code_context=code_context,
+        optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_code),
+        original_helper_code=original_helper_code,
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -2119,7 +2135,6 @@ print("Hello world")
     expected_code = """import numpy as np
 
 a = 6
-
 if 2<3:
     a=4
 else:
@@ -2164,7 +2179,9 @@ class NewClass:
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code=original_helper_code
+        code_context=code_context,
+        optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_code),
+        original_helper_code=original_helper_code,
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -2176,7 +2193,7 @@ class TestAutouseFixtureModifier:
 
     def test_modifies_autouse_fixture_with_pytest_decorator(self):
         """Test that autouse fixture with @pytest.fixture is modified correctly."""
-        source_code = '''
+        source_code = """
 import pytest
 
 @pytest.fixture(autouse=True)
@@ -2184,8 +2201,8 @@ def my_fixture(request):
     print("setup")
     yield
     print("teardown")
-'''
-        expected_code = '''
+"""
+        expected_code = """
 import pytest
 
 @pytest.fixture(autouse=True)
@@ -2196,7 +2213,7 @@ def my_fixture(request):
         print("setup")
         yield
         print("teardown")
-'''
+"""
         module = cst.parse_module(source_code)
         modifier = AutouseFixtureModifier()
         modified_module = module.visit(modifier)
@@ -2207,7 +2224,7 @@ def my_fixture(request):
 
     def test_modifies_autouse_fixture_with_fixture_decorator(self):
         """Test that autouse fixture with @fixture is modified correctly."""
-        source_code = '''
+        source_code = """
 from pytest import fixture
 
 @fixture(autouse=True)
@@ -2215,8 +2232,8 @@ def my_fixture(request):
     setup_code()
     yield "value"
     cleanup_code()
-'''
-        expected_code = '''
+"""
+        expected_code = """
 from pytest import fixture
 
 @fixture(autouse=True)
@@ -2227,7 +2244,7 @@ def my_fixture(request):
         setup_code()
         yield "value"
         cleanup_code()
-'''
+"""
         module = cst.parse_module(source_code)
         modifier = AutouseFixtureModifier()
         modified_module = module.visit(modifier)
@@ -2237,7 +2254,7 @@ def my_fixture(request):
 
     def test_ignores_non_autouse_fixture(self):
         """Test that non-autouse fixtures are not modified."""
-        source_code = '''
+        source_code = """
 import pytest
 
 @pytest.fixture
@@ -2247,7 +2264,7 @@ def my_fixture(request):
 @pytest.fixture(scope="session")
 def session_fixture():
     return "session_value"
-'''
+"""
         module = cst.parse_module(source_code)
         modifier = AutouseFixtureModifier()
         modified_module = module.visit(modifier)
@@ -2257,14 +2274,14 @@ def session_fixture():
 
     def test_ignores_regular_functions(self):
         """Test that regular functions are not modified."""
-        source_code = '''
+        source_code = """
 def regular_function():
     return "not a fixture"
 
 @some_other_decorator
 def decorated_function():
     return "also not a fixture"
-'''
+"""
         module = cst.parse_module(source_code)
         modifier = AutouseFixtureModifier()
         modified_module = module.visit(modifier)
@@ -2274,7 +2291,7 @@ def decorated_function():
 
     def test_handles_multiple_autouse_fixtures(self):
         """Test that multiple autouse fixtures in the same file are all modified."""
-        source_code = '''
+        source_code = """
 import pytest
 
 @pytest.fixture(autouse=True)
@@ -2284,8 +2301,8 @@ def fixture_one(request):
 @pytest.fixture(autouse=True)  
 def fixture_two(request):
     yield "two"
-'''
-        expected_code = '''
+"""
+        expected_code = """
 import pytest
 
 @pytest.fixture(autouse=True)
@@ -2301,18 +2318,18 @@ def fixture_two(request):
         yield
     else:
         yield "two"
-'''
+"""
         module = cst.parse_module(source_code)
         modifier = AutouseFixtureModifier()
         modified_module = module.visit(modifier)
 
         # Both fixtures should be modified
         code = modified_module.code
-        assert code==expected_code
+        assert code == expected_code
 
     def test_preserves_fixture_with_complex_body(self):
         """Test that fixtures with complex bodies are handled correctly."""
-        source_code = '''
+        source_code = """
 import pytest
 
 @pytest.fixture(autouse=True)
@@ -2324,8 +2341,8 @@ def complex_fixture(request):
     finally:
         cleanup_database()
         reset_logging()
-'''
-        expected_code = '''
+"""
+        expected_code = """
 import pytest
 
 @pytest.fixture(autouse=True)
@@ -2340,13 +2357,13 @@ def complex_fixture(request):
         finally:
             cleanup_database()
             reset_logging()
-'''
+"""
         module = cst.parse_module(source_code)
         modifier = AutouseFixtureModifier()
         modified_module = module.visit(modifier)
 
         code = modified_module.code
-        assert code.rstrip()==expected_code.rstrip()
+        assert code.rstrip() == expected_code.rstrip()
 
 
 class TestPytestMarkAdder:
@@ -2354,73 +2371,73 @@ class TestPytestMarkAdder:
 
     def test_adds_pytest_import_when_missing(self):
         """Test that pytest import is added when not present."""
-        source_code = '''
+        source_code = """
 def test_something():
     assert True
-'''
-        expected_code = '''
+"""
+        expected_code = """
 import pytest
 @pytest.mark.codeflash_no_autouse
 def test_something():
     assert True
-'''
+"""
         module = cst.parse_module(source_code)
         mark_adder = PytestMarkAdder("codeflash_no_autouse")
         modified_module = module.visit(mark_adder)
 
         code = modified_module.code
-        assert code==expected_code
+        assert code == expected_code
 
     def test_skips_pytest_import_when_present(self):
         """Test that pytest import is not duplicated when already present."""
-        source_code = '''
+        source_code = """
 import pytest
 
 def test_something():
     assert True
-'''
-        expected_code = '''
+"""
+        expected_code = """
 import pytest
 
 @pytest.mark.codeflash_no_autouse
 def test_something():
     assert True
-'''
+"""
         module = cst.parse_module(source_code)
         mark_adder = PytestMarkAdder("codeflash_no_autouse")
         modified_module = module.visit(mark_adder)
 
         code = modified_module.code
         # Should only have one import pytest line
-        assert code==expected_code
+        assert code == expected_code
 
     def test_handles_from_pytest_import(self):
         """Test that existing 'from pytest import ...' is recognized."""
-        source_code = '''
+        source_code = """
 from pytest import fixture
 
 def test_something():
     assert True
-'''
-        expected_code = '''
+"""
+        expected_code = """
 import pytest
 from pytest import fixture
 
 @pytest.mark.codeflash_no_autouse
 def test_something():
     assert True
-        '''
+        """
         module = cst.parse_module(source_code)
         mark_adder = PytestMarkAdder("codeflash_no_autouse")
         modified_module = module.visit(mark_adder)
 
         code = modified_module.code
         # Should not add import pytest since pytest is already imported
-        assert code.strip()==expected_code.strip()
+        assert code.strip() == expected_code.strip()
 
     def test_adds_mark_to_all_functions(self):
         """Test that marks are added to all functions in the module."""
-        source_code = '''
+        source_code = """
 import pytest
 
 def test_first():
@@ -2431,8 +2448,8 @@ def test_second():
 
 def helper_function():
     return "not a test"
-'''
-        expected_code = '''
+"""
+        expected_code = """
 import pytest
 
 @pytest.mark.codeflash_no_autouse
@@ -2446,18 +2463,18 @@ def test_second():
 @pytest.mark.codeflash_no_autouse
 def helper_function():
     return "not a test"
-'''
+"""
         module = cst.parse_module(source_code)
         mark_adder = PytestMarkAdder("codeflash_no_autouse")
         modified_module = module.visit(mark_adder)
 
         code = modified_module.code
         # All functions should get the mark
-        assert code==expected_code
+        assert code == expected_code
 
     def test_skips_existing_mark(self):
         """Test that existing marks are not duplicated."""
-        source_code = '''
+        source_code = """
 import pytest
 
 @pytest.mark.codeflash_no_autouse
@@ -2466,8 +2483,8 @@ def test_already_marked():
 
 def test_needs_mark():
     assert True
-'''
-        expected_code = '''
+"""
+        expected_code = """
 import pytest
 
 @pytest.mark.codeflash_no_autouse
@@ -2477,48 +2494,48 @@ def test_already_marked():
 @pytest.mark.codeflash_no_autouse
 def test_needs_mark():
     assert True
-'''
+"""
         module = cst.parse_module(source_code)
         mark_adder = PytestMarkAdder("codeflash_no_autouse")
         modified_module = module.visit(mark_adder)
 
         code = modified_module.code
         # Should have exactly 2 marks total (one existing, one added)
-        assert code==expected_code
+        assert code == expected_code
 
     def test_handles_different_mark_names(self):
         """Test that different mark names work correctly."""
-        source_code = '''
+        source_code = """
 import pytest
 
 def test_something():
     assert True
-'''
-        expected_code = '''
+"""
+        expected_code = """
 import pytest
 
 @pytest.mark.slow
 def test_something():
     assert True
-'''
+"""
         module = cst.parse_module(source_code)
         mark_adder = PytestMarkAdder("slow")
         modified_module = module.visit(mark_adder)
 
         code = modified_module.code
-        assert code==expected_code
+        assert code == expected_code
 
     def test_preserves_existing_decorators(self):
         """Test that existing decorators are preserved."""
-        source_code = '''
+        source_code = """
 import pytest
 
 @pytest.mark.parametrize("value", [1, 2, 3])
 @pytest.fixture
 def test_with_decorators():
     assert True
-'''
-        expected_code = '''
+"""
+        expected_code = """
 import pytest
 
 @pytest.mark.parametrize("value", [1, 2, 3])
@@ -2526,17 +2543,17 @@ import pytest
 @pytest.mark.codeflash_no_autouse
 def test_with_decorators():
     assert True
-'''
+"""
         module = cst.parse_module(source_code)
         mark_adder = PytestMarkAdder("codeflash_no_autouse")
         modified_module = module.visit(mark_adder)
 
         code = modified_module.code
-        assert code==expected_code
+        assert code == expected_code
 
     def test_handles_call_style_existing_marks(self):
         """Test recognition of existing marks in call style (with parentheses)."""
-        source_code = '''
+        source_code = """
 import pytest
 
 @pytest.mark.codeflash_no_autouse()
@@ -2545,8 +2562,8 @@ def test_with_call_mark():
 
 def test_needs_mark():
     assert True
-'''
-        expected_code = '''
+"""
+        expected_code = """
 import pytest
 
 @pytest.mark.codeflash_no_autouse()
@@ -2556,45 +2573,45 @@ def test_with_call_mark():
 @pytest.mark.codeflash_no_autouse
 def test_needs_mark():
     assert True
-'''
+"""
         module = cst.parse_module(source_code)
         mark_adder = PytestMarkAdder("codeflash_no_autouse")
         modified_module = module.visit(mark_adder)
 
         code = modified_module.code
         # Should recognize the existing call-style mark and not duplicate
-        assert code==expected_code
+        assert code == expected_code
 
     def test_empty_module(self):
         """Test handling of empty module."""
-        source_code = ''
+        source_code = ""
         module = cst.parse_module(source_code)
         mark_adder = PytestMarkAdder("codeflash_no_autouse")
         modified_module = module.visit(mark_adder)
 
         # Should just add the import
         code = modified_module.code
-        assert code =='import pytest'
+        assert code == "import pytest"
 
     def test_module_with_only_imports(self):
         """Test handling of module with only imports."""
-        source_code = '''
+        source_code = """
 import os
 import sys
 from pathlib import Path
-'''
-        expected_code = '''
+"""
+        expected_code = """
 import pytest
 import os
 import sys
 from pathlib import Path
-'''
+"""
         module = cst.parse_module(source_code)
         mark_adder = PytestMarkAdder("codeflash_no_autouse")
         modified_module = module.visit(mark_adder)
 
         code = modified_module.code
-        assert code==expected_code
+        assert code == expected_code
 
 
 class TestIntegration:
@@ -2602,7 +2619,7 @@ class TestIntegration:
 
     def test_all_transformers_together(self):
         """Test that all three transformers can work on the same code."""
-        source_code = '''
+        source_code = """
 import pytest
 
 @pytest.fixture(autouse=True)
@@ -2611,8 +2628,8 @@ def my_fixture():
 
 def test_something():
     assert True
-'''
-        expected_code = '''
+"""
+        expected_code = """
 import pytest
 
 @pytest.fixture(autouse=True)
@@ -2626,7 +2643,7 @@ def my_fixture(request):
 @pytest.mark.codeflash_no_autouse
 def test_something():
     assert True
-'''
+"""
         # First apply AddRequestArgument
         module = cst.parse_module(source_code)
         request_adder = AddRequestArgument()
@@ -2645,7 +2662,7 @@ def test_something():
 
     def test_transformers_with_existing_request_parameter(self):
         """Test transformers when request parameter already exists."""
-        source_code = '''
+        source_code = """
 import pytest
 
 @pytest.fixture(autouse=True)
@@ -2656,8 +2673,8 @@ def my_fixture(request):
 
 def test_something():
     assert True
-'''
-        expected_code = '''
+"""
+        expected_code = """
 import pytest
 
 @pytest.fixture(autouse=True)
@@ -2673,7 +2690,7 @@ def my_fixture(request):
 @pytest.mark.codeflash_no_autouse
 def test_something():
     assert True
-'''
+"""
         # Apply all transformers in sequence
         module = cst.parse_module(source_code)
         request_adder = AddRequestArgument()
@@ -2690,7 +2707,7 @@ def test_something():
 
     def test_transformers_with_self_parameter(self):
         """Test transformers when fixture has self parameter."""
-        source_code = '''
+        source_code = """
 import pytest
 
 @pytest.fixture(autouse=True)
@@ -2699,8 +2716,8 @@ def my_fixture(self):
 
 def test_something():
     assert True
-'''
-        expected_code = '''
+"""
+        expected_code = """
 import pytest
 
 @pytest.fixture(autouse=True)
@@ -2714,7 +2731,7 @@ def my_fixture(self, request):
 @pytest.mark.codeflash_no_autouse
 def test_something():
     assert True
-'''
+"""
         # Apply all transformers in sequence
         module = cst.parse_module(source_code)
         request_adder = AddRequestArgument()
@@ -2731,7 +2748,7 @@ def test_something():
 
     def test_transformers_with_multiple_fixtures(self):
         """Test transformers with multiple autouse fixtures."""
-        source_code = '''
+        source_code = """
 import pytest
 
 @pytest.fixture(autouse=True)
@@ -2748,8 +2765,8 @@ def regular_fixture():
 
 def test_something():
     assert True
-'''
-        expected_code = '''
+"""
+        expected_code = """
 import pytest
 
 @pytest.fixture(autouse=True)
@@ -2776,7 +2793,7 @@ def regular_fixture():
 @pytest.mark.codeflash_no_autouse
 def test_something():
     assert True
-'''
+"""
         # Apply all transformers in sequence
         module = cst.parse_module(source_code)
         request_adder = AddRequestArgument()
@@ -2792,23 +2809,21 @@ def test_something():
         assert final_module.code == expected_code
 
 
-
-
 class TestAddRequestArgument:
     """Test cases for AddRequestArgument transformer."""
 
     def test_adds_request_to_autouse_fixture_no_existing_args(self):
         """Test adding request argument to autouse fixture with no existing arguments."""
-        source_code = '''
+        source_code = """
 @fixture(autouse=True)
 def my_fixture():
     pass
-'''
-        expected = '''
+"""
+        expected = """
 @fixture(autouse=True)
 def my_fixture(request):
     pass
-'''
+"""
 
         module = cst.parse_module(source_code)
         transformer = AddRequestArgument()
@@ -2818,16 +2833,16 @@ def my_fixture(request):
 
     def test_adds_request_to_pytest_fixture_autouse(self):
         """Test adding request argument to pytest.fixture with autouse=True."""
-        source_code = '''
+        source_code = """
 @pytest.fixture(autouse=True)
 def my_fixture():
     pass
-'''
-        expected = '''
+"""
+        expected = """
 @pytest.fixture(autouse=True)
 def my_fixture(request):
     pass
-'''
+"""
 
         module = cst.parse_module(source_code)
         transformer = AddRequestArgument()
@@ -2837,16 +2852,16 @@ def my_fixture(request):
 
     def test_adds_request_after_self_parameter(self):
         """Test adding request argument after self parameter."""
-        source_code = '''
+        source_code = """
 @fixture(autouse=True)
 def my_fixture(self):
     pass
-'''
-        expected = '''
+"""
+        expected = """
 @fixture(autouse=True)
 def my_fixture(self, request):
     pass
-'''
+"""
 
         module = cst.parse_module(source_code)
         transformer = AddRequestArgument()
@@ -2856,16 +2871,16 @@ def my_fixture(self, request):
 
     def test_adds_request_after_cls_parameter(self):
         """Test adding request argument after cls parameter."""
-        source_code = '''
+        source_code = """
 @fixture(autouse=True)
 def my_fixture(cls):
     pass
-'''
-        expected = '''
+"""
+        expected = """
 @fixture(autouse=True)
 def my_fixture(cls, request):
     pass
-'''
+"""
 
         module = cst.parse_module(source_code)
         transformer = AddRequestArgument()
@@ -2875,16 +2890,16 @@ def my_fixture(cls, request):
 
     def test_adds_request_before_other_parameters(self):
         """Test adding request argument before other parameters (not self/cls)."""
-        source_code = '''
+        source_code = """
 @fixture(autouse=True)
 def my_fixture(param1, param2):
     pass
-'''
-        expected = '''
+"""
+        expected = """
 @fixture(autouse=True)
 def my_fixture(request, param1, param2):
     pass
-'''
+"""
 
         module = cst.parse_module(source_code)
         transformer = AddRequestArgument()
@@ -2894,16 +2909,16 @@ def my_fixture(request, param1, param2):
 
     def test_adds_request_after_self_with_other_parameters(self):
         """Test adding request argument after self with other parameters."""
-        source_code = '''
+        source_code = """
 @fixture(autouse=True)
 def my_fixture(self, param1, param2):
     pass
-'''
-        expected = '''
+"""
+        expected = """
 @fixture(autouse=True)
 def my_fixture(self, request, param1, param2):
     pass
-'''
+"""
 
         module = cst.parse_module(source_code)
         transformer = AddRequestArgument()
@@ -2913,16 +2928,16 @@ def my_fixture(self, request, param1, param2):
 
     def test_skips_when_request_already_present(self):
         """Test that request argument is not added when already present."""
-        source_code = '''
+        source_code = """
 @fixture(autouse=True)
 def my_fixture(request):
     pass
-'''
-        expected = '''
+"""
+        expected = """
 @fixture(autouse=True)
 def my_fixture(request):
     pass
-'''
+"""
 
         module = cst.parse_module(source_code)
         transformer = AddRequestArgument()
@@ -2932,16 +2947,16 @@ def my_fixture(request):
 
     def test_skips_when_request_present_with_other_args(self):
         """Test that request argument is not added when already present with other args."""
-        source_code = '''
+        source_code = """
 @fixture(autouse=True)
 def my_fixture(self, request, param1):
     pass
-'''
-        expected = '''
+"""
+        expected = """
 @fixture(autouse=True)
 def my_fixture(self, request, param1):
     pass
-'''
+"""
 
         module = cst.parse_module(source_code)
         transformer = AddRequestArgument()
@@ -2951,16 +2966,16 @@ def my_fixture(self, request, param1):
 
     def test_ignores_non_autouse_fixture(self):
         """Test that non-autouse fixtures are not modified."""
-        source_code = '''
+        source_code = """
 @fixture
 def my_fixture():
     pass
-'''
-        expected = '''
+"""
+        expected = """
 @fixture
 def my_fixture():
     pass
-'''
+"""
 
         module = cst.parse_module(source_code)
         transformer = AddRequestArgument()
@@ -2970,16 +2985,16 @@ def my_fixture():
 
     def test_ignores_fixture_with_autouse_false(self):
         """Test that fixtures with autouse=False are not modified."""
-        source_code = '''
+        source_code = """
 @fixture(autouse=False)
 def my_fixture():
     pass
-'''
-        expected = '''
+"""
+        expected = """
 @fixture(autouse=False)
 def my_fixture():
     pass
-'''
+"""
 
         module = cst.parse_module(source_code)
         transformer = AddRequestArgument()
@@ -2989,14 +3004,14 @@ def my_fixture():
 
     def test_ignores_regular_function(self):
         """Test that regular functions are not modified."""
-        source_code = '''
+        source_code = """
 def my_function():
     pass
-'''
-        expected = '''
+"""
+        expected = """
 def my_function():
     pass
-'''
+"""
 
         module = cst.parse_module(source_code)
         transformer = AddRequestArgument()
@@ -3006,7 +3021,7 @@ def my_function():
 
     def test_handles_multiple_autouse_fixtures(self):
         """Test handling multiple autouse fixtures in the same module."""
-        source_code = '''
+        source_code = """
 @fixture(autouse=True)
 def fixture1():
     pass
@@ -3018,8 +3033,8 @@ def fixture2(self):
 @fixture(autouse=True)
 def fixture3(request):
     pass
-'''
-        expected = '''
+"""
+        expected = """
 @fixture(autouse=True)
 def fixture1(request):
     pass
@@ -3031,7 +3046,7 @@ def fixture2(self, request):
 @fixture(autouse=True)
 def fixture3(request):
     pass
-'''
+"""
 
         module = cst.parse_module(source_code)
         transformer = AddRequestArgument()
@@ -3041,20 +3056,20 @@ def fixture3(request):
 
     def test_handles_fixture_with_other_decorators(self):
         """Test handling fixture with other decorators."""
-        source_code = '''
+        source_code = """
 @some_decorator
 @fixture(autouse=True)
 @another_decorator
 def my_fixture():
     pass
-'''
-        expected = '''
+"""
+        expected = """
 @some_decorator
 @fixture(autouse=True)
 @another_decorator
 def my_fixture(request):
     pass
-'''
+"""
 
         module = cst.parse_module(source_code)
         transformer = AddRequestArgument()
@@ -3089,16 +3104,16 @@ def my_fixture(request):
 
     def test_handles_fixture_with_additional_arguments(self):
         """Test handling fixture with additional keyword arguments."""
-        source_code = '''
+        source_code = """
 @fixture(autouse=True, scope="session")
 def my_fixture():
     pass
-'''
-        expected = '''
+"""
+        expected = """
 @fixture(autouse=True, scope="session")
 def my_fixture(request):
     pass
-'''
+"""
 
         module = cst.parse_module(source_code)
         transformer = AddRequestArgument()
@@ -3225,7 +3240,6 @@ class HuggingFaceModel(Model):
         return tool_param
 """
 
-
     function_name: str = "HuggingFaceModel._map_tool_definition"
     preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = find_preexisting_objects(original_code)
     new_code: str = replace_functions_and_add_imports(
@@ -3238,9 +3252,16 @@ class HuggingFaceModel(Model):
     )
 
     assert not re.search(r"^import requests\b", new_code, re.MULTILINE)  # conditional simple import: import <name>
-    assert not re.search(r"^import aiohttp as aiohttp_\b", new_code, re.MULTILINE)  # conditional alias import: import <name> as <alias>
-    assert not re.search(r"^from math import pi as PI, sin as sine\b", new_code, re.MULTILINE)  # conditional multiple aliases imports
-    assert "from huggingface_hub import AsyncInferenceClient, ChatCompletionInputTool" not in new_code # conditional from import
+    assert not re.search(
+        r"^import aiohttp as aiohttp_\b", new_code, re.MULTILINE
+    )  # conditional alias import: import <name> as <alias>
+    assert not re.search(
+        r"^from math import pi as PI, sin as sine\b", new_code, re.MULTILINE
+    )  # conditional multiple aliases imports
+    assert (
+        "from huggingface_hub import AsyncInferenceClient, ChatCompletionInputTool" not in new_code
+    )  # conditional from import
+
 
 def test_top_level_global_assignments() -> None:
     root_dir = Path(__file__).parent.parent.resolve()
@@ -3438,7 +3459,9 @@ def hydrate_input_text_actions_with_field_names(
     return updated_actions_by_task
 '''
 
-    func = FunctionToOptimize(function_name="hydrate_input_text_actions_with_field_names", parents=[], file_path=main_file)
+    func = FunctionToOptimize(
+        function_name="hydrate_input_text_actions_with_field_names", parents=[], file_path=main_file
+    )
     test_config = TestConfig(
         tests_root=root_dir / "tests/pytest",
         tests_project_rootdir=root_dir,
@@ -3448,7 +3471,7 @@ def hydrate_input_text_actions_with_field_names(
     )
     func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
-    
+
     original_helper_code: dict[Path, str] = {}
     helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
     for helper_function_path in helper_function_paths:
@@ -3458,10 +3481,11 @@ def hydrate_input_text_actions_with_field_names(
 
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_markdown_code(optim_code), original_helper_code=original_helper_code
+        code_context=code_context,
+        optimized_code=CodeStringsMarkdown.parse_markdown_code(optim_code),
+        original_helper_code=original_helper_code,
     )
 
-  
     new_code = main_file.read_text(encoding="utf-8")
     main_file.unlink(missing_ok=True)
 
@@ -3472,7 +3496,7 @@ def hydrate_input_text_actions_with_field_names(
 def test_optim_function_collector_with_async_functions():
     """Test OptimFunctionCollector correctly collects async functions."""
     import libcst as cst
-    
+
     source_code = """
 def sync_function():
     return "sync"
@@ -3487,14 +3511,19 @@ class TestClass:
     async def async_method(self):
         return "async_method"
 """
-    
+
     tree = cst.parse_module(source_code)
     collector = OptimFunctionCollector(
-        function_names={(None, "sync_function"), (None, "async_function"), ("TestClass", "sync_method"), ("TestClass", "async_method")},
-        preexisting_objects=None
+        function_names={
+            (None, "sync_function"),
+            (None, "async_function"),
+            ("TestClass", "sync_method"),
+            ("TestClass", "async_method"),
+        },
+        preexisting_objects=None,
     )
     tree.visit(collector)
-    
+
     # Should collect both sync and async functions
     assert len(collector.modified_functions) == 4
     assert (None, "sync_function") in collector.modified_functions
@@ -3506,7 +3535,7 @@ class TestClass:
 def test_optim_function_collector_new_async_functions():
     """Test OptimFunctionCollector identifies new async functions not in preexisting objects."""
     import libcst as cst
-    
+
     source_code = """
 def existing_function():
     return "existing"
@@ -3521,23 +3550,23 @@ class ExistingClass:
     async def new_class_async_method(self):
         return "new_class_async"
 """
-    
+
     # Only existing_function is in preexisting objects
     preexisting_objects = {("existing_function", ())}
-    
+
     tree = cst.parse_module(source_code)
     collector = OptimFunctionCollector(
         function_names=set(),  # Not looking for specific functions
-        preexisting_objects=preexisting_objects
+        preexisting_objects=preexisting_objects,
     )
     tree.visit(collector)
-    
+
     # Should identify new functions (both sync and async)
     assert len(collector.new_functions) == 2
     function_names = [func.name.value for func in collector.new_functions]
     assert "new_async_function" in function_names
     assert "new_sync_function" in function_names
-    
+
     # Should identify new class methods
     assert "ExistingClass" in collector.new_class_functions
     assert len(collector.new_class_functions["ExistingClass"]) == 1
@@ -3547,7 +3576,7 @@ class ExistingClass:
 def test_optim_function_collector_mixed_scenarios():
     """Test OptimFunctionCollector with complex mix of sync/async functions and classes."""
     import libcst as cst
-    
+
     source_code = """
 # Global functions
 def global_sync():
@@ -3573,23 +3602,20 @@ class ChildClass:
     def child_sync_method(self):
         pass
 """
-    
+
     # Looking for specific functions
     function_names = {
         (None, "global_sync"),
-        (None, "global_async"), 
+        (None, "global_async"),
         ("ParentClass", "sync_method"),
         ("ParentClass", "async_method"),
-        ("ChildClass", "child_async_method")
+        ("ChildClass", "child_async_method"),
     }
-    
+
     tree = cst.parse_module(source_code)
-    collector = OptimFunctionCollector(
-        function_names=function_names,
-        preexisting_objects=None
-    )
+    collector = OptimFunctionCollector(function_names=function_names, preexisting_objects=None)
     tree.visit(collector)
-    
+
     # Should collect all specified functions (mix of sync and async)
     assert len(collector.modified_functions) == 5
     assert (None, "global_sync") in collector.modified_functions
@@ -3597,37 +3623,37 @@ class ChildClass:
     assert ("ParentClass", "sync_method") in collector.modified_functions
     assert ("ParentClass", "async_method") in collector.modified_functions
     assert ("ChildClass", "child_async_method") in collector.modified_functions
-    
+
     # Should collect __init__ method
     assert "ParentClass" in collector.modified_init_functions
 
 
-
 def test_is_zero_diff_async_sleep():
-    original_code = '''
+    original_code = """
 import time
 
 async def task():
     time.sleep(1)
     return "done"
-'''
-    optimized_code = '''
+"""
+    optimized_code = """
 import asyncio
 
 async def task():
     await asyncio.sleep(1)
     return "done"
-'''
+"""
     assert not is_zero_diff(original_code, optimized_code)
 
+
 def test_is_zero_diff_with_equivalent_code():
-    original_code = '''
+    original_code = """
 import asyncio
 
 async def task():
     await asyncio.sleep(1)
     return "done"
-'''
+"""
     optimized_code = '''
 import asyncio
 
@@ -3637,7 +3663,6 @@ async def task():
     return "done"
 '''
     assert is_zero_diff(original_code, optimized_code)
-
 
 
 def test_code_replacement_with_new_helper_class() -> None:

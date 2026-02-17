@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import platform
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -71,7 +70,6 @@ class InjectPerfOnly(ast.NodeTransformer):
         self,
         function: FunctionToOptimize,
         module_path: str,
-        test_framework: str,
         call_positions: list[CodePosition],
         mode: TestingMode = TestingMode.BEHAVIOR,
     ) -> None:
@@ -80,7 +78,6 @@ class InjectPerfOnly(ast.NodeTransformer):
         self.class_name = None
         self.only_function_name = function.function_name
         self.module_path = module_path
-        self.test_framework = test_framework
         self.call_positions = call_positions
         if len(function.parents) == 1 and function.parents[0].type == "ClassDef":
             self.class_name = function.top_level_parent_name
@@ -92,7 +89,7 @@ class InjectPerfOnly(ast.NodeTransformer):
         # it's much more efficient to visit nodes manually. We'll only descend into expressions/statements.
 
         # Helper for manual walk
-        def iter_ast_calls(node):  # noqa: ANN202, ANN001
+        def iter_ast_calls(node):
             # Generator to yield each ast.Call in test_node, preserves node identity
             stack = [node]
             while stack:
@@ -105,7 +102,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                     if isinstance(value, list):
                         for item in reversed(value):
                             if isinstance(item, ast.AST):
-                                stack.append(item)  # noqa: PERF401
+                                stack.append(item)
                     elif isinstance(value, ast.AST):
                         stack.append(value)
 
@@ -329,17 +326,6 @@ class InjectPerfOnly(ast.NodeTransformer):
     def visit_FunctionDef(self, node: ast.FunctionDef, test_class_name: str | None = None) -> ast.FunctionDef:
         if node.name.startswith("test_"):
             did_update = False
-            if self.test_framework == "unittest" and platform.system() != "Windows":
-                # Only add timeout decorator on non-Windows platforms
-                # Windows doesn't support SIGALRM signal required by timeout_decorator
-
-                node.decorator_list.append(
-                    ast.Call(
-                        func=ast.Name(id="timeout_decorator.timeout", ctx=ast.Load()),
-                        args=[ast.Constant(value=15)],
-                        keywords=[],
-                    )
-                )
             i = len(node.body) - 1
             while i >= 0:
                 line_node = node.body[i]
@@ -487,7 +473,6 @@ class AsyncCallInstrumenter(ast.NodeTransformer):
         self,
         function: FunctionToOptimize,
         module_path: str,
-        test_framework: str,
         call_positions: list[CodePosition],
         mode: TestingMode = TestingMode.BEHAVIOR,
     ) -> None:
@@ -496,7 +481,6 @@ class AsyncCallInstrumenter(ast.NodeTransformer):
         self.class_name = None
         self.only_function_name = function.function_name
         self.module_path = module_path
-        self.test_framework = test_framework
         self.call_positions = call_positions
         self.did_instrument = False
         # Track function call count per test function
@@ -505,25 +489,6 @@ class AsyncCallInstrumenter(ast.NodeTransformer):
             self.class_name = function.top_level_parent_name
 
     def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
-        # Add timeout decorator for unittest test classes if needed
-        if self.test_framework == "unittest":
-            timeout_decorator = ast.Call(
-                func=ast.Name(id="timeout_decorator.timeout", ctx=ast.Load()),
-                args=[ast.Constant(value=15)],
-                keywords=[],
-            )
-            for item in node.body:
-                if (
-                    isinstance(item, ast.FunctionDef)
-                    and item.name.startswith("test_")
-                    and not any(
-                        isinstance(d, ast.Call)
-                        and isinstance(d.func, ast.Name)
-                        and d.func.id == "timeout_decorator.timeout"
-                        for d in item.decorator_list
-                    )
-                ):
-                    item.decorator_list.append(timeout_decorator)
         return self.generic_visit(node)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef:
@@ -542,25 +507,6 @@ class AsyncCallInstrumenter(ast.NodeTransformer):
     def _process_test_function(
         self, node: ast.AsyncFunctionDef | ast.FunctionDef
     ) -> ast.AsyncFunctionDef | ast.FunctionDef:
-        # Optimize the search for decorator presence
-        if self.test_framework == "unittest":
-            found_timeout = False
-            for d in node.decorator_list:
-                # Avoid isinstance(d.func, ast.Name) if d is not ast.Call
-                if isinstance(d, ast.Call):
-                    f = d.func
-                    # Avoid attribute lookup if f is not ast.Name
-                    if isinstance(f, ast.Name) and f.id == "timeout_decorator.timeout":
-                        found_timeout = True
-                        break
-            if not found_timeout:
-                timeout_decorator = ast.Call(
-                    func=ast.Name(id="timeout_decorator.timeout", ctx=ast.Load()),
-                    args=[ast.Constant(value=15)],
-                    keywords=[],
-                )
-                node.decorator_list.append(timeout_decorator)
-
         # Initialize counter for this test function
         if node.name not in self.async_call_counter:
             self.async_call_counter[node.name] = 0
@@ -689,7 +635,6 @@ def inject_async_profiling_into_existing_test(
     call_positions: list[CodePosition],
     function_to_optimize: FunctionToOptimize,
     tests_project_root: Path,
-    test_framework: str,
     mode: TestingMode = TestingMode.BEHAVIOR,
 ) -> tuple[bool, str | None]:
     """Inject profiling for async function calls by setting environment variables before each call."""
@@ -707,7 +652,7 @@ def inject_async_profiling_into_existing_test(
     import_visitor.visit(tree)
     func = import_visitor.imported_as
 
-    async_instrumenter = AsyncCallInstrumenter(func, test_module_path, test_framework, call_positions, mode=mode)
+    async_instrumenter = AsyncCallInstrumenter(func, test_module_path, call_positions, mode=mode)
     tree = async_instrumenter.visit(tree)
 
     if not async_instrumenter.did_instrument:
@@ -715,11 +660,46 @@ def inject_async_profiling_into_existing_test(
 
     # Add necessary imports
     new_imports = [ast.Import(names=[ast.alias(name="os")])]
-    if test_framework == "unittest":
-        new_imports.append(ast.Import(names=[ast.alias(name="timeout_decorator")]))
 
     tree.body = [*new_imports, *tree.body]
     return True, sort_imports(ast.unparse(tree), float_to_top=True)
+
+
+def detect_frameworks_from_code(code: str) -> dict[str, str]:
+    """Detect GPU/device frameworks (torch, tensorflow, jax) used in the code by analyzing imports.
+
+    Returns:
+        A dictionary mapping framework names to their import aliases.
+        For example: {"torch": "th", "tensorflow": "tf", "jax": "jax"}
+
+    """
+    frameworks: dict[str, str] = {}
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return frameworks
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                module_name = alias.name.split(".")[0]
+                if module_name == "torch":
+                    # Use asname if available, otherwise use the module name
+                    frameworks["torch"] = alias.asname if alias.asname else module_name
+                elif module_name == "tensorflow":
+                    frameworks["tensorflow"] = alias.asname if alias.asname else module_name
+                elif module_name == "jax":
+                    frameworks["jax"] = alias.asname if alias.asname else module_name
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            module_name = node.module.split(".")[0]
+            if module_name == "torch" and "torch" not in frameworks:
+                frameworks["torch"] = module_name
+            elif module_name == "tensorflow" and "tensorflow" not in frameworks:
+                frameworks["tensorflow"] = module_name
+            elif module_name == "jax" and "jax" not in frameworks:
+                frameworks["jax"] = module_name
+
+    return frameworks
 
 
 def inject_profiling_into_existing_test(
@@ -727,16 +707,17 @@ def inject_profiling_into_existing_test(
     call_positions: list[CodePosition],
     function_to_optimize: FunctionToOptimize,
     tests_project_root: Path,
-    test_framework: str,
     mode: TestingMode = TestingMode.BEHAVIOR,
 ) -> tuple[bool, str | None]:
     if function_to_optimize.is_async:
         return inject_async_profiling_into_existing_test(
-            test_path, call_positions, function_to_optimize, tests_project_root, test_framework, mode
+            test_path, call_positions, function_to_optimize, tests_project_root, mode
         )
 
     with test_path.open(encoding="utf8") as f:
         test_code = f.read()
+
+    used_frameworks = detect_frameworks_from_code(test_code)
     try:
         tree = ast.parse(test_code)
     except SyntaxError:
@@ -748,7 +729,7 @@ def inject_profiling_into_existing_test(
     import_visitor.visit(tree)
     func = import_visitor.imported_as
 
-    tree = InjectPerfOnly(func, test_module_path, test_framework, call_positions, mode=mode).visit(tree)
+    tree = InjectPerfOnly(func, test_module_path, call_positions, mode=mode).visit(tree)
     new_imports = [
         ast.Import(names=[ast.alias(name="time")]),
         ast.Import(names=[ast.alias(name="gc")]),
@@ -762,15 +743,296 @@ def inject_profiling_into_existing_test(
                 ast.Import(names=[ast.alias(name="dill", asname="pickle")]),
             ]
         )
-    if test_framework == "unittest" and platform.system() != "Windows":
-        new_imports.append(ast.Import(names=[ast.alias(name="timeout_decorator")]))
-    additional_functions = [create_wrapper_function(mode)]
+    # Add framework imports for GPU sync code (needed when framework is only imported via submodule)
+    for framework_name, framework_alias in used_frameworks.items():
+        if framework_alias == framework_name:
+            # Only add import if we're using the framework name directly (not an alias)
+            # This handles cases like "from torch.nn import Module" where torch needs to be imported
+            new_imports.append(ast.Import(names=[ast.alias(name=framework_name)]))
+        else:
+            # If there's an alias, use it (e.g., "import torch as th")
+            new_imports.append(ast.Import(names=[ast.alias(name=framework_name, asname=framework_alias)]))
+    additional_functions = [create_wrapper_function(mode, used_frameworks)]
 
     tree.body = [*new_imports, *additional_functions, *tree.body]
     return True, sort_imports(ast.unparse(tree), float_to_top=True)
 
 
-def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.FunctionDef:
+def _create_device_sync_precompute_statements(used_frameworks: dict[str, str] | None) -> list[ast.stmt]:
+    """Create AST statements to pre-compute device sync conditions before profiling.
+
+    This moves the conditional checks (like is_available(), hasattr(), etc.) outside
+    the timing block to avoid their overhead affecting the measurements.
+
+    Args:
+        used_frameworks: Dict mapping framework names to their import aliases
+
+    Returns:
+        List of AST statements that pre-compute sync conditions into boolean variables
+
+    """
+    if not used_frameworks:
+        return []
+
+    precompute_statements: list[ast.stmt] = []
+
+    # PyTorch: pre-compute whether to sync CUDA or MPS
+    if "torch" in used_frameworks:
+        torch_alias = used_frameworks["torch"]
+        # _codeflash_should_sync_cuda = torch.cuda.is_available() and torch.cuda.is_initialized()
+        precompute_statements.append(
+            ast.Assign(
+                targets=[ast.Name(id="_codeflash_should_sync_cuda", ctx=ast.Store())],
+                value=ast.BoolOp(
+                    op=ast.And(),
+                    values=[
+                        ast.Call(
+                            func=ast.Attribute(
+                                value=ast.Attribute(
+                                    value=ast.Name(id=torch_alias, ctx=ast.Load()), attr="cuda", ctx=ast.Load()
+                                ),
+                                attr="is_available",
+                                ctx=ast.Load(),
+                            ),
+                            args=[],
+                            keywords=[],
+                        ),
+                        ast.Call(
+                            func=ast.Attribute(
+                                value=ast.Attribute(
+                                    value=ast.Name(id=torch_alias, ctx=ast.Load()), attr="cuda", ctx=ast.Load()
+                                ),
+                                attr="is_initialized",
+                                ctx=ast.Load(),
+                            ),
+                            args=[],
+                            keywords=[],
+                        ),
+                    ],
+                ),
+                lineno=1,
+            )
+        )
+        # _codeflash_should_sync_mps = (not _codeflash_should_sync_cuda and
+        #     hasattr(torch.backends, 'mps') and torch.backends.mps.is_available() and
+        #     hasattr(torch.mps, 'synchronize'))
+        precompute_statements.append(
+            ast.Assign(
+                targets=[ast.Name(id="_codeflash_should_sync_mps", ctx=ast.Store())],
+                value=ast.BoolOp(
+                    op=ast.And(),
+                    values=[
+                        ast.UnaryOp(op=ast.Not(), operand=ast.Name(id="_codeflash_should_sync_cuda", ctx=ast.Load())),
+                        ast.Call(
+                            func=ast.Name(id="hasattr", ctx=ast.Load()),
+                            args=[
+                                ast.Attribute(
+                                    value=ast.Name(id=torch_alias, ctx=ast.Load()), attr="backends", ctx=ast.Load()
+                                ),
+                                ast.Constant(value="mps"),
+                            ],
+                            keywords=[],
+                        ),
+                        ast.Call(
+                            func=ast.Attribute(
+                                value=ast.Attribute(
+                                    value=ast.Attribute(
+                                        value=ast.Name(id=torch_alias, ctx=ast.Load()), attr="backends", ctx=ast.Load()
+                                    ),
+                                    attr="mps",
+                                    ctx=ast.Load(),
+                                ),
+                                attr="is_available",
+                                ctx=ast.Load(),
+                            ),
+                            args=[],
+                            keywords=[],
+                        ),
+                        ast.Call(
+                            func=ast.Name(id="hasattr", ctx=ast.Load()),
+                            args=[
+                                ast.Attribute(
+                                    value=ast.Name(id=torch_alias, ctx=ast.Load()), attr="mps", ctx=ast.Load()
+                                ),
+                                ast.Constant(value="synchronize"),
+                            ],
+                            keywords=[],
+                        ),
+                    ],
+                ),
+                lineno=1,
+            )
+        )
+
+    # JAX: pre-compute whether jax.block_until_ready exists
+    if "jax" in used_frameworks:
+        jax_alias = used_frameworks["jax"]
+        # _codeflash_should_sync_jax = hasattr(jax, 'block_until_ready')
+        precompute_statements.append(
+            ast.Assign(
+                targets=[ast.Name(id="_codeflash_should_sync_jax", ctx=ast.Store())],
+                value=ast.Call(
+                    func=ast.Name(id="hasattr", ctx=ast.Load()),
+                    args=[ast.Name(id=jax_alias, ctx=ast.Load()), ast.Constant(value="block_until_ready")],
+                    keywords=[],
+                ),
+                lineno=1,
+            )
+        )
+
+    # TensorFlow: pre-compute whether tf.test.experimental.sync_devices exists
+    if "tensorflow" in used_frameworks:
+        tf_alias = used_frameworks["tensorflow"]
+        # _codeflash_should_sync_tf = hasattr(tf.test.experimental, 'sync_devices')
+        precompute_statements.append(
+            ast.Assign(
+                targets=[ast.Name(id="_codeflash_should_sync_tf", ctx=ast.Store())],
+                value=ast.Call(
+                    func=ast.Name(id="hasattr", ctx=ast.Load()),
+                    args=[
+                        ast.Attribute(
+                            value=ast.Attribute(
+                                value=ast.Name(id=tf_alias, ctx=ast.Load()), attr="test", ctx=ast.Load()
+                            ),
+                            attr="experimental",
+                            ctx=ast.Load(),
+                        ),
+                        ast.Constant(value="sync_devices"),
+                    ],
+                    keywords=[],
+                ),
+                lineno=1,
+            )
+        )
+
+    return precompute_statements
+
+
+def _create_device_sync_statements(
+    used_frameworks: dict[str, str] | None, for_return_value: bool = False
+) -> list[ast.stmt]:
+    """Create AST statements for device synchronization using pre-computed conditions.
+
+    Args:
+        used_frameworks: Dict mapping framework names to their import aliases
+                        (e.g., {'torch': 'th', 'tensorflow': 'tf', 'jax': 'jax'})
+        for_return_value: If True, creates sync for after function call (includes JAX block_until_ready)
+
+    Returns:
+        List of AST statements for device synchronization using pre-computed boolean variables
+
+    """
+    if not used_frameworks:
+        return []
+
+    sync_statements: list[ast.stmt] = []
+
+    # PyTorch synchronization using pre-computed conditions
+    if "torch" in used_frameworks:
+        torch_alias = used_frameworks["torch"]
+        # if _codeflash_should_sync_cuda:
+        #     torch.cuda.synchronize()
+        # elif _codeflash_should_sync_mps:
+        #     torch.mps.synchronize()
+        cuda_sync = ast.If(
+            test=ast.Name(id="_codeflash_should_sync_cuda", ctx=ast.Load()),
+            body=[
+                ast.Expr(
+                    value=ast.Call(
+                        func=ast.Attribute(
+                            value=ast.Attribute(
+                                value=ast.Name(id=torch_alias, ctx=ast.Load()), attr="cuda", ctx=ast.Load()
+                            ),
+                            attr="synchronize",
+                            ctx=ast.Load(),
+                        ),
+                        args=[],
+                        keywords=[],
+                    )
+                )
+            ],
+            orelse=[
+                ast.If(
+                    test=ast.Name(id="_codeflash_should_sync_mps", ctx=ast.Load()),
+                    body=[
+                        ast.Expr(
+                            value=ast.Call(
+                                func=ast.Attribute(
+                                    value=ast.Attribute(
+                                        value=ast.Name(id=torch_alias, ctx=ast.Load()), attr="mps", ctx=ast.Load()
+                                    ),
+                                    attr="synchronize",
+                                    ctx=ast.Load(),
+                                ),
+                                args=[],
+                                keywords=[],
+                            )
+                        )
+                    ],
+                    orelse=[],
+                )
+            ],
+        )
+        sync_statements.append(cuda_sync)
+
+    # JAX synchronization (only after function call, using block_until_ready on return value)
+    if "jax" in used_frameworks and for_return_value:
+        jax_alias = used_frameworks["jax"]
+        # if _codeflash_should_sync_jax:
+        #     jax.block_until_ready(return_value)
+        jax_sync = ast.If(
+            test=ast.Name(id="_codeflash_should_sync_jax", ctx=ast.Load()),
+            body=[
+                ast.Expr(
+                    value=ast.Call(
+                        func=ast.Attribute(
+                            value=ast.Name(id=jax_alias, ctx=ast.Load()), attr="block_until_ready", ctx=ast.Load()
+                        ),
+                        args=[ast.Name(id="return_value", ctx=ast.Load())],
+                        keywords=[],
+                    )
+                )
+            ],
+            orelse=[],
+        )
+        sync_statements.append(jax_sync)
+
+    # TensorFlow synchronization using pre-computed condition
+    if "tensorflow" in used_frameworks:
+        tf_alias = used_frameworks["tensorflow"]
+        # if _codeflash_should_sync_tf:
+        #     tf.test.experimental.sync_devices()
+        tf_sync = ast.If(
+            test=ast.Name(id="_codeflash_should_sync_tf", ctx=ast.Load()),
+            body=[
+                ast.Expr(
+                    value=ast.Call(
+                        func=ast.Attribute(
+                            value=ast.Attribute(
+                                value=ast.Attribute(
+                                    value=ast.Name(id=tf_alias, ctx=ast.Load()), attr="test", ctx=ast.Load()
+                                ),
+                                attr="experimental",
+                                ctx=ast.Load(),
+                            ),
+                            attr="sync_devices",
+                            ctx=ast.Load(),
+                        ),
+                        args=[],
+                        keywords=[],
+                    )
+                )
+            ],
+            orelse=[],
+        )
+        sync_statements.append(tf_sync)
+
+    return sync_statements
+
+
+def create_wrapper_function(
+    mode: TestingMode = TestingMode.BEHAVIOR, used_frameworks: dict[str, str] | None = None
+) -> ast.FunctionDef:
     lineno = 1
     wrapper_body: list[ast.stmt] = [
         ast.Assign(
@@ -931,6 +1193,8 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
         ast.Assign(
             targets=[ast.Name(id="exception", ctx=ast.Store())], value=ast.Constant(value=None), lineno=lineno + 10
         ),
+        # Pre-compute device sync conditions before profiling to avoid overhead during timing
+        *_create_device_sync_precompute_statements(used_frameworks),
         ast.Expr(
             value=ast.Call(
                 func=ast.Attribute(value=ast.Name(id="gc", ctx=ast.Load()), attr="disable", ctx=ast.Load()),
@@ -941,6 +1205,8 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
         ),
         ast.Try(
             body=[
+                # Pre-sync: synchronize device before starting timer
+                *_create_device_sync_statements(used_frameworks, for_return_value=False),
                 ast.Assign(
                     targets=[ast.Name(id="counter", ctx=ast.Store())],
                     value=ast.Call(
@@ -961,6 +1227,8 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                     ),
                     lineno=lineno + 12,
                 ),
+                # Post-sync: synchronize device after function call to ensure all device work is complete
+                *_create_device_sync_statements(used_frameworks, for_return_value=True),
                 ast.Assign(
                     targets=[ast.Name(id="codeflash_duration", ctx=ast.Store())],
                     value=ast.BinOp(
@@ -1169,15 +1437,18 @@ class AsyncDecoratorAdder(cst.CSTTransformer):
         self.added_decorator = False
 
         # Choose decorator based on mode
-        self.decorator_name = (
-            "codeflash_behavior_async" if mode == TestingMode.BEHAVIOR else "codeflash_performance_async"
-        )
+        if mode == TestingMode.BEHAVIOR:
+            self.decorator_name = "codeflash_behavior_async"
+        elif mode == TestingMode.CONCURRENCY:
+            self.decorator_name = "codeflash_concurrency_async"
+        else:
+            self.decorator_name = "codeflash_performance_async"
 
     def visit_ClassDef(self, node: cst.ClassDef) -> None:
         # Track when we enter a class
         self.context_stack.append(node.name.value)
 
-    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:  # noqa: ARG002
+    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:
         # Pop the context when we leave a class
         self.context_stack.pop()
         return updated_node
@@ -1214,12 +1485,14 @@ class AsyncDecoratorAdder(cst.CSTTransformer):
                 "codeflash_trace_async",
                 "codeflash_behavior_async",
                 "codeflash_performance_async",
+                "codeflash_concurrency_async",
             }
         if isinstance(decorator_node, cst.Call) and isinstance(decorator_node.func, cst.Name):
             return decorator_node.func.value in {
                 "codeflash_trace_async",
                 "codeflash_behavior_async",
                 "codeflash_performance_async",
+                "codeflash_concurrency_async",
             }
         return False
 
@@ -1230,6 +1503,14 @@ class AsyncDecoratorImportAdder(cst.CSTTransformer):
     def __init__(self, mode: TestingMode = TestingMode.BEHAVIOR) -> None:
         self.mode = mode
         self.has_import = False
+
+    def _get_decorator_name(self) -> str:
+        """Get the decorator name based on the testing mode."""
+        if self.mode == TestingMode.BEHAVIOR:
+            return "codeflash_behavior_async"
+        if self.mode == TestingMode.CONCURRENCY:
+            return "codeflash_concurrency_async"
+        return "codeflash_performance_async"
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
         # Check if the async decorator import is already present
@@ -1242,22 +1523,18 @@ class AsyncDecoratorImportAdder(cst.CSTTransformer):
             and node.module.attr.value == "codeflash_wrap_decorator"
             and not isinstance(node.names, cst.ImportStar)
         ):
-            decorator_name = (
-                "codeflash_behavior_async" if self.mode == TestingMode.BEHAVIOR else "codeflash_performance_async"
-            )
+            decorator_name = self._get_decorator_name()
             for import_alias in node.names:
                 if import_alias.name.value == decorator_name:
                     self.has_import = True
 
-    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
         # If the import is already there, don't add it again
         if self.has_import:
             return updated_node
 
         # Choose import based on mode
-        decorator_name = (
-            "codeflash_behavior_async" if self.mode == TestingMode.BEHAVIOR else "codeflash_performance_async"
-        )
+        decorator_name = self._get_decorator_name()
 
         # Parse the import statement into a CST node
         import_node = cst.parse_statement(f"from codeflash.code_utils.codeflash_wrap_decorator import {decorator_name}")

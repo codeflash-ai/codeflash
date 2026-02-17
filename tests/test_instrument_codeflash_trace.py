@@ -3,8 +3,10 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from codeflash.benchmarking.instrument_codeflash_trace import add_codeflash_decorator_to_code, \
-    instrument_codeflash_trace_decorator
+from codeflash.benchmarking.instrument_codeflash_trace import (
+    add_codeflash_decorator_to_code,
+    instrument_codeflash_trace_decorator,
+)
 from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
 
 
@@ -15,16 +17,9 @@ def normal_function():
     return "Hello, World!"
 """
 
-    fto = FunctionToOptimize(
-        function_name="normal_function",
-        file_path=Path("dummy_path.py"),
-        parents=[]
-    )
+    fto = FunctionToOptimize(function_name="normal_function", file_path=Path("dummy_path.py"), parents=[])
 
-    modified_code = add_codeflash_decorator_to_code(
-        code=code,
-        functions_to_optimize=[fto]
-    )
+    modified_code = add_codeflash_decorator_to_code(code=code, functions_to_optimize=[fto])
 
     expected_code = """
 from codeflash.benchmarking.codeflash_trace import codeflash_trace
@@ -47,13 +42,10 @@ class TestClass:
     fto = FunctionToOptimize(
         function_name="normal_method",
         file_path=Path("dummy_path.py"),
-        parents=[FunctionParent(name="TestClass", type="ClassDef")]
+        parents=[FunctionParent(name="TestClass", type="ClassDef")],
     )
 
-    modified_code = add_codeflash_decorator_to_code(
-        code=code,
-        functions_to_optimize=[fto]
-    )
+    modified_code = add_codeflash_decorator_to_code(code=code, functions_to_optimize=[fto])
 
     expected_code = """
 from codeflash.benchmarking.codeflash_trace import codeflash_trace
@@ -78,13 +70,10 @@ class TestClass:
     fto = FunctionToOptimize(
         function_name="class_method",
         file_path=Path("dummy_path.py"),
-        parents=[FunctionParent(name="TestClass", type="ClassDef")]
+        parents=[FunctionParent(name="TestClass", type="ClassDef")],
     )
 
-    modified_code = add_codeflash_decorator_to_code(
-        code=code,
-        functions_to_optimize=[fto]
-    )
+    modified_code = add_codeflash_decorator_to_code(code=code, functions_to_optimize=[fto])
 
     expected_code = """
 from codeflash.benchmarking.codeflash_trace import codeflash_trace
@@ -110,13 +99,10 @@ class TestClass:
     fto = FunctionToOptimize(
         function_name="static_method",
         file_path=Path("dummy_path.py"),
-        parents=[FunctionParent(name="TestClass", type="ClassDef")]
+        parents=[FunctionParent(name="TestClass", type="ClassDef")],
     )
 
-    modified_code = add_codeflash_decorator_to_code(
-        code=code,
-        functions_to_optimize=[fto]
-    )
+    modified_code = add_codeflash_decorator_to_code(code=code, functions_to_optimize=[fto])
 
     expected_code = """
 from codeflash.benchmarking.codeflash_trace import codeflash_trace
@@ -141,13 +127,10 @@ class TestClass:
     fto = FunctionToOptimize(
         function_name="__init__",
         file_path=Path("dummy_path.py"),
-        parents=[FunctionParent(name="TestClass", type="ClassDef")]
+        parents=[FunctionParent(name="TestClass", type="ClassDef")],
     )
 
-    modified_code = add_codeflash_decorator_to_code(
-        code=code,
-        functions_to_optimize=[fto]
-    )
+    modified_code = add_codeflash_decorator_to_code(code=code, functions_to_optimize=[fto])
 
     expected_code = """
 from codeflash.benchmarking.codeflash_trace import codeflash_trace
@@ -173,13 +156,10 @@ class TestClass:
     fto = FunctionToOptimize(
         function_name="property_method",
         file_path=Path("dummy_path.py"),
-        parents=[FunctionParent(name="TestClass", type="ClassDef")]
+        parents=[FunctionParent(name="TestClass", type="ClassDef")],
     )
 
-    modified_code = add_codeflash_decorator_to_code(
-        code=code,
-        functions_to_optimize=[fto]
-    )
+    modified_code = add_codeflash_decorator_to_code(code=code, functions_to_optimize=[fto])
 
     expected_code = """
 from codeflash.benchmarking.codeflash_trace import codeflash_trace
@@ -209,13 +189,10 @@ class OtherClass:
     fto = FunctionToOptimize(
         function_name="test_method",
         file_path=Path("dummy_path.py"),
-        parents=[FunctionParent(name="TestClass", type="ClassDef")]
+        parents=[FunctionParent(name="TestClass", type="ClassDef")],
     )
 
-    modified_code = add_codeflash_decorator_to_code(
-        code=code,
-        functions_to_optimize=[fto]
-    )
+    modified_code = add_codeflash_decorator_to_code(code=code, functions_to_optimize=[fto])
 
     expected_code = """
 from codeflash.benchmarking.codeflash_trace import codeflash_trace
@@ -239,16 +216,9 @@ def existing_function():
     return "This exists"
 """
 
-    fto = FunctionToOptimize(
-        function_name="nonexistent_function",
-        file_path=Path("dummy_path.py"),
-        parents=[]
-    )
+    fto = FunctionToOptimize(function_name="nonexistent_function", file_path=Path("dummy_path.py"), parents=[])
 
-    modified_code = add_codeflash_decorator_to_code(
-        code=code,
-        functions_to_optimize=[fto]
-    )
+    modified_code = add_codeflash_decorator_to_code(code=code, functions_to_optimize=[fto])
 
     # Code should remain unchanged
     assert modified_code.strip() == code.strip()
@@ -272,27 +242,16 @@ def function_two():
 """
 
     functions_to_optimize = [
-        FunctionToOptimize(
-            function_name="function_one",
-            file_path=Path("dummy_path.py"),
-            parents=[]
-        ),
+        FunctionToOptimize(function_name="function_one", file_path=Path("dummy_path.py"), parents=[]),
         FunctionToOptimize(
             function_name="method_two",
             file_path=Path("dummy_path.py"),
-            parents=[FunctionParent(name="TestClass", type="ClassDef")]
+            parents=[FunctionParent(name="TestClass", type="ClassDef")],
         ),
-        FunctionToOptimize(
-            function_name="function_two",
-            file_path=Path("dummy_path.py"),
-            parents=[]
-        )
+        FunctionToOptimize(function_name="function_two", file_path=Path("dummy_path.py"), parents=[]),
     ]
 
-    modified_code = add_codeflash_decorator_to_code(
-        code=code,
-        functions_to_optimize=functions_to_optimize
-    )
+    modified_code = add_codeflash_decorator_to_code(code=code, functions_to_optimize=functions_to_optimize)
 
     expected_code = """
 from codeflash.benchmarking.codeflash_trace import codeflash_trace
@@ -339,16 +298,12 @@ def function_two():
 
         # Define functions to optimize
         functions_to_optimize = [
-            FunctionToOptimize(
-                function_name="function_one",
-                file_path=test_file_path,
-                parents=[]
-            ),
+            FunctionToOptimize(function_name="function_one", file_path=test_file_path, parents=[]),
             FunctionToOptimize(
                 function_name="method_two",
                 file_path=test_file_path,
-                parents=[FunctionParent(name="TestClass", type="ClassDef")]
-            )
+                parents=[FunctionParent(name="TestClass", type="ClassDef")],
+            ),
         ]
 
         # Execute the function being tested
@@ -399,7 +354,7 @@ class ClassA:
 
         # Create second test Python file
         test_file_2_path = Path(temp_dir) / "module_b.py"
-        test_file_2_content ="""
+        test_file_2_content = """
 def function_b():
     return "Function in module B"
 
@@ -412,20 +367,14 @@ class ClassB:
 
         # Define functions to optimize
         file_to_funcs_to_optimize = {
-            test_file_1_path: [
-                FunctionToOptimize(
-                    function_name="function_a",
-                    file_path=test_file_1_path,
-                    parents=[]
-                )
-            ],
+            test_file_1_path: [FunctionToOptimize(function_name="function_a", file_path=test_file_1_path, parents=[])],
             test_file_2_path: [
                 FunctionToOptimize(
                     function_name="static_method_b",
                     file_path=test_file_2_path,
-                    parents=[FunctionParent(name="ClassB", type="ClassDef")]
+                    parents=[FunctionParent(name="ClassB", type="ClassDef")],
                 )
-            ]
+            ],
         }
 
         # Execute the function being tested
@@ -484,13 +433,10 @@ class OuterClass:
     fto = FunctionToOptimize(
         function_name="target_method",
         file_path=Path("dummy_path.py"),
-        parents=[FunctionParent(name="OuterClass", type="ClassDef")]
+        parents=[FunctionParent(name="OuterClass", type="ClassDef")],
     )
 
-    modified_code = add_codeflash_decorator_to_code(
-        code=code,
-        functions_to_optimize=[fto]
-    )
+    modified_code = add_codeflash_decorator_to_code(code=code, functions_to_optimize=[fto])
 
     expected_code = """
 from codeflash.benchmarking.codeflash_trace import codeflash_trace
@@ -520,16 +466,9 @@ def target_function():
     return "Hello from target function after nested function"
 """
 
-    fto = FunctionToOptimize(
-        function_name="target_function",
-        file_path=Path("dummy_path.py"),
-        parents=[]
-    )
+    fto = FunctionToOptimize(function_name="target_function", file_path=Path("dummy_path.py"), parents=[])
 
-    modified_code = add_codeflash_decorator_to_code(
-        code=code,
-        functions_to_optimize=[fto]
-    )
+    modified_code = add_codeflash_decorator_to_code(code=code, functions_to_optimize=[fto])
 
     expected_code = """
 from codeflash.benchmarking.codeflash_trace import codeflash_trace
@@ -545,3 +484,123 @@ def target_function():
 """
 
     assert modified_code.strip() == expected_code.strip()
+
+
+def test_instrument_codeflash_trace_skips_benchmarking_module() -> None:
+    """Test that files in codeflash/benchmarking/ are skipped to avoid circular imports."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Create a directory structure that mimics codeflash/benchmarking/
+        benchmarking_dir = Path(temp_dir) / "codeflash" / "benchmarking"
+        benchmarking_dir.mkdir(parents=True)
+
+        test_file_path = benchmarking_dir / "some_module.py"
+        original_content = """
+def some_function():
+    return "This should not be modified"
+"""
+        test_file_path.write_text(original_content, encoding="utf-8")
+
+        fto = FunctionToOptimize(function_name="some_function", file_path=test_file_path, parents=[])
+
+        instrument_codeflash_trace_decorator({test_file_path: [fto]})
+
+        # File should remain unchanged
+        assert test_file_path.read_text(encoding="utf-8") == original_content
+
+
+def test_instrument_codeflash_trace_skips_picklepatch_module() -> None:
+    """Test that files in codeflash/picklepatch/ are skipped to avoid circular imports."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Create a directory structure that mimics codeflash/picklepatch/
+        picklepatch_dir = Path(temp_dir) / "codeflash" / "picklepatch"
+        picklepatch_dir.mkdir(parents=True)
+
+        test_file_path = picklepatch_dir / "patcher.py"
+        original_content = """
+def patch_function():
+    return "This should not be modified"
+"""
+        test_file_path.write_text(original_content, encoding="utf-8")
+
+        fto = FunctionToOptimize(function_name="patch_function", file_path=test_file_path, parents=[])
+
+        instrument_codeflash_trace_decorator({test_file_path: [fto]})
+
+        # File should remain unchanged
+        assert test_file_path.read_text(encoding="utf-8") == original_content
+
+
+def test_instrument_codeflash_trace_nested_codeflash_path_skips_benchmarking() -> None:
+    """Test that nested codeflash paths like /project/codeflash/codeflash/benchmarking/ are skipped.
+
+    The rpartition logic should find the LAST 'codeflash' in the path.
+    """
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Create nested structure: project_codeflash/codeflash/benchmarking/
+        nested_dir = Path(temp_dir) / "project_codeflash" / "codeflash" / "benchmarking"
+        nested_dir.mkdir(parents=True)
+
+        test_file_path = nested_dir / "trace_module.py"
+        original_content = """
+def trace_func():
+    return "Should not be modified"
+"""
+        test_file_path.write_text(original_content, encoding="utf-8")
+
+        fto = FunctionToOptimize(function_name="trace_func", file_path=test_file_path, parents=[])
+
+        instrument_codeflash_trace_decorator({test_file_path: [fto]})
+
+        # File should remain unchanged because last /codeflash/ is followed by benchmarking
+        assert test_file_path.read_text(encoding="utf-8") == original_content
+
+
+def test_instrument_codeflash_trace_nested_codeflash_path_instruments_other_modules() -> None:
+    """Test that nested codeflash paths with non-skipped modules ARE instrumented.
+
+    The rpartition logic should allow instrumentation when the submodule is not benchmarking/picklepatch.
+    """
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Create nested structure: project_codeflash/codeflash/other_module/
+        nested_dir = Path(temp_dir) / "project_codeflash" / "codeflash" / "other_module"
+        nested_dir.mkdir(parents=True)
+
+        test_file_path = nested_dir / "utils.py"
+        original_content = """
+def util_func():
+    return "Should be modified"
+"""
+        test_file_path.write_text(original_content, encoding="utf-8")
+
+        fto = FunctionToOptimize(function_name="util_func", file_path=test_file_path, parents=[])
+
+        instrument_codeflash_trace_decorator({test_file_path: [fto]})
+
+        # File SHOULD be modified because other_module is not in skip list
+        modified_content = test_file_path.read_text(encoding="utf-8")
+        assert "codeflash_trace" in modified_content
+        assert "@codeflash_trace" in modified_content
+
+
+def test_instrument_codeflash_trace_no_codeflash_in_path() -> None:
+    """Test that paths without 'codeflash' directory are instrumented normally."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Create a path with no 'codeflash' directory
+        project_dir = Path(temp_dir) / "myproject" / "src"
+        project_dir.mkdir(parents=True)
+
+        test_file_path = project_dir / "main.py"
+        original_content = """
+def main_func():
+    return "Should be modified"
+"""
+        test_file_path.write_text(original_content, encoding="utf-8")
+
+        fto = FunctionToOptimize(function_name="main_func", file_path=test_file_path, parents=[])
+
+        instrument_codeflash_trace_decorator({test_file_path: [fto]})
+
+        # File SHOULD be modified
+        modified_content = test_file_path.read_text(encoding="utf-8")
+        assert "codeflash_trace" in modified_content
+        assert "@codeflash_trace" in modified_content

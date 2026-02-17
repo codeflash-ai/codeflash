@@ -1,0 +1,35 @@
+{
+  "name": "codeflash-js-test",
+  "version": "1.0.0",
+  "description": "Sample JavaScript project for codeflash optimization testing",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "codeflash": {
+    "moduleRoot": ".",
+    "testsRoot": "tests"
+  },
+  "devDependencies": {
+    "codeflash": "file:../../../packages/codeflash",
+    "jest": "^29.7.0",
+    "jest-junit": "^16.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
+    "reporters": [
+      "default",
+      [
+        "jest-junit",
+        {
+          "outputDirectory": ".codeflash",
+          "outputName": "jest-results.xml",
+          "includeConsoleOutput": true
+        }
+      ]
+    ]
+  }
+}

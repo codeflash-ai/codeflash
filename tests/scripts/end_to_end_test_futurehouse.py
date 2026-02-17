@@ -7,8 +7,8 @@ from end_to_end_test_utilities import CoverageExpectation, TestConfig, run_codef
 def run_test(expected_improvement_pct: int) -> bool:
     config = TestConfig(
         file_path="src/aviary/common_tags.py",
-        expected_unit_tests=1,
-        min_improvement_x=0.1,
+        expected_unit_tests_count=2,
+        min_improvement_x=0.05,
         coverage_expectations=[
             CoverageExpectation(
                 function_name="find_common_tags",
