@@ -295,7 +295,7 @@ public class CalculatorTest__perfonlyinstrumented {
             long _cf_start1 = System.nanoTime();
             try {
                 Calculator calc = new Calculator();
-                assertEquals(4, calc.add(2, 2));
+                Object _cf_result1 = calc.add(2, 2);
             } finally {
                 long _cf_end1 = System.nanoTime();
                 long _cf_dur1 = _cf_end1 - _cf_start1;
@@ -360,7 +360,6 @@ public class MathTest__perfonlyinstrumented {
             System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
             long _cf_start1 = System.nanoTime();
             try {
-                assertEquals(4, add(2, 2));
             } finally {
                 long _cf_end1 = System.nanoTime();
                 long _cf_dur1 = _cf_end1 - _cf_start1;
@@ -382,7 +381,6 @@ public class MathTest__perfonlyinstrumented {
             System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + "######$!");
             long _cf_start2 = System.nanoTime();
             try {
-                assertEquals(0, subtract(2, 2));
             } finally {
                 long _cf_end2 = System.nanoTime();
                 long _cf_dur2 = _cf_end2 - _cf_start2;
@@ -1256,7 +1254,7 @@ public class ImportTest__perfonlyinstrumented {
             long _cf_start1 = System.nanoTime();
             try {
                 List<String> list = new ArrayList<>();
-                assertEquals(0, list.size());
+                Object _cf_result1 = list.size();
             } finally {
                 long _cf_end1 = System.nanoTime();
                 long _cf_dur1 = _cf_end1 - _cf_start1;

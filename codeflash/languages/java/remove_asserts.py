@@ -213,34 +213,24 @@ class JavaAssertTransformer:
         if not assertions:
             return source
 
-        # Filter to only assertions that contain target calls
-        assertions_with_targets = [a for a in assertions if a.target_calls or a.is_exception_assertion]
-
-        if not assertions_with_targets:
-            return source
-
         # Sort by position (forward order) to assign counter numbers in source order
-        assertions_with_targets.sort(key=lambda a: a.start_pos)
+        assertions.sort(key=lambda a: a.start_pos)
 
         # Filter out nested assertions (e.g., assertEquals inside assertAll)
-        # An assertion is nested if it's completely contained within another assertion
         non_nested: list[AssertionMatch] = []
-        for i, assertion in enumerate(assertions_with_targets):
+        for i, assertion in enumerate(assertions):
             is_nested = False
-            for j, other in enumerate(assertions_with_targets):
+            for j, other in enumerate(assertions):
                 if i != j:
-                    # Check if 'assertion' is nested inside 'other'
                     if other.start_pos <= assertion.start_pos and assertion.end_pos <= other.end_pos:
                         is_nested = True
                         break
             if not is_nested:
                 non_nested.append(assertion)
 
-        assertions_with_targets = non_nested
-
         # Pre-compute all replacements with correct counter values
         replacements: list[tuple[int, int, str]] = []
-        for assertion in assertions_with_targets:
+        for assertion in non_nested:
             replacement = self._generate_replacement(assertion)
             replacements.append((assertion.start_pos, assertion.end_pos, replacement))
 
@@ -822,8 +812,7 @@ class JavaAssertTransformer:
             return self._generate_exception_replacement(assertion)
 
         if not assertion.target_calls:
-            # No target calls found, just comment out the assertion
-            return f"{assertion.leading_whitespace}// Removed assertion: no target calls found"
+            return ""
 
         # Generate capture statements for each target call
         replacements = []

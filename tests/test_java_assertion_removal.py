@@ -286,7 +286,6 @@ void testCalculator() {
 @Test
 void testCalculator() {
     Object _cf_result1 = calculator.add(2, 3);
-    assertEquals(6, calculator.multiply(2, 3));
 }"""
         result = transform_java_assertions(source, "add")
         assert result == expected
@@ -550,8 +549,13 @@ void testWithVariables() {
     int actual = calculator.fibonacci(10);
     assertEquals(expected, actual);
 }"""
-        # fibonacci is assigned to 'actual', not in the assertion - no transformation
-        expected = source
+        # Variable declarations are preserved, but assertEquals is removed (all assertions removed)
+        expected = """\
+@Test
+void testWithVariables() {
+    int expected = 55;
+    int actual = calculator.fibonacci(10);
+}"""
         result = transform_java_assertions(source, "fibonacci")
         assert result == expected
 
@@ -670,8 +674,11 @@ void testNoAssertions() {
 void testOther() {
     assertEquals(5, helper.compute(3));
 }"""
-        # No transformation since target function is not in the assertion
-        expected = source
+        # All assertions are removed regardless of target function
+        expected = """\
+@Test
+void testOther() {
+}"""
         result = transform_java_assertions(source, "fibonacci")
         assert result == expected
 
@@ -912,9 +919,13 @@ void testBasicCompoundInterest() {
     assertNotNull(result);
     assertTrue(result.contains("."));
 }"""
-        # assertNotNull(result) and assertTrue(result.contains(".")) don't contain the target function
-        # so they remain unchanged, and the variable assignment is also preserved
-        expected = source
+        # All assertions are removed; variable assignment is preserved
+        expected = """\
+@Test
+@DisplayName("should calculate compound interest for basic case")
+void testBasicCompoundInterest() {
+    String result = calculator.calculateCompoundInterest(1000.0, 0.05, 1, 12);
+}"""
         result = transform_java_assertions(source, "calculateCompoundInterest")
         assert result == expected
 
@@ -1018,13 +1029,12 @@ void testSynchronizedBlock() {
         assertTrue(cache.containsKey("key"));
     }
 }"""
+        # All assertions are removed; target-containing ones get Object capture
         expected = """\
 @Test
 void testSynchronizedBlock() {
     synchronized (cache) {
         Object _cf_result1 = cache.size();
-        assertNotNull(cache.get("key"));
-        assertTrue(cache.containsKey("key"));
     }
 }"""
         result = transform_java_assertions(source, "size")
@@ -1210,6 +1220,8 @@ void testCircularBufferOperations() {
     assertFalse(buffer.isEmpty());
     assertTrue(buffer.put(2));
 }"""
+        # All assertions are removed; target-containing ones get Object capture,
+        # non-target assertions (assertTrue(buffer.put(2))) are deleted entirely
         expected = """\
 @Test
 void testCircularBufferOperations() {
@@ -1217,25 +1229,9 @@ void testCircularBufferOperations() {
     Object _cf_result1 = buffer.isEmpty();
     buffer.put(1);
     Object _cf_result2 = buffer.isEmpty();
-    Object _cf_result3 = buffer.put(2);
 }"""
         result = transform_java_assertions(source, "isEmpty")
-        # isEmpty is target for assertTrue/assertFalse; but put is NOT the target
-        # so only isEmpty calls inside assertions are transformed
-        # Actually: assertTrue(buffer.put(2)) also contains a non-target call
-        # Let's verify what actually happens
-        # put is not "isEmpty", so assertTrue(buffer.put(2)) has no target call -> untouched
-        expected_corrected = """\
-@Test
-void testCircularBufferOperations() {
-    CircularBuffer<Integer> buffer = new CircularBuffer<>(3);
-    Object _cf_result1 = buffer.isEmpty();
-    buffer.put(1);
-    Object _cf_result2 = buffer.isEmpty();
-    assertTrue(buffer.put(2));
-}"""
-        result = transform_java_assertions(source, "isEmpty")
-        assert result == expected_corrected
+        assert result == expected
 
     def test_concurrent_assertion_with_assertj(self):
         """AssertJ assertion on a synchronized method call is correctly transformed."""
@@ -1310,12 +1306,12 @@ void testNegativeInput() {
     );
     assertEquals("Negative input not allowed", exception.getMessage());
 }"""
+        # assertThrows becomes try/catch, and assertEquals after it is also removed
         expected = """\
 @Test
 void testNegativeInput() {
     IllegalArgumentException exception = null;
     try { calculator.fibonacci(-1); } catch (IllegalArgumentException _cf_caught1) { exception = _cf_caught1; } catch (Exception _cf_ignored1) {}
-    assertEquals("Negative input not allowed", exception.getMessage());
 }"""
         result = transform_java_assertions(source, "fibonacci")
         assert result == expected
@@ -1330,12 +1326,12 @@ void testInvalidOperation() {
     });
     assertEquals("Division by zero", ex.getMessage());
 }"""
+        # assertThrows becomes try/catch, and assertEquals after it is also removed
         expected = """\
 @Test
 void testInvalidOperation() {
     ArithmeticException ex = null;
     try { calculator.divide(10, 0); } catch (ArithmeticException _cf_caught1) { ex = _cf_caught1; } catch (Exception _cf_ignored1) {}
-    assertEquals("Division by zero", ex.getMessage());
 }"""
         result = transform_java_assertions(source, "divide")
         assert result == expected
@@ -1348,12 +1344,12 @@ void testGenericException() {
     Exception e = assertThrows(Exception.class, () -> processor.process(null));
     assertNotNull(e.getMessage());
 }"""
+        # assertThrows becomes try/catch, and assertNotNull after it is also removed
         expected = """\
 @Test
 void testGenericException() {
     Exception e = null;
     try { processor.process(null); } catch (Exception _cf_caught1) { e = _cf_caught1; } catch (Exception _cf_ignored1) {}
-    assertNotNull(e.getMessage());
 }"""
         result = transform_java_assertions(source, "process")
         assert result == expected
@@ -1387,13 +1383,13 @@ void testComplexException() {
     );
     assertTrue(exception.getMessage().contains("not initialized"));
 }"""
+        # assertThrows becomes try/catch, and assertTrue after it is also removed
         expected = """\
 @Test
 void testComplexException() {
     IllegalStateException exception = null;
     try { processor.initialize();
             processor.execute(); } catch (IllegalStateException _cf_caught1) { exception = _cf_caught1; } catch (Exception _cf_ignored1) {}
-    assertTrue(exception.getMessage().contains("not initialized"));
 }"""
         result = transform_java_assertions(source, "execute")
         assert result == expected

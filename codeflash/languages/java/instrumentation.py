@@ -811,12 +811,12 @@ def instrument_generated_java_test(
         Instrumented test source code.
 
     """
+    if not test_code or not test_code.strip():
+        return test_code
+
     from codeflash.languages.java.remove_asserts import transform_java_assertions
 
-    # For behavior mode, remove assertions and capture function return values
-    # This converts the generated test into a regression test that captures outputs
-    if mode == "behavior":
-        test_code = transform_java_assertions(test_code, function_name, qualified_name)
+    test_code = transform_java_assertions(test_code, function_name, qualified_name)
 
     # Extract class name from the test code
     # Use pattern that starts at beginning of line to avoid matching words in comments
@@ -827,14 +827,8 @@ def instrument_generated_java_test(
 
     original_class_name = class_match.group(1)
 
-    # For performance mode, add timing instrumentation
-    # Use original class name (without suffix) in timing markers for consistency with Python
     if mode == "performance":
-        # Rename class based on mode
-        if mode == "behavior":
-            new_class_name = f"{original_class_name}__perfinstrumented"
-        else:
-            new_class_name = f"{original_class_name}__perfonlyinstrumented"
+        new_class_name = f"{original_class_name}__perfonlyinstrumented"
 
         # Rename all references to the original class name in the source.
         # This includes the class declaration, return types, constructor calls, etc.
@@ -852,6 +846,8 @@ def instrument_generated_java_test(
             function_to_optimize=function_to_optimize,
             test_class_name=original_class_name,
         )
+    else:
+        modified_code = test_code
 
     logger.debug("Instrumented generated Java test for %s (mode=%s)", function_name, mode)
     return modified_code
