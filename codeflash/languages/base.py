@@ -519,15 +519,6 @@ class LanguageSupport(Protocol):
         """
         ...
 
-    def get_comment_prefix(self) -> str:
-        """Get the comment prefix for this language.
-
-        Returns:
-            Comment prefix (e.g., "//" for JS, "#" for Python).
-
-        """
-        ...
-
     def find_test_root(self, project_root: Path) -> Path | None:
         """Find the test root directory for a project.
 

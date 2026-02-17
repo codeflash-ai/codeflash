@@ -5,8 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.languages.python.context.unused_definition_remover import (
+    detect_unused_helper_functions,
+    revert_unused_helper_functions,
+)
 from codeflash.models.models import CodeStringsMarkdown
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
