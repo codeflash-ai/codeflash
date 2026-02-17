@@ -72,8 +72,6 @@ from codeflash.code_utils.line_profile_utils import add_decorator_imports, conta
 from codeflash.code_utils.shell_utils import make_env_with_project_root
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
-from codeflash.context import code_context_extractor
-from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
 from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
 from codeflash.either import Failure, Success, is_successful
 from codeflash.languages import is_python
@@ -81,6 +79,11 @@ from codeflash.languages.base import Language
 from codeflash.languages.current import current_language_support, is_typescript
 from codeflash.languages.javascript.module_system import detect_module_system
 from codeflash.languages.javascript.test_runner import clear_created_config_files, get_created_config_files
+from codeflash.languages.python.context import code_context_extractor
+from codeflash.languages.python.context.unused_definition_remover import (
+    detect_unused_helper_functions,
+    revert_unused_helper_functions,
+)
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree_to_markdown
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
 from codeflash.models.ExperimentMetadata import ExperimentMetadata

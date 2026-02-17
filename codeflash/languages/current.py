@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from codeflash.languages.base import LanguageSupport
 
 # Module-level singleton for the current language
-_current_language: Language | None = None
+_current_language: Language = Language.PYTHON
 
 
 def current_language() -> Language:
