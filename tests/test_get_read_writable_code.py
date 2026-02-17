@@ -2,7 +2,7 @@ from textwrap import dedent
 
 import pytest
 
-from codeflash.context.code_context_extractor import parse_code_and_prune_cst
+from codeflash.languages.python.context.code_context_extractor import parse_code_and_prune_cst
 from codeflash.models.models import CodeContextType
 
 

@@ -69,7 +69,7 @@ class TestTypeScriptFunctionDiscovery:
         from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
 
         with tempfile.NamedTemporaryFile(suffix=".ts", mode="w", delete=False) as f:
-            f.write("""
+            f.write(r"""
 export function add(a: number, b: number): number {
     return a + b;
 }
@@ -123,9 +123,9 @@ class TestTypeScriptCodeContext:
     def test_extract_code_context_for_typescript(self, ts_project_dir):
         """Test extracting code context for a TypeScript function."""
         skip_if_ts_not_supported()
-        from codeflash.context.code_context_extractor import get_code_optimization_context
         from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
         from codeflash.languages import current as lang_current
+        from codeflash.languages.python.context.code_context_extractor import get_code_optimization_context
 
         lang_current._current_language = Language.TYPESCRIPT
 
@@ -201,7 +201,7 @@ function multiply(a: number, b: number): number {
         from codeflash.languages import get_language_support
         from codeflash.languages.base import FunctionInfo
 
-        original_source = """
+        original_source = r"""
 interface Config {
     timeout: number;
     retries: number;
@@ -212,7 +212,7 @@ function processConfig(config: Config): string {
 }
 """
 
-        new_function = """function processConfig(config: Config): string {
+        new_function = r"""function processConfig(config: Config): string {
     // Optimized with template caching
     const { timeout, retries } = config;
     return `timeout=\${timeout}, retries=\${retries}`;

@@ -9,7 +9,6 @@ These tests verify the full optimization pipeline including:
 This is the JavaScript equivalent of test_instrument_tests.py for Python.
 """
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -71,9 +70,9 @@ module.exports = { add };
     def test_code_context_preserves_language(self, tmp_path):
         """Verify language is preserved in code context extraction."""
         skip_if_js_not_supported()
-        from codeflash.context.code_context_extractor import get_code_optimization_context
         from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
         from codeflash.languages import current as lang_current
+        from codeflash.languages.python.context.code_context_extractor import get_code_optimization_context
 
         lang_current._current_language = Language.TYPESCRIPT
 
@@ -164,7 +163,7 @@ export function add(a: number, b: number): number {
 
         # Mock the AI service request
         ai_client = AiServiceClient()
-        with patch.object(ai_client, 'make_ai_service_request') as mock_request:
+        with patch.object(ai_client, "make_ai_service_request") as mock_request:
             mock_response = MagicMock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
@@ -191,8 +190,8 @@ export function add(a: number, b: number): number {
             # Verify the request was made with correct language
             assert mock_request.called, "API request should have been made"
             call_args = mock_request.call_args
-            payload = call_args[1].get('payload', call_args[0][1] if len(call_args[0]) > 1 else {})
-            assert payload.get('language') == 'typescript', \
+            payload = call_args[1].get("payload", call_args[0][1] if len(call_args[0]) > 1 else {})
+            assert payload.get("language") == "typescript", \
                 f"Expected language='typescript', got language='{payload.get('language')}'"
 
 
@@ -462,7 +461,7 @@ class TestHelperFunctionLanguageAttribute:
         """Verify helper functions have language='javascript' for .js files."""
         skip_if_js_not_supported()
         from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
-        from codeflash.languages import current as lang_current, get_language_support
+        from codeflash.languages import current as lang_current
         from codeflash.optimization.function_optimizer import FunctionOptimizer
 
         lang_current._current_language = Language.JAVASCRIPT
