@@ -15,17 +15,20 @@ from codeflash.verification.llm_tools import (
 )
 
 
-def test_run_behavioral_tests_tool_schema_structure():
+def test_run_behavioral_tests_tool_schema_structure() -> None:
     """Test that the tool schema has the correct structure."""
     schema = RUN_BEHAVIORAL_TESTS_TOOL_SCHEMA
 
     assert schema["type"] == "function"
     assert "function" in schema
-    assert schema["function"]["name"] == "run_behavioral_tests"
-    assert "description" in schema["function"]
-    assert "parameters" in schema["function"]
+    func = schema["function"]
+    assert isinstance(func, dict)
+    assert func["name"] == "run_behavioral_tests"
+    assert "description" in func
+    assert "parameters" in func
 
-    params = schema["function"]["parameters"]
+    params = func["parameters"]
+    assert isinstance(params, dict)
     assert params["type"] == "object"
     assert "test_files" in params["properties"]
     assert "project_root" in params["properties"]
@@ -34,7 +37,7 @@ def test_run_behavioral_tests_tool_schema_structure():
     assert "project_root" in params["required"]
 
 
-def test_get_tool_schema():
+def test_get_tool_schema() -> None:
     """Test getting tool schema by name."""
     schema = get_tool_schema("run_behavioral_tests")
     assert schema is not None
@@ -44,7 +47,7 @@ def test_get_tool_schema():
     assert get_tool_schema("non_existent_tool") is None
 
 
-def test_get_all_tool_schemas():
+def test_get_all_tool_schemas() -> None:
     """Test getting all tool schemas."""
     schemas = get_all_tool_schemas()
     assert isinstance(schemas, list)
@@ -55,7 +58,7 @@ def test_get_all_tool_schemas():
     assert "run_behavioral_tests" in names
 
 
-def test_available_tools_registry():
+def test_available_tools_registry() -> None:
     """Test that the AVAILABLE_TOOLS registry has correct structure."""
     assert "run_behavioral_tests" in AVAILABLE_TOOLS
 
@@ -65,13 +68,13 @@ def test_available_tools_registry():
     assert callable(tool["function"])
 
 
-def test_execute_tool_unknown_tool():
+def test_execute_tool_unknown_tool() -> None:
     """Test that execute_tool raises ValueError for unknown tools."""
     with pytest.raises(ValueError, match="Unknown tool"):
         execute_tool("non_existent_tool")
 
 
-def test_run_behavioral_tests_tool_pytest():
+def test_run_behavioral_tests_tool_pytest() -> None:
     """Test running pytest tests through the LLM tool."""
     test_code = """
 def add(a, b):
@@ -104,7 +107,7 @@ def test_add():
         assert isinstance(result["results"], list)
 
 
-def test_run_behavioral_tests_tool_failing_test():
+def test_run_behavioral_tests_tool_failing_test() -> None:
     """Test running a failing test through the LLM tool."""
     test_code = """
 def test_failing():
@@ -128,7 +131,7 @@ def test_failing():
         assert result["failed_tests"] >= 1
 
 
-def test_run_behavioral_tests_tool_via_execute():
+def test_run_behavioral_tests_tool_via_execute() -> None:
     """Test running tests through the execute_tool interface."""
     test_code = """
 def test_simple():
@@ -151,7 +154,7 @@ def test_simple():
         assert result["error"] is None
 
 
-def test_run_behavioral_tests_tool_invalid_path():
+def test_run_behavioral_tests_tool_invalid_path() -> None:
     """Test handling of invalid test file path."""
     # Use repo root for project_root
     repo_root = Path(__file__).resolve().parent.parent
@@ -167,7 +170,7 @@ def test_run_behavioral_tests_tool_invalid_path():
     assert result["total_tests"] == 0
 
 
-def test_run_behavioral_tests_tool_with_test_type():
+def test_run_behavioral_tests_tool_with_test_type() -> None:
     """Test specifying test type."""
     test_code = """
 def test_with_type():

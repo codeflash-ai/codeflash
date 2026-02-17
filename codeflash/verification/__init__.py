@@ -4,7 +4,7 @@ This module provides test running and verification functionality.
 """
 
 
-def __getattr__(name: str):  # noqa: ANN202
+def __getattr__(name: str) -> object:
     """Lazy import for LLM tools to avoid circular imports."""
     if name in (
         "AVAILABLE_TOOLS",

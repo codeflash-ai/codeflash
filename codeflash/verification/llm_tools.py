@@ -8,11 +8,15 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, TypedDict
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from pydantic import BaseModel, Field
 
-from codeflash.models.models import TestFile, TestFiles, TestType
+from codeflash.models.models import TestFile, TestFiles
+from codeflash.models.test_type import TestType
 from codeflash.verification.parse_test_output import parse_test_xml
 from codeflash.verification.test_runner import run_behavioral_tests
 from codeflash.verification.verification_utils import TestConfig
@@ -137,7 +141,7 @@ def run_behavioral_tests_tool(
     project_root: str,
     test_framework: str = "pytest",
     pytest_timeout: int | None = 30,
-    verbose: bool = False,  # noqa: FBT002, FBT001
+    verbose: bool = False,
 ) -> dict[str, Any]:
     """Run behavioral tests and return results in an LLM-friendly format.
 
@@ -201,15 +205,11 @@ def run_behavioral_tests_tool(
             test_env=test_env,
             cwd=project_root_path,
             pytest_timeout=pytest_timeout,
-            verbose=verbose,
         )
 
         # Create test config for parsing results
         test_config = TestConfig(
-            tests_root=project_root_path,
-            project_root_path=project_root_path,
-            test_framework=test_framework,
-            tests_project_rootdir=project_root_path,
+            tests_root=project_root_path, project_root_path=project_root_path, tests_project_rootdir=project_root_path
         )
 
         # Parse test results
@@ -270,8 +270,13 @@ def run_behavioral_tests_tool(
         }
 
 
+class ToolEntry(TypedDict):
+    schema: dict[str, Any]
+    function: Callable[..., dict[str, Any]]
+
+
 # Registry of available tools
-AVAILABLE_TOOLS = {
+AVAILABLE_TOOLS: dict[str, ToolEntry] = {
     "run_behavioral_tests": {"schema": RUN_BEHAVIORAL_TESTS_TOOL_SCHEMA, "function": run_behavioral_tests_tool}
 }
 
@@ -300,7 +305,7 @@ def get_all_tool_schemas() -> list[dict[str, Any]]:
     return [tool["schema"] for tool in AVAILABLE_TOOLS.values()]
 
 
-def execute_tool(tool_name: str, **kwargs: Any) -> dict[str, Any]:  # noqa: ANN401
+def execute_tool(tool_name: str, **kwargs: Any) -> dict[str, Any]:
     """Execute a tool by name with the given arguments.
 
     Args:
