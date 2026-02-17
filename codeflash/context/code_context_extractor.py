@@ -70,6 +70,12 @@ def build_testgen_context(
                 code_strings=testgen_context.code_strings + external_base_inits.code_strings
             )
 
+        external_class_inits = get_external_class_inits(testgen_context, project_root_path)
+        if external_class_inits.code_strings:
+            testgen_context = CodeStringsMarkdown(
+                code_strings=testgen_context.code_strings + external_class_inits.code_strings
+            )
+
     return testgen_context
 
 
@@ -823,6 +829,210 @@ def get_external_base_class_inits(code_context: CodeStringsMarkdown, project_roo
         except (ImportError, ModuleNotFoundError, AttributeError):
             logger.debug(f"Failed to extract __init__ for {module_name}.{base_name}")
             continue
+
+    return CodeStringsMarkdown(code_strings=code_strings)
+
+
+MAX_TRANSITIVE_DEPTH = 2
+
+
+def extract_classes_from_type_hint(hint: object) -> list[type]:
+    """Recursively extract concrete class objects from a type annotation.
+
+    Unwraps Optional, Union, List, Dict, Callable, Annotated, etc.
+    Filters out builtins and typing module types.
+    """
+    import typing
+
+    classes: list[type] = []
+    origin = getattr(hint, "__origin__", None)
+    args = getattr(hint, "__args__", None)
+
+    if origin is not None and args:
+        for arg in args:
+            classes.extend(extract_classes_from_type_hint(arg))
+    elif isinstance(hint, type):
+        module = getattr(hint, "__module__", "")
+        if module not in ("builtins", "typing", "typing_extensions", "types"):
+            classes.append(hint)
+    # Handle typing.Annotated on older Pythons where __origin__ may not be set
+    if hasattr(typing, "get_args") and origin is None and args is None:
+        try:
+            inner_args = typing.get_args(hint)
+            if inner_args:
+                for arg in inner_args:
+                    classes.extend(extract_classes_from_type_hint(arg))
+        except Exception:
+            pass
+
+    return classes
+
+
+def resolve_transitive_type_deps(cls: type) -> list[type]:
+    """Find external classes referenced in cls.__init__ type annotations.
+
+    Returns classes from site-packages that have a custom __init__.
+    """
+    import inspect
+    import typing
+
+    try:
+        init_method = getattr(cls, "__init__")
+        hints = typing.get_type_hints(init_method)
+    except Exception:
+        return []
+
+    deps: list[type] = []
+    for param_name, hint in hints.items():
+        if param_name == "return":
+            continue
+        for dep_cls in extract_classes_from_type_hint(hint):
+            if dep_cls is cls:
+                continue
+            init_method = getattr(dep_cls, "__init__", None)
+            if init_method is None or init_method is object.__init__:
+                continue
+            try:
+                class_file = Path(inspect.getfile(dep_cls))
+            except (OSError, TypeError):
+                continue
+            if not path_belongs_to_site_packages(class_file):
+                continue
+            deps.append(dep_cls)
+
+    return deps
+
+
+def extract_init_stub_for_class(cls: type, class_name: str) -> CodeString | None:
+    """Extract a stub containing the class definition with only its __init__ method."""
+    import inspect
+    import textwrap
+
+    init_method = getattr(cls, "__init__", None)
+    if init_method is None or init_method is object.__init__:
+        return None
+
+    try:
+        class_file = Path(inspect.getfile(cls))
+    except (OSError, TypeError):
+        return None
+
+    if not path_belongs_to_site_packages(class_file):
+        return None
+
+    try:
+        init_source = inspect.getsource(init_method)
+        init_source = textwrap.dedent(init_source)
+    except (OSError, TypeError):
+        return None
+
+    parts = class_file.parts
+    if "site-packages" in parts:
+        idx = parts.index("site-packages")
+        class_file = Path(*parts[idx + 1 :])
+
+    class_source = f"class {class_name}:\n" + textwrap.indent(init_source, "    ")
+    return CodeString(code=class_source, file_path=class_file)
+
+
+def get_external_class_inits(code_context: CodeStringsMarkdown, project_root_path: Path) -> CodeStringsMarkdown:
+    """Extract __init__ methods from directly imported external library classes.
+
+    Scans the code context for classes imported from external packages (site-packages) and extracts
+    their __init__ methods, including transitive type dependencies found in __init__ annotations.
+    This helps the LLM understand constructor signatures for instantiation in generated tests.
+    """
+    import importlib
+    import inspect
+
+    all_code = "\n".join(cs.code for cs in code_context.code_strings)
+
+    try:
+        tree = ast.parse(all_code)
+    except SyntaxError:
+        return CodeStringsMarkdown(code_strings=[])
+
+    # Collect all from X import Y statements
+    imported_names: dict[str, str] = {}
+    is_project_cache: dict[str, bool] = {}
+
+    # Track classes already defined in the context to avoid duplicates
+    existing_classes: set[str] = set()
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                if alias.name != "*":
+                    imported_name = alias.asname if alias.asname else alias.name
+                    imported_names[imported_name] = node.module
+        elif isinstance(node, ast.ClassDef):
+            existing_classes.add(node.name)
+
+    if not imported_names:
+        return CodeStringsMarkdown(code_strings=[])
+
+    # Filter to external-only imports
+    external_imports: set[tuple[str, str]] = set()
+    for name, module_name in imported_names.items():
+        if name in existing_classes:
+            continue
+        cached = is_project_cache.get(module_name)
+        if cached is None:
+            is_project = _is_project_module(module_name, project_root_path)
+            is_project_cache[module_name] = is_project
+        else:
+            is_project = cached
+        if not is_project:
+            external_imports.add((name, module_name))
+
+    if not external_imports:
+        return CodeStringsMarkdown(code_strings=[])
+
+    code_strings: list[CodeString] = []
+    imported_module_cache: dict[str, object] = {}
+    processed_classes: set[type] = set()
+    emitted_names: set[str] = set()
+
+    # BFS worklist: (class_object, class_name, depth)
+    worklist: list[tuple[type, str, int]] = []
+
+    # Seed the worklist with directly imported classes
+    for class_name, module_name in external_imports:
+        try:
+            module = imported_module_cache.get(module_name)
+            if module is None:
+                module = importlib.import_module(module_name)
+                imported_module_cache[module_name] = module
+
+            cls = getattr(module, class_name, None)
+            if cls is None or not inspect.isclass(cls):
+                continue
+
+            worklist.append((cls, class_name, 0))
+        except (ImportError, ModuleNotFoundError, AttributeError):
+            logger.debug(f"Failed to import {module_name}.{class_name}")
+            continue
+
+    while worklist:
+        cls, class_name, depth = worklist.pop(0)
+
+        if cls in processed_classes:
+            continue
+        processed_classes.add(cls)
+
+        stub = extract_init_stub_for_class(cls, class_name)
+        if stub is None:
+            continue
+
+        if class_name not in emitted_names:
+            code_strings.append(stub)
+            emitted_names.add(class_name)
+
+        # Resolve transitive type dependencies up to MAX_TRANSITIVE_DEPTH
+        if depth < MAX_TRANSITIVE_DEPTH:
+            for dep_cls in resolve_transitive_type_deps(cls):
+                if dep_cls not in processed_classes:
+                    worklist.append((dep_cls, dep_cls.__name__, depth + 1))
 
     return CodeStringsMarkdown(code_strings=code_strings)
 

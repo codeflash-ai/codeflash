@@ -1,0 +1,114 @@
+name: Duplicate Code Detector
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  detect-duplicates:
+    if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
+
+      - name: Start Serena MCP server
+        run: |
+          docker pull ghcr.io/github/serena-mcp-server:latest
+          docker run -d --name serena \
+            --network host \
+            -v "${{ github.workspace }}:${{ github.workspace }}:rw" \
+            ghcr.io/github/serena-mcp-server:latest \
+            serena start-mcp-server --context codex --project "${{ github.workspace }}"
+
+          mkdir -p /tmp/mcp-config
+          cat > /tmp/mcp-config/mcp-servers.json << 'EOF'
+          {
+            "mcpServers": {
+              "serena": {
+                "command": "docker",
+                "args": ["exec", "-i", "serena", "serena", "start-mcp-server", "--context", "codex", "--project", "${{ github.workspace }}"]
+              }
+            }
+          }
+          EOF
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          use_foundry: "true"
+          use_sticky_comment: true
+          allowed_bots: "claude[bot],codeflash-ai[bot]"
+          claude_args: '--mcp-config /tmp/mcp-config/mcp-servers.json --allowedTools "Read,Glob,Grep,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(wc *),Bash(find *),mcp__serena__*"'
+          prompt: |
+            You are a duplicate code detector with access to Serena semantic code analysis.
+
+            ## Setup
+
+            First activate the project in Serena:
+            - Use `mcp__serena__activate_project` with the workspace path `${{ github.workspace }}`
+
+            ## Steps
+
+            1. Get the list of changed .py files (excluding tests):
+               `git diff --name-only origin/main...HEAD -- '*.py' | grep -v -E '(test_|_test\.py|/tests/|/test/)'`
+
+            2. Use Serena's semantic analysis on changed files:
+               - `mcp__serena__get_symbols_overview` to understand file structure
+               - `mcp__serena__find_symbol` to search for similarly named symbols across the codebase
+               - `mcp__serena__find_referencing_symbols` to understand usage patterns
+               - `mcp__serena__search_for_pattern` to find similar code patterns
+
+            3. For each changed file, look for:
+               - **Exact Duplication**: Identical code blocks (>10 lines) in multiple locations
+               - **Structural Duplication**: Same logic with minor variations (different variable names)
+               - **Functional Duplication**: Different implementations of the same functionality
+               - **Copy-Paste Programming**: Similar blocks that could be extracted into shared utilities
+
+            4. Cross-reference against the rest of the codebase using Serena:
+               - Search for similar function signatures and logic patterns
+               - Check if new code duplicates existing utilities or helpers
+               - Look for repeated patterns across modules
+
+            ## What to Report
+
+            - Identical or nearly identical functions in different files
+            - Repeated code blocks that could be extracted to utilities
+            - Similar classes or modules with overlapping functionality
+            - Copy-pasted code with minor modifications
+            - Duplicated business logic across components
+
+            ## What to Skip
+
+            - Standard boilerplate (imports, __init__, etc.)
+            - Test setup/teardown code
+            - Configuration with similar structure
+            - Language-specific patterns (constructors, getters/setters)
+            - Small snippets (<5 lines) unless highly repetitive
+            - Workflow files under .github/
+
+            ## Output
+
+            Post a single PR comment with your findings. For each pattern found:
+            - Severity (High/Medium/Low)
+            - File locations with line numbers
+            - Code samples showing the duplication
+            - Concrete refactoring suggestion
+
+            If no significant duplication is found, say so briefly. Do not create issues — just comment on the PR.
+        env:
+          ANTHROPIC_FOUNDRY_API_KEY: ${{ secrets.AZURE_ANTHROPIC_API_KEY }}
+          ANTHROPIC_FOUNDRY_BASE_URL: ${{ secrets.AZURE_ANTHROPIC_ENDPOINT }}
+
+      - name: Stop Serena
+        if: always()
+        run: docker stop serena && docker rm serena || true
