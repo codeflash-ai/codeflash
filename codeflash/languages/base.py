@@ -221,8 +221,10 @@ class DependencyResolver(Protocol):
         """Return callees for the given functions."""
         ...
 
-    def count_callees_per_function(self, file_path_to_qualified_names: dict[Path, set[str]]) -> dict[str, int]:
-        """Return the number of callees for each caller qualified name."""
+    def count_callees_per_function(
+        self, file_path_to_qualified_names: dict[Path, set[str]]
+    ) -> dict[tuple[Path, str], int]:
+        """Return the number of callees for each (file_path, qualified_name) pair."""
         ...
 
     def close(self) -> None:

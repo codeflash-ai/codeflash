@@ -439,10 +439,11 @@ def leaf():
     cg = CallGraph(project, db_path=db_path)
     try:
         cg.build_index([project / "mod.py"])
-        counts = cg.count_callees_per_function({project / "mod.py": {"caller_one", "caller_two", "leaf"}})
-        assert counts["caller_one"] == 2
-        assert counts["caller_two"] == 1
-        assert counts["leaf"] == 0
+        mod_path = project / "mod.py"
+        counts = cg.count_callees_per_function({mod_path: {"caller_one", "caller_two", "leaf"}})
+        assert counts[(mod_path, "caller_one")] == 2
+        assert counts[(mod_path, "caller_two")] == 1
+        assert counts[(mod_path, "leaf")] == 0
     finally:
         cg.close()
 

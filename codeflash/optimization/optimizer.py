@@ -473,7 +473,9 @@ class Optimizer:
         for file_path, func in all_functions:
             file_to_qns[file_path].add(func.qualified_name)
         callee_counts = call_graph.count_callees_per_function(dict(file_to_qns))
-        ranked = sorted(enumerate(all_functions), key=lambda x: (-callee_counts.get(x[1][1].qualified_name, 0), x[0]))
+        ranked = sorted(
+            enumerate(all_functions), key=lambda x: (-callee_counts.get((x[1][0], x[1][1].qualified_name), 0), x[0])
+        )
         logger.debug(f"Ranked {len(ranked)} functions by dependency count (most complex first)")
         return [item for _, item in ranked]
 
