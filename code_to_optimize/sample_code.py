@@ -1,11 +1,23 @@
 from functools import partial
+from typing import Any
 
 import jax.numpy as jnp
 import numpy as np
 import tensorflow as tf
 import torch
 from jax import lax
+from torch import nn
 
+
+class AlexNet(nn.Module):
+    def __init__(self, num_classes=10, *args: Any, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+        self.num_classes = num_classes
+        self.layer = nn.Linear(5,10)
+
+    def forward(self, x):
+        x = self.layer(x)
+        return x
 
 def tridiagonal_solve(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray) -> np.ndarray:
     n = len(b)

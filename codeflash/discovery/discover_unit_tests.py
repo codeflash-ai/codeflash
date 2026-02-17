@@ -265,27 +265,22 @@ class ImportAnalyzer(ast.NodeVisitor):
 
     def visit_Assign(self, node: ast.Assign) -> None:
         """Track variable assignments, especially class instantiations."""
-        if self.found_any_target_function:
-            return
-
-        # Check if the assignment is a class instantiation
+        # Always track instance assignments, even if we've found a target function
+        # This is needed for the PyTorch nn.Module pattern where model(x) calls forward(x)
         value = node.value
         if isinstance(value, ast.Call) and isinstance(value.func, ast.Name):
             class_name = value.func.id
             if class_name in self.imported_modules:
                 # Map the variable to the actual class name (handling aliases)
                 original_class = self.alias_mapping.get(class_name, class_name)
-                # Use list comprehension for direct assignment to instance_mapping, reducing loop overhead
                 targets = node.targets
-                instance_mapping = self.instance_mapping
-                # since ast.Name nodes are heavily used, avoid local lookup for isinstance
-                # and reuse locals for faster attribute access
                 for target in targets:
                     if isinstance(target, ast.Name):
-                        instance_mapping[target.id] = original_class
+                        self.instance_mapping[target.id] = original_class
 
-        # Continue visiting child nodes
-        self.generic_visit(node)
+        # Continue visiting child nodes if we haven't found a target function yet
+        if not self.found_any_target_function:
+            self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         """Handle 'from module import name' statements."""
@@ -405,7 +400,7 @@ class ImportAnalyzer(ast.NodeVisitor):
             ast.NodeVisitor.generic_visit(self, node)
 
     def visit_Call(self, node: ast.Call) -> None:
-        """Handle function calls, particularly __import__."""
+        """Handle function calls, particularly __import__ and instance calls for nn.Module.forward."""
         if self.found_any_target_function:
             return
 
@@ -414,6 +409,19 @@ class ImportAnalyzer(ast.NodeVisitor):
             self.has_dynamic_imports = True
             # When __import__ is used, any target function could potentially be imported
             # Be conservative and assume it might import target functions
+
+        # Check if this is a call on an instance variable (PyTorch nn.Module pattern)
+        # When model = AlexNet(...) and we call model(input_data), this invokes forward()
+        if isinstance(node.func, ast.Name):
+            instance_name = node.func.id
+            if instance_name in self.instance_mapping:
+                class_name = self.instance_mapping[instance_name]
+                # Check if ClassName.forward is in our target functions
+                roots_possible = self._dot_methods.get("forward")
+                if roots_possible and class_name in roots_possible:
+                    self.found_any_target_function = True
+                    self.found_qualified_name = self._class_method_to_target[(class_name, "forward")]
+                    return
 
         self.generic_visit(node)
 
@@ -493,6 +501,68 @@ class ImportAnalyzer(ast.NodeVisitor):
                         meth(self, value)
                     else:
                         append((value._fields, value))
+
+
+class InstanceMappingExtractor(ast.NodeVisitor):
+    """Simple visitor to extract instance-to-class mappings from a file.
+
+    This is needed for detecting PyTorch nn.Module.forward calls where model(x) calls forward(x).
+    """
+
+    def __init__(self) -> None:
+        self.imported_modules: set[str] = set()
+        self.alias_mapping: dict[str, str] = {}
+        self.instance_mapping: dict[str, str] = {}
+
+    def visit_Import(self, node: ast.Import) -> None:
+        for alias in node.names:
+            module_name = alias.asname if alias.asname else alias.name
+            self.imported_modules.add(module_name)
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        if not node.module:
+            return
+        for alias in node.names:
+            if alias.name == "*":
+                continue
+            imported_name = alias.asname if alias.asname else alias.name
+            self.imported_modules.add(imported_name)
+            if alias.asname:
+                self.alias_mapping[imported_name] = alias.name
+        self.generic_visit(node)
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        value = node.value
+        if isinstance(value, ast.Call) and isinstance(value.func, ast.Name):
+            class_name = value.func.id
+            if class_name in self.imported_modules:
+                original_class = self.alias_mapping.get(class_name, class_name)
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        self.instance_mapping[target.id] = original_class
+        self.generic_visit(node)
+
+
+def extract_instance_mapping(test_file_path: Path) -> dict[str, str]:
+    """Extract instance-to-class mappings from a test file.
+
+    Args:
+        test_file_path: Path to the test file.
+
+    Returns:
+        Dictionary mapping instance variable names to class names.
+
+    """
+    try:
+        with test_file_path.open("r", encoding="utf-8") as f:
+            source_code = f.read()
+        tree = ast.parse(source_code, filename=str(test_file_path))
+        extractor = InstanceMappingExtractor()
+        extractor.visit(tree)
+        return extractor.instance_mapping
+    except (SyntaxError, FileNotFoundError):
+        return {}
 
 
 def analyze_imports_in_test_file(test_file_path: Path | str, target_functions: set[str]) -> bool:
@@ -879,6 +949,10 @@ def process_test_files(
                 top_level_functions = {name.name: name for name in all_names_top if name.type == "function"}
                 top_level_classes = {name.name: name for name in all_names_top if name.type == "class"}
 
+                # Get instance-to-class mappings for PyTorch nn.Module.forward detection
+                # When model = AlexNet(...) and model(x) is called, it invokes forward(x)
+                instance_to_class_mapping = extract_instance_mapping(test_file) if functions_to_optimize else {}
+
             except Exception as e:
                 logger.debug(f"Failed to get jedi script for {test_file}: {e}")
                 progress.advance(task_id)
@@ -1017,6 +1091,61 @@ def process_test_files(
                                             num_discovered_replay_tests += 1
 
                                         num_discovered_tests += 1
+
+                            # Also check for PyTorch nn.Module pattern: model(x) -> forward(x)
+                            # When an instance variable is called, it invokes the forward method
+                            if name.name in instance_to_class_mapping:
+                                class_name = instance_to_class_mapping[name.name]
+                                for func_to_opt in functions_to_optimize:
+                                    # Check if the target is ClassName.forward
+                                    if (
+                                        func_to_opt.function_name == "forward"
+                                        and func_to_opt.top_level_parent_name == class_name
+                                    ):
+                                        qualified_name_with_modules = func_to_opt.qualified_name_with_modules_from_root(
+                                            project_root_path
+                                        )
+
+                                        for test_func in test_functions_by_name[scope]:
+                                            if test_func.parameters is not None:
+                                                if test_framework == "pytest":
+                                                    scope_test_function = (
+                                                        f"{test_func.function_name}[{test_func.parameters}]"
+                                                    )
+                                                else:  # unittest
+                                                    scope_test_function = (
+                                                        f"{test_func.function_name}_{test_func.parameters}"
+                                                    )
+                                            else:
+                                                scope_test_function = test_func.function_name
+
+                                            function_to_test_map[qualified_name_with_modules].add(
+                                                FunctionCalledInTest(
+                                                    tests_in_file=TestsInFile(
+                                                        test_file=test_file,
+                                                        test_class=test_func.test_class,
+                                                        test_function=scope_test_function,
+                                                        test_type=test_func.test_type,
+                                                    ),
+                                                    position=CodePosition(line_no=name.line, col_no=name.column),
+                                                )
+                                            )
+                                            tests_cache.insert_test(
+                                                file_path=str(test_file),
+                                                file_hash=file_hash,
+                                                qualified_name_with_modules_from_root=qualified_name_with_modules,
+                                                function_name=scope,
+                                                test_class=test_func.test_class or "",
+                                                test_function=scope_test_function,
+                                                test_type=test_func.test_type,
+                                                line_number=name.line,
+                                                col_number=name.column,
+                                            )
+
+                                            if test_func.test_type == TestType.REPLAY_TEST:
+                                                num_discovered_replay_tests += 1
+
+                                            num_discovered_tests += 1
                         continue
                     definition_obj = definition[0]
                     definition_path = str(definition_obj.module_path)
