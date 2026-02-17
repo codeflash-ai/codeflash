@@ -184,7 +184,6 @@ def _get_maven_project_info(project_root: Path) -> JavaProjectInfo | None:
         if test_src.exists():
             test_roots.append(test_src)
 
-
         # Check for custom source directories in pom.xml <build> section
         for build in [root.find("m:build", ns), root.find("build")]:
             if build is not None:
@@ -660,7 +659,7 @@ def add_codeflash_dependency_to_pom(pom_path: Path) -> bool:
 
         new_content = content[:idx] + CODEFLASH_DEPENDENCY_SNIPPET
         # Skip the original </dependencies> tag since our snippet includes it
-        new_content += content[idx + len(closing_tag):]
+        new_content += content[idx + len(closing_tag) :]
 
         pom_path.write_text(new_content, encoding="utf-8")
         logger.info("Added codeflash-runtime dependency to pom.xml")

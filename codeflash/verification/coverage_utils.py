@@ -231,7 +231,9 @@ class JacocoCoverageUtils:
                     f"File preview: {content_preview!r}"
                 )
             except Exception as read_err:
-                logger.warning(f"Failed to parse JaCoCo XML file at '{jacoco_xml_path}': {e}. Could not read file: {read_err}")
+                logger.warning(
+                    f"Failed to parse JaCoCo XML file at '{jacoco_xml_path}': {e}. Could not read file: {read_err}"
+                )
             return CoverageData.create_empty(source_code_path, function_name, code_context)
 
         # Determine expected source file name from path

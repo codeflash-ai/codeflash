@@ -800,7 +800,9 @@ class FunctionOptimizer:
                     logger.debug(
                         f"[JAVA] Detected Java sources root: {java_sources_root} (from tests_root: {tests_root})"
                     )
-                    logger.debug(f"[JAVA-ROOT] Returning Java sources root: {java_sources_root}, tests_root was: {tests_root}")
+                    logger.debug(
+                        f"[JAVA-ROOT] Returning Java sources root: {java_sources_root}, tests_root was: {tests_root}"
+                    )
                     return java_sources_root
 
         # If no standard package prefix found, check if there's a 'java' directory
@@ -810,7 +812,9 @@ class FunctionOptimizer:
                 # Return up to and including 'java'
                 java_sources_root = Path(*parts[: i + 1])
                 logger.debug(f"[JAVA] Detected Maven-style Java sources root: {java_sources_root}")
-                logger.debug(f"[JAVA-ROOT] Returning Java sources root: {java_sources_root}, tests_root was: {tests_root}")
+                logger.debug(
+                    f"[JAVA-ROOT] Returning Java sources root: {java_sources_root}, tests_root was: {tests_root}"
+                )
                 return java_sources_root
 
         # Default: return tests_root as-is (original behavior)
@@ -862,7 +866,7 @@ class FunctionOptimizer:
                     if main_match:
                         main_module_name = main_match.group(1)
                         if package_name.startswith(main_module_name):
-                            suffix = package_name[len(main_module_name):]
+                            suffix = package_name[len(main_module_name) :]
                             new_package = test_module_name + suffix
                             old_decl = f"package {package_name};"
                             new_decl = f"package {new_package};"

@@ -1153,7 +1153,7 @@ void testWithThreadSleep() throws InterruptedException {
         assert result == expected
 
     def test_synchronized_method_signature_preserved(self):
-        """synchronized modifier on a test method is preserved after transformation."""
+        """Synchronized modifier on a test method is preserved after transformation."""
         source = """\
 @Test
 synchronized void testSyncMethod() {

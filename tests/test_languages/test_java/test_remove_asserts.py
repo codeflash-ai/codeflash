@@ -16,10 +16,7 @@ Covers:
 - Edge cases: static calls, qualified calls, method chaining
 """
 
-from codeflash.languages.java.remove_asserts import (
-    JavaAssertTransformer,
-    transform_java_assertions,
-)
+from codeflash.languages.java.remove_asserts import JavaAssertTransformer, transform_java_assertions
 
 
 class TestJUnit4Assertions:

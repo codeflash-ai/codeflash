@@ -12,8 +12,6 @@ Also includes end-to-end execution tests that:
 
 import os
 import re
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -24,7 +22,6 @@ os.environ["CODEFLASH_API_KEY"] = "cf-test-key"
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import Language
 from codeflash.languages.current import set_current_language
-from codeflash.models.function_types import FunctionParent
 from codeflash.languages.java.build_tools import find_maven_executable
 from codeflash.languages.java.discovery import discover_functions_from_source
 from codeflash.languages.java.instrumentation import (
@@ -1148,7 +1145,7 @@ public class TargetBenchmark {
             "public class TargetBenchmark {\n"
             "\n"
             "    @Test\n"
-            "    @DisplayName(\"Benchmark multiply\")\n"
+            '    @DisplayName("Benchmark multiply")\n'
             "    public void benchmarkMultiply() {\n"
             "        \n"  # Empty test_setup_code with 8-space indent
             "\n"
@@ -1167,7 +1164,7 @@ public class TargetBenchmark {
             "        long totalNanos = endTime - startTime;\n"
             "        long avgNanos = totalNanos / 5000;\n"
             "\n"
-            "        System.out.println(\"CODEFLASH_BENCHMARK:multiply:total_ns=\" + totalNanos + \",avg_ns=\" + avgNanos + \",iterations=5000\");\n"
+            '        System.out.println("CODEFLASH_BENCHMARK:multiply:total_ns=" + totalNanos + ",avg_ns=" + avgNanos + ",iterations=5000");\n'
             "    }\n"
             "}\n"
         )
@@ -1934,9 +1931,6 @@ class TestRunAndParseTests:
     @pytest.fixture
     def java_project(self, tmp_path: Path):
         """Create a temporary Maven project and set up Java language context."""
-        from codeflash.languages.base import Language
-        from codeflash.languages.current import set_current_language
-
         # Force set the language to Java (reset the singleton first)
         import codeflash.languages.current as current_module
         current_module._current_language = None
@@ -2432,7 +2426,6 @@ public class BrokenCalcTest {
     def test_behavior_mode_writes_to_sqlite(self, java_project):
         """Test that behavior mode correctly writes results to SQLite file."""
         import sqlite3
-
         from argparse import Namespace
 
         from codeflash.code_utils.code_utils import get_run_tmp_file

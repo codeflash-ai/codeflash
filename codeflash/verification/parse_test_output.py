@@ -1002,7 +1002,9 @@ def parse_test_xml(
     # Always use tests_project_rootdir since pytest is now the test runner for all frameworks
     base_dir = test_config.tests_project_rootdir
     logger.debug(f"[PARSE-XML] base_dir for resolution: {base_dir}")
-    logger.debug(f"[PARSE-XML] Registered test files: {[str(tf.instrumented_behavior_file_path) for tf in test_files.test_files]}")
+    logger.debug(
+        f"[PARSE-XML] Registered test files: {[str(tf.instrumented_behavior_file_path) for tf in test_files.test_files]}"
+    )
 
     # For Java: pre-parse fallback stdout once (not per testcase) to avoid O(n²) complexity
     java_fallback_stdout = None
@@ -1067,7 +1069,9 @@ def parse_test_xml(
                     test_file_path = resolve_test_file_from_class_path(test_class_path, base_dir)
 
                     if test_file_path is None:
-                        logger.error(f"[PARSE-XML] ERROR: Could not resolve test_class_path={test_class_path}, base_dir={base_dir}")
+                        logger.error(
+                            f"[PARSE-XML] ERROR: Could not resolve test_class_path={test_class_path}, base_dir={base_dir}"
+                        )
                         logger.warning(f"Could not find the test for file name - {test_class_path} ")
                         continue
                 else:
@@ -1271,9 +1275,7 @@ def parse_test_xml(
             str(test_file.instrumented_behavior_file_path or test_file.original_file_path)
             for test_file in test_files.test_files
         ]
-        logger.info(
-            f"Tests {test_paths_display} failed to run, skipping"
-        )
+        logger.info(f"Tests {test_paths_display} failed to run, skipping")
         if run_result is not None:
             stdout, stderr = "", ""
             try:

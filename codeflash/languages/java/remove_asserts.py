@@ -298,9 +298,7 @@ class JavaAssertTransformer:
         # - Assertions.assertEquals (JUnit 5)
         # - org.junit.jupiter.api.Assertions.assertEquals (fully qualified)
         all_assertions = "|".join(JUNIT5_ALL_ASSERTIONS)
-        pattern = re.compile(
-            rf"(\s*)((?:(?:\w+\.)*Assert(?:ions)?\.)?({all_assertions}))\s*\(", re.MULTILINE
-        )
+        pattern = re.compile(rf"(\s*)((?:(?:\w+\.)*Assert(?:ions)?\.)?({all_assertions}))\s*\(", re.MULTILINE)
 
         for match in pattern.finditer(source):
             leading_ws = match.group(1)
@@ -549,8 +547,12 @@ class JavaAssertTransformer:
         return results
 
     def _collect_target_invocations(
-        self, node, wrapper_bytes: bytes, content_bytes: bytes,
-        base_offset: int, out: list[TargetCall],
+        self,
+        node,
+        wrapper_bytes: bytes,
+        content_bytes: bytes,
+        base_offset: int,
+        out: list[TargetCall],
         seen_top_level: set[tuple[int, int]] | None = None,
     ) -> None:
         """Recursively walk the AST and collect method_invocation nodes that match self.func_name.
@@ -574,22 +576,24 @@ class JavaAssertTransformer:
                         seen_top_level.add(range_key)
                         start = top_node.start_byte - prefix_len
                         end = top_node.end_byte - prefix_len
-                        if 0 <= start and end <= len(content_bytes):
+                        if start >= 0 and end <= len(content_bytes):
                             full_call = self.analyzer.get_node_text(top_node, wrapper_bytes)
                             start_char = len(content_bytes[:start].decode("utf8"))
                             end_char = len(content_bytes[:end].decode("utf8"))
-                            out.append(TargetCall(
-                                receiver=None,
-                                method_name=self.func_name,
-                                arguments="",
-                                full_call=full_call,
-                                start_pos=base_offset + start_char,
-                                end_pos=base_offset + end_char,
-                            ))
+                            out.append(
+                                TargetCall(
+                                    receiver=None,
+                                    method_name=self.func_name,
+                                    arguments="",
+                                    full_call=full_call,
+                                    start_pos=base_offset + start_char,
+                                    end_pos=base_offset + end_char,
+                                )
+                            )
                 else:
                     start = node.start_byte - prefix_len
                     end = node.end_byte - prefix_len
-                    if 0 <= start and end <= len(content_bytes):
+                    if start >= 0 and end <= len(content_bytes):
                         out.append(self._build_target_call(node, wrapper_bytes, content_bytes, start, end, base_offset))
                 return
 
@@ -597,8 +601,7 @@ class JavaAssertTransformer:
             self._collect_target_invocations(child, wrapper_bytes, content_bytes, base_offset, out, seen_top_level)
 
     def _build_target_call(
-        self, node, wrapper_bytes: bytes, content_bytes: bytes,
-        start_byte: int, end_byte: int, base_offset: int,
+        self, node, wrapper_bytes: bytes, content_bytes: bytes, start_byte: int, end_byte: int, base_offset: int
     ) -> TargetCall:
         """Build a TargetCall from a tree-sitter method_invocation node."""
         get_text = self.analyzer.get_node_text
@@ -678,7 +681,6 @@ class JavaAssertTransformer:
         # Pattern: Type varName = assertXxx(...)
         # Handle generic types: Type<Generic> varName = ...
         match = self._assign_re.search(source, line_start, assertion_start)
-
 
         if match:
             var_type = match.group(1).strip()
@@ -934,18 +936,12 @@ class JavaAssertTransformer:
                     f"catch (Exception _cf_ignored{counter}) {{}}"
                 )
 
-            return (
-                f"{ws}try {{ {code_to_run} }} "
-                f"catch (Exception _cf_ignored{counter}) {{}}"
-            )
+            return f"{ws}try {{ {code_to_run} }} catch (Exception _cf_ignored{counter}) {{}}"
 
         # If no lambda body found, try to extract from target calls
         if assertion.target_calls:
             call = assertion.target_calls[0]
-            return (
-                f"{ws}try {{ {call.full_call}; }} "
-                f"catch (Exception _cf_ignored{counter}) {{}}"
-            )
+            return f"{ws}try {{ {call.full_call}; }} catch (Exception _cf_ignored{counter}) {{}}"
 
         # Fallback: comment out the assertion
         return f"{ws}// Removed assertThrows: could not extract callable"

@@ -18,8 +18,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from tree_sitter import Node
-
     from codeflash.languages.base import FunctionInfo
 
 logger = logging.getLogger(__name__)
@@ -306,9 +304,7 @@ class JavaConcurrencyAnalyzer:
         return suggestions
 
 
-def analyze_function_concurrency(
-    func: FunctionInfo, source: str | None = None, analyzer=None
-) -> ConcurrencyInfo:
+def analyze_function_concurrency(func: FunctionInfo, source: str | None = None, analyzer=None) -> ConcurrencyInfo:
     """Analyze a function for concurrency patterns.
 
     Convenience function that creates a JavaConcurrencyAnalyzer and analyzes the function.
