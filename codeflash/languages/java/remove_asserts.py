@@ -813,19 +813,18 @@ class JavaAssertTransformer:
 
         if not assertion.target_calls:
             return ""
-
-        # Generate capture statements for each target call
-        replacements = []
         # For the first replacement, use the full leading whitespace
         # For subsequent ones, strip leading newlines to avoid extra blank lines
         base_indent = assertion.leading_whitespace.lstrip("\n\r")
-        for i, call in enumerate(assertion.target_calls):
-            self.invocation_counter += 1
-            var_name = f"_cf_result{self.invocation_counter}"
-            if i == 0:
-                replacements.append(f"{assertion.leading_whitespace}Object {var_name} = {call.full_call};")
-            else:
-                replacements.append(f"{base_indent}Object {var_name} = {call.full_call};")
+        start_counter = self.invocation_counter + 1
+        self.invocation_counter += len(assertion.target_calls)
+        
+        # Build all replacements using list comprehension with direct f-string formatting
+        replacements = [
+            f"{assertion.leading_whitespace if i == 0 else base_indent}Object _cf_result{start_counter + i} = {call.full_call};"
+            for i, call in enumerate(assertion.target_calls)
+        ]
+
 
         return "\n".join(replacements)
 
@@ -862,8 +861,9 @@ class JavaAssertTransformer:
                 var_type = assertion.assigned_var_type
                 var_name = assertion.assigned_var_name
                 if assertion.assertion_method == "assertDoesNotThrow":
-                    if ";" not in assertion.lambda_body.strip():
-                        return f"{ws}{var_type} {var_name} = {assertion.lambda_body.strip()};"
+                    lambda_stripped = assertion.lambda_body.strip()
+                    if ";" not in lambda_stripped:
+                        return f"{ws}{var_type} {var_name} = {lambda_stripped};"
                     return f"{ws}{code_to_run}"
                 # For assertThrows with variable assignment, use exception_class if available
                 exception_type = assertion.exception_class or var_type
