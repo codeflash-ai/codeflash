@@ -14,7 +14,7 @@ class Result(Generic[L, R]):
         return isinstance(self, Failure)
 
     def is_successful(self) -> bool:
-        return isinstance(self, Success)
+        return False
 
     def unwrap(self) -> L | R:
         if self.is_failure():
@@ -35,6 +35,8 @@ class Failure(Result[L, R]):
 
 class Success(Result[L, R]):
     pass
+    def is_successful(self) -> bool:
+        return True
 
 
 def is_successful(result: Result[L, R]) -> bool:
