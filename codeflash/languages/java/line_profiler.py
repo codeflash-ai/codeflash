@@ -464,23 +464,34 @@ def format_line_profile_results(results: dict, file_path: Path | None = None) ->
         file_key = str(file_path)
         timings = {file_key: timings.get(file_key, {})}
 
+
+    header_line = f"{'Line':>6} | {'Hits':>10} | {'Time (ms)':>12} | {'Avg (ms)':>12} | Code"
+    separator = "-" * 80
+    # Precompile format pattern for per-line rows
+    row_pattern = "{:6d} | {:10d} | {:12.3f} | {:12.6f} | {}"
+
     for file, lines in sorted(timings.items()):
         if not lines:
             continue
 
         output.append(f"\nFile: {file}")
-        output.append("-" * 80)
-        output.append(f"{'Line':>6} | {'Hits':>10} | {'Time (ms)':>12} | {'Avg (ms)':>12} | Code")
-        output.append("-" * 80)
+        output.append(separator)
+        output.append(header_line)
+        output.append(separator)
 
         # Sort by line number
-        for line_num in sorted(lines.keys()):
-            stats = lines[line_num]
+        # Use sorted(lines.items()) to avoid an extra dict lookup per iteration
+        rows = []
+        # Build rows with a list comprehension-like loop to keep logic clear and efficient
+        for line_num, stats in sorted(lines.items()):
             hits = stats["hits"]
             time_ms = stats["time_ms"]
             avg_ms = time_ms / hits if hits > 0 else 0
-            content = stats.get("content", "")[:50]  # Truncate long lines
+            content = stats.get("content", "")
+            if len(content) > 50:
+                content = content[:50]  # Truncate long lines
+            rows.append(row_pattern.format(line_num, hits, time_ms, avg_ms, content))
 
-            output.append(f"{line_num:6d} | {hits:10d} | {time_ms:12.3f} | {avg_ms:12.6f} | {content}")
+        output.extend(rows)
 
     return "\n".join(output)
