@@ -710,12 +710,12 @@ function capturePerf(funcName, lineId, fn, ...args) {
 
     for (let batchIndex = 0; batchIndex < batchSize; batchIndex++) {
         // Check shared time limit BEFORE each iteration
-        if (shouldLoop && checkSharedTimeLimit()) {
+        if (!hasExternalLoopRunner && shouldLoop && checkSharedTimeLimit()) {
             break;
         }
 
         // Check if this invocation has already reached stability
-        if (getPerfStabilityCheck() && sharedPerfState.stableInvocations[invocationKey]) {
+        if (!hasExternalLoopRunner && getPerfStabilityCheck() && sharedPerfState.stableInvocations[invocationKey]) {
             break;
         }
 
@@ -724,7 +724,7 @@ function capturePerf(funcName, lineId, fn, ...args) {
 
         // Check if we've exceeded max loops for this invocation
         const totalIterations = getTotalIterations(invocationKey);
-        if (totalIterations > getPerfLoopCount()) {
+        if (!hasExternalLoopRunner && totalIterations > getPerfLoopCount()) {
             break;
         }
 
@@ -776,7 +776,7 @@ function capturePerf(funcName, lineId, fn, ...args) {
         }
 
         // Check stability after accumulating enough samples
-        if (getPerfStabilityCheck() && runtimes.length >= getPerfMinLoops()) {
+        if (!hasExternalLoopRunner && getPerfStabilityCheck() && runtimes.length >= getPerfMinLoops()) {
             const window = getStabilityWindow();
             if (shouldStopStability(runtimes, window, getPerfMinLoops())) {
                 sharedPerfState.stableInvocations[invocationKey] = true;
@@ -785,7 +785,7 @@ function capturePerf(funcName, lineId, fn, ...args) {
         }
 
         // If we had an error, stop looping
-        if (lastError) {
+        if (!hasExternalLoopRunner && lastError) {
             break;
         }
     }
