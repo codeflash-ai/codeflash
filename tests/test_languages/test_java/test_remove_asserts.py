@@ -478,8 +478,8 @@ public class FibonacciTest {
 """
         result = transform_java_assertions(source, "fibonacci")
         assert "assertTrue" not in result
-        assert "Object _cf_result1 = Fibonacci.fibonacci(5);" in result
-        assert "Object _cf_result2 = Fibonacci.fibonacci(6);" in result
+        # Both fibonacci calls are preserved inside the containing areConsecutiveFibonacci call
+        assert "Object _cf_result1 = Fibonacci.areConsecutiveFibonacci(Fibonacci.fibonacci(5), Fibonacci.fibonacci(6));" in result
 
     def test_multiple_assertions_in_one_method(self):
         source = """\
@@ -626,8 +626,8 @@ public class FibonacciTest {
 """
         result = transform_java_assertions(source, "fibonacci")
         assert "assertEquals" not in result
-        # Should capture the inner fibonacci call
-        assert "Object _cf_result1 = Fibonacci.fibonacci(10);" in result
+        # Should capture the full top-level expression containing the target call
+        assert "Object _cf_result1 = Fibonacci.fibonacciIndex(Fibonacci.fibonacci(10));" in result
 
     def test_chained_method_on_result(self):
         """Target function call with chained method (e.g., result.toString())."""

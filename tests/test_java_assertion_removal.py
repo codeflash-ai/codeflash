@@ -407,9 +407,51 @@ void testDeep() {
         expected = """\
 @Test
 void testDeep() {
-    Object _cf_result1 = calculator.fibonacci(5);
+    Object _cf_result1 = outer.process(inner.compute(calculator.fibonacci(5)));
 }"""
         result = transform_java_assertions(source, "fibonacci")
+        assert result == expected
+
+    def test_target_nested_in_non_target_call(self):
+        source = """\
+@Test
+void testSubtract() {
+    assertEquals(0, add(2, subtract(2, 2)));
+}"""
+        expected = """\
+@Test
+void testSubtract() {
+    Object _cf_result1 = add(2, subtract(2, 2));
+}"""
+        result = transform_java_assertions(source, "subtract")
+        assert result == expected
+
+    def test_non_target_nested_in_target_call(self):
+        source = """\
+@Test
+void testAdd() {
+    assertEquals(0, subtract(2, add(2, 3)));
+}"""
+        expected = """\
+@Test
+void testAdd() {
+    Object _cf_result1 = subtract(2, add(2, 3));
+}"""
+        result = transform_java_assertions(source, "add")
+        assert result == expected
+
+    def test_multiple_targets_nested_in_same_outer_call(self):
+        source = """\
+@Test
+void testOuter() {
+    assertEquals(0, outer(subtract(1, 1), subtract(2, 2)));
+}"""
+        expected = """\
+@Test
+void testOuter() {
+    Object _cf_result1 = outer(subtract(1, 1), subtract(2, 2));
+}"""
+        result = transform_java_assertions(source, "subtract")
         assert result == expected
 
 
