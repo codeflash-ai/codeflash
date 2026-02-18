@@ -5,7 +5,7 @@ description = "Pytest benchmarking plugin for codeflash.ai - automatic code perf
 authors = [{ name = "CodeFlash Inc.", email = "contact@codeflash.ai" }]
 requires-python = ">=3.9"
 readme = "README.md"
-license = {text = "BSL-1.1"}
+license-files = ["LICENSE"]
 keywords = [
     "codeflash",
     "benchmark",

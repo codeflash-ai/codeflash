@@ -527,10 +527,5 @@ def parse_jest_test_xml(
                 f"[LOOP-SUMMARY] Results loop_index: min={min_idx}, max={max_idx}, "
                 f"unique_count={len(unique_loop_indices)}, total_results={len(loop_indices)}"
             )
-            if max_idx == 1 and len(loop_indices) > 1:
-                logger.warning(
-                    f"[LOOP-WARNING] All {len(loop_indices)} results have loop_index=1. "
-                    "Perf test markers may not have been parsed correctly."
-                )
 
     return test_results

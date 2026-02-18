@@ -42,10 +42,16 @@ jobs:
           }
           EOF
 
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
       - name: Run Claude Code
         uses: anthropics/claude-code-action@v1
         with:
-          use_foundry: "true"
+          use_bedrock: "true"
           use_sticky_comment: true
           allowed_bots: "claude[bot],codeflash-ai[bot]"
           claude_args: '--mcp-config /tmp/mcp-config/mcp-servers.json --allowedTools "Read,Glob,Grep,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(wc *),Bash(find *),mcp__serena__*"'
@@ -105,10 +111,6 @@ jobs:
             - Concrete refactoring suggestion
 
             If no significant duplication is found, say so briefly. Do not create issues — just comment on the PR.
-        env:
-          ANTHROPIC_FOUNDRY_API_KEY: ${{ secrets.AZURE_ANTHROPIC_API_KEY }}
-          ANTHROPIC_FOUNDRY_BASE_URL: ${{ secrets.AZURE_ANTHROPIC_ENDPOINT }}
-
       - name: Stop Serena
         if: always()
         run: docker stop serena && docker rm serena || true

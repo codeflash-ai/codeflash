@@ -1900,6 +1900,7 @@ class FunctionOptimizer:
             if self.args.override_fixtures:
                 restore_conftest(original_conftest_content)
             cleanup_paths(paths_to_cleanup)
+            self.cleanup_async_helper_file()
             return Failure(baseline_result.failure())
 
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
@@ -1911,6 +1912,7 @@ class FunctionOptimizer:
             if self.args.override_fixtures:
                 restore_conftest(original_conftest_content)
             cleanup_paths(paths_to_cleanup)
+            self.cleanup_async_helper_file()
             return Failure("The threshold for test confidence was not met.")
 
         return Success(
@@ -2080,7 +2082,10 @@ class FunctionOptimizer:
         generated_tests_str = ""
         code_lang = self.function_to_optimize.language
         for test in generated_tests.generated_tests:
-            if map_gen_test_file_to_no_of_tests[test.behavior_file_path] > 0:
+            if any(
+                test_file.name == test.behavior_file_path.name and count > 0
+                for test_file, count in map_gen_test_file_to_no_of_tests.items()
+            ):
                 formatted_generated_test = format_generated_code(
                     test.generated_original_test_source, self.args.formatter_cmds
                 )
@@ -2279,6 +2284,13 @@ class FunctionOptimizer:
         self.write_code_and_helpers(
             self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
         )
+        self.cleanup_async_helper_file()
+
+    def cleanup_async_helper_file(self) -> None:
+        from codeflash.code_utils.instrument_existing_tests import ASYNC_HELPER_FILENAME
+
+        helper_path = self.project_root / ASYNC_HELPER_FILENAME
+        helper_path.unlink(missing_ok=True)
 
     def establish_original_code_baseline(
         self,
@@ -2296,7 +2308,10 @@ class FunctionOptimizer:
             from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
             success = add_async_decorator_to_function(
-                self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.BEHAVIOR
+                self.function_to_optimize.file_path,
+                self.function_to_optimize,
+                TestingMode.BEHAVIOR,
+                project_root=self.project_root,
             )
 
         # Instrument codeflash capture
@@ -2361,7 +2376,10 @@ class FunctionOptimizer:
                 from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
                 add_async_decorator_to_function(
-                    self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
+                    self.function_to_optimize.file_path,
+                    self.function_to_optimize,
+                    TestingMode.PERFORMANCE,
+                    project_root=self.project_root,
                 )
 
             try:
@@ -2535,7 +2553,10 @@ class FunctionOptimizer:
                 from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
                 add_async_decorator_to_function(
-                    self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.BEHAVIOR
+                    self.function_to_optimize.file_path,
+                    self.function_to_optimize,
+                    TestingMode.BEHAVIOR,
+                    project_root=self.project_root,
                 )
 
             try:
@@ -2611,7 +2632,10 @@ class FunctionOptimizer:
                 from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
                 add_async_decorator_to_function(
-                    self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
+                    self.function_to_optimize.file_path,
+                    self.function_to_optimize,
+                    TestingMode.PERFORMANCE,
+                    project_root=self.project_root,
                 )
 
             try:
@@ -2974,7 +2998,10 @@ class FunctionOptimizer:
         try:
             # Add concurrency decorator to the source function
             add_async_decorator_to_function(
-                self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.CONCURRENCY
+                self.function_to_optimize.file_path,
+                self.function_to_optimize,
+                TestingMode.CONCURRENCY,
+                project_root=self.project_root,
             )
 
             # Run the concurrency benchmark tests

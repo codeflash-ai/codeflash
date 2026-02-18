@@ -113,21 +113,26 @@ function checkSharedTimeLimit() {
 
 /**
  * Get the current loop index for a specific invocation.
- * The loop index represents how many times ALL test files have been run through.
- * This is the batch count from the loop-runner.
+ * When using external loop-runner (Jest), returns the batch number directly.
+ * When using internal looping (Vitest), tracks and returns the invocation count.
+ *
  * @param {string} invocationKey - Unique key for this test invocation
- * @returns {number} The current batch number (loop index)
+ * @returns {number} The loop index for timing markers (1-based)
  */
 function getInvocationLoopIndex(invocationKey) {
-    // Track local loop count for stopping logic (increments on each call)
+    // When using external loop-runner, use the batch number directly
+    // This is reliable because Jest resets module state between batches
+    const currentBatch = process.env.CODEFLASH_PERF_CURRENT_BATCH;
+    if (currentBatch !== undefined) {
+        return parseInt(currentBatch, 10);
+    }
+
+    // For internal looping (Vitest), track the count locally
     if (!sharedPerfState.invocationLoopCounts[invocationKey]) {
         sharedPerfState.invocationLoopCounts[invocationKey] = 0;
     }
     ++sharedPerfState.invocationLoopCounts[invocationKey];
-
-    // Return the batch number as the loop index for timing markers
-    // This represents how many times all test files have been run through
-    return parseInt(process.env.CODEFLASH_PERF_CURRENT_BATCH || '1', 10);
+    return sharedPerfState.invocationLoopCounts[invocationKey];
 }
 
 /**
@@ -693,11 +698,9 @@ function capturePerf(funcName, lineId, fn, ...args) {
     // If not set, we're in Vitest mode and need to do all loops internally
     const hasExternalLoopRunner = process.env.CODEFLASH_PERF_CURRENT_BATCH !== undefined;
 
-    // Batched looping: run BATCH_SIZE loops per capturePerf call when using loop-runner
+    // When using external loop-runner (Jest), execute only once per call - the loop-runner handles batching
     // For Vitest (no loop-runner), do all loops internally in a single call
-    const batchSize = shouldLoop
-        ? (hasExternalLoopRunner ? getPerfBatchSize() : getPerfLoopCount())
-        : 1;
+    const batchSize = hasExternalLoopRunner ? 1 : (shouldLoop ? getPerfLoopCount() : 1);
 
     // Initialize runtime tracking for this invocation if needed
     if (!sharedPerfState.invocationRuntimes[invocationKey]) {
@@ -710,21 +713,21 @@ function capturePerf(funcName, lineId, fn, ...args) {
 
     for (let batchIndex = 0; batchIndex < batchSize; batchIndex++) {
         // Check shared time limit BEFORE each iteration
-        if (shouldLoop && checkSharedTimeLimit()) {
+        if (!hasExternalLoopRunner && shouldLoop && checkSharedTimeLimit()) {
             break;
         }
 
         // Check if this invocation has already reached stability
-        if (getPerfStabilityCheck() && sharedPerfState.stableInvocations[invocationKey]) {
+        if (!hasExternalLoopRunner && getPerfStabilityCheck() && sharedPerfState.stableInvocations[invocationKey]) {
             break;
         }
 
-        // Get the loop index (batch number) for timing markers
+        // Get the loop index for timing markers
         const loopIndex = getInvocationLoopIndex(invocationKey);
 
         // Check if we've exceeded max loops for this invocation
         const totalIterations = getTotalIterations(invocationKey);
-        if (totalIterations > getPerfLoopCount()) {
+        if (!hasExternalLoopRunner && totalIterations > getPerfLoopCount()) {
             break;
         }
 
@@ -776,7 +779,7 @@ function capturePerf(funcName, lineId, fn, ...args) {
         }
 
         // Check stability after accumulating enough samples
-        if (getPerfStabilityCheck() && runtimes.length >= getPerfMinLoops()) {
+        if (!hasExternalLoopRunner && getPerfStabilityCheck() && runtimes.length >= getPerfMinLoops()) {
             const window = getStabilityWindow();
             if (shouldStopStability(runtimes, window, getPerfMinLoops())) {
                 sharedPerfState.stableInvocations[invocationKey] = true;
@@ -785,7 +788,7 @@ function capturePerf(funcName, lineId, fn, ...args) {
         }
 
         // If we had an error, stop looping
-        if (lastError) {
+        if (!hasExternalLoopRunner && lastError) {
             break;
         }
     }
