@@ -9,6 +9,7 @@ import pytest
 
 from codeflash.code_utils.instrument_existing_tests import (
     add_async_decorator_to_function,
+    get_async_inline_code,
     inject_profiling_into_existing_test,
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -59,12 +60,16 @@ async def test_async_sort():
 
         assert source_success
 
-        # Verify the file was modified
+        # Verify the file was modified with exact expected output
         instrumented_source = fto_path.read_text("utf-8")
-        assert (
-            '''import asyncio\nfrom typing import List, Union\n\nfrom codeflash.code_utils.codeflash_wrap_decorator import \\\n    codeflash_behavior_async\n\n\n@codeflash_behavior_async\nasync def async_sorter(lst: List[Union[int, float]]) -> List[Union[int, float]]:\n    """\n    Async bubble sort implementation for testing.\n    """\n    print("codeflash stdout: Async sorting list")\n    \n    await asyncio.sleep(0.01)\n    \n    n = len(lst)\n    for i in range(n):\n        for j in range(0, n - i - 1):\n            if lst[j] > lst[j + 1]:\n                lst[j], lst[j + 1] = lst[j + 1], lst[j]\n    \n    result = lst.copy()\n    print(f"result: {result}")\n    return result\n\n\nclass AsyncBubbleSorter:\n    """Class with async sorting method for testing."""\n    \n    async def sorter(self, lst: List[Union[int, float]]) -> List[Union[int, float]]:\n        """\n        Async bubble sort implementation within a class.\n        """\n        print("codeflash stdout: AsyncBubbleSorter.sorter() called")\n        \n        # Add some async delay\n        await asyncio.sleep(0.005)\n        \n        n = len(lst)\n        for i in range(n):\n            for j in range(0, n - i - 1):\n                if lst[j] > lst[j + 1]:\n                    lst[j], lst[j + 1] = lst[j + 1], lst[j]\n        \n        result = lst.copy()\n        return result\n'''
-            in instrumented_source
+        from codeflash.code_utils.formatter import sort_imports
+
+        inline_code = get_async_inline_code(TestingMode.BEHAVIOR)
+        decorated_original = original_code.replace(
+            "async def async_sorter", "@codeflash_behavior_async\nasync def async_sorter"
         )
+        expected = sort_imports(code=inline_code + decorated_original, float_to_top=True)
+        assert instrumented_source.strip() == expected.strip()
 
         # Add codeflash capture
         instrument_codeflash_capture(func, {}, tests_root)
@@ -300,10 +305,14 @@ async def test_async_perf():
 
         # Verify the file was modified
         instrumented_source = fto_path.read_text("utf-8")
-        assert (
-            instrumented_source
-            == '''import asyncio\nfrom typing import List, Union\n\nfrom codeflash.code_utils.codeflash_wrap_decorator import \\\n    codeflash_performance_async\n\n\n@codeflash_performance_async\nasync def async_sorter(lst: List[Union[int, float]]) -> List[Union[int, float]]:\n    """\n    Async bubble sort implementation for testing.\n    """\n    print("codeflash stdout: Async sorting list")\n    \n    await asyncio.sleep(0.01)\n    \n    n = len(lst)\n    for i in range(n):\n        for j in range(0, n - i - 1):\n            if lst[j] > lst[j + 1]:\n                lst[j], lst[j + 1] = lst[j + 1], lst[j]\n    \n    result = lst.copy()\n    print(f"result: {result}")\n    return result\n\n\nclass AsyncBubbleSorter:\n    """Class with async sorting method for testing."""\n    \n    async def sorter(self, lst: List[Union[int, float]]) -> List[Union[int, float]]:\n        """\n        Async bubble sort implementation within a class.\n        """\n        print("codeflash stdout: AsyncBubbleSorter.sorter() called")\n        \n        # Add some async delay\n        await asyncio.sleep(0.005)\n        \n        n = len(lst)\n        for i in range(n):\n            for j in range(0, n - i - 1):\n                if lst[j] > lst[j + 1]:\n                    lst[j], lst[j + 1] = lst[j + 1], lst[j]\n        \n        result = lst.copy()\n        return result\n'''
+        from codeflash.code_utils.formatter import sort_imports
+
+        inline_code = get_async_inline_code(TestingMode.PERFORMANCE)
+        decorated_original = original_code.replace(
+            "async def async_sorter", "@codeflash_performance_async\nasync def async_sorter"
         )
+        expected = sort_imports(code=inline_code + decorated_original, float_to_top=True)
+        assert instrumented_source.strip() == expected.strip()
 
         instrument_codeflash_capture(func, {}, tests_root)
 
@@ -411,61 +420,14 @@ async def async_error_function(lst):
         # Verify the file was modified
         instrumented_source = fto_path.read_text("utf-8")
 
-        expected_instrumented_source = """import asyncio
-from typing import List, Union
+        from codeflash.code_utils.formatter import sort_imports
 
-from codeflash.code_utils.codeflash_wrap_decorator import \\
-    codeflash_behavior_async
-
-
-async def async_sorter(lst: List[Union[int, float]]) -> List[Union[int, float]]:
-    \"\"\"
-    Async bubble sort implementation for testing.
-    \"\"\"
-    print("codeflash stdout: Async sorting list")
-    
-    await asyncio.sleep(0.01)
-    
-    n = len(lst)
-    for i in range(n):
-        for j in range(0, n - i - 1):
-            if lst[j] > lst[j + 1]:
-                lst[j], lst[j + 1] = lst[j + 1], lst[j]
-    
-    result = lst.copy()
-    print(f"result: {result}")
-    return result
-
-
-class AsyncBubbleSorter:
-    \"\"\"Class with async sorting method for testing.\"\"\"
-    
-    async def sorter(self, lst: List[Union[int, float]]) -> List[Union[int, float]]:
-        \"\"\"
-        Async bubble sort implementation within a class.
-        \"\"\"
-        print("codeflash stdout: AsyncBubbleSorter.sorter() called")
-        
-        # Add some async delay
-        await asyncio.sleep(0.005)
-        
-        n = len(lst)
-        for i in range(n):
-            for j in range(0, n - i - 1):
-                if lst[j] > lst[j + 1]:
-                    lst[j], lst[j + 1] = lst[j + 1], lst[j]
-        
-        result = lst.copy()
-        return result
-
-
-@codeflash_behavior_async
-async def async_error_function(lst):
-    \"\"\"Async function that raises an error for testing.\"\"\"
-    await asyncio.sleep(0.001)  # Small delay
-    raise ValueError("Test error")
-"""
-        assert expected_instrumented_source == instrumented_source
+        inline_code = get_async_inline_code(TestingMode.BEHAVIOR)
+        decorated_modified = modified_code.replace(
+            "async def async_error_function", "@codeflash_behavior_async\nasync def async_error_function"
+        )
+        expected = sort_imports(code=inline_code + decorated_modified, float_to_top=True)
+        assert instrumented_source.strip() == expected.strip()
         instrument_codeflash_capture(func, {}, tests_root)
 
         opt = Optimizer(

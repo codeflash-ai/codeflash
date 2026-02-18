@@ -1497,15 +1497,218 @@ class AsyncDecoratorAdder(cst.CSTTransformer):
         return False
 
 
-class AsyncDecoratorImportAdder(cst.CSTTransformer):
-    """Transformer that adds the import for async decorators."""
+def get_behavior_async_inline_code() -> str:
+    return """import asyncio
+import gc
+import os
+import sqlite3
+from functools import wraps
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import dill as pickle
+
+
+def get_run_tmp_file(file_path):
+    if not hasattr(get_run_tmp_file, "tmpdir"):
+        get_run_tmp_file.tmpdir = TemporaryDirectory(prefix="codeflash_")
+    return Path(get_run_tmp_file.tmpdir.name) / file_path
+
+
+def extract_test_context_from_env():
+    test_module = os.environ["CODEFLASH_TEST_MODULE"]
+    test_class = os.environ.get("CODEFLASH_TEST_CLASS", None)
+    test_function = os.environ["CODEFLASH_TEST_FUNCTION"]
+    if test_module and test_function:
+        return (test_module, test_class if test_class else None, test_function)
+    raise RuntimeError(
+        "Test context environment variables not set - ensure tests are run through codeflash test runner"
+    )
+
+
+def codeflash_behavior_async(func):
+    @wraps(func)
+    async def async_wrapper(*args, **kwargs):
+        loop = asyncio.get_running_loop()
+        function_name = func.__name__
+        line_id = os.environ["CODEFLASH_CURRENT_LINE_ID"]
+        loop_index = int(os.environ["CODEFLASH_LOOP_INDEX"])
+        test_module_name, test_class_name, test_name = extract_test_context_from_env()
+        test_id = f"{test_module_name}:{test_class_name}:{test_name}:{line_id}:{loop_index}"
+        if not hasattr(async_wrapper, "index"):
+            async_wrapper.index = {}
+        if test_id in async_wrapper.index:
+            async_wrapper.index[test_id] += 1
+        else:
+            async_wrapper.index[test_id] = 0
+        codeflash_test_index = async_wrapper.index[test_id]
+        invocation_id = f"{line_id}_{codeflash_test_index}"
+        class_prefix = (test_class_name + ".") if test_class_name else ""
+        test_stdout_tag = f"{test_module_name}:{class_prefix}{test_name}:{function_name}:{loop_index}:{invocation_id}"
+        print(f"!$######{test_stdout_tag}######$!")
+        iteration = os.environ.get("CODEFLASH_TEST_ITERATION", "0")
+        db_path = get_run_tmp_file(Path(f"test_return_values_{iteration}.sqlite"))
+        codeflash_con = sqlite3.connect(db_path)
+        codeflash_cur = codeflash_con.cursor()
+        codeflash_cur.execute(
+            "CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, "
+            "test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, "
+            "runtime INTEGER, return_value BLOB, verification_type TEXT)"
+        )
+        exception = None
+        counter = loop.time()
+        gc.disable()
+        try:
+            ret = func(*args, **kwargs)
+            counter = loop.time()
+            return_value = await ret
+            codeflash_duration = int((loop.time() - counter) * 1_000_000_000)
+        except Exception as e:
+            codeflash_duration = int((loop.time() - counter) * 1_000_000_000)
+            exception = e
+        finally:
+            gc.enable()
+        print(f"!######{test_stdout_tag}######!")
+        pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps((args, kwargs, return_value))
+        codeflash_cur.execute(
+            "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                test_module_name,
+                test_class_name,
+                test_name,
+                function_name,
+                loop_index,
+                invocation_id,
+                codeflash_duration,
+                pickled_return_value,
+                "function_call",
+            ),
+        )
+        codeflash_con.commit()
+        codeflash_con.close()
+        if exception:
+            raise exception
+        return return_value
+    return async_wrapper
+"""
+
+
+def get_performance_async_inline_code() -> str:
+    return """import asyncio
+import gc
+import os
+from functools import wraps
+
+
+def extract_test_context_from_env():
+    test_module = os.environ["CODEFLASH_TEST_MODULE"]
+    test_class = os.environ.get("CODEFLASH_TEST_CLASS", None)
+    test_function = os.environ["CODEFLASH_TEST_FUNCTION"]
+    if test_module and test_function:
+        return (test_module, test_class if test_class else None, test_function)
+    raise RuntimeError(
+        "Test context environment variables not set - ensure tests are run through codeflash test runner"
+    )
+
+
+def codeflash_performance_async(func):
+    @wraps(func)
+    async def async_wrapper(*args, **kwargs):
+        loop = asyncio.get_running_loop()
+        function_name = func.__name__
+        line_id = os.environ["CODEFLASH_CURRENT_LINE_ID"]
+        loop_index = int(os.environ["CODEFLASH_LOOP_INDEX"])
+        test_module_name, test_class_name, test_name = extract_test_context_from_env()
+        test_id = f"{test_module_name}:{test_class_name}:{test_name}:{line_id}:{loop_index}"
+        if not hasattr(async_wrapper, "index"):
+            async_wrapper.index = {}
+        if test_id in async_wrapper.index:
+            async_wrapper.index[test_id] += 1
+        else:
+            async_wrapper.index[test_id] = 0
+        codeflash_test_index = async_wrapper.index[test_id]
+        invocation_id = f"{line_id}_{codeflash_test_index}"
+        class_prefix = (test_class_name + ".") if test_class_name else ""
+        test_stdout_tag = f"{test_module_name}:{class_prefix}{test_name}:{function_name}:{loop_index}:{invocation_id}"
+        print(f"!$######{test_stdout_tag}######$!")
+        exception = None
+        counter = loop.time()
+        gc.disable()
+        try:
+            ret = func(*args, **kwargs)
+            counter = loop.time()
+            return_value = await ret
+            codeflash_duration = int((loop.time() - counter) * 1_000_000_000)
+        except Exception as e:
+            codeflash_duration = int((loop.time() - counter) * 1_000_000_000)
+            exception = e
+        finally:
+            gc.enable()
+        print(f"!######{test_stdout_tag}:{codeflash_duration}######!")
+        if exception:
+            raise exception
+        return return_value
+    return async_wrapper
+"""
+
+
+def get_concurrency_async_inline_code() -> str:
+    return """import asyncio
+import gc
+import os
+import time
+from functools import wraps
+
+
+def codeflash_concurrency_async(func):
+    @wraps(func)
+    async def async_wrapper(*args, **kwargs):
+        function_name = func.__name__
+        concurrency_factor = int(os.environ.get("CODEFLASH_CONCURRENCY_FACTOR", "10"))
+        test_module_name = os.environ.get("CODEFLASH_TEST_MODULE", "")
+        test_class_name = os.environ.get("CODEFLASH_TEST_CLASS", "")
+        test_function = os.environ.get("CODEFLASH_TEST_FUNCTION", "")
+        loop_index = os.environ.get("CODEFLASH_LOOP_INDEX", "0")
+        gc.disable()
+        try:
+            seq_start = time.perf_counter_ns()
+            for _ in range(concurrency_factor):
+                result = await func(*args, **kwargs)
+            sequential_time = time.perf_counter_ns() - seq_start
+        finally:
+            gc.enable()
+        gc.disable()
+        try:
+            conc_start = time.perf_counter_ns()
+            tasks = [func(*args, **kwargs) for _ in range(concurrency_factor)]
+            await asyncio.gather(*tasks)
+            concurrent_time = time.perf_counter_ns() - conc_start
+        finally:
+            gc.enable()
+        tag = f"{test_module_name}:{test_class_name}:{test_function}:{function_name}:{loop_index}"
+        print(f"!@######CONC:{tag}:{sequential_time}:{concurrent_time}:{concurrency_factor}######@!")
+        return result
+    return async_wrapper
+"""
+
+
+def get_async_inline_code(mode: TestingMode) -> str:
+    if mode == TestingMode.BEHAVIOR:
+        return get_behavior_async_inline_code()
+    if mode == TestingMode.CONCURRENCY:
+        return get_concurrency_async_inline_code()
+    return get_performance_async_inline_code()
+
+
+class AsyncInlineCodeInjector(cst.CSTTransformer):
+    """Injects async decorator function definitions inline instead of importing from codeflash."""
 
     def __init__(self, mode: TestingMode = TestingMode.BEHAVIOR) -> None:
         self.mode = mode
-        self.has_import = False
+        self.has_inline_definition = False
+        self.has_old_import = False
 
     def _get_decorator_name(self) -> str:
-        """Get the decorator name based on the testing mode."""
         if self.mode == TestingMode.BEHAVIOR:
             return "codeflash_behavior_async"
         if self.mode == TestingMode.CONCURRENCY:
@@ -1513,7 +1716,6 @@ class AsyncDecoratorImportAdder(cst.CSTTransformer):
         return "codeflash_performance_async"
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
-        # Check if the async decorator import is already present
         if (
             isinstance(node.module, cst.Attribute)
             and isinstance(node.module.value, cst.Attribute)
@@ -1526,21 +1728,18 @@ class AsyncDecoratorImportAdder(cst.CSTTransformer):
             decorator_name = self._get_decorator_name()
             for import_alias in node.names:
                 if import_alias.name.value == decorator_name:
-                    self.has_import = True
+                    self.has_old_import = True
+
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
+        if node.name.value == self._get_decorator_name():
+            self.has_inline_definition = True
 
     def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
-        # If the import is already there, don't add it again
-        if self.has_import:
+        if self.has_inline_definition or self.has_old_import:
             return updated_node
-
-        # Choose import based on mode
-        decorator_name = self._get_decorator_name()
-
-        # Parse the import statement into a CST node
-        import_node = cst.parse_statement(f"from codeflash.code_utils.codeflash_wrap_decorator import {decorator_name}")
-
-        # Add the import to the module's body
-        return updated_node.with_changes(body=[import_node, *list(updated_node.body)])
+        inline_code = get_async_inline_code(self.mode)
+        inline_stmts = cst.parse_module(inline_code).body
+        return updated_node.with_changes(body=[*inline_stmts, *list(updated_node.body)])
 
 
 def add_async_decorator_to_function(
@@ -1575,7 +1774,7 @@ def add_async_decorator_to_function(
 
         # Add the import if decorator was added
         if decorator_transformer.added_decorator:
-            import_transformer = AsyncDecoratorImportAdder(mode)
+            import_transformer = AsyncInlineCodeInjector(mode)
             module = module.visit(import_transformer)
 
         modified_code = sort_imports(code=module.code, float_to_top=True)
