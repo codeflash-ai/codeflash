@@ -2077,7 +2077,10 @@ class FunctionOptimizer:
         generated_tests_str = ""
         code_lang = self.function_to_optimize.language
         for test in generated_tests.generated_tests:
-            if map_gen_test_file_to_no_of_tests[test.behavior_file_path] > 0:
+            if any(
+                test_file.name == test.behavior_file_path.name and count > 0
+                for test_file, count in map_gen_test_file_to_no_of_tests.items()
+            ):
                 formatted_generated_test = format_generated_code(
                     test.generated_original_test_source, self.args.formatter_cmds
                 )
