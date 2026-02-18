@@ -975,6 +975,9 @@ def _extract_public_method_signatures(source: str, class_name: str, analyzer: Ja
     methods = analyzer.find_methods(source)
     signatures: list[str] = []
 
+    if not methods:
+        return signatures
+
     source_bytes = source.encode("utf8")
 
     pub_token = b"public"
@@ -998,13 +1001,11 @@ def _extract_public_method_signatures(source: str, class_name: str, analyzer: Ja
                 mod_slice = source_bytes[child.start_byte : child.end_byte]
                 if pub_token in mod_slice:
                     is_public = True
-                # include modifiers in signature parts (original behavior included it)
                 sig_parts_bytes.append(mod_slice)
                 continue
 
             if ctype == "block" or ctype == "constructor_body":
                 break
-
 
             sig_parts_bytes.append(source_bytes[child.start_byte : child.end_byte])
 
@@ -1012,9 +1013,7 @@ def _extract_public_method_signatures(source: str, class_name: str, analyzer: Ja
             continue
 
         if sig_parts_bytes:
-            # Join bytes once and decode once to reduce allocations
             sig = b" ".join(sig_parts_bytes).decode("utf8").strip()
-            # Skip constructors (already included via constructors_code)
             # Skip constructors (already included via constructors_code)
             if node.type != "constructor_declaration":
                 signatures.append(sig)
