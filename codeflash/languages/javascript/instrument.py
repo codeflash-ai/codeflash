@@ -143,7 +143,7 @@ def split_call_args(args_str: str) -> tuple[str, str]:
             depth -= 1
         elif char == "," and depth == 0:
             return s[:i].strip(), s[i + 1 :].strip()
-        
+
         i += 1
 
     return s.strip(), ""
