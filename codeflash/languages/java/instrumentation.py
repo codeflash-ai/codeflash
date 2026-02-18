@@ -78,7 +78,9 @@ _TS_BODY_SUFFIX = "\n}}"
 _TS_BODY_PREFIX_BYTES = _TS_BODY_PREFIX.encode("utf8")
 
 
-def wrap_target_calls_with_treesitter(body_lines: list[str], func_name: str, iter_id: int) -> tuple[list[str], int]:
+def wrap_target_calls_with_treesitter(
+    body_lines: list[str], func_name: str, iter_id: int, precise_call_timing: bool = False
+) -> tuple[list[str], int]:
     """Replace target method calls in body_lines with capture + serialize using tree-sitter.
 
     Parses the method body with tree-sitter, walks the AST for method_invocation nodes
@@ -144,6 +146,8 @@ def wrap_target_calls_with_treesitter(body_lines: list[str], func_name: str, ite
 
             capture_stmt = f"var {var_name} = {call['full_call']};"
             serialize_stmt = f"_cf_serializedResult{iter_id} = com.codeflash.Serializer.serialize((Object) {var_name});"
+            start_stmt = f"_cf_start{iter_id} = System.nanoTime();"
+            end_stmt = f"_cf_end{iter_id} = System.nanoTime();"
 
             if call["parent_type"] == "expression_statement":
                 # Replace the expression_statement IN PLACE with capture+serialize.
@@ -153,7 +157,16 @@ def wrap_target_calls_with_treesitter(body_lines: list[str], func_name: str, ite
                 es_end_byte = call["es_end_byte"] - line_byte_start
                 es_start_char = len(line_bytes[:es_start_byte].decode("utf8"))
                 es_end_char = len(line_bytes[:es_end_byte].decode("utf8"))
-                replacement = f"{capture_stmt} {serialize_stmt}"
+                if precise_call_timing:
+                    # Place timing boundaries tightly around the target function call only.
+                    replacement = (
+                        f"{start_stmt}\n"
+                        f"{line_indent_str}{capture_stmt}\n"
+                        f"{line_indent_str}{end_stmt}\n"
+                        f"{line_indent_str}{serialize_stmt}"
+                    )
+                else:
+                    replacement = f"{capture_stmt} {serialize_stmt}"
                 adj_start = es_start_char + char_shift
                 adj_end = es_end_char + char_shift
                 new_line = new_line[:adj_start] + replacement + new_line[adj_end:]
@@ -161,9 +174,13 @@ def wrap_target_calls_with_treesitter(body_lines: list[str], func_name: str, ite
             else:
                 # The call is embedded in a larger expression (assignment, assertion, etc.)
                 # Emit capture+serialize before the line, then replace the call with the variable.
+                if precise_call_timing:
+                    wrapped.append(f"{line_indent_str}{start_stmt}")
                 capture_line = f"{line_indent_str}{capture_stmt}"
-                serialize_line = f"{line_indent_str}{serialize_stmt}"
                 wrapped.append(capture_line)
+                if precise_call_timing:
+                    wrapped.append(f"{line_indent_str}{end_stmt}")
+                serialize_line = f"{line_indent_str}{serialize_stmt}"
                 wrapped.append(serialize_line)
 
                 call_start_byte = call["start_byte"] - line_byte_start
@@ -509,7 +526,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
             # Wrap function calls to capture return values using tree-sitter AST analysis.
             # This correctly handles lambdas, try-catch blocks, assignments, and nested calls.
             wrapped_body_lines, _call_counter = wrap_target_calls_with_treesitter(
-                body_lines=body_lines, func_name=func_name, iter_id=iter_id
+                body_lines=body_lines, func_name=func_name, iter_id=iter_id, precise_call_timing=True
             )
 
             # Add behavior instrumentation code
@@ -524,8 +541,9 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 f'{indent}String _cf_testIteration{iter_id} = System.getenv("CODEFLASH_TEST_ITERATION");',
                 f'{indent}if (_cf_testIteration{iter_id} == null) _cf_testIteration{iter_id} = "0";',
                 f'{indent}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + "######$!");',
-                f"{indent}long _cf_start{iter_id} = System.nanoTime();",
                 f"{indent}byte[] _cf_serializedResult{iter_id} = null;",
+                f"{indent}long _cf_end{iter_id} = -1;",
+                f"{indent}long _cf_start{iter_id} = 0;",
                 f"{indent}try {{",
             ]
             result.extend(behavior_start_code)
@@ -535,14 +553,14 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
             # after each capture) so the _cf_serializedResult variable is always
             # assigned while the captured variable is still in scope.
             for bl in wrapped_body_lines:
-                result.append("    " + bl)
+                result.extend(f"    {line}" for line in bl.splitlines())
 
             # Add finally block with SQLite write
             method_close_indent = " " * base_indent
             behavior_end_code = [
                 f"{indent}}} finally {{",
-                f"{indent}    long _cf_end{iter_id} = System.nanoTime();",
-                f"{indent}    long _cf_dur{iter_id} = _cf_end{iter_id} - _cf_start{iter_id};",
+                f"{indent}    long _cf_end{iter_id}_finally = System.nanoTime();",
+                f"{indent}    long _cf_dur{iter_id} = (_cf_end{iter_id} != -1 ? _cf_end{iter_id} : _cf_end{iter_id}_finally) - _cf_start{iter_id};",
                 f'{indent}    System.out.println("!######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + ":" + _cf_dur{iter_id} + "######!");',
                 f"{indent}    // Write to SQLite if output file is set",
                 f"{indent}    if (_cf_outputFile{iter_id} != null && !_cf_outputFile{iter_id}.isEmpty()) {{",

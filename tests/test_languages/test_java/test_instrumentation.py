@@ -146,16 +146,19 @@ public class CalculatorTest__perfinstrumented {
         String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
         System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        long _cf_start1 = System.nanoTime();
         byte[] _cf_serializedResult1 = null;
+        long _cf_end1 = -1;
+        long _cf_start1 = 0;
         try {
             Calculator calc = new Calculator();
+            _cf_start1 = System.nanoTime();
             var _cf_result1_1 = calc.add(2, 2);
+            _cf_end1 = System.nanoTime();
             _cf_serializedResult1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);
             assertEquals(4, _cf_result1_1);
         } finally {
-            long _cf_end1 = System.nanoTime();
-            long _cf_dur1 = _cf_end1 - _cf_start1;
+            long _cf_end1_finally = System.nanoTime();
+            long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
             System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
             // Write to SQLite if output file is set
             if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
@@ -254,13 +257,14 @@ public class FibonacciTest__perfinstrumented {
         String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
         System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        long _cf_start1 = System.nanoTime();
         byte[] _cf_serializedResult1 = null;
+        long _cf_end1 = -1;
+        long _cf_start1 = 0;
         try {
             assertThrows(IllegalArgumentException.class, () -> Fibonacci.fibonacci(-1));
         } finally {
-            long _cf_end1 = System.nanoTime();
-            long _cf_dur1 = _cf_end1 - _cf_start1;
+            long _cf_end1_finally = System.nanoTime();
+            long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
             System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
             // Write to SQLite if output file is set
             if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
@@ -306,15 +310,18 @@ public class FibonacciTest__perfinstrumented {
         String _cf_testIteration2 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration2 == null) _cf_testIteration2 = "0";
         System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + "######$!");
-        long _cf_start2 = System.nanoTime();
         byte[] _cf_serializedResult2 = null;
+        long _cf_end2 = -1;
+        long _cf_start2 = 0;
         try {
+            _cf_start2 = System.nanoTime();
             var _cf_result2_1 = Fibonacci.fibonacci(0);
+            _cf_end2 = System.nanoTime();
             _cf_serializedResult2 = com.codeflash.Serializer.serialize((Object) _cf_result2_1);
             assertEquals(0L, _cf_result2_1);
         } finally {
-            long _cf_end2 = System.nanoTime();
-            long _cf_dur2 = _cf_end2 - _cf_start2;
+            long _cf_end2_finally = System.nanoTime();
+            long _cf_dur2 = (_cf_end2 != -1 ? _cf_end2 : _cf_end2_finally) - _cf_start2;
             System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + ":" + _cf_dur2 + "######!");
             // Write to SQLite if output file is set
             if (_cf_outputFile2 != null && !_cf_outputFile2.isEmpty()) {
@@ -414,15 +421,16 @@ public class FibonacciTest__perfinstrumented {
         String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
         System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        long _cf_start1 = System.nanoTime();
         byte[] _cf_serializedResult1 = null;
+        long _cf_end1 = -1;
+        long _cf_start1 = 0;
         try {
             assertThrows(IllegalArgumentException.class, () -> {
                 Fibonacci.fibonacci(-1);
             });
         } finally {
-            long _cf_end1 = System.nanoTime();
-            long _cf_dur1 = _cf_end1 - _cf_start1;
+            long _cf_end1_finally = System.nanoTime();
+            long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
             System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
             // Write to SQLite if output file is set
             if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
@@ -468,15 +476,18 @@ public class FibonacciTest__perfinstrumented {
         String _cf_testIteration2 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration2 == null) _cf_testIteration2 = "0";
         System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + "######$!");
-        long _cf_start2 = System.nanoTime();
         byte[] _cf_serializedResult2 = null;
+        long _cf_end2 = -1;
+        long _cf_start2 = 0;
         try {
+            _cf_start2 = System.nanoTime();
             var _cf_result2_1 = Fibonacci.fibonacci(0);
+            _cf_end2 = System.nanoTime();
             _cf_serializedResult2 = com.codeflash.Serializer.serialize((Object) _cf_result2_1);
             assertEquals(0L, _cf_result2_1);
         } finally {
-            long _cf_end2 = System.nanoTime();
-            long _cf_dur2 = _cf_end2 - _cf_start2;
+            long _cf_end2_finally = System.nanoTime();
+            long _cf_dur2 = (_cf_end2 != -1 ? _cf_end2 : _cf_end2_finally) - _cf_start2;
             System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + ":" + _cf_dur2 + "######!");
             // Write to SQLite if output file is set
             if (_cf_outputFile2 != null && !_cf_outputFile2.isEmpty()) {
@@ -806,14 +817,17 @@ public class MyTest {
         String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
         System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        long _cf_start1 = System.nanoTime();
         byte[] _cf_serializedResult1 = null;
+        long _cf_end1 = -1;
+        long _cf_start1 = 0;
         try {
+            _cf_start1 = System.nanoTime();
             var _cf_result1_1 = obj.foo();
+            _cf_end1 = System.nanoTime();
             _cf_serializedResult1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);
         } finally {
-            long _cf_end1 = System.nanoTime();
-            long _cf_dur1 = _cf_end1 - _cf_start1;
+            long _cf_end1_finally = System.nanoTime();
+            long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
             System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
             // Write to SQLite if output file is set
             if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
@@ -1236,15 +1250,18 @@ public class CalculatorTest__perfinstrumented {
         String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
         System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        long _cf_start1 = System.nanoTime();
         byte[] _cf_serializedResult1 = null;
+        long _cf_end1 = -1;
+        long _cf_start1 = 0;
         try {
+            _cf_start1 = System.nanoTime();
             var _cf_result1_1 = new Calculator().add(2, 2);
+            _cf_end1 = System.nanoTime();
             _cf_serializedResult1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);
             Object _cf_result1 = _cf_result1_1;
         } finally {
-            long _cf_end1 = System.nanoTime();
-            long _cf_dur1 = _cf_end1 - _cf_start1;
+            long _cf_end1_finally = System.nanoTime();
+            long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
             System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
             // Write to SQLite if output file is set
             if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
@@ -2438,16 +2455,19 @@ public class CounterTest__perfinstrumented {
         String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
         System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        long _cf_start1 = System.nanoTime();
         byte[] _cf_serializedResult1 = null;
+        long _cf_end1 = -1;
+        long _cf_start1 = 0;
         try {
             Counter counter = new Counter();
+            _cf_start1 = System.nanoTime();
             var _cf_result1_1 = counter.increment();
+            _cf_end1 = System.nanoTime();
             _cf_serializedResult1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);
             assertEquals(1, _cf_result1_1);
         } finally {
-            long _cf_end1 = System.nanoTime();
-            long _cf_dur1 = _cf_end1 - _cf_start1;
+            long _cf_end1_finally = System.nanoTime();
+            long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
             System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
             // Write to SQLite if output file is set
             if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
