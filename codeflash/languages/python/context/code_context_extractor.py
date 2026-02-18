@@ -68,15 +68,26 @@ def build_testgen_context(
         if enrichment.code_strings:
             testgen_context = CodeStringsMarkdown(code_strings=testgen_context.code_strings + enrichment.code_strings)
 
+        type_context_strings: list[CodeString] = []
         if function_to_optimize is not None:
             result = _parse_and_collect_imports(testgen_context)
             existing_classes = collect_existing_class_names(result[0]) if result else set()
-            constructor_stubs = extract_parameter_type_constructors(
-                function_to_optimize, project_root_path, existing_classes
-            )
-            if constructor_stubs.code_strings:
+            type_context = extract_type_context_for_testgen(function_to_optimize, project_root_path, existing_classes)
+            if type_context.code_strings:
                 testgen_context = CodeStringsMarkdown(
-                    code_strings=testgen_context.code_strings + constructor_stubs.code_strings
+                    code_strings=testgen_context.code_strings + type_context.code_strings
+                )
+                type_context_strings = type_context.code_strings
+
+        # Enrich field types from all newly extracted classes (enrichment + type context)
+        new_classes = CodeStringsMarkdown(code_strings=enrichment.code_strings + type_context_strings)
+        if new_classes.code_strings:
+            updated_result = _parse_and_collect_imports(testgen_context)
+            updated_existing = collect_existing_class_names(updated_result[0]) if updated_result else set()
+            field_type_enrichment = enrich_type_context_classes(new_classes, updated_existing, project_root_path)
+            if field_type_enrichment.code_strings:
+                testgen_context = CodeStringsMarkdown(
+                    code_strings=testgen_context.code_strings + field_type_enrichment.code_strings
                 )
 
     return testgen_context
@@ -744,6 +755,48 @@ def collect_type_names_from_annotation(node: ast.expr | None) -> set[str]:
     return set()
 
 
+def collect_names_from_function_body(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
+    names: set[str] = set()
+    for node in ast.walk(func_node):
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name):
+                names.add(node.func.id)
+            elif isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
+                names.add(node.func.value.id)
+            if isinstance(node.func, ast.Name) and node.func.id in ("isinstance", "issubclass") and node.args:
+                second_arg = node.args[1] if len(node.args) > 1 else None
+                if isinstance(second_arg, ast.Name):
+                    names.add(second_arg.id)
+                elif isinstance(second_arg, ast.Tuple):
+                    for elt in second_arg.elts:
+                        if isinstance(elt, ast.Name):
+                            names.add(elt.id)
+        elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+            names.add(node.value.id)
+    return names
+
+
+def extract_full_class_from_module(class_name: str, module_source: str, module_tree: ast.Module) -> str | None:
+    class_node = None
+    # Use a deque-based BFS to find the first matching ClassDef (preserves ast.walk order)
+    q: deque[ast.AST] = deque([module_tree])
+    while q:
+        candidate = q.popleft()
+        if isinstance(candidate, ast.ClassDef) and candidate.name == class_name:
+            class_node = candidate
+            break
+        q.extend(ast.iter_child_nodes(candidate))
+
+    if class_node is None:
+        return None
+
+    lines = module_source.split("\n")
+    start_line = class_node.lineno
+    if class_node.decorator_list:
+        start_line = min(d.lineno for d in class_node.decorator_list)
+    return "\n".join(lines[start_line - 1 : class_node.end_lineno])
+
+
 def extract_init_stub_from_class(class_name: str, module_source: str, module_tree: ast.Module) -> str | None:
     class_node = None
     # Use a deque-based BFS to find the first matching ClassDef (preserves ast.walk order)
@@ -793,7 +846,7 @@ def extract_init_stub_from_class(class_name: str, module_source: str, module_tre
     return f"class {class_name}:\n" + "\n".join(snippets)
 
 
-def extract_parameter_type_constructors(
+def extract_type_context_for_testgen(
     function_to_optimize: FunctionToOptimize, project_root_path: Path, existing_class_names: set[str]
 ) -> CodeStringsMarkdown:
     import jedi
@@ -825,6 +878,8 @@ def extract_parameter_type_constructors(
     if func_node.args.kwarg:
         type_names |= collect_type_names_from_annotation(func_node.args.kwarg.annotation)
 
+    type_names |= collect_names_from_function_body(func_node)
+
     type_names -= BUILTIN_AND_TYPING_NAMES
     type_names -= existing_class_names
     if not type_names:
@@ -855,6 +910,13 @@ def extract_parameter_type_constructors(
             if not module_path:
                 continue
 
+            resolved_module = module_path.resolve()
+            module_str = str(resolved_module)
+            is_project = module_str.startswith(str(project_root_path.resolve()))
+            is_third_party = "site-packages" in module_str
+            if not is_project and not is_third_party:
+                continue
+
             if module_path in module_cache:
                 mod_source, mod_tree = module_cache[module_path]
             else:
@@ -862,11 +924,15 @@ def extract_parameter_type_constructors(
                 mod_tree = ast.parse(mod_source)
                 module_cache[module_path] = (mod_source, mod_tree)
 
-            stub = extract_init_stub_from_class(type_name, mod_source, mod_tree)
-            if stub:
-                code_strings.append(CodeString(code=stub, file_path=module_path))
+            class_source = extract_full_class_from_module(type_name, mod_source, mod_tree)
+            if class_source is None:
+                resolved_class = resolve_instance_class_name(type_name, mod_tree)
+                if resolved_class and resolved_class not in existing_class_names:
+                    class_source = extract_full_class_from_module(resolved_class, mod_source, mod_tree)
+            if class_source:
+                code_strings.append(CodeString(code=class_source, file_path=module_path))
         except Exception:
-            logger.debug(f"Error extracting constructor stub for {type_name} from {module_name}")
+            logger.debug(f"Error extracting type context for {type_name} from {module_name}")
             continue
 
     return CodeStringsMarkdown(code_strings=code_strings)
@@ -912,6 +978,7 @@ def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path:
     # --- Step 1: Project class definitions (jedi resolution + recursive base extraction) ---
     extracted_classes: set[tuple[Path, str]] = set()
     module_cache: dict[Path, tuple[str, ast.Module]] = {}
+    module_import_maps: dict[Path, dict[str, str]] = {}
 
     def get_module_source_and_tree(module_path: Path) -> tuple[str, ast.Module] | None:
         if module_path in module_cache:
@@ -925,10 +992,22 @@ def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path:
             module_cache[module_path] = (module_source, module_tree)
             return module_source, module_tree
 
+    def get_module_import_map(module_path: Path, module_tree: ast.Module) -> dict[str, str]:
+        if module_path in module_import_maps:
+            return module_import_maps[module_path]
+        import_map: dict[str, str] = {}
+        for node in ast.walk(module_tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                for alias in node.names:
+                    name = alias.asname if alias.asname else alias.name
+                    import_map[name] = node.module
+        module_import_maps[module_path] = import_map
+        return import_map
+
     def extract_class_and_bases(
-        class_name: str, module_path: Path, module_source: str, module_tree: ast.Module
+        class_name: str, module_path: Path, module_source: str, module_tree: ast.Module, depth: int = 0
     ) -> None:
-        if (module_path, class_name) in extracted_classes:
+        if depth >= 3 or (module_path, class_name) in extracted_classes:
             return
 
         class_node = None
@@ -947,8 +1026,40 @@ def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path:
             elif isinstance(base, ast.Attribute):
                 continue
 
-            if base_name and base_name not in existing_classes:
-                extract_class_and_bases(base_name, module_path, module_source, module_tree)
+            if not base_name or base_name in existing_classes:
+                continue
+
+            # Check if the base class is defined locally in this module
+            local_base = any(isinstance(n, ast.ClassDef) and n.name == base_name for n in ast.walk(module_tree))
+            if local_base:
+                extract_class_and_bases(base_name, module_path, module_source, module_tree, depth + 1)
+            else:
+                # Resolve cross-module base class via imports
+                import_map = get_module_import_map(module_path, module_tree)
+                base_module_name = import_map.get(base_name)
+                if not base_module_name:
+                    continue
+                try:
+                    script_code = f"from {base_module_name} import {base_name}"
+                    script = jedi.Script(script_code, project=jedi.Project(path=project_root_path))
+                    definitions = script.goto(
+                        1, len(f"from {base_module_name} import ") + len(base_name), follow_imports=True
+                    )
+                    if not definitions or not definitions[0].module_path:
+                        continue
+                    base_module_path = definitions[0].module_path
+                    resolved_str = str(base_module_path.resolve())
+                    is_project = resolved_str.startswith(str(project_root_path.resolve()) + os.sep)
+                    is_third_party = "site-packages" in resolved_str
+                    if not is_project and not is_third_party:
+                        continue
+                    base_mod = get_module_source_and_tree(base_module_path)
+                    if base_mod is None:
+                        continue
+                    extract_class_and_bases(base_name, base_module_path, base_mod[0], base_mod[1], depth + 1)
+                except Exception:
+                    logger.debug(f"Error resolving cross-module base class {base_name} from {base_module_name}")
+                    continue
 
         if (module_path, class_name) in extracted_classes:
             return
@@ -1002,6 +1113,96 @@ def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path:
         except Exception:
             logger.debug(f"Error extracting class definition for {name} from {module_name}")
             continue
+
+    return CodeStringsMarkdown(code_strings=code_strings)
+
+
+def enrich_type_context_classes(
+    type_context: CodeStringsMarkdown, existing_class_names: set[str], project_root_path: Path
+) -> CodeStringsMarkdown:
+    import jedi
+
+    code_strings: list[CodeString] = []
+    emitted: set[str] = set()
+    module_cache: dict[Path, tuple[str, ast.Module]] = {}
+
+    for cs in type_context.code_strings:
+        try:
+            snippet_tree = ast.parse(cs.code)
+        except SyntaxError:
+            continue
+
+        # Collect type names from field annotations of extracted classes
+        type_names: set[str] = set()
+        for node in ast.walk(snippet_tree):
+            if isinstance(node, ast.ClassDef):
+                for item in node.body:
+                    if isinstance(item, ast.AnnAssign) and item.annotation:
+                        type_names |= collect_type_names_from_annotation(item.annotation)
+
+        type_names -= BUILTIN_AND_TYPING_NAMES
+        type_names -= existing_class_names
+        type_names -= emitted
+        if not type_names:
+            continue
+
+        # Build import map from the source file, not the snippet
+        source_path = cs.file_path
+        if not source_path:
+            continue
+        import_map: dict[str, str] = {}
+        if source_path in module_cache:
+            source_code, source_tree = module_cache[source_path]
+        else:
+            try:
+                source_code = source_path.read_text(encoding="utf-8")
+                source_tree = ast.parse(source_code)
+                module_cache[source_path] = (source_code, source_tree)
+            except Exception:
+                continue
+        for snode in ast.walk(source_tree):
+            if isinstance(snode, ast.ImportFrom) and snode.module:
+                for alias in snode.names:
+                    name = alias.asname if alias.asname else alias.name
+                    import_map[name] = snode.module
+
+        for type_name in sorted(type_names):
+            module_name = import_map.get(type_name)
+            if not module_name:
+                continue
+            try:
+                script_code = f"from {module_name} import {type_name}"
+                script = jedi.Script(script_code, project=jedi.Project(path=project_root_path))
+                definitions = script.goto(1, len(f"from {module_name} import ") + len(type_name), follow_imports=True)
+                if not definitions or not definitions[0].module_path:
+                    continue
+
+                mod_path = definitions[0].module_path
+                resolved_str = str(mod_path.resolve())
+                is_project = resolved_str.startswith(str(project_root_path.resolve()))
+                is_third_party = "site-packages" in resolved_str
+                if not is_project and not is_third_party:
+                    continue
+
+                if mod_path in module_cache:
+                    mod_source, mod_tree = module_cache[mod_path]
+                else:
+                    mod_source = mod_path.read_text(encoding="utf-8")
+                    mod_tree = ast.parse(mod_source)
+                    module_cache[mod_path] = (mod_source, mod_tree)
+
+                class_source = extract_full_class_from_module(type_name, mod_source, mod_tree)
+                if class_source is None:
+                    resolved_class = resolve_instance_class_name(type_name, mod_tree)
+                    if resolved_class and resolved_class not in existing_class_names and resolved_class not in emitted:
+                        class_source = extract_full_class_from_module(resolved_class, mod_source, mod_tree)
+                        type_name = resolved_class
+                if class_source:
+                    code_strings.append(CodeString(code=class_source, file_path=mod_path))
+                    emitted.add(type_name)
+            except Exception:
+                logger.debug(f"Error extracting type context class for {type_name} from {module_name}")
+                continue
 
     return CodeStringsMarkdown(code_strings=code_strings)
 
