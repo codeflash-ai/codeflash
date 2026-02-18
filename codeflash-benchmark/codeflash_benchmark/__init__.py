@@ -1,3 +1,3 @@
 """CodeFlash Benchmark - Pytest benchmarking plugin for codeflash.ai."""
 
-from codeflash_benchmark.version import __version__
+from codeflash_benchmark.version import __version__ as __version__
