@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 import libcst as cst
+from git import Repo as GitRepo
 from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -2225,11 +2226,11 @@ class FunctionOptimizer:
                 console.print(Panel(panel_content, title="Optimization Review", border_style=display_info[1]))
 
         if raise_pr or staging_review:
-            data["root_dir"] = git_root_dir()
+            data["root_dir"] = git_root_dir(GitRepo(str(self.args.module_root), search_parent_directories=True))
         if raise_pr and not staging_review and opt_review_result.review != "low":
             # Ensure root_dir is set for PR creation (needed for async functions that skip opt_review)
             if "root_dir" not in data:
-                data["root_dir"] = git_root_dir()
+                data["root_dir"] = git_root_dir(GitRepo(str(self.args.module_root), search_parent_directories=True))
             data["git_remote"] = self.args.git_remote
             # Remove language from data dict as check_create_pr doesn't accept it
             pr_data = {k: v for k, v in data.items() if k != "language"}
