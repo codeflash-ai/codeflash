@@ -220,7 +220,9 @@ class Optimizer:
             for file_path, funcs in file_to_funcs.items():
                 new_path = mirror_path(Path(file_path), original_git_root, self.current_worktree)
                 remapped[new_path] = [
-                    dataclasses.replace(func, file_path=mirror_path(func.file_path, original_git_root, self.current_worktree))
+                    dataclasses.replace(
+                        func, file_path=mirror_path(func.file_path, original_git_root, self.current_worktree)
+                    )
                     for func in funcs
                 ]
             return remapped, count, trace
