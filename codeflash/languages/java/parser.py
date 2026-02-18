@@ -679,6 +679,19 @@ class JavaAnalyzer:
         return None
 
 
+    @property
+    def parser(self) -> Parser:
+        """Lazily provide a Parser instance or return the one previously set."""
+        if self._parser is None:
+            self._parser = Parser()
+        return self._parser
+
+    @parser.setter
+    def parser(self, value: Parser) -> None:
+        """Allow external code to set a Parser (keeps compatibility with existing code that assigns .parser)."""
+        self._parser = value
+
+
 def get_java_analyzer() -> JavaAnalyzer:
     """Get a JavaAnalyzer instance.
 
