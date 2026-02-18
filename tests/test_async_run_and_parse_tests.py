@@ -8,8 +8,9 @@ from pathlib import Path
 import pytest
 
 from codeflash.code_utils.instrument_existing_tests import (
+    ASYNC_HELPER_FILENAME,
     add_async_decorator_to_function,
-    get_async_inline_code,
+    get_decorator_name_for_mode,
     inject_profiling_into_existing_test,
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -56,7 +57,9 @@ async def test_async_sort():
         func = FunctionToOptimize(function_name="async_sorter", parents=[], file_path=Path(fto_path), is_async=True)
 
         # For async functions, instrument the source module directly with decorators
-        source_success = add_async_decorator_to_function(fto_path, func, TestingMode.BEHAVIOR)
+        source_success = add_async_decorator_to_function(
+            fto_path, func, TestingMode.BEHAVIOR, project_root=project_root_path
+        )
 
         assert source_success
 
@@ -64,11 +67,12 @@ async def test_async_sort():
         instrumented_source = fto_path.read_text("utf-8")
         from codeflash.code_utils.formatter import sort_imports
 
-        inline_code = get_async_inline_code(TestingMode.BEHAVIOR)
+        decorator_name = get_decorator_name_for_mode(TestingMode.BEHAVIOR)
         decorated_original = original_code.replace(
-            "async def async_sorter", "@codeflash_behavior_async\nasync def async_sorter"
+            "async def async_sorter", f"@{decorator_name}\nasync def async_sorter"
         )
-        expected = sort_imports(code=inline_code + decorated_original, float_to_top=True)
+        code_with_import = f"from codeflash_async_wrapper import {decorator_name}\n{decorated_original}"
+        expected = sort_imports(code=code_with_import, float_to_top=True)
         assert instrumented_source.strip() == expected.strip()
 
         # Add codeflash capture
@@ -147,6 +151,9 @@ async def test_async_sort():
             test_path.unlink()
         if test_path_perf.exists():
             test_path_perf.unlink()
+        helper_path = project_root_path / ASYNC_HELPER_FILENAME
+        if helper_path.exists():
+            helper_path.unlink()
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
@@ -187,7 +194,9 @@ async def test_async_class_sort():
             is_async=True,
         )
 
-        source_success = add_async_decorator_to_function(fto_path, func, TestingMode.BEHAVIOR)
+        source_success = add_async_decorator_to_function(
+            fto_path, func, TestingMode.BEHAVIOR, project_root=project_root_path
+        )
 
         assert source_success
 
@@ -269,6 +278,9 @@ async def test_async_class_sort():
             test_path.unlink()
         if test_path_perf.exists():
             test_path_perf.unlink()
+        helper_path = project_root_path / ASYNC_HELPER_FILENAME
+        if helper_path.exists():
+            helper_path.unlink()
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
@@ -299,7 +311,9 @@ async def test_async_perf():
         func = FunctionToOptimize(function_name="async_sorter", parents=[], file_path=Path(fto_path), is_async=True)
 
         # Instrument the source module with async performance decorators
-        source_success = add_async_decorator_to_function(fto_path, func, TestingMode.PERFORMANCE)
+        source_success = add_async_decorator_to_function(
+            fto_path, func, TestingMode.PERFORMANCE, project_root=project_root_path
+        )
 
         assert source_success
 
@@ -307,11 +321,12 @@ async def test_async_perf():
         instrumented_source = fto_path.read_text("utf-8")
         from codeflash.code_utils.formatter import sort_imports
 
-        inline_code = get_async_inline_code(TestingMode.PERFORMANCE)
+        decorator_name = get_decorator_name_for_mode(TestingMode.PERFORMANCE)
         decorated_original = original_code.replace(
-            "async def async_sorter", "@codeflash_performance_async\nasync def async_sorter"
+            "async def async_sorter", f"@{decorator_name}\nasync def async_sorter"
         )
-        expected = sort_imports(code=inline_code + decorated_original, float_to_top=True)
+        code_with_import = f"from codeflash_async_wrapper import {decorator_name}\n{decorated_original}"
+        expected = sort_imports(code=code_with_import, float_to_top=True)
         assert instrumented_source.strip() == expected.strip()
 
         instrument_codeflash_capture(func, {}, tests_root)
@@ -368,6 +383,9 @@ async def test_async_perf():
         # Clean up test files
         if test_path.exists():
             test_path.unlink()
+        helper_path = project_root_path / ASYNC_HELPER_FILENAME
+        if helper_path.exists():
+            helper_path.unlink()
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
@@ -413,7 +431,9 @@ async def async_error_function(lst):
             function_name="async_error_function", parents=[], file_path=Path(fto_path), is_async=True
         )
 
-        source_success = add_async_decorator_to_function(fto_path, func, TestingMode.BEHAVIOR)
+        source_success = add_async_decorator_to_function(
+            fto_path, func, TestingMode.BEHAVIOR, project_root=project_root_path
+        )
 
         assert source_success
 
@@ -422,11 +442,12 @@ async def async_error_function(lst):
 
         from codeflash.code_utils.formatter import sort_imports
 
-        inline_code = get_async_inline_code(TestingMode.BEHAVIOR)
+        decorator_name = get_decorator_name_for_mode(TestingMode.BEHAVIOR)
         decorated_modified = modified_code.replace(
-            "async def async_error_function", "@codeflash_behavior_async\nasync def async_error_function"
+            "async def async_error_function", f"@{decorator_name}\nasync def async_error_function"
         )
-        expected = sort_imports(code=inline_code + decorated_modified, float_to_top=True)
+        code_with_import = f"from codeflash_async_wrapper import {decorator_name}\n{decorated_modified}"
+        expected = sort_imports(code=code_with_import, float_to_top=True)
         assert instrumented_source.strip() == expected.strip()
         instrument_codeflash_capture(func, {}, tests_root)
 
@@ -488,6 +509,9 @@ async def async_error_function(lst):
             test_path.unlink()
         if test_path_perf.exists():
             test_path_perf.unlink()
+        helper_path = project_root_path / ASYNC_HELPER_FILENAME
+        if helper_path.exists():
+            helper_path.unlink()
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
@@ -525,7 +549,9 @@ async def test_async_multi():
 
         func = FunctionToOptimize(function_name="async_sorter", parents=[], file_path=Path(fto_path), is_async=True)
 
-        source_success = add_async_decorator_to_function(fto_path, func, TestingMode.BEHAVIOR)
+        source_success = add_async_decorator_to_function(
+            fto_path, func, TestingMode.BEHAVIOR, project_root=project_root_path
+        )
 
         assert source_success
         instrument_codeflash_capture(func, {}, tests_root)
@@ -598,6 +624,9 @@ async def test_async_multi():
             test_path.unlink()
         if test_path_perf.exists():
             test_path_perf.unlink()
+        helper_path = project_root_path / ASYNC_HELPER_FILENAME
+        if helper_path.exists():
+            helper_path.unlink()
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
@@ -640,7 +669,9 @@ async def test_async_edge_cases():
 
         func = FunctionToOptimize(function_name="async_sorter", parents=[], file_path=Path(fto_path), is_async=True)
 
-        source_success = add_async_decorator_to_function(fto_path, func, TestingMode.BEHAVIOR)
+        source_success = add_async_decorator_to_function(
+            fto_path, func, TestingMode.BEHAVIOR, project_root=project_root_path
+        )
 
         assert source_success
         instrument_codeflash_capture(func, {}, tests_root)
@@ -715,6 +746,9 @@ async def test_async_edge_cases():
             test_path.unlink()
         if test_path_perf.exists():
             test_path_perf.unlink()
+        helper_path = project_root_path / ASYNC_HELPER_FILENAME
+        if helper_path.exists():
+            helper_path.unlink()
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
@@ -949,7 +983,9 @@ async def test_mixed_sorting():
             function_name="async_merge_sort", parents=[], file_path=Path(mixed_fto_path), is_async=True
         )
 
-        source_success = add_async_decorator_to_function(mixed_fto_path, async_func, TestingMode.BEHAVIOR)
+        source_success = add_async_decorator_to_function(
+            mixed_fto_path, async_func, TestingMode.BEHAVIOR, project_root=project_root_path
+        )
 
         assert source_success
 
@@ -1022,3 +1058,6 @@ async def test_mixed_sorting():
             test_path.unlink()
         if test_path_perf.exists():
             test_path_perf.unlink()
+        helper_path = project_root_path / ASYNC_HELPER_FILENAME
+        if helper_path.exists():
+            helper_path.unlink()

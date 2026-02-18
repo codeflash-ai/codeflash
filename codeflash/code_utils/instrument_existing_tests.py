@@ -1700,69 +1700,44 @@ def get_async_inline_code(mode: TestingMode) -> str:
     return get_performance_async_inline_code()
 
 
-class AsyncInlineCodeInjector(cst.CSTTransformer):
-    """Injects async decorator function definitions inline instead of importing from codeflash."""
+ASYNC_HELPER_FILENAME = "codeflash_async_wrapper.py"
 
-    def __init__(self, mode: TestingMode = TestingMode.BEHAVIOR) -> None:
-        self.mode = mode
-        self.has_inline_definition = False
-        self.has_old_import = False
 
-    def _get_decorator_name(self) -> str:
-        if self.mode == TestingMode.BEHAVIOR:
-            return "codeflash_behavior_async"
-        if self.mode == TestingMode.CONCURRENCY:
-            return "codeflash_concurrency_async"
-        return "codeflash_performance_async"
+def get_decorator_name_for_mode(mode: TestingMode) -> str:
+    if mode == TestingMode.BEHAVIOR:
+        return "codeflash_behavior_async"
+    if mode == TestingMode.CONCURRENCY:
+        return "codeflash_concurrency_async"
+    return "codeflash_performance_async"
 
-    def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
-        if (
-            isinstance(node.module, cst.Attribute)
-            and isinstance(node.module.value, cst.Attribute)
-            and isinstance(node.module.value.value, cst.Name)
-            and node.module.value.value.value == "codeflash"
-            and node.module.value.attr.value == "code_utils"
-            and node.module.attr.value == "codeflash_wrap_decorator"
-            and not isinstance(node.names, cst.ImportStar)
-        ):
-            decorator_name = self._get_decorator_name()
-            for import_alias in node.names:
-                if import_alias.name.value == decorator_name:
-                    self.has_old_import = True
 
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
-        if node.name.value == self._get_decorator_name():
-            self.has_inline_definition = True
-
-    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
-        if self.has_inline_definition or self.has_old_import:
-            return updated_node
-        inline_code = get_async_inline_code(self.mode)
-        inline_stmts = cst.parse_module(inline_code).body
-        return updated_node.with_changes(body=[*inline_stmts, *list(updated_node.body)])
+def write_async_helper_file(target_dir: Path, mode: TestingMode) -> Path:
+    """Write the async decorator helper file to the target directory."""
+    helper_path = target_dir / ASYNC_HELPER_FILENAME
+    if helper_path.exists():
+        decorator_name = get_decorator_name_for_mode(mode)
+        if f"def {decorator_name}" in helper_path.read_text("utf-8"):
+            return helper_path
+    helper_path.write_text(get_async_inline_code(mode), "utf-8")
+    return helper_path
 
 
 def add_async_decorator_to_function(
-    source_path: Path, function: FunctionToOptimize, mode: TestingMode = TestingMode.BEHAVIOR
+    source_path: Path,
+    function: FunctionToOptimize,
+    mode: TestingMode = TestingMode.BEHAVIOR,
+    project_root: Path | None = None,
 ) -> bool:
     """Add async decorator to an async function definition and write back to file.
 
-    Args:
-    ----
-        source_path: Path to the source file to modify in-place.
-        function: The FunctionToOptimize object representing the target async function.
-        mode: The testing mode to determine which decorator to apply.
-
-    Returns:
-    -------
-        Boolean indicating whether the decorator was successfully added.
+    Writes a helper file containing the decorator implementation to project_root (or source directory
+    as fallback) and adds a standard import + decorator to the source file.
 
     """
     if not function.is_async:
         return False
 
     try:
-        # Read source code
         with source_path.open(encoding="utf8") as f:
             source_code = f.read()
 
@@ -1772,10 +1747,14 @@ def add_async_decorator_to_function(
         decorator_transformer = AsyncDecoratorAdder(function, mode)
         module = module.visit(decorator_transformer)
 
-        # Add the import if decorator was added
         if decorator_transformer.added_decorator:
-            import_transformer = AsyncInlineCodeInjector(mode)
-            module = module.visit(import_transformer)
+            # Write the helper file to project_root (on sys.path) or source dir as fallback
+            helper_dir = project_root if project_root is not None else source_path.parent
+            write_async_helper_file(helper_dir, mode)
+            # Add the import via CST so sort_imports can place it correctly
+            decorator_name = get_decorator_name_for_mode(mode)
+            import_node = cst.parse_statement(f"from codeflash_async_wrapper import {decorator_name}")
+            module = module.with_changes(body=[import_node, *list(module.body)])
 
         modified_code = sort_imports(code=module.code, float_to_top=True)
     except Exception as e:

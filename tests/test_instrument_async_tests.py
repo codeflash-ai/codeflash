@@ -6,8 +6,9 @@ from pathlib import Path
 import pytest
 
 from codeflash.code_utils.instrument_existing_tests import (
+    ASYNC_HELPER_FILENAME,
     add_async_decorator_to_function,
-    get_async_inline_code,
+    get_decorator_name_for_mode,
     inject_profiling_into_existing_test,
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -75,13 +76,14 @@ async def async_function(x: int, y: int) -> int:
     modified_code = test_file.read_text()
     from codeflash.code_utils.formatter import sort_imports
 
-    inline_code = get_async_inline_code(TestingMode.BEHAVIOR)
-    expected = sort_imports(
-        code=inline_code + "\n@codeflash_behavior_async\nasync def async_function(x: int, y: int) -> int:\n"
-        '    """Simple async function for testing."""\n    await asyncio.sleep(0.01)\n    return x * y\n',
-        float_to_top=True,
+    decorator_name = get_decorator_name_for_mode(TestingMode.BEHAVIOR)
+    code_with_decorator = async_function_code.replace(
+        "async def async_function", f"@{decorator_name}\nasync def async_function"
     )
+    code_with_import = f"from codeflash_async_wrapper import {decorator_name}\n{code_with_decorator}"
+    expected = sort_imports(code=code_with_import, float_to_top=True)
     assert modified_code.strip() == expected.strip()
+    assert (temp_dir / ASYNC_HELPER_FILENAME).exists()
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
@@ -106,13 +108,14 @@ async def async_function(x: int, y: int) -> int:
     modified_code = test_file.read_text()
     from codeflash.code_utils.formatter import sort_imports
 
-    inline_code = get_async_inline_code(TestingMode.PERFORMANCE)
-    expected = sort_imports(
-        code=inline_code + "\n@codeflash_performance_async\nasync def async_function(x: int, y: int) -> int:\n"
-        '    """Simple async function for testing."""\n    await asyncio.sleep(0.01)\n    return x * y\n',
-        float_to_top=True,
+    decorator_name = get_decorator_name_for_mode(TestingMode.PERFORMANCE)
+    code_with_decorator = async_function_code.replace(
+        "async def async_function", f"@{decorator_name}\nasync def async_function"
     )
+    code_with_import = f"from codeflash_async_wrapper import {decorator_name}\n{code_with_decorator}"
+    expected = sort_imports(code=code_with_import, float_to_top=True)
     assert modified_code.strip() == expected.strip()
+    assert (temp_dir / ASYNC_HELPER_FILENAME).exists()
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
@@ -138,13 +141,14 @@ async def async_function(x: int, y: int) -> int:
     modified_code = test_file.read_text()
     from codeflash.code_utils.formatter import sort_imports
 
-    inline_code = get_async_inline_code(TestingMode.CONCURRENCY)
-    expected = sort_imports(
-        code=inline_code + "\n@codeflash_concurrency_async\nasync def async_function(x: int, y: int) -> int:\n"
-        '    """Simple async function for testing."""\n    await asyncio.sleep(0.01)\n    return x * y\n',
-        float_to_top=True,
+    decorator_name = get_decorator_name_for_mode(TestingMode.CONCURRENCY)
+    code_with_decorator = async_function_code.replace(
+        "async def async_function", f"@{decorator_name}\nasync def async_function"
     )
+    code_with_import = f"from codeflash_async_wrapper import {decorator_name}\n{code_with_decorator}"
+    expected = sort_imports(code=code_with_import, float_to_top=True)
     assert modified_code.strip() == expected.strip()
+    assert (temp_dir / ASYNC_HELPER_FILENAME).exists()
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
@@ -181,24 +185,14 @@ class Calculator:
     modified_code = test_file.read_text()
     from codeflash.code_utils.formatter import sort_imports
 
-    inline_code = get_async_inline_code(TestingMode.BEHAVIOR)
-    expected = sort_imports(
-        code=inline_code
-        + "\nclass Calculator:\n"
-        '    """Test class with async methods."""\n'
-        "    \n"
-        "    @codeflash_behavior_async\n"
-        "    async def async_method(self, a: int, b: int) -> int:\n"
-        '        """Async method in class."""\n'
-        "        await asyncio.sleep(0.005)\n"
-        "        return a ** b\n"
-        "        \n"
-        "    def sync_method(self, a: int, b: int) -> int:\n"
-        '        """Sync method in class."""\n'
-        "        return a - b\n",
-        float_to_top=True,
+    decorator_name = get_decorator_name_for_mode(TestingMode.BEHAVIOR)
+    code_with_decorator = async_class_code.replace(
+        "    async def async_method", f"    @{decorator_name}\n    async def async_method"
     )
+    code_with_import = f"from codeflash_async_wrapper import {decorator_name}\n{code_with_decorator}"
+    expected = sort_imports(code=code_with_import, float_to_top=True)
     assert modified_code.strip() == expected.strip()
+    assert (temp_dir / ASYNC_HELPER_FILENAME).exists()
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
@@ -295,13 +289,14 @@ async def test_async_function():
     instrumented_source = source_file.read_text()
     from codeflash.code_utils.formatter import sort_imports
 
-    inline_code = get_async_inline_code(TestingMode.BEHAVIOR)
-    expected = sort_imports(
-        code=inline_code + "\n@codeflash_behavior_async\nasync def async_function(x: int, y: int) -> int:\n"
-        '    """Simple async function for testing."""\n    await asyncio.sleep(0.01)\n    return x * y\n',
-        float_to_top=True,
+    decorator_name = get_decorator_name_for_mode(TestingMode.BEHAVIOR)
+    code_with_decorator = source_module_code.replace(
+        "async def async_function", f"@{decorator_name}\nasync def async_function"
     )
+    code_with_import = f"from codeflash_async_wrapper import {decorator_name}\n{code_with_decorator}"
+    expected = sort_imports(code=code_with_import, float_to_top=True)
     assert instrumented_source.strip() == expected.strip()
+    assert (temp_dir / ASYNC_HELPER_FILENAME).exists()
 
     success, instrumented_test_code = inject_profiling_into_existing_test(
         test_file, [CodePosition(8, 18), CodePosition(11, 19)], func, temp_dir, mode=TestingMode.BEHAVIOR
@@ -356,13 +351,14 @@ async def test_async_function():
     instrumented_source = source_file.read_text()
     from codeflash.code_utils.formatter import sort_imports
 
-    inline_code = get_async_inline_code(TestingMode.PERFORMANCE)
-    expected = sort_imports(
-        code=inline_code + "\n@codeflash_performance_async\nasync def async_function(x: int, y: int) -> int:\n"
-        '    """Simple async function for testing."""\n    await asyncio.sleep(0.01)\n    return x * y\n',
-        float_to_top=True,
+    decorator_name = get_decorator_name_for_mode(TestingMode.PERFORMANCE)
+    code_with_decorator = source_module_code.replace(
+        "async def async_function", f"@{decorator_name}\nasync def async_function"
     )
+    code_with_import = f"from codeflash_async_wrapper import {decorator_name}\n{code_with_decorator}"
+    expected = sort_imports(code=code_with_import, float_to_top=True)
     assert instrumented_source.strip() == expected.strip()
+    assert (temp_dir / ASYNC_HELPER_FILENAME).exists()
 
     # Now test the full pipeline with source module path
     success, instrumented_test_code = inject_profiling_into_existing_test(
@@ -425,19 +421,14 @@ async def test_mixed_functions():
     instrumented_source = source_file.read_text()
     from codeflash.code_utils.formatter import sort_imports
 
-    inline_code = get_async_inline_code(TestingMode.BEHAVIOR)
-    expected = sort_imports(
-        code=inline_code
-        + "\ndef sync_function(x: int, y: int) -> int:\n"
-        '    """Regular sync function."""\n'
-        "    return x * y\n"
-        "\n@codeflash_behavior_async\nasync def async_function(x: int, y: int) -> int:\n"
-        '    """Simple async function."""\n'
-        "    await asyncio.sleep(0.01)\n"
-        "    return x * y\n",
-        float_to_top=True,
+    decorator_name = get_decorator_name_for_mode(TestingMode.BEHAVIOR)
+    code_with_decorator = source_module_code.replace(
+        "async def async_function", f"@{decorator_name}\nasync def async_function"
     )
+    code_with_import = f"from codeflash_async_wrapper import {decorator_name}\n{code_with_decorator}"
+    expected = sort_imports(code=code_with_import, float_to_top=True)
     assert instrumented_source.strip() == expected.strip()
+    assert (temp_dir / ASYNC_HELPER_FILENAME).exists()
 
     success, instrumented_test_code = inject_profiling_into_existing_test(
         test_file, [CodePosition(8, 18), CodePosition(11, 19)], async_func, temp_dir, mode=TestingMode.BEHAVIOR
@@ -477,19 +468,15 @@ class OuterClass:
     modified_code = test_file.read_text()
     from codeflash.code_utils.formatter import sort_imports
 
-    inline_code = get_async_inline_code(TestingMode.BEHAVIOR)
-    expected = sort_imports(
-        code=inline_code
-        + "\nclass OuterClass:    \n"
-        "    class InnerClass:        \n"
-        "        @codeflash_behavior_async\n"
-        "        async def nested_async_method(self, x: int) -> int:\n"
-        '            """Nested async method."""\n'
-        "            await asyncio.sleep(0.001)\n"
-        "            return x * 2\n",
-        float_to_top=True,
+    decorator_name = get_decorator_name_for_mode(TestingMode.BEHAVIOR)
+    code_with_decorator = nested_async_code.replace(
+        "        async def nested_async_method",
+        f"        @{decorator_name}\n        async def nested_async_method",
     )
+    code_with_import = f"from codeflash_async_wrapper import {decorator_name}\n{code_with_decorator}"
+    expected = sort_imports(code=code_with_import, float_to_top=True)
     assert modified_code.strip() == expected.strip()
+    assert (temp_dir / ASYNC_HELPER_FILENAME).exists()
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")

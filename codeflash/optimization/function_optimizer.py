@@ -2296,7 +2296,10 @@ class FunctionOptimizer:
             from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
             success = add_async_decorator_to_function(
-                self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.BEHAVIOR
+                self.function_to_optimize.file_path,
+                self.function_to_optimize,
+                TestingMode.BEHAVIOR,
+                project_root=self.project_root,
             )
 
         # Instrument codeflash capture
@@ -2361,7 +2364,10 @@ class FunctionOptimizer:
                 from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
                 add_async_decorator_to_function(
-                    self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
+                    self.function_to_optimize.file_path,
+                    self.function_to_optimize,
+                    TestingMode.PERFORMANCE,
+                    project_root=self.project_root,
                 )
 
             try:
@@ -2535,7 +2541,10 @@ class FunctionOptimizer:
                 from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
                 add_async_decorator_to_function(
-                    self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.BEHAVIOR
+                    self.function_to_optimize.file_path,
+                    self.function_to_optimize,
+                    TestingMode.BEHAVIOR,
+                    project_root=self.project_root,
                 )
 
             try:
@@ -2611,7 +2620,10 @@ class FunctionOptimizer:
                 from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
                 add_async_decorator_to_function(
-                    self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
+                    self.function_to_optimize.file_path,
+                    self.function_to_optimize,
+                    TestingMode.PERFORMANCE,
+                    project_root=self.project_root,
                 )
 
             try:
@@ -2974,7 +2986,10 @@ class FunctionOptimizer:
         try:
             # Add concurrency decorator to the source function
             add_async_decorator_to_function(
-                self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.CONCURRENCY
+                self.function_to_optimize.file_path,
+                self.function_to_optimize,
+                TestingMode.CONCURRENCY,
+                project_root=self.project_root,
             )
 
             # Run the concurrency benchmark tests
