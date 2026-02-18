@@ -191,7 +191,7 @@ class StandaloneCallTransformer:
             call_match = self._dot_call_pattern.search(code, pos)
 
             # Choose the earliest match by position
-            candidates: list[tuple[str, re.Match]] = []
+            candidates: list[tuple[str, re.Match[str]]] = []
             if dot_match:
                 candidates.append(("dot", dot_match))
             if bracket_match:
@@ -241,7 +241,7 @@ class StandaloneCallTransformer:
 
         return "".join(result)
 
-    def _should_skip_match(self, code: str, start: int, match: re.Match) -> bool:
+    def _should_skip_match(self, code: str, start: int, match: re.Match[str]) -> bool:
         """Check if the match should be skipped (inside expect, already transformed, etc.)."""
         # Skip if inside a string literal (e.g., test description)
         if is_inside_string(code, start):
@@ -325,7 +325,7 @@ class StandaloneCallTransformer:
 
         return pos if depth == 0 else -1
 
-    def _parse_standalone_call(self, code: str, match: re.Match) -> StandaloneCallMatch | None:
+    def _parse_standalone_call(self, code: str, match: re.Match[str]) -> StandaloneCallMatch | None:
         """Parse a complete standalone func(...) call."""
         leading_ws = match.group(1)
         prefix = match.group(2) or ""  # "await " or ""
@@ -408,7 +408,7 @@ class StandaloneCallTransformer:
         # slice once
         return s[open_paren_pos + 1 : pos - 1], pos
 
-    def _parse_bracket_standalone_call(self, code: str, match: re.Match) -> StandaloneCallMatch | None:
+    def _parse_bracket_standalone_call(self, code: str, match: re.Match[str]) -> StandaloneCallMatch | None:
         """Parse a complete standalone obj['func'](...) call with bracket notation."""
         leading_ws = match.group(1)
         prefix = match.group(2) or ""  # "await " or ""
@@ -447,7 +447,7 @@ class StandaloneCallTransformer:
             has_trailing_semicolon=has_trailing_semicolon,
         )
 
-    def _parse_dot_call_standalone(self, code: str, match: re.Match) -> StandaloneCallMatch | None:
+    def _parse_dot_call_standalone(self, code: str, match: re.Match[str]) -> StandaloneCallMatch | None:
         """Parse a funcName.call(thisArg, args) or obj.funcName.call(thisArg, args) call."""
         leading_ws = match.group(1)
         prefix = match.group(2) or ""  # "await " or ""
@@ -655,7 +655,7 @@ class ExpectCallTransformer:
 
         return "".join(result)
 
-    def _parse_expect_call(self, code: str, match: re.Match) -> ExpectCallMatch | None:
+    def _parse_expect_call(self, code: str, match: re.Match[str]) -> ExpectCallMatch | None:
         """Parse a complete expect(func(...)).assertion() call.
 
         Returns None if the pattern doesn't match expected structure.
@@ -704,7 +704,7 @@ class ExpectCallTransformer:
             object_prefix=object_prefix,
         )
 
-    def _parse_expect_dot_call(self, code: str, match: re.Match) -> ExpectCallMatch | None:
+    def _parse_expect_dot_call(self, code: str, match: re.Match[str]) -> ExpectCallMatch | None:
         """Parse expect(funcName.call(thisArg, args)).assertion()."""
         leading_ws = match.group(1)
         object_prefix = match.group(2) or ""
