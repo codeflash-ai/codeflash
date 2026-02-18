@@ -3121,11 +3121,11 @@ class FunctionOptimizer:
             return results, coverage_results
         # For LINE_PROFILE mode, Python uses .lprof files while JavaScript uses JSON
         # Return TestResults for JavaScript so _line_profiler_step_javascript can parse the JSON
-        if not is_python():
-            # Return TestResults to indicate tests ran, actual parsing happens in _line_profiler_step_javascript
-            return TestResults(test_results=[]), None
-        results, coverage_results = parse_line_profile_results(line_profiler_output_file=line_profiler_output_file)
-        return results, coverage_results
+        if testing_type == TestingMode.LINE_PROFILE:
+            results, coverage_results = parse_line_profile_results(line_profiler_output_file=line_profiler_output_file)
+            return results, coverage_results
+        logger.error(f"Unexpected testing type: {testing_type}")
+        return TestResults(), None
 
     def submit_test_generation_tasks(
         self,
