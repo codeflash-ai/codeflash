@@ -82,6 +82,7 @@ class CodeContext:
     read_only_context: str = ""
     imports: list[str] = field(default_factory=list)
     language: Language = Language.PYTHON
+    imported_type_skeletons: str = ""
 
 
 @dataclass

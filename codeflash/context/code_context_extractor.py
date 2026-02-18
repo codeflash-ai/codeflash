@@ -314,9 +314,18 @@ def get_code_optimization_context_for_language(
         code_strings=read_writable_code_strings, language=function_to_optimize.language
     )
 
-    # Build testgen context (same as read_writable for non-Python)
+    # Build testgen context (same as read_writable for non-Python, plus imported type skeletons)
+    testgen_code_strings = read_writable_code_strings.copy()
+    if code_context.imported_type_skeletons:
+        testgen_code_strings.append(
+            CodeString(
+                code=code_context.imported_type_skeletons,
+                file_path=None,
+                language=function_to_optimize.language,
+            )
+        )
     testgen_context = CodeStringsMarkdown(
-        code_strings=read_writable_code_strings.copy(), language=function_to_optimize.language
+        code_strings=testgen_code_strings, language=function_to_optimize.language
     )
 
     # Check token limits
