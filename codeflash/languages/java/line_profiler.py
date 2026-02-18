@@ -10,10 +10,11 @@ from __future__ import annotations
 import json
 import logging
 import re
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from tree_sitter import Node
 
     from codeflash.languages.base import FunctionInfo
@@ -34,6 +35,7 @@ class JavaLineProfiler:
         instrumented = profiler.instrument_source(source, file_path, functions)
         # Run instrumented code
         results = JavaLineProfiler.parse_results(Path("profile.json"))
+
     """
 
     def __init__(self, output_file: Path) -> None:
@@ -48,13 +50,7 @@ class JavaLineProfiler:
         self.profiler_var = "__codeflashProfiler__"
         self.line_contents: dict[str, str] = {}
 
-    def instrument_source(
-        self,
-        source: str,
-        file_path: Path,
-        functions: list[FunctionInfo],
-        analyzer=None,
-    ) -> str:
+    def instrument_source(self, source: str, file_path: Path, functions: list[FunctionInfo], analyzer=None) -> str:
         """Instrument Java source code with line profiling.
 
         Adds profiling instrumentation to track line-level execution for the
@@ -106,9 +102,7 @@ class JavaLineProfiler:
                 import_end_idx = i
                 break
 
-        lines_with_profiler = (
-            lines[:import_end_idx] + [profiler_class_code + "\n"] + lines[import_end_idx:]
-        )
+        lines_with_profiler = [*lines[:import_end_idx], profiler_class_code + "\n", *lines[import_end_idx:]]
 
         result = "".join(lines_with_profiler)
         if not analyzer.validate_syntax(result):
@@ -121,7 +115,7 @@ class JavaLineProfiler:
         # Store line contents as a simple map (embedded directly in code)
         line_contents_code = self._generate_line_contents_map()
 
-        return f'''
+        return f"""
 /**
  * Codeflash line profiler - tracks per-line execution statistics.
  * Auto-generated - do not modify.
@@ -132,7 +126,7 @@ class {self.profiler_class} {{
     private static final ThreadLocal<Long> lastLineTime = new ThreadLocal<>();
     private static final ThreadLocal<String> lastKey = new ThreadLocal<>();
     private static final java.util.concurrent.atomic.AtomicInteger totalHits = new java.util.concurrent.atomic.AtomicInteger(0);
-    private static final String OUTPUT_FILE = "{str(self.output_file)}";
+    private static final String OUTPUT_FILE = "{self.output_file!s}";
 
     static class LineStats {{
         public final java.util.concurrent.atomic.AtomicLong hits = new java.util.concurrent.atomic.AtomicLong(0);
@@ -247,15 +241,9 @@ class {self.profiler_class} {{
         Runtime.getRuntime().addShutdownHook(new Thread(() -> save()));
     }}
 }}
-'''
+"""
 
-    def _instrument_function(
-        self,
-        func: FunctionInfo,
-        lines: list[str],
-        file_path: Path,
-        analyzer,
-    ) -> list[str]:
+    def _instrument_function(self, func: FunctionInfo, lines: list[str], file_path: Path, analyzer) -> list[str]:
         """Instrument a single function with line profiling.
 
         Args:
@@ -300,9 +288,7 @@ class {self.profiler_class} {{
 
                 # Add the line with enterFunction() call after it
                 instrumented_lines.append(line)
-                instrumented_lines.append(
-                    f"{body_indent}{self.profiler_class}.enterFunction();\n"
-                )
+                instrumented_lines.append(f"{body_indent}{self.profiler_class}.enterFunction();\n")
                 function_entry_added = True
                 continue
 
@@ -313,8 +299,7 @@ class {self.profiler_class} {{
                 and not stripped.startswith("//")
                 and not stripped.startswith("/*")
                 and not stripped.startswith("*")
-                and stripped != "}"
-                and stripped != "};"
+                and stripped not in ("}", "};")
             ):
                 # Get indentation
                 indent = len(line) - len(line.lstrip())
@@ -326,8 +311,7 @@ class {self.profiler_class} {{
 
                 # Add hit() call before the line
                 profiled_line = (
-                    f"{indent_str}{self.profiler_class}.hit("
-                    f'"{file_path.as_posix()}", {global_line_num});\n{line}'
+                    f'{indent_str}{self.profiler_class}.hit("{file_path.as_posix()}", {global_line_num});\n{line}'
                 )
                 instrumented_lines.append(profiled_line)
             else:
@@ -450,8 +434,8 @@ class {self.profiler_class} {{
             result["str_out"] = format_line_profile_results(result)
             return result
 
-        except Exception as e:
-            logger.error("Failed to parse line profile results: %s", e)
+        except Exception:
+            logger.exception("Failed to parse line profile results")
             return {"timings": {}, "unit": 1e-9, "raw_data": {}, "str_out": ""}
 
 
@@ -497,8 +481,6 @@ def format_line_profile_results(results: dict, file_path: Path | None = None) ->
             avg_ms = time_ms / hits if hits > 0 else 0
             content = stats.get("content", "")[:50]  # Truncate long lines
 
-            output.append(
-                f"{line_num:6d} | {hits:10d} | {time_ms:12.3f} | {avg_ms:12.6f} | {content}"
-            )
+            output.append(f"{line_num:6d} | {hits:10d} | {time_ms:12.3f} | {avg_ms:12.6f} | {content}")
 
     return "\n".join(output)

@@ -715,7 +715,12 @@ def inject_profiling_into_existing_test(
         from codeflash.languages.javascript.instrument import inject_profiling_into_existing_js_test
 
         return inject_profiling_into_existing_js_test(
-            test_string=test_string, call_positions=call_positions, function_to_optimize=function_to_optimize, tests_project_root=tests_project_root, mode= mode.value, test_path=test_path
+            test_string=test_string,
+            call_positions=call_positions,
+            function_to_optimize=function_to_optimize,
+            tests_project_root=tests_project_root,
+            mode=mode.value,
+            test_path=test_path,
         )
 
     if is_java():
@@ -725,10 +730,13 @@ def inject_profiling_into_existing_test(
 
     if function_to_optimize.is_async:
         return inject_async_profiling_into_existing_test(
-            test_string=test_string, call_positions=call_positions, function_to_optimize=function_to_optimize, tests_project_root=tests_project_root, mode=mode.value, test_path=test_path
+            test_string=test_string,
+            call_positions=call_positions,
+            function_to_optimize=function_to_optimize,
+            tests_project_root=tests_project_root,
+            mode=mode.value,
+            test_path=test_path,
         )
-
-
 
     used_frameworks = detect_frameworks_from_code(test_string)
     try:

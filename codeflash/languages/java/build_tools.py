@@ -13,10 +13,7 @@ import subprocess
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +181,6 @@ def _get_maven_project_info(project_root: Path) -> JavaProjectInfo | None:
         if test_src.exists():
             test_roots.append(test_src)
 
-
         # Check for custom source directories in pom.xml <build> section
         for build in [root.find("m:build", ns), root.find("build")]:
             if build is not None:
@@ -312,9 +308,9 @@ def find_maven_executable(project_root: Path | None = None) -> str | None:
             return str(mvnw_cmd_path)
 
     # Check for Maven wrapper in current directory
-    if os.path.exists("mvnw"):
+    if Path("mvnw").exists():
         return "./mvnw"
-    if os.path.exists("mvnw.cmd"):
+    if Path("mvnw.cmd").exists():
         return "mvnw.cmd"
 
     # Check system Maven
@@ -348,9 +344,9 @@ def find_gradle_executable(project_root: Path | None = None) -> str | None:
             return str(gradlew_bat_path)
 
     # Check for Gradle wrapper in current directory
-    if os.path.exists("gradlew"):
+    if Path("gradlew").exists():
         return "./gradlew"
-    if os.path.exists("gradlew.bat"):
+    if Path("gradlew.bat").exists():
         return "gradlew.bat"
 
     # Check system Gradle
@@ -660,7 +656,7 @@ def add_codeflash_dependency_to_pom(pom_path: Path) -> bool:
 
         new_content = content[:idx] + CODEFLASH_DEPENDENCY_SNIPPET
         # Skip the original </dependencies> tag since our snippet includes it
-        new_content += content[idx + len(closing_tag):]
+        new_content += content[idx + len(closing_tag) :]
 
         pom_path.write_text(new_content, encoding="utf-8")
         logger.info("Added codeflash-runtime dependency to pom.xml")

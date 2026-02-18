@@ -14,11 +14,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
-    from tree_sitter import Node
+    from pathlib import Path
 
     from codeflash.languages.base import FunctionInfo
 
@@ -59,7 +58,7 @@ class ConcurrencyInfo:
     async_method_calls: list[str] = None
     """List of async/concurrent method calls."""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.async_method_calls is None:
             self.async_method_calls = []
 
@@ -68,7 +67,7 @@ class JavaConcurrencyAnalyzer:
     """Analyzes Java code for concurrency patterns."""
 
     # Concurrent patterns to detect
-    COMPLETABLE_FUTURE_PATTERNS = {
+    COMPLETABLE_FUTURE_PATTERNS: ClassVar[set[str]] = {
         "CompletableFuture",
         "supplyAsync",
         "runAsync",
@@ -80,7 +79,7 @@ class JavaConcurrencyAnalyzer:
         "anyOf",
     }
 
-    EXECUTOR_PATTERNS = {
+    EXECUTOR_PATTERNS: ClassVar[set[str]] = {
         "ExecutorService",
         "Executors",
         "ThreadPoolExecutor",
@@ -93,14 +92,14 @@ class JavaConcurrencyAnalyzer:
         "newWorkStealingPool",
     }
 
-    VIRTUAL_THREAD_PATTERNS = {
+    VIRTUAL_THREAD_PATTERNS: ClassVar[set[str]] = {
         "newVirtualThreadPerTaskExecutor",
         "Thread.startVirtualThread",
         "Thread.ofVirtual",
         "VirtualThreads",
     }
 
-    CONCURRENT_COLLECTION_PATTERNS = {
+    CONCURRENT_COLLECTION_PATTERNS: ClassVar[set[str]] = {
         "ConcurrentHashMap",
         "ConcurrentLinkedQueue",
         "ConcurrentLinkedDeque",
@@ -113,7 +112,7 @@ class JavaConcurrencyAnalyzer:
         "ArrayBlockingQueue",
     }
 
-    ATOMIC_PATTERNS = {
+    ATOMIC_PATTERNS: ClassVar[set[str]] = {
         "AtomicInteger",
         "AtomicLong",
         "AtomicBoolean",
@@ -123,7 +122,7 @@ class JavaConcurrencyAnalyzer:
         "AtomicReferenceArray",
     }
 
-    def __init__(self, analyzer=None):
+    def __init__(self, analyzer=None) -> None:
         """Initialize concurrency analyzer.
 
         Args:
@@ -306,9 +305,7 @@ class JavaConcurrencyAnalyzer:
         return suggestions
 
 
-def analyze_function_concurrency(
-    func: FunctionInfo, source: str | None = None, analyzer=None
-) -> ConcurrencyInfo:
+def analyze_function_concurrency(func: FunctionInfo, source: str | None = None, analyzer=None) -> ConcurrencyInfo:
     """Analyze a function for concurrency patterns.
 
     Convenience function that creates a JavaConcurrencyAnalyzer and analyzes the function.

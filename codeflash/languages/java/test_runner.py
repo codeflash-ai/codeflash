@@ -432,27 +432,27 @@ def run_behavioral_tests(
 
     # Debug: Log Maven result and coverage file status
     if enable_coverage:
-        logger.info(f"Maven verify completed with return code: {result.returncode}")
+        logger.info("Maven verify completed with return code: %s", result.returncode)
         if result.returncode != 0:
             logger.warning(
-                f"Maven verify had non-zero return code: {result.returncode}. Coverage data may be incomplete."
+                "Maven verify had non-zero return code: %s. Coverage data may be incomplete.", result.returncode
             )
 
     # Log coverage file status after Maven verify
     if enable_coverage and coverage_xml_path:
         jacoco_exec_path = target_dir / "jacoco.exec"
-        logger.info(f"Coverage paths - target_dir: {target_dir}, coverage_xml_path: {coverage_xml_path}")
+        logger.info("Coverage paths - target_dir: %s, coverage_xml_path: %s", target_dir, coverage_xml_path)
         if jacoco_exec_path.exists():
-            logger.info(f"JaCoCo exec file exists: {jacoco_exec_path} ({jacoco_exec_path.stat().st_size} bytes)")
+            logger.info("JaCoCo exec file exists: %s (%s bytes)", jacoco_exec_path, jacoco_exec_path.stat().st_size)
         else:
-            logger.warning(f"JaCoCo exec file not found: {jacoco_exec_path} - JaCoCo agent may not have run")
+            logger.warning("JaCoCo exec file not found: %s - JaCoCo agent may not have run", jacoco_exec_path)
         if coverage_xml_path.exists():
             file_size = coverage_xml_path.stat().st_size
-            logger.info(f"JaCoCo XML report exists: {coverage_xml_path} ({file_size} bytes)")
+            logger.info("JaCoCo XML report exists: %s (%s bytes)", coverage_xml_path, file_size)
             if file_size == 0:
                 logger.warning("JaCoCo XML report is empty - report generation may have failed")
         else:
-            logger.warning(f"JaCoCo XML report not found: {coverage_xml_path} - verify phase may not have completed")
+            logger.warning("JaCoCo XML report not found: %s - verify phase may not have completed", coverage_xml_path)
 
     # Return tuple matching the expected signature:
     # (result_xml_path, run_result, coverage_database_file, coverage_config_file)
@@ -610,13 +610,20 @@ def _run_tests_direct(
     cmd = [
         str(java),
         # Java 16+ module system: Kryo needs reflective access to internal JDK classes
-        "--add-opens", "java.base/java.util=ALL-UNNAMED",
-        "--add-opens", "java.base/java.lang=ALL-UNNAMED",
-        "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED",
-        "--add-opens", "java.base/java.io=ALL-UNNAMED",
-        "--add-opens", "java.base/java.math=ALL-UNNAMED",
-        "--add-opens", "java.base/java.net=ALL-UNNAMED",
-        "--add-opens", "java.base/java.util.zip=ALL-UNNAMED",
+        "--add-opens",
+        "java.base/java.util=ALL-UNNAMED",
+        "--add-opens",
+        "java.base/java.lang=ALL-UNNAMED",
+        "--add-opens",
+        "java.base/java.lang.reflect=ALL-UNNAMED",
+        "--add-opens",
+        "java.base/java.io=ALL-UNNAMED",
+        "--add-opens",
+        "java.base/java.math=ALL-UNNAMED",
+        "--add-opens",
+        "java.base/java.net=ALL-UNNAMED",
+        "--add-opens",
+        "java.base/java.util.zip=ALL-UNNAMED",
         "-cp",
         classpath,
         "org.junit.platform.console.ConsoleLauncher",
@@ -1219,16 +1226,14 @@ def _run_maven_tests(
     # These flags are safe no-ops on older Java versions.
     # Note: This overrides JaCoCo's argLine for the forked JVM, but JaCoCo coverage
     # is handled separately via enable_coverage and the verify phase.
-    add_opens_flags = " ".join(
-        [
-            "--add-opens java.base/java.util=ALL-UNNAMED",
-            "--add-opens java.base/java.lang=ALL-UNNAMED",
-            "--add-opens java.base/java.lang.reflect=ALL-UNNAMED",
-            "--add-opens java.base/java.io=ALL-UNNAMED",
-            "--add-opens java.base/java.math=ALL-UNNAMED",
-            "--add-opens java.base/java.net=ALL-UNNAMED",
-            "--add-opens java.base/java.util.zip=ALL-UNNAMED",
-        ]
+    add_opens_flags = (
+        "--add-opens java.base/java.util=ALL-UNNAMED"
+        " --add-opens java.base/java.lang=ALL-UNNAMED"
+        " --add-opens java.base/java.lang.reflect=ALL-UNNAMED"
+        " --add-opens java.base/java.io=ALL-UNNAMED"
+        " --add-opens java.base/java.math=ALL-UNNAMED"
+        " --add-opens java.base/java.net=ALL-UNNAMED"
+        " --add-opens java.base/java.util.zip=ALL-UNNAMED"
     )
     cmd.append(f"-DargLine={add_opens_flags}")
 
@@ -1292,14 +1297,16 @@ def _run_maven_tests(
 
             if has_compilation_error:
                 logger.error(
-                    f"Maven compilation failed for {mode} tests. "
-                    f"Check that generated test code is syntactically valid Java. "
-                    f"Return code: {result.returncode}"
+                    "Maven compilation failed for %s tests. "
+                    "Check that generated test code is syntactically valid Java. "
+                    "Return code: %s",
+                    mode,
+                    result.returncode,
                 )
                 # Log first 50 lines of output to help diagnose compilation errors
                 output_lines = combined_output.split("\n")
                 error_context = "\n".join(output_lines[:50]) if len(output_lines) > 50 else combined_output
-                logger.error(f"Maven compilation error output:\n{error_context}")
+                logger.error("Maven compilation error output:\n%s", error_context)
 
         return result
 
@@ -1435,8 +1442,7 @@ def _path_to_class_name(path: Path, source_dirs: list[str] | None = None) -> str
                 idx = path_str.index(normalized) + len(normalized)
                 remainder = path_str[idx:].lstrip("/")
                 if remainder:
-                    class_name = remainder.replace("/", ".").removesuffix(".java")
-                    return class_name
+                    return remainder.replace("/", ".").removesuffix(".java")
 
     # Look for standard Maven/Gradle source directories
     # Find 'java' that comes after 'main' or 'test'

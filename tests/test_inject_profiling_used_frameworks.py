@@ -1105,6 +1105,7 @@ def test_my_function():
         func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
+            test_string=code,
             test_path=test_file,
             call_positions=[CodePosition(4, 13)],
             function_to_optimize=func,
@@ -1131,6 +1132,7 @@ def test_my_function():
         func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
+            test_string=code,
             test_path=test_file,
             call_positions=[CodePosition(5, 13)],
             function_to_optimize=func,
@@ -1157,6 +1159,7 @@ def test_my_function():
         func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
+            test_string=code,
             test_path=test_file,
             call_positions=[CodePosition(5, 13)],
             function_to_optimize=func,
@@ -1183,6 +1186,7 @@ def test_my_function():
         func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
+            test_string=code,
             test_path=test_file,
             call_positions=[CodePosition(5, 13)],
             function_to_optimize=func,
@@ -1209,6 +1213,7 @@ def test_my_function():
         func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
+            test_string=code,
             test_path=test_file,
             call_positions=[CodePosition(5, 13)],
             function_to_optimize=func,
@@ -1235,6 +1240,7 @@ def test_my_function():
         func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
+            test_string=code,
             test_path=test_file,
             call_positions=[CodePosition(5, 13)],
             function_to_optimize=func,
@@ -1261,6 +1267,7 @@ def test_my_function():
         func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
+            test_string=code,
             test_path=test_file,
             call_positions=[CodePosition(5, 13)],
             function_to_optimize=func,
@@ -1287,6 +1294,7 @@ def test_my_function():
         func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
+            test_string=code,
             test_path=test_file,
             call_positions=[CodePosition(5, 13)],
             function_to_optimize=func,
@@ -1314,6 +1322,7 @@ def test_my_function():
         func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
+            test_string=code,
             test_path=test_file,
             call_positions=[CodePosition(6, 13)],
             function_to_optimize=func,
@@ -1342,6 +1351,7 @@ def test_my_function():
         func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
+            test_string=code,
             test_path=test_file,
             call_positions=[CodePosition(7, 13)],
             function_to_optimize=func,
@@ -1376,6 +1386,7 @@ def test_my_function():
         func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
+            test_string=code,
             test_path=test_file,
             call_positions=[CodePosition(4, 13)],
             function_to_optimize=func,
@@ -1402,6 +1413,7 @@ def test_my_function():
         func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
+            test_string=code,
             test_path=test_file,
             call_positions=[CodePosition(5, 13)],
             function_to_optimize=func,
@@ -1428,6 +1440,7 @@ def test_my_function():
         func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
+            test_string=code,
             test_path=test_file,
             call_positions=[CodePosition(5, 13)],
             function_to_optimize=func,
@@ -1454,6 +1467,7 @@ def test_my_function():
         func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
+            test_string=code,
             test_path=test_file,
             call_positions=[CodePosition(5, 13)],
             function_to_optimize=func,
@@ -1482,6 +1496,7 @@ def test_my_function():
         func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
+            test_string=code,
             test_path=test_file,
             call_positions=[CodePosition(7, 13)],
             function_to_optimize=func,
