@@ -5,7 +5,6 @@ import hashlib
 import os
 from collections import defaultdict
 from itertools import chain
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import libcst as cst
@@ -35,6 +34,8 @@ from codeflash.models.models import (
 from codeflash.optimization.function_context import belongs_to_function_qualified
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from jedi.api.classes import Name
 
     from codeflash.languages.base import HelperFunction
@@ -756,11 +757,9 @@ def extract_init_stub_from_class(class_name: str, module_source: str, module_tre
     relevant_nodes: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
     for item in class_node.body:
         if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if item.name in ("__init__", "__post_init__"):
-                relevant_nodes.append(item)
-            elif any(
-                isinstance(d, ast.Name) and d.id == "property"
-                or isinstance(d, ast.Attribute) and d.attr == "property"
+            if item.name in ("__init__", "__post_init__") or any(
+                (isinstance(d, ast.Name) and d.id == "property")
+                or (isinstance(d, ast.Attribute) and d.attr == "property")
                 for d in item.decorator_list
             ):
                 relevant_nodes.append(item)
