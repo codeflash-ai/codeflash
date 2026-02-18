@@ -947,12 +947,15 @@ def _format_skeleton_for_context(
 
     # Fields
     if skeleton.fields_code:
-        for line in skeleton.fields_code.strip().splitlines():
+        # avoid repeated strip() calls inside loop
+        fields_lines = skeleton.fields_code.strip().splitlines()
+        for line in fields_lines:
             parts.append(f"    {line.strip()}")
 
     # Constructors
     if skeleton.constructors_code:
-        for line in skeleton.constructors_code.strip().splitlines():
+        constructors_lines = skeleton.constructors_code.strip().splitlines()
+        for line in constructors_lines:
             stripped = line.strip()
             if stripped:
                 parts.append(f"    {stripped}")
@@ -974,6 +977,8 @@ def _extract_public_method_signatures(source: str, class_name: str, analyzer: Ja
 
     source_bytes = source.encode("utf8")
 
+    pub_token = b"public"
+
     for method in methods:
         if method.class_name != class_name:
             continue
@@ -984,25 +989,32 @@ def _extract_public_method_signatures(source: str, class_name: str, analyzer: Ja
 
         # Check if the method is public
         is_public = False
+        sig_parts_bytes: list[bytes] = []
+        # Single pass over children: detect modifiers and collect parts up to the body
         for child in node.children:
-            if child.type == "modifiers":
-                mod_text = source_bytes[child.start_byte : child.end_byte].decode("utf8")
-                if "public" in mod_text:
+            ctype = child.type
+            if ctype == "modifiers":
+                # Check modifiers for 'public' using bytes to avoid decoding each time
+                mod_slice = source_bytes[child.start_byte : child.end_byte]
+                if pub_token in mod_slice:
                     is_public = True
+                # include modifiers in signature parts (original behavior included it)
+                sig_parts_bytes.append(mod_slice)
+                continue
+
+            if ctype == "block" or ctype == "constructor_body":
                 break
+
+
+            sig_parts_bytes.append(source_bytes[child.start_byte : child.end_byte])
 
         if not is_public:
             continue
 
-        # Extract everything before the body (method_body node)
-        sig_parts: list[str] = []
-        for child in node.children:
-            if child.type == "block" or child.type == "constructor_body":
-                break
-            sig_parts.append(source_bytes[child.start_byte : child.end_byte].decode("utf8"))
-
-        if sig_parts:
-            sig = " ".join(sig_parts).strip()
+        if sig_parts_bytes:
+            # Join bytes once and decode once to reduce allocations
+            sig = b" ".join(sig_parts_bytes).decode("utf8").strip()
+            # Skip constructors (already included via constructors_code)
             # Skip constructors (already included via constructors_code)
             if node.type != "constructor_declaration":
                 signatures.append(sig)
