@@ -603,6 +603,10 @@ class ExpectCallTransformer:
         """Transform all expect calls in the code."""
         result: list[str] = []
         pos = 0
+        # Track string state incrementally to avoid O(n²) rescanning
+        in_string = False
+        string_char = None
+        last_checked_pos = 0
 
         while pos < len(code):
             expect_match = self._expect_pattern.search(code, pos)
@@ -627,8 +631,32 @@ class ExpectCallTransformer:
                 result.append(code[pos:])
                 break
 
+            # Update string state up to match.start() incrementally
+            match_start = match.start()
+            i = last_checked_pos
+            while i < match_start:
+                char = code[i]
+
+                if in_string:
+                    # Check for escape sequence
+                    if char == "\\" and i + 1 < len(code):
+                        i += 2
+                        continue
+                    # Check for end of string
+                    if char == string_char:
+                        in_string = False
+                        string_char = None
+                # Check for start of string
+                elif char in "\"'`":
+                    in_string = True
+                    string_char = char
+
+                i += 1
+
+            last_checked_pos = match_start
+
             # Skip if inside a string literal (e.g., test description)
-            if is_inside_string(code, match.start()):
+            if in_string:
                 result.append(code[pos : match.end()])
                 pos = match.end()
                 continue
