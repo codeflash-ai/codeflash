@@ -1497,11 +1497,11 @@ class AsyncDecoratorAdder(cst.CSTTransformer):
         return False
 
 
-def get_behavior_async_inline_code() -> str:
-    return """import asyncio
+ASYNC_HELPER_INLINE_CODE = """import asyncio
 import gc
 import os
 import sqlite3
+import time
 from functools import wraps
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -1590,25 +1590,6 @@ def codeflash_behavior_async(func):
             raise exception
         return return_value
     return async_wrapper
-"""
-
-
-def get_performance_async_inline_code() -> str:
-    return """import asyncio
-import gc
-import os
-from functools import wraps
-
-
-def extract_test_context_from_env():
-    test_module = os.environ["CODEFLASH_TEST_MODULE"]
-    test_class = os.environ.get("CODEFLASH_TEST_CLASS", None)
-    test_function = os.environ["CODEFLASH_TEST_FUNCTION"]
-    if test_module and test_function:
-        return (test_module, test_class if test_class else None, test_function)
-    raise RuntimeError(
-        "Test context environment variables not set - ensure tests are run through codeflash test runner"
-    )
 
 
 def codeflash_performance_async(func):
@@ -1649,15 +1630,6 @@ def codeflash_performance_async(func):
             raise exception
         return return_value
     return async_wrapper
-"""
-
-
-def get_concurrency_async_inline_code() -> str:
-    return """import asyncio
-import gc
-import os
-import time
-from functools import wraps
 
 
 def codeflash_concurrency_async(func):
@@ -1691,15 +1663,6 @@ def codeflash_concurrency_async(func):
     return async_wrapper
 """
 
-
-def get_async_inline_code(mode: TestingMode) -> str:
-    if mode == TestingMode.BEHAVIOR:
-        return get_behavior_async_inline_code()
-    if mode == TestingMode.CONCURRENCY:
-        return get_concurrency_async_inline_code()
-    return get_performance_async_inline_code()
-
-
 ASYNC_HELPER_FILENAME = "codeflash_async_wrapper.py"
 
 
@@ -1711,14 +1674,11 @@ def get_decorator_name_for_mode(mode: TestingMode) -> str:
     return "codeflash_performance_async"
 
 
-def write_async_helper_file(target_dir: Path, mode: TestingMode) -> Path:
+def write_async_helper_file(target_dir: Path) -> Path:
     """Write the async decorator helper file to the target directory."""
     helper_path = target_dir / ASYNC_HELPER_FILENAME
-    if helper_path.exists():
-        decorator_name = get_decorator_name_for_mode(mode)
-        if f"def {decorator_name}" in helper_path.read_text("utf-8"):
-            return helper_path
-    helper_path.write_text(get_async_inline_code(mode), "utf-8")
+    if not helper_path.exists():
+        helper_path.write_text(ASYNC_HELPER_INLINE_CODE, "utf-8")
     return helper_path
 
 
@@ -1750,7 +1710,7 @@ def add_async_decorator_to_function(
         if decorator_transformer.added_decorator:
             # Write the helper file to project_root (on sys.path) or source dir as fallback
             helper_dir = project_root if project_root is not None else source_path.parent
-            write_async_helper_file(helper_dir, mode)
+            write_async_helper_file(helper_dir)
             # Add the import via CST so sort_imports can place it correctly
             decorator_name = get_decorator_name_for_mode(mode)
             import_node = cst.parse_statement(f"from codeflash_async_wrapper import {decorator_name}")

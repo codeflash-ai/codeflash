@@ -1897,6 +1897,7 @@ class FunctionOptimizer:
             if self.args.override_fixtures:
                 restore_conftest(original_conftest_content)
             cleanup_paths(paths_to_cleanup)
+            self.cleanup_async_helper_file()
             return Failure(baseline_result.failure())
 
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
@@ -1908,6 +1909,7 @@ class FunctionOptimizer:
             if self.args.override_fixtures:
                 restore_conftest(original_conftest_content)
             cleanup_paths(paths_to_cleanup)
+            self.cleanup_async_helper_file()
             return Failure("The threshold for test confidence was not met.")
 
         return Success(
@@ -2279,6 +2281,13 @@ class FunctionOptimizer:
         self.write_code_and_helpers(
             self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
         )
+        self.cleanup_async_helper_file()
+
+    def cleanup_async_helper_file(self) -> None:
+        from codeflash.code_utils.instrument_existing_tests import ASYNC_HELPER_FILENAME
+
+        helper_path = self.project_root / ASYNC_HELPER_FILENAME
+        helper_path.unlink(missing_ok=True)
 
     def establish_original_code_baseline(
         self,
