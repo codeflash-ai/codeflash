@@ -2891,6 +2891,20 @@ class FunctionOptimizer:
             )
             console.rule()
 
+            if not is_python():
+                # Check if candidate had any passing behavioral tests before attempting SQLite comparison.
+                # Python compares in-memory TestResults (no file dependency), but Java/JS require
+                # SQLite files that only exist when test instrumentation hooks fire successfully.
+                candidate_report = candidate_behavior_results.get_test_pass_fail_report_by_type()
+                total_passed = sum(r.get("passed", 0) for r in candidate_report.values())
+                if total_passed == 0:
+                    logger.warning(
+                        "No behavioral tests passed for optimization candidate %d. "
+                        "Skipping correctness verification.",
+                        optimization_candidate_index,
+                    )
+                    return self.get_results_not_matched_error()
+
             # Use language-appropriate comparison
             if not is_python():
                 # Non-Python: Compare using language support with SQLite results if available

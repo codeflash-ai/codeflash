@@ -6,14 +6,20 @@ import pytest
 
 from codeflash.languages.base import FunctionFilterCriteria, Language, ParentInfo
 from codeflash.languages.java.context import (
+    TypeSkeleton,
+    _extract_type_skeleton,
     extract_class_context,
     extract_code_context,
     extract_function_source,
     extract_read_only_context,
     find_helper_functions,
+    get_java_imported_type_skeletons,
+    _extract_public_method_signatures,
+    _format_skeleton_for_context,
 )
 from codeflash.languages.java.discovery import discover_functions_from_source
-from codeflash.languages.java.parser import get_java_analyzer
+from codeflash.languages.java.import_resolver import JavaImportResolver, ResolvedImport
+from codeflash.languages.java.parser import JavaImportInfo, get_java_analyzer
 
 
 # Filter criteria that includes void methods
@@ -2293,3 +2299,402 @@ class TestExtractFunctionSourceStaleLineNumbers:
         result = extract_function_source(source, func_fake, analyzer=analyzer)
         assert "functionA" in result
         assert "return 1;" in result
+
+
+FIXTURE_DIR = Path(__file__).parent.parent / "fixtures" / "java_maven"
+
+
+class TestGetJavaImportedTypeSkeletons:
+    """Tests for get_java_imported_type_skeletons()."""
+
+    def test_resolves_internal_imports(self):
+        """Verify that project-internal imports are resolved and skeletons extracted."""
+        project_root = FIXTURE_DIR
+        module_root = FIXTURE_DIR / "src" / "main" / "java"
+        analyzer = get_java_analyzer()
+
+        source = (FIXTURE_DIR / "src" / "main" / "java" / "com" / "example" / "Calculator.java").read_text()
+        imports = analyzer.find_imports(source)
+
+        result = get_java_imported_type_skeletons(imports, project_root, module_root, analyzer)
+
+        # Should contain skeletons for MathHelper and Formatter (imported by Calculator)
+        assert "MathHelper" in result
+        assert "Formatter" in result
+
+    def test_skeletons_contain_method_signatures(self):
+        """Verify extracted skeletons include public method signatures."""
+        project_root = FIXTURE_DIR
+        module_root = FIXTURE_DIR / "src" / "main" / "java"
+        analyzer = get_java_analyzer()
+
+        source = (FIXTURE_DIR / "src" / "main" / "java" / "com" / "example" / "Calculator.java").read_text()
+        imports = analyzer.find_imports(source)
+
+        result = get_java_imported_type_skeletons(imports, project_root, module_root, analyzer)
+
+        # MathHelper should have its public static methods listed
+        assert "add" in result
+        assert "multiply" in result
+        assert "factorial" in result
+
+    def test_skips_external_imports(self):
+        """Verify that standard library and external imports are skipped."""
+        project_root = FIXTURE_DIR
+        module_root = FIXTURE_DIR / "src" / "main" / "java"
+        analyzer = get_java_analyzer()
+
+        # DataProcessor has java.util.* imports but no internal project imports
+        source = (FIXTURE_DIR / "src" / "main" / "java" / "com" / "example" / "DataProcessor.java").read_text()
+        imports = analyzer.find_imports(source)
+
+        result = get_java_imported_type_skeletons(imports, project_root, module_root, analyzer)
+
+        # No internal imports → empty result
+        assert result == ""
+
+    def test_deduplicates_imports(self):
+        """Verify that the same type imported twice is only included once."""
+        project_root = FIXTURE_DIR
+        module_root = FIXTURE_DIR / "src" / "main" / "java"
+        analyzer = get_java_analyzer()
+
+        source = (FIXTURE_DIR / "src" / "main" / "java" / "com" / "example" / "Calculator.java").read_text()
+        imports = analyzer.find_imports(source)
+        # Double the imports to simulate duplicates
+        doubled_imports = imports + imports
+
+        result = get_java_imported_type_skeletons(doubled_imports, project_root, module_root, analyzer)
+
+        # Count occurrences of MathHelper — should appear exactly once
+        assert result.count("class MathHelper") == 1
+
+    def test_empty_imports_returns_empty(self):
+        """Verify that empty import list returns empty string."""
+        project_root = FIXTURE_DIR
+        analyzer = get_java_analyzer()
+
+        result = get_java_imported_type_skeletons([], project_root, None, analyzer)
+
+        assert result == ""
+
+    def test_respects_token_budget(self):
+        """Verify that the function stops when token budget is exceeded."""
+        project_root = FIXTURE_DIR
+        module_root = FIXTURE_DIR / "src" / "main" / "java"
+        analyzer = get_java_analyzer()
+
+        source = (FIXTURE_DIR / "src" / "main" / "java" / "com" / "example" / "Calculator.java").read_text()
+        imports = analyzer.find_imports(source)
+
+        # With a very small budget, should truncate output
+        import codeflash.languages.java.context as ctx
+
+        original_budget = ctx.IMPORTED_SKELETON_TOKEN_BUDGET
+        try:
+            ctx.IMPORTED_SKELETON_TOKEN_BUDGET = 1  # Very small budget
+            result = get_java_imported_type_skeletons(imports, project_root, module_root, analyzer)
+            # Should be empty since even a single skeleton exceeds 1 token
+            assert result == ""
+        finally:
+            ctx.IMPORTED_SKELETON_TOKEN_BUDGET = original_budget
+
+
+class TestExtractPublicMethodSignatures:
+    """Tests for _extract_public_method_signatures()."""
+
+    def test_extracts_public_methods(self):
+        """Verify public method signatures are extracted."""
+        source = """public class Foo {
+    public int add(int a, int b) {
+        return a + b;
+    }
+    private void secret() {}
+    public static String format(double val) {
+        return String.valueOf(val);
+    }
+}"""
+        analyzer = get_java_analyzer()
+        sigs = _extract_public_method_signatures(source, "Foo", analyzer)
+
+        assert len(sigs) == 2
+        assert any("add" in s for s in sigs)
+        assert any("format" in s for s in sigs)
+        # private method should not be included
+        assert not any("secret" in s for s in sigs)
+
+    def test_excludes_constructors(self):
+        """Verify constructors are excluded from method signatures."""
+        source = """public class Bar {
+    public Bar(int x) { this.x = x; }
+    public int getX() { return x; }
+}"""
+        analyzer = get_java_analyzer()
+        sigs = _extract_public_method_signatures(source, "Bar", analyzer)
+
+        assert len(sigs) == 1
+        assert "getX" in sigs[0]
+        assert not any("Bar(" in s for s in sigs)
+
+    def test_empty_class_returns_empty(self):
+        """Verify empty class returns no signatures."""
+        source = """public class Empty {}"""
+        analyzer = get_java_analyzer()
+        sigs = _extract_public_method_signatures(source, "Empty", analyzer)
+
+        assert sigs == []
+
+    def test_filters_by_class_name(self):
+        """Verify only methods from the specified class are returned."""
+        source = """public class A {
+    public int aMethod() { return 1; }
+}
+class B {
+    public int bMethod() { return 2; }
+}"""
+        analyzer = get_java_analyzer()
+        sigs_a = _extract_public_method_signatures(source, "A", analyzer)
+        sigs_b = _extract_public_method_signatures(source, "B", analyzer)
+
+        assert len(sigs_a) == 1
+        assert "aMethod" in sigs_a[0]
+        assert len(sigs_b) == 1
+        assert "bMethod" in sigs_b[0]
+
+
+class TestFormatSkeletonForContext:
+    """Tests for _format_skeleton_for_context()."""
+
+    def test_formats_basic_skeleton(self):
+        """Verify basic skeleton formatting with fields and constructors."""
+        source = """public class Widget {
+    private int size;
+    public Widget(int size) { this.size = size; }
+    public int getSize() { return size; }
+}"""
+        analyzer = get_java_analyzer()
+        skeleton = TypeSkeleton(
+            type_declaration="public class Widget",
+            type_javadoc=None,
+            fields_code="    private int size;\n",
+            constructors_code="    public Widget(int size) { this.size = size; }\n",
+            enum_constants="",
+            type_indent="",
+            type_kind="class",
+        )
+
+        result = _format_skeleton_for_context(skeleton, source, "Widget", analyzer)
+
+        assert result.startswith("public class Widget {")
+        assert "private int size;" in result
+        assert "Widget(int size)" in result
+        assert "getSize" in result
+        assert result.endswith("}")
+
+    def test_formats_enum_skeleton(self):
+        """Verify enum formatting includes constants."""
+        source = """public enum Color {
+    RED, GREEN, BLUE;
+    public String lower() { return name().toLowerCase(); }
+}"""
+        analyzer = get_java_analyzer()
+        skeleton = TypeSkeleton(
+            type_declaration="public enum Color",
+            type_javadoc=None,
+            fields_code="",
+            constructors_code="",
+            enum_constants="RED, GREEN, BLUE",
+            type_indent="",
+            type_kind="enum",
+        )
+
+        result = _format_skeleton_for_context(skeleton, source, "Color", analyzer)
+
+        assert "public enum Color {" in result
+        assert "RED, GREEN, BLUE;" in result
+        assert "lower" in result
+
+    def test_formats_empty_class(self):
+        """Verify formatting of a class with no fields or methods."""
+        source = """public class Empty {}"""
+        analyzer = get_java_analyzer()
+        skeleton = TypeSkeleton(
+            type_declaration="public class Empty",
+            type_javadoc=None,
+            fields_code="",
+            constructors_code="",
+            enum_constants="",
+            type_indent="",
+            type_kind="class",
+        )
+
+        result = _format_skeleton_for_context(skeleton, source, "Empty", analyzer)
+
+        assert result == "public class Empty {\n}"
+
+
+class TestGetJavaImportedTypeSkeletonsEdgeCases:
+    """Additional edge case tests for get_java_imported_type_skeletons()."""
+
+    def test_wildcard_imports_are_skipped(self):
+        """Wildcard imports (e.g., import com.example.helpers.*) have class_name=None and should be skipped."""
+        project_root = FIXTURE_DIR
+        module_root = FIXTURE_DIR / "src" / "main" / "java"
+        analyzer = get_java_analyzer()
+
+        # Create a source with a wildcard import
+        source = "package com.example;\nimport com.example.helpers.*;\npublic class Foo {}"
+        imports = analyzer.find_imports(source)
+
+        # Verify the import is wildcard
+        assert any(imp.is_wildcard for imp in imports)
+
+        result = get_java_imported_type_skeletons(imports, project_root, module_root, analyzer)
+
+        # Wildcard imports can't resolve to a single class, so result should be empty
+        assert result == ""
+
+    def test_import_to_nonexistent_class_in_file(self):
+        """When an import resolves to a file but the class doesn't exist in it, skeleton extraction returns None."""
+        analyzer = get_java_analyzer()
+
+        source = "package com.example;\npublic class Actual { public int x; }"
+        # Try to extract a skeleton for a class that doesn't exist in this source
+        skeleton = _extract_type_skeleton(source, "NonExistent", "", analyzer)
+
+        assert skeleton is None
+
+    def test_skeleton_output_is_well_formed(self):
+        """Verify the skeleton string has proper Java-like structure with braces."""
+        project_root = FIXTURE_DIR
+        module_root = FIXTURE_DIR / "src" / "main" / "java"
+        analyzer = get_java_analyzer()
+
+        source = (FIXTURE_DIR / "src" / "main" / "java" / "com" / "example" / "Calculator.java").read_text()
+        imports = analyzer.find_imports(source)
+
+        result = get_java_imported_type_skeletons(imports, project_root, module_root, analyzer)
+
+        # Each skeleton block should be well-formed: starts with declaration {, ends with }
+        for block in result.split("\n\n"):
+            block = block.strip()
+            if not block:
+                continue
+            assert "{" in block, f"Skeleton block missing opening brace: {block[:50]}"
+            assert block.endswith("}"), f"Skeleton block missing closing brace: {block[-50:]}"
+
+
+class TestExtractPublicMethodSignaturesEdgeCases:
+    """Additional edge case tests for _extract_public_method_signatures()."""
+
+    def test_excludes_protected_and_package_private(self):
+        """Verify protected and package-private methods are excluded."""
+        source = """public class Visibility {
+    public int publicMethod() { return 1; }
+    protected int protectedMethod() { return 2; }
+    int packagePrivateMethod() { return 3; }
+    private int privateMethod() { return 4; }
+}"""
+        analyzer = get_java_analyzer()
+        sigs = _extract_public_method_signatures(source, "Visibility", analyzer)
+
+        assert len(sigs) == 1
+        assert "publicMethod" in sigs[0]
+        assert not any("protectedMethod" in s for s in sigs)
+        assert not any("packagePrivateMethod" in s for s in sigs)
+        assert not any("privateMethod" in s for s in sigs)
+
+    def test_handles_overloaded_methods(self):
+        """Verify all public overloads are extracted."""
+        source = """public class Overloaded {
+    public int process(int x) { return x; }
+    public int process(int x, int y) { return x + y; }
+    public String process(String s) { return s; }
+}"""
+        analyzer = get_java_analyzer()
+        sigs = _extract_public_method_signatures(source, "Overloaded", analyzer)
+
+        assert len(sigs) == 3
+        # All should contain "process"
+        assert all("process" in s for s in sigs)
+
+    def test_handles_generic_methods(self):
+        """Verify generic method signatures are extracted correctly."""
+        source = """public class Generic {
+    public <T> T identity(T value) { return value; }
+    public <K, V> void putPair(K key, V value) {}
+}"""
+        analyzer = get_java_analyzer()
+        sigs = _extract_public_method_signatures(source, "Generic", analyzer)
+
+        assert len(sigs) == 2
+        assert any("identity" in s for s in sigs)
+        assert any("putPair" in s for s in sigs)
+
+
+class TestFormatSkeletonRoundTrip:
+    """Tests that verify _extract_type_skeleton → _format_skeleton_for_context produces valid output."""
+
+    def test_round_trip_produces_valid_skeleton(self):
+        """Extract a real skeleton and format it — verify the output is sensible."""
+        source = """public class Service {
+    private final String name;
+    private int count;
+
+    public Service(String name) {
+        this.name = name;
+        this.count = 0;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void increment() {
+        count++;
+    }
+
+    public int getCount() {
+        return count;
+    }
+
+    private void reset() {
+        count = 0;
+    }
+}"""
+        analyzer = get_java_analyzer()
+        skeleton = _extract_type_skeleton(source, "Service", "", analyzer)
+        assert skeleton is not None
+
+        result = _format_skeleton_for_context(skeleton, source, "Service", analyzer)
+
+        # Should contain class declaration
+        assert "public class Service {" in result
+        # Should contain fields
+        assert "name" in result
+        assert "count" in result
+        # Should contain constructor
+        assert "Service(String name)" in result
+        # Should contain public methods
+        assert "getName" in result
+        assert "getCount" in result
+        # Should NOT contain private methods
+        assert "reset" not in result
+        # Should end properly
+        assert result.strip().endswith("}")
+
+    def test_round_trip_with_fixture_mathhelper(self):
+        """Round-trip test using the real MathHelper fixture file."""
+        source = (FIXTURE_DIR / "src" / "main" / "java" / "com" / "example" / "helpers" / "MathHelper.java").read_text()
+        analyzer = get_java_analyzer()
+
+        skeleton = _extract_type_skeleton(source, "MathHelper", "", analyzer)
+        assert skeleton is not None
+
+        result = _format_skeleton_for_context(skeleton, source, "MathHelper", analyzer)
+
+        assert "public class MathHelper {" in result
+        # All public static methods should have signatures
+        for method_name in ["add", "multiply", "factorial", "power", "isPrime", "gcd", "lcm"]:
+            assert method_name in result, f"Expected method '{method_name}' in skeleton"
+        assert result.strip().endswith("}")

@@ -10,9 +10,10 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from codeflash.code_utils.code_utils import encoded_tokens_len
 from codeflash.languages.base import CodeContext, HelperFunction, Language
 from codeflash.languages.java.discovery import discover_functions_from_source
-from codeflash.languages.java.import_resolver import find_helper_files
+from codeflash.languages.java.import_resolver import JavaImportResolver, find_helper_files
 from codeflash.languages.java.parser import get_java_analyzer
 
 if TYPE_CHECKING:
@@ -105,6 +106,9 @@ def extract_code_context(
             msg = f"Extracted code for {function.function_name} is not syntactically valid Java:\n{target_code}"
             raise InvalidJavaSyntaxError(msg)
 
+    # Extract type skeletons for project-internal imported types
+    imported_type_skeletons = get_java_imported_type_skeletons(imports, project_root, module_root, analyzer)
+
     return CodeContext(
         target_code=target_code,
         target_file=function.file_path,
@@ -112,6 +116,7 @@ def extract_code_context(
         read_only_context=read_only_context,
         imports=import_statements,
         language=Language.JAVA,
+        imported_type_skeletons=imported_type_skeletons,
     )
 
 
@@ -844,3 +849,173 @@ def extract_class_context(file_path: Path, class_name: str, analyzer: JavaAnalyz
     except Exception as e:
         logger.exception("Failed to extract class context: %s", e)
         return ""
+
+
+# Maximum token budget for imported type skeletons to avoid bloating testgen context
+IMPORTED_SKELETON_TOKEN_BUDGET = 2000
+
+
+def get_java_imported_type_skeletons(
+    imports: list,
+    project_root: Path,
+    module_root: Path | None,
+    analyzer: JavaAnalyzer,
+) -> str:
+    """Extract type skeletons for project-internal imported types.
+
+    Analogous to Python's get_imported_class_definitions() — resolves each import
+    to a project file, extracts class declaration + constructors + fields + public
+    method signatures, and returns them concatenated. This gives the testgen AI
+    real type information instead of forcing it to hallucinate constructors.
+
+    Args:
+        imports: List of JavaImportInfo objects from analyzer.find_imports().
+        project_root: Root of the project.
+        module_root: Root of the module (defaults to project_root).
+        analyzer: JavaAnalyzer instance.
+
+    Returns:
+        Concatenated type skeletons as a string, within token budget.
+
+    """
+    module_root = module_root or project_root
+    resolver = JavaImportResolver(project_root)
+
+    seen: set[tuple[str, str]] = set()  # (file_path_str, type_name) for dedup
+    skeleton_parts: list[str] = []
+    total_tokens = 0
+
+    for imp in imports:
+        resolved = resolver.resolve_import(imp)
+
+        # Skip external/unresolved imports
+        if resolved.is_external or resolved.file_path is None:
+            continue
+
+        class_name = resolved.class_name
+        if not class_name:
+            continue
+
+        dedup_key = (str(resolved.file_path), class_name)
+        if dedup_key in seen:
+            continue
+        seen.add(dedup_key)
+
+        try:
+            source = resolved.file_path.read_text(encoding="utf-8")
+        except Exception:
+            logger.debug("Could not read imported file %s", resolved.file_path)
+            continue
+
+        skeleton = _extract_type_skeleton(source, class_name, "", analyzer)
+        if not skeleton:
+            continue
+
+        # Build a minimal skeleton string: declaration + fields + constructors + method signatures
+        skeleton_str = _format_skeleton_for_context(skeleton, source, class_name, analyzer)
+        if not skeleton_str:
+            continue
+
+        skeleton_tokens = encoded_tokens_len(skeleton_str)
+        if total_tokens + skeleton_tokens > IMPORTED_SKELETON_TOKEN_BUDGET:
+            logger.debug("Imported type skeleton token budget exceeded, stopping")
+            break
+
+        total_tokens += skeleton_tokens
+        skeleton_parts.append(skeleton_str)
+
+    return "\n\n".join(skeleton_parts)
+
+
+def _format_skeleton_for_context(
+    skeleton: TypeSkeleton, source: str, class_name: str, analyzer: JavaAnalyzer
+) -> str:
+    """Format a TypeSkeleton into a context string with method signatures.
+
+    Includes: type declaration, fields, constructors, and public method signatures
+    (signature only, no body).
+
+    """
+    parts: list[str] = []
+
+    # Type declaration
+    parts.append(f"{skeleton.type_declaration} {{")
+
+    # Enum constants
+    if skeleton.enum_constants:
+        parts.append(f"    {skeleton.enum_constants};")
+
+    # Fields
+    if skeleton.fields_code:
+        # avoid repeated strip() calls inside loop
+        fields_lines = skeleton.fields_code.strip().splitlines()
+        for line in fields_lines:
+            parts.append(f"    {line.strip()}")
+
+    # Constructors
+    if skeleton.constructors_code:
+        constructors_lines = skeleton.constructors_code.strip().splitlines()
+        for line in constructors_lines:
+            stripped = line.strip()
+            if stripped:
+                parts.append(f"    {stripped}")
+
+    # Public method signatures (no body)
+    method_sigs = _extract_public_method_signatures(source, class_name, analyzer)
+    for sig in method_sigs:
+        parts.append(f"    {sig};")
+
+    parts.append("}")
+
+    return "\n".join(parts)
+
+
+def _extract_public_method_signatures(source: str, class_name: str, analyzer: JavaAnalyzer) -> list[str]:
+    """Extract public method signatures (without body) from a class."""
+    methods = analyzer.find_methods(source)
+    signatures: list[str] = []
+
+    if not methods:
+        return signatures
+
+    source_bytes = source.encode("utf8")
+
+    pub_token = b"public"
+
+    for method in methods:
+        if method.class_name != class_name:
+            continue
+
+        node = method.node
+        if not node:
+            continue
+
+        # Check if the method is public
+        is_public = False
+        sig_parts_bytes: list[bytes] = []
+        # Single pass over children: detect modifiers and collect parts up to the body
+        for child in node.children:
+            ctype = child.type
+            if ctype == "modifiers":
+                # Check modifiers for 'public' using bytes to avoid decoding each time
+                mod_slice = source_bytes[child.start_byte : child.end_byte]
+                if pub_token in mod_slice:
+                    is_public = True
+                sig_parts_bytes.append(mod_slice)
+                continue
+
+            if ctype == "block" or ctype == "constructor_body":
+                break
+
+            sig_parts_bytes.append(source_bytes[child.start_byte : child.end_byte])
+
+        if not is_public:
+            continue
+
+        if sig_parts_bytes:
+            sig = b" ".join(sig_parts_bytes).decode("utf8").strip()
+            # Skip constructors (already included via constructors_code)
+            if node.type != "constructor_declaration":
+                signatures.append(sig)
+
+    return signatures
