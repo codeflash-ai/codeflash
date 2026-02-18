@@ -21,7 +21,7 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
-from codeflash.languages import is_java, is_javascript
+from codeflash.languages import is_java, is_javascript, is_python
 from codeflash.models.models import (
     ConcurrencyMetrics,
     FunctionTestInvocation,
@@ -29,6 +29,7 @@ from codeflash.models.models import (
     TestResults,
     TestType,
     VerificationType,
+    TestingMode,
 )
 from codeflash.verification.coverage_utils import CoverageUtils, JacocoCoverageUtils, JestCoverageUtils
 
@@ -1148,19 +1149,21 @@ def parse_test_xml(
                         groups = (*groups[:5], iteration_id)
                     end_matches[groups] = match
 
+            # TODO: I am not sure if this is the correct approach. see if this was needed for test
+            # pass/fail status extraction in python. otherwise not needed.
             if not begin_matches:
                 # For Java tests, use the JUnit XML time attribute for runtime
                 runtime_from_xml = None
-                if is_java():
-                    try:
-                        # JUnit XML time is in seconds, convert to nanoseconds
-                        # Use a minimum of 1000ns (1 microsecond) for any successful test
-                        # to avoid 0 runtime being treated as "no runtime"
-                        test_time = float(testcase.time) if hasattr(testcase, "time") and testcase.time else 0.0
-                        runtime_from_xml = max(int(test_time * 1_000_000_000), 1000)
-                    except (ValueError, TypeError):
-                        # If we can't get time from XML, use 1 microsecond as minimum
-                        runtime_from_xml = 1000
+                # if is_java():
+                #     try:
+                #         # JUnit XML time is in seconds, convert to nanoseconds
+                #         # Use a minimum of 1000ns (1 microsecond) for any successful test
+                #         # to avoid 0 runtime being treated as "no runtime"
+                #         test_time = float(testcase.time) if hasattr(testcase, "time") and testcase.time else 0.0
+                #         runtime_from_xml = max(int(test_time * 1_000_000_000), 1000)
+                #     except (ValueError, TypeError):
+                #         # If we can't get time from XML, use 1 microsecond as minimum
+                #         runtime_from_xml = 1000
 
                 test_results.add(
                     FunctionTestInvocation(
@@ -1497,6 +1500,7 @@ def parse_test_results(
     code_context: CodeOptimizationContext | None = None,
     run_result: subprocess.CompletedProcess | None = None,
     skip_sqlite_cleanup: bool = False,
+    testing_type: TestingMode = TestingMode.BEHAVIOR
 ) -> tuple[TestResults, CoverageData | None]:
     test_results_xml = parse_test_xml(
         test_xml_path, test_files=test_files, test_config=test_config, run_result=run_result
@@ -1509,7 +1513,7 @@ def parse_test_results(
 
     try:
         sql_results_file = get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.sqlite"))
-        if sql_results_file.exists():
+        if sql_results_file.exists() and testing_type != TestingMode.PERFORMANCE:
             test_results_data = parse_sqlite_test_results(
                 sqlite_file_path=sql_results_file, test_files=test_files, test_config=test_config
             )
@@ -1520,7 +1524,7 @@ def parse_test_results(
     # Also try to read legacy binary format for Python tests
     # Binary file may contain additional results (e.g., from codeflash_wrap) even if SQLite has data
     # from @codeflash_capture. We need to merge both sources.
-    if not is_javascript():
+    if is_python():
         try:
             bin_results_file = get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin"))
             if bin_results_file.exists():
@@ -1544,6 +1548,7 @@ def parse_test_results(
     get_run_tmp_file(Path("vitest_results.xml")).unlink(missing_ok=True)
     get_run_tmp_file(Path("vitest_perf_results.xml")).unlink(missing_ok=True)
     get_run_tmp_file(Path("vitest_line_profile_results.xml")).unlink(missing_ok=True)
+    test_xml_path.unlink(missing_ok=True)
 
     # For Jest tests, SQLite cleanup is deferred until after comparison
     # (comparison happens via language_support.compare_test_results)

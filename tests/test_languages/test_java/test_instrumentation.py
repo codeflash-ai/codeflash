@@ -1053,6 +1053,74 @@ class TestAddTimingInstrumentation:
         expected = source
         assert result == expected
 
+    def test_multiple_target_calls_in_single_test_method(self):
+        """Test each target call gets an independent timing wrapper with unique iteration IDs."""
+        source = """public class RepeatTest {
+    @Test
+    public void testRepeat() {
+        setup();
+        target();
+        helper();
+        target();
+        teardown();
+    }
+}
+"""
+        result = _add_timing_instrumentation(source, "RepeatTest", "target")
+
+        expected = """public class RepeatTest {
+    @Test
+    public void testRepeat() {
+        setup();
+
+        // Codeflash timing instrumentation with inner loop for JIT warmup
+        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        String _cf_mod1 = "RepeatTest";
+        String _cf_cls1 = "RepeatTest";
+        String _cf_fn1 = "target";
+        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + "1_" + _cf_i1 + "######$!");
+            long _cf_end1 = -1;
+            long _cf_start1 = 0;
+            try {
+                _cf_start1 = System.nanoTime();
+                target();
+                _cf_end1 = System.nanoTime();
+            } finally {
+                long _cf_end1_finally = System.nanoTime();
+                long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + "1_" + _cf_i1 + ":" + _cf_dur1 + "######!");
+            }
+        }
+        helper();
+
+        // Codeflash timing instrumentation with inner loop for JIT warmup
+        int _cf_loop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        String _cf_mod2 = "RepeatTest";
+        String _cf_cls2 = "RepeatTest";
+        String _cf_fn2 = "target";
+        for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
+            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + "2_" + _cf_i2 + "######$!");
+            long _cf_end2 = -1;
+            long _cf_start2 = 0;
+            try {
+                _cf_start2 = System.nanoTime();
+                target();
+                _cf_end2 = System.nanoTime();
+            } finally {
+                long _cf_end2_finally = System.nanoTime();
+                long _cf_dur2 = (_cf_end2 != -1 ? _cf_end2 : _cf_end2_finally) - _cf_start2;
+                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + "2_" + _cf_i2 + ":" + _cf_dur2 + "######!");
+            }
+        }
+        teardown();
+    }
+}
+"""
+        assert result == expected
+
 
 class TestCreateBenchmarkTest:
     """Tests for create_benchmark_test."""
