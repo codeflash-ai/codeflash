@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import os
-from collections import deque, defaultdict
+from collections import defaultdict, deque
 from itertools import chain
 from typing import TYPE_CHECKING
 
@@ -747,13 +747,13 @@ def collect_type_names_from_annotation(node: ast.expr | None) -> set[str]:
 def extract_init_stub_from_class(class_name: str, module_source: str, module_tree: ast.Module) -> str | None:
     class_node = None
     # Use a deque-based BFS to find the first matching ClassDef (preserves ast.walk order)
-    q = deque([module_tree])
+    q: deque[ast.AST] = deque([module_tree])
     while q:
-        node = q.popleft()
-        if isinstance(node, ast.ClassDef) and node.name == class_name:
-            class_node = node
+        candidate = q.popleft()
+        if isinstance(candidate, ast.ClassDef) and candidate.name == class_name:
+            class_node = candidate
             break
-        q.extend(ast.iter_child_nodes(node))
+        q.extend(ast.iter_child_nodes(candidate))
 
     if class_node is None:
         return None
@@ -780,16 +780,15 @@ def extract_init_stub_from_class(class_name: str, module_source: str, module_tre
         return None
 
     snippets: list[str] = []
-    for node in relevant_nodes:
-        start = node.lineno
-        if node.decorator_list:
+    for fn_node in relevant_nodes:
+        start = fn_node.lineno
+        if fn_node.decorator_list:
             # Compute minimum decorator lineno with an explicit loop (avoids generator/min overhead)
             m = start
-            for d in node.decorator_list:
-                if d.lineno < m:
-                    m = d.lineno
+            for d in fn_node.decorator_list:
+                m = min(m, d.lineno)
             start = m
-        snippets.append("\n".join(lines[start - 1 : node.end_lineno]))
+        snippets.append("\n".join(lines[start - 1 : fn_node.end_lineno]))
 
     return f"class {class_name}:\n" + "\n".join(snippets)
 
