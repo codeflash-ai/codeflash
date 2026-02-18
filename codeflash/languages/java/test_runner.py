@@ -481,7 +481,7 @@ def _compile_tests(
         logger.error("Maven not found")
         return subprocess.CompletedProcess(args=["mvn"], returncode=-1, stdout="", stderr="Maven not found")
 
-    cmd = [mvn, "test-compile", "-e"]  # Show errors but not verbose output
+    cmd = [mvn, "test-compile", "-e", "-B"]  # Show errors but not verbose output; -B for batch mode (no ANSI colors)
 
     if test_module:
         cmd.extend(["-pl", test_module, "-am"])
@@ -524,7 +524,7 @@ def _get_test_classpath(
     # Create temp file for classpath output
     cp_file = project_root / ".codeflash_classpath.txt"
 
-    cmd = [mvn, "dependency:build-classpath", "-DincludeScope=test", f"-Dmdep.outputFile={cp_file}", "-q"]
+    cmd = [mvn, "dependency:build-classpath", "-DincludeScope=test", f"-Dmdep.outputFile={cp_file}", "-q", "-B"]
 
     if test_module:
         cmd.extend(["-pl", test_module])
@@ -1218,7 +1218,7 @@ def _run_maven_tests(
     # When coverage is enabled, use 'verify' phase to ensure JaCoCo report runs after tests
     # JaCoCo's report goal is bound to the verify phase to get post-test execution data
     maven_goal = "verify" if enable_coverage else "test"
-    cmd = [mvn, maven_goal, "-fae"]  # Fail at end to run all tests
+    cmd = [mvn, maven_goal, "-fae", "-B"]  # Fail at end to run all tests; -B for batch mode (no ANSI colors)
 
     # Add --add-opens flags for Java 16+ module system compatibility.
     # The codeflash-runtime Serializer uses Kryo which needs reflective access to
@@ -1713,7 +1713,7 @@ def get_test_run_command(project_root: Path, test_classes: list[str] | None = No
     """
     mvn = find_maven_executable() or "mvn"
 
-    cmd = [mvn, "test"]
+    cmd = [mvn, "test", "-B"]
 
     if test_classes:
         # Validate each test class name to prevent command injection

@@ -6,6 +6,7 @@ from itertools import cycle
 from typing import TYPE_CHECKING, Optional
 
 from rich.console import Console
+from rich.highlighter import NullHighlighter
 from rich.logging import RichHandler
 from rich.progress import (
     BarColumn,
@@ -32,14 +33,14 @@ if TYPE_CHECKING:
 
 DEBUG_MODE = logging.getLogger().getEffectiveLevel() == logging.DEBUG
 
-console = Console()
+console = Console(highlighter=NullHighlighter())
 
 if is_LSP_enabled():
     console.quiet = True
 
 logging.basicConfig(
     level=logging.INFO,
-    handlers=[RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False)],
+    handlers=[RichHandler(rich_tracebacks=True, markup=False, highlighter=NullHighlighter(), console=console, show_path=False, show_time=False)],
     format=BARE_LOGGING_FORMAT,
 )
 

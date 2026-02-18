@@ -7,13 +7,14 @@ def set_level(level: int, *, echo_setting: bool = True) -> None:
     import logging
     import time
 
+    from rich.highlighter import NullHighlighter
     from rich.logging import RichHandler
 
     from codeflash.cli_cmds.console import console
 
     logging.basicConfig(
         level=level,
-        handlers=[RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False)],
+        handlers=[RichHandler(rich_tracebacks=True, markup=False, highlighter=NullHighlighter(), console=console, show_path=False, show_time=False)],
         format=BARE_LOGGING_FORMAT,
     )
     logging.getLogger().setLevel(level)
@@ -22,7 +23,7 @@ def set_level(level: int, *, echo_setting: bool = True) -> None:
         logging.basicConfig(
             format=VERBOSE_LOGGING_FORMAT,
             handlers=[
-                RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False)
+                RichHandler(rich_tracebacks=True, markup=False, highlighter=NullHighlighter(), console=console, show_path=False, show_time=False)
             ],
             force=True,
         )

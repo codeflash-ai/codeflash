@@ -416,8 +416,8 @@ def run_maven_tests(
             tests = ",".join(test_classes)
         cmd.extend(["-Dtest=" + tests])
 
-    # Fail at end to run all tests
-    cmd.append("-fae")
+    # Fail at end to run all tests; -B for batch mode (no ANSI colors)
+    cmd.extend(["-fae", "-B"])
 
     # Use full environment with optional overrides
     run_env = os.environ.copy()
@@ -551,8 +551,8 @@ def compile_maven_project(
     else:
         cmd.append("compile")
 
-    # Skip test execution
-    cmd.append("-DskipTests")
+    # Skip test execution; -B for batch mode (no ANSI colors)
+    cmd.extend(["-DskipTests", "-B"])
 
     run_env = os.environ.copy()
     if env:
@@ -599,6 +599,7 @@ def install_codeflash_runtime(project_root: Path, runtime_jar_path: Path) -> boo
         "-DartifactId=codeflash-runtime",
         "-Dversion=1.0.0",
         "-Dpackaging=jar",
+        "-B",
     ]
 
     try:
@@ -989,7 +990,7 @@ def _get_maven_classpath(project_root: Path) -> str | None:
 
     try:
         result = subprocess.run(
-            [mvn, "dependency:build-classpath", "-q", "-DincludeScope=test"],
+            [mvn, "dependency:build-classpath", "-q", "-DincludeScope=test", "-B"],
             check=False,
             cwd=project_root,
             capture_output=True,
