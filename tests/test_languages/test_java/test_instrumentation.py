@@ -12,8 +12,6 @@ Also includes end-to-end execution tests that:
 
 import os
 import re
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -24,7 +22,6 @@ os.environ["CODEFLASH_API_KEY"] = "cf-test-key"
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import Language
 from codeflash.languages.current import set_current_language
-from codeflash.models.function_types import FunctionParent
 from codeflash.languages.java.build_tools import find_maven_executable
 from codeflash.languages.java.discovery import discover_functions_from_source
 from codeflash.languages.java.instrumentation import (
@@ -131,23 +128,70 @@ public class CalculatorTest {
             test_path=test_file,
         )
 
-        assert success is True
+        expected = """import org.junit.jupiter.api.Test;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 
-        # Behavior mode now adds SQLite instrumentation
-        # Verify key elements are present
-        assert "import java.sql.Connection;" in result
-        assert "import java.sql.DriverManager;" in result
-        assert "import java.sql.PreparedStatement;" in result
-        # Note: java.sql.Statement is used fully qualified to avoid conflicts with other Statement classes
-        assert "java.sql.Statement" in result
-        assert "class CalculatorTest__perfinstrumented" in result
-        assert "CODEFLASH_OUTPUT_FILE" in result
-        assert "CREATE TABLE IF NOT EXISTS test_results" in result
-        assert "INSERT INTO test_results VALUES" in result
-        assert "_cf_loop1" in result
-        assert "_cf_iter1" in result
-        assert "System.nanoTime()" in result
-        assert "com.codeflash.Serializer.serialize((Object)" in result
+public class CalculatorTest__perfinstrumented {
+    @Test
+    public void testAdd() {
+        // Codeflash behavior instrumentation
+        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_iter1 = 1;
+        String _cf_mod1 = "CalculatorTest";
+        String _cf_cls1 = "CalculatorTest";
+        String _cf_fn1 = "add";
+        String _cf_outputFile1 = System.getenv("CODEFLASH_OUTPUT_FILE");
+        String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
+        if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
+        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
+        long _cf_start1 = System.nanoTime();
+        byte[] _cf_serializedResult1 = null;
+        try {
+            Calculator calc = new Calculator();
+            var _cf_result1_1 = calc.add(2, 2);
+            _cf_serializedResult1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);
+            assertEquals(4, _cf_result1_1);
+        } finally {
+            long _cf_end1 = System.nanoTime();
+            long _cf_dur1 = _cf_end1 - _cf_start1;
+            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
+            // Write to SQLite if output file is set
+            if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
+                try {
+                    Class.forName("org.sqlite.JDBC");
+                    try (Connection _cf_conn1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {
+                        try (java.sql.Statement _cf_stmt1 = _cf_conn1.createStatement()) {
+                            _cf_stmt1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
+                                "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
+                                "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
+                                "runtime INTEGER, return_value BLOB, verification_type TEXT)");
+                        }
+                        String _cf_sql1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        try (PreparedStatement _cf_pstmt1 = _cf_conn1.prepareStatement(_cf_sql1)) {
+                            _cf_pstmt1.setString(1, _cf_mod1);
+                            _cf_pstmt1.setString(2, _cf_cls1);
+                            _cf_pstmt1.setString(3, "CalculatorTestTest");
+                            _cf_pstmt1.setString(4, _cf_fn1);
+                            _cf_pstmt1.setInt(5, _cf_loop1);
+                            _cf_pstmt1.setString(6, _cf_iter1 + "_" + _cf_testIteration1);
+                            _cf_pstmt1.setLong(7, _cf_dur1);
+                            _cf_pstmt1.setBytes(8, _cf_serializedResult1);
+                            _cf_pstmt1.setString(9, "function_call");
+                            _cf_pstmt1.executeUpdate();
+                        }
+                    }
+                } catch (Exception _cf_e1) {
+                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e1.getMessage());
+                }
+            }
+        }
+    }
+}
+"""
+        assert success is True
+        assert result == expected
 
     def test_instrument_behavior_mode_assert_throws_expression_lambda(self, tmp_path: Path):
         """Test that assertThrows expression lambdas are not broken by behavior instrumentation.
@@ -191,11 +235,122 @@ public class FibonacciTest {
             test_path=test_file,
         )
 
+        expected = """import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+
+public class FibonacciTest__perfinstrumented {
+    @Test
+    void testNegativeInput_ThrowsIllegalArgumentException() {
+        // Codeflash behavior instrumentation
+        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_iter1 = 1;
+        String _cf_mod1 = "FibonacciTest";
+        String _cf_cls1 = "FibonacciTest";
+        String _cf_fn1 = "fibonacci";
+        String _cf_outputFile1 = System.getenv("CODEFLASH_OUTPUT_FILE");
+        String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
+        if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
+        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
+        long _cf_start1 = System.nanoTime();
+        byte[] _cf_serializedResult1 = null;
+        try {
+            assertThrows(IllegalArgumentException.class, () -> Fibonacci.fibonacci(-1));
+        } finally {
+            long _cf_end1 = System.nanoTime();
+            long _cf_dur1 = _cf_end1 - _cf_start1;
+            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
+            // Write to SQLite if output file is set
+            if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
+                try {
+                    Class.forName("org.sqlite.JDBC");
+                    try (Connection _cf_conn1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {
+                        try (java.sql.Statement _cf_stmt1 = _cf_conn1.createStatement()) {
+                            _cf_stmt1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
+                                "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
+                                "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
+                                "runtime INTEGER, return_value BLOB, verification_type TEXT)");
+                        }
+                        String _cf_sql1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        try (PreparedStatement _cf_pstmt1 = _cf_conn1.prepareStatement(_cf_sql1)) {
+                            _cf_pstmt1.setString(1, _cf_mod1);
+                            _cf_pstmt1.setString(2, _cf_cls1);
+                            _cf_pstmt1.setString(3, "FibonacciTestTest");
+                            _cf_pstmt1.setString(4, _cf_fn1);
+                            _cf_pstmt1.setInt(5, _cf_loop1);
+                            _cf_pstmt1.setString(6, _cf_iter1 + "_" + _cf_testIteration1);
+                            _cf_pstmt1.setLong(7, _cf_dur1);
+                            _cf_pstmt1.setBytes(8, _cf_serializedResult1);
+                            _cf_pstmt1.setString(9, "function_call");
+                            _cf_pstmt1.executeUpdate();
+                        }
+                    }
+                } catch (Exception _cf_e1) {
+                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e1.getMessage());
+                }
+            }
+        }
+    }
+
+    @Test
+    void testZeroInput_ReturnsZero() {
+        // Codeflash behavior instrumentation
+        int _cf_loop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_iter2 = 2;
+        String _cf_mod2 = "FibonacciTest";
+        String _cf_cls2 = "FibonacciTest";
+        String _cf_fn2 = "fibonacci";
+        String _cf_outputFile2 = System.getenv("CODEFLASH_OUTPUT_FILE");
+        String _cf_testIteration2 = System.getenv("CODEFLASH_TEST_ITERATION");
+        if (_cf_testIteration2 == null) _cf_testIteration2 = "0";
+        System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + "######$!");
+        long _cf_start2 = System.nanoTime();
+        byte[] _cf_serializedResult2 = null;
+        try {
+            var _cf_result2_1 = Fibonacci.fibonacci(0);
+            _cf_serializedResult2 = com.codeflash.Serializer.serialize((Object) _cf_result2_1);
+            assertEquals(0L, _cf_result2_1);
+        } finally {
+            long _cf_end2 = System.nanoTime();
+            long _cf_dur2 = _cf_end2 - _cf_start2;
+            System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + ":" + _cf_dur2 + "######!");
+            // Write to SQLite if output file is set
+            if (_cf_outputFile2 != null && !_cf_outputFile2.isEmpty()) {
+                try {
+                    Class.forName("org.sqlite.JDBC");
+                    try (Connection _cf_conn2 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile2)) {
+                        try (java.sql.Statement _cf_stmt2 = _cf_conn2.createStatement()) {
+                            _cf_stmt2.execute("CREATE TABLE IF NOT EXISTS test_results (" +
+                                "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
+                                "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
+                                "runtime INTEGER, return_value BLOB, verification_type TEXT)");
+                        }
+                        String _cf_sql2 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        try (PreparedStatement _cf_pstmt2 = _cf_conn2.prepareStatement(_cf_sql2)) {
+                            _cf_pstmt2.setString(1, _cf_mod2);
+                            _cf_pstmt2.setString(2, _cf_cls2);
+                            _cf_pstmt2.setString(3, "FibonacciTestTest");
+                            _cf_pstmt2.setString(4, _cf_fn2);
+                            _cf_pstmt2.setInt(5, _cf_loop2);
+                            _cf_pstmt2.setString(6, _cf_iter2 + "_" + _cf_testIteration2);
+                            _cf_pstmt2.setLong(7, _cf_dur2);
+                            _cf_pstmt2.setBytes(8, _cf_serializedResult2);
+                            _cf_pstmt2.setString(9, "function_call");
+                            _cf_pstmt2.executeUpdate();
+                        }
+                    }
+                } catch (Exception _cf_e2) {
+                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e2.getMessage());
+                }
+            }
+        }
+    }
+}
+"""
         assert success is True
-        # The assertThrows lambda line should remain unchanged (not wrapped in variable assignment)
-        assert "() -> Fibonacci.fibonacci(-1)" in result
-        # The non-lambda call should still be wrapped
-        assert "_cf_result" in result
+        assert result == expected
 
     def test_instrument_behavior_mode_assert_throws_block_lambda(self, tmp_path: Path):
         """Test that assertThrows block lambdas are not broken by behavior instrumentation.
@@ -240,11 +395,124 @@ public class FibonacciTest {
             test_path=test_file,
         )
 
+        expected = """import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+
+public class FibonacciTest__perfinstrumented {
+    @Test
+    void testNegativeInput_ThrowsIllegalArgumentException() {
+        // Codeflash behavior instrumentation
+        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_iter1 = 1;
+        String _cf_mod1 = "FibonacciTest";
+        String _cf_cls1 = "FibonacciTest";
+        String _cf_fn1 = "fibonacci";
+        String _cf_outputFile1 = System.getenv("CODEFLASH_OUTPUT_FILE");
+        String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
+        if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
+        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
+        long _cf_start1 = System.nanoTime();
+        byte[] _cf_serializedResult1 = null;
+        try {
+            assertThrows(IllegalArgumentException.class, () -> {
+                Fibonacci.fibonacci(-1);
+            });
+        } finally {
+            long _cf_end1 = System.nanoTime();
+            long _cf_dur1 = _cf_end1 - _cf_start1;
+            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
+            // Write to SQLite if output file is set
+            if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
+                try {
+                    Class.forName("org.sqlite.JDBC");
+                    try (Connection _cf_conn1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {
+                        try (java.sql.Statement _cf_stmt1 = _cf_conn1.createStatement()) {
+                            _cf_stmt1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
+                                "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
+                                "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
+                                "runtime INTEGER, return_value BLOB, verification_type TEXT)");
+                        }
+                        String _cf_sql1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        try (PreparedStatement _cf_pstmt1 = _cf_conn1.prepareStatement(_cf_sql1)) {
+                            _cf_pstmt1.setString(1, _cf_mod1);
+                            _cf_pstmt1.setString(2, _cf_cls1);
+                            _cf_pstmt1.setString(3, "FibonacciTestTest");
+                            _cf_pstmt1.setString(4, _cf_fn1);
+                            _cf_pstmt1.setInt(5, _cf_loop1);
+                            _cf_pstmt1.setString(6, _cf_iter1 + "_" + _cf_testIteration1);
+                            _cf_pstmt1.setLong(7, _cf_dur1);
+                            _cf_pstmt1.setBytes(8, _cf_serializedResult1);
+                            _cf_pstmt1.setString(9, "function_call");
+                            _cf_pstmt1.executeUpdate();
+                        }
+                    }
+                } catch (Exception _cf_e1) {
+                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e1.getMessage());
+                }
+            }
+        }
+    }
+
+    @Test
+    void testZeroInput_ReturnsZero() {
+        // Codeflash behavior instrumentation
+        int _cf_loop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_iter2 = 2;
+        String _cf_mod2 = "FibonacciTest";
+        String _cf_cls2 = "FibonacciTest";
+        String _cf_fn2 = "fibonacci";
+        String _cf_outputFile2 = System.getenv("CODEFLASH_OUTPUT_FILE");
+        String _cf_testIteration2 = System.getenv("CODEFLASH_TEST_ITERATION");
+        if (_cf_testIteration2 == null) _cf_testIteration2 = "0";
+        System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + "######$!");
+        long _cf_start2 = System.nanoTime();
+        byte[] _cf_serializedResult2 = null;
+        try {
+            var _cf_result2_1 = Fibonacci.fibonacci(0);
+            _cf_serializedResult2 = com.codeflash.Serializer.serialize((Object) _cf_result2_1);
+            assertEquals(0L, _cf_result2_1);
+        } finally {
+            long _cf_end2 = System.nanoTime();
+            long _cf_dur2 = _cf_end2 - _cf_start2;
+            System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + ":" + _cf_dur2 + "######!");
+            // Write to SQLite if output file is set
+            if (_cf_outputFile2 != null && !_cf_outputFile2.isEmpty()) {
+                try {
+                    Class.forName("org.sqlite.JDBC");
+                    try (Connection _cf_conn2 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile2)) {
+                        try (java.sql.Statement _cf_stmt2 = _cf_conn2.createStatement()) {
+                            _cf_stmt2.execute("CREATE TABLE IF NOT EXISTS test_results (" +
+                                "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
+                                "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
+                                "runtime INTEGER, return_value BLOB, verification_type TEXT)");
+                        }
+                        String _cf_sql2 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        try (PreparedStatement _cf_pstmt2 = _cf_conn2.prepareStatement(_cf_sql2)) {
+                            _cf_pstmt2.setString(1, _cf_mod2);
+                            _cf_pstmt2.setString(2, _cf_cls2);
+                            _cf_pstmt2.setString(3, "FibonacciTestTest");
+                            _cf_pstmt2.setString(4, _cf_fn2);
+                            _cf_pstmt2.setInt(5, _cf_loop2);
+                            _cf_pstmt2.setString(6, _cf_iter2 + "_" + _cf_testIteration2);
+                            _cf_pstmt2.setLong(7, _cf_dur2);
+                            _cf_pstmt2.setBytes(8, _cf_serializedResult2);
+                            _cf_pstmt2.setString(9, "function_call");
+                            _cf_pstmt2.executeUpdate();
+                        }
+                    }
+                } catch (Exception _cf_e2) {
+                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e2.getMessage());
+                }
+            }
+        }
+    }
+}
+"""
         assert success is True
-        assert "Fibonacci.fibonacci(-1);" in result
-        assert "() -> {" in result
-        lines_with_cf_result = [l for l in result.split("\n") if "var _cf_result" in l and "Fibonacci.fibonacci(0)" in l]
-        assert len(lines_with_cf_result) > 0, "Non-lambda call to fibonacci(0) should be wrapped"
+        assert result == expected
 
     def test_instrument_performance_mode_simple(self, tmp_path: Path):
         """Test instrumenting a simple test in performance mode with inner loop."""
@@ -515,9 +783,7 @@ public class ServiceTest__perfonlyinstrumented {
 class TestKryoSerializerUsage:
     """Tests for Kryo Serializer usage in behavior mode."""
 
-    def test_serializer_used_for_return_values(self):
-        """Test that captured return values use com.codeflash.Serializer.serialize()."""
-        source = """import org.junit.jupiter.api.Test;
+    KRYO_SOURCE = """import org.junit.jupiter.api.Test;
 
 public class MyTest {
     @Test
@@ -526,91 +792,125 @@ public class MyTest {
     }
 }
 """
-        result = _add_behavior_instrumentation(source, "MyTest", "foo")
 
-        assert "com.codeflash.Serializer.serialize((Object)" in result
-        # Should NOT use old _cfSerialize helper
-        assert "_cfSerialize" not in result
+    BEHAVIOR_EXPECTED = """import org.junit.jupiter.api.Test;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+
+public class MyTest {
+    @Test
+    public void testFoo() {
+        // Codeflash behavior instrumentation
+        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_iter1 = 1;
+        String _cf_mod1 = "MyTest";
+        String _cf_cls1 = "MyTest";
+        String _cf_fn1 = "foo";
+        String _cf_outputFile1 = System.getenv("CODEFLASH_OUTPUT_FILE");
+        String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
+        if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
+        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
+        long _cf_start1 = System.nanoTime();
+        byte[] _cf_serializedResult1 = null;
+        try {
+            var _cf_result1_1 = obj.foo();
+            _cf_serializedResult1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);
+            assertEquals(0, _cf_result1_1);
+        } finally {
+            long _cf_end1 = System.nanoTime();
+            long _cf_dur1 = _cf_end1 - _cf_start1;
+            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
+            // Write to SQLite if output file is set
+            if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
+                try {
+                    Class.forName("org.sqlite.JDBC");
+                    try (Connection _cf_conn1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {
+                        try (java.sql.Statement _cf_stmt1 = _cf_conn1.createStatement()) {
+                            _cf_stmt1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
+                                "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
+                                "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
+                                "runtime INTEGER, return_value BLOB, verification_type TEXT)");
+                        }
+                        String _cf_sql1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        try (PreparedStatement _cf_pstmt1 = _cf_conn1.prepareStatement(_cf_sql1)) {
+                            _cf_pstmt1.setString(1, _cf_mod1);
+                            _cf_pstmt1.setString(2, _cf_cls1);
+                            _cf_pstmt1.setString(3, "MyTestTest");
+                            _cf_pstmt1.setString(4, _cf_fn1);
+                            _cf_pstmt1.setInt(5, _cf_loop1);
+                            _cf_pstmt1.setString(6, _cf_iter1 + "_" + _cf_testIteration1);
+                            _cf_pstmt1.setLong(7, _cf_dur1);
+                            _cf_pstmt1.setBytes(8, _cf_serializedResult1);
+                            _cf_pstmt1.setString(9, "function_call");
+                            _cf_pstmt1.executeUpdate();
+                        }
+                    }
+                } catch (Exception _cf_e1) {
+                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e1.getMessage());
+                }
+            }
+        }
+    }
+}
+"""
+
+    TIMING_EXPECTED = """import org.junit.jupiter.api.Test;
+
+public class MyTest {
+    @Test
+    public void testFoo() {
+        // Codeflash timing instrumentation with inner loop for JIT warmup
+        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        String _cf_mod1 = "MyTest";
+        String _cf_cls1 = "MyTest";
+        String _cf_fn1 = "foo";
+
+        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            long _cf_start1 = System.nanoTime();
+            try {
+                assertEquals(0, obj.foo());
+            } finally {
+                long _cf_end1 = System.nanoTime();
+                long _cf_dur1 = _cf_end1 - _cf_start1;
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+            }
+        }
+    }
+}
+"""
+
+    def test_serializer_used_for_return_values(self):
+        """Test that captured return values use com.codeflash.Serializer.serialize()."""
+        result = _add_behavior_instrumentation(self.KRYO_SOURCE, "MyTest", "foo")
+        assert result == self.BEHAVIOR_EXPECTED
 
     def test_byte_array_result_variable(self):
         """Test that the serialized result variable is byte[] not String."""
-        source = """import org.junit.jupiter.api.Test;
-
-public class MyTest {
-    @Test
-    public void testFoo() {
-        assertEquals(0, obj.foo());
-    }
-}
-"""
-        result = _add_behavior_instrumentation(source, "MyTest", "foo")
-
-        assert "byte[] _cf_serializedResult" in result
-        assert "String _cf_serializedResult" not in result
+        result = _add_behavior_instrumentation(self.KRYO_SOURCE, "MyTest", "foo")
+        assert result == self.BEHAVIOR_EXPECTED
 
     def test_blob_column_in_schema(self):
         """Test that the SQLite schema uses BLOB for return_value column."""
-        source = """import org.junit.jupiter.api.Test;
-
-public class MyTest {
-    @Test
-    public void testFoo() {
-        assertEquals(0, obj.foo());
-    }
-}
-"""
-        result = _add_behavior_instrumentation(source, "MyTest", "foo")
-
-        assert "return_value BLOB" in result
-        assert "return_value TEXT" not in result
+        result = _add_behavior_instrumentation(self.KRYO_SOURCE, "MyTest", "foo")
+        assert result == self.BEHAVIOR_EXPECTED
 
     def test_set_bytes_for_blob_write(self):
         """Test that setBytes is used to write BLOB data to SQLite."""
-        source = """import org.junit.jupiter.api.Test;
-
-public class MyTest {
-    @Test
-    public void testFoo() {
-        assertEquals(0, obj.foo());
-    }
-}
-"""
-        result = _add_behavior_instrumentation(source, "MyTest", "foo")
-
-        assert "setBytes(8, _cf_serializedResult" in result
-        # Should NOT use setString for return value
-        assert "setString(8, _cf_serializedResult" not in result
+        result = _add_behavior_instrumentation(self.KRYO_SOURCE, "MyTest", "foo")
+        assert result == self.BEHAVIOR_EXPECTED
 
     def test_no_inline_helper_injected(self):
         """Test that no inline _cfSerialize helper method is injected."""
-        source = """import org.junit.jupiter.api.Test;
-
-public class MyTest {
-    @Test
-    public void testFoo() {
-        assertEquals(0, obj.foo());
-    }
-}
-"""
-        result = _add_behavior_instrumentation(source, "MyTest", "foo")
-
-        assert "private static String _cfSerialize" not in result
+        result = _add_behavior_instrumentation(self.KRYO_SOURCE, "MyTest", "foo")
+        assert result == self.BEHAVIOR_EXPECTED
 
     def test_serializer_not_used_in_performance_mode(self):
         """Test that Serializer is NOT used in performance mode (only behavior)."""
-        source = """import org.junit.jupiter.api.Test;
-
-public class MyTest {
-    @Test
-    public void testFoo() {
-        assertEquals(0, obj.foo());
-    }
-}
-"""
-        result = _add_timing_instrumentation(source, "MyTest", "foo")
-
-        assert "Serializer.serialize" not in result
-        assert "_cfSerialize" not in result
+        result = _add_timing_instrumentation(self.KRYO_SOURCE, "MyTest", "foo")
+        assert result == self.TIMING_EXPECTED
 
 
 class TestAddTimingInstrumentation:
@@ -845,7 +1145,7 @@ public class TargetBenchmark {
             "public class TargetBenchmark {\n"
             "\n"
             "    @Test\n"
-            "    @DisplayName(\"Benchmark multiply\")\n"
+            '    @DisplayName("Benchmark multiply")\n'
             "    public void benchmarkMultiply() {\n"
             "        \n"  # Empty test_setup_code with 8-space indent
             "\n"
@@ -864,7 +1164,7 @@ public class TargetBenchmark {
             "        long totalNanos = endTime - startTime;\n"
             "        long avgNanos = totalNanos / 5000;\n"
             "\n"
-            "        System.out.println(\"CODEFLASH_BENCHMARK:multiply:total_ns=\" + totalNanos + \",avg_ns=\" + avgNanos + \",iterations=5000\");\n"
+            '        System.out.println("CODEFLASH_BENCHMARK:multiply:total_ns=" + totalNanos + ",avg_ns=" + avgNanos + ",iterations=5000");\n'
             "    }\n"
             "}\n"
         )
@@ -933,12 +1233,68 @@ public class CalculatorTest {
             function_to_optimize=func,
         )
 
-        # Behavior mode now adds full instrumentation (SQLite, timing markers, etc.)
-        assert "CalculatorTest__perfinstrumented" in result
-        assert "_cf_result" in result
-        assert "com.codeflash.Serializer.serialize" in result
-        assert "CODEFLASH_OUTPUT_FILE" in result
-        assert "CREATE TABLE IF NOT EXISTS test_results" in result
+        expected = """import org.junit.jupiter.api.Test;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+
+public class CalculatorTest__perfinstrumented {
+    @Test
+    public void testAdd() {
+        // Codeflash behavior instrumentation
+        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_iter1 = 1;
+        String _cf_mod1 = "CalculatorTest";
+        String _cf_cls1 = "CalculatorTest";
+        String _cf_fn1 = "add";
+        String _cf_outputFile1 = System.getenv("CODEFLASH_OUTPUT_FILE");
+        String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
+        if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
+        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
+        long _cf_start1 = System.nanoTime();
+        byte[] _cf_serializedResult1 = null;
+        try {
+            var _cf_result1_1 = new Calculator().add(2, 2);
+            _cf_serializedResult1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);
+            Object _cf_result1 = _cf_result1_1;
+        } finally {
+            long _cf_end1 = System.nanoTime();
+            long _cf_dur1 = _cf_end1 - _cf_start1;
+            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
+            // Write to SQLite if output file is set
+            if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
+                try {
+                    Class.forName("org.sqlite.JDBC");
+                    try (Connection _cf_conn1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {
+                        try (java.sql.Statement _cf_stmt1 = _cf_conn1.createStatement()) {
+                            _cf_stmt1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
+                                "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
+                                "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
+                                "runtime INTEGER, return_value BLOB, verification_type TEXT)");
+                        }
+                        String _cf_sql1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        try (PreparedStatement _cf_pstmt1 = _cf_conn1.prepareStatement(_cf_sql1)) {
+                            _cf_pstmt1.setString(1, _cf_mod1);
+                            _cf_pstmt1.setString(2, _cf_cls1);
+                            _cf_pstmt1.setString(3, "CalculatorTestTest");
+                            _cf_pstmt1.setString(4, _cf_fn1);
+                            _cf_pstmt1.setInt(5, _cf_loop1);
+                            _cf_pstmt1.setString(6, _cf_iter1 + "_" + _cf_testIteration1);
+                            _cf_pstmt1.setLong(7, _cf_dur1);
+                            _cf_pstmt1.setBytes(8, _cf_serializedResult1);
+                            _cf_pstmt1.setString(9, "function_call");
+                            _cf_pstmt1.executeUpdate();
+                        }
+                    }
+                } catch (Exception _cf_e1) {
+                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e1.getMessage());
+                }
+            }
+        }
+    }
+}
+"""
+        assert result == expected
 
     def test_instrument_generated_test_performance_mode(self):
         """Test instrumenting generated test in performance mode with inner loop."""
@@ -1575,9 +1931,6 @@ class TestRunAndParseTests:
     @pytest.fixture
     def java_project(self, tmp_path: Path):
         """Create a temporary Maven project and set up Java language context."""
-        from codeflash.languages.base import Language
-        from codeflash.languages.current import set_current_language
-
         # Force set the language to Java (reset the singleton first)
         import codeflash.languages.current as current_module
         current_module._current_language = None
@@ -1760,9 +2113,37 @@ public class MathUtilsTest {
         )
         assert success
 
-        # Verify instrumented code contains inner loop for JIT warmup
-        assert "CODEFLASH_INNER_ITERATIONS" in instrumented, "Performance mode should use inner loop"
-        assert "for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++)" in instrumented
+        expected_instrumented = """package com.example;
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class MathUtilsTest__perfonlyinstrumented {
+    @Test
+    public void testMultiply() {
+        // Codeflash timing instrumentation with inner loop for JIT warmup
+        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        String _cf_mod1 = "MathUtilsTest";
+        String _cf_cls1 = "MathUtilsTest";
+        String _cf_fn1 = "multiply";
+
+        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            long _cf_start1 = System.nanoTime();
+            try {
+                MathUtils math = new MathUtils();
+                assertEquals(6, math.multiply(2, 3));
+            } finally {
+                long _cf_end1 = System.nanoTime();
+                long _cf_dur1 = _cf_end1 - _cf_start1;
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+            }
+        }
+    }
+}
+"""
+        assert instrumented == expected_instrumented
 
         instrumented_file = test_dir / "MathUtilsTest__perfonlyinstrumented.java"
         instrumented_file.write_text(instrumented, encoding="utf-8")
@@ -2045,7 +2426,6 @@ public class BrokenCalcTest {
     def test_behavior_mode_writes_to_sqlite(self, java_project):
         """Test that behavior mode correctly writes results to SQLite file."""
         import sqlite3
-
         from argparse import Namespace
 
         from codeflash.code_utils.code_utils import get_run_tmp_file
@@ -2105,15 +2485,72 @@ public class CounterTest {
         )
         assert success
 
-        # Verify SQLite imports were added
-        assert "import java.sql.Connection;" in instrumented
-        assert "import java.sql.DriverManager;" in instrumented
-        assert "import java.sql.PreparedStatement;" in instrumented
+        expected_instrumented = """package com.example;
 
-        # Verify SQLite writing code was added
-        assert "CODEFLASH_OUTPUT_FILE" in instrumented
-        assert "CREATE TABLE IF NOT EXISTS test_results" in instrumented
-        assert "INSERT INTO test_results VALUES" in instrumented
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+
+public class CounterTest__perfinstrumented {
+    @Test
+    public void testIncrement() {
+        // Codeflash behavior instrumentation
+        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_iter1 = 1;
+        String _cf_mod1 = "CounterTest";
+        String _cf_cls1 = "CounterTest";
+        String _cf_fn1 = "increment";
+        String _cf_outputFile1 = System.getenv("CODEFLASH_OUTPUT_FILE");
+        String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
+        if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
+        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
+        long _cf_start1 = System.nanoTime();
+        byte[] _cf_serializedResult1 = null;
+        try {
+            Counter counter = new Counter();
+            var _cf_result1_1 = counter.increment();
+            _cf_serializedResult1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);
+            assertEquals(1, _cf_result1_1);
+        } finally {
+            long _cf_end1 = System.nanoTime();
+            long _cf_dur1 = _cf_end1 - _cf_start1;
+            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
+            // Write to SQLite if output file is set
+            if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
+                try {
+                    Class.forName("org.sqlite.JDBC");
+                    try (Connection _cf_conn1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {
+                        try (java.sql.Statement _cf_stmt1 = _cf_conn1.createStatement()) {
+                            _cf_stmt1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
+                                "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
+                                "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
+                                "runtime INTEGER, return_value BLOB, verification_type TEXT)");
+                        }
+                        String _cf_sql1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        try (PreparedStatement _cf_pstmt1 = _cf_conn1.prepareStatement(_cf_sql1)) {
+                            _cf_pstmt1.setString(1, _cf_mod1);
+                            _cf_pstmt1.setString(2, _cf_cls1);
+                            _cf_pstmt1.setString(3, "CounterTestTest");
+                            _cf_pstmt1.setString(4, _cf_fn1);
+                            _cf_pstmt1.setInt(5, _cf_loop1);
+                            _cf_pstmt1.setString(6, _cf_iter1 + "_" + _cf_testIteration1);
+                            _cf_pstmt1.setLong(7, _cf_dur1);
+                            _cf_pstmt1.setBytes(8, _cf_serializedResult1);
+                            _cf_pstmt1.setString(9, "function_call");
+                            _cf_pstmt1.executeUpdate();
+                        }
+                    }
+                } catch (Exception _cf_e1) {
+                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e1.getMessage());
+                }
+            }
+        }
+    }
+}
+"""
+        assert instrumented == expected_instrumented
 
         instrumented_file = test_dir / "CounterTest__perfinstrumented.java"
         instrumented_file.write_text(instrumented, encoding="utf-8")
@@ -2267,9 +2704,37 @@ public class FibonacciTest {
         )
         assert success
 
-        # Verify instrumented code contains inner loop
-        assert "CODEFLASH_INNER_ITERATIONS" in instrumented
-        assert "for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++)" in instrumented
+        expected_instrumented = """package com.example;
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class FibonacciTest__perfonlyinstrumented {
+    @Test
+    public void testFib() {
+        // Codeflash timing instrumentation with inner loop for JIT warmup
+        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        String _cf_mod1 = "FibonacciTest";
+        String _cf_cls1 = "FibonacciTest";
+        String _cf_fn1 = "fib";
+
+        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            long _cf_start1 = System.nanoTime();
+            try {
+                Fibonacci fib = new Fibonacci();
+                assertEquals(5, fib.fib(5));
+            } finally {
+                long _cf_end1 = System.nanoTime();
+                long _cf_dur1 = _cf_end1 - _cf_start1;
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+            }
+        }
+    }
+}
+"""
+        assert instrumented == expected_instrumented
 
         instrumented_file = test_dir / "FibonacciTest__perfonlyinstrumented.java"
         instrumented_file.write_text(instrumented, encoding="utf-8")
