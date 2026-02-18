@@ -2485,7 +2485,8 @@ class TestFormatSkeletonForContext:
 
         result = _format_skeleton_for_context(skeleton, source, "Widget", analyzer)
 
-        assert result.startswith("public class Widget {")
+        assert "// Constructors: Widget(int size)" in result
+        assert "public class Widget {" in result
         assert "private int size;" in result
         assert "Widget(int size)" in result
         assert "getSize" in result
@@ -2536,8 +2537,8 @@ class TestFormatSkeletonForContext:
 class TestGetJavaImportedTypeSkeletonsEdgeCases:
     """Additional edge case tests for get_java_imported_type_skeletons()."""
 
-    def test_wildcard_imports_are_skipped(self):
-        """Wildcard imports (e.g., import com.example.helpers.*) have class_name=None and should be skipped."""
+    def test_wildcard_imports_are_expanded(self):
+        """Wildcard imports (e.g., import com.example.helpers.*) are expanded to individual types."""
         project_root = FIXTURE_DIR
         module_root = FIXTURE_DIR / "src" / "main" / "java"
         analyzer = get_java_analyzer()
@@ -2551,8 +2552,8 @@ class TestGetJavaImportedTypeSkeletonsEdgeCases:
 
         result = get_java_imported_type_skeletons(imports, project_root, module_root, analyzer)
 
-        # Wildcard imports can't resolve to a single class, so result should be empty
-        assert result == ""
+        # Wildcard imports should now be expanded to individual classes found in the package directory
+        assert "MathHelper" in result
 
     def test_import_to_nonexistent_class_in_file(self):
         """When an import resolves to a file but the class doesn't exist in it, skeleton extraction returns None."""

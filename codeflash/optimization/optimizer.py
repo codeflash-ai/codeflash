@@ -547,6 +547,15 @@ class Optimizer:
                     f"{function_to_optimize.qualified_name} (in {original_module_path.name})"
                 )
                 console.rule()
+
+                # Safety-net cleanup: remove any leftover instrumented test files from previous iterations.
+                # This prevents a broken test file from one function from cascading compilation failures
+                # to all subsequent functions (e.g., when Maven compiles all test files together).
+                leftover_files = Optimizer.find_leftover_instrumented_test_files(self.test_cfg.tests_root)
+                if leftover_files:
+                    logger.debug(f"Cleaning up {len(leftover_files)} leftover instrumented test file(s)")
+                    cleanup_paths(leftover_files)
+
                 function_optimizer = None
                 try:
                     function_optimizer = self.create_function_optimizer(
@@ -652,8 +661,8 @@ class Optimizer:
             r"test.*__perf_test_\d?\.py|test_.*__unit_test_\d?\.py|test_.*__perfinstrumented\.py|test_.*__perfonlyinstrumented\.py|"
             # JavaScript/TypeScript patterns (new naming with .test/.spec preserved)
             r".*__perfinstrumented\.(?:test|spec)\.(?:js|ts|jsx|tsx)|.*__perfonlyinstrumented\.(?:test|spec)\.(?:js|ts|jsx|tsx)|"
-            # Java patterns (with optional numeric suffix _2, _3, etc.)
-            r".*Test__perfinstrumented(?:_\d+)?\.java|.*Test__perfonlyinstrumented(?:_\d+)?\.java"
+            # Java patterns (with optional numeric suffix _2, _3, etc., and existing_ prefix variant)
+            r".*Test__(?:existing_)?perfinstrumented(?:_\d+)?\.java|.*Test__(?:existing_)?perfonlyinstrumented(?:_\d+)?\.java"
             r")$"
         )
 

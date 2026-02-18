@@ -1919,8 +1919,23 @@ class FunctionOptimizer:
 
                     return path_obj.parent / f"{new_stem}{ext}"
 
-                new_behavioral_test_path = get_instrumented_path(test_file, "__perfinstrumented")
-                new_perf_test_path = get_instrumented_path(test_file, "__perfonlyinstrumented")
+                # Use distinct suffixes for existing tests to avoid collisions
+                # with generated test paths (which use __perfinstrumented / __perfonlyinstrumented)
+                new_behavioral_test_path = get_instrumented_path(test_file, "__existing_perfinstrumented")
+                new_perf_test_path = get_instrumented_path(test_file, "__existing_perfonlyinstrumented")
+
+                # For Java, the class name inside the file must match the file name.
+                # instrument_existing_test() renames to __perfinstrumented, but we use
+                # __existing_perfinstrumented for file paths, so fix the class name.
+                if is_java():
+                    if injected_behavior_test is not None:
+                        injected_behavior_test = injected_behavior_test.replace(
+                            "__perfinstrumented", "__existing_perfinstrumented"
+                        )
+                    if injected_perf_test is not None:
+                        injected_perf_test = injected_perf_test.replace(
+                            "__perfonlyinstrumented", "__existing_perfonlyinstrumented"
+                        )
 
                 if injected_behavior_test is not None:
                     with new_behavioral_test_path.open("w", encoding="utf8") as _f:

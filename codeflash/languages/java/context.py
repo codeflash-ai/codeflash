@@ -107,7 +107,9 @@ def extract_code_context(
             raise InvalidJavaSyntaxError(msg)
 
     # Extract type skeletons for project-internal imported types
-    imported_type_skeletons = get_java_imported_type_skeletons(imports, project_root, module_root, analyzer)
+    imported_type_skeletons = get_java_imported_type_skeletons(
+        imports, project_root, module_root, analyzer, target_code=target_code
+    )
 
     return CodeContext(
         target_code=target_code,
@@ -852,7 +854,36 @@ def extract_class_context(file_path: Path, class_name: str, analyzer: JavaAnalyz
 
 
 # Maximum token budget for imported type skeletons to avoid bloating testgen context
-IMPORTED_SKELETON_TOKEN_BUDGET = 2000
+IMPORTED_SKELETON_TOKEN_BUDGET = 4000
+
+
+def _extract_type_names_from_code(code: str, analyzer: JavaAnalyzer) -> set[str]:
+    """Extract type names referenced in Java code (method parameters, field types, etc.).
+
+    Parses the code and collects type_identifier nodes to find which types
+    are directly used. This is used to prioritize skeletons for types the
+    target method actually references.
+    """
+    if not code:
+        return set()
+
+    type_names: set[str] = set()
+    try:
+        tree = analyzer.parse(code)
+        source_bytes = code.encode("utf8")
+
+        def collect_type_identifiers(node: Node) -> None:
+            if node.type == "type_identifier":
+                name = source_bytes[node.start_byte : node.end_byte].decode("utf8")
+                type_names.add(name)
+            for child in node.children:
+                collect_type_identifiers(child)
+
+        collect_type_identifiers(tree.root_node)
+    except Exception:
+        pass
+
+    return type_names
 
 
 def get_java_imported_type_skeletons(
@@ -860,6 +891,7 @@ def get_java_imported_type_skeletons(
     project_root: Path,
     module_root: Path | None,
     analyzer: JavaAnalyzer,
+    target_code: str = "",
 ) -> str:
     """Extract type skeletons for project-internal imported types.
 
@@ -868,11 +900,16 @@ def get_java_imported_type_skeletons(
     method signatures, and returns them concatenated. This gives the testgen AI
     real type information instead of forcing it to hallucinate constructors.
 
+    Types referenced in the target method (parameter types, field types used in
+    the method body) are prioritized to ensure the AI always has context for
+    the types it must construct in tests.
+
     Args:
         imports: List of JavaImportInfo objects from analyzer.find_imports().
         project_root: Root of the project.
         module_root: Root of the module (defaults to project_root).
         analyzer: JavaAnalyzer instance.
+        target_code: The target method's source code (used for type prioritization).
 
     Returns:
         Concatenated type skeletons as a string, within token budget.
@@ -885,13 +922,36 @@ def get_java_imported_type_skeletons(
     skeleton_parts: list[str] = []
     total_tokens = 0
 
+    # Extract type names from target code for priority ordering
+    priority_types = _extract_type_names_from_code(target_code, analyzer)
+
+    # Pre-resolve all imports, expanding wildcards into individual types
+    resolved_imports: list = []
     for imp in imports:
+        if imp.is_wildcard:
+            # Expand wildcard imports (e.g., com.aerospike.client.policy.*) into individual types
+            expanded = resolver.expand_wildcard_import(imp.import_path)
+            if expanded:
+                resolved_imports.extend(expanded)
+                logger.debug("Expanded wildcard import %s.* into %d types", imp.import_path, len(expanded))
+            continue
+
         resolved = resolver.resolve_import(imp)
 
         # Skip external/unresolved imports
         if resolved.is_external or resolved.file_path is None:
             continue
 
+        if not resolved.class_name:
+            continue
+
+        resolved_imports.append(resolved)
+
+    # Sort: types referenced in the target method come first (priority), rest after
+    if priority_types:
+        resolved_imports.sort(key=lambda r: 0 if r.class_name in priority_types else 1)
+
+    for resolved in resolved_imports:
         class_name = resolved.class_name
         if not class_name:
             continue
@@ -927,6 +987,30 @@ def get_java_imported_type_skeletons(
     return "\n\n".join(skeleton_parts)
 
 
+def _extract_constructor_summaries(skeleton: TypeSkeleton) -> list[str]:
+    """Extract one-line constructor signature summaries from a TypeSkeleton.
+
+    Returns lines like "ClassName(Type1 param1, Type2 param2)" for each constructor.
+    """
+    if not skeleton.constructors_code:
+        return []
+
+    import re
+
+    summaries: list[str] = []
+    # Match constructor declarations: optional modifiers, then ClassName(params)
+    # The pattern captures the constructor name and parameter list
+    for match in re.finditer(r"(?:public|protected|private)?\s*(\w+)\s*\(([^)]*)\)", skeleton.constructors_code):
+        name = match.group(1)
+        params = match.group(2).strip()
+        if params:
+            summaries.append(f"{name}({params})")
+        else:
+            summaries.append(f"{name}()")
+
+    return summaries
+
+
 def _format_skeleton_for_context(
     skeleton: TypeSkeleton, source: str, class_name: str, analyzer: JavaAnalyzer
 ) -> str:
@@ -937,6 +1021,12 @@ def _format_skeleton_for_context(
 
     """
     parts: list[str] = []
+
+    # Constructor summary header — makes constructor signatures unambiguous for the AI
+    constructor_summaries = _extract_constructor_summaries(skeleton)
+    if constructor_summaries:
+        for summary in constructor_summaries:
+            parts.append(f"// Constructors: {summary}")
 
     # Type declaration
     parts.append(f"{skeleton.type_declaration} {{")
