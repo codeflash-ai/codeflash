@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import json
 import linecache
 import os
 from typing import TYPE_CHECKING, Optional
@@ -10,6 +11,7 @@ from typing import TYPE_CHECKING, Optional
 import dill as pickle
 
 from codeflash.code_utils.tabulate import tabulate
+from codeflash.languages import is_python
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -25,6 +27,7 @@ def show_func(
     if total_hits == 0:
         return ""
     scalar = 1
+    sublines = []
     if os.path.exists(filename):  # noqa: PTH110
         out_table += f"## Function: {func_name}\n"
         # Clear the cache to ensure that we get up-to-date results.
@@ -78,14 +81,49 @@ def show_text(stats: dict) -> str:
 
 
 def parse_line_profile_results(line_profiler_output_file: Optional[Path]) -> dict:
-    line_profiler_output_file = line_profiler_output_file.with_suffix(".lprof")
+    if is_python():
+        line_profiler_output_file = line_profiler_output_file.with_suffix(".lprof")
+        stats_dict = {}
+        if not line_profiler_output_file.exists():
+            return {"timings": {}, "unit": 0, "str_out": ""}, None
+        with line_profiler_output_file.open("rb") as f:
+            stats = pickle.load(f)
+            stats_dict["timings"] = stats.timings
+            stats_dict["unit"] = stats.unit
+            str_out = show_text(stats_dict)
+            stats_dict["str_out"] = str_out
+        return stats_dict, None
+
     stats_dict = {}
-    if not line_profiler_output_file.exists():
+    if line_profiler_output_file is None or not line_profiler_output_file.exists():
         return {"timings": {}, "unit": 0, "str_out": ""}, None
-    with line_profiler_output_file.open("rb") as f:
-        stats = pickle.load(f)
-        stats_dict["timings"] = stats.timings
-        stats_dict["unit"] = stats.unit
-        str_out = show_text(stats_dict)
-        stats_dict["str_out"] = str_out
+
+    with line_profiler_output_file.open("r", encoding="utf-8") as f:
+        raw_data = json.load(f)
+
+    # Convert Java/JS JSON output into Python line_profiler-compatible shape.
+    # timings: {(filename, start_lineno, func_name): [(lineno, hits, time_raw), ...]}
+    grouped_timings: dict[tuple[str, int, str], list[tuple[int, int, int]]] = {}
+    lines_by_file: dict[str, list[tuple[int, int, int]]] = {}
+    for key, stats in raw_data.items():
+        file_path = stats.get("file")
+        line_num = stats.get("line")
+        if file_path is None or line_num is None:
+            file_path, line_str = key.rsplit(":", 1)
+            line_num = int(line_str)
+
+        lines_by_file.setdefault(file_path, []).append(
+            (int(line_num), int(stats.get("hits", 0)), int(stats.get("time", 0)))
+        )
+
+    for file_path, line_stats in lines_by_file.items():
+        sorted_line_stats = sorted(line_stats, key=lambda t: t[0])
+        if not sorted_line_stats:
+            continue
+        start_lineno = sorted_line_stats[0][0]
+        grouped_timings[(file_path, start_lineno, os.path.basename(file_path))] = sorted_line_stats
+
+    stats_dict["timings"] = grouped_timings
+    stats_dict["unit"] = 1e-9
+    stats_dict["str_out"] = show_text(stats_dict)
     return stats_dict, None
