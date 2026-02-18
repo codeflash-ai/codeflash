@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import sys
 import tempfile
 from argparse import Namespace
@@ -12,7 +13,10 @@ from codeflash.code_utils.code_extractor import GlobalAssignmentCollector, add_g
 from codeflash.code_utils.code_replacer import replace_functions_and_add_imports
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.python.context.code_context_extractor import (
+    collect_type_names_from_annotation,
     enrich_testgen_context,
+    extract_init_stub_from_class,
+    extract_parameter_type_constructors,
     get_code_optimization_context,
 )
 from codeflash.models.models import CodeString, CodeStringsMarkdown, FunctionParent
@@ -4132,3 +4136,206 @@ def my_func(ctx: Context) -> None:
 
     class_names = [cs.code.split("\n")[0].replace("class ", "").rstrip(":") for cs in result.code_strings]
     assert len(class_names) == len(set(class_names)), f"Duplicate class stubs found: {class_names}"
+
+
+# --- Tests for collect_type_names_from_annotation ---
+
+
+def test_collect_type_names_simple() -> None:
+    tree = ast.parse("def f(x: Foo): pass")
+    func = tree.body[0]
+    ann = func.args.args[0].annotation
+    assert collect_type_names_from_annotation(ann) == {"Foo"}
+
+
+def test_collect_type_names_generic() -> None:
+    tree = ast.parse("def f(x: list[Foo]): pass")
+    func = tree.body[0]
+    ann = func.args.args[0].annotation
+    names = collect_type_names_from_annotation(ann)
+    assert "Foo" in names
+    assert "list" in names
+
+
+def test_collect_type_names_optional() -> None:
+    tree = ast.parse("def f(x: Optional[Foo]): pass")
+    func = tree.body[0]
+    ann = func.args.args[0].annotation
+    names = collect_type_names_from_annotation(ann)
+    assert "Optional" in names
+    assert "Foo" in names
+
+
+def test_collect_type_names_union_pipe() -> None:
+    tree = ast.parse("def f(x: Foo | Bar): pass")
+    func = tree.body[0]
+    ann = func.args.args[0].annotation
+    names = collect_type_names_from_annotation(ann)
+    assert names == {"Foo", "Bar"}
+
+
+def test_collect_type_names_none_annotation() -> None:
+    assert collect_type_names_from_annotation(None) == set()
+
+
+def test_collect_type_names_attribute_skipped() -> None:
+    tree = ast.parse("def f(x: module.Foo): pass")
+    func = tree.body[0]
+    ann = func.args.args[0].annotation
+    assert collect_type_names_from_annotation(ann) == set()
+
+
+# --- Tests for extract_init_stub_from_class ---
+
+
+def test_extract_init_stub_basic() -> None:
+    source = """
+class MyClass:
+    def __init__(self, name: str, value: int = 0):
+        self.name = name
+        self.value = value
+"""
+    tree = ast.parse(source)
+    stub = extract_init_stub_from_class("MyClass", source, tree)
+    assert stub is not None
+    assert "class MyClass:" in stub
+    assert "def __init__(self, name: str, value: int = 0):" in stub
+    assert "self.name = name" in stub
+    assert "self.value = value" in stub
+
+
+def test_extract_init_stub_no_init() -> None:
+    source = """
+class NoInit:
+    x = 10
+    def other(self):
+        pass
+"""
+    tree = ast.parse(source)
+    stub = extract_init_stub_from_class("NoInit", source, tree)
+    assert stub is None
+
+
+def test_extract_init_stub_class_not_found() -> None:
+    source = """
+class Other:
+    def __init__(self):
+        pass
+"""
+    tree = ast.parse(source)
+    stub = extract_init_stub_from_class("Missing", source, tree)
+    assert stub is None
+
+
+# --- Tests for extract_parameter_type_constructors ---
+
+
+def test_extract_parameter_type_constructors_project_type(tmp_path: Path) -> None:
+    # Create a module with a class
+    pkg = tmp_path / "mypkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "models.py").write_text(
+        """
+class Widget:
+    def __init__(self, size: int, color: str = "red"):
+        self.size = size
+        self.color = color
+""",
+        encoding="utf-8",
+    )
+
+    # Create the FTO file that uses Widget
+    (pkg / "processor.py").write_text(
+        """from mypkg.models import Widget
+
+def process(w: Widget) -> str:
+    return str(w)
+""",
+        encoding="utf-8",
+    )
+
+    fto = FunctionToOptimize(
+        function_name="process", file_path=(pkg / "processor.py").resolve(), starting_line=3, ending_line=4
+    )
+    result = extract_parameter_type_constructors(fto, tmp_path.resolve(), set())
+    assert len(result.code_strings) == 1
+    code = result.code_strings[0].code
+    assert "class Widget:" in code
+    assert "def __init__" in code
+    assert "size" in code
+
+
+def test_extract_parameter_type_constructors_excludes_builtins(tmp_path: Path) -> None:
+    pkg = tmp_path / "mypkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "func.py").write_text(
+        """
+def my_func(x: int, y: str, z: list) -> None:
+    pass
+""",
+        encoding="utf-8",
+    )
+
+    fto = FunctionToOptimize(
+        function_name="my_func", file_path=(pkg / "func.py").resolve(), starting_line=2, ending_line=3
+    )
+    result = extract_parameter_type_constructors(fto, tmp_path.resolve(), set())
+    assert len(result.code_strings) == 0
+
+
+def test_extract_parameter_type_constructors_skips_existing_classes(tmp_path: Path) -> None:
+    pkg = tmp_path / "mypkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "models.py").write_text(
+        """
+class Widget:
+    def __init__(self, size: int):
+        self.size = size
+""",
+        encoding="utf-8",
+    )
+    (pkg / "processor.py").write_text(
+        """from mypkg.models import Widget
+
+def process(w: Widget) -> str:
+    return str(w)
+""",
+        encoding="utf-8",
+    )
+
+    fto = FunctionToOptimize(
+        function_name="process", file_path=(pkg / "processor.py").resolve(), starting_line=3, ending_line=4
+    )
+    # Widget is already in the context — should not be duplicated
+    result = extract_parameter_type_constructors(fto, tmp_path.resolve(), {"Widget"})
+    assert len(result.code_strings) == 0
+
+
+def test_extract_parameter_type_constructors_no_init(tmp_path: Path) -> None:
+    pkg = tmp_path / "mypkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "models.py").write_text(
+        """
+class Config:
+    x = 10
+""",
+        encoding="utf-8",
+    )
+    (pkg / "processor.py").write_text(
+        """from mypkg.models import Config
+
+def process(c: Config) -> str:
+    return str(c)
+""",
+        encoding="utf-8",
+    )
+
+    fto = FunctionToOptimize(
+        function_name="process", file_path=(pkg / "processor.py").resolve(), starting_line=3, ending_line=4
+    )
+    result = extract_parameter_type_constructors(fto, tmp_path.resolve(), set())
+    assert len(result.code_strings) == 0
