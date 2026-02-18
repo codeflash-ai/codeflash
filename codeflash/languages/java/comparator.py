@@ -11,6 +11,7 @@ import logging
 import math
 import os
 import subprocess
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -69,6 +70,7 @@ def _find_comparator_jar(project_root: Path | None = None) -> Path | None:
     return None
 
 
+@lru_cache(maxsize=1)
 def _find_java_executable() -> str | None:
     """Find the Java executable.
 
