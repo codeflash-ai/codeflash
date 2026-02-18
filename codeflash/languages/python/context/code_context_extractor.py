@@ -752,17 +752,30 @@ def extract_init_stub_from_class(class_name: str, module_source: str, module_tre
     if class_node is None:
         return None
 
-    init_node = None
+    lines = module_source.splitlines()
+    relevant_nodes: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
     for item in class_node.body:
-        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name == "__init__":
-            init_node = item
-            break
-    if init_node is None:
+        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if item.name in ("__init__", "__post_init__"):
+                relevant_nodes.append(item)
+            elif any(
+                isinstance(d, ast.Name) and d.id == "property"
+                or isinstance(d, ast.Attribute) and d.attr == "property"
+                for d in item.decorator_list
+            ):
+                relevant_nodes.append(item)
+
+    if not relevant_nodes:
         return None
 
-    lines = module_source.splitlines()
-    init_source = "\n".join(lines[init_node.lineno - 1 : init_node.end_lineno])
-    return f"class {class_name}:\n{init_source}"
+    snippets: list[str] = []
+    for node in relevant_nodes:
+        start = node.lineno
+        if node.decorator_list:
+            start = min(d.lineno for d in node.decorator_list)
+        snippets.append("\n".join(lines[start - 1 : node.end_lineno]))
+
+    return f"class {class_name}:\n" + "\n".join(snippets)
 
 
 def extract_parameter_type_constructors(
@@ -842,6 +855,27 @@ def extract_parameter_type_constructors(
             continue
 
     return CodeStringsMarkdown(code_strings=code_strings)
+
+
+def resolve_instance_class_name(name: str, module_tree: ast.Module) -> str | None:
+    for node in module_tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == name:
+                    value = node.value
+                    if isinstance(value, ast.Call):
+                        func = value.func
+                        if isinstance(func, ast.Name):
+                            return func.id
+                        if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+                            return func.value.id
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id == name:
+            ann = node.annotation
+            if isinstance(ann, ast.Name):
+                return ann.id
+            if isinstance(ann, ast.Subscript) and isinstance(ann.value, ast.Name):
+                return ann.value.id
+    return None
 
 
 def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path: Path) -> CodeStringsMarkdown:
@@ -937,6 +971,11 @@ def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path:
             module_source, module_tree = mod_result
 
             extract_class_and_bases(name, module_path, module_source, module_tree)
+
+            if (module_path, name) not in extracted_classes:
+                resolved_class = resolve_instance_class_name(name, module_tree)
+                if resolved_class and resolved_class not in existing_classes:
+                    extract_class_and_bases(resolved_class, module_path, module_source, module_tree)
 
         except Exception:
             logger.debug(f"Error extracting class definition for {name} from {module_name}")
