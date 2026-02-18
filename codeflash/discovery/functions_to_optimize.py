@@ -956,15 +956,20 @@ def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list
 
 def function_has_return_statement(function_node: FunctionDef | AsyncFunctionDef) -> bool:
     # Custom DFS, return True as soon as a Return node is found
-    stack: list[ast.AST] = [function_node]
+    stack: list[ast.AST] = list(function_node.body)
     while stack:
         node = stack.pop()
         if isinstance(node, ast.Return):
             return True
         # Only push child nodes that are statements; Return nodes are statements,
         # so this preserves correctness while avoiding unnecessary traversal into expr/Name/etc.
-        for child in ast.iter_child_nodes(node):
-            if isinstance(child, ast.stmt):
+        for field in getattr(node, "_fields", ()):
+            child = getattr(node, field, None)
+            if isinstance(child, list):
+                for item in child:
+                    if isinstance(item, ast.stmt):
+                        stack.append(item)
+            elif isinstance(child, ast.stmt):
                 stack.append(child)
     return False
 
