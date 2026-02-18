@@ -21,7 +21,15 @@ public class Fibonacci {
         if (n <= 1) {
             return n;
         }
-        return fibonacci(n - 1) + fibonacci(n - 2);
+        long a = 0L;
+        long b = 1L;
+        // Iteratively compute Fibonacci to avoid exponential recursion
+        for (int i = 2; i <= n; i++) {
+            long c = a + b;
+            a = b;
+            b = c;
+        }
+        return b;
     }
 
     /**
