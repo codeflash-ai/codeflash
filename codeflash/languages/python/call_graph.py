@@ -264,41 +264,44 @@ class CallGraph:
         file_path_to_function_source: dict[Path, set[FunctionSource]] = defaultdict(set)
         function_source_list: list[FunctionSource] = []
 
-        # Build list of all caller keys
         all_caller_keys: list[tuple[str, str]] = []
         for file_path, qualified_names in file_path_to_qualified_names.items():
-            self.ensure_file_indexed(file_path)
             resolved = str(file_path.resolve())
+            self.ensure_file_indexed(file_path, resolved)
             all_caller_keys.extend((resolved, qn) for qn in qualified_names)
 
         if not all_caller_keys:
             return file_path_to_function_source, function_source_list
 
-        # Query all callees
         cur = self.conn.cursor()
-        for caller_file, caller_qn in all_caller_keys:
-            rows = cur.execute(
-                """
-                SELECT callee_file, callee_qualified_name, callee_fully_qualified_name,
-                       callee_only_function_name, callee_definition_type, callee_source_line
-                FROM call_edges
-                WHERE project_root = ? AND language = ? AND caller_file = ? AND caller_qualified_name = ?
-                """,
-                (self.project_root_str, self.language, caller_file, caller_qn),
-            ).fetchall()
+        cur.execute("CREATE TEMP TABLE IF NOT EXISTS _caller_keys (caller_file TEXT, caller_qualified_name TEXT)")
+        cur.execute("DELETE FROM _caller_keys")
+        cur.executemany("INSERT INTO _caller_keys VALUES (?, ?)", all_caller_keys)
 
-            for callee_file, callee_qn, callee_fqn, callee_name, callee_type, callee_src in rows:
-                callee_path = Path(callee_file)
-                fs = FunctionSource(
-                    file_path=callee_path,
-                    qualified_name=callee_qn,
-                    fully_qualified_name=callee_fqn,
-                    only_function_name=callee_name,
-                    source_code=callee_src,
-                    definition_type=callee_type,
-                )
-                file_path_to_function_source[callee_path].add(fs)
-                function_source_list.append(fs)
+        rows = cur.execute(
+            """
+            SELECT ce.callee_file, ce.callee_qualified_name, ce.callee_fully_qualified_name,
+                   ce.callee_only_function_name, ce.callee_definition_type, ce.callee_source_line
+            FROM call_edges ce
+            INNER JOIN _caller_keys ck
+                ON ce.caller_file = ck.caller_file AND ce.caller_qualified_name = ck.caller_qualified_name
+            WHERE ce.project_root = ? AND ce.language = ?
+            """,
+            (self.project_root_str, self.language),
+        ).fetchall()
+
+        for callee_file, callee_qn, callee_fqn, callee_name, callee_type, callee_src in rows:
+            callee_path = Path(callee_file)
+            fs = FunctionSource(
+                file_path=callee_path,
+                qualified_name=callee_qn,
+                fully_qualified_name=callee_fqn,
+                only_function_name=callee_name,
+                source_code=callee_src,
+                definition_type=callee_type,
+            )
+            file_path_to_function_source[callee_path].add(fs)
+            function_source_list.append(fs)
 
         return file_path_to_function_source, function_source_list
 
@@ -307,30 +310,44 @@ class CallGraph:
     ) -> dict[tuple[Path, str], int]:
         all_caller_keys: list[tuple[Path, str, str]] = []
         for file_path, qualified_names in file_path_to_qualified_names.items():
-            self.ensure_file_indexed(file_path)
             resolved = str(file_path.resolve())
+            self.ensure_file_indexed(file_path, resolved)
             all_caller_keys.extend((file_path, resolved, qn) for qn in qualified_names)
 
         if not all_caller_keys:
             return {}
 
-        counts: dict[tuple[Path, str], int] = {}
         cur = self.conn.cursor()
-        for orig_path, caller_file, caller_qn in all_caller_keys:
-            row = cur.execute(
-                """
-                SELECT COUNT(*) FROM call_edges
-                WHERE project_root = ? AND language = ? AND caller_file = ? AND caller_qualified_name = ?
-                """,
-                (self.project_root_str, self.language, caller_file, caller_qn),
-            ).fetchone()
-            counts[(orig_path, caller_qn)] = row[0] if row else 0
+        cur.execute("CREATE TEMP TABLE IF NOT EXISTS _count_keys (caller_file TEXT, caller_qualified_name TEXT)")
+        cur.execute("DELETE FROM _count_keys")
+        cur.executemany(
+            "INSERT INTO _count_keys VALUES (?, ?)", [(resolved, qn) for _, resolved, qn in all_caller_keys]
+        )
+
+        rows = cur.execute(
+            """
+            SELECT ck.caller_file, ck.caller_qualified_name, COUNT(ce.rowid)
+            FROM _count_keys ck
+            LEFT JOIN call_edges ce
+                ON ce.caller_file = ck.caller_file AND ce.caller_qualified_name = ck.caller_qualified_name
+                AND ce.project_root = ? AND ce.language = ?
+            GROUP BY ck.caller_file, ck.caller_qualified_name
+            """,
+            (self.project_root_str, self.language),
+        ).fetchall()
+
+        resolved_to_path: dict[str, Path] = {resolved: fp for fp, resolved, _ in all_caller_keys}
+        counts: dict[tuple[Path, str], int] = {}
+        for caller_file, caller_qn, cnt in rows:
+            counts[(resolved_to_path[caller_file], caller_qn)] = cnt
 
         return counts
 
-    def ensure_file_indexed(self, file_path: Path) -> IndexResult:
-        resolved = str(file_path.resolve())
+    def ensure_file_indexed(self, file_path: Path, resolved: str | None = None) -> IndexResult:
+        if resolved is None:
+            resolved = str(file_path.resolve())
 
+        # Always read and hash the file before checking the cache so we detect on-disk changes
         try:
             content = file_path.read_text(encoding="utf-8")
         except Exception:
@@ -341,10 +358,11 @@ class CallGraph:
         if self._is_file_cached(resolved, file_hash):
             return IndexResult(file_path=file_path, cached=True, num_edges=0, edges=(), cross_file_edges=0, error=False)
 
-        return self.index_file(file_path, file_hash)
+        return self.index_file(file_path, file_hash, resolved)
 
-    def index_file(self, file_path: Path, file_hash: str) -> IndexResult:
-        resolved = str(file_path.resolve())
+    def index_file(self, file_path: Path, file_hash: str, resolved: str | None = None) -> IndexResult:
+        if resolved is None:
+            resolved = str(file_path.resolve())
         edges, had_error = _analyze_file(file_path, self.jedi_project, self.project_root_str)
         if had_error:
             logger.debug(f"CallGraph: failed to parse {file_path}")
@@ -441,8 +459,8 @@ class CallGraph:
         if len(to_index) >= _PARALLEL_THRESHOLD:
             self._build_index_parallel(to_index, on_progress)
         else:
-            for file_path, _resolved, file_hash in to_index:
-                result = self.index_file(file_path, file_hash)
+            for file_path, resolved, file_hash in to_index:
+                result = self.index_file(file_path, file_hash, resolved)
                 self._report_progress(on_progress, result)
 
     def _is_file_cached(self, resolved: str, file_hash: str) -> bool:
@@ -518,7 +536,7 @@ class CallGraph:
             # Skip files already persisted before the failure
             if resolved in self.indexed_file_hashes:
                 continue
-            result = self.index_file(file_path, file_hash)
+            result = self.index_file(file_path, file_hash, resolved)
             self._report_progress(on_progress, result)
 
     def close(self) -> None:
