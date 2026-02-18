@@ -114,9 +114,7 @@ class FunctionVisitor(cst.CSTVisitor):
             )
 
 
-def find_functions_with_return_statement(
-    ast_module: ast.Module, file_path: Path
-) -> list[FunctionToOptimize]:
+def find_functions_with_return_statement(ast_module: ast.Module, file_path: Path) -> list[FunctionToOptimize]:
     results: list[FunctionToOptimize] = []
     # (node, parent_path) — iterative DFS avoids RecursionError on deeply nested ASTs
     stack: list[tuple[ast.AST, list[FunctionParent]]] = [(ast_module, [])]
@@ -135,9 +133,7 @@ def find_functions_with_return_statement(
             # Don't recurse into function bodies (matches original visitor behaviour)
             continue
         child_path = (
-            ast_path + [FunctionParent(node.name, node.__class__.__name__)]
-            if isinstance(node, ClassDef)
-            else ast_path
+            [*ast_path, FunctionParent(node.name, node.__class__.__name__)] if isinstance(node, ClassDef) else ast_path
         )
         for child in reversed(list(ast.iter_child_nodes(node))):
             stack.append((child, child_path))
