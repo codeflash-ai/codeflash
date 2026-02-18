@@ -5,7 +5,7 @@ description = "Client for codeflash.ai - automatic code performance optimization
 authors = [{ name = "CodeFlash Inc.", email = "contact@codeflash.ai" }]
 requires-python = ">=3.9"
 readme = "README.md"
-license = {text = "BSL-1.1"}
+license-files = ["LICENSE"]
 keywords = [
     "codeflash",
     "performance",
