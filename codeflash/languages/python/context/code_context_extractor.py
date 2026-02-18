@@ -966,7 +966,7 @@ def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path:
 
             resolved_module = module_path.resolve()
             module_str = str(resolved_module)
-            is_project = module_str.startswith(str(project_root_path.resolve()))
+            is_project = module_str.startswith(str(project_root_path.resolve()) + os.sep)
             is_third_party = "site-packages" in module_str
             if not is_project and not is_third_party:
                 continue
