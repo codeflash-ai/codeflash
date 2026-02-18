@@ -18,6 +18,11 @@ if TYPE_CHECKING:
 
     from codeflash.models.models import CodePosition
 
+_MODE_TO_DECORATOR = {
+    TestingMode.BEHAVIOR: "codeflash_behavior_async",
+    TestingMode.CONCURRENCY: "codeflash_concurrency_async",
+}
+
 
 @dataclass(frozen=True)
 class FunctionCallNodeArguments:
@@ -1667,11 +1672,7 @@ ASYNC_HELPER_FILENAME = "codeflash_async_wrapper.py"
 
 
 def get_decorator_name_for_mode(mode: TestingMode) -> str:
-    if mode == TestingMode.BEHAVIOR:
-        return "codeflash_behavior_async"
-    if mode == TestingMode.CONCURRENCY:
-        return "codeflash_concurrency_async"
-    return "codeflash_performance_async"
+    return _MODE_TO_DECORATOR.get(mode, "codeflash_performance_async")
 
 
 def write_async_helper_file(target_dir: Path) -> Path:
