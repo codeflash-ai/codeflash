@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import subprocess
 import tempfile
 import time
@@ -17,6 +18,8 @@ from codeflash.languages import is_python
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.verification_utils import TestConfig
+
+CROSSHAIR_AVAILABLE = importlib.util.find_spec("crosshair") is not None
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -50,6 +53,10 @@ def generate_concolic_tests(
     # CrossHair is Python-only - skip for other languages
     if not is_python():
         logger.debug("Skipping concolic test generation for non-Python languages (CrossHair is Python-only)")
+        return function_to_concolic_tests, concolic_test_suite_code
+
+    if not CROSSHAIR_AVAILABLE:
+        logger.debug("Skipping concolic test generation (crosshair-tool is not installed)")
         return function_to_concolic_tests, concolic_test_suite_code
 
     if is_LSP_enabled():
