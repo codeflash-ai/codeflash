@@ -15,6 +15,7 @@ from codeflash.languages.base import CodeContext, HelperFunction, Language
 from codeflash.languages.java.discovery import discover_functions_from_source
 from codeflash.languages.java.import_resolver import JavaImportResolver, find_helper_files
 from codeflash.languages.java.parser import get_java_analyzer
+import re
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -23,6 +24,8 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.java.parser import JavaAnalyzer, JavaMethodNode
+
+_CONSTRUCTOR_RE = re.compile(r"(?:public|protected|private)?\s*(\w+)\s*\(([^)]*)\)")
 
 logger = logging.getLogger(__name__)
 
@@ -995,14 +998,10 @@ def _extract_constructor_summaries(skeleton: TypeSkeleton) -> list[str]:
     if not skeleton.constructors_code:
         return []
 
-    import re
-
     summaries: list[str] = []
-    # Match constructor declarations: optional modifiers, then ClassName(params)
-    # The pattern captures the constructor name and parameter list
-    for match in re.finditer(r"(?:public|protected|private)?\s*(\w+)\s*\(([^)]*)\)", skeleton.constructors_code):
-        name = match.group(1)
-        params = match.group(2).strip()
+    # Use findall to avoid match-object overhead from finditer; returns tuples of (name, params)
+    for name, params in _CONSTRUCTOR_RE.findall(skeleton.constructors_code):
+        params = params.strip()
         if params:
             summaries.append(f"{name}({params})")
         else:
