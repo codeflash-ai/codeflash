@@ -961,7 +961,11 @@ def function_has_return_statement(function_node: FunctionDef | AsyncFunctionDef)
         node = stack.pop()
         if isinstance(node, ast.Return):
             return True
-        stack.extend(ast.iter_child_nodes(node))
+        # Only push child nodes that are statements; Return nodes are statements,
+        # so this preserves correctness while avoiding unnecessary traversal into expr/Name/etc.
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.stmt):
+                stack.append(child)
     return False
 
 
