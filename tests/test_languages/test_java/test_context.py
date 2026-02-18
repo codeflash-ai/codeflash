@@ -1806,8 +1806,8 @@ class TestExtractCodeContextEdgeCases:
         return "こんにちは世界";
     }
 }
-""")
-        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
+""", encoding="utf-8")
+        functions = discover_functions_from_source(java_file.read_text(encoding="utf-8"), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
