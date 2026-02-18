@@ -114,32 +114,34 @@ class FunctionVisitor(cst.CSTVisitor):
             )
 
 
-class FunctionWithReturnStatement(ast.NodeVisitor):
-    def __init__(self, file_path: Path) -> None:
-        self.functions: list[FunctionToOptimize] = []
-        self.ast_path: list[FunctionParent] = []
-        self.file_path: Path = file_path
-
-    def visit_FunctionDef(self, node: FunctionDef) -> None:
-        if function_has_return_statement(node) and not function_is_a_property(node):
-            self.functions.append(
-                FunctionToOptimize(function_name=node.name, file_path=self.file_path, parents=self.ast_path[:])
-            )
-
-    def visit_AsyncFunctionDef(self, node: AsyncFunctionDef) -> None:
-        if function_has_return_statement(node) and not function_is_a_property(node):
-            self.functions.append(
-                FunctionToOptimize(
-                    function_name=node.name, file_path=self.file_path, parents=self.ast_path[:], is_async=True
+def find_functions_with_return_statement(
+    ast_module: ast.Module, file_path: Path
+) -> list[FunctionToOptimize]:
+    results: list[FunctionToOptimize] = []
+    # (node, parent_path) — iterative DFS avoids RecursionError on deeply nested ASTs
+    stack: list[tuple[ast.AST, list[FunctionParent]]] = [(ast_module, [])]
+    while stack:
+        node, ast_path = stack.pop()
+        if isinstance(node, (FunctionDef, AsyncFunctionDef)):
+            if function_has_return_statement(node) and not function_is_a_property(node):
+                results.append(
+                    FunctionToOptimize(
+                        function_name=node.name,
+                        file_path=file_path,
+                        parents=ast_path[:],
+                        is_async=isinstance(node, AsyncFunctionDef),
+                    )
                 )
-            )
-
-    def generic_visit(self, node: ast.AST) -> None:
-        if isinstance(node, (FunctionDef, AsyncFunctionDef, ClassDef)):
-            self.ast_path.append(FunctionParent(node.name, node.__class__.__name__))
-        super().generic_visit(node)
-        if isinstance(node, (FunctionDef, AsyncFunctionDef, ClassDef)):
-            self.ast_path.pop()
+            # Don't recurse into function bodies (matches original visitor behaviour)
+            continue
+        child_path = (
+            ast_path + [FunctionParent(node.name, node.__class__.__name__)]
+            if isinstance(node, ClassDef)
+            else ast_path
+        )
+        for child in reversed(list(ast.iter_child_nodes(node))):
+            stack.append((child, child_path))
+    return results
 
 
 # =============================================================================
@@ -237,9 +239,7 @@ def _find_all_functions_in_python_file(file_path: Path) -> dict[Path, list[Funct
             if DEBUG_MODE:
                 logger.exception(e)
             return functions
-        function_name_visitor = FunctionWithReturnStatement(file_path)
-        function_name_visitor.visit(ast_module)
-        functions[file_path] = function_name_visitor.functions
+        functions[file_path] = find_functions_with_return_statement(ast_module, file_path)
     return functions
 
 
