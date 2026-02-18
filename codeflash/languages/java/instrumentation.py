@@ -690,7 +690,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             current = current.parent
         return current if current is not None and current.parent == body_node else None
 
-    def build_instrumented_body(body_text: str, iter_id: int, base_indent: str) -> str:
+    def build_instrumented_body(body_text: str, next_wrapper_id: int, base_indent: str) -> tuple[str, int]:
         body_bytes = body_text.encode("utf8")
         wrapper_bytes = _TS_BODY_PREFIX_BYTES + body_bytes + _TS_BODY_SUFFIX.encode("utf8")
         wrapper_tree = analyzer.parse(wrapper_bytes)
@@ -703,10 +703,10 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 break
             stack.extend(reversed(node.children))
         if wrapped_method is None:
-            return body_text
+            return body_text, next_wrapper_id
         wrapped_body = wrapped_method.child_by_field_name("body")
         if wrapped_body is None:
-            return body_text
+            return body_text, next_wrapper_id
         calls = []
         collect_target_calls(wrapped_body, wrapper_bytes, func_name, calls)
 
@@ -715,67 +715,131 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         inner_body_indent = f"{inner_indent}    "
 
         if not calls:
-            return body_text
+            return body_text, next_wrapper_id
 
-        first_call = min(calls, key=lambda n: n.start_byte)
-        stmt_node = find_top_level_statement(first_call, wrapped_body)
-        if stmt_node is None:
-            return body_text
+        statement_ranges: list[tuple[int, int]] = []
+        for call in sorted(calls, key=lambda n: n.start_byte):
+            stmt_node = find_top_level_statement(call, wrapped_body)
+            if stmt_node is None:
+                continue
+            stmt_start = stmt_node.start_byte - len(_TS_BODY_PREFIX_BYTES)
+            stmt_end = stmt_node.end_byte - len(_TS_BODY_PREFIX_BYTES)
+            if not (0 <= stmt_start <= stmt_end <= len(body_bytes)):
+                continue
+            # Include leading indentation so wrapped statement reindents correctly.
+            stmt_start = body_text.rfind("\n", 0, stmt_start) + 1
+            statement_ranges.append((stmt_start, stmt_end))
 
-        stmt_start = stmt_node.start_byte - len(_TS_BODY_PREFIX_BYTES)
-        stmt_end = stmt_node.end_byte - len(_TS_BODY_PREFIX_BYTES)
-        if not (0 <= stmt_start <= stmt_end <= len(body_bytes)):
-            return body_text
+        # Deduplicate repeated calls within the same top-level statement.
+        unique_ranges: list[tuple[int, int]] = []
+        seen_ranges: set[tuple[int, int]] = set()
+        for stmt_range in statement_ranges:
+            if stmt_range in seen_ranges:
+                continue
+            seen_ranges.add(stmt_range)
+            unique_ranges.append(stmt_range)
+        if not unique_ranges:
+            return body_text, next_wrapper_id
 
-        prefix = body_text[:stmt_start]
-        target_stmt = body_text[stmt_start:stmt_end]
-        suffix = body_text[stmt_end:]
+        if len(unique_ranges) == 1:
+            stmt_start, stmt_end = unique_ranges[0]
+            prefix = body_text[:stmt_start]
+            target_stmt = body_text[stmt_start:stmt_end]
+            suffix = body_text[stmt_end:]
 
-        setup_lines = [
-            f"{indent}// Codeflash timing instrumentation with inner loop for JIT warmup",
-            f'{indent}int _cf_loop{iter_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
-            f'{indent}int _cf_innerIterations{iter_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));',
-            f'{indent}String _cf_mod{iter_id} = "{class_name}";',
-            f'{indent}String _cf_cls{iter_id} = "{class_name}";',
-            f'{indent}String _cf_fn{iter_id} = "{func_name}";',
-            "",
-        ]
+            current_id = next_wrapper_id + 1
+            setup_lines = [
+                f"{indent}// Codeflash timing instrumentation with inner loop for JIT warmup",
+                f'{indent}int _cf_loop{current_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
+                f'{indent}int _cf_innerIterations{current_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));',
+                f'{indent}String _cf_mod{current_id} = "{class_name}";',
+                f'{indent}String _cf_cls{current_id} = "{class_name}";',
+                f'{indent}String _cf_fn{current_id} = "{func_name}";',
+                "",
+            ]
 
-        stmt_in_try = reindent_block(target_stmt, inner_body_indent)
+            stmt_in_try = reindent_block(target_stmt, inner_body_indent)
+            timing_lines = [
+                f"{indent}for (int _cf_i{current_id} = 0; _cf_i{current_id} < _cf_innerIterations{current_id}; _cf_i{current_id}++) {{",
+                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + _cf_i{current_id} + "######$!");',
+                f"{inner_indent}long _cf_end{current_id} = -1;",
+                f"{inner_indent}long _cf_start{current_id} = 0;",
+                f"{inner_indent}try {{",
+                f"{inner_body_indent}_cf_start{current_id} = System.nanoTime();",
+                stmt_in_try,
+                f"{inner_body_indent}_cf_end{current_id} = System.nanoTime();",
+                f"{inner_indent}}} finally {{",
+                f"{inner_body_indent}long _cf_end{current_id}_finally = System.nanoTime();",
+                f"{inner_body_indent}long _cf_dur{current_id} = (_cf_end{current_id} != -1 ? _cf_end{current_id} : _cf_end{current_id}_finally) - _cf_start{current_id};",
+                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + _cf_i{current_id} + ":" + _cf_dur{current_id} + "######!");',
+                f"{inner_indent}}}",
+                f"{indent}}}",
+            ]
 
-        timing_lines = [
-            f"{indent}for (int _cf_i{iter_id} = 0; _cf_i{iter_id} < _cf_innerIterations{iter_id}; _cf_i{iter_id}++) {{",
-            f'{inner_indent}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_i{iter_id} + "######$!");',
-            f"{inner_indent}long _cf_end{iter_id} = -1;",
-            f"{inner_indent}long _cf_start{iter_id} = 0;",
-            f"{inner_indent}try {{",
-            f"{inner_body_indent}_cf_start{iter_id} = System.nanoTime();",
-            stmt_in_try,
-            f"{inner_body_indent}_cf_end{iter_id} = System.nanoTime();",
-            f"{inner_indent}}} finally {{",
-            f"{inner_body_indent}long _cf_end{iter_id}_finally = System.nanoTime();",
-            f"{inner_body_indent}long _cf_dur{iter_id} = (_cf_end{iter_id} != -1 ? _cf_end{iter_id} : _cf_end{iter_id}_finally) - _cf_start{iter_id};",
-            f'{inner_body_indent}System.out.println("!######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_i{iter_id} + ":" + _cf_dur{iter_id} + "######!");',
-            f"{inner_indent}}}",
-            f"{indent}}}",
-        ]
-
-        normalized_prefix = prefix.rstrip(" \t")
-
-        result_parts = ["\n" + "\n".join(setup_lines)]
-        if normalized_prefix.strip():
-            prefix_body = normalized_prefix.lstrip("\n")
-            result_parts.append(f"{indent}\n")
-            result_parts.append(prefix_body)
-            if not prefix_body.endswith("\n"):
+            normalized_prefix = prefix.rstrip(" \t")
+            result_parts = ["\n" + "\n".join(setup_lines)]
+            if normalized_prefix.strip():
+                prefix_body = normalized_prefix.lstrip("\n")
+                result_parts.append(f"{indent}\n")
+                result_parts.append(prefix_body)
+                if not prefix_body.endswith("\n"):
+                    result_parts.append("\n")
+            else:
                 result_parts.append("\n")
-        else:
-            result_parts.append("\n")
-        result_parts.append("\n".join(timing_lines))
-        if suffix and not suffix.startswith("\n"):
-            result_parts.append("\n")
-        result_parts.append(suffix)
-        return "".join(result_parts)
+            result_parts.append("\n".join(timing_lines))
+            if suffix and not suffix.startswith("\n"):
+                result_parts.append("\n")
+            result_parts.append(suffix)
+            return "".join(result_parts), current_id
+
+        result_parts: list[str] = []
+        cursor = 0
+        wrapper_id = next_wrapper_id
+
+        for stmt_start, stmt_end in unique_ranges:
+            prefix = body_text[cursor:stmt_start]
+            target_stmt = body_text[stmt_start:stmt_end]
+            result_parts.append(prefix)
+
+            wrapper_id += 1
+            current_id = wrapper_id
+
+            setup_lines = [
+                f"{indent}// Codeflash timing instrumentation with inner loop for JIT warmup",
+                f'{indent}int _cf_loop{current_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
+                f'{indent}int _cf_innerIterations{current_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));',
+                f'{indent}String _cf_mod{current_id} = "{class_name}";',
+                f'{indent}String _cf_cls{current_id} = "{class_name}";',
+                f'{indent}String _cf_fn{current_id} = "{func_name}";',
+                "",
+            ]
+
+            stmt_in_try = reindent_block(target_stmt, inner_body_indent)
+            iteration_id_expr = f'"{current_id}_" + _cf_i{current_id}'
+
+            timing_lines = [
+                f"{indent}for (int _cf_i{current_id} = 0; _cf_i{current_id} < _cf_innerIterations{current_id}; _cf_i{current_id}++) {{",
+                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + {iteration_id_expr} + "######$!");',
+                f"{inner_indent}long _cf_end{current_id} = -1;",
+                f"{inner_indent}long _cf_start{current_id} = 0;",
+                f"{inner_indent}try {{",
+                f"{inner_body_indent}_cf_start{current_id} = System.nanoTime();",
+                stmt_in_try,
+                f"{inner_body_indent}_cf_end{current_id} = System.nanoTime();",
+                f"{inner_indent}}} finally {{",
+                f"{inner_body_indent}long _cf_end{current_id}_finally = System.nanoTime();",
+                f"{inner_body_indent}long _cf_dur{current_id} = (_cf_end{current_id} != -1 ? _cf_end{current_id} : _cf_end{current_id}_finally) - _cf_start{current_id};",
+                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + {iteration_id_expr} + ":" + _cf_dur{current_id} + "######!");',
+                f"{inner_indent}}}",
+                f"{indent}}}",
+            ]
+
+            result_parts.append("\n" + "\n".join(setup_lines))
+            result_parts.append("\n".join(timing_lines))
+            cursor = stmt_end
+
+        result_parts.append(body_text[cursor:])
+        return "".join(result_parts), wrapper_id
 
     test_methods = []
     collect_test_methods(tree.root_node, test_methods)
@@ -783,14 +847,13 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         return source
 
     replacements: list[tuple[int, int, bytes]] = []
-    iter_id = 0
+    wrapper_id = 0
     for method_node, body_node in test_methods:
-        iter_id += 1
         body_start = body_node.start_byte + 1  # skip '{'
         body_end = body_node.end_byte - 1  # skip '}'
         body_text = source_bytes[body_start:body_end].decode("utf8")
         base_indent = " " * (method_node.start_point[1] + 4)
-        new_body = build_instrumented_body(body_text, iter_id, base_indent)
+        new_body, wrapper_id = build_instrumented_body(body_text, wrapper_id, base_indent)
         replacements.append((body_start, body_end, new_body.encode("utf8")))
 
     updated = source_bytes
