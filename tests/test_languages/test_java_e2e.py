@@ -150,10 +150,10 @@ public class Calculator {
 
         # Create FunctionInfo for the add method with parent class
         func_info = FunctionInfo(
-            name="add",
+            function_name="add",
             file_path=Path("/tmp/Calculator.java"),
-            start_line=4,
-            end_line=6,
+            starting_line=4,
+            ending_line=6,
             language=Language.JAVA,
             parents=(ParentInfo(name="Calculator", type="ClassDef"),),
         )
@@ -191,10 +191,10 @@ class TestJavaTestDiscovery:
         # Create FunctionInfo for bubbleSort method with parent class
         sort_file = java_project_dir / "src" / "main" / "java" / "com" / "example" / "BubbleSort.java"
         func_info = FunctionInfo(
-            name="bubbleSort",
+            function_name="bubbleSort",
             file_path=sort_file,
-            start_line=14,
-            end_line=37,
+            starting_line=14,
+            ending_line=37,
             language=Language.JAVA,
             parents=(ParentInfo(name="BubbleSort", type="ClassDef"),),
         )

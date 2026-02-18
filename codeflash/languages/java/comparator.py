@@ -90,7 +90,7 @@ def _find_java_executable() -> str | None:
     if platform.system() == "Darwin":
         # Try to extract Java home from Maven (which always finds it)
         try:
-            result = subprocess.run(["mvn", "--version"], capture_output=True, text=True, timeout=10)
+            result = subprocess.run(["mvn", "--version"], capture_output=True, text=True, timeout=10, check=False)
             for line in result.stdout.split("\n"):
                 if "runtime:" in line:
                     runtime_path = line.split("runtime:")[-1].strip()
@@ -116,7 +116,7 @@ def _find_java_executable() -> str | None:
     if java_path:
         # Verify it's a real Java, not a macOS stub
         try:
-            result = subprocess.run([java_path, "--version"], capture_output=True, text=True, timeout=5)
+            result = subprocess.run([java_path, "--version"], capture_output=True, text=True, timeout=5, check=False)
             if result.returncode == 0:
                 return java_path
         except (subprocess.TimeoutExpired, FileNotFoundError):

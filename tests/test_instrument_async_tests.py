@@ -292,7 +292,7 @@ async def test_async_function():
     assert "codeflash_behavior_async" in instrumented_source
 
     success, instrumented_test_code = inject_profiling_into_existing_test(
-        test_file, [CodePosition(8, 18), CodePosition(11, 19)], func, temp_dir, mode=TestingMode.BEHAVIOR
+        async_test_code, test_file, [CodePosition(8, 18), CodePosition(11, 19)], func, temp_dir, mode=TestingMode.BEHAVIOR
     )
 
     # For async functions, once source is decorated, test injection should fail
@@ -349,7 +349,7 @@ async def test_async_function():
 
     # Now test the full pipeline with source module path
     success, instrumented_test_code = inject_profiling_into_existing_test(
-        test_file, [CodePosition(8, 18)], func, temp_dir, mode=TestingMode.PERFORMANCE
+        async_test_code, test_file, [CodePosition(8, 18)], func, temp_dir, mode=TestingMode.PERFORMANCE
     )
 
     # For async functions, once source is decorated, test injection should fail
@@ -413,7 +413,7 @@ async def test_mixed_functions():
     assert "def sync_function(x: int, y: int) -> int:" in instrumented_source
 
     success, instrumented_test_code = inject_profiling_into_existing_test(
-        test_file, [CodePosition(8, 18), CodePosition(11, 19)], async_func, temp_dir, mode=TestingMode.BEHAVIOR
+        mixed_test_code, test_file, [CodePosition(8, 18), CodePosition(11, 19)], async_func, temp_dir, mode=TestingMode.BEHAVIOR
     )
 
     # Async functions should not be instrumented at the test level
@@ -592,7 +592,7 @@ async def test_multiple_calls():
     assert len(call_positions) == 4
 
     success, instrumented_test_code = inject_profiling_into_existing_test(
-        test_file, call_positions, func, temp_dir, mode=TestingMode.BEHAVIOR
+        test_code_multiple_calls, test_file, call_positions, func, temp_dir, mode=TestingMode.BEHAVIOR
     )
 
     assert success

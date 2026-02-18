@@ -32,9 +32,7 @@ class TestExtractCodeContextBasic:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
@@ -42,12 +40,15 @@ class TestExtractCodeContextBasic:
         assert context.language == Language.JAVA
         assert context.target_file == java_file
         # Method is wrapped in class skeleton
-        assert context.target_code == """public class Calculator {
+        assert (
+            context.target_code
+            == """public class Calculator {
     public int add(int a, int b) {
         return a + b;
     }
 }
 """
+        )
         assert context.imports == []
         assert context.helper_functions == []
         assert context.read_only_context == ""
@@ -67,16 +68,16 @@ class TestExtractCodeContextBasic:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
         assert context.language == Language.JAVA
         assert context.target_file == java_file
-        assert context.target_code == """public class Calculator {
+        assert (
+            context.target_code
+            == """public class Calculator {
     /**
      * Adds two numbers.
      * @param a first number
@@ -88,6 +89,7 @@ class TestExtractCodeContextBasic:
     }
 }
 """
+        )
         assert context.imports == []
         assert context.helper_functions == []
         assert context.read_only_context == ""
@@ -101,21 +103,22 @@ class TestExtractCodeContextBasic:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
         assert context.language == Language.JAVA
         assert context.target_file == java_file
-        assert context.target_code == """public class MathUtils {
+        assert (
+            context.target_code
+            == """public class MathUtils {
     public static int multiply(int a, int b) {
         return a * b;
     }
 }
 """
+        )
         assert context.imports == []
         assert context.helper_functions == []
         assert context.read_only_context == ""
@@ -129,21 +132,22 @@ class TestExtractCodeContextBasic:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
         assert context.language == Language.JAVA
         assert context.target_file == java_file
-        assert context.target_code == """public class Helper {
+        assert (
+            context.target_code
+            == """public class Helper {
     private int getValue() {
         return 42;
     }
 }
 """
+        )
 
     def test_protected_method(self, tmp_path: Path):
         """Test extracting context for a protected method."""
@@ -154,21 +158,22 @@ class TestExtractCodeContextBasic:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
         assert context.language == Language.JAVA
         assert context.target_file == java_file
-        assert context.target_code == """public class Base {
+        assert (
+            context.target_code
+            == """public class Base {
     protected int compute(int x) {
         return x * 2;
     }
 }
 """
+        )
 
     def test_synchronized_method(self, tmp_path: Path):
         """Test extracting context for a synchronized method."""
@@ -179,20 +184,21 @@ class TestExtractCodeContextBasic:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
         assert context.language == Language.JAVA
-        assert context.target_code == """public class Counter {
+        assert (
+            context.target_code
+            == """public class Counter {
     public synchronized int getCount() {
         return count;
     }
 }
 """
+        )
 
     def test_method_with_throws(self, tmp_path: Path):
         """Test extracting context for a method with throws clause."""
@@ -203,20 +209,21 @@ class TestExtractCodeContextBasic:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
         assert context.language == Language.JAVA
-        assert context.target_code == """public class FileHandler {
+        assert (
+            context.target_code
+            == """public class FileHandler {
     public String readFile(String path) throws IOException, FileNotFoundException {
         return Files.readString(Path.of(path));
     }
 }
 """
+        )
 
     def test_method_with_varargs(self, tmp_path: Path):
         """Test extracting context for a method with varargs."""
@@ -227,20 +234,21 @@ class TestExtractCodeContextBasic:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
         assert context.language == Language.JAVA
-        assert context.target_code == """public class Logger {
+        assert (
+            context.target_code
+            == """public class Logger {
     public String format(String... messages) {
         return String.join(", ", messages);
     }
 }
 """
+        )
 
     def test_void_method(self, tmp_path: Path):
         """Test extracting context for a void method."""
@@ -259,12 +267,15 @@ class TestExtractCodeContextBasic:
         context = extract_code_context(functions[0], tmp_path)
 
         assert context.language == Language.JAVA
-        assert context.target_code == """public class Printer {
+        assert (
+            context.target_code
+            == """public class Printer {
     public void print(String text) {
         System.out.println(text);
     }
 }
 """
+        )
 
     def test_generic_return_type(self, tmp_path: Path):
         """Test extracting context for a method with generic return type."""
@@ -275,20 +286,21 @@ class TestExtractCodeContextBasic:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
         assert context.language == Language.JAVA
-        assert context.target_code == """public class Container {
+        assert (
+            context.target_code
+            == """public class Container {
     public List<String> getNames() {
         return new ArrayList<>();
     }
 }
 """
+        )
 
 
 class TestExtractCodeContextWithImports:
@@ -309,9 +321,7 @@ public class Calculator {
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         add_func = next((f for f in functions if f.function_name == "add"), None)
         assert add_func is not None
 
@@ -320,13 +330,16 @@ public class Calculator {
         assert context.language == Language.JAVA
         assert context.target_file == java_file
         # Class skeleton includes fields
-        assert context.target_code == """public class Calculator {
+        assert (
+            context.target_code
+            == """public class Calculator {
     private int base = 0;
     public int add(int a, int b) {
         return a + b + base;
     }
 }
 """
+        )
         assert context.imports == ["import java.util.List;"]
         # Fields are in skeleton, so read_only_context is empty
         assert context.read_only_context == ""
@@ -346,20 +359,21 @@ public class Calculator {
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
         assert context.language == Language.JAVA
-        assert context.target_code == """public class Calculator {
+        assert (
+            context.target_code
+            == """public class Calculator {
     public double circleArea(double radius) {
         return PI * radius * radius;
     }
 }
 """
+        )
         assert context.imports == [
             "import java.util.List;",
             "import static java.lang.Math.PI;",
@@ -380,18 +394,13 @@ public class Processor {
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
         assert context.language == Language.JAVA
-        assert context.imports == [
-            "import java.util.*;",
-            "import java.io.*;",
-        ]
+        assert context.imports == ["import java.util.*;", "import java.io.*;"]
 
     def test_with_multiple_import_types(self, tmp_path: Path):
         """Test context extraction with various import types."""
@@ -411,20 +420,21 @@ public class Handler {
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Handler {
+        assert (
+            context.target_code
+            == """public class Handler {
     public List<Integer> sortNumbers(List<Integer> nums) {
         sort(nums);
         return nums;
     }
 }
 """
+        )
         assert context.imports == [
             "import java.util.List;",
             "import java.util.Map;",
@@ -455,16 +465,16 @@ class TestExtractCodeContextWithFields:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
         assert context.language == Language.JAVA
         # Class skeleton includes fields
-        assert context.target_code == """public class Person {
+        assert (
+            context.target_code
+            == """public class Person {
     private String name;
     private int age;
     public String getName() {
@@ -472,6 +482,7 @@ class TestExtractCodeContextWithFields:
     }
 }
 """
+        )
         # Fields are in skeleton, so read_only_context is empty (no duplication)
         assert context.read_only_context == ""
         assert context.imports == []
@@ -489,14 +500,14 @@ class TestExtractCodeContextWithFields:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Counter {
+        assert (
+            context.target_code
+            == """public class Counter {
     private static int instanceCount = 0;
     private static String prefix = "counter_";
     public int getCount() {
@@ -504,6 +515,7 @@ class TestExtractCodeContextWithFields:
     }
 }
 """
+        )
         # Fields are in skeleton, so read_only_context is empty
         assert context.read_only_context == ""
 
@@ -519,14 +531,14 @@ class TestExtractCodeContextWithFields:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Config {
+        assert (
+            context.target_code
+            == """public class Config {
     private final String name;
     private final int maxSize;
     public String getName() {
@@ -534,6 +546,7 @@ class TestExtractCodeContextWithFields:
     }
 }
 """
+        )
         assert context.read_only_context == ""
 
     def test_with_static_final_constants(self, tmp_path: Path):
@@ -549,14 +562,14 @@ class TestExtractCodeContextWithFields:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Constants {
+        assert (
+            context.target_code
+            == """public class Constants {
     public static final double PI = 3.14159;
     public static final int MAX_VALUE = 100;
     private static final String PREFIX = "const_";
@@ -565,6 +578,7 @@ class TestExtractCodeContextWithFields:
     }
 }
 """
+        )
         assert context.read_only_context == ""
 
     def test_with_volatile_fields(self, tmp_path: Path):
@@ -579,14 +593,14 @@ class TestExtractCodeContextWithFields:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class ThreadSafe {
+        assert (
+            context.target_code
+            == """public class ThreadSafe {
     private volatile boolean running = true;
     private volatile int counter = 0;
     public boolean isRunning() {
@@ -594,6 +608,7 @@ class TestExtractCodeContextWithFields:
     }
 }
 """
+        )
         assert context.read_only_context == ""
 
     def test_with_generic_fields(self, tmp_path: Path):
@@ -609,14 +624,14 @@ class TestExtractCodeContextWithFields:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Container {
+        assert (
+            context.target_code
+            == """public class Container {
     private List<String> names;
     private Map<String, Integer> scores;
     private Set<Long> ids;
@@ -625,6 +640,7 @@ class TestExtractCodeContextWithFields:
     }
 }
 """
+        )
         assert context.read_only_context == ""
 
     def test_with_array_fields(self, tmp_path: Path):
@@ -640,14 +656,14 @@ class TestExtractCodeContextWithFields:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class ArrayHolder {
+        assert (
+            context.target_code
+            == """public class ArrayHolder {
     private int[] numbers;
     private String[] names;
     private double[][] matrix;
@@ -656,6 +672,7 @@ class TestExtractCodeContextWithFields:
     }
 }
 """
+        )
         assert context.read_only_context == ""
 
 
@@ -675,24 +692,28 @@ class TestExtractCodeContextWithHelpers:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         process_func = next((f for f in functions if f.function_name == "process"), None)
         assert process_func is not None
 
         context = extract_code_context(process_func, tmp_path)
 
         assert context.language == Language.JAVA
-        assert context.target_code == """public class Processor {
+        assert (
+            context.target_code
+            == """public class Processor {
     public String process(String input) {
         return normalize(input);
     }
 }
 """
+        )
         assert len(context.helper_functions) == 1
         assert context.helper_functions[0].name == "normalize"
-        assert context.helper_functions[0].source_code == "private String normalize(String s) {\n        return s.trim().toLowerCase();\n    }"
+        assert (
+            context.helper_functions[0].source_code
+            == "private String normalize(String s) {\n        return s.trim().toLowerCase();\n    }"
+        )
 
     def test_multiple_helper_methods(self, tmp_path: Path):
         """Test context extraction with multiple helper methods."""
@@ -716,21 +737,22 @@ class TestExtractCodeContextWithHelpers:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         process_func = next((f for f in functions if f.function_name == "process"), None)
         assert process_func is not None
 
         context = extract_code_context(process_func, tmp_path)
 
-        assert context.target_code == """public class Processor {
+        assert (
+            context.target_code
+            == """public class Processor {
     public String process(String input) {
         String trimmed = trim(input);
         return upper(trimmed);
     }
 }
 """
+        )
         assert context.read_only_context == ""
         assert context.imports == []
         helper_names = sorted([h.name for h in context.helper_functions])
@@ -753,9 +775,7 @@ class TestExtractCodeContextWithHelpers:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         process_func = next((f for f in functions if f.function_name == "process"), None)
         assert process_func is not None
 
@@ -777,20 +797,21 @@ class TestExtractCodeContextWithHelpers:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         add_func = next((f for f in functions if f.function_name == "add"), None)
         assert add_func is not None
 
         context = extract_code_context(add_func, tmp_path)
 
-        assert context.target_code == """public class Calculator {
+        assert (
+            context.target_code
+            == """public class Calculator {
     public int add(int a, int b) {
         return a + b;
     }
 }
 """
+        )
         assert context.helper_functions == []
 
     def test_static_helper_from_instance_method(self, tmp_path: Path):
@@ -806,9 +827,7 @@ class TestExtractCodeContextWithHelpers:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         calc_func = next((f for f in functions if f.function_name == "calculate"), None)
         assert calc_func is not None
 
@@ -837,12 +856,15 @@ class TestExtractCodeContextWithJavadoc:
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Example {
+        assert (
+            context.target_code
+            == """public class Example {
     /** Simple description. */
     public void doSomething() {
     }
 }
 """
+        )
 
     def test_javadoc_with_params(self, tmp_path: Path):
         """Test context extraction with Javadoc @param tags."""
@@ -858,14 +880,14 @@ class TestExtractCodeContextWithJavadoc:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Calculator {
+        assert (
+            context.target_code
+            == """public class Calculator {
     /**
      * Adds two numbers.
      * @param a the first number
@@ -876,6 +898,7 @@ class TestExtractCodeContextWithJavadoc:
     }
 }
 """
+        )
 
     def test_javadoc_with_return(self, tmp_path: Path):
         """Test context extraction with Javadoc @return tag."""
@@ -890,14 +913,14 @@ class TestExtractCodeContextWithJavadoc:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Calculator {
+        assert (
+            context.target_code
+            == """public class Calculator {
     /**
      * Computes the sum.
      * @return the sum of a and b
@@ -907,6 +930,7 @@ class TestExtractCodeContextWithJavadoc:
     }
 }
 """
+        )
 
     def test_javadoc_with_throws(self, tmp_path: Path):
         """Test context extraction with Javadoc @throws tag."""
@@ -923,14 +947,14 @@ class TestExtractCodeContextWithJavadoc:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Divider {
+        assert (
+            context.target_code
+            == """public class Divider {
     /**
      * Divides two numbers.
      * @throws ArithmeticException if divisor is zero
@@ -942,6 +966,7 @@ class TestExtractCodeContextWithJavadoc:
     }
 }
 """
+        )
 
     def test_javadoc_multiline(self, tmp_path: Path):
         """Test context extraction with multi-paragraph Javadoc."""
@@ -964,14 +989,14 @@ class TestExtractCodeContextWithJavadoc:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Complex {
+        assert (
+            context.target_code
+            == """public class Complex {
     /**
      * This is a complex method.
      *
@@ -989,6 +1014,7 @@ class TestExtractCodeContextWithJavadoc:
     }
 }
 """
+        )
 
 
 class TestExtractCodeContextWithGenerics:
@@ -1003,19 +1029,20 @@ class TestExtractCodeContextWithGenerics:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Utils {
+        assert (
+            context.target_code
+            == """public class Utils {
     public <T> T identity(T value) {
         return value;
     }
 }
 """
+        )
 
     def test_bounded_type_parameter(self, tmp_path: Path):
         """Test context extraction with bounded type parameter."""
@@ -1030,14 +1057,14 @@ class TestExtractCodeContextWithGenerics:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Statistics {
+        assert (
+            context.target_code
+            == """public class Statistics {
     public <T extends Number> double average(List<T> numbers) {
         double sum = 0;
         for (T num : numbers) {
@@ -1047,6 +1074,7 @@ class TestExtractCodeContextWithGenerics:
     }
 }
 """
+        )
 
     def test_wildcard_type(self, tmp_path: Path):
         """Test context extraction with wildcard type."""
@@ -1057,19 +1085,20 @@ class TestExtractCodeContextWithGenerics:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Printer {
+        assert (
+            context.target_code
+            == """public class Printer {
     public int countItems(List<?> items) {
         return items.size();
     }
 }
 """
+        )
 
     def test_bounded_wildcard_extends(self, tmp_path: Path):
         """Test context extraction with upper bounded wildcard."""
@@ -1084,14 +1113,14 @@ class TestExtractCodeContextWithGenerics:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Aggregator {
+        assert (
+            context.target_code
+            == """public class Aggregator {
     public double sum(List<? extends Number> numbers) {
         double total = 0;
         for (Number n : numbers) {
@@ -1101,6 +1130,7 @@ class TestExtractCodeContextWithGenerics:
     }
 }
 """
+        )
 
     def test_bounded_wildcard_super(self, tmp_path: Path):
         """Test context extraction with lower bounded wildcard."""
@@ -1112,20 +1142,21 @@ class TestExtractCodeContextWithGenerics:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Filler {
+        assert (
+            context.target_code
+            == """public class Filler {
     public boolean fill(List<? super Integer> list, Integer value) {
         list.add(value);
         return true;
     }
 }
 """
+        )
 
     def test_multiple_type_parameters(self, tmp_path: Path):
         """Test context extraction with multiple type parameters."""
@@ -1140,14 +1171,14 @@ class TestExtractCodeContextWithGenerics:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Mapper {
+        assert (
+            context.target_code
+            == """public class Mapper {
     public <K, V> Map<V, K> invert(Map<K, V> map) {
         Map<V, K> result = new HashMap<>();
         for (Map.Entry<K, V> entry : map.entrySet()) {
@@ -1157,6 +1188,7 @@ class TestExtractCodeContextWithGenerics:
     }
 }
 """
+        )
 
     def test_recursive_type_bound(self, tmp_path: Path):
         """Test context extraction with recursive type bound."""
@@ -1167,19 +1199,20 @@ class TestExtractCodeContextWithGenerics:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Sorter {
+        assert (
+            context.target_code
+            == """public class Sorter {
     public <T extends Comparable<T>> T max(T a, T b) {
         return a.compareTo(b) > 0 ? a : b;
     }
 }
 """
+        )
 
 
 class TestExtractCodeContextWithAnnotations:
@@ -1195,20 +1228,21 @@ class TestExtractCodeContextWithAnnotations:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Child extends Parent {
+        assert (
+            context.target_code
+            == """public class Child extends Parent {
     @Override
     public String toString() {
         return "Child";
     }
 }
 """
+        )
 
     def test_deprecated_annotation(self, tmp_path: Path):
         """Test context extraction with @Deprecated annotation."""
@@ -1220,20 +1254,21 @@ class TestExtractCodeContextWithAnnotations:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Legacy {
+        assert (
+            context.target_code
+            == """public class Legacy {
     @Deprecated
     public int oldMethod() {
         return 0;
     }
 }
 """
+        )
 
     def test_suppress_warnings_annotation(self, tmp_path: Path):
         """Test context extraction with @SuppressWarnings annotation."""
@@ -1245,20 +1280,21 @@ class TestExtractCodeContextWithAnnotations:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Processor {
+        assert (
+            context.target_code
+            == """public class Processor {
     @SuppressWarnings("unchecked")
     public List process(Object input) {
         return (List) input;
     }
 }
 """
+        )
 
     def test_multiple_annotations(self, tmp_path: Path):
         """Test context extraction with multiple annotations."""
@@ -1272,14 +1308,14 @@ class TestExtractCodeContextWithAnnotations:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Service {
+        assert (
+            context.target_code
+            == """public class Service {
     @Override
     @Deprecated
     @SuppressWarnings("deprecation")
@@ -1288,6 +1324,7 @@ class TestExtractCodeContextWithAnnotations:
     }
 }
 """
+        )
 
     def test_annotation_with_array_value(self, tmp_path: Path):
         """Test context extraction with annotation array value."""
@@ -1299,20 +1336,21 @@ class TestExtractCodeContextWithAnnotations:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Handler {
+        assert (
+            context.target_code
+            == """public class Handler {
     @SuppressWarnings({"unchecked", "rawtypes"})
     public Object handle(Object input) {
         return input;
     }
 }
 """
+        )
 
 
 class TestExtractCodeContextWithInheritance:
@@ -1327,21 +1365,22 @@ class TestExtractCodeContextWithInheritance:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
         assert context.language == Language.JAVA
         # Class skeleton includes extends clause
-        assert context.target_code == """public class AdvancedCalc extends Calculator {
+        assert (
+            context.target_code
+            == """public class AdvancedCalc extends Calculator {
     public int multiply(int a, int b) {
         return a * b;
     }
 }
 """
+        )
 
     def test_interface_implementation(self, tmp_path: Path):
         """Test context extraction for interface implementation."""
@@ -1355,15 +1394,15 @@ class TestExtractCodeContextWithInheritance:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
         # Class skeleton includes implements clause and fields
-        assert context.target_code == """public class MyComparable implements Comparable<MyComparable> {
+        assert (
+            context.target_code
+            == """public class MyComparable implements Comparable<MyComparable> {
     private int value;
     @Override
     public int compareTo(MyComparable other) {
@@ -1371,6 +1410,7 @@ class TestExtractCodeContextWithInheritance:
     }
 }
 """
+        )
         # Fields are in skeleton, so read_only_context is empty (no duplication)
         assert context.read_only_context == ""
 
@@ -1396,12 +1436,15 @@ class TestExtractCodeContextWithInheritance:
         assert run_func is not None
 
         context = extract_code_context(run_func, tmp_path)
-        assert context.target_code == """public class MultiImpl implements Runnable, Comparable<MultiImpl> {
+        assert (
+            context.target_code
+            == """public class MultiImpl implements Runnable, Comparable<MultiImpl> {
     public void run() {
         System.out.println("Running");
     }
 }
 """
+        )
 
     def test_default_interface_method(self, tmp_path: Path):
         """Test context extraction for default interface method."""
@@ -1414,21 +1457,22 @@ class TestExtractCodeContextWithInheritance:
     void doSomething();
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         greet_func = next((f for f in functions if f.function_name == "greet"), None)
         assert greet_func is not None
 
         context = extract_code_context(greet_func, tmp_path)
 
         # Interface methods are wrapped in interface skeleton
-        assert context.target_code == """public interface MyInterface {
+        assert (
+            context.target_code
+            == """public interface MyInterface {
     default String greet() {
         return "Hello";
     }
 }
 """
+        )
         assert context.read_only_context == ""
 
 
@@ -1446,16 +1490,16 @@ class TestExtractCodeContextWithInnerClasses:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         compute_func = next((f for f in functions if f.function_name == "compute"), None)
         assert compute_func is not None
 
         context = extract_code_context(compute_func, tmp_path)
 
         # Inner class wrapped in outer class skeleton
-        assert context.target_code == """public class Container {
+        assert (
+            context.target_code
+            == """public class Container {
     public static class Nested {
         public int compute(int x) {
             return x * 2;
@@ -1463,6 +1507,7 @@ class TestExtractCodeContextWithInnerClasses:
     }
 }
 """
+        )
         assert context.read_only_context == ""
 
     def test_inner_class_method(self, tmp_path: Path):
@@ -1478,16 +1523,16 @@ class TestExtractCodeContextWithInnerClasses:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         get_func = next((f for f in functions if f.function_name == "getValue"), None)
         assert get_func is not None
 
         context = extract_code_context(get_func, tmp_path)
 
         # Inner class wrapped in outer class skeleton
-        assert context.target_code == """public class Outer {
+        assert (
+            context.target_code
+            == """public class Outer {
     public class Inner {
         public int getValue() {
             return value;
@@ -1495,6 +1540,7 @@ class TestExtractCodeContextWithInnerClasses:
     }
 }
 """
+        )
         assert context.read_only_context == ""
 
 
@@ -1518,16 +1564,16 @@ class TestExtractCodeContextWithEnumAndInterface:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         apply_func = next((f for f in functions if f.function_name == "apply"), None)
         assert apply_func is not None
 
         context = extract_code_context(apply_func, tmp_path)
 
         # Enum methods are wrapped in enum skeleton with constants
-        assert context.target_code == """public enum Operation {
+        assert (
+            context.target_code
+            == """public enum Operation {
     ADD, SUBTRACT, MULTIPLY, DIVIDE;
 
     public int apply(int a, int b) {
@@ -1541,6 +1587,7 @@ class TestExtractCodeContextWithEnumAndInterface:
     }
 }
 """
+        )
         assert context.read_only_context == ""
 
     def test_interface_default_method(self, tmp_path: Path):
@@ -1552,21 +1599,22 @@ class TestExtractCodeContextWithEnumAndInterface:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         greet_func = next((f for f in functions if f.function_name == "greet"), None)
         assert greet_func is not None
 
         context = extract_code_context(greet_func, tmp_path)
 
         # Interface methods are wrapped in interface skeleton
-        assert context.target_code == """public interface Greeting {
+        assert (
+            context.target_code
+            == """public interface Greeting {
     default String greet(String name) {
         return "Hello, " + name;
     }
 }
 """
+        )
         assert context.read_only_context == ""
 
     def test_interface_static_method(self, tmp_path: Path):
@@ -1578,21 +1626,22 @@ class TestExtractCodeContextWithEnumAndInterface:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         create_func = next((f for f in functions if f.function_name == "create"), None)
         assert create_func is not None
 
         context = extract_code_context(create_func, tmp_path)
 
         # Interface methods are wrapped in interface skeleton
-        assert context.target_code == """public interface Factory {
+        assert (
+            context.target_code
+            == """public interface Factory {
     static Factory create() {
         return null;
     }
 }
 """
+        )
         assert context.read_only_context == ""
 
 
@@ -1614,11 +1663,14 @@ class TestExtractCodeContextEdgeCases:
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Empty {
+        assert (
+            context.target_code
+            == """public class Empty {
     public void doNothing() {
     }
 }
 """
+        )
 
     def test_single_line_method(self, tmp_path: Path):
         """Test context extraction for single-line method."""
@@ -1627,17 +1679,18 @@ class TestExtractCodeContextEdgeCases:
     public int get() { return 42; }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class OneLiner {
+        assert (
+            context.target_code
+            == """public class OneLiner {
     public int get() { return 42; }
 }
 """
+        )
 
     def test_method_with_lambda(self, tmp_path: Path):
         """Test context extraction for method with lambda."""
@@ -1650,14 +1703,14 @@ class TestExtractCodeContextEdgeCases:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Functional {
+        assert (
+            context.target_code
+            == """public class Functional {
     public List<String> filter(List<String> items) {
         return items.stream()
             .filter(s -> s != null && !s.isEmpty())
@@ -1665,6 +1718,7 @@ class TestExtractCodeContextEdgeCases:
     }
 }
 """
+        )
 
     def test_method_with_method_reference(self, tmp_path: Path):
         """Test context extraction for method with method reference."""
@@ -1675,19 +1729,20 @@ class TestExtractCodeContextEdgeCases:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Printer {
+        assert (
+            context.target_code
+            == """public class Printer {
     public List<String> toUpper(List<String> items) {
         return items.stream().map(String::toUpperCase).collect(Collectors.toList());
     }
 }
 """
+        )
 
     def test_deeply_nested_blocks(self, tmp_path: Path):
         """Test context extraction for method with deeply nested blocks."""
@@ -1713,14 +1768,14 @@ class TestExtractCodeContextEdgeCases:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Nested {
+        assert (
+            context.target_code
+            == """public class Nested {
     public int deepMethod(int n) {
         int result = 0;
         if (n > 0) {
@@ -1741,6 +1796,7 @@ class TestExtractCodeContextEdgeCases:
     }
 }
 """
+        )
 
     def test_unicode_in_source(self, tmp_path: Path):
         """Test context extraction for method with unicode characters."""
@@ -1750,20 +1806,21 @@ class TestExtractCodeContextEdgeCases:
         return "こんにちは世界";
     }
 }
-""")
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+""", encoding="utf-8")
+        functions = discover_functions_from_source(java_file.read_text(encoding="utf-8"), file_path=java_file)
         assert len(functions) == 1
 
         context = extract_code_context(functions[0], tmp_path)
 
-        assert context.target_code == """public class Unicode {
+        assert (
+            context.target_code
+            == """public class Unicode {
     public String greet() {
         return "こんにちは世界";
     }
 }
 """
+        )
 
     def test_file_not_found(self, tmp_path: Path):
         """Test context extraction for missing file."""
@@ -1799,21 +1856,22 @@ class TestExtractCodeContextEdgeCases:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         calc_func = next((f for f in functions if f.function_name == "calculate"), None)
         assert calc_func is not None
 
         context = extract_code_context(calc_func, tmp_path, max_helper_depth=0)
 
         # With max_depth=0, cross-file helpers should be empty, but same-file helpers are still found
-        assert context.target_code == """public class Calculator {
+        assert (
+            context.target_code
+            == """public class Calculator {
     public int calculate(int x) {
         return helper(x);
     }
 }
 """
+        )
 
 
 class TestExtractCodeContextWithConstructor:
@@ -1836,16 +1894,16 @@ class TestExtractCodeContextWithConstructor:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         get_func = next((f for f in functions if f.function_name == "getName"), None)
         assert get_func is not None
 
         context = extract_code_context(get_func, tmp_path)
 
         # Class skeleton includes fields and constructor
-        assert context.target_code == """public class Person {
+        assert (
+            context.target_code
+            == """public class Person {
     private String name;
     private int age;
     public Person(String name, int age) {
@@ -1857,6 +1915,7 @@ class TestExtractCodeContextWithConstructor:
     }
 }
 """
+        )
 
     def test_class_with_multiple_constructors(self, tmp_path: Path):
         """Test context extraction includes all constructors in skeleton."""
@@ -1883,16 +1942,16 @@ class TestExtractCodeContextWithConstructor:
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         get_func = next((f for f in functions if f.function_name == "getName"), None)
         assert get_func is not None
 
         context = extract_code_context(get_func, tmp_path)
 
         # Class skeleton includes fields and all constructors
-        assert context.target_code == """public class Config {
+        assert (
+            context.target_code
+            == """public class Config {
     private String name;
     private int value;
     public Config() {
@@ -1910,6 +1969,7 @@ class TestExtractCodeContextWithConstructor:
     }
 }
 """
+        )
 
 
 class TestExtractCodeContextFullIntegration:
@@ -1938,9 +1998,7 @@ public class Service {
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         process_func = next((f for f in functions if f.function_name == "process"), None)
         assert process_func is not None
 
@@ -1949,7 +2007,9 @@ public class Service {
         assert context.language == Language.JAVA
         assert context.target_file == java_file
         # Class skeleton includes fields
-        assert context.target_code == """public class Service {
+        assert (
+            context.target_code
+            == """public class Service {
     private static final String PREFIX = "service_";
     private List<String> history = new ArrayList<>();
     public String process(String input) {
@@ -1959,10 +2019,8 @@ public class Service {
     }
 }
 """
-        assert context.imports == [
-            "import java.util.List;",
-            "import java.util.ArrayList;",
-        ]
+        )
+        assert context.imports == ["import java.util.List;", "import java.util.ArrayList;"]
         # Fields are in skeleton, so read_only_context is empty (no duplication)
         assert context.read_only_context == ""
         assert len(context.helper_functions) == 1
@@ -1998,9 +2056,7 @@ public class Calculator {
     }
 }
 """)
-        functions = discover_functions_from_source(
-            java_file.read_text(), file_path=java_file
-        )
+        functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         sqrt_func = next((f for f in functions if f.function_name == "sqrtNewton"), None)
         assert sqrt_func is not None
 
@@ -2008,7 +2064,9 @@ public class Calculator {
 
         assert context.language == Language.JAVA
         # Class skeleton includes fields and Javadoc
-        assert context.target_code == """public class Calculator {
+        assert (
+            context.target_code
+            == """public class Calculator {
     private double precision = 0.0001;
     /**
      * Calculates the square root using Newton's method.
@@ -2023,10 +2081,8 @@ public class Calculator {
     }
 }
 """
-        assert context.imports == [
-            "import java.util.Objects;",
-            "import static java.lang.Math.sqrt;",
-        ]
+        )
+        assert context.imports == ["import java.util.Objects;", "import static java.lang.Math.sqrt;"]
         # Fields are in skeleton, so read_only_context is empty (no duplication)
         assert context.read_only_context == ""
         assert len(context.helper_functions) == 1
@@ -2057,7 +2113,9 @@ public class Calculator {
 
         context = extract_class_context(java_file, "Calculator")
 
-        assert context == """package com.example;
+        assert (
+            context
+            == """package com.example;
 
 import java.util.List;
 import java.util.ArrayList;
@@ -2071,6 +2129,7 @@ public class Calculator {
         return result;
     }
 }"""
+        )
 
     def test_extract_class_not_found(self, tmp_path: Path):
         """Test extracting non-existent class returns empty string."""
@@ -2091,3 +2150,146 @@ public class Calculator {
         context = extract_class_context(missing_file, "Missing")
 
         assert context == ""
+
+
+class TestExtractFunctionSourceStaleLineNumbers:
+    """Tests for tree-sitter based function extraction resilience to stale line numbers.
+
+    When running --all mode, a prior optimization may modify the source file,
+    shifting line numbers for subsequent functions. The tree-sitter based
+    extraction should still find the correct function by name.
+    """
+
+    def test_extraction_with_stale_line_numbers(self):
+        """Verify extraction works when pre-computed line numbers no longer match the source."""
+        # Original source: functionA at lines 2-4, functionB at lines 5-7
+        original_source = """public class Utils {
+    public int functionA() {
+        return 1;
+    }
+    public int functionB() {
+        return 2;
+    }
+}
+"""
+        analyzer = get_java_analyzer()
+        functions = discover_functions_from_source(original_source, file_path=Path("Utils.java"))
+        func_b = [f for f in functions if f.function_name == "functionB"][0]
+        original_b_start = func_b.starting_line
+
+        # Simulate a prior optimization adding lines to functionA
+        modified_source = """public class Utils {
+    public int functionA() {
+        int x = 1;
+        int y = 2;
+        int z = 3;
+        return x + y + z;
+    }
+    public int functionB() {
+        return 2;
+    }
+}
+"""
+        # func_b still has the STALE line numbers from the original source
+        # With tree-sitter, extraction should still work correctly
+        result = extract_function_source(modified_source, func_b, analyzer=analyzer)
+        assert "functionB" in result
+        assert "return 2;" in result
+
+    def test_extraction_without_analyzer_uses_line_numbers(self):
+        """Without analyzer, extraction falls back to pre-computed line numbers."""
+        source = """public class Utils {
+    public int functionA() {
+        return 1;
+    }
+    public int functionB() {
+        return 2;
+    }
+}
+"""
+        functions = discover_functions_from_source(source, file_path=Path("Utils.java"))
+        func_b = [f for f in functions if f.function_name == "functionB"][0]
+
+        # Without analyzer, should still work with correct line numbers
+        result = extract_function_source(source, func_b)
+        assert "functionB" in result
+        assert "return 2;" in result
+
+    def test_extraction_with_javadoc_after_file_modification(self):
+        """Verify Javadoc is included when using tree-sitter extraction on modified files."""
+        original_source = """public class Utils {
+    /** Adds two numbers. */
+    public int add(int a, int b) {
+        return a + b;
+    }
+    /** Subtracts two numbers. */
+    public int subtract(int a, int b) {
+        return a - b;
+    }
+}
+"""
+        analyzer = get_java_analyzer()
+        functions = discover_functions_from_source(original_source, file_path=Path("Utils.java"))
+        func_sub = [f for f in functions if f.function_name == "subtract"][0]
+
+        # Simulate prior optimization expanding the add method
+        modified_source = """public class Utils {
+    /** Adds two numbers. */
+    public int add(int a, int b) {
+        // Optimized with null check
+        if (a == 0) return b;
+        if (b == 0) return a;
+        return a + b;
+    }
+    /** Subtracts two numbers. */
+    public int subtract(int a, int b) {
+        return a - b;
+    }
+}
+"""
+        result = extract_function_source(modified_source, func_sub, analyzer=analyzer)
+        assert "/** Subtracts two numbers. */" in result
+        assert "public int subtract" in result
+        assert "return a - b;" in result
+
+    def test_extraction_with_overloaded_methods(self):
+        """Verify correct overload is selected using line proximity."""
+        source = """public class Utils {
+    public int process(int x) {
+        return x * 2;
+    }
+    public int process(int x, int y) {
+        return x + y;
+    }
+}
+"""
+        analyzer = get_java_analyzer()
+        functions = discover_functions_from_source(source, file_path=Path("Utils.java"))
+        # Get the second overload (process(int, int))
+        func_two_args = [f for f in functions if f.function_name == "process" and f.ending_line > 4][0]
+
+        result = extract_function_source(source, func_two_args, analyzer=analyzer)
+        assert "int x, int y" in result
+        assert "return x + y;" in result
+
+    def test_extraction_function_not_found_falls_back(self):
+        """If tree-sitter can't find the method, fall back to line numbers."""
+        source = """public class Utils {
+    public int functionA() {
+        return 1;
+    }
+}
+"""
+        analyzer = get_java_analyzer()
+        functions = discover_functions_from_source(source, file_path=Path("Utils.java"))
+        func_a = functions[0]
+
+        # Create a copy with a non-existent name so tree-sitter can't find it
+        from dataclasses import replace
+
+        func_fake = replace(func_a, function_name="nonExistentMethod")
+
+        # Should fall back to line-number extraction (which still works since source is unmodified)
+        result = extract_function_source(source, func_fake, analyzer=analyzer)
+        assert "functionA" in result
+        assert "return 1;" in result

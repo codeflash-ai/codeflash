@@ -14,10 +14,11 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from codeflash.languages.base import FunctionInfo
 
 logger = logging.getLogger(__name__)
@@ -57,7 +58,7 @@ class ConcurrencyInfo:
     async_method_calls: list[str] = None
     """List of async/concurrent method calls."""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.async_method_calls is None:
             self.async_method_calls = []
 
@@ -66,7 +67,7 @@ class JavaConcurrencyAnalyzer:
     """Analyzes Java code for concurrency patterns."""
 
     # Concurrent patterns to detect
-    COMPLETABLE_FUTURE_PATTERNS = {
+    COMPLETABLE_FUTURE_PATTERNS: ClassVar[set[str]] = {
         "CompletableFuture",
         "supplyAsync",
         "runAsync",
@@ -78,7 +79,7 @@ class JavaConcurrencyAnalyzer:
         "anyOf",
     }
 
-    EXECUTOR_PATTERNS = {
+    EXECUTOR_PATTERNS: ClassVar[set[str]] = {
         "ExecutorService",
         "Executors",
         "ThreadPoolExecutor",
@@ -91,14 +92,14 @@ class JavaConcurrencyAnalyzer:
         "newWorkStealingPool",
     }
 
-    VIRTUAL_THREAD_PATTERNS = {
+    VIRTUAL_THREAD_PATTERNS: ClassVar[set[str]] = {
         "newVirtualThreadPerTaskExecutor",
         "Thread.startVirtualThread",
         "Thread.ofVirtual",
         "VirtualThreads",
     }
 
-    CONCURRENT_COLLECTION_PATTERNS = {
+    CONCURRENT_COLLECTION_PATTERNS: ClassVar[set[str]] = {
         "ConcurrentHashMap",
         "ConcurrentLinkedQueue",
         "ConcurrentLinkedDeque",
@@ -111,7 +112,7 @@ class JavaConcurrencyAnalyzer:
         "ArrayBlockingQueue",
     }
 
-    ATOMIC_PATTERNS = {
+    ATOMIC_PATTERNS: ClassVar[set[str]] = {
         "AtomicInteger",
         "AtomicLong",
         "AtomicBoolean",
@@ -121,7 +122,7 @@ class JavaConcurrencyAnalyzer:
         "AtomicReferenceArray",
     }
 
-    def __init__(self, analyzer=None):
+    def __init__(self, analyzer=None) -> None:
         """Initialize concurrency analyzer.
 
         Args:
@@ -145,13 +146,13 @@ class JavaConcurrencyAnalyzer:
             try:
                 source = func.file_path.read_text(encoding="utf-8")
             except Exception as e:
-                logger.warning("Failed to read source for %s: %s", func.name, e)
+                logger.warning("Failed to read source for %s: %s", func.function_name, e)
                 return ConcurrencyInfo(is_concurrent=False, patterns=[])
 
         # Extract function source
         lines = source.splitlines()
-        func_start = func.start_line - 1  # Convert to 0-indexed
-        func_end = func.end_line
+        func_start = func.starting_line - 1  # Convert to 0-indexed
+        func_end = func.ending_line
         func_source = "\n".join(lines[func_start:func_end])
 
         # Detect patterns

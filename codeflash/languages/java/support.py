@@ -39,6 +39,7 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, TestInfo, TestResult
+    from codeflash.languages.java.concurrency_analyzer import ConcurrencyInfo
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +112,7 @@ class JavaSupport(LanguageSupport):
         """Find helper functions called by the target function."""
         return find_helper_functions(function, project_root, analyzer=self._analyzer)
 
-    def analyze_concurrency(self, function: FunctionInfo, source: str | None = None):
+    def analyze_concurrency(self, function: FunctionToOptimize, source: str | None = None) -> ConcurrencyInfo:
         """Analyze a function for concurrency patterns.
 
         Args:
@@ -319,8 +320,8 @@ class JavaSupport(LanguageSupport):
             func_info.file_path.write_text(instrumented, encoding="utf-8")
 
             return True
-        except Exception as e:
-            logger.error("Failed to instrument %s for line profiling: %s", func_info.function_name, e)
+        except Exception:
+            logger.exception("Failed to instrument %s for line profiling", func_info.function_name)
             return False
 
     def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict:

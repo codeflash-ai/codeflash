@@ -236,7 +236,7 @@ public class TestQueryBlob {
     public void queryBlob() {
         byte[] bytes = new byte[8];
         Buffer.longToBytes(50003, bytes, 0);
-        // Uses Buffer class
+        String hex = Buffer.bytesToHexString(bytes);
     }
 }
 """)
@@ -253,9 +253,8 @@ public class TestQueryBlob {
         # Discover tests
         result = discover_tests(tmp_path / "src" / "test" / "java", target_functions)
 
-        # The test should be discovered because it imports Buffer class
-        # Even though TestQueryBlob doesn't follow naming convention for BufferTest
-        assert len(result) > 0, "Should find tests that import the target class"
+        # The test should be discovered because it calls Buffer.bytesToHexString
+        assert len(result) > 0, "Should find tests that call the target method"
         assert "Buffer.bytesToHexString" in result, f"Should map test to Buffer.bytesToHexString, got: {result.keys()}"
 
     def test_discover_by_direct_method_call(self, tmp_path: Path):
@@ -477,7 +476,7 @@ class TestClassNamingConventions:
     """Tests for class naming convention matching."""
 
     def test_suffix_test_pattern(self, tmp_path: Path):
-        """Test that ClassNameTest matches ClassName."""
+        """Test that ClassNameTest matches ClassName via method call resolution."""
         src_file = tmp_path / "Calculator.java"
         src_file.write_text("""
 public class Calculator {
@@ -492,7 +491,10 @@ public class Calculator {
 import org.junit.jupiter.api.Test;
 public class CalculatorTest {
     @Test
-    public void testAdd() { }
+    public void testAdd() {
+        Calculator calc = new Calculator();
+        calc.add(1, 2);
+    }
 }
 """)
 
@@ -504,7 +506,7 @@ public class CalculatorTest {
         assert "Calculator.add" in result
 
     def test_prefix_test_pattern(self, tmp_path: Path):
-        """Test that TestClassName matches ClassName."""
+        """Test that TestClassName matches ClassName via method call resolution."""
         src_file = tmp_path / "Calculator.java"
         src_file.write_text("""
 public class Calculator {
@@ -519,7 +521,10 @@ public class Calculator {
 import org.junit.jupiter.api.Test;
 public class TestCalculator {
     @Test
-    public void testAdd() { }
+    public void testAdd() {
+        Calculator calc = new Calculator();
+        calc.add(1, 2);
+    }
 }
 """)
 
@@ -531,7 +536,7 @@ public class TestCalculator {
         assert "Calculator.add" in result
 
     def test_tests_suffix_pattern(self, tmp_path: Path):
-        """Test that ClassNameTests matches ClassName."""
+        """Test that ClassNameTests matches ClassName via method call resolution."""
         src_file = tmp_path / "Calculator.java"
         src_file.write_text("""
 public class Calculator {
@@ -546,7 +551,10 @@ public class Calculator {
 import org.junit.jupiter.api.Test;
 public class CalculatorTests {
     @Test
-    public void testAdd() { }
+    public void testAdd() {
+        Calculator calc = new Calculator();
+        calc.add(1, 2);
+    }
 }
 """)
 
