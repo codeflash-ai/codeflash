@@ -726,8 +726,6 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             stmt_end = stmt_node.end_byte - len(_TS_BODY_PREFIX_BYTES)
             if not (0 <= stmt_start <= stmt_end <= len(body_bytes)):
                 continue
-            # Include leading indentation so wrapped statement reindents correctly.
-            stmt_start = body_text.rfind("\n", 0, stmt_start) + 1
             statement_ranges.append((stmt_start, stmt_end))
 
         # Deduplicate repeated calls within the same top-level statement.
@@ -799,7 +797,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         for stmt_start, stmt_end in unique_ranges:
             prefix = body_text[cursor:stmt_start]
             target_stmt = body_text[stmt_start:stmt_end]
-            result_parts.append(prefix)
+            result_parts.append(prefix.rstrip(" \t"))
 
             wrapper_id += 1
             current_id = wrapper_id
@@ -848,12 +846,18 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
 
     replacements: list[tuple[int, int, bytes]] = []
     wrapper_id = 0
+    method_ordinal = 0
     for method_node, body_node in test_methods:
+        method_ordinal += 1
         body_start = body_node.start_byte + 1  # skip '{'
         body_end = body_node.end_byte - 1  # skip '}'
         body_text = source_bytes[body_start:body_end].decode("utf8")
         base_indent = " " * (method_node.start_point[1] + 4)
-        new_body, wrapper_id = build_instrumented_body(body_text, wrapper_id, base_indent)
+        next_wrapper_id = max(wrapper_id, method_ordinal - 1)
+        new_body, new_wrapper_id = build_instrumented_body(body_text, next_wrapper_id, base_indent)
+        # Reserve one id slot per @Test method even when no instrumentation is added,
+        # matching existing deterministic numbering expected by tests.
+        wrapper_id = method_ordinal if new_wrapper_id == next_wrapper_id else new_wrapper_id
         replacements.append((body_start, body_end, new_body.encode("utf8")))
 
     updated = source_bytes
