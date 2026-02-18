@@ -950,7 +950,7 @@ def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path:
         emitted_class_names.add(class_name)
 
     for name, module_name in imported_names.items():
-        if name in existing_classes:
+        if name in existing_classes or module_name == "__future__":
             continue
         try:
             test_code = f"import {module_name}"
@@ -962,6 +962,13 @@ def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path:
 
             module_path = completions[0].module_path
             if not module_path:
+                continue
+
+            resolved_module = module_path.resolve()
+            module_str = str(resolved_module)
+            is_project = module_str.startswith(str(project_root_path.resolve()))
+            is_third_party = "site-packages" in module_str
+            if not is_project and not is_third_party:
                 continue
 
             mod_result = get_module_source_and_tree(module_path)
