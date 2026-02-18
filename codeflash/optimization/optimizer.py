@@ -193,6 +193,7 @@ class Optimizer:
             self.current_worktree and self.original_args_and_test_cfg and not self.args.all and not self.args.file
         )
         if use_original_roots:
+            assert self.original_args_and_test_cfg is not None
             original_args, _ = self.original_args_and_test_cfg
             project_root = original_args.project_root
             module_root = original_args.module_root
@@ -214,6 +215,7 @@ class Optimizer:
         if use_original_roots:
             import dataclasses
 
+            assert self.current_worktree is not None
             original_git_root = git_root_dir()
             file_to_funcs, count, trace = result
             remapped: dict[Path, list[FunctionToOptimize]] = {}
