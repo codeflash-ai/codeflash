@@ -1106,10 +1106,13 @@ def _get_combined_junit_xml(surefire_dir: Path, candidate_index: int) -> Path:
     if len(xml_files) == 1:
         # Copy the single file
         shutil.copy(xml_files[0], result_xml_path)
+        Path(xml_files[0]).unlink(missing_ok=True)
         return result_xml_path
 
     # Combine multiple XML files into one
     _combine_junit_xml_files(xml_files, result_xml_path)
+    for xml_file in xml_files:
+        Path(xml_file).unlink(missing_ok=True)
     return result_xml_path
 
 

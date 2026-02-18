@@ -3115,6 +3115,7 @@ class FunctionOptimizer:
                 coverage_database_file=coverage_database_file,
                 coverage_config_file=coverage_config_file,
                 skip_sqlite_cleanup=skip_cleanup,
+                testing_type=testing_type
             )
             if testing_type == TestingMode.PERFORMANCE:
                 results.perf_stdout = run_result.stdout
