@@ -10,10 +10,11 @@ from __future__ import annotations
 import json
 import logging
 import re
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from tree_sitter import Node
 
     from codeflash.languages.base import FunctionInfo
@@ -101,7 +102,7 @@ class JavaLineProfiler:
                 import_end_idx = i
                 break
 
-        lines_with_profiler = lines[:import_end_idx] + [profiler_class_code + "\n"] + lines[import_end_idx:]
+        lines_with_profiler = [*lines[:import_end_idx], profiler_class_code + "\n", *lines[import_end_idx:]]
 
         result = "".join(lines_with_profiler)
         if not analyzer.validate_syntax(result):
@@ -298,8 +299,7 @@ class {self.profiler_class} {{
                 and not stripped.startswith("//")
                 and not stripped.startswith("/*")
                 and not stripped.startswith("*")
-                and stripped != "}"
-                and stripped != "};"
+                and stripped not in ("}", "};")
             ):
                 # Get indentation
                 indent = len(line) - len(line.lstrip())
@@ -434,8 +434,8 @@ class {self.profiler_class} {{
             result["str_out"] = format_line_profile_results(result)
             return result
 
-        except Exception as e:
-            logger.error("Failed to parse line profile results: %s", e)
+        except Exception:
+            logger.exception("Failed to parse line profile results")
             return {"timings": {}, "unit": 1e-9, "raw_data": {}, "str_out": ""}
 
 

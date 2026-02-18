@@ -431,4 +431,4 @@ class TestJacocoXmlPath:
 
     def test_jacoco_plugin_version(self):
         """Test that JaCoCo version constant is defined."""
-        assert JACOCO_PLUGIN_VERSION == "0.8.11"
+        assert JACOCO_PLUGIN_VERSION == "0.8.13"

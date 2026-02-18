@@ -13,10 +13,7 @@ import subprocess
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -311,9 +308,9 @@ def find_maven_executable(project_root: Path | None = None) -> str | None:
             return str(mvnw_cmd_path)
 
     # Check for Maven wrapper in current directory
-    if os.path.exists("mvnw"):
+    if Path("mvnw").exists():
         return "./mvnw"
-    if os.path.exists("mvnw.cmd"):
+    if Path("mvnw.cmd").exists():
         return "mvnw.cmd"
 
     # Check system Maven
@@ -347,9 +344,9 @@ def find_gradle_executable(project_root: Path | None = None) -> str | None:
             return str(gradlew_bat_path)
 
     # Check for Gradle wrapper in current directory
-    if os.path.exists("gradlew"):
+    if Path("gradlew").exists():
         return "./gradlew"
-    if os.path.exists("gradlew.bat"):
+    if Path("gradlew.bat").exists():
         return "gradlew.bat"
 
     # Check system Gradle

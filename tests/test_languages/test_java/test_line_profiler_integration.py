@@ -37,12 +37,12 @@ public class Calculator {
             profile_output = tmppath / "profile.json"
 
             func = FunctionInfo(
-                name="add",
+                function_name="add",
                 file_path=java_file,
-                start_line=4,
-                end_line=7,
-                start_col=0,
-                end_col=0,
+                starting_line=4,
+                ending_line=7,
+                starting_col=0,
+                ending_col=0,
                 parents=(),
                 is_async=False,
                 is_method=True,
@@ -144,12 +144,12 @@ public class Calculator {
             profile_output = tmppath / "profile.json"
 
             func1 = FunctionInfo(
-                name="method1",
+                function_name="method1",
                 file_path=java_file,
-                start_line=2,
-                end_line=4,
-                start_col=0,
-                end_col=0,
+                starting_line=2,
+                ending_line=4,
+                starting_col=0,
+                ending_col=0,
                 parents=(),
                 is_async=False,
                 is_method=True,
@@ -157,12 +157,12 @@ public class Calculator {
             )
 
             func2 = FunctionInfo(
-                name="method2",
+                function_name="method2",
                 file_path=java_file,
-                start_line=6,
-                end_line=8,
-                start_col=0,
-                end_col=0,
+                starting_line=6,
+                ending_line=8,
+                starting_col=0,
+                ending_col=0,
                 parents=(),
                 is_async=False,
                 is_method=True,

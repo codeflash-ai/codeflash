@@ -1992,7 +1992,9 @@ class FunctionOptimizer:
                 else:
                     msg = f"Unexpected test type: {test_type}"
                     raise ValueError(msg)
+                test_string = path_obj_test_file.read_text(encoding="utf-8")
                 success, injected_behavior_test = inject_profiling_into_existing_test(
+                    test_string=test_string,
                     mode=TestingMode.BEHAVIOR,
                     test_path=path_obj_test_file,
                     call_positions=[test.position for test in tests_in_file_list],
@@ -2002,6 +2004,7 @@ class FunctionOptimizer:
                 if not success:
                     continue
                 success, injected_perf_test = inject_profiling_into_existing_test(
+                    test_string=test_string,
                     mode=TestingMode.PERFORMANCE,
                     test_path=path_obj_test_file,
                     call_positions=[test.position for test in tests_in_file_list],
