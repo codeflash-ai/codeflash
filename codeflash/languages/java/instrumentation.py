@@ -443,8 +443,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
         i += 1
 
     # Now add timing and SQLite instrumentation to test methods
-    source = "\n".join(result)
-    lines = source.split("\n")
+    lines = result.copy()
     result = []
     i = 0
     iteration_counter = 0
@@ -611,110 +610,175 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         Instrumented source code.
 
     """
-    # Find all @Test methods and add timing around their bodies
-    # Pattern matches: @Test (with optional parameters) followed by method declaration
-    # We process line by line for cleaner handling
+    from codeflash.languages.java.parser import get_java_analyzer
 
-    lines = source.split("\n")
-    result = []
-    i = 0
-    iteration_counter = 0
+    source_bytes = source.encode("utf8")
+    analyzer = get_java_analyzer()
+    tree = analyzer.parse(source_bytes)
 
-    while i < len(lines):
-        line = lines[i]
-        stripped = line.strip()
+    def has_test_annotation(method_node) -> bool:
+        modifiers = None
+        for child in method_node.children:
+            if child.type == "modifiers":
+                modifiers = child
+                break
+        if not modifiers:
+            return False
+        for child in modifiers.children:
+            if child.type not in {"annotation", "marker_annotation"}:
+                continue
+            # annotation text includes '@'
+            annotation_text = analyzer.get_node_text(child, source_bytes).strip()
+            if annotation_text.startswith("@"):
+                name = annotation_text[1:].split("(", 1)[0].strip()
+                if name == "Test" or name.endswith(".Test"):
+                    return True
+        return False
 
-        # Look for @Test annotation (not @TestOnly, @TestFactory, etc.)
-        if _is_test_annotation(stripped):
-            result.append(line)
-            i += 1
+    def collect_test_methods(node, out) -> None:
+        if node.type == "method_declaration" and has_test_annotation(node):
+            body_node = node.child_by_field_name("body")
+            if body_node is not None:
+                out.append((node, body_node))
+        for child in node.children:
+            collect_test_methods(child, out)
 
-            # Collect any additional annotations
-            while i < len(lines) and lines[i].strip().startswith("@"):
-                result.append(lines[i])
-                i += 1
+    def collect_target_calls(node, wrapper_bytes: bytes, func: str, out) -> None:
+        if node.type == "method_invocation":
+            name_node = node.child_by_field_name("name")
+            if name_node and analyzer.get_node_text(name_node, wrapper_bytes) == func and not _is_inside_lambda(node):
+                out.append(node)
+        for child in node.children:
+            collect_target_calls(child, wrapper_bytes, func, out)
 
-            # Now find the method signature and opening brace
-            method_lines = []
-            while i < len(lines):
-                method_lines.append(lines[i])
-                if "{" in lines[i]:
-                    break
-                i += 1
+    def reindent_block(text: str, target_indent: str) -> str:
+        lines = text.splitlines()
+        non_empty = [line for line in lines if line.strip()]
+        if not non_empty:
+            return text
+        min_leading = min(len(line) - len(line.lstrip(" ")) for line in non_empty)
+        reindented: list[str] = []
+        for line in lines:
+            if not line.strip():
+                reindented.append(line)
+                continue
+            # Normalize relative indentation and place block under target indent.
+            reindented.append(f"{target_indent}{line[min_leading:]}")
+        return "\n".join(reindented)
 
-            # Add the method signature lines
-            result.extend(method_lines)
-            i += 1
+    def find_top_level_statement(node, body_node):
+        current = node
+        while current is not None and current.parent is not None and current.parent != body_node:
+            current = current.parent
+        return current if current is not None and current.parent == body_node else None
 
-            # We're now inside the method body
-            iteration_counter += 1
-            iter_id = iteration_counter
+    def build_instrumented_body(body_text: str, iter_id: int, base_indent: str) -> str:
+        body_bytes = body_text.encode("utf8")
+        wrapper_bytes = _TS_BODY_PREFIX_BYTES + body_bytes + _TS_BODY_SUFFIX.encode("utf8")
+        wrapper_tree = analyzer.parse(wrapper_bytes)
+        wrapped_method = None
+        stack = [wrapper_tree.root_node]
+        while stack:
+            node = stack.pop()
+            if node.type == "method_declaration":
+                wrapped_method = node
+                break
+            stack.extend(reversed(node.children))
+        if wrapped_method is None:
+            return body_text
+        wrapped_body = wrapped_method.child_by_field_name("body")
+        if wrapped_body is None:
+            return body_text
+        calls = []
+        collect_target_calls(wrapped_body, wrapper_bytes, func_name, calls)
 
-            # Detect indentation from method signature line (line with opening brace)
-            method_sig_line = method_lines[-1] if method_lines else ""
-            base_indent = len(method_sig_line) - len(method_sig_line.lstrip())
-            indent = " " * (base_indent + 4)  # Add one level of indentation
-            inner_indent = " " * (base_indent + 8)  # Two levels for inside inner loop
-            inner_body_indent = " " * (base_indent + 12)  # Three levels for try block body
+        indent = base_indent
+        inner_indent = f"{indent}    "
+        inner_body_indent = f"{inner_indent}    "
 
-            # Add timing instrumentation with inner loop
-            # Note: CODEFLASH_LOOP_INDEX must always be set - no null check, crash if missing
-            # CODEFLASH_INNER_ITERATIONS controls inner loop count (default: 100)
-            timing_start_code = [
-                f"{indent}// Codeflash timing instrumentation with inner loop for JIT warmup",
-                f'{indent}int _cf_loop{iter_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
-                f'{indent}int _cf_innerIterations{iter_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));',
-                f'{indent}String _cf_mod{iter_id} = "{class_name}";',
-                f'{indent}String _cf_cls{iter_id} = "{class_name}";',
-                f'{indent}String _cf_fn{iter_id} = "{func_name}";',
-                "",
-                f"{indent}for (int _cf_i{iter_id} = 0; _cf_i{iter_id} < _cf_innerIterations{iter_id}; _cf_i{iter_id}++) {{",
-                f'{inner_indent}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_i{iter_id} + "######$!");',
-                f"{inner_indent}long _cf_start{iter_id} = System.nanoTime();",
-                f"{inner_indent}try {{",
-            ]
-            result.extend(timing_start_code)
+        if not calls:
+            return body_text
 
-            # Collect method body until we find matching closing brace
-            brace_depth = 1
-            body_lines = []
+        first_call = min(calls, key=lambda n: n.start_byte)
+        stmt_node = find_top_level_statement(first_call, wrapped_body)
+        if stmt_node is None:
+            return body_text
 
-            while i < len(lines) and brace_depth > 0:
-                body_line = lines[i]
-                # Count braces (simple approach - doesn't handle strings/comments perfectly)
-                for ch in body_line:
-                    if ch == "{":
-                        brace_depth += 1
-                    elif ch == "}":
-                        brace_depth -= 1
+        stmt_start = stmt_node.start_byte - len(_TS_BODY_PREFIX_BYTES)
+        stmt_end = stmt_node.end_byte - len(_TS_BODY_PREFIX_BYTES)
+        if not (0 <= stmt_start <= stmt_end <= len(body_bytes)):
+            return body_text
 
-                if brace_depth > 0:
-                    body_lines.append(body_line)
-                    i += 1
-                else:
-                    # This line contains the closing brace, but we've hit depth 0
-                    # Add indented body lines (inside try block, inside for loop)
-                    for bl in body_lines:
-                        result.append("        " + bl)  # 8 extra spaces for inner loop + try
+        prefix = body_text[:stmt_start]
+        target_stmt = body_text[stmt_start:stmt_end]
+        suffix = body_text[stmt_end:]
 
-                    # Add finally block and close inner loop
-                    method_close_indent = " " * base_indent  # Same level as method signature
-                    timing_end_code = [
-                        f"{inner_indent}}} finally {{",
-                        f"{inner_indent}    long _cf_end{iter_id} = System.nanoTime();",
-                        f"{inner_indent}    long _cf_dur{iter_id} = _cf_end{iter_id} - _cf_start{iter_id};",
-                        f'{inner_indent}    System.out.println("!######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_i{iter_id} + ":" + _cf_dur{iter_id} + "######!");',
-                        f"{inner_indent}}}",
-                        f"{indent}}}",  # Close for loop
-                        f"{method_close_indent}}}",  # Method closing brace
-                    ]
-                    result.extend(timing_end_code)
-                    i += 1
+        setup_lines = [
+            f"{indent}// Codeflash timing instrumentation with inner loop for JIT warmup",
+            f'{indent}int _cf_loop{iter_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
+            f'{indent}int _cf_innerIterations{iter_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));',
+            f'{indent}String _cf_mod{iter_id} = "{class_name}";',
+            f'{indent}String _cf_cls{iter_id} = "{class_name}";',
+            f'{indent}String _cf_fn{iter_id} = "{func_name}";',
+            "",
+        ]
+
+        stmt_in_try = reindent_block(target_stmt, inner_body_indent)
+
+        timing_lines = [
+            f"{indent}for (int _cf_i{iter_id} = 0; _cf_i{iter_id} < _cf_innerIterations{iter_id}; _cf_i{iter_id}++) {{",
+            f'{inner_indent}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_i{iter_id} + "######$!");',
+            f"{inner_indent}long _cf_end{iter_id} = -1;",
+            f"{inner_indent}long _cf_start{iter_id} = 0;",
+            f"{inner_indent}try {{",
+            f"{inner_body_indent}_cf_start{iter_id} = System.nanoTime();",
+            stmt_in_try,
+            f"{inner_body_indent}_cf_end{iter_id} = System.nanoTime();",
+            f"{inner_indent}}} finally {{",
+            f"{inner_body_indent}long _cf_end{iter_id}_finally = System.nanoTime();",
+            f"{inner_body_indent}long _cf_dur{iter_id} = (_cf_end{iter_id} != -1 ? _cf_end{iter_id} : _cf_end{iter_id}_finally) - _cf_start{iter_id};",
+            f'{inner_body_indent}System.out.println("!######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_i{iter_id} + ":" + _cf_dur{iter_id} + "######!");',
+            f"{inner_indent}}}",
+            f"{indent}}}",
+        ]
+
+        normalized_prefix = prefix.rstrip(" \t")
+
+        result_parts = [f"\n{'\n'.join(setup_lines)}"]
+        if normalized_prefix.strip():
+            prefix_body = normalized_prefix.lstrip("\n")
+            result_parts.append(f"{indent}\n")
+            result_parts.append(prefix_body)
+            if not prefix_body.endswith("\n"):
+                result_parts.append("\n")
         else:
-            result.append(line)
-            i += 1
+            result_parts.append("\n")
+        result_parts.append("\n".join(timing_lines))
+        if suffix and not suffix.startswith("\n"):
+            result_parts.append("\n")
+        result_parts.append(suffix)
+        return "".join(result_parts)
 
-    return "\n".join(result)
+    test_methods = []
+    collect_test_methods(tree.root_node, test_methods)
+    if not test_methods:
+        return source
+
+    replacements: list[tuple[int, int, bytes]] = []
+    iter_id = 0
+    for method_node, body_node in test_methods:
+        iter_id += 1
+        body_start = body_node.start_byte + 1  # skip '{'
+        body_end = body_node.end_byte - 1  # skip '}'
+        body_text = source_bytes[body_start:body_end].decode("utf8")
+        base_indent = " " * (method_node.start_point[1] + 4)
+        new_body = build_instrumented_body(body_text, iter_id, base_indent)
+        replacements.append((body_start, body_end, new_body.encode("utf8")))
+
+    updated = source_bytes
+    for start, end, new_bytes in sorted(replacements, key=lambda item: item[0], reverse=True):
+        updated = updated[:start] + new_bytes + updated[end:]
+    return updated.decode("utf8")
 
 
 def create_benchmark_test(
