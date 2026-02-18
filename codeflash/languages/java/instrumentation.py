@@ -690,6 +690,55 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             current = current.parent
         return current if current is not None and current.parent == body_node else None
 
+    def split_var_declaration(stmt_node, source_bytes_ref: bytes) -> tuple[str, str] | None:
+        """Split a local_variable_declaration into a hoisted declaration and an assignment.
+
+        When a target call is inside a variable declaration like:
+            int len = Buffer.stringToUtf8(input, buf, 0);
+        wrapping it in a for/try block would put `len` out of scope for subsequent code.
+
+        This function splits it into:
+            hoisted:    int len;
+            assignment: len = Buffer.stringToUtf8(input, buf, 0);
+
+        Returns (hoisted_decl, assignment_stmt) or None if not a local_variable_declaration.
+        """
+        if stmt_node.type != "local_variable_declaration":
+            return None
+
+        # Extract the type and declarator from the AST
+        type_node = stmt_node.child_by_field_name("type")
+        declarator_node = None
+        for child in stmt_node.children:
+            if child.type == "variable_declarator":
+                declarator_node = child
+                break
+        if type_node is None or declarator_node is None:
+            return None
+
+        # Get the variable name and initializer
+        name_node = declarator_node.child_by_field_name("name")
+        value_node = declarator_node.child_by_field_name("value")
+        if name_node is None or value_node is None:
+            return None
+
+        type_text = analyzer.get_node_text(type_node, source_bytes_ref)
+        name_text = analyzer.get_node_text(name_node, source_bytes_ref)
+        value_text = analyzer.get_node_text(value_node, source_bytes_ref)
+
+        # Initialize with a default value to satisfy Java's definite assignment rules.
+        # The variable is assigned inside a for/try block which Java considers
+        # conditionally executed, so an uninitialized declaration would cause
+        # "variable might not have been initialized" errors.
+        _PRIMITIVE_DEFAULTS = {
+            "byte": "0", "short": "0", "int": "0", "long": "0L",
+            "float": "0.0f", "double": "0.0", "char": "'\\0'", "boolean": "false",
+        }
+        default_val = _PRIMITIVE_DEFAULTS.get(type_text, "null")
+        hoisted = f"{type_text} {name_text} = {default_val};"
+        assignment = f"{name_text} = {value_text};"
+        return hoisted, assignment
+
     def build_instrumented_body(body_text: str, next_wrapper_id: int, base_indent: str) -> tuple[str, int]:
         body_bytes = body_text.encode("utf8")
         wrapper_bytes = _TS_BODY_PREFIX_BYTES + body_bytes + _TS_BODY_SUFFIX.encode("utf8")
@@ -717,30 +766,37 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         if not calls:
             return body_text, next_wrapper_id
 
-        statement_ranges: list[tuple[int, int]] = []
+        statement_ranges: list[tuple[int, int, Any]] = []  # (char_start, char_end, ast_node)
         for call in sorted(calls, key=lambda n: n.start_byte):
             stmt_node = find_top_level_statement(call, wrapped_body)
             if stmt_node is None:
                 continue
-            stmt_start = stmt_node.start_byte - len(_TS_BODY_PREFIX_BYTES)
-            stmt_end = stmt_node.end_byte - len(_TS_BODY_PREFIX_BYTES)
-            if not (0 <= stmt_start <= stmt_end <= len(body_bytes)):
+            stmt_byte_start = stmt_node.start_byte - len(_TS_BODY_PREFIX_BYTES)
+            stmt_byte_end = stmt_node.end_byte - len(_TS_BODY_PREFIX_BYTES)
+            if not (0 <= stmt_byte_start <= stmt_byte_end <= len(body_bytes)):
                 continue
-            statement_ranges.append((stmt_start, stmt_end))
+            # Convert byte offsets to character offsets for correct Python str slicing.
+            # Tree-sitter returns byte offsets but body_text is a Python str (Unicode),
+            # so multi-byte UTF-8 characters (e.g., é, 世) cause misalignment if we
+            # slice the str directly with byte offsets.
+            stmt_start = len(body_bytes[:stmt_byte_start].decode("utf8"))
+            stmt_end = len(body_bytes[:stmt_byte_end].decode("utf8"))
+            statement_ranges.append((stmt_start, stmt_end, stmt_node))
 
         # Deduplicate repeated calls within the same top-level statement.
-        unique_ranges: list[tuple[int, int]] = []
-        seen_ranges: set[tuple[int, int]] = set()
-        for stmt_range in statement_ranges:
-            if stmt_range in seen_ranges:
+        unique_ranges: list[tuple[int, int, Any]] = []
+        seen_offsets: set[tuple[int, int]] = set()
+        for stmt_start, stmt_end, stmt_node in statement_ranges:
+            key = (stmt_start, stmt_end)
+            if key in seen_offsets:
                 continue
-            seen_ranges.add(stmt_range)
-            unique_ranges.append(stmt_range)
+            seen_offsets.add(key)
+            unique_ranges.append((stmt_start, stmt_end, stmt_node))
         if not unique_ranges:
             return body_text, next_wrapper_id
 
         if len(unique_ranges) == 1:
-            stmt_start, stmt_end = unique_ranges[0]
+            stmt_start, stmt_end, stmt_ast_node = unique_ranges[0]
             prefix = body_text[:stmt_start]
             target_stmt = body_text[stmt_start:stmt_end]
             suffix = body_text[stmt_end:]
@@ -756,7 +812,16 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 "",
             ]
 
-            stmt_in_try = reindent_block(target_stmt, inner_body_indent)
+            # If the target statement is a variable declaration (e.g., int len = func()),
+            # hoist the declaration before the timing block so the variable stays in scope
+            # for subsequent code that references it.
+            var_split = split_var_declaration(stmt_ast_node, wrapper_bytes)
+            if var_split is not None:
+                hoisted_decl, assignment_stmt = var_split
+                setup_lines.append(f"{indent}{hoisted_decl}")
+                stmt_in_try = reindent_block(assignment_stmt, inner_body_indent)
+            else:
+                stmt_in_try = reindent_block(target_stmt, inner_body_indent)
             timing_lines = [
                 f"{indent}for (int _cf_i{current_id} = 0; _cf_i{current_id} < _cf_innerIterations{current_id}; _cf_i{current_id}++) {{",
                 f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + _cf_i{current_id} + "######$!");',
@@ -794,7 +859,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         cursor = 0
         wrapper_id = next_wrapper_id
 
-        for stmt_start, stmt_end in unique_ranges:
+        for stmt_start, stmt_end, stmt_ast_node in unique_ranges:
             prefix = body_text[cursor:stmt_start]
             target_stmt = body_text[stmt_start:stmt_end]
             result_parts.append(prefix.rstrip(" \t"))
@@ -812,7 +877,14 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 "",
             ]
 
-            stmt_in_try = reindent_block(target_stmt, inner_body_indent)
+            # Hoist variable declarations to avoid scoping issues (same as single-range branch)
+            var_split = split_var_declaration(stmt_ast_node, wrapper_bytes)
+            if var_split is not None:
+                hoisted_decl, assignment_stmt = var_split
+                setup_lines.append(f"{indent}{hoisted_decl}")
+                stmt_in_try = reindent_block(assignment_stmt, inner_body_indent)
+            else:
+                stmt_in_try = reindent_block(target_stmt, inner_body_indent)
             iteration_id_expr = f'"{current_id}_" + _cf_i{current_id}'
 
             timing_lines = [
