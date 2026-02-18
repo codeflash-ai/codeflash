@@ -17,8 +17,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from codeflash.code_utils.time_utils import format_perf, format_time
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.java.parser import get_java_analyzer
+from codeflash.result.critic import performance_gain
 
 if TYPE_CHECKING:
     from codeflash.languages.java.parser import JavaAnalyzer
@@ -692,12 +694,14 @@ def add_runtime_comments(
         original_ns = original_runtimes[inv_id]
         optimized_ns = optimized_runtimes.get(inv_id, original_ns)
 
-        original_ms = original_ns / 1_000_000
-        optimized_ms = optimized_ns / 1_000_000
-
         if original_ns > 0:
-            speedup = ((original_ns - optimized_ns) / original_ns) * 100
-            summary_lines.append(f"// {inv_id}: {original_ms:.3f}ms -> {optimized_ms:.3f}ms ({speedup:.1f}% faster)")
+            perf_gain = format_perf(
+                (performance_gain(original_runtime_ns=original_ns, optimized_runtime_ns=optimized_ns) * 100)
+            )
+            status = "slower" if optimized_ns > original_ns else "faster"
+            summary_lines.append(
+                f"// {inv_id}: {format_time(original_ns)} -> {format_time(optimized_ns)} ({perf_gain}% {status})"
+            )
 
     # Insert after imports
     lines = test_source.splitlines(keepends=True)
