@@ -80,6 +80,51 @@ def show_text(stats: dict) -> str:
     return out_table
 
 
+def show_text_non_python(
+    stats: dict, line_contents: dict[tuple[str, int], str]
+) -> str:
+    """Show text for non-Python timings using profiler-provided line contents."""
+    out_table = ""
+    out_table += "# Timer unit: {:g} s\n".format(stats["unit"])
+    stats_order = sorted(stats["timings"].items())
+    for (fn, _lineno, name), timings in stats_order:
+        total_hits = sum(t[1] for t in timings)
+        total_time = sum(t[2] for t in timings)
+        if total_hits == 0:
+            continue
+
+        out_table += f"## Function: {name}\n"
+        out_table += "## Total time: %g s\n" % (total_time * stats["unit"])
+
+        default_column_sizes = {"hits": 9, "time": 12, "perhit": 8, "percent": 8}
+        table_rows = []
+        for lineno, nhits, time in timings:
+            percent = "" if total_time == 0 else "%5.1f" % (100 * time / total_time)
+            time_disp = "%5.1f" % time
+            if len(time_disp) > default_column_sizes["time"]:
+                time_disp = "%5.1g" % time
+            perhit = (float(time) / nhits) if nhits > 0 else 0.0
+            perhit_disp = "%5.1f" % perhit
+            if len(perhit_disp) > default_column_sizes["perhit"]:
+                perhit_disp = "%5.1g" % perhit
+            nhits_disp = "%d" % nhits  # noqa: UP031
+            if len(nhits_disp) > default_column_sizes["hits"]:
+                nhits_disp = f"{nhits:g}"
+
+            table_rows.append((nhits_disp, time_disp, perhit_disp, percent, line_contents.get((fn, lineno), "")))
+
+        table_cols = ("Hits", "Time", "Per Hit", "% Time", "Line Contents")
+        out_table += tabulate(
+            headers=table_cols,
+            tabular_data=table_rows,
+            tablefmt="pipe",
+            colglobalalign=None,
+            preserve_whitespace=True,
+        )
+        out_table += "\n"
+    return out_table
+
+
 def parse_line_profile_results(line_profiler_output_file: Optional[Path]) -> dict:
     if is_python():
         line_profiler_output_file = line_profiler_output_file.with_suffix(".lprof")
@@ -105,16 +150,19 @@ def parse_line_profile_results(line_profiler_output_file: Optional[Path]) -> dic
     # timings: {(filename, start_lineno, func_name): [(lineno, hits, time_raw), ...]}
     grouped_timings: dict[tuple[str, int, str], list[tuple[int, int, int]]] = {}
     lines_by_file: dict[str, list[tuple[int, int, int]]] = {}
+    line_contents: dict[tuple[str, int], str] = {}
     for key, stats in raw_data.items():
         file_path = stats.get("file")
         line_num = stats.get("line")
         if file_path is None or line_num is None:
             file_path, line_str = key.rsplit(":", 1)
             line_num = int(line_str)
+        line_num = int(line_num)
 
         lines_by_file.setdefault(file_path, []).append(
-            (int(line_num), int(stats.get("hits", 0)), int(stats.get("time", 0)))
+            (line_num, int(stats.get("hits", 0)), int(stats.get("time", 0)))
         )
+        line_contents[(file_path, line_num)] = stats.get("content", "")
 
     for file_path, line_stats in lines_by_file.items():
         sorted_line_stats = sorted(line_stats, key=lambda t: t[0])
@@ -125,5 +173,5 @@ def parse_line_profile_results(line_profiler_output_file: Optional[Path]) -> dic
 
     stats_dict["timings"] = grouped_timings
     stats_dict["unit"] = 1e-9
-    stats_dict["str_out"] = show_text(stats_dict)
+    stats_dict["str_out"] = show_text_non_python(stats_dict, line_contents)
     return stats_dict, None

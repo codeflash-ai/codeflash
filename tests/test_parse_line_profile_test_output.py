@@ -45,7 +45,15 @@ def test_parse_line_profile_results_non_python_java_json():
         results, _ = parse_line_profile_results(profile_file)
 
     assert results["unit"] == 1e-9
-    assert results["str_out"].startswith("# Timer unit: 1e-09 s")
+    assert results["str_out"] == (
+        "# Timer unit: 1e-09 s\n"
+        "## Function: Util.java\n"
+        "## Total time: 3e-06 s\n"
+        "|   Hits |   Time |   Per Hit |   % Time | Line Contents   |\n"
+        "|-------:|-------:|----------:|---------:|:----------------|\n"
+        "|      6 |   1000 |     166.7 |     33.3 | int x = 1;      |\n"
+        "|      6 |   2000 |     333.3 |     66.7 | return x;       |\n"
+    )
     assert (source_file.as_posix(), 3, "Util.java") in results["timings"]
     assert results["timings"][(source_file.as_posix(), 3, "Util.java")] == [(3, 6, 1000), (4, 6, 2000)]
 
