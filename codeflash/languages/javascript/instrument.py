@@ -179,6 +179,9 @@ class StandaloneCallTransformer:
         # Captures: (whitespace)(await )?(object.)*func_name.call(
         self._dot_call_pattern = re.compile(rf"(\s*)(await\s+)?((?:\w+\.)*){re.escape(self.func_name)}\.call\s*\(")
 
+        # Precompile regex to find next special character (quotes or parentheses)
+        self._special_re = re.compile(r'["\'`()]')
+
     def transform(self, code: str) -> str:
         """Transform all standalone calls in the code."""
         result: list[str] = []
@@ -380,13 +383,18 @@ class StandaloneCallTransformer:
         s_len = len(s)
         quotes = "\"'`"
 
-        while pos < s_len and depth > 0:
-            char = s[pos]
+        special_re = self._special_re
 
-            # Handle string literals
-            # Note: preserve original escaping semantics (only checks immediate preceding char)
+        while pos < s_len and depth > 0:
+            match = special_re.search(s, pos)
+            if not match:
+                return None, -1
+            
+            char = match.group()
+            char_pos = match.start()
+
             if char in quotes:
-                prev_char = s[pos - 1] if pos > 0 else None
+                prev_char = s[char_pos - 1] if char_pos > 0 else None
                 if prev_char != "\\":
                     if not in_string:
                         in_string = True
@@ -399,13 +407,12 @@ class StandaloneCallTransformer:
                     depth += 1
                 elif char == ")":
                     depth -= 1
-
-            pos += 1
+            
+            pos = char_pos + 1
 
         if depth != 0:
             return None, -1
 
-        # slice once
         return s[open_paren_pos + 1 : pos - 1], pos
 
     def _parse_bracket_standalone_call(self, code: str, match: re.Match[str]) -> StandaloneCallMatch | None:
