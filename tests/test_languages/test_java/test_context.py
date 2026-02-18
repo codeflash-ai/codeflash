@@ -7,6 +7,7 @@ import pytest
 from codeflash.languages.base import FunctionFilterCriteria, Language, ParentInfo
 from codeflash.languages.java.context import (
     TypeSkeleton,
+    _extract_type_skeleton,
     extract_class_context,
     extract_code_context,
     extract_function_source,
@@ -17,7 +18,8 @@ from codeflash.languages.java.context import (
     _format_skeleton_for_context,
 )
 from codeflash.languages.java.discovery import discover_functions_from_source
-from codeflash.languages.java.parser import get_java_analyzer
+from codeflash.languages.java.import_resolver import JavaImportResolver, ResolvedImport
+from codeflash.languages.java.parser import JavaImportInfo, get_java_analyzer
 
 
 # Filter criteria that includes void methods
@@ -2529,3 +2531,170 @@ class TestFormatSkeletonForContext:
         result = _format_skeleton_for_context(skeleton, source, "Empty", analyzer)
 
         assert result == "public class Empty {\n}"
+
+
+class TestGetJavaImportedTypeSkeletonsEdgeCases:
+    """Additional edge case tests for get_java_imported_type_skeletons()."""
+
+    def test_wildcard_imports_are_skipped(self):
+        """Wildcard imports (e.g., import com.example.helpers.*) have class_name=None and should be skipped."""
+        project_root = FIXTURE_DIR
+        module_root = FIXTURE_DIR / "src" / "main" / "java"
+        analyzer = get_java_analyzer()
+
+        # Create a source with a wildcard import
+        source = "package com.example;\nimport com.example.helpers.*;\npublic class Foo {}"
+        imports = analyzer.find_imports(source)
+
+        # Verify the import is wildcard
+        assert any(imp.is_wildcard for imp in imports)
+
+        result = get_java_imported_type_skeletons(imports, project_root, module_root, analyzer)
+
+        # Wildcard imports can't resolve to a single class, so result should be empty
+        assert result == ""
+
+    def test_import_to_nonexistent_class_in_file(self):
+        """When an import resolves to a file but the class doesn't exist in it, skeleton extraction returns None."""
+        analyzer = get_java_analyzer()
+
+        source = "package com.example;\npublic class Actual { public int x; }"
+        # Try to extract a skeleton for a class that doesn't exist in this source
+        skeleton = _extract_type_skeleton(source, "NonExistent", "", analyzer)
+
+        assert skeleton is None
+
+    def test_skeleton_output_is_well_formed(self):
+        """Verify the skeleton string has proper Java-like structure with braces."""
+        project_root = FIXTURE_DIR
+        module_root = FIXTURE_DIR / "src" / "main" / "java"
+        analyzer = get_java_analyzer()
+
+        source = (FIXTURE_DIR / "src" / "main" / "java" / "com" / "example" / "Calculator.java").read_text()
+        imports = analyzer.find_imports(source)
+
+        result = get_java_imported_type_skeletons(imports, project_root, module_root, analyzer)
+
+        # Each skeleton block should be well-formed: starts with declaration {, ends with }
+        for block in result.split("\n\n"):
+            block = block.strip()
+            if not block:
+                continue
+            assert "{" in block, f"Skeleton block missing opening brace: {block[:50]}"
+            assert block.endswith("}"), f"Skeleton block missing closing brace: {block[-50:]}"
+
+
+class TestExtractPublicMethodSignaturesEdgeCases:
+    """Additional edge case tests for _extract_public_method_signatures()."""
+
+    def test_excludes_protected_and_package_private(self):
+        """Verify protected and package-private methods are excluded."""
+        source = """public class Visibility {
+    public int publicMethod() { return 1; }
+    protected int protectedMethod() { return 2; }
+    int packagePrivateMethod() { return 3; }
+    private int privateMethod() { return 4; }
+}"""
+        analyzer = get_java_analyzer()
+        sigs = _extract_public_method_signatures(source, "Visibility", analyzer)
+
+        assert len(sigs) == 1
+        assert "publicMethod" in sigs[0]
+        assert not any("protectedMethod" in s for s in sigs)
+        assert not any("packagePrivateMethod" in s for s in sigs)
+        assert not any("privateMethod" in s for s in sigs)
+
+    def test_handles_overloaded_methods(self):
+        """Verify all public overloads are extracted."""
+        source = """public class Overloaded {
+    public int process(int x) { return x; }
+    public int process(int x, int y) { return x + y; }
+    public String process(String s) { return s; }
+}"""
+        analyzer = get_java_analyzer()
+        sigs = _extract_public_method_signatures(source, "Overloaded", analyzer)
+
+        assert len(sigs) == 3
+        # All should contain "process"
+        assert all("process" in s for s in sigs)
+
+    def test_handles_generic_methods(self):
+        """Verify generic method signatures are extracted correctly."""
+        source = """public class Generic {
+    public <T> T identity(T value) { return value; }
+    public <K, V> void putPair(K key, V value) {}
+}"""
+        analyzer = get_java_analyzer()
+        sigs = _extract_public_method_signatures(source, "Generic", analyzer)
+
+        assert len(sigs) == 2
+        assert any("identity" in s for s in sigs)
+        assert any("putPair" in s for s in sigs)
+
+
+class TestFormatSkeletonRoundTrip:
+    """Tests that verify _extract_type_skeleton → _format_skeleton_for_context produces valid output."""
+
+    def test_round_trip_produces_valid_skeleton(self):
+        """Extract a real skeleton and format it — verify the output is sensible."""
+        source = """public class Service {
+    private final String name;
+    private int count;
+
+    public Service(String name) {
+        this.name = name;
+        this.count = 0;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void increment() {
+        count++;
+    }
+
+    public int getCount() {
+        return count;
+    }
+
+    private void reset() {
+        count = 0;
+    }
+}"""
+        analyzer = get_java_analyzer()
+        skeleton = _extract_type_skeleton(source, "Service", "", analyzer)
+        assert skeleton is not None
+
+        result = _format_skeleton_for_context(skeleton, source, "Service", analyzer)
+
+        # Should contain class declaration
+        assert "public class Service {" in result
+        # Should contain fields
+        assert "name" in result
+        assert "count" in result
+        # Should contain constructor
+        assert "Service(String name)" in result
+        # Should contain public methods
+        assert "getName" in result
+        assert "getCount" in result
+        # Should NOT contain private methods
+        assert "reset" not in result
+        # Should end properly
+        assert result.strip().endswith("}")
+
+    def test_round_trip_with_fixture_mathhelper(self):
+        """Round-trip test using the real MathHelper fixture file."""
+        source = (FIXTURE_DIR / "src" / "main" / "java" / "com" / "example" / "helpers" / "MathHelper.java").read_text()
+        analyzer = get_java_analyzer()
+
+        skeleton = _extract_type_skeleton(source, "MathHelper", "", analyzer)
+        assert skeleton is not None
+
+        result = _format_skeleton_for_context(skeleton, source, "MathHelper", analyzer)
+
+        assert "public class MathHelper {" in result
+        # All public static methods should have signatures
+        for method_name in ["add", "multiply", "factorial", "power", "isPrime", "gcd", "lcm"]:
+            assert method_name in result, f"Expected method '{method_name}' in skeleton"
+        assert result.strip().endswith("}")
