@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -12,7 +13,6 @@ from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_f
 from codeflash.code_utils.formatter import sort_imports
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent, TestingMode, VerificationType
-from functools import cache
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
