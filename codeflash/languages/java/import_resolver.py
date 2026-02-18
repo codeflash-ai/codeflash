@@ -209,6 +209,37 @@ class JavaImportResolver:
             return last_part
         return None
 
+    def expand_wildcard_import(self, import_path: str) -> list[ResolvedImport]:
+        """Expand a wildcard import (e.g., com.example.utils.*) to individual class imports.
+
+        Resolves the package path to a directory and returns a ResolvedImport for each
+        .java file found in that directory.
+        """
+        # Convert package path to directory path
+        # e.g., "com.example.utils" -> "com/example/utils"
+        relative_dir = import_path.replace(".", "/")
+
+        resolved: list[ResolvedImport] = []
+
+        for source_root in self._source_roots + self._test_roots:
+            candidate_dir = source_root / relative_dir
+            if candidate_dir.is_dir():
+                for java_file in candidate_dir.glob("*.java"):
+                    class_name = java_file.stem
+                    # Only include files that look like class names (start with uppercase)
+                    if class_name and class_name[0].isupper():
+                        resolved.append(
+                            ResolvedImport(
+                                import_path=f"{import_path}.{class_name}",
+                                file_path=java_file,
+                                is_external=False,
+                                is_wildcard=False,
+                                class_name=class_name,
+                            )
+                        )
+
+        return resolved
+
     def find_class_file(self, class_name: str, package_hint: str | None = None) -> Path | None:
         """Find the file containing a specific class.
 
