@@ -389,7 +389,7 @@ class StandaloneCallTransformer:
             match = special_re.search(s, pos)
             if not match:
                 return None, -1
-            
+
             char = match.group()
             char_pos = match.start()
 
@@ -407,7 +407,7 @@ class StandaloneCallTransformer:
                     depth += 1
                 elif char == ")":
                     depth -= 1
-            
+
             pos = char_pos + 1
 
         if depth != 0:
