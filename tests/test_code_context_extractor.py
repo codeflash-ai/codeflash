@@ -4133,6 +4133,7 @@ def my_func(ctx: Context) -> None:
 def test_collect_type_names_simple() -> None:
     tree = ast.parse("def f(x: Foo): pass")
     func = tree.body[0]
+    assert isinstance(func, ast.FunctionDef)
     ann = func.args.args[0].annotation
     assert collect_type_names_from_annotation(ann) == {"Foo"}
 
@@ -4140,6 +4141,7 @@ def test_collect_type_names_simple() -> None:
 def test_collect_type_names_generic() -> None:
     tree = ast.parse("def f(x: list[Foo]): pass")
     func = tree.body[0]
+    assert isinstance(func, ast.FunctionDef)
     ann = func.args.args[0].annotation
     names = collect_type_names_from_annotation(ann)
     assert "Foo" in names
@@ -4149,6 +4151,7 @@ def test_collect_type_names_generic() -> None:
 def test_collect_type_names_optional() -> None:
     tree = ast.parse("def f(x: Optional[Foo]): pass")
     func = tree.body[0]
+    assert isinstance(func, ast.FunctionDef)
     ann = func.args.args[0].annotation
     names = collect_type_names_from_annotation(ann)
     assert "Optional" in names
@@ -4158,6 +4161,7 @@ def test_collect_type_names_optional() -> None:
 def test_collect_type_names_union_pipe() -> None:
     tree = ast.parse("def f(x: Foo | Bar): pass")
     func = tree.body[0]
+    assert isinstance(func, ast.FunctionDef)
     ann = func.args.args[0].annotation
     names = collect_type_names_from_annotation(ann)
     assert names == {"Foo", "Bar"}
@@ -4170,6 +4174,7 @@ def test_collect_type_names_none_annotation() -> None:
 def test_collect_type_names_attribute_skipped() -> None:
     tree = ast.parse("def f(x: module.Foo): pass")
     func = tree.body[0]
+    assert isinstance(func, ast.FunctionDef)
     ann = func.args.args[0].annotation
     assert collect_type_names_from_annotation(ann) == set()
 
