@@ -762,7 +762,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
 
         normalized_prefix = prefix.rstrip(" \t")
 
-        result_parts = [f"\n{'\n'.join(setup_lines)}"]
+        result_parts = ["\n" + "\n".join(setup_lines)]
         if normalized_prefix.strip():
             prefix_body = normalized_prefix.lstrip("\n")
             result_parts.append(f"{indent}\n")
