@@ -5,7 +5,7 @@ description = "Client for codeflash.ai - automatic code performance optimization
 authors = [{ name = "CodeFlash Inc.", email = "contact@codeflash.ai" }]
 requires-python = ">=3.9"
 readme = "README.md"
-license = {text = "BSL-1.1"}
+license-files = ["LICENSE"]
 keywords = [
     "codeflash",
     "performance",
@@ -40,14 +40,15 @@ dependencies = [
     "dill>=0.3.8",
     "rich>=13.8.1",
     "lxml>=5.3.0",
-    "crosshair-tool>=0.0.78",
+    "crosshair-tool>=0.0.78; python_version < '3.15'",
     "coverage>=7.6.4",
     "line_profiler>=4.2.0",
     "platformdirs>=4.3.7",
     "pygls>=2.0.0,<3.0.0",
     "codeflash-benchmark",
-    "filelock",
-    "pytest-asyncio>=1.2.0",
+    "filelock>=3.20.3; python_version >= '3.10'",
+    "filelock<3.20.3; python_version < '3.10'",
+    "pytest-asyncio>=0.18.0",
 ]
 
 [project.urls]
@@ -88,13 +89,14 @@ tests = [
     "jax>=0.4.30",
     "numpy>=2.0.2",
     "pandas>=2.3.3",
+    "pyarrow>=15.0.0",
     "pyrsistent>=0.20.0",
     "scipy>=1.13.1",
     "torch>=2.8.0",
     "xarray>=2024.7.0",
     "eval_type_backport",
     "numba>=0.60.0",
-    "tensorflow>=2.20.0",
+    "tensorflow>=2.20.0; python_version >= '3.10'",
 ]
 
 [tool.hatch.build.targets.sdist]
@@ -207,6 +209,8 @@ warn_unreachable = true
 install_types = true
 plugins = ["pydantic.mypy"]
 
+exclude = ["tests/", "code_to_optimize/", "pie_test_set/", "experiments/"]
+
 [[tool.mypy.overrides]]
 module = ["jedi", "jedi.api.classes", "inquirer", "inquirer.themes", "numba"]
 ignore_missing_imports = true
@@ -309,6 +313,9 @@ split-on-trailing-comma = false
 docstring-code-format = true
 skip-magic-trailing-comma = true
 
+[tool.ty.src]
+exclude = ["tests", "code_to_optimize", "pie_test_set", "experiments"]
+
 [tool.hatch.version]
 source = "uv-dynamic-versioning"
 
@@ -354,4 +361,3 @@ markers = [
 [build-system]
 requires = ["hatchling", "uv-dynamic-versioning"]
 build-backend = "hatchling.build"
-
