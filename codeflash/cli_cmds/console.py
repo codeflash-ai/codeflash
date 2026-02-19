@@ -336,11 +336,12 @@ def call_graph_summary(call_graph: DependencyResolver, file_to_funcs: dict[Path,
     leaf_functions = total_functions - with_context
     avg_callees = total_callees / total_functions
 
+    function_label = "function" if total_functions == 1 else "functions"
+
     summary = (
-        f"{total_functions} functions ready for optimization · "
-        f"avg {avg_callees:.1f} dependencies/function\n"
-        f"{with_context} call other functions · "
-        f"{leaf_functions} are self-contained"
+        f"{total_functions} {function_label} ready for optimization\n"
+        f"Uses other functions: {with_context} · "
+        f"Standalone: {leaf_functions}"
     )
 
     if is_LSP_enabled():
