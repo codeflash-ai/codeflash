@@ -207,6 +207,8 @@ warn_unreachable = true
 install_types = true
 plugins = ["pydantic.mypy"]
 
+exclude = ["tests/", "code_to_optimize/", "pie_test_set/", "experiments/"]
+
 [[tool.mypy.overrides]]
 module = ["jedi", "jedi.api.classes", "inquirer", "inquirer.themes", "numba"]
 ignore_missing_imports = true

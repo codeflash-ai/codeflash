@@ -158,6 +158,10 @@ class TestConfig:
     _language: Optional[str] = None  # Language identifier for multi-language support
     js_project_root: Optional[Path] = None  # JavaScript project root (directory containing package.json)
 
+    def __post_init__(self) -> None:
+        self.project_root_path = self.project_root_path.resolve()
+        self.tests_project_rootdir = self.tests_project_rootdir.resolve()
+
     @property
     def test_framework(self) -> str:
         """Returns the appropriate test framework based on language.

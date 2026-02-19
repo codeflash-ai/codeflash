@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import concurrent.futures
+import dataclasses
 import logging
 import os
 import queue
@@ -443,9 +444,12 @@ class FunctionOptimizer:
         args: Namespace | None = None,
         replay_tests_dir: Path | None = None,
     ) -> None:
-        self.project_root = test_cfg.project_root_path
+        self.project_root = test_cfg.project_root_path.resolve()
         self.test_cfg = test_cfg
         self.aiservice_client = aiservice_client if aiservice_client else AiServiceClient()
+        resolved_file_path = function_to_optimize.file_path.resolve()
+        if resolved_file_path != function_to_optimize.file_path:
+            function_to_optimize = dataclasses.replace(function_to_optimize, file_path=resolved_file_path)
         self.function_to_optimize = function_to_optimize
         self.function_to_optimize_source_code = (
             function_to_optimize_source_code
@@ -1451,7 +1455,7 @@ class FunctionOptimizer:
         optimized_code = ""
         if optimized_context is not None:
             file_to_code_context = optimized_context.file_to_path()
-            optimized_code = file_to_code_context.get(str(path.relative_to(self.project_root)), "")
+            optimized_code = file_to_code_context.get(str(path.resolve().relative_to(self.project_root)), "")
 
         new_code = format_code(
             self.args.formatter_cmds, path, optimized_code=optimized_code, check_diff=True, exit_on_failure=False
