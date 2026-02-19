@@ -11,7 +11,6 @@ from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
 from codeflash.code_utils.formatter import sort_imports
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.languages import is_java
 from codeflash.models.models import FunctionParent, TestingMode, VerificationType
 
 if TYPE_CHECKING:
@@ -710,13 +709,6 @@ def inject_profiling_into_existing_test(
     mode: TestingMode = TestingMode.BEHAVIOR,
 ) -> tuple[bool, str | None]:
     tests_project_root = tests_project_root.resolve()
-
-    if is_java():
-        from codeflash.languages.java.instrument_existing_tests import inject_profiling_into_existing_java_test
-
-        return inject_profiling_into_existing_java_test(
-            test_path, call_positions, function_to_optimize, tests_project_root, mode.value
-        )
 
     if function_to_optimize.is_async:
         return inject_async_profiling_into_existing_test(
