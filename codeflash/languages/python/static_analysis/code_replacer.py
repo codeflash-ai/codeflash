@@ -10,23 +10,22 @@ import libcst as cst
 from libcst.metadata import PositionProvider
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_extractor import (
+from codeflash.code_utils.config_parser import find_conftest_files
+from codeflash.code_utils.formatter import sort_imports
+from codeflash.languages import is_python
+from codeflash.languages.python.static_analysis.code_extractor import (
     add_global_assignments,
     add_needed_imports_from_module,
     find_insertion_index_after_imports,
 )
-from codeflash.code_utils.config_parser import find_conftest_files
-from codeflash.code_utils.formatter import sort_imports
-from codeflash.code_utils.line_profile_utils import ImportAdder
-from codeflash.languages import is_python
+from codeflash.languages.python.static_analysis.line_profile_utils import ImportAdder
 from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-    from codeflash.languages.base import Language, LanguageSupport
-    from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer
+    from codeflash.languages.base import LanguageSupport
     from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, OptimizedCandidate, ValidCode
 
 ASTNodeT = TypeVar("ASTNodeT", bound=ast.AST)
@@ -401,23 +400,114 @@ def replace_functions_in_file(
             return source_code
         parsed_function_names.append((class_name, function_name))
 
-    # Collect functions we want to modify from the optimized code
-    optimized_module = cst.metadata.MetadataWrapper(cst.parse_module(optimized_code))
+    # Collect functions from optimized code without using MetadataWrapper
+    optimized_module = cst.parse_module(optimized_code)
+    modified_functions: dict[tuple[str | None, str], cst.FunctionDef] = {}
+    new_functions: list[cst.FunctionDef] = []
+    new_class_functions: dict[str, list[cst.FunctionDef]] = defaultdict(list)
+    new_classes: list[cst.ClassDef] = []
+    modified_init_functions: dict[str, cst.FunctionDef] = {}
+
+    function_names_set = set(parsed_function_names)
+
+    for node in optimized_module.body:
+        if isinstance(node, cst.FunctionDef):
+            key = (None, node.name.value)
+            if key in function_names_set:
+                modified_functions[key] = node
+            elif preexisting_objects and (node.name.value, ()) not in preexisting_objects:
+                new_functions.append(node)
+
+        elif isinstance(node, cst.ClassDef):
+            class_name = node.name.value
+            parents = (FunctionParent(name=class_name, type="ClassDef"),)
+
+            if (class_name, ()) not in preexisting_objects:
+                new_classes.append(node)
+
+            for child in node.body.body:
+                if isinstance(child, cst.FunctionDef):
+                    method_key = (class_name, child.name.value)
+                    if method_key in function_names_set:
+                        modified_functions[method_key] = child
+                    elif (
+                        child.name.value == "__init__"
+                        and preexisting_objects
+                        and (class_name, ()) in preexisting_objects
+                    ):
+                        modified_init_functions[class_name] = child
+                    elif preexisting_objects and (child.name.value, parents) not in preexisting_objects:
+                        new_class_functions[class_name].append(child)
+
     original_module = cst.parse_module(source_code)
 
-    visitor = OptimFunctionCollector(preexisting_objects, set(parsed_function_names))
-    optimized_module.visit(visitor)
+    max_function_index = None
+    max_class_index = None
+    for index, _node in enumerate(original_module.body):
+        if isinstance(_node, cst.FunctionDef):
+            max_function_index = index
+        if isinstance(_node, cst.ClassDef):
+            max_class_index = index
 
-    # Replace these functions in the original code
-    transformer = OptimFunctionReplacer(
-        modified_functions=visitor.modified_functions,
-        new_classes=visitor.new_classes,
-        new_functions=visitor.new_functions,
-        new_class_functions=visitor.new_class_functions,
-        modified_init_functions=visitor.modified_init_functions,
-    )
-    modified_tree = original_module.visit(transformer)
-    return modified_tree.code
+    new_body: list[cst.CSTNode] = []
+    existing_class_names = set()
+
+    for node in original_module.body:
+        if isinstance(node, cst.FunctionDef):
+            key = (None, node.name.value)
+            if key in modified_functions:
+                modified_func = modified_functions[key]
+                new_body.append(node.with_changes(body=modified_func.body, decorators=modified_func.decorators))
+            else:
+                new_body.append(node)
+
+        elif isinstance(node, cst.ClassDef):
+            class_name = node.name.value
+            existing_class_names.add(class_name)
+
+            new_members: list[cst.CSTNode] = []
+            for child in node.body.body:
+                if isinstance(child, cst.FunctionDef):
+                    key = (class_name, child.name.value)
+                    if key in modified_functions:
+                        modified_func = modified_functions[key]
+                        new_members.append(
+                            child.with_changes(body=modified_func.body, decorators=modified_func.decorators)
+                        )
+                    elif child.name.value == "__init__" and class_name in modified_init_functions:
+                        new_members.append(modified_init_functions[class_name])
+                    else:
+                        new_members.append(child)
+                else:
+                    new_members.append(child)
+
+            if class_name in new_class_functions:
+                new_members.extend(new_class_functions[class_name])
+
+            new_body.append(node.with_changes(body=node.body.with_changes(body=new_members)))
+        else:
+            new_body.append(node)
+
+    if new_classes:
+        unique_classes = [nc for nc in new_classes if nc.name.value not in existing_class_names]
+        if unique_classes:
+            new_classes_insertion_idx = (
+                max_class_index if max_class_index is not None else find_insertion_index_after_imports(original_module)
+            )
+            new_body = list(
+                chain(new_body[:new_classes_insertion_idx], unique_classes, new_body[new_classes_insertion_idx:])
+            )
+
+    if new_functions:
+        if max_function_index is not None:
+            new_body = [*new_body[: max_function_index + 1], *new_functions, *new_body[max_function_index + 1 :]]
+        elif max_class_index is not None:
+            new_body = [*new_body[: max_class_index + 1], *new_functions, *new_body[max_class_index + 1 :]]
+        else:
+            new_body = [*new_functions, *new_body]
+
+    updated_module = original_module.with_changes(body=new_body)
+    return updated_module.code
 
 
 def replace_functions_and_add_imports(
@@ -509,11 +599,8 @@ def replace_function_definitions_for_language(
     lang_support = get_language_support(language)
 
     # Add any new global declarations from the optimized code to the original source
-    original_source_code = _add_global_declarations_for_language(
-        optimized_code=code_to_apply,
-        original_source=original_source_code,
-        module_abspath=module_abspath,
-        language=language,
+    original_source_code = lang_support.add_global_declarations(
+        optimized_code=code_to_apply, original_source=original_source_code, module_abspath=module_abspath
     )
 
     # If we have function_to_optimize with line info and this is the main file, use it for precise replacement
@@ -610,204 +697,6 @@ def _extract_function_from_code(
         logger.debug(f"Error extracting function {function_name}: {e}")
 
     return None
-
-
-def _add_global_declarations_for_language(
-    optimized_code: str, original_source: str, module_abspath: Path, language: Language
-) -> str:
-    """Add new global declarations from optimized code to original source.
-
-    Finds module-level declarations (const, let, var, class, type, interface, enum)
-    in the optimized code that don't exist in the original source and adds them.
-
-    New declarations are inserted after any existing declarations they depend on.
-    For example, if optimized code has `const _has = FOO.bar.bind(FOO)`, and `FOO`
-    is already declared in the original source, `_has` will be inserted after `FOO`.
-
-    Args:
-        optimized_code: The optimized code that may contain new declarations.
-        original_source: The original source code.
-        module_abspath: Path to the module file (for parser selection).
-        language: The language of the code.
-
-    Returns:
-        Original source with new declarations added in dependency order.
-
-    """
-    from codeflash.languages.base import Language
-
-    if language not in (Language.JAVASCRIPT, Language.TYPESCRIPT):
-        return original_source
-
-    try:
-        from codeflash.languages.javascript.treesitter import get_analyzer_for_file
-
-        analyzer = get_analyzer_for_file(module_abspath)
-
-        original_declarations = analyzer.find_module_level_declarations(original_source)
-        optimized_declarations = analyzer.find_module_level_declarations(optimized_code)
-
-        if not optimized_declarations:
-            return original_source
-
-        existing_names = _get_existing_names(original_declarations, analyzer, original_source)
-        new_declarations = _filter_new_declarations(optimized_declarations, existing_names)
-
-        if not new_declarations:
-            return original_source
-
-        # Build a map of existing declaration names to their end lines (1-indexed)
-        existing_decl_end_lines = {decl.name: decl.end_line for decl in original_declarations}
-
-        # Insert each new declaration after its dependencies
-        result = original_source
-        for decl in new_declarations:
-            result = _insert_declaration_after_dependencies(
-                result, decl, existing_decl_end_lines, analyzer, module_abspath
-            )
-            # Update the map with the newly inserted declaration for subsequent insertions
-            # Re-parse to get accurate line numbers after insertion
-            updated_declarations = analyzer.find_module_level_declarations(result)
-            existing_decl_end_lines = {d.name: d.end_line for d in updated_declarations}
-
-        return result
-
-    except Exception as e:
-        logger.debug(f"Error adding global declarations: {e}")
-        return original_source
-
-
-def _get_existing_names(original_declarations: list, analyzer: TreeSitterAnalyzer, original_source: str) -> set[str]:
-    """Get all names that already exist in the original source (declarations + imports)."""
-    existing_names = {decl.name for decl in original_declarations}
-
-    original_imports = analyzer.find_imports(original_source)
-    for imp in original_imports:
-        if imp.default_import:
-            existing_names.add(imp.default_import)
-        for name, alias in imp.named_imports:
-            existing_names.add(alias if alias else name)
-        if imp.namespace_import:
-            existing_names.add(imp.namespace_import)
-
-    return existing_names
-
-
-def _filter_new_declarations(optimized_declarations: list, existing_names: set[str]) -> list:
-    """Filter declarations to only those that don't exist in the original source."""
-    new_declarations = []
-    seen_sources: set[str] = set()
-
-    # Sort by line number to maintain order from optimized code
-    sorted_declarations = sorted(optimized_declarations, key=lambda d: d.start_line)
-
-    for decl in sorted_declarations:
-        if decl.name not in existing_names and decl.source_code not in seen_sources:
-            new_declarations.append(decl)
-            seen_sources.add(decl.source_code)
-
-    return new_declarations
-
-
-def _insert_declaration_after_dependencies(
-    source: str,
-    declaration,
-    existing_decl_end_lines: dict[str, int],
-    analyzer: TreeSitterAnalyzer,
-    module_abspath: Path,
-) -> str:
-    """Insert a declaration after the last existing declaration it depends on.
-
-    Args:
-        source: Current source code.
-        declaration: The declaration to insert.
-        existing_decl_end_lines: Map of existing declaration names to their end lines.
-        analyzer: TreeSitter analyzer.
-        module_abspath: Path to the module file.
-
-    Returns:
-        Source code with the declaration inserted at the correct position.
-
-    """
-    # Find identifiers referenced in this declaration
-    referenced_names = analyzer.find_referenced_identifiers(declaration.source_code)
-
-    # Find the latest end line among all referenced declarations
-    insertion_line = _find_insertion_line_for_declaration(source, referenced_names, existing_decl_end_lines, analyzer)
-
-    lines = source.splitlines(keepends=True)
-
-    # Ensure proper spacing
-    decl_code = declaration.source_code
-    if not decl_code.endswith("\n"):
-        decl_code += "\n"
-
-    # Add blank line before if inserting after content
-    if insertion_line > 0 and lines[insertion_line - 1].strip():
-        decl_code = "\n" + decl_code
-
-    before = lines[:insertion_line]
-    after = lines[insertion_line:]
-
-    return "".join([*before, decl_code, *after])
-
-
-def _find_insertion_line_for_declaration(
-    source: str, referenced_names: set[str], existing_decl_end_lines: dict[str, int], analyzer: TreeSitterAnalyzer
-) -> int:
-    """Find the line where a declaration should be inserted based on its dependencies.
-
-    Args:
-        source: Source code.
-        referenced_names: Names referenced by the declaration.
-        existing_decl_end_lines: Map of declaration names to their end lines (1-indexed).
-        analyzer: TreeSitter analyzer.
-
-    Returns:
-        Line index (0-based) where the declaration should be inserted.
-
-    """
-    # Find the maximum end line among referenced declarations
-    max_dependency_line = 0
-    for name in referenced_names:
-        if name in existing_decl_end_lines:
-            max_dependency_line = max(max_dependency_line, existing_decl_end_lines[name])
-
-    if max_dependency_line > 0:
-        # Insert after the last dependency (end_line is 1-indexed, we need 0-indexed)
-        return max_dependency_line
-
-    # No dependencies found - insert after imports
-    lines = source.splitlines(keepends=True)
-    return _find_line_after_imports(lines, analyzer, source)
-
-
-def _find_line_after_imports(lines: list[str], analyzer: TreeSitterAnalyzer, source: str) -> int:
-    """Find the line index after all imports.
-
-    Args:
-        lines: Source lines.
-        analyzer: TreeSitter analyzer.
-        source: Full source code.
-
-    Returns:
-        Line index (0-based) for insertion after imports.
-
-    """
-    try:
-        imports = analyzer.find_imports(source)
-        if imports:
-            return max(imp.end_line for imp in imports)
-    except Exception as exc:
-        logger.debug(f"Exception in _find_line_after_imports: {exc}")
-
-    # Default: insert at beginning (after shebang/directive comments)
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped and not stripped.startswith("//") and not stripped.startswith("#!"):
-            return i
-
-    return 0
 
 
 def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStringsMarkdown) -> str:

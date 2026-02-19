@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from codeflash.code_utils.concolic_utils import AssertCleanup, is_valid_concolic_test
+from codeflash.languages.python.static_analysis.concolic_utils import AssertCleanup, is_valid_concolic_test
 
 
 class TestFirstTopLevelArg:

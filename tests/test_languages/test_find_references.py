@@ -22,7 +22,7 @@ from codeflash.languages.javascript.find_references import (
     find_references,
 )
 from codeflash.languages.base import Language, FunctionInfo, ReferenceInfo
-from codeflash.code_utils.code_extractor import _format_references_as_markdown
+from codeflash.languages.python.static_analysis.code_extractor import _format_references_as_markdown
 from codeflash.models.models import FunctionParent
 
 

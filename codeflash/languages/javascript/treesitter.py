@@ -1788,3 +1788,39 @@ def get_analyzer_for_file(file_path: Path) -> TreeSitterAnalyzer:
         return TreeSitterAnalyzer(TreeSitterLanguage.TSX)
     # Default to JavaScript for .js, .jsx, .mjs, .cjs
     return TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
+
+
+# Author: Saurabh Misra <misra.saurabh1@gmail.com>
+def extract_calling_function_source(source_code: str, function_name: str, ref_line: int) -> str | None:
+    """Extract the source code of a calling function in JavaScript/TypeScript.
+
+    Args:
+        source_code: Full source code of the file.
+        function_name: Name of the function to extract.
+        ref_line: Line number where the reference is (helps identify the right function).
+
+    Returns:
+        Source code of the function, or None if not found.
+
+    """
+    try:
+        from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage
+
+        # Try TypeScript first, fall back to JavaScript
+        for lang in [TreeSitterLanguage.TYPESCRIPT, TreeSitterLanguage.TSX, TreeSitterLanguage.JAVASCRIPT]:
+            try:
+                analyzer = TreeSitterAnalyzer(lang)
+                functions = analyzer.find_functions(source_code, include_methods=True)
+
+                for func in functions:
+                    if func.name == function_name:
+                        # Check if the reference line is within this function
+                        if func.start_line <= ref_line <= func.end_line:
+                            return func.source_text
+                break
+            except Exception:
+                continue
+
+        return None
+    except Exception:
+        return None

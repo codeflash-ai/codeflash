@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
     from codeflash.languages.base import ReferenceInfo
     from codeflash.languages.javascript.treesitter import TypeDefinition
+    from codeflash.models.models import GeneratedTestsList, InvocationId
 
 logger = logging.getLogger(__name__)
 
@@ -1777,6 +1778,116 @@ class JavaScriptSupport:
         from codeflash.languages.javascript.edit_tests import remove_test_functions
 
         return remove_test_functions(test_source, functions_to_remove)
+
+    def postprocess_generated_tests(
+        self, generated_tests: GeneratedTestsList, test_framework: str, project_root: Path, source_file_path: Path
+    ) -> GeneratedTestsList:
+        """Apply language-specific postprocessing to generated tests."""
+        from codeflash.languages.javascript.edit_tests import (
+            disable_ts_check,
+            inject_test_globals,
+            normalize_generated_tests_imports,
+        )
+        from codeflash.languages.javascript.module_system import detect_module_system
+
+        module_system = detect_module_system(project_root, source_file_path)
+        if module_system == "esm":
+            generated_tests = inject_test_globals(generated_tests, test_framework)
+        if self.language == Language.TYPESCRIPT:
+            generated_tests = disable_ts_check(generated_tests)
+        return normalize_generated_tests_imports(generated_tests)
+
+    def remove_test_functions_from_generated_tests(
+        self, generated_tests: GeneratedTestsList, functions_to_remove: list[str]
+    ) -> GeneratedTestsList:
+        """Remove specific test functions from generated tests."""
+        from codeflash.models.models import GeneratedTests, GeneratedTestsList
+
+        updated_tests: list[GeneratedTests] = []
+        for test in generated_tests.generated_tests:
+            updated_tests.append(
+                GeneratedTests(
+                    generated_original_test_source=self.remove_test_functions(
+                        test.generated_original_test_source, functions_to_remove
+                    ),
+                    instrumented_behavior_test_source=test.instrumented_behavior_test_source,
+                    instrumented_perf_test_source=test.instrumented_perf_test_source,
+                    behavior_file_path=test.behavior_file_path,
+                    perf_file_path=test.perf_file_path,
+                )
+            )
+        return GeneratedTestsList(generated_tests=updated_tests)
+
+    def add_runtime_comments_to_generated_tests(
+        self,
+        generated_tests: GeneratedTestsList,
+        original_runtimes: dict[InvocationId, list[int]],
+        optimized_runtimes: dict[InvocationId, list[int]],
+        tests_project_rootdir: Path | None = None,
+    ) -> GeneratedTestsList:
+        """Add runtime comments to generated tests."""
+        from codeflash.models.models import GeneratedTests, GeneratedTestsList
+
+        tests_root = tests_project_rootdir or Path()
+        original_runtimes_dict = self._build_runtime_map(original_runtimes, tests_root)
+        optimized_runtimes_dict = self._build_runtime_map(optimized_runtimes, tests_root)
+
+        modified_tests: list[GeneratedTests] = []
+        for test in generated_tests.generated_tests:
+            modified_source = self.add_runtime_comments(
+                test.generated_original_test_source, original_runtimes_dict, optimized_runtimes_dict
+            )
+            modified_tests.append(
+                GeneratedTests(
+                    generated_original_test_source=modified_source,
+                    instrumented_behavior_test_source=test.instrumented_behavior_test_source,
+                    instrumented_perf_test_source=test.instrumented_perf_test_source,
+                    behavior_file_path=test.behavior_file_path,
+                    perf_file_path=test.perf_file_path,
+                )
+            )
+        return GeneratedTestsList(generated_tests=modified_tests)
+
+    def add_global_declarations(self, optimized_code: str, original_source: str, module_abspath: Path) -> str:
+        from codeflash.languages.javascript.code_replacer import _add_global_declarations_for_language
+
+        return _add_global_declarations_for_language(optimized_code, original_source, module_abspath, self.language)
+
+    def extract_calling_function_source(self, source_code: str, function_name: str, ref_line: int) -> str | None:
+        from codeflash.languages.javascript.treesitter import extract_calling_function_source
+
+        return extract_calling_function_source(source_code, function_name, ref_line)
+
+    def _build_runtime_map(
+        self, inv_id_runtimes: dict[InvocationId, list[int]], tests_project_rootdir: Path
+    ) -> dict[str, int]:
+        from codeflash.languages.javascript.edit_tests import resolve_js_test_module_path
+
+        unique_inv_ids: dict[str, int] = {}
+        for inv_id, runtimes in inv_id_runtimes.items():
+            test_qualified_name = (
+                inv_id.test_class_name + "." + inv_id.test_function_name  # type: ignore[operator]
+                if inv_id.test_class_name
+                else inv_id.test_function_name
+            )
+            if not test_qualified_name:
+                continue
+            abs_path = resolve_js_test_module_path(inv_id.test_module_path, tests_project_rootdir)
+
+            abs_path_str = str(abs_path.resolve().with_suffix(""))
+            if "__unit_test_" not in abs_path_str and "__perf_test_" not in abs_path_str:
+                continue
+
+            key = test_qualified_name + "#" + abs_path_str
+            parts = inv_id.iteration_id.split("_").__len__()  # type: ignore[union-attr]
+            cur_invid = (
+                inv_id.iteration_id.split("_")[0] if parts < 3 else "_".join(inv_id.iteration_id.split("_")[:-1])
+            )  # type: ignore[union-attr]
+            match_key = key + "#" + cur_invid
+            if match_key not in unique_inv_ids:
+                unique_inv_ids[match_key] = 0
+            unique_inv_ids[match_key] += min(runtimes)
+        return unique_inv_ids
 
     # === Test Result Comparison ===
 
