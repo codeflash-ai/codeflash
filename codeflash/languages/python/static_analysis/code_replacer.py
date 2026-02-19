@@ -10,15 +10,15 @@ import libcst as cst
 from libcst.metadata import PositionProvider
 
 from codeflash.cli_cmds.console import logger
+from codeflash.code_utils.config_parser import find_conftest_files
+from codeflash.code_utils.formatter import sort_imports
+from codeflash.languages import is_python
 from codeflash.languages.python.static_analysis.code_extractor import (
     add_global_assignments,
     add_needed_imports_from_module,
     find_insertion_index_after_imports,
 )
-from codeflash.code_utils.config_parser import find_conftest_files
-from codeflash.code_utils.formatter import sort_imports
 from codeflash.languages.python.static_analysis.line_profile_utils import ImportAdder
-from codeflash.languages import is_python
 from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:

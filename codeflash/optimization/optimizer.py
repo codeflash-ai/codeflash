@@ -250,7 +250,9 @@ class Optimizer:
         original_module_path: Path | None = None,
         call_graph: DependencyResolver | None = None,
     ) -> FunctionOptimizer | None:
-        from codeflash.languages.python.static_analysis.static_analysis import get_first_top_level_function_or_method_ast
+        from codeflash.languages.python.static_analysis.static_analysis import (
+            get_first_top_level_function_or_method_ast,
+        )
         from codeflash.optimization.function_optimizer import FunctionOptimizer
 
         if function_to_optimize_ast is None and original_module_ast is not None:

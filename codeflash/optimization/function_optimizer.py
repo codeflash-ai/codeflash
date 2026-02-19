@@ -26,12 +26,6 @@ from codeflash.api.cfapi import add_code_context_hash, create_staging, get_cfapi
 from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import code_print, console, logger, lsp_log, progress_bar
 from codeflash.code_utils import env_utils
-from codeflash.languages.python.static_analysis.code_extractor import get_opt_review_metrics, is_numerical_code
-from codeflash.languages.python.static_analysis.code_replacer import (
-    add_custom_marker_to_all_tests,
-    modify_autouse_fixture,
-    replace_function_definitions_in_module,
-)
 from codeflash.code_utils.code_utils import (
     choose_weights,
     cleanup_paths,
@@ -59,20 +53,11 @@ from codeflash.code_utils.config_consts import (
     get_effort_value,
 )
 from codeflash.code_utils.deduplicate_code import normalize_code
-from codeflash.languages.python.static_analysis.edit_generated_tests import (
-    add_runtime_comments_to_generated_tests,
-    disable_ts_check,
-    inject_test_globals,
-    normalize_generated_tests_imports,
-    remove_functions_from_generated_tests,
-)
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.formatter import format_code, format_generated_code, sort_imports
 from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
-from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports, contains_jit_decorator
 from codeflash.code_utils.shell_utils import make_env_with_project_root
-from codeflash.languages.python.static_analysis.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
 from codeflash.either import Failure, Success, is_successful
@@ -86,6 +71,21 @@ from codeflash.languages.python.context.unused_definition_remover import (
     detect_unused_helper_functions,
     revert_unused_helper_functions,
 )
+from codeflash.languages.python.static_analysis.code_extractor import get_opt_review_metrics, is_numerical_code
+from codeflash.languages.python.static_analysis.code_replacer import (
+    add_custom_marker_to_all_tests,
+    modify_autouse_fixture,
+    replace_function_definitions_in_module,
+)
+from codeflash.languages.python.static_analysis.edit_generated_tests import (
+    add_runtime_comments_to_generated_tests,
+    disable_ts_check,
+    inject_test_globals,
+    normalize_generated_tests_imports,
+    remove_functions_from_generated_tests,
+)
+from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports, contains_jit_decorator
+from codeflash.languages.python.static_analysis.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree_to_markdown
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
