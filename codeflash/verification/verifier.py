@@ -102,13 +102,13 @@ def generate_tests(
 
             logger.debug(f"Instrumented JS/TS tests locally for {function_to_optimize.function_name}")
         elif is_java():
-            from codeflash.languages.java.instrumentation import instrument_generated_java_test
+            from codeflash.languages.java.test_instrumentation import instrument_generated_test
 
             func_name = function_to_optimize.function_name
             qualified_name = function_to_optimize.qualified_name
 
             # Instrument for behavior verification (renames class)
-            instrumented_behavior_test_source = instrument_generated_java_test(
+            instrumented_behavior_test_source = instrument_generated_test(
                 test_code=generated_test_source,
                 function_name=func_name,
                 qualified_name=qualified_name,
@@ -117,7 +117,7 @@ def generate_tests(
             )
 
             # Instrument for performance measurement (adds timing markers)
-            instrumented_perf_test_source = instrument_generated_java_test(
+            instrumented_perf_test_source = instrument_generated_test(
                 test_code=generated_test_source,
                 function_name=func_name,
                 qualified_name=qualified_name,
