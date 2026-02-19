@@ -159,6 +159,25 @@ class JavaSupport(LanguageSupport):
         """Add timing instrumentation to test code."""
         return instrument_for_benchmarking(test_source, target_function, self._analyzer)
 
+    def instrument_generated_test(
+        self,
+        test_code: str,
+        function_name: str,
+        qualified_name: str,
+        mode: str,
+        function_to_optimize: FunctionToOptimize,
+    ) -> str:
+        """Instrument a generated Java test for behavior or performance testing."""
+        from codeflash.languages.java.instrumentation import instrument_generated_java_test
+
+        return instrument_generated_java_test(
+            test_code=test_code,
+            function_name=function_name,
+            qualified_name=qualified_name,
+            mode=mode,
+            function_to_optimize=function_to_optimize,
+        )
+
     # === Validation ===
 
     def validate_syntax(self, source: str) -> bool:
