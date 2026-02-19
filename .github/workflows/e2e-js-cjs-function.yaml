@@ -3,7 +3,16 @@ name: E2E - JS CommonJS Function
 on:
   pull_request:
     paths:
-      - '**'  # Trigger for all paths
+      - 'codeflash/languages/javascript/**'
+      - 'packages/**'
+      - 'code_to_optimize/js/**'
+      - 'tests/test_languages/test_javascript*'
+      - 'tests/test_languages/test_js_*'
+      - 'tests/test_languages/test_import_resolver*'
+      - 'tests/test_languages/test_typescript*'
+      - 'tests/test_languages/test_vitest*'
+      - 'tests/scripts/end_to_end_test_js*'
+      - '.github/workflows/e2e-js-*'
 
   workflow_dispatch:
 

@@ -4,6 +4,13 @@ on:
   push:
     branches: [main]
   pull_request:
+    paths:
+      - 'codeflash/**'
+      - 'tests/**'
+      - 'code_to_optimize/**'
+      - '!code_to_optimize/js/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
   workflow_dispatch:
 
 concurrency:

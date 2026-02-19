@@ -1,5 +1,13 @@
 name: Lint
-on: [pull_request]
+on:
+  pull_request:
+    paths:
+      - 'codeflash/**'
+      - 'tests/**'
+      - 'code_to_optimize/**'
+      - '!code_to_optimize/js/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}

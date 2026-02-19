@@ -3,7 +3,14 @@ name: E2E - Topological Sort (Worktree)
 on:
   pull_request:
     paths:
-      - '**'  # Trigger for all paths
+      - 'codeflash/**'
+      - 'code_to_optimize/**'
+      - '!code_to_optimize/js/**'
+      - 'tests/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/e2e-*'
+      - '!.github/workflows/e2e-js-*'
 
   workflow_dispatch:
 
