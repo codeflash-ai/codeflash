@@ -1762,4 +1762,3 @@ def _extract_calling_function_python(source_code: str, function_name: str, ref_l
         return None
     except Exception:
         return None
-
