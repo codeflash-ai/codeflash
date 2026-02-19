@@ -293,7 +293,7 @@ class Optimizer:
     def prepare_module_for_optimization(
         self, original_module_path: Path
     ) -> tuple[dict[Path, ValidCode], ast.Module | None] | None:
-        from codeflash.code_utils.code_replacer import normalize_code, normalize_node
+        from codeflash.languages.python.static_analysis.code_replacer import normalize_code, normalize_node
         from codeflash.languages.python.static_analysis.static_analysis import analyze_imported_modules
 
         logger.info(f"loading|Examining file {original_module_path!s}")

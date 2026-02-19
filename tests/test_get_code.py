@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.code_utils.code_extractor import get_code
+from codeflash.languages.python.static_analysis.code_extractor import get_code
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent
 

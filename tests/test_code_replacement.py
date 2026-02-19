@@ -7,8 +7,8 @@ from pathlib import Path
 
 import libcst as cst
 
-from codeflash.code_utils.code_extractor import delete___future___aliased_imports, find_preexisting_objects
-from codeflash.code_utils.code_replacer import (
+from codeflash.languages.python.static_analysis.code_extractor import delete___future___aliased_imports, find_preexisting_objects
+from codeflash.languages.python.static_analysis.code_replacer import (
     AddRequestArgument,
     AutouseFixtureModifier,
     OptimFunctionCollector,

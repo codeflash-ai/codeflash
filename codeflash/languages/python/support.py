@@ -379,7 +379,7 @@ class PythonSupport:
             Modified source code with function replaced.
 
         """
-        from codeflash.code_utils.code_replacer import replace_functions_in_file
+        from codeflash.languages.python.static_analysis.code_replacer import replace_functions_in_file
 
         try:
             # Determine the function names to replace
