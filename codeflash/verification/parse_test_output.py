@@ -1216,6 +1216,10 @@ def parse_test_xml(
                 )
 
             else:
+                # Bug #10 Debug: Log how many timing markers we're processing
+                if is_java():
+                    logger.debug(f"Bug #10: Processing {len(begin_matches)} timing markers for test {test_function}")
+
                 for match_index, match in enumerate(begin_matches):
                     groups = match.groups()
 
@@ -1237,6 +1241,9 @@ def parse_test_xml(
                         if end_match:
                             stdout = sys_stdout[match.end() : end_match.start()]
                             runtime = int(end_match.groups()[5])  # duration is at index 5
+                            # Bug #10 Debug: Log first few runtime values
+                            if match_index < 3:
+                                logger.debug(f"Bug #10: Test {test_func}, iteration {iteration_id}: runtime={runtime}ns")
                         elif match_index == len(begin_matches) - 1:
                             stdout = sys_stdout[match.end() :]
                         else:
