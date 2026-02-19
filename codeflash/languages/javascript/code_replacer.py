@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
-from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from codeflash.languages.base import Language
     from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer
 
