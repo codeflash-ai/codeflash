@@ -99,6 +99,9 @@ def show_text_non_python(
         default_column_sizes = {"hits": 9, "time": 12, "perhit": 8, "percent": 8}
         table_rows = []
         for lineno, nhits, time in timings:
+            if nhits == 0:
+                table_rows.append(("", "", "", "", line_contents.get((fn, lineno), "")))
+                continue
             percent = "" if total_time == 0 else "%5.1f" % (100 * time / total_time)
             time_disp = "%5.1f" % time
             if len(time_disp) > default_column_sizes["time"]:
