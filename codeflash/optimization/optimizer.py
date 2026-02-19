@@ -250,7 +250,7 @@ class Optimizer:
         original_module_path: Path | None = None,
         call_graph: DependencyResolver | None = None,
     ) -> FunctionOptimizer | None:
-        from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
+        from codeflash.languages.python.static_analysis.static_analysis import get_first_top_level_function_or_method_ast
         from codeflash.optimization.function_optimizer import FunctionOptimizer
 
         if function_to_optimize_ast is None and original_module_ast is not None:
@@ -294,7 +294,7 @@ class Optimizer:
         self, original_module_path: Path
     ) -> tuple[dict[Path, ValidCode], ast.Module | None] | None:
         from codeflash.code_utils.code_replacer import normalize_code, normalize_node
-        from codeflash.code_utils.static_analysis import analyze_imported_modules
+        from codeflash.languages.python.static_analysis.static_analysis import analyze_imported_modules
 
         logger.info(f"loading|Examining file {original_module_path!s}")
         console.rule()
