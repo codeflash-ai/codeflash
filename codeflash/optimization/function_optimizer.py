@@ -63,13 +63,7 @@ from codeflash.discovery.functions_to_optimize import was_function_previously_op
 from codeflash.either import Failure, Success, is_successful
 from codeflash.languages import is_python
 from codeflash.languages.base import Language
-from codeflash.languages.current import current_language_support, is_typescript
-from codeflash.languages.javascript.edit_tests import (
-    disable_ts_check,
-    inject_test_globals,
-    normalize_generated_tests_imports,
-)
-from codeflash.languages.javascript.module_system import detect_module_system
+from codeflash.languages.current import current_language_support
 from codeflash.languages.javascript.test_runner import clear_created_config_files, get_created_config_files
 from codeflash.languages.python.context import code_context_extractor
 from codeflash.languages.python.context.unused_definition_remover import (
@@ -81,10 +75,6 @@ from codeflash.languages.python.static_analysis.code_replacer import (
     add_custom_marker_to_all_tests,
     modify_autouse_fixture,
     replace_function_definitions_in_module,
-)
-from codeflash.languages.python.static_analysis.edit_generated_tests import (
-    add_runtime_comments_to_generated_tests,
-    remove_functions_from_generated_tests,
 )
 from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports, contains_jit_decorator
 from codeflash.languages.python.static_analysis.static_analysis import get_first_top_level_function_or_method_ast
@@ -598,16 +588,13 @@ class FunctionOptimizer:
 
         count_tests, generated_tests, function_to_concolic_tests, concolic_test_str = test_results.unwrap()
 
-        # Normalize codeflash imports in JS/TS tests to use npm package
-        if not is_python():
-            module_system = detect_module_system(self.project_root, self.function_to_optimize.file_path)
-            if module_system == "esm":
-                generated_tests = inject_test_globals(generated_tests, self.test_cfg.test_framework)
-            if is_typescript():
-                # disable ts check for typescript tests
-                generated_tests = disable_ts_check(generated_tests)
-
-            generated_tests = normalize_generated_tests_imports(generated_tests)
+        # Language-specific postprocessing for generated tests
+        generated_tests = self.language_support.postprocess_generated_tests(
+            generated_tests,
+            test_framework=self.test_cfg.test_framework,
+            project_root=self.project_root,
+            source_file_path=self.function_to_optimize.file_path,
+        )
 
         logger.debug(f"[PIPELINE] Processing {count_tests} generated tests")
         for i, generated_test in enumerate(generated_tests.generated_tests):
@@ -2069,8 +2056,8 @@ class FunctionOptimizer:
             else "Coverage data not available"
         )
 
-        generated_tests = remove_functions_from_generated_tests(
-            generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
+        generated_tests = self.language_support.remove_test_functions_from_generated_tests(
+            generated_tests, test_functions_to_remove
         )
         map_gen_test_file_to_no_of_tests = original_code_baseline.behavior_test_results.file_to_no_of_tests(
             test_functions_to_remove
@@ -2081,8 +2068,11 @@ class FunctionOptimizer:
             best_optimization.winning_benchmarking_test_results.usable_runtime_data_by_test_case()
         )
 
-        generated_tests = add_runtime_comments_to_generated_tests(
-            generated_tests, original_runtime_by_test, optimized_runtime_by_test, self.test_cfg.tests_project_rootdir
+        generated_tests = self.language_support.add_runtime_comments_to_generated_tests(
+            generated_tests,
+            original_runtime_by_test,
+            optimized_runtime_by_test,
+            self.test_cfg.tests_project_rootdir,
         )
 
         generated_tests_str = ""
