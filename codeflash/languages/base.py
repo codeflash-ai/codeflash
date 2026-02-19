@@ -11,10 +11,11 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Iterable, Sequence
     from pathlib import Path
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.models.models import FunctionSource
 
 from codeflash.languages.language_enum import Language
 from codeflash.models.function_types import FunctionParent
@@ -32,6 +33,16 @@ def __getattr__(name: str) -> Any:
         return FunctionToOptimize
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)
+
+
+@dataclass(frozen=True)
+class IndexResult:
+    file_path: Path
+    cached: bool
+    num_edges: int
+    edges: tuple[tuple[str, str, bool], ...]  # (caller_qn, callee_name, is_cross_file)
+    cross_file_edges: int
+    error: bool
 
 
 @dataclass
@@ -190,6 +201,35 @@ class ReferenceInfo:
     reference_type: str
     import_name: str | None
     caller_function: str | None = None
+
+
+@runtime_checkable
+class DependencyResolver(Protocol):
+    """Protocol for language-specific dependency resolution.
+
+    Implementations analyze source files to discover call-graph edges
+    between functions so the optimizer can extract richer context.
+    """
+
+    def build_index(self, file_paths: Iterable[Path], on_progress: Callable[[IndexResult], None] | None = None) -> None:
+        """Pre-index a batch of files."""
+        ...
+
+    def get_callees(
+        self, file_path_to_qualified_names: dict[Path, set[str]]
+    ) -> tuple[dict[Path, set[FunctionSource]], list[FunctionSource]]:
+        """Return callees for the given functions."""
+        ...
+
+    def count_callees_per_function(
+        self, file_path_to_qualified_names: dict[Path, set[str]]
+    ) -> dict[tuple[Path, str], int]:
+        """Return the number of callees for each (file_path, qualified_name) pair."""
+        ...
+
+    def close(self) -> None:
+        """Release resources (e.g. database connections)."""
+        ...
 
 
 @runtime_checkable
@@ -563,6 +603,15 @@ class LanguageSupport(Protocol):
         """
         # Default implementation: just copy runtime files
         return False
+
+    def create_dependency_resolver(self, project_root: Path) -> DependencyResolver | None:
+        """Create a language-specific dependency resolver, if available.
+
+        Returns:
+            A DependencyResolver instance, or None if not supported.
+
+        """
+        return None
 
     def instrument_existing_test(
         self,

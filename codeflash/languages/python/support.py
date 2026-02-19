@@ -21,6 +21,7 @@ from codeflash.languages.registry import register_language
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from codeflash.languages.base import DependencyResolver
     from codeflash.models.models import FunctionSource
 
 logger = logging.getLogger(__name__)
@@ -750,6 +751,15 @@ class PythonSupport:
 
         """
         return True
+
+    def create_dependency_resolver(self, project_root: Path) -> DependencyResolver | None:
+        from codeflash.languages.python.reference_graph import ReferenceGraph
+
+        try:
+            return ReferenceGraph(project_root, language=self.language.value)
+        except Exception:
+            logger.debug("Failed to initialize ReferenceGraph, falling back to per-function Jedi analysis")
+            return None
 
     def instrument_existing_test(
         self,

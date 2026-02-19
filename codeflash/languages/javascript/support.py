@@ -2004,6 +2004,9 @@ class JavaScriptSupport:
         logger.error("Could not install codeflash. Please run: npm install --save-dev codeflash")
         return False
 
+    def create_dependency_resolver(self, project_root: Path) -> None:
+        return None
+
     def instrument_existing_test(
         self,
         test_path: Path,

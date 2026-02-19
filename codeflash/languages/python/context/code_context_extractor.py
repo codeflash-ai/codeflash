@@ -36,7 +36,7 @@ from codeflash.optimization.function_context import belongs_to_function_qualifie
 if TYPE_CHECKING:
     from jedi.api.classes import Name
 
-    from codeflash.languages.base import HelperFunction
+    from codeflash.languages.base import DependencyResolver, HelperFunction
     from codeflash.languages.python.context.unused_definition_remover import UsageInfo
 
 # Error message constants
@@ -80,6 +80,7 @@ def get_code_optimization_context(
     project_root_path: Path,
     optim_token_limit: int = OPTIMIZATION_CONTEXT_TOKEN_LIMIT,
     testgen_token_limit: int = TESTGEN_CONTEXT_TOKEN_LIMIT,
+    call_graph: DependencyResolver | None = None,
 ) -> CodeOptimizationContext:
     # Route to language-specific implementation for non-Python languages
     if not is_python():
@@ -88,9 +89,11 @@ def get_code_optimization_context(
         )
 
     # Get FunctionSource representation of helpers of FTO
-    helpers_of_fto_dict, helpers_of_fto_list = get_function_sources_from_jedi(
-        {function_to_optimize.file_path: {function_to_optimize.qualified_name}}, project_root_path
-    )
+    fto_input = {function_to_optimize.file_path: {function_to_optimize.qualified_name}}
+    if call_graph is not None:
+        helpers_of_fto_dict, helpers_of_fto_list = call_graph.get_callees(fto_input)
+    else:
+        helpers_of_fto_dict, helpers_of_fto_list = get_function_sources_from_jedi(fto_input, project_root_path)
 
     # Add function to optimize into helpers of FTO dict, as they'll be processed together
     fto_as_function_source = get_function_to_optimize_as_function_source(function_to_optimize, project_root_path)
@@ -252,7 +255,6 @@ def get_code_optimization_context_for_language(
                 fully_qualified_name=helper.qualified_name,
                 only_function_name=helper.name,
                 source_code=helper.source_code,
-                jedi_definition=None,
             )
         )
 
@@ -474,7 +476,6 @@ def get_function_to_optimize_as_function_source(
                     fully_qualified_name=name.full_name,
                     only_function_name=name.name,
                     source_code=name.get_line_code(),
-                    jedi_definition=name,
                 )
         except Exception as e:
             logger.exception(f"Error while getting function source: {e}")
@@ -542,7 +543,6 @@ def get_function_sources_from_jedi(
                                 fully_qualified_name=fqn,
                                 only_function_name=func_name,
                                 source_code=definition.get_line_code(),
-                                jedi_definition=definition,
                             )
                             file_path_to_function_source[definition_path].add(function_source)
                             function_source_list.append(function_source)

@@ -767,9 +767,202 @@ class HelperClass:
     assert hashing_context.strip() == expected_hashing_context.strip()
 
 
-def test_example_class_token_limit_3(tmp_path: Path) -> None:
+def test_example_class_token_limit_1(tmp_path: Path) -> None:
+    docstring_filler = " ".join(
+        ["This is a long docstring that will be used to fill up the token limit." for _ in range(4000)]
+    )
+    code = f"""
+class MyClass:
+    \"\"\"A class with a helper method.
+{docstring_filler}\"\"\"
+    def __init__(self):
+        self.x = 1
+    def target_method(self):
+        \"\"\"Docstring for target method\"\"\"
+        y = HelperClass().helper_method()
+
+class HelperClass:
+    \"\"\"A helper class for MyClass.\"\"\"
+    def __init__(self):
+        \"\"\"Initialize the HelperClass.\"\"\"
+        self.x = 1
+    def __repr__(self):
+        \"\"\"Return a string representation of the HelperClass.\"\"\"
+        return "HelperClass" + str(self.x)
+    def helper_method(self):
+        return self.x
+"""
+    # Create a temporary Python file using pytest's tmp_path fixture
+    file_path = tmp_path / "test_code.py"
+    file_path.write_text(code, encoding="utf-8")
+    opt = Optimizer(
+        Namespace(
+            project_root=file_path.parent.resolve(),
+            disable_telemetry=True,
+            tests_root="tests",
+            test_framework="pytest",
+            pytest_cmd="pytest",
+            experiment_id=None,
+            test_project_root=Path().resolve(),
+        )
+    )
+    function_to_optimize = FunctionToOptimize(
+        function_name="target_method",
+        file_path=file_path,
+        parents=[FunctionParent(name="MyClass", type="ClassDef")],
+        starting_line=None,
+        ending_line=None,
+    )
+
+    code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
+    read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
+    hashing_context = code_ctx.hashing_code_context
+    # In this scenario, the read-only code context is too long, so the read-only docstrings are removed.
+    expected_read_write_context = f"""
+```python:{file_path.relative_to(opt.args.project_root)}
+class MyClass:
+    def __init__(self):
+        self.x = 1
+    def target_method(self):
+        \"\"\"Docstring for target method\"\"\"
+        y = HelperClass().helper_method()
+
+class HelperClass:
+    def __init__(self):
+        \"\"\"Initialize the HelperClass.\"\"\"
+        self.x = 1
+    def helper_method(self):
+        return self.x
+```
+"""
+    expected_read_only_context = f"""
+```python:{file_path.relative_to(opt.args.project_root)}
+class MyClass:
+    pass
+
+class HelperClass:
+    def __repr__(self):
+        return "HelperClass" + str(self.x)
+```
+"""
+    expected_hashing_context = f"""
+```python:{file_path.relative_to(opt.args.project_root)}
+class MyClass:
+
+    def target_method(self):
+        y = HelperClass().helper_method()
+
+class HelperClass:
+
+    def helper_method(self):
+        return self.x
+```
+"""
+    assert read_write_context.markdown.strip() == expected_read_write_context.strip()
+    assert read_only_context.strip() == expected_read_only_context.strip()
+    assert hashing_context.strip() == expected_hashing_context.strip()
+
+
+def test_example_class_token_limit_2(tmp_path: Path) -> None:
     string_filler = " ".join(
         ["This is a long string that will be used to fill up the token limit." for _ in range(1000)]
+    )
+    code = f"""
+class MyClass:
+    \"\"\"A class with a helper method. \"\"\"
+    def __init__(self):
+        self.x = 1
+    def target_method(self):
+        \"\"\"Docstring for target method\"\"\"
+        y = HelperClass().helper_method()
+x = '{string_filler}'
+
+class HelperClass:
+    \"\"\"A helper class for MyClass.\"\"\"
+    def __init__(self):
+        \"\"\"Initialize the HelperClass.\"\"\"
+        self.x = 1
+    def __repr__(self):
+        \"\"\"Return a string representation of the HelperClass.\"\"\"
+        return "HelperClass" + str(self.x)
+    def helper_method(self):
+        return self.x
+"""
+    # Create a temporary Python file using pytest's tmp_path fixture
+    file_path = tmp_path / "test_code.py"
+    file_path.write_text(code, encoding="utf-8")
+    opt = Optimizer(
+        Namespace(
+            project_root=file_path.parent.resolve(),
+            disable_telemetry=True,
+            tests_root="tests",
+            test_framework="pytest",
+            pytest_cmd="pytest",
+            experiment_id=None,
+            test_project_root=Path().resolve(),
+        )
+    )
+    function_to_optimize = FunctionToOptimize(
+        function_name="target_method",
+        file_path=file_path,
+        parents=[FunctionParent(name="MyClass", type="ClassDef")],
+        starting_line=None,
+        ending_line=None,
+    )
+
+    code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root, 8000, 100000)
+    read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
+    hashing_context = code_ctx.hashing_code_context
+    # In this scenario, the read-only code context is too long even after removing docstrings, hence we remove it completely.
+    expected_read_write_context = f"""
+```python:{file_path.relative_to(opt.args.project_root)}
+class MyClass:
+    def __init__(self):
+        self.x = 1
+    def target_method(self):
+        \"\"\"Docstring for target method\"\"\"
+        y = HelperClass().helper_method()
+
+class HelperClass:
+    def __init__(self):
+        \"\"\"Initialize the HelperClass.\"\"\"
+        self.x = 1
+    def helper_method(self):
+        return self.x
+```
+"""
+    expected_read_only_context = f'''```python:{file_path.relative_to(opt.args.project_root)}
+class MyClass:
+    """A class with a helper method. """
+
+class HelperClass:
+    """A helper class for MyClass."""
+    def __repr__(self):
+        """Return a string representation of the HelperClass."""
+        return "HelperClass" + str(self.x)
+```
+'''
+    expected_hashing_context = f"""
+```python:{file_path.relative_to(opt.args.project_root)}
+class MyClass:
+
+    def target_method(self):
+        y = HelperClass().helper_method()
+
+class HelperClass:
+
+    def helper_method(self):
+        return self.x
+```
+"""
+    assert read_write_context.markdown.strip() == expected_read_write_context.strip()
+    assert read_only_context.strip() == expected_read_only_context.strip()
+    assert hashing_context.strip() == expected_hashing_context.strip()
+
+
+def test_example_class_token_limit_3(tmp_path: Path) -> None:
+    string_filler = " ".join(
+        ["This is a long string that will be used to fill up the token limit." for _ in range(4000)]
     )
     code = f"""
 class MyClass:
@@ -819,7 +1012,7 @@ class HelperClass:
 
 def test_example_class_token_limit_4(tmp_path: Path) -> None:
     string_filler = " ".join(
-        ["This is a long string that will be used to fill up the token limit." for _ in range(1000)]
+        ["This is a long string that will be used to fill up the token limit." for _ in range(4000)]
     )
     code = f"""
 class MyClass:

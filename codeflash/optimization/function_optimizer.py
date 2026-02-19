@@ -140,6 +140,7 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.either import Result
+    from codeflash.languages.base import DependencyResolver
     from codeflash.models.models import (
         BenchmarkKey,
         CodeStringsMarkdown,
@@ -443,6 +444,7 @@ class FunctionOptimizer:
         total_benchmark_timings: dict[BenchmarkKey, int] | None = None,
         args: Namespace | None = None,
         replay_tests_dir: Path | None = None,
+        call_graph: DependencyResolver | None = None,
     ) -> None:
         self.project_root = test_cfg.project_root_path.resolve()
         self.test_cfg = test_cfg
@@ -488,6 +490,7 @@ class FunctionOptimizer:
         self.function_benchmark_timings = function_benchmark_timings if function_benchmark_timings else {}
         self.total_benchmark_timings = total_benchmark_timings if total_benchmark_timings else {}
         self.replay_tests_dir = replay_tests_dir if replay_tests_dir else None
+        self.call_graph = call_graph
         n_tests = get_effort_value(EffortKeys.N_GENERATED_TESTS, self.effort)
         self.executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=n_tests + 3 if self.experiment_id is None else n_tests + 4
@@ -1492,8 +1495,8 @@ class FunctionOptimizer:
             self.function_to_optimize.qualified_name
         )
         for helper_function in code_context.helper_functions:
-            # Skip class definitions (jedi_definition may be None for non-Python languages)
-            if helper_function.jedi_definition is None or helper_function.jedi_definition.type != "class":
+            # Skip class definitions (definition_type may be None for non-Python languages)
+            if helper_function.definition_type != "class":
                 read_writable_functions_by_file_path[helper_function.file_path].add(helper_function.qualified_name)
         for module_abspath, qualified_names in read_writable_functions_by_file_path.items():
             did_update |= replace_function_definitions_in_module(
@@ -1514,7 +1517,7 @@ class FunctionOptimizer:
     def get_code_optimization_context(self) -> Result[CodeOptimizationContext, str]:
         try:
             new_code_ctx = code_context_extractor.get_code_optimization_context(
-                self.function_to_optimize, self.project_root
+                self.function_to_optimize, self.project_root, call_graph=self.call_graph
             )
         except ValueError as e:
             return Failure(str(e))
