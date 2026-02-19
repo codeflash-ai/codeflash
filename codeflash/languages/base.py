@@ -254,6 +254,14 @@ class LanguageSupport(Protocol):
         """Like # or //."""
         ...
 
+    @property
+    def dir_excludes(self) -> frozenset[str]:
+        """Directory name patterns to skip during file discovery.
+
+        Supports glob wildcards: "name" for exact, "prefix*" for startswith, "*suffix" for endswith.
+        """
+        ...
+
     # === Discovery ===
 
     def discover_functions(
