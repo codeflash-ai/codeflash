@@ -569,9 +569,18 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 f'{indent}String _cf_outputFile{iter_id} = System.getenv("CODEFLASH_OUTPUT_FILE");',
                 f'{indent}String _cf_testIteration{iter_id} = System.getenv("CODEFLASH_TEST_ITERATION");',
                 f'{indent}if (_cf_testIteration{iter_id} == null) _cf_testIteration{iter_id} = "0";',
-                # Extract test method name from stack trace
+                # Extract test method name from stack trace - walk up to find test method
                 f'{indent}String _cf_test{iter_id} = "";',
-                f'{indent}try {{ _cf_test{iter_id} = Thread.currentThread().getStackTrace()[1].getMethodName(); }} catch (Exception e) {{}}',
+                f'{indent}try {{',
+                f'{indent}    StackTraceElement[] _cf_stack{iter_id} = Thread.currentThread().getStackTrace();',
+                f'{indent}    for (int _cf_i{iter_id} = 0; _cf_i{iter_id} < _cf_stack{iter_id}.length && _cf_i{iter_id} < 10; _cf_i{iter_id}++) {{',
+                f'{indent}        String _cf_method{iter_id} = _cf_stack{iter_id}[_cf_i{iter_id}].getMethodName();',
+                f'{indent}        if (_cf_method{iter_id}.startsWith("test") || _cf_method{iter_id}.contains("Test")) {{',
+                f'{indent}            _cf_test{iter_id} = _cf_method{iter_id};',
+                f'{indent}            break;',
+                f'{indent}        }}',
+                f'{indent}    }}',
+                f'{indent}}} catch (Exception e) {{}}',
                 # Modified marker with test name
                 f'{indent}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + ":" + _cf_test{iter_id} + "######$!");',
                 f"{indent}byte[] _cf_serializedResult{iter_id} = null;",
@@ -861,9 +870,18 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             else:
                 stmt_in_try = reindent_block(target_stmt, inner_body_indent)
             timing_lines = [
-                # Extract test method name before loop
+                # Extract test method name before loop - walk up to find test method
                 f'{indent}String _cf_test{current_id} = "";',
-                f'{indent}try {{ _cf_test{current_id} = Thread.currentThread().getStackTrace()[1].getMethodName(); }} catch (Exception e) {{}}',
+                f'{indent}try {{',
+                f'{indent}    StackTraceElement[] _cf_stack{current_id} = Thread.currentThread().getStackTrace();',
+                f'{indent}    for (int _cf_idx{current_id} = 0; _cf_idx{current_id} < _cf_stack{current_id}.length && _cf_idx{current_id} < 10; _cf_idx{current_id}++) {{',
+                f'{indent}        String _cf_method{current_id} = _cf_stack{current_id}[_cf_idx{current_id}].getMethodName();',
+                f'{indent}        if (_cf_method{current_id}.startsWith("test") || _cf_method{current_id}.contains("Test")) {{',
+                f'{indent}            _cf_test{current_id} = _cf_method{current_id};',
+                f'{indent}            break;',
+                f'{indent}        }}',
+                f'{indent}    }}',
+                f'{indent}}} catch (Exception e) {{}}',
                 f"{indent}for (int _cf_i{current_id} = 0; _cf_i{current_id} < _cf_innerIterations{current_id}; _cf_i{current_id}++) {{",
                 # Start marker with test name
                 f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + _cf_i{current_id} + ":" + _cf_test{current_id} + "######$!");',
@@ -931,9 +949,18 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             iteration_id_expr = f'"{current_id}_" + _cf_i{current_id}'
 
             timing_lines = [
-                # Extract test method name before loop
+                # Extract test method name before loop - walk up to find test method
                 f'{indent}String _cf_test{current_id} = "";',
-                f'{indent}try {{ _cf_test{current_id} = Thread.currentThread().getStackTrace()[1].getMethodName(); }} catch (Exception e) {{}}',
+                f'{indent}try {{',
+                f'{indent}    StackTraceElement[] _cf_stack{current_id} = Thread.currentThread().getStackTrace();',
+                f'{indent}    for (int _cf_idx{current_id} = 0; _cf_idx{current_id} < _cf_stack{current_id}.length && _cf_idx{current_id} < 10; _cf_idx{current_id}++) {{',
+                f'{indent}        String _cf_method{current_id} = _cf_stack{current_id}[_cf_idx{current_id}].getMethodName();',
+                f'{indent}        if (_cf_method{current_id}.startsWith("test") || _cf_method{current_id}.contains("Test")) {{',
+                f'{indent}            _cf_test{current_id} = _cf_method{current_id};',
+                f'{indent}            break;',
+                f'{indent}        }}',
+                f'{indent}    }}',
+                f'{indent}}} catch (Exception e) {{}}',
                 f"{indent}for (int _cf_i{current_id} = 0; _cf_i{current_id} < _cf_innerIterations{current_id}; _cf_i{current_id}++) {{",
                 # Start marker with test name
                 f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + {iteration_id_expr} + ":" + _cf_test{current_id} + "######$!");',
