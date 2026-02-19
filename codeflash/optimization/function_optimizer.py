@@ -447,6 +447,7 @@ class FunctionOptimizer:
         self.test_cfg = test_cfg
         self.aiservice_client = aiservice_client if aiservice_client else AiServiceClient()
         self.function_to_optimize = function_to_optimize
+        self.function_to_optimize.file_path = self.function_to_optimize.file_path.resolve()
         self.function_to_optimize_source_code = (
             function_to_optimize_source_code
             if function_to_optimize_source_code
