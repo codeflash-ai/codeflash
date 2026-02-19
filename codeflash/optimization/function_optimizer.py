@@ -634,24 +634,25 @@ class FunctionOptimizer:
 
         count_tests, generated_tests, function_to_concolic_tests, concolic_test_str = test_results.unwrap()
 
-        # Normalize codeflash imports in JS/TS tests to use npm package
-        if is_javascript():
-            module_system = detect_module_system(self.project_root, self.function_to_optimize.file_path)
-            if module_system == "esm":
-                generated_tests = inject_test_globals(generated_tests)
-            if is_typescript():
-                # disable ts check for typescript tests
-                generated_tests = disable_ts_check(generated_tests)
-
-            generated_tests = normalize_generated_tests_imports(generated_tests)
-
-        # Postprocess generated Java tests to ensure package-aligned paths
-        if is_java():
-            from codeflash.languages.java.generated_tests import (
-                postprocess_generated_tests as _postprocess_generated_tests,
+        postprocess_generated_tests = getattr(self.language_support, "postprocess_generated_tests", None)
+        if callable(postprocess_generated_tests):
+            generated_tests = postprocess_generated_tests(
+                generated_tests,
+                test_framework=self.test_cfg.test_framework,
+                project_root=self.project_root,
+                source_file_path=self.function_to_optimize.file_path,
             )
+        else:
+            # Normalize codeflash imports in JS/TS tests to use npm package
+            if is_javascript():
+                module_system = detect_module_system(self.project_root, self.function_to_optimize.file_path)
+                if module_system == "esm":
+                    generated_tests = inject_test_globals(generated_tests)
+                if is_typescript():
+                    # disable ts check for typescript tests
+                    generated_tests = disable_ts_check(generated_tests)
 
-            generated_tests = _postprocess_generated_tests(generated_tests, self.test_cfg.tests_root)
+                generated_tests = normalize_generated_tests_imports(generated_tests)
 
         logger.debug(f"[PIPELINE] Processing {count_tests} generated tests")
         for i, generated_test in enumerate(generated_tests.generated_tests):

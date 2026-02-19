@@ -1733,6 +1733,17 @@ def _extract_calling_function(source_code: str, function_name: str, ref_line: in
         Source code of the function, or None if not found.
 
     """
+    try:
+        from codeflash.languages.registry import get_language_support
+
+        lang_support = get_language_support(language)
+        extract_calling_function = getattr(lang_support, "extract_calling_function_source", None)
+        if callable(extract_calling_function):
+            result = extract_calling_function(source_code, function_name, ref_line)
+            if result:
+                return result
+    except Exception:
+        pass
     if language == Language.PYTHON:
         return _extract_calling_function_python(source_code, function_name, ref_line)
     return _extract_calling_function_js(source_code, function_name, ref_line)

@@ -510,13 +510,30 @@ def replace_function_definitions_for_language(
     lang_support = get_language_support(language)
 
     # Add any new global declarations from the optimized code to the original source
-    original_source_code = _add_global_declarations_for_language(
-        optimized_code=code_to_apply,
-        original_source=original_source_code,
-        module_abspath=module_abspath,
-        language=language,
-        target_function_names=function_names,
-    )
+    add_global_declarations = getattr(lang_support, "add_global_declarations", None)
+    if callable(add_global_declarations):
+        try:
+            original_source_code = add_global_declarations(
+                optimized_code=code_to_apply,
+                original_source=original_source_code,
+                module_abspath=module_abspath,
+            )
+        except Exception:
+            original_source_code = _add_global_declarations_for_language(
+                optimized_code=code_to_apply,
+                original_source=original_source_code,
+                module_abspath=module_abspath,
+                language=language,
+                target_function_names=function_names,
+            )
+    else:
+        original_source_code = _add_global_declarations_for_language(
+            optimized_code=code_to_apply,
+            original_source=original_source_code,
+            module_abspath=module_abspath,
+            language=language,
+            target_function_names=function_names,
+        )
 
     # If we have function_to_optimize with line info and this is the main file, use it for precise replacement
     if (
