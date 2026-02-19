@@ -1249,6 +1249,19 @@ def parse_test_results(
 
     results = merge_test_results(test_results_xml, test_results_data, test_config.test_framework)
 
+    # Bug #10 Fix: For Java performance tests, preserve subprocess stdout containing timing markers
+    # This is needed for calculate_function_throughput_from_test_results to work correctly
+    if is_java() and testing_type == TestingMode.PERFORMANCE and run_result is not None:
+        try:
+            # Extract stdout from subprocess result containing timing markers
+            if isinstance(run_result.stdout, bytes):
+                results.perf_stdout = run_result.stdout.decode('utf-8', errors='replace')
+            elif isinstance(run_result.stdout, str):
+                results.perf_stdout = run_result.stdout
+            logger.debug(f"Bug #10 Fix: Set perf_stdout for Java performance tests ({len(results.perf_stdout or '')} chars)")
+        except Exception as e:
+            logger.debug(f"Bug #10 Fix: Failed to set perf_stdout: {e}")
+
     all_args = False
     coverage = None
     if coverage_database_file and source_file and code_context and function_name:
