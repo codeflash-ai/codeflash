@@ -448,7 +448,7 @@ def replace_functions_in_file(
 
     new_body: list[cst.CSTNode] = []
     existing_class_names = set()
-    
+
     for node in original_module.body:
         if isinstance(node, cst.FunctionDef):
             key = (None, node.name.value)
@@ -461,24 +461,26 @@ def replace_functions_in_file(
         elif isinstance(node, cst.ClassDef):
             class_name = node.name.value
             existing_class_names.add(class_name)
-            
+
             new_members: list[cst.CSTNode] = []
             for child in node.body.body:
                 if isinstance(child, cst.FunctionDef):
                     key = (class_name, child.name.value)
                     if key in modified_functions:
                         modified_func = modified_functions[key]
-                        new_members.append(child.with_changes(body=modified_func.body, decorators=modified_func.decorators))
+                        new_members.append(
+                            child.with_changes(body=modified_func.body, decorators=modified_func.decorators)
+                        )
                     elif child.name.value == "__init__" and class_name in modified_init_functions:
                         new_members.append(modified_init_functions[class_name])
                     else:
                         new_members.append(child)
                 else:
                     new_members.append(child)
-            
+
             if class_name in new_class_functions:
                 new_members.extend(new_class_functions[class_name])
-            
+
             new_body.append(node.with_changes(body=node.body.with_changes(body=new_members)))
         else:
             new_body.append(node)
@@ -486,14 +488,18 @@ def replace_functions_in_file(
     if new_classes:
         unique_classes = [nc for nc in new_classes if nc.name.value not in existing_class_names]
         if unique_classes:
-            new_classes_insertion_idx = max_class_index if max_class_index is not None else find_insertion_index_after_imports(original_module)
-            new_body = list(chain(new_body[:new_classes_insertion_idx], unique_classes, new_body[new_classes_insertion_idx:]))
+            new_classes_insertion_idx = (
+                max_class_index if max_class_index is not None else find_insertion_index_after_imports(original_module)
+            )
+            new_body = list(
+                chain(new_body[:new_classes_insertion_idx], unique_classes, new_body[new_classes_insertion_idx:])
+            )
 
     if new_functions:
         if max_function_index is not None:
-            new_body = [*new_body[:max_function_index + 1], *new_functions, *new_body[max_function_index + 1:]]
+            new_body = [*new_body[: max_function_index + 1], *new_functions, *new_body[max_function_index + 1 :]]
         elif max_class_index is not None:
-            new_body = [*new_body[:max_class_index + 1], *new_functions, *new_body[max_class_index + 1:]]
+            new_body = [*new_body[: max_class_index + 1], *new_functions, *new_body[max_class_index + 1 :]]
         else:
             new_body = [*new_functions, *new_body]
 
