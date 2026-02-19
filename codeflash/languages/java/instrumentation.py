@@ -73,6 +73,35 @@ def _is_inside_lambda(node) -> bool:
     return False
 
 
+def _is_inside_complex_expression(node) -> bool:
+    """Check if a tree-sitter node is inside a complex expression that shouldn't be instrumented directly.
+
+    This includes:
+    - Cast expressions: (Long)list.get(2)
+    - Ternary expressions: condition ? func() : other
+    - Array access: arr[func()]
+    - Binary operations: func() + 1
+
+    Returns True if the node should not be directly instrumented.
+    """
+    current = node.parent
+    while current is not None:
+        # Stop at statement boundaries
+        if current.type in {"method_declaration", "block", "if_statement", "for_statement",
+                          "while_statement", "try_statement", "expression_statement"}:
+            return False
+
+        # These are complex expressions that shouldn't have instrumentation inserted in the middle
+        if current.type in {"cast_expression", "ternary_expression", "array_access",
+                          "binary_expression", "unary_expression", "parenthesized_expression",
+                          "instanceof_expression"}:
+            logger.debug(f"Found complex expression parent: {current.type}")
+            return True
+
+        current = current.parent
+    return False
+
+
 _TS_BODY_PREFIX = "class _D { void _m() {\n"
 _TS_BODY_SUFFIX = "\n}}"
 _TS_BODY_PREFIX_BYTES = _TS_BODY_PREFIX.encode("utf8")
@@ -113,10 +142,11 @@ def wrap_target_calls_with_treesitter(
         line_byte_starts.append(offset)
         offset += len(line.encode("utf8")) + 1  # +1 for \n from join
 
-    # Group non-lambda calls by their line index
+    # Group non-lambda and non-complex-expression calls by their line index
     calls_by_line: dict[int, list] = {}
     for call in calls:
-        if call["in_lambda"]:
+        if call["in_lambda"] or call.get("in_complex", False):
+            logger.debug(f"Skipping behavior instrumentation for call in lambda or complex expression")
             continue
         line_idx = _byte_to_line_index(call["start_byte"], line_byte_starts)
         calls_by_line.setdefault(line_idx, []).append(call)
@@ -220,6 +250,7 @@ def _collect_calls(node, wrapper_bytes, body_bytes, prefix_len, func_name, analy
                         "full_call": analyzer.get_node_text(node, wrapper_bytes),
                         "parent_type": parent_type,
                         "in_lambda": _is_inside_lambda(node),
+                        "in_complex": _is_inside_complex_expression(node),
                         "es_start_byte": es_start,
                         "es_end_byte": es_end,
                     }
@@ -664,8 +695,12 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
     def collect_target_calls(node, wrapper_bytes: bytes, func: str, out) -> None:
         if node.type == "method_invocation":
             name_node = node.child_by_field_name("name")
-            if name_node and analyzer.get_node_text(name_node, wrapper_bytes) == func and not _is_inside_lambda(node):
-                out.append(node)
+            if name_node and analyzer.get_node_text(name_node, wrapper_bytes) == func:
+                # Skip if inside lambda or complex expression
+                if not _is_inside_lambda(node) and not _is_inside_complex_expression(node):
+                    out.append(node)
+                else:
+                    logger.debug(f"Skipping instrumentation of {func} inside lambda or complex expression")
         for child in node.children:
             collect_target_calls(child, wrapper_bytes, func, out)
 
