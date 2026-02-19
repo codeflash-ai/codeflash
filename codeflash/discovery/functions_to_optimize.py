@@ -149,9 +149,7 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
 _VCS_EXCLUDES = frozenset({".git", ".hg", ".svn"})
 
 
-def parse_dir_excludes(
-    patterns: frozenset[str],
-) -> tuple[frozenset[str], tuple[str, ...], tuple[str, ...]]:
+def parse_dir_excludes(patterns: frozenset[str]) -> tuple[frozenset[str], tuple[str, ...], tuple[str, ...]]:
     """Split glob patterns into exact names, prefixes, and suffixes.
 
     Patterns ending with ``*`` become prefix matches, patterns starting with ``*``
@@ -187,13 +185,14 @@ def get_files_for_language(
     if ignore_paths is None:
         ignore_paths = []
 
+    all_patterns: frozenset[str]
     if language is not None:
         support = get_language_support(language)
         extensions = support.file_extensions
         all_patterns = support.dir_excludes | _VCS_EXCLUDES
     else:
         extensions = tuple(get_supported_extensions())
-        all_patterns: frozenset[str] = _VCS_EXCLUDES
+        all_patterns = _VCS_EXCLUDES
         for lang in Language:
             if is_language_supported(lang):
                 all_patterns = all_patterns | get_language_support(lang).dir_excludes
