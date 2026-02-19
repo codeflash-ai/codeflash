@@ -107,8 +107,7 @@ def get_code_optimization_context(
     for qualified_names in helpers_of_fto_qualified_names_dict.values():
         qualified_names.update({f"{qn.rsplit('.', 1)[0]}.__init__" for qn in qualified_names if "." in qn})
 
-    # Get FunctionSource representation of helpers of helpers of FTO
-    helpers_of_helpers_dict, _helpers_of_helpers_list = get_function_sources_from_jedi(
+    helpers_of_helpers_dict, helpers_of_helpers_list = get_function_sources_from_jedi(
         helpers_of_fto_qualified_names_dict, project_root_path
     )
 
@@ -186,6 +185,8 @@ def get_code_optimization_context(
     code_hash_context = hashing_code_context.markdown
     code_hash = hashlib.sha256(code_hash_context.encode("utf-8")).hexdigest()
 
+    all_helper_fqns = list({fs.fully_qualified_name for fs in helpers_of_fto_list + helpers_of_helpers_list})
+
     return CodeOptimizationContext(
         testgen_context=testgen_context,
         read_writable_code=final_read_writable_code,
@@ -193,6 +194,7 @@ def get_code_optimization_context(
         hashing_code_context=code_hash_context,
         hashing_code_context_hash=code_hash,
         helper_functions=helpers_of_fto_list,
+        testgen_helper_fqns=all_helper_fqns,
         preexisting_objects=preexisting_objects,
     )
 
@@ -317,13 +319,12 @@ def get_code_optimization_context_for_language(
     return CodeOptimizationContext(
         testgen_context=testgen_context,
         read_writable_code=read_writable_code,
-        # Pass type definitions and globals as read-only context for the AI
-        # This way the AI sees them as context but doesn't include them in optimized output
         read_only_context_code=code_context.read_only_context,
         hashing_code_context=read_writable_code.flat,
         hashing_code_context_hash=code_hash,
         helper_functions=helper_function_sources,
-        preexisting_objects=set(),  # Not implemented for non-Python yet
+        testgen_helper_fqns=[fs.fully_qualified_name for fs in helper_function_sources],
+        preexisting_objects=set(),
     )
 
 
@@ -519,15 +520,16 @@ def get_function_sources_from_jedi(
                         and not belongs_to_function_qualified(definition, qualified_function_name)
                         and definition.full_name.startswith(definition.module_name)
                     )
-                    if is_valid_definition and definition.type in ("function", "class"):
+                    if is_valid_definition and definition.type in ("function", "class", "statement"):
                         if definition.type == "function":
                             fqn = definition.full_name
                             func_name = definition.name
-                        else:
-                            # When a class is instantiated (e.g., MyClass()), track its __init__ as a helper
-                            # This ensures the class definition with constructor is included in testgen context
+                        elif definition.type == "class":
                             fqn = f"{definition.full_name}.__init__"
                             func_name = "__init__"
+                        else:
+                            fqn = definition.full_name
+                            func_name = definition.name
                         qualified_name = get_qualified_name(definition.module_name, fqn)
                         # Avoid nested functions or classes. Only class.function is allowed
                         if len(qualified_name.split(".")) <= 2:
