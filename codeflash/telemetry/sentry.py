@@ -16,7 +16,8 @@ def init_sentry(*, enabled: bool = False, exclude_errors: bool = False) -> None:
 
         sentry_sdk.init(
             dsn="https://4b9a1902f9361b48c04376df6483bc96@o4506833230561280.ingest.sentry.io/4506833262477312",
-            integrations=[sentry_logging, StdlibIntegration(subprocess_instrumentation=False)],
+            integrations=[sentry_logging],
+            disabled_integrations=[StdlibIntegration],
             traces_sample_rate=0,
             profiles_sample_rate=0,
             ignore_errors=[KeyboardInterrupt],
