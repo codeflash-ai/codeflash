@@ -1738,15 +1738,9 @@ class FunctionOptimizer:
         assert len(generated_test_paths) == n_tests
 
         if not self.args.no_gen_tests:
-            helper_fqns = testgen_helper_fqns or [
-                definition.fully_qualified_name for definition in helper_functions
-            ]
+            helper_fqns = testgen_helper_fqns or [definition.fully_qualified_name for definition in helper_functions]
             future_tests = self.submit_test_generation_tasks(
-                self.executor,
-                testgen_context.markdown,
-                helper_fqns,
-                generated_test_paths,
-                generated_perf_test_paths,
+                self.executor, testgen_context.markdown, helper_fqns, generated_test_paths, generated_perf_test_paths
             )
 
         future_concolic_tests = self.executor.submit(
