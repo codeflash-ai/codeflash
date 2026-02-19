@@ -15,8 +15,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-    from codeflash.models.models import GeneratedTestsList, InvocationId
-    from codeflash.models.models import FunctionSource
+    from codeflash.models.models import FunctionSource, GeneratedTestsList, InvocationId
 
 from codeflash.languages.language_enum import Language
 from codeflash.models.function_types import FunctionParent
@@ -540,11 +539,7 @@ class LanguageSupport(Protocol):
         ...
 
     def postprocess_generated_tests(
-        self,
-        generated_tests: GeneratedTestsList,
-        test_framework: str,
-        project_root: Path,
-        source_file_path: Path,
+        self, generated_tests: GeneratedTestsList, test_framework: str, project_root: Path, source_file_path: Path
     ) -> GeneratedTestsList:
         """Apply language-specific postprocessing to generated tests.
 

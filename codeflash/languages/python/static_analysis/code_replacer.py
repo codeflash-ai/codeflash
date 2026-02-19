@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-    from codeflash.languages.base import Language, LanguageSupport
+    from codeflash.languages.base import LanguageSupport
     from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, OptimizedCandidate, ValidCode
 
 ASTNodeT = TypeVar("ASTNodeT", bound=ast.AST)
@@ -600,9 +600,7 @@ def replace_function_definitions_for_language(
 
     # Add any new global declarations from the optimized code to the original source
     original_source_code = lang_support.add_global_declarations(
-        optimized_code=code_to_apply,
-        original_source=original_source_code,
-        module_abspath=module_abspath,
+        optimized_code=code_to_apply, original_source=original_source_code, module_abspath=module_abspath
     )
 
     # If we have function_to_optimize with line info and this is the main file, use it for precise replacement

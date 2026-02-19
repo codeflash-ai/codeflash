@@ -1780,11 +1780,7 @@ class JavaScriptSupport:
         return remove_test_functions(test_source, functions_to_remove)
 
     def postprocess_generated_tests(
-        self,
-        generated_tests: GeneratedTestsList,
-        test_framework: str,
-        project_root: Path,
-        source_file_path: Path,
+        self, generated_tests: GeneratedTestsList, test_framework: str, project_root: Path, source_file_path: Path
     ) -> GeneratedTestsList:
         """Apply language-specific postprocessing to generated tests."""
         from codeflash.languages.javascript.edit_tests import (
@@ -1884,7 +1880,9 @@ class JavaScriptSupport:
 
             key = test_qualified_name + "#" + abs_path_str
             parts = inv_id.iteration_id.split("_").__len__()  # type: ignore[union-attr]
-            cur_invid = inv_id.iteration_id.split("_")[0] if parts < 3 else "_".join(inv_id.iteration_id.split("_")[:-1])  # type: ignore[union-attr]
+            cur_invid = (
+                inv_id.iteration_id.split("_")[0] if parts < 3 else "_".join(inv_id.iteration_id.split("_")[:-1])
+            )  # type: ignore[union-attr]
             match_key = key + "#" + cur_invid
             if match_key not in unique_inv_ids:
                 unique_inv_ids[match_key] = 0

@@ -1729,4 +1729,3 @@ def _format_references_as_markdown(references: list, file_path: Path, project_ro
             fn_call_context += "\n```\n"
 
     return fn_call_context
-

@@ -658,11 +658,7 @@ class PythonSupport:
             return test_source
 
     def postprocess_generated_tests(
-        self,
-        generated_tests: GeneratedTestsList,
-        test_framework: str,
-        project_root: Path,
-        source_file_path: Path,
+        self, generated_tests: GeneratedTestsList, test_framework: str, project_root: Path, source_file_path: Path
     ) -> GeneratedTestsList:
         """Apply language-specific postprocessing to generated tests."""
         _ = test_framework, project_root, source_file_path
@@ -672,7 +668,9 @@ class PythonSupport:
         self, generated_tests: GeneratedTestsList, functions_to_remove: list[str]
     ) -> GeneratedTestsList:
         """Remove specific test functions from generated tests."""
-        from codeflash.languages.python.static_analysis.edit_generated_tests import remove_functions_from_generated_tests
+        from codeflash.languages.python.static_analysis.edit_generated_tests import (
+            remove_functions_from_generated_tests,
+        )
 
         return remove_functions_from_generated_tests(generated_tests, functions_to_remove)
 
@@ -684,7 +682,9 @@ class PythonSupport:
         tests_project_rootdir: Path | None = None,
     ) -> GeneratedTestsList:
         """Add runtime comments to generated tests."""
-        from codeflash.languages.python.static_analysis.edit_generated_tests import add_runtime_comments_to_generated_tests
+        from codeflash.languages.python.static_analysis.edit_generated_tests import (
+            add_runtime_comments_to_generated_tests,
+        )
 
         return add_runtime_comments_to_generated_tests(
             generated_tests, original_runtimes, optimized_runtimes, tests_project_rootdir
