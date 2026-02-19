@@ -12,8 +12,6 @@ from libcst.metadata import PositionProvider
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.time_utils import format_perf, format_time
-from codeflash.languages.javascript.edit_tests import is_js_test_module_path, resolve_js_test_module_path
-from codeflash.languages.registry import get_language_support
 from codeflash.models.models import GeneratedTests, GeneratedTestsList
 from codeflash.result.critic import performance_gain
 
@@ -167,9 +165,7 @@ def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]], tests_project_
         )
 
         test_module_path = inv_id.test_module_path
-        if is_js_test_module_path(test_module_path):
-            abs_path = resolve_js_test_module_path(test_module_path, tests_project_rootdir)
-        elif "/" in test_module_path or "\\" in test_module_path:
+        if "/" in test_module_path or "\\" in test_module_path:
             abs_path = tests_project_rootdir / Path(test_module_path)
         else:
             abs_path = tests_project_rootdir / Path(test_module_path.replace(".", os.sep)).with_suffix(".py")
@@ -228,22 +224,7 @@ def add_runtime_comments_to_generated_tests(
                 logger.debug(f"Failed to add runtime comments to test: {e}")
                 modified_tests.append(test)
         else:
-            try:
-                language_support = get_language_support(test.behavior_file_path)
-                modified_source = language_support.add_runtime_comments(
-                    test.generated_original_test_source, original_runtimes_dict, optimized_runtimes_dict
-                )
-                modified_test = GeneratedTests(
-                    generated_original_test_source=modified_source,
-                    instrumented_behavior_test_source=test.instrumented_behavior_test_source,
-                    instrumented_perf_test_source=test.instrumented_perf_test_source,
-                    behavior_file_path=test.behavior_file_path,
-                    perf_file_path=test.perf_file_path,
-                )
-                modified_tests.append(modified_test)
-            except Exception as e:
-                logger.debug(f"Failed to add runtime comments to test: {e}")
-                modified_tests.append(test)
+            modified_tests.append(test)
 
     return GeneratedTestsList(generated_tests=modified_tests)
 
