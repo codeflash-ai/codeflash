@@ -128,6 +128,10 @@ def parse_concurrency_metrics(test_results: TestResults, function_name: str) -> 
     )
 
 
+# Cache for resolved test file paths to avoid repeated rglob calls
+_test_file_path_cache: dict[tuple[str, Path], Path | None] = {}
+
+
 def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> Path | None:
     """Resolve test file path from pytest's test class path or Java class path.
 
@@ -149,6 +153,13 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         >>> # Should find: /path/to/tests/unittest/test_file.py
 
     """
+    # Check cache first
+    cache_key = (test_class_path, base_dir)
+    if cache_key in _test_file_path_cache:
+        cached_result = _test_file_path_cache[cache_key]
+        logger.debug(f"[RESOLVE] Cache hit for {test_class_path}: {cached_result}")
+        return cached_result
+
     # Handle Java class paths (convert dots to path and add .java extension)
     # Java class paths look like "com.example.TestClass" and should map to
     # src/test/java/com/example/TestClass.java
@@ -163,6 +174,7 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         logger.debug(f"[RESOLVE] Attempt 1: checking {potential_path}")
         if potential_path.exists():
             logger.debug(f"[RESOLVE] Attempt 1 SUCCESS: found {potential_path}")
+            _test_file_path_cache[cache_key] = potential_path
             return potential_path
 
         # 2. Under src/test/java relative to project root
@@ -174,6 +186,7 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
             logger.debug(f"[RESOLVE] Attempt 2: checking {potential_path} (project_root={project_root})")
             if potential_path.exists():
                 logger.debug(f"[RESOLVE] Attempt 2 SUCCESS: found {potential_path}")
+                _test_file_path_cache[cache_key] = potential_path
                 return potential_path
 
         # 3. Search for the file in base_dir and its subdirectories
@@ -181,9 +194,11 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         logger.debug(f"[RESOLVE] Attempt 3: rglob for {file_name} in {base_dir}")
         for java_file in base_dir.rglob(file_name):
             logger.debug(f"[RESOLVE] Attempt 3 SUCCESS: rglob found {java_file}")
+            _test_file_path_cache[cache_key] = java_file
             return java_file
 
         logger.warning(f"[RESOLVE] FAILED to resolve {test_class_path} in base_dir {base_dir}")
+        _test_file_path_cache[cache_key] = None  # Cache negative results too
         return None
 
     # Handle file paths (contain slashes and extensions like .js/.ts)
@@ -192,6 +207,7 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         # Try the path as-is if it's absolute
         potential_path = Path(test_class_path)
         if potential_path.is_absolute() and potential_path.exists():
+            _test_file_path_cache[cache_key] = potential_path
             return potential_path
 
         # Try to resolve relative to base_dir's parent (project root)
@@ -201,6 +217,7 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         try:
             potential_path = potential_path.resolve()
             if potential_path.exists():
+                _test_file_path_cache[cache_key] = potential_path
                 return potential_path
         except (OSError, RuntimeError):
             pass
@@ -210,10 +227,12 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         try:
             potential_path = potential_path.resolve()
             if potential_path.exists():
+                _test_file_path_cache[cache_key] = potential_path
                 return potential_path
         except (OSError, RuntimeError):
             pass
 
+        _test_file_path_cache[cache_key] = None  # Cache negative results
         return None
 
     # First try the full path (Python module path)
@@ -244,6 +263,8 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
                 if test_file_path:
                     break
 
+    # Cache the result (could be None)
+    _test_file_path_cache[cache_key] = test_file_path
     return test_file_path
 
 
