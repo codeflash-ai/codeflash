@@ -512,9 +512,10 @@ def get_function_sources_from_jedi(
                     # TODO: there can be multiple definitions, see how to handle such cases
                     definition = definitions[0]
                     definition_path = definition.module_path
-                    rel = safe_relative_to(definition_path, project_root_path)
-                    if not rel.is_absolute():
-                        definition_path = project_root_path / rel
+                    if definition_path is not None:
+                        rel = safe_relative_to(definition_path, project_root_path)
+                        if not rel.is_absolute():
+                            definition_path = project_root_path / rel
 
                     # The definition is part of this project and not defined within the original function
                     is_valid_definition = (
