@@ -128,7 +128,7 @@ def determine_js_package_manager(project_root: Path) -> JsPackageManager:
     """
     # Search from project_root up to filesystem root for lock files
     # This supports monorepo setups where lock file is at workspace root
-    current_dir = project_root.resolve()
+    current_dir = project_root
     while current_dir != current_dir.parent:
         if (current_dir / "bun.lockb").exists() or (current_dir / "bun.lock").exists():
             return JsPackageManager.BUN
@@ -161,7 +161,7 @@ def find_node_modules_with_package(project_root: Path, package_name: str) -> Pat
         Path to the node_modules directory containing the package, or None if not found.
 
     """
-    current_dir = project_root.resolve()
+    current_dir = project_root
     while current_dir != current_dir.parent:
         node_modules = current_dir / "node_modules"
         if node_modules.exists():
