@@ -562,6 +562,17 @@ def _get_test_classpath(
         if main_classes.exists():
             cp_parts.append(str(main_classes))
 
+        # For multi-module projects, also include target/classes from all modules
+        # This is needed because the test module may depend on other modules
+        if test_module:
+            # Find all target/classes directories in sibling modules
+            for module_dir in project_root.iterdir():
+                if module_dir.is_dir() and module_dir.name != test_module:
+                    module_classes = module_dir / "target" / "classes"
+                    if module_classes.exists():
+                        logger.debug(f"Adding multi-module classpath: {module_classes}")
+                        cp_parts.append(str(module_classes))
+
         return os.pathsep.join(cp_parts)
 
     except subprocess.TimeoutExpired:
@@ -605,49 +616,99 @@ def _run_tests_direct(
 
     java = _find_java_executable() or "java"
 
-    # Build command using JUnit Platform Console Launcher
-    # The launcher is included in junit-platform-console-standalone or junit-jupiter
-    cmd = [
+    # Try to detect if JUnit 4 is being used (check for JUnit 4 runner in classpath)
+    # If JUnit 4, use JUnitCore directly instead of ConsoleLauncher
+    is_junit4 = False
+    # Check if org.junit.runner.JUnitCore is in classpath (JUnit 4)
+    # and org.junit.platform.console.ConsoleLauncher is not (JUnit 5)
+    check_junit4_cmd = [
         str(java),
-        # Java 16+ module system: Kryo needs reflective access to internal JDK classes
-        "--add-opens",
-        "java.base/java.util=ALL-UNNAMED",
-        "--add-opens",
-        "java.base/java.lang=ALL-UNNAMED",
-        "--add-opens",
-        "java.base/java.lang.reflect=ALL-UNNAMED",
-        "--add-opens",
-        "java.base/java.io=ALL-UNNAMED",
-        "--add-opens",
-        "java.base/java.math=ALL-UNNAMED",
-        "--add-opens",
-        "java.base/java.net=ALL-UNNAMED",
-        "--add-opens",
-        "java.base/java.util.zip=ALL-UNNAMED",
         "-cp",
         classpath,
-        "org.junit.platform.console.ConsoleLauncher",
-        "--disable-banner",
-        "--disable-ansi-colors",
-        # Use 'none' details to avoid duplicate output
-        # Timing markers are captured in XML via stdout capture config
-        "--details=none",
-        # Enable stdout/stderr capture in XML reports
-        # This ensures timing markers are included in the XML system-out element
-        "--config=junit.platform.output.capture.stdout=true",
-        "--config=junit.platform.output.capture.stderr=true",
+        "org.junit.runner.JUnitCore",
+        "-version"
     ]
+    try:
+        result = subprocess.run(check_junit4_cmd, capture_output=True, text=True, timeout=2)
+        # JUnit 4's JUnitCore will show version, JUnit 5 won't have this class
+        if "JUnit version" in result.stdout or result.returncode == 0:
+            is_junit4 = True
+            logger.debug("Detected JUnit 4, using JUnitCore for direct execution")
+    except (subprocess.TimeoutExpired, Exception):
+        pass
 
-    # Add reports directory if specified (for XML output)
-    if reports_dir:
-        reports_dir.mkdir(parents=True, exist_ok=True)
-        cmd.extend(["--reports-dir", str(reports_dir)])
+    if is_junit4:
+        # Use JUnit 4's JUnitCore runner
+        cmd = [
+            str(java),
+            # Java 16+ module system: Kryo needs reflective access to internal JDK classes
+            "--add-opens",
+            "java.base/java.util=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.lang=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.io=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.math=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.net=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.util.zip=ALL-UNNAMED",
+            "-cp",
+            classpath,
+            "org.junit.runner.JUnitCore",
+        ]
+        # Add test classes
+        cmd.extend(test_classes)
+    else:
+        # Build command using JUnit Platform Console Launcher (JUnit 5)
+        # The launcher is included in junit-platform-console-standalone or junit-jupiter
+        cmd = [
+            str(java),
+            # Java 16+ module system: Kryo needs reflective access to internal JDK classes
+            "--add-opens",
+            "java.base/java.util=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.lang=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.io=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.math=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.net=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.util.zip=ALL-UNNAMED",
+            "-cp",
+            classpath,
+            "org.junit.platform.console.ConsoleLauncher",
+            "--disable-banner",
+            "--disable-ansi-colors",
+            # Use 'none' details to avoid duplicate output
+            # Timing markers are captured in XML via stdout capture config
+            "--details=none",
+            # Enable stdout/stderr capture in XML reports
+            # This ensures timing markers are included in the XML system-out element
+            "--config=junit.platform.output.capture.stdout=true",
+            "--config=junit.platform.output.capture.stderr=true",
+        ]
 
-    # Add test classes to select
-    for test_class in test_classes:
-        cmd.extend(["--select-class", test_class])
+        # Add reports directory if specified (for XML output)
+        if reports_dir:
+            reports_dir.mkdir(parents=True, exist_ok=True)
+            cmd.extend(["--reports-dir", str(reports_dir)])
 
-    logger.debug("Running tests directly: java -cp ... ConsoleLauncher --select-class %s", test_classes)
+        # Add test classes to select
+        for test_class in test_classes:
+            cmd.extend(["--select-class", test_class])
+
+    if is_junit4:
+        logger.debug("Running tests directly: java -cp ... JUnitCore %s", test_classes)
+    else:
+        logger.debug("Running tests directly: java -cp ... ConsoleLauncher --select-class %s", test_classes)
 
     try:
         return subprocess.run(
@@ -981,6 +1042,10 @@ def run_benchmarking_tests(
             all_stderr.append(result.stderr)
 
         logger.debug("Loop %d completed in %.2fs (returncode=%d)", loop_idx, loop_time, result.returncode)
+
+        # Log stderr if direct JVM execution failed (for debugging)
+        if result.returncode != 0 and result.stderr:
+            logger.debug("Direct JVM stderr: %s", result.stderr[:500])
 
         # Check if direct JVM execution failed on the first loop.
         # Fall back to Maven-based execution for:
