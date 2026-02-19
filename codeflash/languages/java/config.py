@@ -240,7 +240,7 @@ def _detect_test_deps_from_pom(project_root: Path) -> tuple[bool, bool, bool]:
                         check_dependencies(deps, ns)
 
     except ET.ParseError:
-        logger.debug(f"Failed to parse pom.xml at {pom_path}")
+        logger.debug("Failed to parse pom.xml at %s", pom_path)
 
     # For multi-module projects, also check submodule pom.xml files
     if not (has_junit5 or has_junit4 or has_testng):
