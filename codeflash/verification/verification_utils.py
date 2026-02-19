@@ -232,7 +232,7 @@ class TestConfig:
                 return config.test_framework
         except Exception:
             pass
-        return "junit5"  # Default fallback
+        return "junit4"  # Default fallback (JUnit 4 is more common in legacy projects)
 
     def set_language(self, language: str) -> None:
         """Set the language for this test config.
