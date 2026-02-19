@@ -935,7 +935,10 @@ def filter_functions(
         if previous_checkpoint_functions:
             functions_tmp = []
             for function in _functions:
-                if function.qualified_name_with_modules_from_root(resolved_project_root) in previous_checkpoint_functions:
+                if (
+                    function.qualified_name_with_modules_from_root(resolved_project_root)
+                    in previous_checkpoint_functions
+                ):
                     previous_checkpoint_functions_removed_count += 1
                     continue
                 functions_tmp.append(function)
