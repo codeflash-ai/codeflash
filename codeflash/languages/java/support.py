@@ -83,6 +83,14 @@ class JavaSupport(LanguageSupport):
         """Comment prefix for Java."""
         return "//"
 
+    @property
+    def default_file_extension(self) -> str:
+        return ".java"
+
+    @property
+    def dir_excludes(self) -> frozenset[str]:
+        return frozenset({"target", "build", ".gradle", ".m2", "out", ".idea", "bin"})
+
     # === Discovery ===
 
     def discover_functions(
