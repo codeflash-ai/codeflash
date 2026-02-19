@@ -512,6 +512,9 @@ def get_function_sources_from_jedi(
                     # TODO: there can be multiple definitions, see how to handle such cases
                     definition = definitions[0]
                     definition_path = definition.module_path
+                    rel = safe_relative_to(definition_path, project_root_path)
+                    if not rel.is_absolute():
+                        definition_path = project_root_path / rel
 
                     # The definition is part of this project and not defined within the original function
                     is_valid_definition = (
@@ -936,7 +939,11 @@ def is_project_path(module_path: Path | None, project_root_path: Path) -> bool:
     # site-packages must be checked first because .venv/site-packages is under project root
     if path_belongs_to_site_packages(module_path):
         return False
-    return str(module_path).startswith(str(project_root_path) + os.sep)
+    try:
+        module_path.resolve().relative_to(project_root_path.resolve())
+        return True
+    except ValueError:
+        return False
 
 
 def _is_project_module(module_name: str, project_root_path: Path) -> bool:
