@@ -199,6 +199,7 @@ class JavaSupport(LanguageSupport):
         self, generated_tests: GeneratedTestsList, functions_to_remove: list[str]
     ) -> GeneratedTestsList:
         """Remove specific test functions from generated tests."""
+        # TODO(java): implement if needed for Java generated tests.
         _ = functions_to_remove
         return generated_tests
 
@@ -210,6 +211,7 @@ class JavaSupport(LanguageSupport):
         tests_project_rootdir: Path | None = None,
     ) -> GeneratedTestsList:
         """Add runtime comments to generated tests."""
+        # TODO(java): implement if needed for Java generated tests.
         _ = original_runtimes, optimized_runtimes, tests_project_rootdir
         return generated_tests
 
