@@ -15,6 +15,8 @@ from codeflash.code_utils.formatter import format_code
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config, save_api_key_to_rc
 from codeflash.lsp.helpers import is_LSP_enabled
 
+_get_language_support_by_common_formatters = None
+
 
 def check_formatter_installed(
     formatter_cmds: list[str], exit_on_failure: bool = True, language: str = "python"
@@ -22,23 +24,46 @@ def check_formatter_installed(
     if not formatter_cmds or formatter_cmds[0] == "disabled":
         return True
     first_cmd = formatter_cmds[0]
-    cmd_tokens = shlex.split(first_cmd) if isinstance(first_cmd, str) else [first_cmd]
+
+    # Fast-path split for simple commands without quoting/backslashes; fall back to shlex for correctness.
+    if isinstance(first_cmd, str):
+        if ('"' not in first_cmd) and ("'" not in first_cmd) and ("\\" not in first_cmd):
+            cmd_tokens = first_cmd.split()
+        else:
+            cmd_tokens = shlex.split(first_cmd)
+    else:
+        cmd_tokens = [first_cmd]
+
 
     if not cmd_tokens:
         return True
 
     exe_name = cmd_tokens[0]
-    command_str = " ".join(formatter_cmds).replace(" $file", "")
 
     if shutil.which(exe_name) is None:
+        command_str = " ".join(formatter_cmds).replace(" $file", "")
         logger.error(
             f"Could not find formatter: {command_str}\n"
             f"Please install it or update 'formatter-cmds' in your codeflash configuration"
         )
         return False
 
-    # Import here to avoid circular import
-    from codeflash.languages.registry import get_language_support_by_common_formatters
+    # Import here to avoid circular import, but cache the imported callable to avoid repeated import cost.
+    global _get_language_support_by_common_formatters
+    if _get_language_support_by_common_formatters is None:
+        try:
+            from codeflash.languages.registry import \
+                get_language_support_by_common_formatters as _cached_helper
+
+            _get_language_support_by_common_formatters = _cached_helper
+        except Exception:
+            _get_language_support_by_common_formatters = None
+
+    get_language_support_by_common_formatters = _get_language_support_by_common_formatters
+    if not get_language_support_by_common_formatters:
+        logger.debug(f"Could not determine language for formatter: {formatter_cmds}")
+        return True
+
 
     lang_support = get_language_support_by_common_formatters(formatter_cmds)
     if not lang_support:
@@ -59,12 +84,14 @@ def check_formatter_installed(
             format_code(formatter_cmds, tmp_file, print_status=False, exit_on_failure=False)
             return True
     except FileNotFoundError:
+        command_str = " ".join(formatter_cmds).replace(" $file", "")
         logger.error(
             f"Could not find formatter: {command_str}\n"
             f"Please install it or update 'formatter-cmds' in your codeflash configuration"
         )
         return False
     except Exception as e:
+        command_str = " ".join(formatter_cmds).replace(" $file", "")
         logger.error(f"Formatter failed to run: {command_str}\nError: {e}")
         return False
 

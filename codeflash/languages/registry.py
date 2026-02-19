@@ -18,6 +18,10 @@ if TYPE_CHECKING:
 
     from codeflash.languages.base import LanguageSupport
 
+_PY_FORMATTERS = frozenset(("black", "isort", "ruff", "autopep8", "yapf", "pyfmt"))
+
+_JS_TS_FORMATTERS = frozenset(("prettier", "eslint", "biome", "rome", "deno", "standard", "tslint"))
+
 logger = logging.getLogger(__name__)
 
 
@@ -211,28 +215,36 @@ _FRAMEWORK_CACHE: dict[str, LanguageSupport] = {}
 
 
 def get_language_support_by_common_formatters(formatter_cmd: str | list[str]) -> LanguageSupport | None:
-    _ensure_languages_registered()
-    language: Language | None = None
+    _ensure_called = False
+    # Accept both a single string or list of strings
     if isinstance(formatter_cmd, str):
         formatter_cmd = [formatter_cmd]
 
     if len(formatter_cmd) == 1:
         formatter_cmd = formatter_cmd[0].split(" ")
 
-    # Try as extension first
-    ext = None
+    # Try to determine language by checking tokens against known formatter names using set intersection.
+    # This avoids generator overhead and repeated membership checks.
+    tokens_set = set(formatter_cmd)
 
-    py_formatters = ["black", "isort", "ruff", "autopep8", "yapf", "pyfmt"]
-    js_ts_formatters = ["prettier", "eslint", "biome", "rome", "deno", "standard", "tslint"]
-
-    if any(cmd in py_formatters for cmd in formatter_cmd):
+    ext: str | None = None
+    if tokens_set & _PY_FORMATTERS:
         ext = ".py"
-    elif any(cmd in js_ts_formatters for cmd in formatter_cmd):
+    elif tokens_set & _JS_TS_FORMATTERS:
         ext = ".js"
 
     if ext is None:
         # can't determine language
         return None
+
+
+    # Only ensure languages registered if necessary to access registry
+    # This avoids the expensive registration step on every call when we can early-return.
+    if ext not in _EXTENSION_REGISTRY:
+        _ensure_languages_registered()
+        if ext not in _EXTENSION_REGISTRY:
+            # Still missing after ensuring registration; cannot determine language support
+            return None
 
     cls = _EXTENSION_REGISTRY[ext]
     language = cls().language
