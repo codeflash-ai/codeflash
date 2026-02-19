@@ -10,6 +10,7 @@ on:
       - 'code_to_optimize/**'
       - 'pyproject.toml'
       - 'uv.lock'
+      - '.github/workflows/windows-unit-tests.yml'
   workflow_dispatch:
 
 concurrency:
