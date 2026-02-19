@@ -34,7 +34,6 @@ def check_formatter_installed(
     else:
         cmd_tokens = [first_cmd]
 
-
     if not cmd_tokens:
         return True
 
@@ -52,8 +51,7 @@ def check_formatter_installed(
     global _get_language_support_by_common_formatters
     if _get_language_support_by_common_formatters is None:
         try:
-            from codeflash.languages.registry import \
-                get_language_support_by_common_formatters as _cached_helper
+            from codeflash.languages.registry import get_language_support_by_common_formatters as _cached_helper
 
             _get_language_support_by_common_formatters = _cached_helper
         except Exception:
@@ -63,7 +61,6 @@ def check_formatter_installed(
     if not get_language_support_by_common_formatters:
         logger.debug(f"Could not determine language for formatter: {formatter_cmds}")
         return True
-
 
     lang_support = get_language_support_by_common_formatters(formatter_cmds)
     if not lang_support:

@@ -237,7 +237,6 @@ def get_language_support_by_common_formatters(formatter_cmd: str | list[str]) ->
         # can't determine language
         return None
 
-
     # Only ensure languages registered if necessary to access registry
     # This avoids the expensive registration step on every call when we can early-return.
     if ext not in _EXTENSION_REGISTRY:
