@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from operator import attrgetter
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
-from operator import attrgetter
 
 if TYPE_CHECKING:
     from pathlib import Path
