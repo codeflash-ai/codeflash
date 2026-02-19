@@ -14,15 +14,16 @@ from typing import TYPE_CHECKING, Any
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, Language, TestInfo, TestResult
+from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
 from codeflash.languages.registry import register_language
-from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
 from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from codeflash.languages.base import ReferenceInfo
-    from codeflash.languages.treesitter_utils import TypeDefinition
+    from codeflash.languages.javascript.treesitter import TypeDefinition
+    from codeflash.models.models import GeneratedTestsList, InvocationId
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,10 @@ class JavaScriptSupport:
     def comment_prefix(self) -> str:
         return "//"
 
+    @property
+    def dir_excludes(self) -> frozenset[str]:
+        return frozenset({"node_modules", "dist", "build", ".next", ".nuxt", "coverage", ".cache", ".turbo", ".vercel"})
+
     # === Discovery ===
 
     def discover_functions(
@@ -102,6 +107,12 @@ class JavaScriptSupport:
 
                 # Check async filter
                 if not criteria.include_async and func.is_async:
+                    continue
+
+                # Skip non-exported functions (can't be imported in tests)
+                # Exception: nested functions and methods are allowed if their parent is exported
+                if not func.is_exported and not func.parent_function:
+                    logger.debug(f"Skipping non-exported function: {func.name}")  # noqa: G004
                     continue
 
                 # Build parents list
@@ -326,8 +337,14 @@ class JavaScriptSupport:
         else:
             target_code = ""
 
+        imports = analyzer.find_imports(source)
+
+        # Find helper functions called by target (needed before class wrapping to find same-class helpers)
+        helpers = self._find_helper_functions(function, source, analyzer, imports, module_root)
+
         # For class methods, wrap the method in its class definition
         # This is necessary because method definition syntax is only valid inside a class body
+        same_class_helper_names: set[str] = set()
         if function.is_method and function.parents:
             class_name = None
             for parent in function.parents:
@@ -336,17 +353,26 @@ class JavaScriptSupport:
                     break
 
             if class_name:
+                # Find same-class helper methods that need to be included inside the class wrapper
+                same_class_helpers = self._find_same_class_helpers(
+                    class_name, function.function_name, helpers, tree_functions, lines
+                )
+                same_class_helper_names = {h[0] for h in same_class_helpers}  # method names
+
                 # Find the class definition in the source to get proper indentation, JSDoc, constructor, and fields
                 class_info = self._find_class_definition(source, class_name, analyzer, function.function_name)
                 if class_info:
                     class_jsdoc, class_indent, constructor_code, fields_code = class_info
-                    # Build the class body with fields, constructor, and target method
+                    # Build the class body with fields, constructor, target method, and same-class helpers
                     class_body_parts = []
                     if fields_code:
                         class_body_parts.append(fields_code)
                     if constructor_code:
                         class_body_parts.append(constructor_code)
                     class_body_parts.append(target_code)
+                    # Add same-class helper methods inside the class body
+                    for _helper_name, helper_source in same_class_helpers:
+                        class_body_parts.append(helper_source)
                     class_body = "\n".join(class_body_parts)
 
                     # Wrap the method in a class definition with context
@@ -357,13 +383,16 @@ class JavaScriptSupport:
                     else:
                         target_code = f"{class_indent}class {class_name} {{\n{class_body}{class_indent}}}\n"
                 else:
-                    # Fallback: wrap with no indentation
-                    target_code = f"class {class_name} {{\n{target_code}}}\n"
+                    # Fallback: wrap with no indentation, including same-class helpers
+                    helper_code = "\n".join(h[1] for h in same_class_helpers)
+                    if helper_code:
+                        target_code = f"class {class_name} {{\n{target_code}\n{helper_code}}}\n"
+                    else:
+                        target_code = f"class {class_name} {{\n{target_code}}}\n"
 
-        imports = analyzer.find_imports(source)
-
-        # Find helper functions called by target
-        helpers = self._find_helper_functions(function, source, analyzer, imports, module_root)
+        # Filter out same-class helpers from the helpers list (they're already inside the class wrapper)
+        if same_class_helper_names:
+            helpers = [h for h in helpers if h.name not in same_class_helper_names]
 
         # Extract import statements as strings
         import_lines = []
@@ -545,6 +574,49 @@ class JavaScriptSupport:
         fields_code = "".join(field_parts)
 
         return (constructor_code, fields_code)
+
+    def _find_same_class_helpers(
+        self,
+        class_name: str,
+        target_method_name: str,
+        helpers: list[HelperFunction],
+        tree_functions: list,
+        lines: list[str],
+    ) -> list[tuple[str, str]]:
+        """Find helper methods that belong to the same class as the target method.
+
+        These helpers need to be included inside the class wrapper rather than
+        appended outside, because they may use class-specific syntax like 'private'.
+
+        Args:
+            class_name: Name of the class containing the target method.
+            target_method_name: Name of the target method (to exclude).
+            helpers: List of all helper functions found.
+            tree_functions: List of FunctionNode from tree-sitter analysis.
+            lines: Source code split into lines.
+
+        Returns:
+            List of (method_name, source_code) tuples for same-class helpers.
+
+        """
+        same_class_helpers: list[tuple[str, str]] = []
+
+        # Build a set of helper names for quick lookup
+        helper_names = {h.name for h in helpers}
+
+        # Names to exclude from same-class helpers (target method and constructor)
+        exclude_names = {target_method_name, "constructor"}
+
+        # Find methods in tree_functions that belong to the same class and are helpers
+        for func in tree_functions:
+            if func.class_name == class_name and func.name in helper_names and func.name not in exclude_names:
+                # Extract source including JSDoc if present
+                effective_start = func.doc_start_line or func.start_line
+                helper_lines = lines[effective_start - 1 : func.end_line]
+                helper_source = "".join(helper_lines)
+                same_class_helpers.append((func.name, helper_source))
+
+        return same_class_helpers
 
     def _find_helper_functions(
         self,
@@ -1707,6 +1779,116 @@ class JavaScriptSupport:
 
         return remove_test_functions(test_source, functions_to_remove)
 
+    def postprocess_generated_tests(
+        self, generated_tests: GeneratedTestsList, test_framework: str, project_root: Path, source_file_path: Path
+    ) -> GeneratedTestsList:
+        """Apply language-specific postprocessing to generated tests."""
+        from codeflash.languages.javascript.edit_tests import (
+            disable_ts_check,
+            inject_test_globals,
+            normalize_generated_tests_imports,
+        )
+        from codeflash.languages.javascript.module_system import detect_module_system
+
+        module_system = detect_module_system(project_root, source_file_path)
+        if module_system == "esm":
+            generated_tests = inject_test_globals(generated_tests, test_framework)
+        if self.language == Language.TYPESCRIPT:
+            generated_tests = disable_ts_check(generated_tests)
+        return normalize_generated_tests_imports(generated_tests)
+
+    def remove_test_functions_from_generated_tests(
+        self, generated_tests: GeneratedTestsList, functions_to_remove: list[str]
+    ) -> GeneratedTestsList:
+        """Remove specific test functions from generated tests."""
+        from codeflash.models.models import GeneratedTests, GeneratedTestsList
+
+        updated_tests: list[GeneratedTests] = []
+        for test in generated_tests.generated_tests:
+            updated_tests.append(
+                GeneratedTests(
+                    generated_original_test_source=self.remove_test_functions(
+                        test.generated_original_test_source, functions_to_remove
+                    ),
+                    instrumented_behavior_test_source=test.instrumented_behavior_test_source,
+                    instrumented_perf_test_source=test.instrumented_perf_test_source,
+                    behavior_file_path=test.behavior_file_path,
+                    perf_file_path=test.perf_file_path,
+                )
+            )
+        return GeneratedTestsList(generated_tests=updated_tests)
+
+    def add_runtime_comments_to_generated_tests(
+        self,
+        generated_tests: GeneratedTestsList,
+        original_runtimes: dict[InvocationId, list[int]],
+        optimized_runtimes: dict[InvocationId, list[int]],
+        tests_project_rootdir: Path | None = None,
+    ) -> GeneratedTestsList:
+        """Add runtime comments to generated tests."""
+        from codeflash.models.models import GeneratedTests, GeneratedTestsList
+
+        tests_root = tests_project_rootdir or Path()
+        original_runtimes_dict = self._build_runtime_map(original_runtimes, tests_root)
+        optimized_runtimes_dict = self._build_runtime_map(optimized_runtimes, tests_root)
+
+        modified_tests: list[GeneratedTests] = []
+        for test in generated_tests.generated_tests:
+            modified_source = self.add_runtime_comments(
+                test.generated_original_test_source, original_runtimes_dict, optimized_runtimes_dict
+            )
+            modified_tests.append(
+                GeneratedTests(
+                    generated_original_test_source=modified_source,
+                    instrumented_behavior_test_source=test.instrumented_behavior_test_source,
+                    instrumented_perf_test_source=test.instrumented_perf_test_source,
+                    behavior_file_path=test.behavior_file_path,
+                    perf_file_path=test.perf_file_path,
+                )
+            )
+        return GeneratedTestsList(generated_tests=modified_tests)
+
+    def add_global_declarations(self, optimized_code: str, original_source: str, module_abspath: Path) -> str:
+        from codeflash.languages.javascript.code_replacer import _add_global_declarations_for_language
+
+        return _add_global_declarations_for_language(optimized_code, original_source, module_abspath, self.language)
+
+    def extract_calling_function_source(self, source_code: str, function_name: str, ref_line: int) -> str | None:
+        from codeflash.languages.javascript.treesitter import extract_calling_function_source
+
+        return extract_calling_function_source(source_code, function_name, ref_line)
+
+    def _build_runtime_map(
+        self, inv_id_runtimes: dict[InvocationId, list[int]], tests_project_rootdir: Path
+    ) -> dict[str, int]:
+        from codeflash.languages.javascript.edit_tests import resolve_js_test_module_path
+
+        unique_inv_ids: dict[str, int] = {}
+        for inv_id, runtimes in inv_id_runtimes.items():
+            test_qualified_name = (
+                inv_id.test_class_name + "." + inv_id.test_function_name  # type: ignore[operator]
+                if inv_id.test_class_name
+                else inv_id.test_function_name
+            )
+            if not test_qualified_name:
+                continue
+            abs_path = resolve_js_test_module_path(inv_id.test_module_path, tests_project_rootdir)
+
+            abs_path_str = str(abs_path.resolve().with_suffix(""))
+            if "__unit_test_" not in abs_path_str and "__perf_test_" not in abs_path_str:
+                continue
+
+            key = test_qualified_name + "#" + abs_path_str
+            parts = inv_id.iteration_id.split("_").__len__()  # type: ignore[union-attr]
+            cur_invid = (
+                inv_id.iteration_id.split("_")[0] if parts < 3 else "_".join(inv_id.iteration_id.split("_")[:-1])
+            )  # type: ignore[union-attr]
+            match_key = key + "#" + cur_invid
+            if match_key not in unique_inv_ids:
+                unique_inv_ids[match_key] = 0
+            unique_inv_ids[match_key] += min(runtimes)
+        return unique_inv_ids
+
     # === Test Result Comparison ===
 
     def compare_test_results(
@@ -1737,15 +1919,6 @@ class JavaScriptSupport:
 
         """
         return ".test.js"
-
-    def get_comment_prefix(self) -> str:
-        """Get the comment prefix for JavaScript.
-
-        Returns:
-            JavaScript single-line comment prefix.
-
-        """
-        return "//"
 
     def find_test_root(self, project_root: Path) -> Path | None:
         """Find the test root directory for a JavaScript project.
@@ -1846,8 +2019,11 @@ class JavaScriptSupport:
         Checks for:
         1. Node.js installation
         2. npm availability
-        3. Test framework (jest/vitest) installation
-        4. node_modules existence
+        3. Test framework (jest/vitest) installation (with monorepo support)
+
+        Uses find_node_modules_with_package() from init_javascript to search up the
+        directory tree for node_modules containing the test framework. This supports
+        monorepo setups where dependencies are hoisted to the workspace root.
 
         Args:
             project_root: The project root directory.
@@ -1879,16 +2055,21 @@ class JavaScriptSupport:
         except Exception as e:
             errors.append(f"Failed to check npm: {e}")
 
-        # Check node_modules exists
-        node_modules = project_root / "node_modules"
-        if not node_modules.exists():
-            errors.append(
-                f"node_modules not found in {project_root}. Please run 'npm install' to install dependencies."
-            )
+        # Check test framework is installed (with monorepo support)
+        # Uses find_node_modules_with_package which searches up the directory tree
+        from codeflash.cli_cmds.init_javascript import find_node_modules_with_package
+
+        node_modules = find_node_modules_with_package(project_root, test_framework)
+        if node_modules:
+            logger.debug("Found %s in node_modules at %s", test_framework, node_modules / test_framework)
         else:
-            # Check test framework is installed
-            framework_path = node_modules / test_framework
-            if not framework_path.exists():
+            # Check if local node_modules exists at all
+            local_node_modules = project_root / "node_modules"
+            if not local_node_modules.exists():
+                errors.append(
+                    f"node_modules not found in {project_root}. Please run 'npm install' to install dependencies."
+                )
+            else:
                 errors.append(
                     f"{test_framework} is not installed. "
                     f"Please run 'npm install --save-dev {test_framework}' to install it."
@@ -1934,14 +2115,16 @@ class JavaScriptSupport:
         logger.error("Could not install codeflash. Please run: npm install --save-dev codeflash")
         return False
 
+    def create_dependency_resolver(self, project_root: Path) -> None:
+        return None
+
     def instrument_existing_test(
         self,
-        test_string: str,
+        test_path: Path,
         call_positions: Sequence[Any],
         function_to_optimize: Any,
         tests_project_root: Path,
         mode: str,
-        test_path: Path | None,
     ) -> tuple[bool, str | None]:
         """Inject profiling code into an existing JavaScript test file.
 
@@ -1962,7 +2145,6 @@ class JavaScriptSupport:
         from codeflash.languages.javascript.instrument import inject_profiling_into_existing_js_test
 
         return inject_profiling_into_existing_js_test(
-            test_string=test_string,
             test_path=test_path,
             call_positions=list(call_positions),
             function_to_optimize=function_to_optimize,
@@ -2092,6 +2274,10 @@ class JavaScriptSupport:
             candidate_index=candidate_index,
         )
 
+    # JavaScript/TypeScript benchmarking uses high max_loops like Python (100,000)
+    # The actual loop count is limited by target_duration_seconds, not max_loops
+    JS_BENCHMARKING_MAX_LOOPS = 100_000
+
     def run_benchmarking_tests(
         self,
         test_paths: Any,
@@ -2124,10 +2310,15 @@ class JavaScriptSupport:
         from codeflash.languages.test_framework import get_js_test_framework_or_default
 
         framework = test_framework or get_js_test_framework_or_default()
+        logger.debug("run_benchmarking_tests called with framework=%s", framework)
+
+        # Use JS-specific high max_loops - actual loop count is limited by target_duration
+        effective_max_loops = self.JS_BENCHMARKING_MAX_LOOPS
 
         if framework == "vitest":
             from codeflash.languages.javascript.vitest_runner import run_vitest_benchmarking_tests
 
+            logger.debug("Dispatching to run_vitest_benchmarking_tests")
             return run_vitest_benchmarking_tests(
                 test_paths=test_paths,
                 test_env=test_env,
@@ -2135,7 +2326,7 @@ class JavaScriptSupport:
                 timeout=timeout,
                 project_root=project_root,
                 min_loops=min_loops,
-                max_loops=max_loops,
+                max_loops=effective_max_loops,
                 target_duration_ms=int(target_duration_seconds * 1000),
             )
 
@@ -2148,7 +2339,7 @@ class JavaScriptSupport:
             timeout=timeout,
             project_root=project_root,
             min_loops=min_loops,
-            max_loops=max_loops,
+            max_loops=effective_max_loops,
             target_duration_ms=int(target_duration_seconds * 1000),
         )
 
