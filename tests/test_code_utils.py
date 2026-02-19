@@ -20,11 +20,7 @@ from codeflash.code_utils.code_utils import (
     validate_python_code,
 )
 from codeflash.languages.python.static_analysis.concolic_utils import clean_concolic_tests
-from codeflash.languages.python.static_analysis.coverage_utils import (
-    extract_dependent_function,
-    generate_candidates,
-    prepare_coverage_files,
-)
+from codeflash.languages.python.static_analysis.coverage_utils import extract_dependent_function, generate_candidates, prepare_coverage_files
 from codeflash.models.models import CodeStringsMarkdown
 from codeflash.verification.parse_test_output import resolve_test_file_from_class_path
 
