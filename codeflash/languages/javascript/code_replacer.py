@@ -151,10 +151,8 @@ def _insert_declaration_after_dependencies(
     if insertion_line > 0 and lines[insertion_line - 1].strip():
         decl_code = "\n" + decl_code
 
-    before = lines[:insertion_line]
-    after = lines[insertion_line:]
-
-    return "".join([*before, decl_code, *after])
+    # Directly construct the result without intermediate list
+    return "".join(lines[:insertion_line]) + decl_code + "".join(lines[insertion_line:])
 
 
 # Author: ali <mohammed18200118@gmail.com>
@@ -174,10 +172,11 @@ def _find_insertion_line_for_declaration(
 
     """
     # Find the maximum end line among referenced declarations
-    max_dependency_line = 0
-    for name in referenced_names:
-        if name in existing_decl_end_lines:
-            max_dependency_line = max(max_dependency_line, existing_decl_end_lines[name])
+    max_dependency_line = max(
+        (existing_decl_end_lines[name] for name in referenced_names if name in existing_decl_end_lines),
+        default=0
+    )
+
 
     if max_dependency_line > 0:
         # Insert after the last dependency (end_line is 1-indexed, we need 0-indexed)

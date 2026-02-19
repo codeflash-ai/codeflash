@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 
     from tree_sitter import Node, Tree
 
+_PARSER_CACHE: dict[TreeSitterLanguage, Parser] = {}
+
 logger = logging.getLogger(__name__)
 
 
@@ -1768,6 +1770,18 @@ class TreeSitterAnalyzer:
                         is_exported=is_exported,
                     )
                 )
+
+
+    @property
+    def parser(self) -> Parser:
+        """Get or create the cached parser for this language."""
+        if self._parser is None:
+            # Check if we have a cached parser for this language
+            if self.language not in _PARSER_CACHE:
+                _PARSER_CACHE[self.language] = Parser()
+                # Assuming parser setup happens elsewhere or in subclass
+            self._parser = _PARSER_CACHE[self.language]
+        return self._parser
 
 
 def get_analyzer_for_file(file_path: Path) -> TreeSitterAnalyzer:
