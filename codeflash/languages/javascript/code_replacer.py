@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
+from operator import attrgetter
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -103,9 +104,7 @@ def _filter_new_declarations(optimized_declarations: list, existing_names: set[s
     seen_sources: set[str] = set()
 
     # Sort by line number to maintain order from optimized code
-    sorted_declarations = sorted(optimized_declarations, key=lambda d: d.start_line)
-
-    for decl in sorted_declarations:
+    for decl in sorted(optimized_declarations, key=attrgetter("start_line")):
         if decl.name not in existing_names and decl.source_code not in seen_sources:
             new_declarations.append(decl)
             seen_sources.add(decl.source_code)
