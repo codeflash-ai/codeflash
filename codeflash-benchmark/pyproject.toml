@@ -1,6 +1,6 @@
 [project]
 name = "codeflash-benchmark"
-version = "0.2.0"
+version = "0.3.0"
 description = "Pytest benchmarking plugin for codeflash.ai - automatic code performance optimization"
 authors = [{ name = "CodeFlash Inc.", email = "contact@codeflash.ai" }]
 requires-python = ">=3.9"
