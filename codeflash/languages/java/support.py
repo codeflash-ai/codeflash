@@ -39,8 +39,8 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, TestInfo, TestResult
-    from codeflash.models.models import GeneratedTestsList, InvocationId
     from codeflash.languages.java.concurrency_analyzer import ConcurrencyInfo
+    from codeflash.models.models import GeneratedTestsList, InvocationId
 
 logger = logging.getLogger(__name__)
 

@@ -9,7 +9,7 @@ from junitparser.xunit2 import JUnitXml
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import file_path_from_module_name, module_name_from_file_path
-from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults, TestType, VerificationType
+from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults
 
 if TYPE_CHECKING:
     import subprocess

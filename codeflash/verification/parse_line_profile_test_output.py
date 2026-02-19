@@ -80,9 +80,7 @@ def show_text(stats: dict) -> str:
     return out_table
 
 
-def show_text_non_python(
-    stats: dict, line_contents: dict[tuple[str, int], str]
-) -> str:
+def show_text_non_python(stats: dict, line_contents: dict[tuple[str, int], str]) -> str:
     """Show text for non-Python timings using profiler-provided line contents."""
     out_table = ""
     out_table += "# Timer unit: {:g} s\n".format(stats["unit"])
@@ -115,11 +113,7 @@ def show_text_non_python(
 
         table_cols = ("Hits", "Time", "Per Hit", "% Time", "Line Contents")
         out_table += tabulate(
-            headers=table_cols,
-            tabular_data=table_rows,
-            tablefmt="pipe",
-            colglobalalign=None,
-            preserve_whitespace=True,
+            headers=table_cols, tabular_data=table_rows, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
         )
         out_table += "\n"
     return out_table
@@ -159,9 +153,7 @@ def parse_line_profile_results(line_profiler_output_file: Optional[Path]) -> dic
             line_num = int(line_str)
         line_num = int(line_num)
 
-        lines_by_file.setdefault(file_path, []).append(
-            (line_num, int(stats.get("hits", 0)), int(stats.get("time", 0)))
-        )
+        lines_by_file.setdefault(file_path, []).append((line_num, int(stats.get("hits", 0)), int(stats.get("time", 0))))
         line_contents[(file_path, line_num)] = stats.get("content", "")
 
     for file_path, line_stats in lines_by_file.items():

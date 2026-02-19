@@ -21,8 +21,8 @@ from codeflash.code_utils.code_utils import (
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.languages import is_java, is_javascript, is_python
+from codeflash.languages.java.parse import parse_java_test_xml as _parse_java_test_xml
 from codeflash.languages.java.parse import (
-    parse_java_test_xml as _parse_java_test_xml,
     resolve_java_test_file_from_class_path,
     resolve_java_test_file_from_module_path,
 )
@@ -33,10 +33,10 @@ from codeflash.models.models import (
     ConcurrencyMetrics,
     FunctionTestInvocation,
     InvocationId,
+    TestingMode,
     TestResults,
     TestType,
     VerificationType,
-    TestingMode,
 )
 from codeflash.verification.coverage_utils import CoverageUtils, JacocoCoverageUtils, JestCoverageUtils
 
@@ -1038,7 +1038,7 @@ def parse_test_results(
     code_context: CodeOptimizationContext | None = None,
     run_result: subprocess.CompletedProcess | None = None,
     skip_sqlite_cleanup: bool = False,
-    testing_type: TestingMode = TestingMode.BEHAVIOR
+    testing_type: TestingMode = TestingMode.BEHAVIOR,
 ) -> tuple[TestResults, CoverageData | None]:
     test_results_xml = parse_test_xml(
         test_xml_path, test_files=test_files, test_config=test_config, run_result=run_result

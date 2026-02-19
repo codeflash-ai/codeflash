@@ -20,7 +20,6 @@ from codeflash.languages.registry import register_language
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-    from codeflash.models.models import GeneratedTestsList, InvocationId
 
     from codeflash.languages.base import DependencyResolver
     from codeflash.models.models import FunctionSource, GeneratedTestsList, InvocationId

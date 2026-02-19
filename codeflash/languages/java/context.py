@@ -888,11 +888,7 @@ def _extract_type_names_from_code(code: str, analyzer: JavaAnalyzer) -> set[str]
 
 
 def get_java_imported_type_skeletons(
-    imports: list,
-    project_root: Path,
-    module_root: Path | None,
-    analyzer: JavaAnalyzer,
-    target_code: str = "",
+    imports: list, project_root: Path, module_root: Path | None, analyzer: JavaAnalyzer, target_code: str = ""
 ) -> str:
     """Extract type skeletons for project-internal imported types.
 
@@ -1012,9 +1008,7 @@ def _extract_constructor_summaries(skeleton: TypeSkeleton) -> list[str]:
     return summaries
 
 
-def _format_skeleton_for_context(
-    skeleton: TypeSkeleton, source: str, class_name: str, analyzer: JavaAnalyzer
-) -> str:
+def _format_skeleton_for_context(skeleton: TypeSkeleton, source: str, class_name: str, analyzer: JavaAnalyzer) -> str:
     """Format a TypeSkeleton into a context string with method signatures.
 
     Includes: type declaration, fields, constructors, and public method signatures

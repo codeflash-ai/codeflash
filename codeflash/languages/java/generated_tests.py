@@ -75,9 +75,7 @@ def get_java_sources_root(tests_root: Path) -> Path:
             # Return up to and including 'java'
             java_sources_root = Path(*parts[: i + 1])
             logger.debug(f"[JAVA] Detected Maven-style Java sources root: {java_sources_root}")
-            logger.debug(
-                f"[JAVA-ROOT] Returning Java sources root: {java_sources_root}, tests_root was: {tests_root}"
-            )
+            logger.debug(f"[JAVA-ROOT] Returning Java sources root: {java_sources_root}, tests_root was: {tests_root}")
             return java_sources_root
 
     # Default: return tests_root as-is (original behavior)
