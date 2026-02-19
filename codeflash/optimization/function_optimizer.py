@@ -24,8 +24,8 @@ from codeflash.api.cfapi import add_code_context_hash, create_staging, get_cfapi
 from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import DEBUG_MODE, code_print, console, logger, lsp_log, progress_bar
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.code_extractor import get_opt_review_metrics, is_numerical_code
-from codeflash.code_utils.code_replacer import (
+from codeflash.languages.python.static_analysis.code_extractor import get_opt_review_metrics, is_numerical_code
+from codeflash.languages.python.static_analysis.code_replacer import (
     add_custom_marker_to_all_tests,
     modify_autouse_fixture,
     replace_function_definitions_in_module,

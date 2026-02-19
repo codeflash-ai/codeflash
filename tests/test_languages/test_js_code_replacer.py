@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.code_utils.code_replacer import replace_function_definitions_for_language
+from codeflash.languages.python.static_analysis.code_replacer import replace_function_definitions_for_language
 from codeflash.languages.base import Language
 from codeflash.languages.current import set_current_language
 from codeflash.languages.javascript.module_system import (

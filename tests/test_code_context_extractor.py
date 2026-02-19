@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.code_utils.code_extractor import GlobalAssignmentCollector, add_global_assignments
-from codeflash.code_utils.code_replacer import replace_functions_and_add_imports
+from codeflash.languages.python.static_analysis.code_extractor import GlobalAssignmentCollector, add_global_assignments
+from codeflash.languages.python.static_analysis.code_replacer import replace_functions_and_add_imports
 from codeflash.context.code_context_extractor import (
     collect_names_from_annotation,
     extract_imports_for_class,
@@ -2820,7 +2820,7 @@ def test_global_function_collector():
     """Test GlobalFunctionCollector correctly collects module-level function definitions."""
     import libcst as cst
 
-    from codeflash.code_utils.code_extractor import GlobalFunctionCollector
+    from codeflash.languages.python.static_analysis.code_extractor import GlobalFunctionCollector
 
     source_code = """
 # Module-level functions

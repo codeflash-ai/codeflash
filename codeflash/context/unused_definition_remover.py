@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Optional, Union
 import libcst as cst
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
+from codeflash.languages.python.static_analysis.code_replacer import replace_function_definitions_in_module
 from codeflash.languages import is_java, is_javascript
 from codeflash.models.models import CodeString, CodeStringsMarkdown
 

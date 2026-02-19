@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from codeflash.code_utils.code_extractor import is_numerical_code
+from codeflash.languages.python.static_analysis.code_extractor import is_numerical_code
 
 
 @patch("codeflash.code_utils.code_extractor.has_numba", True)
