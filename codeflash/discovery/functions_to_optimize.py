@@ -836,6 +836,7 @@ def filter_functions(
     *,
     disable_logs: bool = False,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
+    resolved_project_root = project_root.resolve()
     filtered_modified_functions: dict[str, list[FunctionToOptimize]] = {}
     blocklist_funcs = get_blocklisted_functions()
     logger.debug(f"Blocklisted functions: {blocklist_funcs}")
@@ -912,7 +913,7 @@ def filter_functions(
         lang_support = get_language_support(Path(file_path))
         if lang_support.language == Language.PYTHON:
             try:
-                ast.parse(f"import {module_name_from_file_path(Path(file_path), project_root)}")
+                ast.parse(f"import {module_name_from_file_path(Path(file_path), resolved_project_root)}")
             except SyntaxError:
                 malformed_paths_count += 1
                 continue
