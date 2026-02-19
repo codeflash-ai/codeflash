@@ -50,8 +50,10 @@ matches_re_start = re.compile(r"!\$######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)
 matches_re_end = re.compile(r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######!")
 
 
-start_pattern = re.compile(r"!\$######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+)######\$!")
-end_pattern = re.compile(r"!######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+):([^:]+)######!")
+# Support 5-field (old) or 6-field (new with test name) formats
+start_pattern = re.compile(r"!\$######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+)(?::([^#]+))?######\$!")
+# End pattern has duration, then optional test name
+end_pattern = re.compile(r"!######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+):([^:]+)(?::([^#]+))?######!")
 
 # Jest timing marker patterns (from codeflash-jest-helper.js console.log output)
 # Format: !$######testName:testName:funcName:loopIndex:lineId######$! (start)
@@ -1048,9 +1050,12 @@ def parse_test_xml(
                 java_fallback_stdout = fallback_stdout
                 java_fallback_begin_matches = begin_matches
                 java_fallback_end_matches = {}
+                # When pre-parsing fallback stdout, handle both formats
                 for match in end_pattern.finditer(fallback_stdout):
                     groups = match.groups()
-                    java_fallback_end_matches[groups[:5]] = match
+                    # Key is first 5 fields (excluding duration and test name)
+                    key = groups[:5]
+                    java_fallback_end_matches[key] = match
                 logger.debug(f"Java: Found {len(begin_matches)} timing markers in subprocess stdout (fallback)")
         except (AttributeError, UnicodeDecodeError):
             pass
@@ -1165,9 +1170,38 @@ def parse_test_xml(
                 # For Java: fallback to pre-parsed subprocess stdout when XML system-out has no timing markers
                 # This happens when using JUnit Console Launcher directly (bypassing Maven)
                 if not begin_matches and java_fallback_begin_matches is not None:
+                    # Filter markers by test name when available
+                    filtered_begin_matches = []
+                    filtered_end_matches = {}
+
+                    for match in java_fallback_begin_matches:
+                        groups = match.groups()
+                        # New format has test name in 6th position
+                        if len(groups) > 5 and groups[5]:
+                            # Only include if marker's test name matches current test
+                            if groups[5] == test_function:
+                                filtered_begin_matches.append(match)
+                        else:
+                            # Old format without test name - include for backward compatibility
+                            # TODO: Log warning about old format
+                            filtered_begin_matches.append(match)
+
+                    # Filter end matches similarly
+                    for key, match in java_fallback_end_matches.items():
+                        groups = match.groups()
+                        # End pattern has duration at index 5, test name at index 6
+                        if len(groups) > 6 and groups[6]:
+                            if groups[6] == test_function:
+                                # Keep the same key structure for matching
+                                filtered_end_matches[key] = match
+                        else:
+                            filtered_end_matches[key] = match
+
                     sys_stdout = java_fallback_stdout
-                    begin_matches = java_fallback_begin_matches
-                    end_matches = java_fallback_end_matches
+                    begin_matches = filtered_begin_matches
+                    end_matches = filtered_end_matches
+
+                    logger.debug(f"Java: Filtered {len(begin_matches)} markers for test {test_function} from {len(java_fallback_begin_matches)} total")
             else:
                 begin_matches = list(matches_re_start.finditer(sys_stdout))
                 end_matches = {}

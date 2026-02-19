@@ -569,7 +569,11 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 f'{indent}String _cf_outputFile{iter_id} = System.getenv("CODEFLASH_OUTPUT_FILE");',
                 f'{indent}String _cf_testIteration{iter_id} = System.getenv("CODEFLASH_TEST_ITERATION");',
                 f'{indent}if (_cf_testIteration{iter_id} == null) _cf_testIteration{iter_id} = "0";',
-                f'{indent}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + "######$!");',
+                # Extract test method name from stack trace
+                f'{indent}String _cf_test{iter_id} = "";',
+                f'{indent}try {{ _cf_test{iter_id} = Thread.currentThread().getStackTrace()[1].getMethodName(); }} catch (Exception e) {{}}',
+                # Modified marker with test name
+                f'{indent}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + ":" + _cf_test{iter_id} + "######$!");',
                 f"{indent}byte[] _cf_serializedResult{iter_id} = null;",
                 f"{indent}long _cf_end{iter_id} = -1;",
                 f"{indent}long _cf_start{iter_id} = 0;",
@@ -590,7 +594,8 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 f"{indent}}} finally {{",
                 f"{indent}    long _cf_end{iter_id}_finally = System.nanoTime();",
                 f"{indent}    long _cf_dur{iter_id} = (_cf_end{iter_id} != -1 ? _cf_end{iter_id} : _cf_end{iter_id}_finally) - _cf_start{iter_id};",
-                f'{indent}    System.out.println("!######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + ":" + _cf_dur{iter_id} + "######!");',
+                # End marker with test name
+                f'{indent}    System.out.println("!######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + ":" + _cf_dur{iter_id} + ":" + _cf_test{iter_id} + "######!");',
                 f"{indent}    // Write to SQLite if output file is set",
                 f"{indent}    if (_cf_outputFile{iter_id} != null && !_cf_outputFile{iter_id}.isEmpty()) {{",
                 f"{indent}        try {{",
@@ -856,8 +861,12 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             else:
                 stmt_in_try = reindent_block(target_stmt, inner_body_indent)
             timing_lines = [
+                # Extract test method name before loop
+                f'{indent}String _cf_test{current_id} = "";',
+                f'{indent}try {{ _cf_test{current_id} = Thread.currentThread().getStackTrace()[1].getMethodName(); }} catch (Exception e) {{}}',
                 f"{indent}for (int _cf_i{current_id} = 0; _cf_i{current_id} < _cf_innerIterations{current_id}; _cf_i{current_id}++) {{",
-                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + _cf_i{current_id} + "######$!");',
+                # Start marker with test name
+                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + _cf_i{current_id} + ":" + _cf_test{current_id} + "######$!");',
                 f"{inner_indent}long _cf_end{current_id} = -1;",
                 f"{inner_indent}long _cf_start{current_id} = 0;",
                 f"{inner_indent}try {{",
@@ -867,7 +876,8 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 f"{inner_indent}}} finally {{",
                 f"{inner_body_indent}long _cf_end{current_id}_finally = System.nanoTime();",
                 f"{inner_body_indent}long _cf_dur{current_id} = (_cf_end{current_id} != -1 ? _cf_end{current_id} : _cf_end{current_id}_finally) - _cf_start{current_id};",
-                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + _cf_i{current_id} + ":" + _cf_dur{current_id} + "######!");',
+                # End marker with test name
+                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + _cf_i{current_id} + ":" + _cf_dur{current_id} + ":" + _cf_test{current_id} + "######!");',
                 f"{inner_indent}}}",
                 f"{indent}}}",
             ]
@@ -921,8 +931,12 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             iteration_id_expr = f'"{current_id}_" + _cf_i{current_id}'
 
             timing_lines = [
+                # Extract test method name before loop
+                f'{indent}String _cf_test{current_id} = "";',
+                f'{indent}try {{ _cf_test{current_id} = Thread.currentThread().getStackTrace()[1].getMethodName(); }} catch (Exception e) {{}}',
                 f"{indent}for (int _cf_i{current_id} = 0; _cf_i{current_id} < _cf_innerIterations{current_id}; _cf_i{current_id}++) {{",
-                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + {iteration_id_expr} + "######$!");',
+                # Start marker with test name
+                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + {iteration_id_expr} + ":" + _cf_test{current_id} + "######$!");',
                 f"{inner_indent}long _cf_end{current_id} = -1;",
                 f"{inner_indent}long _cf_start{current_id} = 0;",
                 f"{inner_indent}try {{",
@@ -932,7 +946,8 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 f"{inner_indent}}} finally {{",
                 f"{inner_body_indent}long _cf_end{current_id}_finally = System.nanoTime();",
                 f"{inner_body_indent}long _cf_dur{current_id} = (_cf_end{current_id} != -1 ? _cf_end{current_id} : _cf_end{current_id}_finally) - _cf_start{current_id};",
-                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + {iteration_id_expr} + ":" + _cf_dur{current_id} + "######!");',
+                # End marker with test name
+                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + {iteration_id_expr} + ":" + _cf_dur{current_id} + ":" + _cf_test{current_id} + "######!");',
                 f"{inner_indent}}}",
                 f"{indent}}}",
             ]
