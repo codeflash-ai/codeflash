@@ -62,7 +62,7 @@ from codeflash.code_utils.formatter import format_code, format_generated_code, s
 from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.line_profile_utils import add_decorator_imports, contains_jit_decorator
-from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
+from codeflash.languages.python.static_analysis.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.context import code_context_extractor
 from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
