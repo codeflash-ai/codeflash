@@ -2196,9 +2196,14 @@ class FunctionOptimizer:
             else "Coverage data not available"
         )
 
-        generated_tests = remove_functions_from_generated_tests(
-            generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
-        )
+        if is_java():
+            generated_tests = self.language_support.remove_test_functions_from_generated_tests(
+                generated_tests, test_functions_to_remove
+            )
+        else:
+            generated_tests = remove_functions_from_generated_tests(
+                generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
+            )
         map_gen_test_file_to_no_of_tests = original_code_baseline.behavior_test_results.file_to_no_of_tests(
             test_functions_to_remove
         )
@@ -2208,9 +2213,14 @@ class FunctionOptimizer:
             best_optimization.winning_benchmarking_test_results.usable_runtime_data_by_test_case()
         )
 
-        generated_tests = add_runtime_comments_to_generated_tests(
-            generated_tests, original_runtime_by_test, optimized_runtime_by_test, self.test_cfg.tests_project_rootdir
-        )
+        if is_java():
+            generated_tests = self.language_support.add_runtime_comments_to_generated_tests(
+                generated_tests, original_runtime_by_test, optimized_runtime_by_test, self.test_cfg.tests_project_rootdir
+            )
+        else:
+            generated_tests = add_runtime_comments_to_generated_tests(
+                generated_tests, original_runtime_by_test, optimized_runtime_by_test, self.test_cfg.tests_project_rootdir
+            )
 
         generated_tests_str = ""
         code_lang = self.function_to_optimize.language
