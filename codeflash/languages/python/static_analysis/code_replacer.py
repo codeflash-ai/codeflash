@@ -599,11 +599,10 @@ def replace_function_definitions_for_language(
     lang_support = get_language_support(language)
 
     # Add any new global declarations from the optimized code to the original source
-    original_source_code = _add_global_declarations_for_language(
+    original_source_code = lang_support.add_global_declarations(
         optimized_code=code_to_apply,
         original_source=original_source_code,
         module_abspath=module_abspath,
-        language=language,
     )
 
     # If we have function_to_optimize with line info and this is the main file, use it for precise replacement
@@ -700,42 +699,6 @@ def _extract_function_from_code(
         logger.debug(f"Error extracting function {function_name}: {e}")
 
     return None
-
-
-def _add_global_declarations_for_language(
-    optimized_code: str, original_source: str, module_abspath: Path, language: Language
-) -> str:
-    """Add new global declarations from optimized code to original source.
-
-    Finds module-level declarations (const, let, var, class, type, interface, enum)
-    in the optimized code that don't exist in the original source and adds them.
-
-    New declarations are inserted after any existing declarations they depend on.
-    For example, if optimized code has `const _has = FOO.bar.bind(FOO)`, and `FOO`
-    is already declared in the original source, `_has` will be inserted after `FOO`.
-
-    Args:
-        optimized_code: The optimized code that may contain new declarations.
-        original_source: The original source code.
-        module_abspath: Path to the module file (for parser selection).
-        language: The language of the code.
-
-    Returns:
-        Original source with new declarations added in dependency order.
-
-    """
-    from codeflash.languages.base import Language
-
-    if language not in (Language.JAVASCRIPT, Language.TYPESCRIPT):
-        return original_source
-
-    try:
-        from codeflash.languages.javascript.code_replacer import _add_global_declarations_for_language
-
-        return _add_global_declarations_for_language(optimized_code, original_source, module_abspath, language)
-    except Exception as e:
-        logger.debug(f"Error adding global declarations: {e}")
-        return original_source
 
 
 def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStringsMarkdown) -> str:
