@@ -110,6 +110,8 @@ def extract_code_context(
     imported_type_skeletons = get_java_imported_type_skeletons(
         imports, project_root, module_root, analyzer, target_code=target_code
     )
+    if imported_type_skeletons:
+        read_only_context = (read_only_context + "\n\n" + imported_type_skeletons).strip()
 
     return CodeContext(
         target_code=target_code,
@@ -118,7 +120,6 @@ def extract_code_context(
         read_only_context=read_only_context,
         imports=import_statements,
         language=Language.JAVA,
-        imported_type_skeletons=imported_type_skeletons,
     )
 
 
