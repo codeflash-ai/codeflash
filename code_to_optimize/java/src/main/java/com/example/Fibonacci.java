@@ -21,7 +21,18 @@ public class Fibonacci {
         if (n <= 1) {
             return n;
         }
-        return fibonacci(n - 1) + fibonacci(n - 2);
+        
+        long prev2 = 0;
+        long prev1 = 1;
+        long current = 0;
+        
+        for (int i = 2; i <= n; i++) {
+            current = prev1 + prev2;
+            prev2 = prev1;
+            prev1 = current;
+        }
+        
+        return current;
     }
 
     /**

@@ -1052,7 +1052,8 @@ def run_benchmarking_tests(
         # - JUnit 4 projects (ConsoleLauncher not on classpath or no tests discovered)
         # - Class not found errors
         # - No tests executed (JUnit 4 tests invisible to JUnit 5 launcher)
-        should_fallback = False
+        # Force Maven fallback - direct JVM doesn't generate XML needed for result parsing
+        should_fallback = True  # TODO: Fix direct JVM to generate XML reports
         if loop_idx == 1 and result.returncode != 0:
             combined_output = (result.stderr or "") + (result.stdout or "")
             fallback_indicators = [

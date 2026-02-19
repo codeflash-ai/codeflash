@@ -15,7 +15,8 @@ public class Calculator {
      * @return Map containing sum, average, min, max, and range
      */
     public static Map<String, Double> calculateStats(double[] numbers) {
-        Map<String, Double> stats = new HashMap<>();
+        // Pre-size the HashMap to avoid rehashing (we know we'll have exactly 5 entries)
+        Map<String, Double> stats = new HashMap<>(8);
 
         if (numbers == null || numbers.length == 0) {
             stats.put("sum", 0.0);
@@ -26,10 +27,23 @@ public class Calculator {
             return stats;
         }
 
-        double sum = MathHelpers.sumArray(numbers);
-        double avg = MathHelpers.average(numbers);
-        double min = MathHelpers.findMin(numbers);
-        double max = MathHelpers.findMax(numbers);
+        // Single pass through the array to calculate all statistics
+        double sum = numbers[0];
+        double min = numbers[0];
+        double max = numbers[0];
+        
+        for (int i = 1; i < numbers.length; i++) {
+            double value = numbers[i];
+            sum += value;
+            if (value < min) {
+                min = value;
+            }
+            if (value > max) {
+                max = value;
+            }
+        }
+        
+        double avg = sum / numbers.length;
         double range = max - min;
 
         stats.put("sum", sum);

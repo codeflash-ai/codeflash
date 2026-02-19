@@ -145,13 +145,11 @@ public class MathHelpers {
         if (a == 0) return b;
         if (b == 0) return a;
 
-        int smaller = Math.min(a, b);
-        int gcd = 1;
-        for (int i = 1; i <= smaller; i++) {
-            if (a % i == 0 && b % i == 0) {
-                gcd = i;
-            }
+        while (b != 0) {
+            int temp = b;
+            b = a % b;
+            a = temp;
         }
-        return gcd;
+        return a;
     }
 }
