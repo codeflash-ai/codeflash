@@ -8,7 +8,7 @@ to actual file paths, enabling multi-file context extraction.
 import pytest
 
 from codeflash.languages.javascript.import_resolver import HelperSearchContext, ImportResolver, MultiFileHelperFinder
-from codeflash.languages.treesitter_utils import ImportInfo
+from codeflash.languages.javascript.treesitter import ImportInfo
 
 
 class TestImportResolver:
@@ -286,7 +286,7 @@ class TestExportInfo:
     @pytest.fixture
     def js_analyzer(self):
         """Create a JavaScript analyzer."""
-        from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage
+        from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage
 
         return TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
 
@@ -388,7 +388,7 @@ class TestCommonJSRequire:
     @pytest.fixture
     def js_analyzer(self):
         """Create a JavaScript analyzer."""
-        from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage
+        from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage
 
         return TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
 
@@ -470,14 +470,14 @@ class TestCommonJSExports:
     @pytest.fixture
     def js_analyzer(self):
         """Create a JavaScript analyzer."""
-        from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage
+        from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage
 
         return TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
 
     @pytest.fixture
     def ts_analyzer(self):
         """Create a TypeScript analyzer."""
-        from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage
+        from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage
 
         return TreeSitterAnalyzer(TreeSitterLanguage.TYPESCRIPT)
 

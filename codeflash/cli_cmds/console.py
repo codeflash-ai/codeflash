@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections import deque
 from contextlib import contextmanager
 from itertools import cycle
 from typing import TYPE_CHECKING, Optional
@@ -8,6 +9,7 @@ from typing import TYPE_CHECKING, Optional
 from rich.console import Console
 from rich.highlighter import NullHighlighter
 from rich.logging import RichHandler
+from rich.panel import Panel
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -25,10 +27,13 @@ from codeflash.lsp.lsp_logger import enhanced_log
 from codeflash.lsp.lsp_message import LspCodeMessage, LspTextMessage
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Callable, Generator
+    from pathlib import Path
 
     from rich.progress import TaskID
 
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.languages.base import DependencyResolver, IndexResult
     from codeflash.lsp.lsp_message import LspMessage
 
 DEBUG_MODE = logging.getLogger().getEffectiveLevel() == logging.DEBUG
@@ -197,3 +202,151 @@ def test_files_progress_bar(total: int, description: str) -> Generator[tuple[Pro
     ) as progress:
         task_id = progress.add_task(description, total=total)
         yield progress, task_id
+
+
+MAX_TREE_ENTRIES = 8
+
+
+@contextmanager
+def call_graph_live_display(
+    total: int, project_root: Path | None = None
+) -> Generator[Callable[[IndexResult], None], None, None]:
+    from rich.console import Group
+    from rich.live import Live
+    from rich.panel import Panel
+    from rich.text import Text
+    from rich.tree import Tree
+
+    if is_LSP_enabled():
+        lsp_log(LspTextMessage(text="Building call graph", takes_time=True))
+        yield lambda _: None
+        return
+
+    progress = Progress(
+        SpinnerColumn(next(spinners)),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(complete_style="cyan", finished_style="green", pulse_style="yellow"),
+        MofNCompleteColumn(),
+        TimeElapsedColumn(),
+        TimeRemainingColumn(),
+        auto_refresh=False,
+    )
+    task_id = progress.add_task("Analyzing files", total=total)
+
+    results: deque[IndexResult] = deque(maxlen=MAX_TREE_ENTRIES)
+    stats = {"indexed": 0, "cached": 0, "edges": 0, "external": 0, "errors": 0}
+
+    tree = Tree("[bold]Recent Files[/bold]")
+    stats_text = Text("0 calls found", style="dim")
+    panel = Panel(
+        Group(progress, Text(""), tree, Text(""), stats_text), title="Building Call Graph", border_style="cyan"
+    )
+
+    def create_tree_node(result: IndexResult) -> Tree:
+        if project_root:
+            try:
+                name = str(result.file_path.resolve().relative_to(project_root.resolve()))
+            except ValueError:
+                name = f"{result.file_path.parent.name}/{result.file_path.name}"
+        else:
+            name = f"{result.file_path.parent.name}/{result.file_path.name}"
+
+        if result.error:
+            return Tree(f"[red]{name}  (error)[/red]")
+
+        if result.cached:
+            return Tree(f"[dim]{name}  (cached)[/dim]")
+
+        local_edges = result.num_edges - result.cross_file_edges
+        edge_info = []
+
+        if local_edges:
+            edge_info.append(f"{local_edges} calls in same file")
+        if result.cross_file_edges:
+            edge_info.append(f"{result.cross_file_edges} calls from other modules")
+
+        label = ", ".join(edge_info) if edge_info else "no calls"
+        return Tree(f"[cyan]{name}[/cyan]  [dim]{label}[/dim]")
+
+    def refresh_display() -> None:
+        tree.children = [create_tree_node(r) for r in results]
+        tree.children.extend([Tree(" ")] * (MAX_TREE_ENTRIES - len(results)))
+
+        # Update stats
+        stat_parts = []
+        if stats["indexed"]:
+            stat_parts.append(f"{stats['indexed']} files analyzed")
+        if stats["cached"]:
+            stat_parts.append(f"{stats['cached']} cached")
+        if stats["errors"]:
+            stat_parts.append(f"{stats['errors']} errors")
+        stat_parts.append(f"{stats['edges']} calls found")
+        if stats["external"]:
+            stat_parts.append(f"{stats['external']} cross-file calls")
+
+        stats_text.truncate(0)
+        stats_text.append(" · ".join(stat_parts), style="dim")
+
+    batch: list[IndexResult] = []
+
+    def process_batch() -> None:
+        for result in batch:
+            results.append(result)
+
+            if result.error:
+                stats["errors"] += 1
+            elif result.cached:
+                stats["cached"] += 1
+            else:
+                stats["indexed"] += 1
+                stats["edges"] += result.num_edges
+                stats["external"] += result.cross_file_edges
+
+            progress.advance(task_id)
+
+        batch.clear()
+        refresh_display()
+        live.refresh()
+
+    def update(result: IndexResult) -> None:
+        batch.append(result)
+        if len(batch) >= 8:
+            process_batch()
+
+    with Live(panel, console=console, transient=False, auto_refresh=False) as live:
+        yield update
+        if batch:
+            process_batch()
+
+
+def call_graph_summary(call_graph: DependencyResolver, file_to_funcs: dict[Path, list[FunctionToOptimize]]) -> None:
+    total_functions = sum(map(len, file_to_funcs.values()))
+    if not total_functions:
+        return
+
+    # Build the mapping expected by the dependency resolver
+    file_items = file_to_funcs.items()
+    mapping = {file_path: {func.qualified_name for func in funcs} for file_path, funcs in file_items}
+
+    callee_counts = call_graph.count_callees_per_function(mapping)
+
+    # Use built-in sum for C-level loops to reduce Python overhead
+    total_callees = sum(callee_counts.values())
+    with_context = sum(1 for count in callee_counts.values() if count > 0)
+
+    leaf_functions = total_functions - with_context
+    avg_callees = total_callees / total_functions
+
+    function_label = "function" if total_functions == 1 else "functions"
+
+    summary = (
+        f"{total_functions} {function_label} ready for optimization\n"
+        f"Uses other functions: {with_context} · "
+        f"Standalone: {leaf_functions}"
+    )
+
+    if is_LSP_enabled():
+        lsp_log(LspTextMessage(text=summary))
+        return
+
+    console.print(Panel(summary, title="Call Graph Summary", border_style="cyan"))

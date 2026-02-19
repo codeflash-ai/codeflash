@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import os
 import re
 import sqlite3
@@ -22,12 +21,14 @@ from codeflash.code_utils.code_utils import (
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.languages import is_java, is_javascript, is_python
-from codeflash.languages.javascript.parse import parse_jest_test_xml as _parse_jest_test_xml
 from codeflash.languages.java.parse import (
     parse_java_test_xml as _parse_java_test_xml,
     resolve_java_test_file_from_class_path,
     resolve_java_test_file_from_module_path,
 )
+
+# Import Jest-specific parsing from the JavaScript language module
+from codeflash.languages.javascript.parse import parse_jest_test_xml as _parse_jest_test_xml
 from codeflash.models.models import (
     ConcurrencyMetrics,
     FunctionTestInvocation,
@@ -52,8 +53,24 @@ def parse_func(file_path: Path) -> XMLParser:
     return parse(file_path, xml_parser)
 
 
-matches_re_start = re.compile(r"!\$######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######\$!\n")
-matches_re_end = re.compile(r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######!")
+matches_re_start = re.compile(
+    r"!\$######([^:]*)"  # group 1: module path
+    r":((?:[^:.]*\.)*)"  # group 2: class prefix with trailing dot, or empty
+    r"([^.:]*)"  # group 3: test function name
+    r":([^:]*)"  # group 4: function being tested
+    r":([^:]*)"  # group 5: loop index
+    r":([^#]*)"  # group 6: iteration id
+    r"######\$!\n"
+)
+matches_re_end = re.compile(
+    r"!######([^:]*)"  # group 1: module path
+    r":((?:[^:.]*\.)*)"  # group 2: class prefix with trailing dot, or empty
+    r"([^.:]*)"  # group 3: test function name
+    r":([^:]*)"  # group 4: function being tested
+    r":([^:]*)"  # group 5: loop index
+    r":([^#]*)"  # group 6: iteration_id or iteration_id:runtime
+    r"######!"
+)
 
 
 start_pattern = re.compile(r"!\$######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+)######\$!")
@@ -581,7 +598,12 @@ def parse_test_xml(
     # Route to Jest-specific parser for JavaScript/TypeScript tests
     if is_javascript():
         return _parse_jest_test_xml(
-            test_xml_file_path, test_files, test_config, run_result=run_result, parse_func=parse_func
+            test_xml_file_path,
+            test_files,
+            test_config,
+            run_result,
+            parse_func=parse_func,
+            resolve_test_file_from_class_path=resolve_test_file_from_class_path,
         )
     if is_java():
         return _parse_java_test_xml(
@@ -951,7 +973,6 @@ def merge_test_results(
     return merged_test_results
 
 
-FAILURES_HEADER_RE = re.compile(r"=+ FAILURES =+")
 TEST_HEADER_RE = re.compile(r"_{3,}\s*(.*?)\s*_{3,}$")
 
 
@@ -961,7 +982,7 @@ def parse_test_failures_from_stdout(stdout: str) -> dict[str, str]:
     start = end = None
 
     for i, line in enumerate(lines):
-        if FAILURES_HEADER_RE.search(line.strip()):
+        if "= FAILURES =" in line:
             start = i
             break
 

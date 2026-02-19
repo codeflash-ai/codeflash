@@ -9,6 +9,7 @@ from typing import Optional
 import sentry_sdk
 
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE, codeflash_temp_dir
+from codeflash.code_utils.shell_utils import make_env_with_project_root
 
 # Known CrossHair limitations that produce invalid Python syntax in generated tests:
 # - "<locals>" - higher-order functions returning nested functions
@@ -37,6 +38,7 @@ def is_valid_concolic_test(test_code: str, project_root: Optional[str] = None) -
             text=True,
             cwd=project_root,
             timeout=10,
+            env=make_env_with_project_root(project_root) if project_root else None,
         )
     except (subprocess.TimeoutExpired, Exception):
         return False
@@ -105,12 +107,12 @@ def clean_concolic_tests(test_suite_code: str) -> str:
         can_parse = False
         tree = None
 
-    if not can_parse:
+    if not can_parse or tree is None:
         return AssertCleanup().transform_asserts(test_suite_code)
 
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
-            new_body = []
+            new_body: list[ast.stmt] = []
             for stmt in node.body:
                 if isinstance(stmt, ast.Assert):
                     if isinstance(stmt.test, ast.Compare) and isinstance(stmt.test.left, ast.Call):

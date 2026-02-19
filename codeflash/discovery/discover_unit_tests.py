@@ -69,8 +69,8 @@ FUNCTION_NAME_REGEX = re.compile(r"([^.]+)\.([a-zA-Z0-9_]+)$")
 class TestsCache:
     SCHEMA_VERSION = 1  # Increment this when schema changes
 
-    def __init__(self, project_root_path: str | Path) -> None:
-        self.project_root_path = Path(project_root_path).resolve().as_posix()
+    def __init__(self, project_root_path: Path) -> None:
+        self.project_root_path = project_root_path.resolve().as_posix()
         self.connection = sqlite3.connect(codeflash_cache_db)
         self.cur = self.connection.cursor()
 

@@ -8,7 +8,7 @@
  * @param decimals - Number of decimal places
  * @returns Formatted number
  */
-function formatNumber(num, decimals) {
+export function formatNumber(num, decimals) {
     return Number(num.toFixed(decimals));
 }
 
@@ -18,7 +18,7 @@ function formatNumber(num, decimals) {
  * @param name - Parameter name for error message
  * @throws Error if value is not a valid number
  */
-function validateInput(value, name) {
+export function validateInput(value, name) {
     if (typeof value !== 'number' || isNaN(value)) {
         throw new Error(`Invalid ${name}: must be a number`);
     }
@@ -30,7 +30,7 @@ function validateInput(value, name) {
  * @param symbol - Currency symbol
  * @returns Formatted currency string
  */
-function formatCurrency(amount, symbol = '$') {
+export function formatCurrency(amount, symbol = '$') {
     return `${symbol}${formatNumber(amount, 2)}`;
 }
 

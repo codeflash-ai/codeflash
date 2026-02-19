@@ -668,10 +668,10 @@ class TestBundlerModuleResolutionFix:
             assert result_path.exists()
             assert result_path.name == "jest.codeflash.config.js"
 
-            # Verify it contains the tsconfig reference
+            # Verify it contains ESM package transformation patterns
             content = result_path.read_text()
-            assert "tsconfig.codeflash.json" in content
-            assert "ts-jest" in content
+            assert "transformIgnorePatterns" in content
+            assert "node_modules" in content
 
     def test_get_jest_config_for_project_with_bundler(self):
         """Test that bundler projects get codeflash Jest config."""

@@ -126,10 +126,10 @@ def existing_tests_source_for(
             tests_dir_name = test_cfg.tests_project_rootdir.name
             if file_path.startswith((tests_dir_name + os.sep, tests_dir_name + "/")):
                 # Module path includes "tests." - use project root parent
-                instrumented_abs_path = (test_cfg.tests_project_rootdir.parent / file_path).resolve()
+                instrumented_abs_path = test_cfg.tests_project_rootdir.parent / file_path
             else:
                 # Module path doesn't include tests dir - use tests root directly
-                instrumented_abs_path = (test_cfg.tests_project_rootdir / file_path).resolve()
+                instrumented_abs_path = test_cfg.tests_project_rootdir / file_path
             logger.debug(f"[PR-DEBUG] Looking up: {instrumented_abs_path}")
             logger.debug(f"[PR-DEBUG]   Available keys: {list(instrumented_to_original.keys())[:3]}")
             # Try to map instrumented path to original path

@@ -43,7 +43,20 @@ def generate_tests(
 
         source_file = Path(function_to_optimize.file_path)
         project_module_system = detect_module_system(test_cfg.tests_project_rootdir, source_file)
-        logger.debug(f"Detected module system: {project_module_system}")
+
+        # For JavaScript, calculate the correct import path from the actual test location
+        # (test_path) to the source file, not from tests_root
+        import os
+
+        source_file_abs = source_file.resolve().with_suffix("")
+        test_dir_abs = test_path.resolve().parent
+        # Compute relative path from test directory to source file
+        rel_import_path = os.path.relpath(str(source_file_abs), str(test_dir_abs))
+        # Ensure path starts with ./ or ../ for JavaScript/TypeScript imports
+        if not rel_import_path.startswith("../"):
+            rel_import_path = f"./{rel_import_path}"
+        # Keep as string since Path() normalizes away the ./ prefix
+        module_path = rel_import_path
 
     response = aiservice_client.generate_regression_tests(
         source_code_being_tested=source_code_being_tested,
@@ -67,6 +80,8 @@ def generate_tests(
         if is_javascript():
             from codeflash.languages.javascript.instrument import (
                 TestingMode,
+                fix_imports_inside_test_blocks,
+                fix_jest_mock_paths,
                 instrument_generated_js_test,
                 validate_and_fix_import_style,
             )
@@ -76,6 +91,14 @@ def generate_tests(
             )
 
             source_file = Path(function_to_optimize.file_path)
+
+            # Fix import statements that appear inside test blocks (invalid JS syntax)
+            generated_test_source = fix_imports_inside_test_blocks(generated_test_source)
+
+            # Fix relative paths in jest.mock() calls
+            generated_test_source = fix_jest_mock_paths(
+                generated_test_source, test_path, source_file, test_cfg.tests_project_rootdir
+            )
 
             # Validate and fix import styles (default vs named exports)
             generated_test_source = validate_and_fix_import_style(
