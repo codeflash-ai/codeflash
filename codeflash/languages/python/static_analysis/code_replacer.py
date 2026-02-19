@@ -430,7 +430,11 @@ def replace_functions_in_file(
                     method_key = (class_name, child.name.value)
                     if method_key in function_names_set:
                         modified_functions[method_key] = child
-                    elif child.name.value == "__init__" and preexisting_objects:
+                    elif (
+                        child.name.value == "__init__"
+                        and preexisting_objects
+                        and (class_name, ()) in preexisting_objects
+                    ):
                         modified_init_functions[class_name] = child
                     elif preexisting_objects and (child.name.value, parents) not in preexisting_objects:
                         new_class_functions[class_name].append(child)
