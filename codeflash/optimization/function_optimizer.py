@@ -57,13 +57,6 @@ from codeflash.code_utils.config_consts import (
     get_effort_value,
 )
 from codeflash.code_utils.deduplicate_code import normalize_code
-from codeflash.code_utils.edit_generated_tests import (
-    add_runtime_comments_to_generated_tests,
-    disable_ts_check,
-    inject_test_globals,
-    normalize_generated_tests_imports,
-    remove_functions_from_generated_tests,
-)
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.formatter import format_code, format_generated_code, sort_imports
 from codeflash.code_utils.git_utils import git_root_dir
@@ -75,10 +68,9 @@ from codeflash.context import code_context_extractor
 from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
 from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
 from codeflash.either import Failure, Success, is_successful
-from codeflash.languages import is_java, is_javascript, is_python
+from codeflash.languages import is_java, is_python
 from codeflash.languages.base import Language
-from codeflash.languages.current import current_language_support, is_typescript
-from codeflash.languages.javascript.module_system import detect_module_system
+from codeflash.languages.current import current_language_support
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree_to_markdown
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
@@ -634,25 +626,12 @@ class FunctionOptimizer:
 
         count_tests, generated_tests, function_to_concolic_tests, concolic_test_str = test_results.unwrap()
 
-        postprocess_generated_tests = getattr(self.language_support, "postprocess_generated_tests", None)
-        if callable(postprocess_generated_tests):
-            generated_tests = postprocess_generated_tests(
-                generated_tests,
-                test_framework=self.test_cfg.test_framework,
-                project_root=self.project_root,
-                source_file_path=self.function_to_optimize.file_path,
-            )
-        else:
-            # Normalize codeflash imports in JS/TS tests to use npm package
-            if is_javascript():
-                module_system = detect_module_system(self.project_root, self.function_to_optimize.file_path)
-                if module_system == "esm":
-                    generated_tests = inject_test_globals(generated_tests)
-                if is_typescript():
-                    # disable ts check for typescript tests
-                    generated_tests = disable_ts_check(generated_tests)
-
-                generated_tests = normalize_generated_tests_imports(generated_tests)
+        generated_tests = self.language_support.postprocess_generated_tests(
+            generated_tests,
+            test_framework=self.test_cfg.test_framework,
+            project_root=self.project_root,
+            source_file_path=self.function_to_optimize.file_path,
+        )
 
         logger.debug(f"[PIPELINE] Processing {count_tests} generated tests")
         for i, generated_test in enumerate(generated_tests.generated_tests):
@@ -2197,14 +2176,9 @@ class FunctionOptimizer:
             else "Coverage data not available"
         )
 
-        if is_java():
-            generated_tests = self.language_support.remove_test_functions_from_generated_tests(
-                generated_tests, test_functions_to_remove
-            )
-        else:
-            generated_tests = remove_functions_from_generated_tests(
-                generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
-            )
+        generated_tests = self.language_support.remove_test_functions_from_generated_tests(
+            generated_tests, test_functions_to_remove
+        )
         map_gen_test_file_to_no_of_tests = original_code_baseline.behavior_test_results.file_to_no_of_tests(
             test_functions_to_remove
         )
@@ -2214,14 +2188,9 @@ class FunctionOptimizer:
             best_optimization.winning_benchmarking_test_results.usable_runtime_data_by_test_case()
         )
 
-        if is_java():
-            generated_tests = self.language_support.add_runtime_comments_to_generated_tests(
-                generated_tests, original_runtime_by_test, optimized_runtime_by_test, self.test_cfg.tests_project_rootdir
-            )
-        else:
-            generated_tests = add_runtime_comments_to_generated_tests(
-                generated_tests, original_runtime_by_test, optimized_runtime_by_test, self.test_cfg.tests_project_rootdir
-            )
+        generated_tests = self.language_support.add_runtime_comments_to_generated_tests(
+            generated_tests, original_runtime_by_test, optimized_runtime_by_test, self.test_cfg.tests_project_rootdir
+        )
 
         generated_tests_str = ""
         code_lang = self.function_to_optimize.language
