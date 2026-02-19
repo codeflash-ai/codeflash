@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ast
 import hashlib
-import os
 from collections import defaultdict
 from itertools import chain
 from pathlib import Path
