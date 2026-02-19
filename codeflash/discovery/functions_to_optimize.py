@@ -114,37 +114,56 @@ class FunctionVisitor(cst.CSTVisitor):
             )
 
 
-class FunctionWithReturnStatement(ast.NodeVisitor):
-    def __init__(self, file_path: Path) -> None:
-        self.functions: list[FunctionToOptimize] = []
-        self.ast_path: list[FunctionParent] = []
-        self.file_path: Path = file_path
-
-    def visit_FunctionDef(self, node: FunctionDef) -> None:
-        if function_has_return_statement(node) and not function_is_a_property(node):
-            self.functions.append(
-                FunctionToOptimize(function_name=node.name, file_path=self.file_path, parents=self.ast_path[:])
-            )
-
-    def visit_AsyncFunctionDef(self, node: AsyncFunctionDef) -> None:
-        if function_has_return_statement(node) and not function_is_a_property(node):
-            self.functions.append(
-                FunctionToOptimize(
-                    function_name=node.name, file_path=self.file_path, parents=self.ast_path[:], is_async=True
+def find_functions_with_return_statement(ast_module: ast.Module, file_path: Path) -> list[FunctionToOptimize]:
+    results: list[FunctionToOptimize] = []
+    # (node, parent_path) — iterative DFS avoids RecursionError on deeply nested ASTs
+    stack: list[tuple[ast.AST, list[FunctionParent]]] = [(ast_module, [])]
+    while stack:
+        node, ast_path = stack.pop()
+        if isinstance(node, (FunctionDef, AsyncFunctionDef)):
+            if function_has_return_statement(node) and not function_is_a_property(node):
+                results.append(
+                    FunctionToOptimize(
+                        function_name=node.name,
+                        file_path=file_path,
+                        parents=ast_path[:],
+                        is_async=isinstance(node, AsyncFunctionDef),
+                    )
                 )
-            )
-
-    def generic_visit(self, node: ast.AST) -> None:
-        if isinstance(node, (FunctionDef, AsyncFunctionDef, ClassDef)):
-            self.ast_path.append(FunctionParent(node.name, node.__class__.__name__))
-        super().generic_visit(node)
-        if isinstance(node, (FunctionDef, AsyncFunctionDef, ClassDef)):
-            self.ast_path.pop()
+            # Don't recurse into function bodies (matches original visitor behaviour)
+            continue
+        child_path = (
+            [*ast_path, FunctionParent(node.name, node.__class__.__name__)] if isinstance(node, ClassDef) else ast_path
+        )
+        for child in reversed(list(ast.iter_child_nodes(node))):
+            stack.append((child, child_path))
+    return results
 
 
 # =============================================================================
 # Multi-language support helpers
 # =============================================================================
+
+_VCS_EXCLUDES = frozenset({".git", ".hg", ".svn"})
+
+
+def parse_dir_excludes(patterns: frozenset[str]) -> tuple[frozenset[str], tuple[str, ...], tuple[str, ...]]:
+    """Split glob patterns into exact names, prefixes, and suffixes.
+
+    Patterns ending with ``*`` become prefix matches, patterns starting with ``*``
+    become suffix matches, and plain strings become exact matches.
+    """
+    exact: set[str] = set()
+    prefixes: list[str] = []
+    suffixes: list[str] = []
+    for p in patterns:
+        if p.endswith("*"):
+            prefixes.append(p[:-1])
+        elif p.startswith("*"):
+            suffixes.append(p[1:])
+        else:
+            exact.add(p)
+    return frozenset(exact), tuple(prefixes), tuple(suffixes)
 
 
 def get_files_for_language(
@@ -164,37 +183,44 @@ def get_files_for_language(
     if ignore_paths is None:
         ignore_paths = []
 
+    all_patterns: frozenset[str]
     if language is not None:
         support = get_language_support(language)
         extensions = support.file_extensions
+        all_patterns = support.dir_excludes | _VCS_EXCLUDES
     else:
         extensions = tuple(get_supported_extensions())
+        all_patterns = _VCS_EXCLUDES
+        for lang in Language:
+            if is_language_supported(lang):
+                all_patterns = all_patterns | get_language_support(lang).dir_excludes
 
-    # Default directory patterns to always exclude for JS/TS
-    js_ts_default_excludes = {
-        "node_modules",
-        "dist",
-        "build",
-        ".next",
-        ".nuxt",
-        "coverage",
-        ".cache",
-        ".turbo",
-        ".vercel",
-        "__pycache__",
-    }
+    dir_excludes, prefixes, suffixes = parse_dir_excludes(all_patterns)
 
-    files = []
-    for ext in extensions:
-        pattern = f"*{ext}"
-        for file_path in module_root_path.rglob(pattern):
-            # Check explicit ignore paths
-            if any(file_path.is_relative_to(ignore_path) for ignore_path in ignore_paths):
-                continue
-            # Check default JS/TS excludes in path parts
-            if any(part in js_ts_default_excludes for part in file_path.parts):
-                continue
-            files.append(file_path)
+    ignore_dirs: set[str] = set()
+    ignore_files: set[Path] = set()
+    for p in ignore_paths:
+        p = Path(p) if not isinstance(p, Path) else p
+        if p.is_file():
+            ignore_files.add(p)
+        else:
+            ignore_dirs.add(str(p))
+
+    files: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(module_root_path):
+        dirnames[:] = [
+            d
+            for d in dirnames
+            if d not in dir_excludes
+            and not (prefixes and d.startswith(prefixes))
+            and not (suffixes and d.endswith(suffixes))
+            and str(Path(dirpath) / d) not in ignore_dirs
+        ]
+        for fname in filenames:
+            if fname.endswith(extensions):
+                fpath = Path(dirpath, fname)
+                if fpath not in ignore_files:
+                    files.append(fpath)
     return files
 
 
@@ -237,9 +263,7 @@ def _find_all_functions_in_python_file(file_path: Path) -> dict[Path, list[Funct
             if DEBUG_MODE:
                 logger.exception(e)
             return functions
-        function_name_visitor = FunctionWithReturnStatement(file_path)
-        function_name_visitor.visit(ast_module)
-        functions[file_path] = function_name_visitor.functions
+        functions[file_path] = find_functions_with_return_statement(ast_module, file_path)
     return functions
 
 
@@ -808,6 +832,7 @@ def filter_functions(
     *,
     disable_logs: bool = False,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
+    resolved_project_root = project_root.resolve()
     filtered_modified_functions: dict[str, list[FunctionToOptimize]] = {}
     blocklist_funcs = get_blocklisted_functions()
     logger.debug(f"Blocklisted functions: {blocklist_funcs}")
@@ -884,7 +909,7 @@ def filter_functions(
         lang_support = get_language_support(Path(file_path))
         if lang_support.language == Language.PYTHON:
             try:
-                ast.parse(f"import {module_name_from_file_path(Path(file_path), project_root)}")
+                ast.parse(f"import {module_name_from_file_path(Path(file_path), resolved_project_root)}")
             except SyntaxError:
                 malformed_paths_count += 1
                 continue
@@ -906,7 +931,10 @@ def filter_functions(
         if previous_checkpoint_functions:
             functions_tmp = []
             for function in _functions:
-                if function.qualified_name_with_modules_from_root(project_root) in previous_checkpoint_functions:
+                if (
+                    function.qualified_name_with_modules_from_root(resolved_project_root)
+                    in previous_checkpoint_functions
+                ):
                     previous_checkpoint_functions_removed_count += 1
                     continue
                 functions_tmp.append(function)
@@ -960,12 +988,21 @@ def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list
 
 def function_has_return_statement(function_node: FunctionDef | AsyncFunctionDef) -> bool:
     # Custom DFS, return True as soon as a Return node is found
-    stack: list[ast.AST] = [function_node]
+    stack: list[ast.AST] = list(function_node.body)
     while stack:
         node = stack.pop()
         if isinstance(node, ast.Return):
             return True
-        stack.extend(ast.iter_child_nodes(node))
+        # Only push child nodes that are statements; Return nodes are statements,
+        # so this preserves correctness while avoiding unnecessary traversal into expr/Name/etc.
+        for field in getattr(node, "_fields", ()):
+            child = getattr(node, field, None)
+            if isinstance(child, list):
+                for item in child:
+                    if isinstance(item, ast.stmt):
+                        stack.append(item)
+            elif isinstance(child, ast.stmt):
+                stack.append(child)
     return False
 
 

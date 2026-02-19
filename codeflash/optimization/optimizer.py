@@ -11,7 +11,13 @@ from typing import TYPE_CHECKING
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.api.cfapi import send_completion_email
-from codeflash.cli_cmds.console import console, logger, progress_bar
+from codeflash.cli_cmds.console import (  # noqa: F401
+    call_graph_live_display,
+    call_graph_summary,
+    console,
+    logger,
+    progress_bar,
+)
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import cleanup_paths, get_run_tmp_file
 from codeflash.code_utils.env_utils import get_pr_number, is_pr_draft
@@ -24,7 +30,7 @@ from codeflash.code_utils.git_worktree_utils import (
 )
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.either import is_successful
-from codeflash.languages import is_javascript, set_current_language
+from codeflash.languages import current_language_support, is_javascript, set_current_language
 from codeflash.models.models import ValidCode
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.verification_utils import TestConfig
@@ -35,6 +41,7 @@ if TYPE_CHECKING:
     from codeflash.benchmarking.function_ranker import FunctionRanker
     from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.languages.base import DependencyResolver
     from codeflash.models.models import BenchmarkKey, FunctionCalledInTest
     from codeflash.optimization.function_optimizer import FunctionOptimizer
 
@@ -241,8 +248,11 @@ class Optimizer:
         total_benchmark_timings: dict[BenchmarkKey, float] | None = None,
         original_module_ast: ast.Module | None = None,
         original_module_path: Path | None = None,
+        call_graph: DependencyResolver | None = None,
     ) -> FunctionOptimizer | None:
-        from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
+        from codeflash.languages.python.static_analysis.static_analysis import (
+            get_first_top_level_function_or_method_ast,
+        )
         from codeflash.optimization.function_optimizer import FunctionOptimizer
 
         if function_to_optimize_ast is None and original_module_ast is not None:
@@ -279,13 +289,14 @@ class Optimizer:
             function_benchmark_timings=function_specific_timings,
             total_benchmark_timings=total_benchmark_timings if function_specific_timings else None,
             replay_tests_dir=self.replay_tests_dir,
+            call_graph=call_graph,
         )
 
     def prepare_module_for_optimization(
         self, original_module_path: Path
     ) -> tuple[dict[Path, ValidCode], ast.Module | None] | None:
-        from codeflash.code_utils.code_replacer import normalize_code, normalize_node
-        from codeflash.code_utils.static_analysis import analyze_imported_modules
+        from codeflash.languages.python.static_analysis.code_replacer import normalize_code, normalize_node
+        from codeflash.languages.python.static_analysis.static_analysis import analyze_imported_modules
 
         logger.info(f"loading|Examining file {original_module_path!s}")
         console.rule()
@@ -422,7 +433,10 @@ class Optimizer:
             console.print(f"[dim]... and {len(globally_ranked) - display_count} more functions[/dim]")
 
     def rank_all_functions_globally(
-        self, file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]], trace_file_path: Path | None
+        self,
+        file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]],
+        trace_file_path: Path | None,
+        call_graph: DependencyResolver | None = None,
     ) -> list[tuple[Path, FunctionToOptimize]]:
         """Rank all functions globally across all files based on trace data.
 
@@ -442,8 +456,10 @@ class Optimizer:
         for file_path, functions in file_to_funcs_to_optimize.items():
             all_functions.extend((file_path, func) for func in functions)
 
-        # If no trace file, return in original order
+        # If no trace file, rank by dependency count if call graph is available
         if not trace_file_path or not trace_file_path.exists():
+            if call_graph is not None:
+                return self.rank_by_dependency_count(all_functions, call_graph)
             logger.debug("No trace file available, using original function order")
             return all_functions
 
@@ -494,6 +510,19 @@ class Optimizer:
         else:
             return globally_ranked
 
+    def rank_by_dependency_count(
+        self, all_functions: list[tuple[Path, FunctionToOptimize]], call_graph: DependencyResolver
+    ) -> list[tuple[Path, FunctionToOptimize]]:
+        file_to_qns: dict[Path, set[str]] = defaultdict(set)
+        for file_path, func in all_functions:
+            file_to_qns[file_path].add(func.qualified_name)
+        callee_counts = call_graph.count_callees_per_function(dict(file_to_qns))
+        ranked = sorted(
+            enumerate(all_functions), key=lambda x: (-callee_counts.get((x[1][0], x[1][1].qualified_name), 0), x[0])
+        )
+        logger.debug(f"Ranked {len(ranked)} functions by dependency count (most complex first)")
+        return [item for _, item in ranked]
+
     def run(self) -> None:
         from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
 
@@ -536,16 +565,33 @@ class Optimizer:
         if self.args.all:
             three_min_in_ns = int(1.8e11)
             console.rule()
-            pr_message = (
-                "\nCodeflash will keep opening pull requests as it finds optimizations." if not self.args.no_pr else ""
-            )
             logger.info(
-                f"It might take about {humanize_runtime(num_optimizable_functions * three_min_in_ns)} to fully optimize this project.{pr_message}"
+                f"It might take about {humanize_runtime(num_optimizable_functions * three_min_in_ns)} to fully optimize this project."
             )
+            if not self.args.no_pr:
+                logger.info("Codeflash will keep opening pull requests as it finds optimizations.")
+            console.rule()
 
         function_benchmark_timings, total_benchmark_timings = self.run_benchmarks(
             file_to_funcs_to_optimize, num_optimizable_functions
         )
+
+        # Create a language-specific dependency resolver (e.g. Jedi-based call graph for Python)
+        # Skip in CI — the cache DB doesn't persist between runs on ephemeral runners
+        lang_support = current_language_support()
+        resolver = None
+        # CURRENTLY DISABLED: The resolver is currently not used for anything until i clean up the repo structure for python
+        # if lang_support and not env_utils.is_ci():
+        #     resolver = lang_support.create_dependency_resolver(self.args.project_root)
+
+        # if resolver is not None and lang_support is not None and file_to_funcs_to_optimize:
+        #     supported_exts = lang_support.file_extensions
+        #     source_files = [f for f in file_to_funcs_to_optimize if f.suffix in supported_exts]
+        #     with call_graph_live_display(len(source_files), project_root=self.args.project_root) as on_progress:
+        #         resolver.build_index(source_files, on_progress=on_progress)
+        #     console.rule()
+        #     call_graph_summary(resolver, file_to_funcs_to_optimize)
+
         optimizations_found: int = 0
         self.test_cfg.concolic_test_root_dir = Path(
             tempfile.mkdtemp(dir=self.args.tests_root, prefix="codeflash_concolic_")
@@ -561,7 +607,9 @@ class Optimizer:
                 self.functions_checkpoint = CodeflashRunCheckpoint(self.args.module_root)
 
             # GLOBAL RANKING: Rank all functions together before optimizing
-            globally_ranked_functions = self.rank_all_functions_globally(file_to_funcs_to_optimize, trace_file_path)
+            globally_ranked_functions = self.rank_all_functions_globally(
+                file_to_funcs_to_optimize, trace_file_path, call_graph=resolver
+            )
             # Cache for module preparation (avoid re-parsing same files)
             prepared_modules: dict[Path, tuple[dict[Path, ValidCode], ast.Module | None]] = {}
 
@@ -593,6 +641,7 @@ class Optimizer:
                         total_benchmark_timings=total_benchmark_timings,
                         original_module_ast=original_module_ast,
                         original_module_path=original_module_path,
+                        call_graph=resolver,
                     )
                     if function_optimizer is None:
                         continue
@@ -651,6 +700,9 @@ class Optimizer:
                 else:
                     logger.warning("⚠️ Failed to send completion email. Status")
         finally:
+            if resolver is not None:
+                resolver.close()
+
             if function_optimizer:
                 function_optimizer.cleanup_generated_files()
 

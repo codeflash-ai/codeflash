@@ -1,1 +1,0 @@
-Deterministic patch values and test execution architecture

@@ -19,8 +19,8 @@ from codeflash.code_utils.code_utils import (
     path_belongs_to_site_packages,
     validate_python_code,
 )
-from codeflash.code_utils.concolic_utils import clean_concolic_tests
-from codeflash.code_utils.coverage_utils import extract_dependent_function, generate_candidates, prepare_coverage_files
+from codeflash.languages.python.static_analysis.concolic_utils import clean_concolic_tests
+from codeflash.languages.python.static_analysis.coverage_utils import extract_dependent_function, generate_candidates, prepare_coverage_files
 from codeflash.models.models import CodeStringsMarkdown
 from codeflash.verification.parse_test_output import resolve_test_file_from_class_path
 
@@ -36,7 +36,7 @@ def multiple_existing_and_non_existing_files(tmp_path: Path) -> list[Path]:
 
 @pytest.fixture
 def mock_get_run_tmp_file() -> Generator[MagicMock, None, None]:
-    with patch("codeflash.code_utils.coverage_utils.get_run_tmp_file") as mock:
+    with patch("codeflash.languages.python.static_analysis.coverage_utils.get_run_tmp_file") as mock:
         yield mock
 
 

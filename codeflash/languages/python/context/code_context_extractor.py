@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ast
 import hashlib
-import os
 from collections import defaultdict
 from itertools import chain
 from pathlib import Path
@@ -11,7 +10,6 @@ from typing import TYPE_CHECKING
 import libcst as cst
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_extractor import add_needed_imports_from_module, find_preexisting_objects
 from codeflash.code_utils.code_utils import encoded_tokens_len, get_qualified_name, path_belongs_to_site_packages
 from codeflash.code_utils.config_consts import OPTIMIZATION_CONTEXT_TOKEN_LIMIT, TESTGEN_CONTEXT_TOKEN_LIMIT
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize  # noqa: TC001
@@ -25,6 +23,10 @@ from codeflash.languages.python.context.unused_definition_remover import (
     recurse_sections,
     remove_unused_definitions_by_function_names,
 )
+from codeflash.languages.python.static_analysis.code_extractor import (
+    add_needed_imports_from_module,
+    find_preexisting_objects,
+)
 from codeflash.models.models import (
     CodeContextType,
     CodeOptimizationContext,
@@ -37,7 +39,7 @@ from codeflash.optimization.function_context import belongs_to_function_qualifie
 if TYPE_CHECKING:
     from jedi.api.classes import Name
 
-    from codeflash.languages.base import HelperFunction
+    from codeflash.languages.base import DependencyResolver, HelperFunction
     from codeflash.languages.python.context.unused_definition_remover import UsageInfo
 
 # Error message constants
@@ -81,6 +83,7 @@ def get_code_optimization_context(
     project_root_path: Path,
     optim_token_limit: int = OPTIMIZATION_CONTEXT_TOKEN_LIMIT,
     testgen_token_limit: int = TESTGEN_CONTEXT_TOKEN_LIMIT,
+    call_graph: DependencyResolver | None = None,
 ) -> CodeOptimizationContext:
     # Route to language-specific implementation for non-Python languages
     if not is_python():
@@ -89,9 +92,11 @@ def get_code_optimization_context(
         )
 
     # Get FunctionSource representation of helpers of FTO
-    helpers_of_fto_dict, helpers_of_fto_list = get_function_sources_from_jedi(
-        {function_to_optimize.file_path: {function_to_optimize.qualified_name}}, project_root_path
-    )
+    fto_input = {function_to_optimize.file_path: {function_to_optimize.qualified_name}}
+    if call_graph is not None:
+        helpers_of_fto_dict, helpers_of_fto_list = call_graph.get_callees(fto_input)
+    else:
+        helpers_of_fto_dict, helpers_of_fto_list = get_function_sources_from_jedi(fto_input, project_root_path)
 
     # Add function to optimize into helpers of FTO dict, as they'll be processed together
     fto_as_function_source = get_function_to_optimize_as_function_source(function_to_optimize, project_root_path)
@@ -107,8 +112,7 @@ def get_code_optimization_context(
     for qualified_names in helpers_of_fto_qualified_names_dict.values():
         qualified_names.update({f"{qn.rsplit('.', 1)[0]}.__init__" for qn in qualified_names if "." in qn})
 
-    # Get FunctionSource representation of helpers of helpers of FTO
-    helpers_of_helpers_dict, _helpers_of_helpers_list = get_function_sources_from_jedi(
+    helpers_of_helpers_dict, helpers_of_helpers_list = get_function_sources_from_jedi(
         helpers_of_fto_qualified_names_dict, project_root_path
     )
 
@@ -186,6 +190,8 @@ def get_code_optimization_context(
     code_hash_context = hashing_code_context.markdown
     code_hash = hashlib.sha256(code_hash_context.encode("utf-8")).hexdigest()
 
+    all_helper_fqns = list({fs.fully_qualified_name for fs in helpers_of_fto_list + helpers_of_helpers_list})
+
     return CodeOptimizationContext(
         testgen_context=testgen_context,
         read_writable_code=final_read_writable_code,
@@ -193,6 +199,7 @@ def get_code_optimization_context(
         hashing_code_context=code_hash_context,
         hashing_code_context_hash=code_hash,
         helper_functions=helpers_of_fto_list,
+        testgen_helper_fqns=all_helper_fqns,
         preexisting_objects=preexisting_objects,
     )
 
@@ -251,7 +258,6 @@ def get_code_optimization_context_for_language(
                 fully_qualified_name=helper.qualified_name,
                 only_function_name=helper.name,
                 source_code=helper.source_code,
-                jedi_definition=None,
             )
         )
 
@@ -317,13 +323,12 @@ def get_code_optimization_context_for_language(
     return CodeOptimizationContext(
         testgen_context=testgen_context,
         read_writable_code=read_writable_code,
-        # Pass type definitions and globals as read-only context for the AI
-        # This way the AI sees them as context but doesn't include them in optimized output
         read_only_context_code=code_context.read_only_context,
         hashing_code_context=read_writable_code.flat,
         hashing_code_context_hash=code_hash,
         helper_functions=helper_function_sources,
-        preexisting_objects=set(),  # Not implemented for non-Python yet
+        testgen_helper_fqns=[fs.fully_qualified_name for fs in helper_function_sources],
+        preexisting_objects=set(),
     )
 
 
@@ -474,7 +479,6 @@ def get_function_to_optimize_as_function_source(
                     fully_qualified_name=name.full_name,
                     only_function_name=name.name,
                     source_code=name.get_line_code(),
-                    jedi_definition=name,
                 )
         except Exception as e:
             logger.exception(f"Error while getting function source: {e}")
@@ -511,6 +515,10 @@ def get_function_sources_from_jedi(
                     # TODO: there can be multiple definitions, see how to handle such cases
                     definition = definitions[0]
                     definition_path = definition.module_path
+                    if definition_path is not None:
+                        rel = safe_relative_to(definition_path, project_root_path)
+                        if not rel.is_absolute():
+                            definition_path = project_root_path / rel
 
                     # The definition is part of this project and not defined within the original function
                     is_valid_definition = (
@@ -519,15 +527,16 @@ def get_function_sources_from_jedi(
                         and not belongs_to_function_qualified(definition, qualified_function_name)
                         and definition.full_name.startswith(definition.module_name)
                     )
-                    if is_valid_definition and definition.type in ("function", "class"):
+                    if is_valid_definition and definition.type in ("function", "class", "statement"):
                         if definition.type == "function":
                             fqn = definition.full_name
                             func_name = definition.name
-                        else:
-                            # When a class is instantiated (e.g., MyClass()), track its __init__ as a helper
-                            # This ensures the class definition with constructor is included in testgen context
+                        elif definition.type == "class":
                             fqn = f"{definition.full_name}.__init__"
                             func_name = "__init__"
+                        else:
+                            fqn = definition.full_name
+                            func_name = definition.name
                         qualified_name = get_qualified_name(definition.module_name, fqn)
                         # Avoid nested functions or classes. Only class.function is allowed
                         if len(qualified_name.split(".")) <= 2:
@@ -537,7 +546,6 @@ def get_function_sources_from_jedi(
                                 fully_qualified_name=fqn,
                                 only_function_name=func_name,
                                 source_code=definition.get_line_code(),
-                                jedi_definition=definition,
                             )
                             file_path_to_function_source[definition_path].add(function_source)
                             function_source_list.append(function_source)
@@ -934,7 +942,11 @@ def is_project_path(module_path: Path | None, project_root_path: Path) -> bool:
     # site-packages must be checked first because .venv/site-packages is under project root
     if path_belongs_to_site_packages(module_path):
         return False
-    return str(module_path).startswith(str(project_root_path) + os.sep)
+    try:
+        module_path.resolve().relative_to(project_root_path.resolve())
+        return True
+    except ValueError:
+        return False
 
 
 def _is_project_module(module_name: str, project_root_path: Path) -> bool:

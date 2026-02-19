@@ -6,10 +6,13 @@ including adding runtime comments and removing test functions.
 
 from __future__ import annotations
 
+import os
 import re
+from pathlib import Path
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.time_utils import format_perf, format_time
+from codeflash.models.models import GeneratedTests, GeneratedTestsList
 from codeflash.result.critic import performance_gain
 
 
@@ -128,6 +131,165 @@ def add_runtime_comments(source: str, original_runtimes: dict[str, int], optimiz
         modified_lines.append(line)
 
     return "\n".join(modified_lines)
+
+
+JS_TEST_EXTENSIONS = (
+    ".test.ts",
+    ".test.js",
+    ".test.tsx",
+    ".test.jsx",
+    ".spec.ts",
+    ".spec.js",
+    ".spec.tsx",
+    ".spec.jsx",
+    ".ts",
+    ".js",
+    ".tsx",
+    ".jsx",
+    ".mjs",
+    ".mts",
+)
+
+
+# TODO:{self} Needs cleanup for jest logic in else block
+# Author: Sarthak Agarwal <sarthak.saga@gmail.com>
+def is_js_test_module_path(test_module_path: str) -> bool:
+    """Return True when the module path looks like a JS/TS test path."""
+    return any(test_module_path.endswith(ext) for ext in JS_TEST_EXTENSIONS)
+
+
+# Author: Sarthak Agarwal <sarthak.saga@gmail.com>
+def resolve_js_test_module_path(test_module_path: str, tests_project_rootdir: Path) -> Path:
+    """Resolve a JS/TS test module path to a concrete file path."""
+    if "/" in test_module_path or "\\" in test_module_path:
+        return tests_project_rootdir / Path(test_module_path)
+
+    matched_ext = None
+    for ext in JS_TEST_EXTENSIONS:
+        if test_module_path.endswith(ext):
+            matched_ext = ext
+            break
+
+    if matched_ext:
+        base_path = test_module_path[: -len(matched_ext)]
+        file_path = base_path.replace(".", os.sep) + matched_ext
+        tests_dir_name = tests_project_rootdir.name
+        if file_path.startswith((tests_dir_name + os.sep, tests_dir_name + "/")):
+            return tests_project_rootdir.parent / Path(file_path)
+        return tests_project_rootdir / Path(file_path)
+
+    return tests_project_rootdir / Path(test_module_path)
+
+
+# Patterns for normalizing codeflash imports (legacy -> npm package)
+# Author: Sarthak Agarwal <sarthak.saga@gmail.com>
+_CODEFLASH_REQUIRE_PATTERN = re.compile(
+    r"(const|let|var)\s+(\w+)\s*=\s*require\s*\(\s*['\"]\.?/?codeflash-jest-helper['\"]\s*\)"
+)
+_CODEFLASH_IMPORT_PATTERN = re.compile(r"import\s+(?:\*\s+as\s+)?(\w+)\s+from\s+['\"]\.?/?codeflash-jest-helper['\"]")
+
+
+# Author: Sarthak Agarwal <sarthak.saga@gmail.com>
+def normalize_codeflash_imports(source: str) -> str:
+    """Normalize codeflash imports to use the npm package.
+
+    Replaces legacy local file imports:
+        const codeflash = require('./codeflash-jest-helper')
+        import codeflash from './codeflash-jest-helper'
+
+    With npm package imports:
+        const codeflash = require('codeflash')
+
+    Args:
+        source: JavaScript/TypeScript source code.
+
+    Returns:
+        Source code with normalized imports.
+
+    """
+    # Replace CommonJS require
+    source = _CODEFLASH_REQUIRE_PATTERN.sub(r"\1 \2 = require('codeflash')", source)
+    # Replace ES module import
+    return _CODEFLASH_IMPORT_PATTERN.sub(r"import \1 from 'codeflash'", source)
+
+
+# Author: ali <mohammed18200118@gmail.com>
+def inject_test_globals(generated_tests: GeneratedTestsList, test_framework: str = "jest") -> GeneratedTestsList:
+    # TODO: inside the prompt tell the llm if it should import jest functions or it's already injected in the global window
+    """Inject test globals into all generated tests.
+
+    Args:
+        generated_tests: List of generated tests.
+        test_framework: The test framework being used ("jest", "vitest", or "mocha").
+
+    Returns:
+        Generated tests with test globals injected.
+
+    """
+    # we only inject test globals for esm modules
+    # Use vitest imports for vitest projects, jest imports for jest projects
+    if test_framework == "vitest":
+        global_import = "import { vi, describe, it, expect, beforeEach, afterEach, beforeAll, test } from 'vitest'\n"
+    else:
+        # Default to jest imports for jest and other frameworks
+        global_import = (
+            "import { jest, describe, it, expect, beforeEach, afterEach, beforeAll, test } from '@jest/globals'\n"
+        )
+
+    for test in generated_tests.generated_tests:
+        test.generated_original_test_source = global_import + test.generated_original_test_source
+        test.instrumented_behavior_test_source = global_import + test.instrumented_behavior_test_source
+        test.instrumented_perf_test_source = global_import + test.instrumented_perf_test_source
+    return generated_tests
+
+
+# Author: ali <mohammed18200118@gmail.com>
+def disable_ts_check(generated_tests: GeneratedTestsList) -> GeneratedTestsList:
+    """Disable TypeScript type checking in all generated tests.
+
+    Args:
+        generated_tests: List of generated tests.
+
+    Returns:
+        Generated tests with TypeScript type checking disabled.
+
+    """
+    # we only inject test globals for esm modules
+    ts_nocheck = "// @ts-nocheck\n"
+
+    for test in generated_tests.generated_tests:
+        test.generated_original_test_source = ts_nocheck + test.generated_original_test_source
+        test.instrumented_behavior_test_source = ts_nocheck + test.instrumented_behavior_test_source
+        test.instrumented_perf_test_source = ts_nocheck + test.instrumented_perf_test_source
+    return generated_tests
+
+
+# Author: Sarthak Agarwal <sarthak.saga@gmail.com>
+def normalize_generated_tests_imports(generated_tests: GeneratedTestsList) -> GeneratedTestsList:
+    """Normalize codeflash imports in all generated tests.
+
+    Args:
+        generated_tests: List of generated tests.
+
+    Returns:
+        Generated tests with normalized imports.
+
+    """
+    normalized_tests = []
+    for test in generated_tests.generated_tests:
+        # Only normalize JS/TS files
+        if test.behavior_file_path.suffix in (".js", ".ts", ".jsx", ".tsx", ".mjs", ".mts"):
+            normalized_test = GeneratedTests(
+                generated_original_test_source=normalize_codeflash_imports(test.generated_original_test_source),
+                instrumented_behavior_test_source=normalize_codeflash_imports(test.instrumented_behavior_test_source),
+                instrumented_perf_test_source=normalize_codeflash_imports(test.instrumented_perf_test_source),
+                behavior_file_path=test.behavior_file_path,
+                perf_file_path=test.perf_file_path,
+            )
+            normalized_tests.append(normalized_test)
+        else:
+            normalized_tests.append(test)
+    return GeneratedTestsList(generated_tests=normalized_tests)
 
 
 def remove_test_functions(source: str, functions_to_remove: list[str]) -> str:
