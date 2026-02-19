@@ -64,6 +64,11 @@ from codeflash.either import Failure, Success, is_successful
 from codeflash.languages import is_python
 from codeflash.languages.base import Language
 from codeflash.languages.current import current_language_support, is_typescript
+from codeflash.languages.javascript.edit_tests import (
+    disable_ts_check,
+    inject_test_globals,
+    normalize_generated_tests_imports,
+)
 from codeflash.languages.javascript.module_system import detect_module_system
 from codeflash.languages.javascript.test_runner import clear_created_config_files, get_created_config_files
 from codeflash.languages.python.context import code_context_extractor
@@ -79,9 +84,6 @@ from codeflash.languages.python.static_analysis.code_replacer import (
 )
 from codeflash.languages.python.static_analysis.edit_generated_tests import (
     add_runtime_comments_to_generated_tests,
-    disable_ts_check,
-    inject_test_globals,
-    normalize_generated_tests_imports,
     remove_functions_from_generated_tests,
 )
 from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports, contains_jit_decorator
