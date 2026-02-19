@@ -235,8 +235,8 @@ def call_graph_live_display(
     results: deque[IndexResult] = deque(maxlen=MAX_TREE_ENTRIES)
     stats = {"indexed": 0, "cached": 0, "edges": 0, "external": 0, "errors": 0}
 
-    tree = Tree("[bold]Dependencies[/bold]")
-    stats_text = Text("0 dependencies found", style="dim")
+    tree = Tree("[bold]Recent Files[/bold]")
+    stats_text = Text("0 calls found", style="dim")
     panel = Panel(
         Group(progress, Text(""), tree, Text(""), stats_text), title="Building Call Graph", border_style="cyan"
     )
@@ -260,11 +260,11 @@ def call_graph_live_display(
         edge_info = []
 
         if local_edges:
-            edge_info.append(f"{local_edges} in same file")
+            edge_info.append(f"{local_edges} calls in same file")
         if result.cross_file_edges:
-            edge_info.append(f"{result.cross_file_edges} from other modules")
+            edge_info.append(f"{result.cross_file_edges} calls from other modules")
 
-        label = ", ".join(edge_info) if edge_info else "no dependencies"
+        label = ", ".join(edge_info) if edge_info else "no calls"
         return Tree(f"[cyan]{name}[/cyan]  [dim]{label}[/dim]")
 
     def refresh_display() -> None:
@@ -279,9 +279,9 @@ def call_graph_live_display(
             stat_parts.append(f"{stats['cached']} cached")
         if stats["errors"]:
             stat_parts.append(f"{stats['errors']} errors")
-        stat_parts.append(f"{stats['edges']} dependencies found")
+        stat_parts.append(f"{stats['edges']} calls found")
         if stats["external"]:
-            stat_parts.append(f"{stats['external']} from other modules")
+            stat_parts.append(f"{stats['external']} cross-file calls")
 
         stats_text.truncate(0)
         stats_text.append(" · ".join(stat_parts), style="dim")
@@ -312,7 +312,7 @@ def call_graph_live_display(
         if len(batch) >= 8:
             process_batch()
 
-    with Live(panel, console=console, transient=True, auto_refresh=False) as live:
+    with Live(panel, console=console, transient=False, auto_refresh=False) as live:
         yield update
         if batch:
             process_batch()
@@ -348,4 +348,4 @@ def call_graph_summary(call_graph: DependencyResolver, file_to_funcs: dict[Path,
         lsp_log(LspTextMessage(text=summary))
         return
 
-    console.print(Panel(summary, title="Dependency Summary", border_style="cyan"))
+    console.print(Panel(summary, title="Call Graph Summary", border_style="cyan"))
