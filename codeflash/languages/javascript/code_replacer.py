@@ -173,10 +173,8 @@ def _find_insertion_line_for_declaration(
     """
     # Find the maximum end line among referenced declarations
     max_dependency_line = max(
-        (existing_decl_end_lines[name] for name in referenced_names if name in existing_decl_end_lines),
-        default=0
+        (existing_decl_end_lines[name] for name in referenced_names if name in existing_decl_end_lines), default=0
     )
-
 
     if max_dependency_line > 0:
         # Insert after the last dependency (end_line is 1-indexed, we need 0-indexed)

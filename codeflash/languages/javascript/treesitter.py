@@ -1771,7 +1771,6 @@ class TreeSitterAnalyzer:
                     )
                 )
 
-
     @property
     def parser(self) -> Parser:
         """Get or create the cached parser for this language."""
