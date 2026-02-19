@@ -11,37 +11,37 @@ from codeflash.verification.parse_test_output import (
 
 
 class TestMatchesReStart:
-    def test_simple_no_class(self):
+    def test_simple_no_class(self) -> None:
         s = "!$######tests.test_foo:test_bar:target_func:1:abc######$!\n"
         m = matches_re_start.search(s)
         assert m is not None
         assert m.groups() == ("tests.test_foo", "", "test_bar", "target_func", "1", "abc")
 
-    def test_with_class(self):
+    def test_with_class(self) -> None:
         s = "!$######tests.test_foo:MyClass.test_bar:target_func:1:abc######$!\n"
         m = matches_re_start.search(s)
         assert m is not None
         assert m.groups() == ("tests.test_foo", "MyClass.", "test_bar", "target_func", "1", "abc")
 
-    def test_nested_class(self):
+    def test_nested_class(self) -> None:
         s = "!$######a.b.c:A.B.test_x:func:3:id123######$!\n"
         m = matches_re_start.search(s)
         assert m is not None
         assert m.groups() == ("a.b.c", "A.B.", "test_x", "func", "3", "id123")
 
-    def test_empty_class_and_function(self):
+    def test_empty_class_and_function(self) -> None:
         s = "!$######mod::func:0:iter######$!\n"
         m = matches_re_start.search(s)
         assert m is not None
         assert m.groups() == ("mod", "", "", "func", "0", "iter")
 
-    def test_embedded_in_stdout(self):
+    def test_embedded_in_stdout(self) -> None:
         s = "some output\n!$######mod:test_fn:f:1:x######$!\nmore output\n"
         m = matches_re_start.search(s)
         assert m is not None
         assert m.groups() == ("mod", "", "test_fn", "f", "1", "x")
 
-    def test_multiple_matches(self):
+    def test_multiple_matches(self) -> None:
         s = (
             "!$######m1:C1.fn1:t1:1:a######$!\n"
             "!$######m2:fn2:t2:2:b######$!\n"
@@ -51,12 +51,12 @@ class TestMatchesReStart:
         assert matches[0].groups() == ("m1", "C1.", "fn1", "t1", "1", "a")
         assert matches[1].groups() == ("m2", "", "fn2", "t2", "2", "b")
 
-    def test_no_match_without_newline(self):
+    def test_no_match_without_newline(self) -> None:
         s = "!$######mod:test_fn:f:1:x######$!"
         m = matches_re_start.search(s)
         assert m is None
 
-    def test_dots_in_module_path(self):
+    def test_dots_in_module_path(self) -> None:
         s = "!$######a.b.c.d.e:test_fn:f:1:x######$!\n"
         m = matches_re_start.search(s)
         assert m is not None
@@ -67,32 +67,32 @@ class TestMatchesReStart:
 
 
 class TestMatchesReEnd:
-    def test_simple_no_class_with_runtime(self):
+    def test_simple_no_class_with_runtime(self) -> None:
         s = "!######tests.test_foo:test_bar:target_func:1:abc:12345######!"
         m = matches_re_end.search(s)
         assert m is not None
         assert m.groups() == ("tests.test_foo", "", "test_bar", "target_func", "1", "abc:12345")
 
-    def test_with_class_no_runtime(self):
+    def test_with_class_no_runtime(self) -> None:
         s = "!######tests.test_foo:MyClass.test_bar:target_func:1:abc######!"
         m = matches_re_end.search(s)
         assert m is not None
         assert m.groups() == ("tests.test_foo", "MyClass.", "test_bar", "target_func", "1", "abc")
 
-    def test_nested_class_with_runtime(self):
+    def test_nested_class_with_runtime(self) -> None:
         s = "!######mod:A.B.test_x:func:3:id123:99999######!"
         m = matches_re_end.search(s)
         assert m is not None
         assert m.groups() == ("mod", "A.B.", "test_x", "func", "3", "id123:99999")
 
-    def test_runtime_colon_preserved_in_group6(self):
+    def test_runtime_colon_preserved_in_group6(self) -> None:
         """Group 6 must capture 'iteration_id:runtime' as a single string (colon included)."""
         s = "!######m:fn:f:1:iter42:98765######!"
         m = matches_re_end.search(s)
         assert m is not None
         assert m.group(6) == "iter42:98765"
 
-    def test_embedded_in_stdout(self):
+    def test_embedded_in_stdout(self) -> None:
         s = "captured output\n!######mod:test_fn:f:1:x:500######!\nmore"
         m = matches_re_end.search(s)
         assert m is not None
@@ -103,7 +103,7 @@ class TestMatchesReEnd:
 
 
 class TestStartEndPairing:
-    def test_paired_markers(self):
+    def test_paired_markers(self) -> None:
         stdout = (
             "!$######mod:Class.test_fn:func:1:iter1######$!\n"
             "test output here\n"
@@ -132,7 +132,7 @@ class TestStartEndPairing:
 
 
 class TestParseTestFailuresHeader:
-    def test_standard_pytest_header(self):
+    def test_standard_pytest_header(self) -> None:
         stdout = (
             "..F.\n"
             "=================================== FAILURES ===================================\n"
@@ -149,7 +149,7 @@ class TestParseTestFailuresHeader:
         result = parse_test_failures_from_stdout(stdout)
         assert "test_foo" in result
 
-    def test_minimal_equals(self):
+    def test_minimal_equals(self) -> None:
         """Even a short '= FAILURES =' header should be detected."""
         stdout = (
             "= FAILURES =\n"
@@ -163,12 +163,12 @@ class TestParseTestFailuresHeader:
         result = parse_test_failures_from_stdout(stdout)
         assert "test_bar" in result
 
-    def test_no_failures_section(self):
+    def test_no_failures_section(self) -> None:
         stdout = "....\n4 passed in 0.1s\n"
         result = parse_test_failures_from_stdout(stdout)
         assert result == {}
 
-    def test_word_failures_without_equals_is_not_matched(self):
+    def test_word_failures_without_equals_is_not_matched(self) -> None:
         """'FAILURES' without surrounding '=' signs should not trigger the header detection."""
         stdout = (
             "FAILURES detected in module\n"
@@ -179,7 +179,7 @@ class TestParseTestFailuresHeader:
         result = parse_test_failures_from_stdout(stdout)
         assert result == {}
 
-    def test_failures_in_test_output_not_matched(self):
+    def test_failures_in_test_output_not_matched(self) -> None:
         """A test printing 'FAILURES' (no = signs) should not trigger header detection."""
         stdout = (
             "Testing FAILURES handling\n"
