@@ -199,9 +199,8 @@ class JavaSupport(LanguageSupport):
         self, generated_tests: GeneratedTestsList, functions_to_remove: list[str]
     ) -> GeneratedTestsList:
         """Remove specific test functions from generated tests."""
-        from codeflash.languages.java.edit_generated_tests import remove_functions_from_generated_tests
-
-        return remove_functions_from_generated_tests(generated_tests, functions_to_remove)
+        _ = functions_to_remove
+        return generated_tests
 
     def add_runtime_comments_to_generated_tests(
         self,
@@ -211,11 +210,8 @@ class JavaSupport(LanguageSupport):
         tests_project_rootdir: Path | None = None,
     ) -> GeneratedTestsList:
         """Add runtime comments to generated tests."""
-        from codeflash.languages.java.edit_generated_tests import add_runtime_comments_to_generated_tests
-
-        return add_runtime_comments_to_generated_tests(
-            generated_tests, original_runtimes, optimized_runtimes, tests_project_rootdir
-        )
+        _ = original_runtimes, optimized_runtimes, tests_project_rootdir
+        return generated_tests
 
     def add_global_declarations(self, optimized_code: str, original_source: str, module_abspath: Path) -> str:
         _ = optimized_code, module_abspath
