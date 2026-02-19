@@ -720,7 +720,7 @@ def inject_profiling_into_existing_test(
 
     if function_to_optimize.is_async:
         return inject_async_profiling_into_existing_test(
-            test_path, call_positions, function_to_optimize, tests_project_root, mode,
+            test_path, call_positions, function_to_optimize, tests_project_root, mode
         )
 
     with test_path.open(encoding="utf8") as f:

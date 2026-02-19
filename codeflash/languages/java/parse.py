@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import re
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from junitparser.xunit2 import JUnitXml
@@ -13,6 +12,7 @@ from codeflash.models.models import FunctionTestInvocation, InvocationId, TestRe
 
 if TYPE_CHECKING:
     import subprocess
+    from pathlib import Path
 
     from codeflash.models.models import TestFiles
     from codeflash.verification.verification_utils import TestConfig

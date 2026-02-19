@@ -284,12 +284,14 @@ def _add_java_class_members(
         if not new_fields and not new_methods:
             return original_source
 
-        logger.debug(f"Adding {len(new_fields)} new fields and {len(new_methods)} helper methods to class {class_name}")
+        logger.debug(
+            "Adding %d new fields and %d helper methods to class %s", len(new_fields), len(new_methods), class_name
+        )
 
         return _insert_class_members(original_source, class_name, new_fields, new_methods, analyzer)
 
     except Exception as e:
-        logger.debug(f"Error adding Java class members: {e}")
+        logger.debug("Error adding Java class members: %s", e)
         return original_source
 
 

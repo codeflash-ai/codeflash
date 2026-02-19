@@ -2144,12 +2144,14 @@ class JavaScriptSupport:
         """
         from codeflash.languages.javascript.instrument import inject_profiling_into_existing_js_test
 
+        test_string = test_path.read_text(encoding="utf-8")
         return inject_profiling_into_existing_js_test(
-            test_path=test_path,
+            test_string=test_string,
             call_positions=list(call_positions),
             function_to_optimize=function_to_optimize,
             tests_project_root=tests_project_root,
             mode=mode,
+            test_path=test_path,
         )
 
     def instrument_source_for_line_profiler(

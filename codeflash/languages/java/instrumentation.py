@@ -730,7 +730,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         # The variable is assigned inside a for/try block which Java considers
         # conditionally executed, so an uninitialized declaration would cause
         # "variable might not have been initialized" errors.
-        _PRIMITIVE_DEFAULTS = {
+        primitive_defaults = {
             "byte": "0",
             "short": "0",
             "int": "0",
@@ -740,7 +740,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             "char": "'\\0'",
             "boolean": "false",
         }
-        default_val = _PRIMITIVE_DEFAULTS.get(type_text, "null")
+        default_val = primitive_defaults.get(type_text, "null")
         hoisted = f"{type_text} {name_text} = {default_val};"
         assignment = f"{name_text} = {value_text};"
         return hoisted, assignment
@@ -924,9 +924,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
 
     replacements: list[tuple[int, int, bytes]] = []
     wrapper_id = 0
-    method_ordinal = 0
-    for method_node, body_node in test_methods:
-        method_ordinal += 1
+    for method_ordinal, (method_node, body_node) in enumerate(test_methods, start=1):
         body_start = body_node.start_byte + 1  # skip '{'
         body_end = body_node.end_byte - 1  # skip '}'
         body_text = source_bytes[body_start:body_end].decode("utf8")
