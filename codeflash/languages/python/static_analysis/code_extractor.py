@@ -1735,7 +1735,12 @@ def _extract_calling_function(source_code: str, function_name: str, ref_line: in
     """
     if language == Language.PYTHON:
         return _extract_calling_function_python(source_code, function_name, ref_line)
-    return _extract_calling_function_js(source_code, function_name, ref_line)
+    try:
+        from codeflash.languages.javascript.treesitter import extract_calling_function_source
+
+        return extract_calling_function_source(source_code, function_name, ref_line)
+    except Exception:
+        return None
 
 
 def _extract_calling_function_python(source_code: str, function_name: str, ref_line: int) -> str | None:
@@ -1758,37 +1763,3 @@ def _extract_calling_function_python(source_code: str, function_name: str, ref_l
     except Exception:
         return None
 
-
-def _extract_calling_function_js(source_code: str, function_name: str, ref_line: int) -> str | None:
-    """Extract the source code of a calling function in JavaScript/TypeScript.
-
-    Args:
-        source_code: Full source code of the file.
-        function_name: Name of the function to extract.
-        ref_line: Line number where the reference is (helps identify the right function).
-
-    Returns:
-        Source code of the function, or None if not found.
-
-    """
-    try:
-        from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage
-
-        # Try TypeScript first, fall back to JavaScript
-        for lang in [TreeSitterLanguage.TYPESCRIPT, TreeSitterLanguage.TSX, TreeSitterLanguage.JAVASCRIPT]:
-            try:
-                analyzer = TreeSitterAnalyzer(lang)
-                functions = analyzer.find_functions(source_code, include_methods=True)
-
-                for func in functions:
-                    if func.name == function_name:
-                        # Check if the reference line is within this function
-                        if func.start_line <= ref_line <= func.end_line:
-                            return func.source_text
-                break
-            except Exception:
-                continue
-
-        return None
-    except Exception:
-        return None

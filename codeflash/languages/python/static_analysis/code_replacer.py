@@ -26,7 +26,6 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import Language, LanguageSupport
-    from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer
     from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, OptimizedCandidate, ValidCode
 
 ASTNodeT = TypeVar("ASTNodeT", bound=ast.AST)
@@ -727,174 +726,12 @@ def _add_global_declarations_for_language(
         return original_source
 
     try:
-        from codeflash.languages.javascript.treesitter import get_analyzer_for_file
+        from codeflash.languages.javascript.code_replacer import _add_global_declarations_for_language
 
-        analyzer = get_analyzer_for_file(module_abspath)
-
-        original_declarations = analyzer.find_module_level_declarations(original_source)
-        optimized_declarations = analyzer.find_module_level_declarations(optimized_code)
-
-        if not optimized_declarations:
-            return original_source
-
-        existing_names = _get_existing_names(original_declarations, analyzer, original_source)
-        new_declarations = _filter_new_declarations(optimized_declarations, existing_names)
-
-        if not new_declarations:
-            return original_source
-
-        # Build a map of existing declaration names to their end lines (1-indexed)
-        existing_decl_end_lines = {decl.name: decl.end_line for decl in original_declarations}
-
-        # Insert each new declaration after its dependencies
-        result = original_source
-        for decl in new_declarations:
-            result = _insert_declaration_after_dependencies(
-                result, decl, existing_decl_end_lines, analyzer, module_abspath
-            )
-            # Update the map with the newly inserted declaration for subsequent insertions
-            # Re-parse to get accurate line numbers after insertion
-            updated_declarations = analyzer.find_module_level_declarations(result)
-            existing_decl_end_lines = {d.name: d.end_line for d in updated_declarations}
-
-        return result
-
+        return _add_global_declarations_for_language(optimized_code, original_source, module_abspath, language)
     except Exception as e:
         logger.debug(f"Error adding global declarations: {e}")
         return original_source
-
-
-def _get_existing_names(original_declarations: list, analyzer: TreeSitterAnalyzer, original_source: str) -> set[str]:
-    """Get all names that already exist in the original source (declarations + imports)."""
-    existing_names = {decl.name for decl in original_declarations}
-
-    original_imports = analyzer.find_imports(original_source)
-    for imp in original_imports:
-        if imp.default_import:
-            existing_names.add(imp.default_import)
-        for name, alias in imp.named_imports:
-            existing_names.add(alias if alias else name)
-        if imp.namespace_import:
-            existing_names.add(imp.namespace_import)
-
-    return existing_names
-
-
-def _filter_new_declarations(optimized_declarations: list, existing_names: set[str]) -> list:
-    """Filter declarations to only those that don't exist in the original source."""
-    new_declarations = []
-    seen_sources: set[str] = set()
-
-    # Sort by line number to maintain order from optimized code
-    sorted_declarations = sorted(optimized_declarations, key=lambda d: d.start_line)
-
-    for decl in sorted_declarations:
-        if decl.name not in existing_names and decl.source_code not in seen_sources:
-            new_declarations.append(decl)
-            seen_sources.add(decl.source_code)
-
-    return new_declarations
-
-
-def _insert_declaration_after_dependencies(
-    source: str,
-    declaration,
-    existing_decl_end_lines: dict[str, int],
-    analyzer: TreeSitterAnalyzer,
-    module_abspath: Path,
-) -> str:
-    """Insert a declaration after the last existing declaration it depends on.
-
-    Args:
-        source: Current source code.
-        declaration: The declaration to insert.
-        existing_decl_end_lines: Map of existing declaration names to their end lines.
-        analyzer: TreeSitter analyzer.
-        module_abspath: Path to the module file.
-
-    Returns:
-        Source code with the declaration inserted at the correct position.
-
-    """
-    # Find identifiers referenced in this declaration
-    referenced_names = analyzer.find_referenced_identifiers(declaration.source_code)
-
-    # Find the latest end line among all referenced declarations
-    insertion_line = _find_insertion_line_for_declaration(source, referenced_names, existing_decl_end_lines, analyzer)
-
-    lines = source.splitlines(keepends=True)
-
-    # Ensure proper spacing
-    decl_code = declaration.source_code
-    if not decl_code.endswith("\n"):
-        decl_code += "\n"
-
-    # Add blank line before if inserting after content
-    if insertion_line > 0 and lines[insertion_line - 1].strip():
-        decl_code = "\n" + decl_code
-
-    before = lines[:insertion_line]
-    after = lines[insertion_line:]
-
-    return "".join([*before, decl_code, *after])
-
-
-def _find_insertion_line_for_declaration(
-    source: str, referenced_names: set[str], existing_decl_end_lines: dict[str, int], analyzer: TreeSitterAnalyzer
-) -> int:
-    """Find the line where a declaration should be inserted based on its dependencies.
-
-    Args:
-        source: Source code.
-        referenced_names: Names referenced by the declaration.
-        existing_decl_end_lines: Map of declaration names to their end lines (1-indexed).
-        analyzer: TreeSitter analyzer.
-
-    Returns:
-        Line index (0-based) where the declaration should be inserted.
-
-    """
-    # Find the maximum end line among referenced declarations
-    max_dependency_line = 0
-    for name in referenced_names:
-        if name in existing_decl_end_lines:
-            max_dependency_line = max(max_dependency_line, existing_decl_end_lines[name])
-
-    if max_dependency_line > 0:
-        # Insert after the last dependency (end_line is 1-indexed, we need 0-indexed)
-        return max_dependency_line
-
-    # No dependencies found - insert after imports
-    lines = source.splitlines(keepends=True)
-    return _find_line_after_imports(lines, analyzer, source)
-
-
-def _find_line_after_imports(lines: list[str], analyzer: TreeSitterAnalyzer, source: str) -> int:
-    """Find the line index after all imports.
-
-    Args:
-        lines: Source lines.
-        analyzer: TreeSitter analyzer.
-        source: Full source code.
-
-    Returns:
-        Line index (0-based) for insertion after imports.
-
-    """
-    try:
-        imports = analyzer.find_imports(source)
-        if imports:
-            return max(imp.end_line for imp in imports)
-    except Exception as exc:
-        logger.debug(f"Exception in _find_line_after_imports: {exc}")
-
-    # Default: insert at beginning (after shebang/directive comments)
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped and not stripped.startswith("//") and not stripped.startswith("#!"):
-            return i
-
-    return 0
 
 
 def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStringsMarkdown) -> str:
