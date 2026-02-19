@@ -32,6 +32,8 @@ jobs:
             python-version: "3.13"
     continue-on-error: true
     runs-on: ${{ matrix.os }}
+    env:
+      PYTHONIOENCODING: utf-8
     steps:
       - uses: actions/checkout@v4
         with:
