@@ -587,17 +587,20 @@ def revert_unused_helper_functions(
 
     logger.debug(f"Reverting {len(unused_helpers)} unused helper function(s) to original definitions")
 
+    # Resolve all path keys for consistent comparison (Windows 8.3 short names may differ from Jedi-resolved paths)
+    resolved_original_helper_code = {p.resolve(): code for p, code in original_helper_code.items()}
+
     # Group unused helpers by file path
     unused_helpers_by_file = defaultdict(list)
     for helper in unused_helpers:
-        unused_helpers_by_file[helper.file_path].append(helper)
+        unused_helpers_by_file[helper.file_path.resolve()].append(helper)
 
     # For each file, revert the unused helper functions to their original definitions
     for file_path, helpers_in_file in unused_helpers_by_file.items():
-        if file_path in original_helper_code:
+        if file_path in resolved_original_helper_code:
             try:
                 # Get original code for this file
-                original_code = original_helper_code[file_path]
+                original_code = resolved_original_helper_code[file_path]
 
                 # Use the code replacer to selectively revert only the unused helper functions
                 helper_names = [helper.qualified_name for helper in helpers_in_file]
