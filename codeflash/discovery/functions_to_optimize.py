@@ -146,6 +146,29 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
 # Multi-language support helpers
 # =============================================================================
 
+_VCS_EXCLUDES = frozenset({".git", ".hg", ".svn"})
+
+
+def parse_dir_excludes(
+    patterns: frozenset[str],
+) -> tuple[frozenset[str], tuple[str, ...], tuple[str, ...]]:
+    """Split glob patterns into exact names, prefixes, and suffixes.
+
+    Patterns ending with ``*`` become prefix matches, patterns starting with ``*``
+    become suffix matches, and plain strings become exact matches.
+    """
+    exact: set[str] = set()
+    prefixes: list[str] = []
+    suffixes: list[str] = []
+    for p in patterns:
+        if p.endswith("*"):
+            prefixes.append(p[:-1])
+        elif p.startswith("*"):
+            suffixes.append(p[1:])
+        else:
+            exact.add(p)
+    return frozenset(exact), tuple(prefixes), tuple(suffixes)
+
 
 def get_files_for_language(
     module_root_path: Path, ignore_paths: list[Path] | None = None, language: Language | None = None
@@ -167,34 +190,39 @@ def get_files_for_language(
     if language is not None:
         support = get_language_support(language)
         extensions = support.file_extensions
+        all_patterns = support.dir_excludes | _VCS_EXCLUDES
     else:
         extensions = tuple(get_supported_extensions())
+        all_patterns: frozenset[str] = _VCS_EXCLUDES
+        for lang in Language:
+            if is_language_supported(lang):
+                all_patterns = all_patterns | get_language_support(lang).dir_excludes
 
-    # Default directory patterns to always exclude for JS/TS
-    js_ts_default_excludes = {
-        "node_modules",
-        "dist",
-        "build",
-        ".next",
-        ".nuxt",
-        "coverage",
-        ".cache",
-        ".turbo",
-        ".vercel",
-        "__pycache__",
-    }
+    dir_excludes, prefixes, suffixes = parse_dir_excludes(all_patterns)
 
-    files = []
-    for ext in extensions:
-        pattern = f"*{ext}"
-        for file_path in module_root_path.rglob(pattern):
-            # Check explicit ignore paths
-            if any(file_path.is_relative_to(ignore_path) for ignore_path in ignore_paths):
-                continue
-            # Check default JS/TS excludes in path parts
-            if any(part in js_ts_default_excludes for part in file_path.parts):
-                continue
-            files.append(file_path)
+    ignore_dirs: set[str] = set()
+    ignore_files: set[Path] = set()
+    for p in ignore_paths:
+        if p.is_file():
+            ignore_files.add(p)
+        else:
+            ignore_dirs.add(str(p))
+
+    files: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(module_root_path):
+        dirnames[:] = [
+            d
+            for d in dirnames
+            if d not in dir_excludes
+            and not (prefixes and d.startswith(prefixes))
+            and not (suffixes and d.endswith(suffixes))
+            and str(Path(dirpath) / d) not in ignore_dirs
+        ]
+        for fname in filenames:
+            if fname.endswith(extensions):
+                fpath = Path(dirpath, fname)
+                if fpath not in ignore_files:
+                    files.append(fpath)
     return files
 
 

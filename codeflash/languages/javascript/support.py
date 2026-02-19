@@ -63,6 +63,10 @@ class JavaScriptSupport:
     def comment_prefix(self) -> str:
         return "//"
 
+    @property
+    def dir_excludes(self) -> frozenset[str]:
+        return frozenset({"node_modules", "dist", "build", ".next", ".nuxt", "coverage", ".cache", ".turbo", ".vercel"})
+
     # === Discovery ===
 
     def discover_functions(
