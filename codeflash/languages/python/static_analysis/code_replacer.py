@@ -401,23 +401,104 @@ def replace_functions_in_file(
             return source_code
         parsed_function_names.append((class_name, function_name))
 
-    # Collect functions we want to modify from the optimized code
-    optimized_module = cst.metadata.MetadataWrapper(cst.parse_module(optimized_code))
+    # Collect functions from optimized code without using MetadataWrapper
+    optimized_module = cst.parse_module(optimized_code)
+    modified_functions: dict[tuple[str | None, str], cst.FunctionDef] = {}
+    new_functions: list[cst.FunctionDef] = []
+    new_class_functions: dict[str, list[cst.FunctionDef]] = defaultdict(list)
+    new_classes: list[cst.ClassDef] = []
+    modified_init_functions: dict[str, cst.FunctionDef] = {}
+
+    function_names_set = set(parsed_function_names)
+
+    for node in optimized_module.body:
+        if isinstance(node, cst.FunctionDef):
+            key = (None, node.name.value)
+            if key in function_names_set:
+                modified_functions[key] = node
+            elif preexisting_objects and (node.name.value, ()) not in preexisting_objects:
+                new_functions.append(node)
+
+        elif isinstance(node, cst.ClassDef):
+            class_name = node.name.value
+            parents = (FunctionParent(name=class_name, type="ClassDef"),)
+
+            if (class_name, ()) not in preexisting_objects:
+                new_classes.append(node)
+
+            for child in node.body.body:
+                if isinstance(child, cst.FunctionDef):
+                    method_key = (class_name, child.name.value)
+                    if method_key in function_names_set:
+                        modified_functions[method_key] = child
+                    elif child.name.value == "__init__" and preexisting_objects:
+                        modified_init_functions[class_name] = child
+                    elif preexisting_objects and (child.name.value, parents) not in preexisting_objects:
+                        new_class_functions[class_name].append(child)
+
     original_module = cst.parse_module(source_code)
 
-    visitor = OptimFunctionCollector(preexisting_objects, set(parsed_function_names))
-    optimized_module.visit(visitor)
+    max_function_index = None
+    max_class_index = None
+    for index, _node in enumerate(original_module.body):
+        if isinstance(_node, cst.FunctionDef):
+            max_function_index = index
+        if isinstance(_node, cst.ClassDef):
+            max_class_index = index
 
-    # Replace these functions in the original code
-    transformer = OptimFunctionReplacer(
-        modified_functions=visitor.modified_functions,
-        new_classes=visitor.new_classes,
-        new_functions=visitor.new_functions,
-        new_class_functions=visitor.new_class_functions,
-        modified_init_functions=visitor.modified_init_functions,
-    )
-    modified_tree = original_module.visit(transformer)
-    return modified_tree.code
+    new_body: list[cst.CSTNode] = []
+    existing_class_names = set()
+    
+    for node in original_module.body:
+        if isinstance(node, cst.FunctionDef):
+            key = (None, node.name.value)
+            if key in modified_functions:
+                modified_func = modified_functions[key]
+                new_body.append(node.with_changes(body=modified_func.body, decorators=modified_func.decorators))
+            else:
+                new_body.append(node)
+
+        elif isinstance(node, cst.ClassDef):
+            class_name = node.name.value
+            existing_class_names.add(class_name)
+            
+            new_members: list[cst.CSTNode] = []
+            for child in node.body.body:
+                if isinstance(child, cst.FunctionDef):
+                    key = (class_name, child.name.value)
+                    if key in modified_functions:
+                        modified_func = modified_functions[key]
+                        new_members.append(child.with_changes(body=modified_func.body, decorators=modified_func.decorators))
+                    elif child.name.value == "__init__" and class_name in modified_init_functions:
+                        new_members.append(modified_init_functions[class_name])
+                    else:
+                        new_members.append(child)
+                else:
+                    new_members.append(child)
+            
+            if class_name in new_class_functions:
+                new_members.extend(new_class_functions[class_name])
+            
+            new_body.append(node.with_changes(body=node.body.with_changes(body=new_members)))
+        else:
+            new_body.append(node)
+
+    if new_classes:
+        unique_classes = [nc for nc in new_classes if nc.name.value not in existing_class_names]
+        if unique_classes:
+            new_classes_insertion_idx = max_class_index if max_class_index is not None else find_insertion_index_after_imports(original_module)
+            new_body = list(chain(new_body[:new_classes_insertion_idx], unique_classes, new_body[new_classes_insertion_idx:]))
+
+    if new_functions:
+        if max_function_index is not None:
+            new_body = [*new_body[:max_function_index + 1], *new_functions, *new_body[max_function_index + 1:]]
+        elif max_class_index is not None:
+            new_body = [*new_body[:max_class_index + 1], *new_functions, *new_body[max_class_index + 1:]]
+        else:
+            new_body = [*new_functions, *new_body]
+
+    updated_module = original_module.with_changes(body=new_body)
+    return updated_module.code
 
 
 def replace_functions_and_add_imports(
