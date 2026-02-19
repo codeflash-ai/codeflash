@@ -7,6 +7,7 @@ from typing import Optional
 from pydantic.dataclasses import dataclass
 
 from codeflash.languages import current_language_support, is_java, is_javascript
+from codeflash.languages.java.tests import get_java_test_file_path
 
 
 def get_test_file_path(
@@ -28,20 +29,10 @@ def get_test_file_path(
         extension = ".py"
 
     if is_java() and package_name:
-        # For Java, create package directory structure
-        # e.g., com.example -> com/example/
-        package_path = package_name.replace(".", "/")
-        java_class_name = class_name or f"{function_name_safe.title()}Test"
-        # Add suffix to avoid conflicts
-        if test_type == "perf":
-            java_class_name = f"{java_class_name}__perfonlyinstrumented"
-        elif test_type == "unit":
-            java_class_name = f"{java_class_name}__perfinstrumented"
-        path = test_dir / package_path / f"{java_class_name}{extension}"
-        # Create package directory if needed
-        path.parent.mkdir(parents=True, exist_ok=True)
-    else:
-        path = test_dir / f"test_{function_name_safe}__{test_type}_test_{iteration}{extension}"
+        # Bug note: Java test filenames must include the instrumented suffix to keep class/file names aligned.
+        return get_java_test_file_path(test_dir, function_name, iteration, test_type, package_name, class_name)
+
+    path = test_dir / f"test_{function_name_safe}__{test_type}_test_{iteration}{extension}"
 
     if path.exists():
         return get_test_file_path(test_dir, function_name, iteration + 1, test_type, package_name, class_name)
