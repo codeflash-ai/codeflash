@@ -67,8 +67,14 @@ def calculate_function_throughput_from_test_results(test_results: TestResults, f
     Start: !$######test_module:test_function:function_name:loop_index:iteration_id######$!
     End:   !######test_module:test_function:function_name:loop_index:iteration_id:duration######!
     """
+    # Bug #10 Debug: Log what we're working with
+    logger.debug(f"Bug #10: calculate_function_throughput for function={function_name}")
+    logger.debug(f"Bug #10: perf_stdout exists={test_results.perf_stdout is not None}, length={len(test_results.perf_stdout or '')}")
+
     start_matches = start_pattern.findall(test_results.perf_stdout or "")
     end_matches = end_pattern.findall(test_results.perf_stdout or "")
+
+    logger.debug(f"Bug #10: Found {len(start_matches)} start matches, {len(end_matches)} end matches")
 
     end_matches_truncated = [end_match[:5] for end_match in end_matches]
     end_matches_set = set(end_matches_truncated)
@@ -77,6 +83,8 @@ def calculate_function_throughput_from_test_results(test_results: TestResults, f
     for start_match in start_matches:
         if start_match in end_matches_set and len(start_match) > 2 and start_match[2] == function_name:
             function_throughput += 1
+
+    logger.debug(f"Bug #10: Calculated throughput={function_throughput} for function={function_name}")
     return function_throughput
 
 
@@ -1588,6 +1596,15 @@ def parse_test_results(
             elif isinstance(run_result.stdout, str):
                 results.perf_stdout = run_result.stdout
             logger.debug(f"Bug #10 Fix: Set perf_stdout for Java performance tests ({len(results.perf_stdout or '')} chars)")
+
+            # Debug: Check if timing markers are in perf_stdout
+            if results.perf_stdout:
+                import re
+                start_pattern = re.compile(r"!\$######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+)######\$!")
+                end_pattern = re.compile(r"!######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+):([^:]+)######!")
+                start_count = len(start_pattern.findall(results.perf_stdout))
+                end_count = len(end_pattern.findall(results.perf_stdout))
+                logger.debug(f"Bug #10 Debug: Found {start_count} start markers, {end_count} end markers in perf_stdout")
         except Exception as e:
             logger.debug(f"Bug #10 Fix: Failed to set perf_stdout: {e}")
 
