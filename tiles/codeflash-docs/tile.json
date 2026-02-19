@@ -1,7 +1,0 @@
-{
-  "name": "codeflash/codeflash-docs",
-  "version": "0.1.0",
-  "summary": "Internal documentation for the codeflash optimization engine",
-  "private": true,
-  "docs": "docs/index.md"
-}
