@@ -351,14 +351,14 @@ class JavaSupport(LanguageSupport):
 
     def instrument_existing_test(
         self,
-        test_string: str,
+        test_path: Path,
         call_positions: Sequence[Any],
         function_to_optimize: Any,
         tests_project_root: Path,
         mode: str,
-        test_path: Path | None,
     ) -> tuple[bool, str | None]:
         """Inject profiling code into an existing test file."""
+        test_string = test_path.read_text(encoding="utf-8")
         return instrument_existing_test(
             test_string=test_string, function_to_optimize=function_to_optimize, mode=mode, test_path=test_path
         )

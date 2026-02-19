@@ -632,15 +632,15 @@ class FunctionImportedAsVisitor(ast.NodeVisitor):
 
 
 def inject_async_profiling_into_existing_test(
-    test_string: str,
+    test_path: Path,
     call_positions: list[CodePosition],
     function_to_optimize: FunctionToOptimize,
     tests_project_root: Path,
     mode: TestingMode = TestingMode.BEHAVIOR,
-    test_path: Path | None = None,
 ) -> tuple[bool, str | None]:
     """Inject profiling for async function calls by setting environment variables before each call."""
-    test_code = test_string
+    with test_path.open(encoding="utf8") as f:
+        test_code = f.read()
     try:
         tree = ast.parse(test_code)
     except SyntaxError:
@@ -703,7 +703,6 @@ def detect_frameworks_from_code(code: str) -> dict[str, str]:
 
 
 def inject_profiling_into_existing_test(
-    test_string: str,
     test_path: Path,
     call_positions: list[CodePosition],
     function_to_optimize: FunctionToOptimize,
@@ -711,19 +710,6 @@ def inject_profiling_into_existing_test(
     mode: TestingMode = TestingMode.BEHAVIOR,
 ) -> tuple[bool, str | None]:
     tests_project_root = tests_project_root.resolve()
-
-    # Route to language-specific implementations
-    if is_javascript():
-        from codeflash.languages.javascript.instrument import inject_profiling_into_existing_js_test
-
-        return inject_profiling_into_existing_js_test(
-            test_string=test_string,
-            call_positions=call_positions,
-            function_to_optimize=function_to_optimize,
-            tests_project_root=tests_project_root,
-            mode=mode.value,
-            test_path=test_path,
-        )
 
     if is_java():
         from codeflash.languages.java.instrument_existing_tests import inject_profiling_into_existing_java_test
@@ -734,17 +720,15 @@ def inject_profiling_into_existing_test(
 
     if function_to_optimize.is_async:
         return inject_async_profiling_into_existing_test(
-            test_string=test_string,
-            call_positions=call_positions,
-            function_to_optimize=function_to_optimize,
-            tests_project_root=tests_project_root,
-            mode=mode.value,
-            test_path=test_path,
+            test_path, call_positions, function_to_optimize, tests_project_root, mode,
         )
 
-    used_frameworks = detect_frameworks_from_code(test_string)
+    with test_path.open(encoding="utf8") as f:
+        test_code = f.read()
+
+    used_frameworks = detect_frameworks_from_code(test_code)
     try:
-        tree = ast.parse(test_string)
+        tree = ast.parse(test_code)
     except SyntaxError:
         logger.exception(f"Syntax error in code in file - {test_path}")
         return False, None

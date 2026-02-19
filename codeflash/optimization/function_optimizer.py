@@ -1642,30 +1642,23 @@ class FunctionOptimizer:
                     msg = f"Unexpected test type: {test_type}"
                     raise ValueError(msg)
 
-                # Use language-specific instrumentation
-                # Read the test file first
-                with path_obj_test_file.open("r", encoding="utf8") as f:
-                    original_test_source = f.read()
-
                 success, injected_behavior_test = self.language_support.instrument_existing_test(
-                    test_string=original_test_source,
+                    test_path=path_obj_test_file,
                     call_positions=[test.position for test in tests_in_file_list],
                     function_to_optimize=self.function_to_optimize,
                     tests_project_root=self.test_cfg.tests_project_rootdir,
                     mode="behavior",
-                    test_path=path_obj_test_file,
                 )
                 if not success:
                     logger.debug(f"Failed to instrument test file {test_file} for behavior testing")
                     continue
 
                 success, injected_perf_test = self.language_support.instrument_existing_test(
-                    test_string=original_test_source,
+                    test_path=path_obj_test_file,
                     call_positions=[test.position for test in tests_in_file_list],
                     function_to_optimize=self.function_to_optimize,
                     tests_project_root=self.test_cfg.tests_project_rootdir,
                     mode="performance",
-                    test_path=path_obj_test_file,
                 )
                 if not success:
                     logger.debug(f"Failed to instrument test file {test_file} for performance testing")
@@ -1778,24 +1771,21 @@ class FunctionOptimizer:
                 else:
                     msg = f"Unexpected test type: {test_type}"
                     raise ValueError(msg)
-                test_string = path_obj_test_file.read_text(encoding="utf-8")
                 success, injected_behavior_test = inject_profiling_into_existing_test(
-                    test_string=test_string,
-                    mode=TestingMode.BEHAVIOR,
                     test_path=path_obj_test_file,
                     call_positions=[test.position for test in tests_in_file_list],
                     function_to_optimize=self.function_to_optimize,
                     tests_project_root=self.test_cfg.tests_project_rootdir,
+                    mode=TestingMode.BEHAVIOR,
                 )
                 if not success:
                     continue
                 success, injected_perf_test = inject_profiling_into_existing_test(
-                    test_string=test_string,
-                    mode=TestingMode.PERFORMANCE,
                     test_path=path_obj_test_file,
                     call_positions=[test.position for test in tests_in_file_list],
                     function_to_optimize=self.function_to_optimize,
                     tests_project_root=self.test_cfg.tests_project_rootdir,
+                    mode=TestingMode.PERFORMANCE,
                 )
                 if not success:
                     continue
