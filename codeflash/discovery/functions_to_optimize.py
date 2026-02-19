@@ -202,6 +202,8 @@ def get_files_for_language(
     ignore_dirs: set[str] = set()
     ignore_files: set[Path] = set()
     for p in ignore_paths:
+        p = Path(p) if not isinstance(p, Path) else p
+        if p.is_file():
         if p.is_file():
             ignore_files.add(p)
         else:
