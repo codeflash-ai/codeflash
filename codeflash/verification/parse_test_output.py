@@ -23,6 +23,11 @@ from codeflash.code_utils.code_utils import (
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.languages import is_java, is_javascript, is_python
 from codeflash.languages.javascript.parse import parse_jest_test_xml as _parse_jest_test_xml
+from codeflash.languages.java.parse import (
+    parse_java_test_xml as _parse_java_test_xml,
+    resolve_java_test_file_from_class_path,
+    resolve_java_test_file_from_module_path,
+)
 from codeflash.models.models import (
     ConcurrencyMetrics,
     FunctionTestInvocation,
@@ -147,42 +152,8 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         >>> # Should find: /path/to/tests/unittest/test_file.py
 
     """
-    # Handle Java class paths (convert dots to path and add .java extension)
-    # Java class paths look like "com.example.TestClass" and should map to
-    # src/test/java/com/example/TestClass.java
     if is_java():
-        logger.debug(f"[RESOLVE] Input: test_class_path={test_class_path}, base_dir={base_dir}")
-        # Convert dots to path separators
-        relative_path = test_class_path.replace(".", "/") + ".java"
-
-        # Try various locations
-        # 1. Directly under base_dir
-        potential_path = base_dir / relative_path
-        logger.debug(f"[RESOLVE] Attempt 1: checking {potential_path}")
-        if potential_path.exists():
-            logger.debug(f"[RESOLVE] Attempt 1 SUCCESS: found {potential_path}")
-            return potential_path
-
-        # 2. Under src/test/java relative to project root
-        project_root = base_dir.parent if base_dir.name == "java" else base_dir
-        while project_root.name not in ("", "/") and not (project_root / "pom.xml").exists():
-            project_root = project_root.parent
-        if (project_root / "pom.xml").exists():
-            potential_path = project_root / "src" / "test" / "java" / relative_path
-            logger.debug(f"[RESOLVE] Attempt 2: checking {potential_path} (project_root={project_root})")
-            if potential_path.exists():
-                logger.debug(f"[RESOLVE] Attempt 2 SUCCESS: found {potential_path}")
-                return potential_path
-
-        # 3. Search for the file in base_dir and its subdirectories
-        file_name = test_class_path.rsplit(".", maxsplit=1)[-1] + ".java"
-        logger.debug(f"[RESOLVE] Attempt 3: rglob for {file_name} in {base_dir}")
-        for java_file in base_dir.rglob(file_name):
-            logger.debug(f"[RESOLVE] Attempt 3 SUCCESS: rglob found {java_file}")
-            return java_file
-
-        logger.warning(f"[RESOLVE] FAILED to resolve {test_class_path} in base_dir {base_dir}")
-        return None
+        return resolve_java_test_file_from_class_path(test_class_path, base_dir)
 
     # Handle file paths (contain slashes and extensions like .js/.ts)
     if "/" in test_class_path or "\\" in test_class_path:
@@ -521,35 +492,9 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                     # Already a file path
                     test_file_path = test_config.tests_project_rootdir / test_module_path
             elif is_java_test:
-                # Java: test_module_path is the class name (e.g., "CounterTest")
-                # We need to find the test file by searching for it in the test files
-                test_file_path = None
-                for test_file in test_files.test_files:
-                    # Check instrumented behavior file path
-                    if test_file.instrumented_behavior_file_path:
-                        # Java class name is stored without package prefix in SQLite
-                        # Check if the file name matches the module path
-                        file_stem = test_file.instrumented_behavior_file_path.stem
-                        # The instrumented file has __perfinstrumented suffix
-                        original_class = file_stem.replace("__perfinstrumented", "").replace(
-                            "__perfonlyinstrumented", ""
-                        )
-                        if test_module_path in (original_class, file_stem):
-                            test_file_path = test_file.instrumented_behavior_file_path
-                            break
-                    # Check original file path
-                    if test_file.original_file_path:
-                        if test_file.original_file_path.stem == test_module_path:
-                            test_file_path = test_file.original_file_path
-                            break
-                if test_file_path is None:
-                    # Fallback: try to find by searching in tests_project_rootdir
-                    java_files = list(test_config.tests_project_rootdir.rglob(f"*{test_module_path}*.java"))
-                    if java_files:
-                        test_file_path = java_files[0]
-                    else:
-                        logger.debug(f"Could not find Java test file for module path: {test_module_path}")
-                        test_file_path = test_config.tests_project_rootdir / f"{test_module_path}.java"
+                test_file_path = resolve_java_test_file_from_module_path(
+                    test_module_path, test_files, test_config.tests_project_rootdir
+                )
             else:
                 # Python: convert module path to file path
                 test_file_path = file_path_from_module_name(test_module_path, test_config.tests_project_rootdir)
@@ -638,6 +583,10 @@ def parse_test_xml(
         return _parse_jest_test_xml(
             test_xml_file_path, test_files, test_config, run_result=run_result, parse_func=parse_func
         )
+    if is_java():
+        return _parse_java_test_xml(
+            test_xml_file_path, test_files, test_config, run_result=run_result, parse_func=parse_func
+        )
 
     test_results = TestResults()
     # Parse unittest output
@@ -656,25 +605,6 @@ def parse_test_xml(
     logger.debug(
         f"[PARSE-XML] Registered test files: {[str(tf.instrumented_behavior_file_path) for tf in test_files.test_files]}"
     )
-
-    # For Java: pre-parse fallback stdout once (not per testcase) to avoid O(n²) complexity
-    java_fallback_stdout = None
-    java_fallback_begin_matches = None
-    java_fallback_end_matches = None
-    if is_java() and run_result is not None:
-        try:
-            fallback_stdout = run_result.stdout if isinstance(run_result.stdout, str) else run_result.stdout.decode()
-            begin_matches = list(start_pattern.finditer(fallback_stdout))
-            if begin_matches:
-                java_fallback_stdout = fallback_stdout
-                java_fallback_begin_matches = begin_matches
-                java_fallback_end_matches = {}
-                for match in end_pattern.finditer(fallback_stdout):
-                    groups = match.groups()
-                    java_fallback_end_matches[groups[:5]] = match
-                logger.debug(f"Java: Found {len(begin_matches)} timing markers in subprocess stdout (fallback)")
-        except (AttributeError, UnicodeDecodeError):
-            pass
 
     for suite in xml:
         for testcase in suite:
@@ -772,32 +702,14 @@ def parse_test_xml(
 
             sys_stdout = testcase.system_out or ""
 
-            # Use different patterns for Java (5-field start, 6-field end) vs Python (6-field both)
-            # Java format: !$######module:class:func:loop:iter######$! (start)
-            #              !######module:class:func:loop:iter:duration######! (end)
-            if is_java():
-                begin_matches = list(start_pattern.finditer(sys_stdout))
-                end_matches = {}
-                for match in end_pattern.finditer(sys_stdout):
-                    groups = match.groups()
-                    # Key is first 5 groups (module, class, func, loop, iter)
-                    end_matches[groups[:5]] = match
-
-                # For Java: fallback to pre-parsed subprocess stdout when XML system-out has no timing markers
-                # This happens when using JUnit Console Launcher directly (bypassing Maven)
-                if not begin_matches and java_fallback_begin_matches is not None:
-                    sys_stdout = java_fallback_stdout
-                    begin_matches = java_fallback_begin_matches
-                    end_matches = java_fallback_end_matches
-            else:
-                begin_matches = list(matches_re_start.finditer(sys_stdout))
-                end_matches = {}
-                for match in matches_re_end.finditer(sys_stdout):
-                    groups = match.groups()
-                    if len(groups[5].split(":")) > 1:
-                        iteration_id = groups[5].split(":")[0]
-                        groups = (*groups[:5], iteration_id)
-                    end_matches[groups] = match
+            begin_matches = list(matches_re_start.finditer(sys_stdout))
+            end_matches = {}
+            for match in matches_re_end.finditer(sys_stdout):
+                groups = match.groups()
+                if len(groups[5].split(":")) > 1:
+                    iteration_id = groups[5].split(":")[0]
+                    groups = (*groups[:5], iteration_id)
+                end_matches[groups] = match
 
             # TODO: I am not sure if this is the correct approach. see if this was needed for test
             # pass/fail status extraction in python. otherwise not needed.
@@ -840,86 +752,41 @@ def parse_test_xml(
                 for match_index, match in enumerate(begin_matches):
                     groups = match.groups()
 
-                    # Java and Python have different marker formats:
-                    # Java:   5 groups - (module, class, func, loop_index, iteration_id)
-                    # Python: 6 groups - (module, class.test, _, func, loop_index, iteration_id)
-                    if is_java():
-                        # Java format: !$######module:class:func:loop:iter######$!
-                        end_key = groups[:5]  # Use all 5 groups as key
-                        end_match = end_matches.get(end_key)
-                        iteration_id = groups[4]  # iter is at index 4
-                        loop_idx = int(groups[3])  # loop is at index 3
-                        test_module = groups[0]  # module
-                        test_class_str = groups[1]  # class
-                        test_func = test_function  # Use the testcase name from XML
-                        func_getting_tested = groups[2]  # func being tested
-                        runtime = None
-
-                        if end_match:
-                            stdout = sys_stdout[match.end() : end_match.start()]
-                            runtime = int(end_match.groups()[5])  # duration is at index 5
-                        elif match_index == len(begin_matches) - 1:
-                            stdout = sys_stdout[match.end() :]
+                    end_match = end_matches.get(groups)
+                    iteration_id, runtime = groups[5], None
+                    if end_match:
+                        stdout = sys_stdout[match.end() : end_match.start()]
+                        split_val = end_match.groups()[5].split(":")
+                        if len(split_val) > 1:
+                            iteration_id = split_val[0]
+                            runtime = int(split_val[1])
                         else:
-                            stdout = sys_stdout[match.end() : begin_matches[match_index + 1].start()]
-
-                        test_results.add(
-                            FunctionTestInvocation(
-                                loop_index=loop_idx,
-                                id=InvocationId(
-                                    test_module_path=test_module,
-                                    test_class_name=test_class_str if test_class_str else None,
-                                    test_function_name=test_func,
-                                    function_getting_tested=func_getting_tested,
-                                    iteration_id=iteration_id,
-                                ),
-                                file_name=test_file_path,
-                                runtime=runtime,
-                                test_framework=test_config.test_framework,
-                                did_pass=result,
-                                test_type=test_type,
-                                return_value=None,
-                                timed_out=timed_out,
-                                stdout=stdout,
-                            )
-                        )
+                            iteration_id, runtime = split_val[0], None
+                    elif match_index == len(begin_matches) - 1:
+                        stdout = sys_stdout[match.end() :]
                     else:
-                        # Python format: 6 groups
-                        end_match = end_matches.get(groups)
-                        iteration_id, runtime = groups[5], None
-                        if end_match:
-                            stdout = sys_stdout[match.end() : end_match.start()]
-                            split_val = end_match.groups()[5].split(":")
-                            if len(split_val) > 1:
-                                iteration_id = split_val[0]
-                                runtime = int(split_val[1])
-                            else:
-                                iteration_id, runtime = split_val[0], None
-                        elif match_index == len(begin_matches) - 1:
-                            stdout = sys_stdout[match.end() :]
-                        else:
-                            stdout = sys_stdout[match.end() : begin_matches[match_index + 1].start()]
+                        stdout = sys_stdout[match.end() : begin_matches[match_index + 1].start()]
 
-                        test_results.add(
-                            FunctionTestInvocation(
-                                loop_index=int(groups[4]),
-                                id=InvocationId(
-                                    test_module_path=groups[0],
-                                    test_class_name=None if groups[1] == "" else groups[1][:-1],
-                                    test_function_name=groups[2],
-                                    function_getting_tested=groups[3],
-                                    iteration_id=iteration_id,
-                                ),
-                                file_name=test_file_path,
-                                runtime=runtime,
-                                test_framework=test_config.test_framework,
-                                did_pass=result,
-                                test_type=test_type,
-                                return_value=None,
-                                timed_out=timed_out,
-                                stdout=stdout,
-                            )
+                    test_results.add(
+                        FunctionTestInvocation(
+                            loop_index=int(groups[4]),
+                            id=InvocationId(
+                                test_module_path=groups[0],
+                                test_class_name=None if groups[1] == \"\" else groups[1][:-1],
+                                test_function_name=groups[2],
+                                function_getting_tested=groups[3],
+                                iteration_id=iteration_id,
+                            ),
+                            file_name=test_file_path,
+                            runtime=runtime,
+                            test_framework=test_config.test_framework,
+                            did_pass=result,
+                            test_type=test_type,
+                            return_value=None,
+                            timed_out=timed_out,
+                            stdout=stdout,
                         )
+                    )
 
     if not test_results:
         # Show actual test file paths being used (behavior or original), not just original_file_path
