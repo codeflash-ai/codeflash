@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.models.models import GeneratedTestsList, InvocationId
 
 from codeflash.languages.language_enum import Language
 from codeflash.models.function_types import FunctionParent
@@ -487,6 +488,87 @@ class LanguageSupport(Protocol):
 
         Returns:
             Test source code with specified functions removed.
+
+        """
+        ...
+
+    def postprocess_generated_tests(
+        self, generated_tests: GeneratedTestsList, test_framework: str, project_root: Path, source_file_path: Path
+    ) -> GeneratedTestsList:
+        """Apply language-specific postprocessing to generated tests.
+
+        Args:
+            generated_tests: Generated tests to update.
+            test_framework: Test framework used for the project.
+            project_root: Project root directory.
+            source_file_path: Path to the source file under optimization.
+
+        Returns:
+            Updated generated tests.
+
+        """
+        ...
+
+    def remove_test_functions_from_generated_tests(
+        self, generated_tests: GeneratedTestsList, functions_to_remove: list[str]
+    ) -> GeneratedTestsList:
+        """Remove specific test functions from generated tests.
+
+        Args:
+            generated_tests: Generated tests to update.
+            functions_to_remove: List of function names to remove.
+
+        Returns:
+            Updated generated tests.
+
+        """
+        ...
+
+    def add_runtime_comments_to_generated_tests(
+        self,
+        generated_tests: GeneratedTestsList,
+        original_runtimes: dict[InvocationId, list[int]],
+        optimized_runtimes: dict[InvocationId, list[int]],
+        tests_project_rootdir: Path | None = None,
+    ) -> GeneratedTestsList:
+        """Add runtime comments to generated tests.
+
+        Args:
+            generated_tests: Generated tests to update.
+            original_runtimes: Mapping of invocation IDs to original runtimes.
+            optimized_runtimes: Mapping of invocation IDs to optimized runtimes.
+            tests_project_rootdir: Root directory for tests (if applicable).
+
+        Returns:
+            Updated generated tests.
+
+        """
+        ...
+
+    def add_global_declarations(self, optimized_code: str, original_source: str, module_abspath: Path) -> str:
+        """Add new global declarations from optimized code to original source.
+
+        Args:
+            optimized_code: The optimized code that may contain new declarations.
+            original_source: The original source code.
+            module_abspath: Path to the module file (for parser selection).
+
+        Returns:
+            Original source with new declarations added.
+
+        """
+        ...
+
+    def extract_calling_function_source(self, source_code: str, function_name: str, ref_line: int) -> str | None:
+        """Extract the source code of a calling function.
+
+        Args:
+            source_code: Full source code of the file.
+            function_name: Name of the function to extract.
+            ref_line: Line number where the reference is.
+
+        Returns:
+            Source code of the function, or None if not found.
 
         """
         ...

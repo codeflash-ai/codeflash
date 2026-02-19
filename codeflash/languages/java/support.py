@@ -39,6 +39,7 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, TestInfo, TestResult
+    from codeflash.models.models import GeneratedTestsList, InvocationId
     from codeflash.languages.java.concurrency_analyzer import ConcurrencyInfo
 
 logger = logging.getLogger(__name__)
@@ -179,6 +180,50 @@ class JavaSupport(LanguageSupport):
     def remove_test_functions(self, test_source: str, functions_to_remove: list[str]) -> str:
         """Remove specific test functions from test source code."""
         return remove_test_functions(test_source, functions_to_remove, self._analyzer)
+
+    def postprocess_generated_tests(
+        self, generated_tests: GeneratedTestsList, test_framework: str, project_root: Path, source_file_path: Path
+    ) -> GeneratedTestsList:
+        """Apply language-specific postprocessing to generated tests."""
+        _ = test_framework, source_file_path
+        tests_root = getattr(self, "_tests_root", None)
+        if tests_root is None:
+            config = detect_java_project(project_root)
+            tests_root = config.test_root if config and config.test_root else project_root
+
+        from codeflash.languages.java.generated_tests import postprocess_generated_tests as _postprocess_generated_tests
+
+        return _postprocess_generated_tests(generated_tests, tests_root)
+
+    def remove_test_functions_from_generated_tests(
+        self, generated_tests: GeneratedTestsList, functions_to_remove: list[str]
+    ) -> GeneratedTestsList:
+        """Remove specific test functions from generated tests."""
+        from codeflash.code_utils.edit_generated_tests import remove_functions_from_generated_tests
+
+        return remove_functions_from_generated_tests(generated_tests, functions_to_remove)
+
+    def add_runtime_comments_to_generated_tests(
+        self,
+        generated_tests: GeneratedTestsList,
+        original_runtimes: dict[InvocationId, list[int]],
+        optimized_runtimes: dict[InvocationId, list[int]],
+        tests_project_rootdir: Path | None = None,
+    ) -> GeneratedTestsList:
+        """Add runtime comments to generated tests."""
+        from codeflash.code_utils.edit_generated_tests import add_runtime_comments_to_generated_tests
+
+        return add_runtime_comments_to_generated_tests(
+            generated_tests, original_runtimes, optimized_runtimes, tests_project_rootdir
+        )
+
+    def add_global_declarations(self, optimized_code: str, original_source: str, module_abspath: Path) -> str:
+        _ = optimized_code, module_abspath
+        return original_source
+
+    def extract_calling_function_source(self, source_code: str, function_name: str, ref_line: int) -> str | None:
+        _ = source_code, function_name, ref_line
+        return None
 
     # === Test Result Comparison ===
 
