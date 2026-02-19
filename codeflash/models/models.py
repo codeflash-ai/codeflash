@@ -937,9 +937,22 @@ class TestResults(BaseModel):  # noqa: PLW1641
 
         :return: The runtime in nanoseconds.
         """
+        # Bug #10 Debug: Log what we're summing
+        usable_data = self.usable_runtime_data_by_test_case()
+        from codeflash.cli_cmds.console import logger
+        logger.debug(f"Bug #10: total_passed_runtime - found {len(usable_data)} test cases with runtime data")
+        if len(usable_data) == 0:
+            logger.debug(f"Bug #10: No usable runtime data! Total test results: {len(self.test_results)}, "
+                        f"Passed: {sum(1 for r in self.test_results if r.did_pass)}, "
+                        f"With runtime: {sum(1 for r in self.test_results if r.runtime is not None)}")
+            # Log sample of test results to understand the issue
+            for i, result in enumerate(self.test_results[:3]):
+                logger.debug(f"Bug #10: Test result {i}: did_pass={result.did_pass}, runtime={result.runtime}, "
+                            f"test_type={result.test_type}, id={result.id.test_function_name}")
+
         # TODO this doesn't look at the intersection of tests of baseline and original
         return sum(
-            [min(usable_runtime_data) for _, usable_runtime_data in self.usable_runtime_data_by_test_case().items()]
+            [min(usable_runtime_data) for _, usable_runtime_data in usable_data.items()]
         )
 
     def file_to_no_of_tests(self, test_functions_to_remove: list[str]) -> Counter[Path]:
