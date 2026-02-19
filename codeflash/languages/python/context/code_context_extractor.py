@@ -255,7 +255,6 @@ def get_code_optimization_context_for_language(
                 fully_qualified_name=helper.qualified_name,
                 only_function_name=helper.name,
                 source_code=helper.source_code,
-                jedi_definition=None,
             )
         )
 
@@ -477,7 +476,6 @@ def get_function_to_optimize_as_function_source(
                     fully_qualified_name=name.full_name,
                     only_function_name=name.name,
                     source_code=name.get_line_code(),
-                    jedi_definition=name,
                 )
         except Exception as e:
             logger.exception(f"Error while getting function source: {e}")
@@ -545,7 +543,6 @@ def get_function_sources_from_jedi(
                                 fully_qualified_name=fqn,
                                 only_function_name=func_name,
                                 source_code=definition.get_line_code(),
-                                jedi_definition=definition,
                             )
                             file_path_to_function_source[definition_path].add(function_source)
                             function_source_list.append(function_source)

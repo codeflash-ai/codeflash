@@ -11,7 +11,13 @@ from typing import TYPE_CHECKING
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.api.cfapi import send_completion_email
-from codeflash.cli_cmds.console import call_graph_live_display, call_graph_summary, console, logger, progress_bar
+from codeflash.cli_cmds.console import (  # noqa: F401
+    call_graph_live_display,
+    call_graph_summary,
+    console,
+    logger,
+    progress_bar,
+)
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import cleanup_paths, get_run_tmp_file
 from codeflash.code_utils.env_utils import get_pr_number, is_pr_draft
