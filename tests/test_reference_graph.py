@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from codeflash.languages.base import IndexResult
-from codeflash.languages.python.call_graph import CallGraph
+from codeflash.languages.python.reference_graph import ReferenceGraph
 
 
 @pytest.fixture
@@ -46,7 +46,7 @@ def caller():
     return helper()
 """,
     )
-    cg = CallGraph(project, db_path=db_path)
+    cg = ReferenceGraph(project, db_path=db_path)
     try:
         _, result_list = cg.get_callees({project / "mod.py": {"caller"}})
         callee_qns = {fs.qualified_name for fs in result_list}
@@ -74,7 +74,7 @@ def caller():
     return utility()
 """,
     )
-    cg = CallGraph(project, db_path=db_path)
+    cg = ReferenceGraph(project, db_path=db_path)
     try:
         _, result_list = cg.get_callees({project / "main.py": {"caller"}})
         callee_qns = {fs.qualified_name for fs in result_list}
@@ -100,7 +100,7 @@ def caller():
     return obj
 """,
     )
-    cg = CallGraph(project, db_path=db_path)
+    cg = ReferenceGraph(project, db_path=db_path)
     try:
         _, result_list = cg.get_callees({project / "mod.py": {"caller"}})
         callee_types = {fs.definition_type for fs in result_list}
@@ -120,7 +120,7 @@ def caller():
     return inner()
 """,
     )
-    cg = CallGraph(project, db_path=db_path)
+    cg = ReferenceGraph(project, db_path=db_path)
     try:
         _, result_list = cg.get_callees({project / "mod.py": {"caller"}})
         assert len(result_list) == 0
@@ -139,7 +139,7 @@ def helper():
 x = helper()
 """,
     )
-    cg = CallGraph(project, db_path=db_path)
+    cg = ReferenceGraph(project, db_path=db_path)
     try:
         # Module level calls have no enclosing function, so no edges
         _, result_list = cg.get_callees({project / "mod.py": {"helper"}})
@@ -160,7 +160,7 @@ def caller():
     return os.path.join("a", "b")
 """,
     )
-    cg = CallGraph(project, db_path=db_path)
+    cg = ReferenceGraph(project, db_path=db_path)
     try:
         _, result_list = cg.get_callees({project / "mod.py": {"caller"}})
         # os.path.join is stdlib, should not appear
@@ -171,7 +171,7 @@ def caller():
 
 def test_empty_file(project: Path, db_path: Path) -> None:
     write_file(project, "mod.py", "")
-    cg = CallGraph(project, db_path=db_path)
+    cg = ReferenceGraph(project, db_path=db_path)
     try:
         _, result_list = cg.get_callees({project / "mod.py": set()})
         assert len(result_list) == 0
@@ -181,7 +181,7 @@ def test_empty_file(project: Path, db_path: Path) -> None:
 
 def test_syntax_error_file(project: Path, db_path: Path) -> None:
     write_file(project, "mod.py", "def broken(\n")
-    cg = CallGraph(project, db_path=db_path)
+    cg = ReferenceGraph(project, db_path=db_path)
     try:
         _, result_list = cg.get_callees({project / "mod.py": {"broken"}})
         assert len(result_list) == 0
@@ -206,7 +206,7 @@ def caller():
     return helper()
 """,
     )
-    cg = CallGraph(project, db_path=db_path)
+    cg = ReferenceGraph(project, db_path=db_path)
     try:
         cg.get_callees({project / "mod.py": {"caller"}})
         # Second call should use in-memory cache (hash unchanged)
@@ -231,7 +231,7 @@ def caller():
     return helper()
 """,
     )
-    cg = CallGraph(project, db_path=db_path)
+    cg = ReferenceGraph(project, db_path=db_path)
     try:
         _, result_list = cg.get_callees({project / "mod.py": {"caller"}})
         assert any(fs.qualified_name == "helper" for fs in result_list)
@@ -270,7 +270,7 @@ def caller():
 """,
     )
     # First session: index the file
-    cg1 = CallGraph(project, db_path=db_path)
+    cg1 = ReferenceGraph(project, db_path=db_path)
     try:
         _, result_list = cg1.get_callees({project / "mod.py": {"caller"}})
         assert any(fs.qualified_name == "helper" for fs in result_list)
@@ -278,7 +278,7 @@ def caller():
         cg1.close()
 
     # Second session: should read from DB without re-indexing
-    cg2 = CallGraph(project, db_path=db_path)
+    cg2 = ReferenceGraph(project, db_path=db_path)
     try:
         assert len(cg2.indexed_file_hashes) == 0  # in-memory cache is empty
         _, result_list = cg2.get_callees({project / "mod.py": {"caller"}})
@@ -310,7 +310,7 @@ def caller_b():
 """,
     )
 
-    cg = CallGraph(project, db_path=db_path)
+    cg = ReferenceGraph(project, db_path=db_path)
     try:
         progress_calls: list[IndexResult] = []
         files = [project / "a.py", project / "b.py"]
@@ -359,7 +359,7 @@ def caller_b():
 """,
     )
 
-    cg = CallGraph(project, db_path=db_path)
+    cg = ReferenceGraph(project, db_path=db_path)
     try:
         files = [project / "a.py", project / "b.py"]
         # First pass — fresh indexing
@@ -400,7 +400,7 @@ def caller():
 """,
     )
 
-    cg = CallGraph(project, db_path=db_path)
+    cg = ReferenceGraph(project, db_path=db_path)
     try:
         progress_calls: list[IndexResult] = []
         cg.build_index([project / "utils.py", project / "main.py"], on_progress=progress_calls.append)
@@ -436,7 +436,7 @@ def leaf():
 """,
     )
 
-    cg = CallGraph(project, db_path=db_path)
+    cg = ReferenceGraph(project, db_path=db_path)
     try:
         cg.build_index([project / "mod.py"])
         mod_path = project / "mod.py"
@@ -461,7 +461,7 @@ def caller():
 """,
     )
 
-    cg = CallGraph(project, db_path=db_path)
+    cg = ReferenceGraph(project, db_path=db_path)
     try:
         progress_calls: list[IndexResult] = []
         cg.build_index([project / "mod.py"], on_progress=progress_calls.append)
