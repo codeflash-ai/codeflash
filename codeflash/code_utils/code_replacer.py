@@ -17,7 +17,7 @@ from codeflash.code_utils.code_extractor import (
 )
 from codeflash.code_utils.config_parser import find_conftest_files
 from codeflash.code_utils.formatter import sort_imports
-from codeflash.code_utils.line_profile_utils import ImportAdder
+from codeflash.languages.python.static_analysis.line_profile_utils import ImportAdder
 from codeflash.languages import is_python
 from codeflash.models.models import FunctionParent
 

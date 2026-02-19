@@ -59,7 +59,7 @@ from codeflash.code_utils.config_consts import (
     get_effort_value,
 )
 from codeflash.code_utils.deduplicate_code import normalize_code
-from codeflash.code_utils.edit_generated_tests import (
+from codeflash.languages.python.static_analysis.edit_generated_tests import (
     add_runtime_comments_to_generated_tests,
     disable_ts_check,
     inject_test_globals,
@@ -70,7 +70,7 @@ from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.formatter import format_code, format_generated_code, sort_imports
 from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
-from codeflash.code_utils.line_profile_utils import add_decorator_imports, contains_jit_decorator
+from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports, contains_jit_decorator
 from codeflash.code_utils.shell_utils import make_env_with_project_root
 from codeflash.languages.python.static_analysis.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
