@@ -772,7 +772,7 @@ def parse_test_xml(
                             loop_index=int(groups[4]),
                             id=InvocationId(
                                 test_module_path=groups[0],
-                                test_class_name=None if groups[1] == \"\" else groups[1][:-1],
+                                test_class_name=None if groups[1] == "" else groups[1][:-1],
                                 test_function_name=groups[2],
                                 function_getting_tested=groups[3],
                                 iteration_id=iteration_id,
