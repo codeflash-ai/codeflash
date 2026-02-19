@@ -753,12 +753,12 @@ class PythonSupport:
         return True
 
     def create_dependency_resolver(self, project_root: Path) -> DependencyResolver | None:
-        from codeflash.languages.python.call_graph import CallGraph
+        from codeflash.languages.python.reference_graph import ReferenceGraph
 
         try:
-            return CallGraph(project_root, language=self.language.value)
+            return ReferenceGraph(project_root, language=self.language.value)
         except Exception:
-            logger.debug("Failed to initialize CallGraph, falling back to per-function Jedi analysis")
+            logger.debug("Failed to initialize ReferenceGraph, falling back to per-function Jedi analysis")
             return None
 
     def instrument_existing_test(

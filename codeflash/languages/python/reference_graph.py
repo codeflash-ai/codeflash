@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # Module-level helpers (must be top-level for ProcessPoolExecutor pickling)
 # ---------------------------------------------------------------------------
+# TODO: create call graph.
 
 _PARALLEL_THRESHOLD = 8
 
@@ -179,7 +180,7 @@ def _index_file_worker(args: tuple[str, str]) -> tuple[str, str, set[tuple[str, 
 # ---------------------------------------------------------------------------
 
 
-class CallGraph:
+class ReferenceGraph:
     SCHEMA_VERSION = 2
 
     def __init__(self, project_root: Path, language: str = "python", db_path: Path | None = None) -> None:
@@ -365,7 +366,7 @@ class CallGraph:
             resolved = str(file_path.resolve())
         edges, had_error = _analyze_file(file_path, self.jedi_project, self.project_root_str)
         if had_error:
-            logger.debug(f"CallGraph: failed to parse {file_path}")
+            logger.debug(f"ReferenceGraph: failed to parse {file_path}")
         return self._persist_edges(file_path, resolved, file_hash, edges, had_error)
 
     def _persist_edges(
@@ -493,7 +494,7 @@ class CallGraph:
         path_info: dict[str, tuple[Path, str]] = {resolved: (fp, fh) for fp, resolved, fh in to_index}
         worker_args = [(resolved, fh) for _fp, resolved, fh in to_index]
 
-        logger.debug(f"CallGraph: indexing {len(to_index)} files across {max_workers} workers")
+        logger.debug(f"ReferenceGraph: indexing {len(to_index)} files across {max_workers} workers")
 
         try:
             with ProcessPoolExecutor(
@@ -508,7 +509,7 @@ class CallGraph:
                     try:
                         _, _, edges, had_error = future.result()
                     except Exception:
-                        logger.debug(f"CallGraph: worker failed for {file_path}")
+                        logger.debug(f"ReferenceGraph: worker failed for {file_path}")
                         self._persist_edges(file_path, resolved, file_hash, set(), had_error=True)
                         self._report_progress(
                             on_progress,
@@ -519,13 +520,13 @@ class CallGraph:
                         continue
 
                     if had_error:
-                        logger.debug(f"CallGraph: failed to parse {file_path}")
+                        logger.debug(f"ReferenceGraph: failed to parse {file_path}")
 
                     result = self._persist_edges(file_path, resolved, file_hash, edges, had_error)
                     self._report_progress(on_progress, result)
 
         except Exception:
-            logger.debug("CallGraph: parallel indexing failed, falling back to sequential")
+            logger.debug("ReferenceGraph: parallel indexing failed, falling back to sequential")
             self._fallback_sequential_index(to_index, on_progress)
 
     def _fallback_sequential_index(
