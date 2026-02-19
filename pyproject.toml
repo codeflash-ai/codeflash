@@ -310,6 +310,9 @@ split-on-trailing-comma = false
 docstring-code-format = true
 skip-magic-trailing-comma = true
 
+[tool.ty.src]
+exclude = ["tests", "code_to_optimize", "pie_test_set", "experiments"]
+
 [tool.hatch.version]
 source = "uv-dynamic-versioning"
 
