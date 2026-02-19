@@ -39,7 +39,7 @@ dependencies = [
     "dill>=0.3.8",
     "rich>=13.8.1",
     "lxml>=5.3.0",
-    "crosshair-tool>=0.0.78",
+    "crosshair-tool>=0.0.78; python_version < '3.15'",
     "coverage>=7.6.4",
     "line_profiler>=4.2.0",
     "platformdirs>=4.3.7",
@@ -207,6 +207,8 @@ warn_unreachable = true
 install_types = true
 plugins = ["pydantic.mypy"]
 
+exclude = ["tests/", "code_to_optimize/", "pie_test_set/", "experiments/"]
+
 [[tool.mypy.overrides]]
 module = ["jedi", "jedi.api.classes", "inquirer", "inquirer.themes", "numba"]
 ignore_missing_imports = true
@@ -309,6 +311,9 @@ split-on-trailing-comma = false
 [tool.ruff.format]
 docstring-code-format = true
 skip-magic-trailing-comma = true
+
+[tool.ty.src]
+exclude = ["tests", "code_to_optimize", "pie_test_set", "experiments"]
 
 [tool.hatch.version]
 source = "uv-dynamic-versioning"

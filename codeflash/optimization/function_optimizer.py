@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import concurrent.futures
+import dataclasses
 import logging
 import os
 import queue
@@ -445,9 +446,12 @@ class FunctionOptimizer:
         replay_tests_dir: Path | None = None,
         call_graph: DependencyResolver | None = None,
     ) -> None:
-        self.project_root = test_cfg.project_root_path
+        self.project_root = test_cfg.project_root_path.resolve()
         self.test_cfg = test_cfg
         self.aiservice_client = aiservice_client if aiservice_client else AiServiceClient()
+        resolved_file_path = function_to_optimize.file_path.resolve()
+        if resolved_file_path != function_to_optimize.file_path:
+            function_to_optimize = dataclasses.replace(function_to_optimize, file_path=resolved_file_path)
         self.function_to_optimize = function_to_optimize
         self.function_to_optimize_source_code = (
             function_to_optimize_source_code
@@ -582,6 +586,7 @@ class FunctionOptimizer:
         test_results = self.generate_tests(
             testgen_context=code_context.testgen_context,
             helper_functions=code_context.helper_functions,
+            testgen_helper_fqns=code_context.testgen_helper_fqns,
             generated_test_paths=generated_test_paths,
             generated_perf_test_paths=generated_perf_test_paths,
         )
@@ -1453,7 +1458,7 @@ class FunctionOptimizer:
         optimized_code = ""
         if optimized_context is not None:
             file_to_code_context = optimized_context.file_to_path()
-            optimized_code = file_to_code_context.get(str(path.relative_to(self.project_root)), "")
+            optimized_code = file_to_code_context.get(str(path.resolve().relative_to(self.project_root)), "")
 
         new_code = format_code(
             self.args.formatter_cmds, path, optimized_code=optimized_code, check_diff=True, exit_on_failure=False
@@ -1524,7 +1529,8 @@ class FunctionOptimizer:
                 read_only_context_code=new_code_ctx.read_only_context_code,
                 hashing_code_context=new_code_ctx.hashing_code_context,
                 hashing_code_context_hash=new_code_ctx.hashing_code_context_hash,
-                helper_functions=new_code_ctx.helper_functions,  # only functions that are read writable
+                helper_functions=new_code_ctx.helper_functions,
+                testgen_helper_fqns=new_code_ctx.testgen_helper_fqns,
                 preexisting_objects=new_code_ctx.preexisting_objects,
             )
         )
@@ -1730,6 +1736,7 @@ class FunctionOptimizer:
         self,
         testgen_context: CodeStringsMarkdown,
         helper_functions: list[FunctionSource],
+        testgen_helper_fqns: list[str],
         generated_test_paths: list[Path],
         generated_perf_test_paths: list[Path],
     ) -> Result[tuple[int, GeneratedTestsList, dict[str, set[FunctionCalledInTest]], str], str]:
@@ -1738,13 +1745,9 @@ class FunctionOptimizer:
         assert len(generated_test_paths) == n_tests
 
         if not self.args.no_gen_tests:
-            # Submit test generation tasks
+            helper_fqns = testgen_helper_fqns or [definition.fully_qualified_name for definition in helper_functions]
             future_tests = self.submit_test_generation_tasks(
-                self.executor,
-                testgen_context.markdown,
-                [definition.fully_qualified_name for definition in helper_functions],
-                generated_test_paths,
-                generated_perf_test_paths,
+                self.executor, testgen_context.markdown, helper_fqns, generated_test_paths, generated_perf_test_paths
             )
 
         future_concolic_tests = self.executor.submit(

@@ -1171,7 +1171,12 @@ def test_repo_helper() -> None:
     code_ctx = get_code_optimization_context(function_to_optimize, project_root)
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     hashing_context = code_ctx.hashing_code_context
+    path_to_globals = project_root / "globals.py"
     expected_read_write_context = f"""
+```python:{path_to_globals.relative_to(project_root)}
+# Define a global variable
+API_URL = "https://api.example.com/data"
+```
 ```python:{path_to_utils.relative_to(project_root)}
 import math
 
@@ -1264,7 +1269,12 @@ def test_repo_helper_of_helper() -> None:
     code_ctx = get_code_optimization_context(function_to_optimize, project_root)
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     hashing_context = code_ctx.hashing_code_context
+    path_to_globals = project_root / "globals.py"
     expected_read_write_context = f"""
+```python:{path_to_globals.relative_to(project_root)}
+# Define a global variable
+API_URL = "https://api.example.com/data"
+```
 ```python:{path_to_utils.relative_to(project_root)}
 import math
 from transform_utils import DataTransformer
@@ -1991,6 +2001,8 @@ class Calculator:
 """
         expected_read_only_context = """
 ```python:utility_module.py
+import sys
+
 DEFAULT_PRECISION = "medium"
 
 # Try-except block with variable definitions
@@ -2000,6 +2012,17 @@ try:
 except ImportError:
     # Used variable in except block
     CALCULATION_BACKEND = "python"
+
+# Nested if-else with variable definitions
+if sys.platform.startswith('win'):
+    # Used variable in outer if
+    SYSTEM_TYPE = "windows"
+elif sys.platform.startswith('linux'):
+    # Used variable in outer elif
+    SYSTEM_TYPE = "linux"
+else:
+    # Used variable in outer else
+    SYSTEM_TYPE = "other"
 
 # Function that will be used in the main code
 def select_precision(precision, fallback_precision):
@@ -2207,6 +2230,8 @@ def get_system_details():
         relative_path = file_path.relative_to(project_root)
         expected_read_write_context = f"""
 ```python:utility_module.py
+import sys
+
 DEFAULT_PRECISION = "medium"
 
 # Try-except block with variable definitions
@@ -2216,6 +2241,17 @@ try:
 except ImportError:
     # Used variable in except block
     CALCULATION_BACKEND = "python"
+
+# Nested if-else with variable definitions
+if sys.platform.startswith('win'):
+    # Used variable in outer if
+    SYSTEM_TYPE = "windows"
+elif sys.platform.startswith('linux'):
+    # Used variable in outer elif
+    SYSTEM_TYPE = "linux"
+else:
+    # Used variable in outer else
+    SYSTEM_TYPE = "other"
 
 # Function that will be used in the main code
 def select_precision(precision, fallback_precision):
@@ -2257,6 +2293,8 @@ class Calculator:
 """
         expected_read_only_context = """
 ```python:utility_module.py
+import sys
+
 DEFAULT_PRECISION = "medium"
 
 # Try-except block with variable definitions
@@ -2266,6 +2304,17 @@ try:
 except ImportError:
     # Used variable in except block
     CALCULATION_BACKEND = "python"
+
+# Nested if-else with variable definitions
+if sys.platform.startswith('win'):
+    # Used variable in outer if
+    SYSTEM_TYPE = "windows"
+elif sys.platform.startswith('linux'):
+    # Used variable in outer elif
+    SYSTEM_TYPE = "linux"
+else:
+    # Used variable in outer else
+    SYSTEM_TYPE = "other"
 ```
 """
         assert read_write_context.markdown.strip() == expected_read_write_context.strip()

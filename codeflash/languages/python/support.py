@@ -76,6 +76,37 @@ class PythonSupport:
     def comment_prefix(self) -> str:
         return "#"
 
+    @property
+    def dir_excludes(self) -> frozenset[str]:
+        return frozenset(
+            {
+                "__pycache__",
+                ".venv",
+                "venv",
+                ".tox",
+                ".nox",
+                ".eggs",
+                ".mypy_cache",
+                ".ruff_cache",
+                ".pytest_cache",
+                ".hypothesis",
+                "htmlcov",
+                ".pytype",
+                ".pyre",
+                ".pybuilder",
+                ".ipynb_checkpoints",
+                ".codeflash",
+                ".cache",
+                ".complexipy_cache",
+                "build",
+                "dist",
+                "sdist",
+                ".coverage*",
+                ".pyright*",
+                "*.egg-info",
+            }
+        )
+
     # === Discovery ===
 
     def discover_functions(

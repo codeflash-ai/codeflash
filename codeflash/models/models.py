@@ -379,6 +379,7 @@ class CodeOptimizationContext(BaseModel):
     hashing_code_context: str = ""
     hashing_code_context_hash: str = ""
     helper_functions: list[FunctionSource]
+    testgen_helper_fqns: list[str] = []
     preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]]
 
 
