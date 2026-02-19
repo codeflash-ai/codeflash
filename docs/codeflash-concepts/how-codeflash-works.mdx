@@ -3,25 +3,31 @@ title: "How Codeflash Works"
 description: "Understand Codeflash's generate-and-verify approach to code optimization and correctness verification"
 icon: "gear"
 sidebarTitle: "How It Works"
-keywords: ["architecture", "verification", "correctness", "testing", "optimization", "LLM", "benchmarking"]
+keywords: ["architecture", "verification", "correctness", "testing", "optimization", "LLM", "benchmarking", "javascript", "typescript", "python"]
 ---
 # How Codeflash Works
 
 Codeflash follows a "generate and verify" approach to optimize code. It uses LLMs to generate optimizations, then it rigorously verifies if those optimizations are indeed
 faster and if they have the same behavior. The basic unit of optimization is a function—Codeflash tries to speed up the function, and tries to ensure that it still behaves the same way. This way if you merge the optimized code, it simply runs faster without breaking any functionality.
 
+Codeflash supports **Python**, **JavaScript**, and **TypeScript** projects.
+
 ## Analysis of your code
 
 Codeflash scans your codebase to identify all available functions. It locates existing unit tests in your projects and maps which functions they test. When optimizing a function, Codeflash runs these discovered tests to verify nothing has broken.
 
+For Python, code analysis uses `libcst` and `jedi`. For JavaScript/TypeScript, it uses `tree-sitter` for AST parsing.
+
 #### What kind of functions can Codeflash optimize?
 
 Codeflash works best with self-contained functions that have minimal side effects (like communicating with external systems or sending network requests). Codeflash optimizes a group of functions - consisting of an entry point function and any other functions it directly calls.
-Codeflash supports optimizing async functions.
+Codeflash supports optimizing async functions in all supported languages.
 
 #### Test Discovery
 
-Codeflash currently only runs tests that directly call the target function in their test body. To discover tests that indirectly call the function, you can use the Codeflash Tracer. The Tracer analyzes your test suite and identifies all tests that eventually call a function.
+Codeflash discovers tests that directly call the target function in their test body. For Python, it finds pytest and unittest tests. For JavaScript/TypeScript, it finds Jest and Vitest test files.
+
+To discover tests that indirectly call the function, you can use the Codeflash Tracer. The Tracer analyzes your test suite and identifies all tests that eventually call a function.
 
 ## Optimization Generation
 
@@ -48,12 +54,12 @@ We recommend manually reviewing the optimized code since there might be importan
 
 Codeflash generates two types of tests:
 
-- LLM Generated tests - Codeflash uses LLMs to create several regression test cases that cover typical function usage, edge cases, and large-scale inputs to verify both correctness and performance.
-- Concolic coverage tests - Codeflash uses state-of-the-art concolic testing with an SMT Solver (a theorem prover) to explore execution paths and generate function arguments. This aims to maximize code coverage for the function being optimized. Codeflash runs the resulting test file to verify correctness. Currently, this feature only supports pytest.
+- **LLM Generated tests** - Codeflash uses LLMs to create several regression test cases that cover typical function usage, edge cases, and large-scale inputs to verify both correctness and performance. This works for Python, JavaScript, and TypeScript.
+- **Concolic coverage tests** - Codeflash uses state-of-the-art concolic testing with an SMT Solver (a theorem prover) to explore execution paths and generate function arguments. This aims to maximize code coverage for the function being optimized. Currently, this feature only supports Python (pytest).
 
 ## Code Execution
 
-Codeflash runs tests for the target function using either pytest or unittest frameworks. The tests execute on your machine, ensuring access to the Python environment and any other dependencies associated to let Codeflash run your code properly. Running on your machine also ensures accurate performance measurements since runtime varies by system.
+Codeflash runs tests for the target function on your machine. For Python, it uses pytest or unittest. For JavaScript/TypeScript, it uses Jest or Vitest. Running on your machine ensures access to your environment and dependencies, and provides accurate performance measurements since runtime varies by system.
 
 #### Performance benchmarking
 

@@ -1,0 +1,80 @@
+---
+title: "Python Configuration"
+description: "Configure Codeflash for Python projects using pyproject.toml"
+icon: "python"
+sidebarTitle: "Python"
+keywords:
+  [
+    "configuration",
+    "pyproject.toml",
+    "python",
+    "pytest",
+    "formatter",
+    "ruff",
+    "black",
+  ]
+---
+
+# Python Configuration
+
+Codeflash stores its configuration in `pyproject.toml` under the `[tool.codeflash]` section.
+
+## Full Reference
+
+```toml
+[tool.codeflash]
+# Required
+module-root = "my_module"
+tests-root = "tests"
+
+# Optional
+formatter-cmds = ["black $file"]
+benchmarks-root = "tests/benchmarks"
+ignore-paths = ["my_module/build/"]
+pytest-cmd = "pytest"
+disable-imports-sorting = false
+disable-telemetry = false
+git-remote = "origin"
+override-fixtures = false
+```
+
+All file paths are relative to the directory of the `pyproject.toml` file.
+
+## Required Options
+
+- `module-root`: The Python module to optimize. Only code under this directory will be optimized. It should have an `__init__.py` file to make the module importable.
+- `tests-root`: The directory where your tests are located. Codeflash discovers existing tests and generates new ones here.
+
+## Optional Options
+
+- `benchmarks-root`: Directory for benchmarks. Required when running with `--benchmark`.
+- `ignore-paths`: Paths within `module-root` to skip. Useful for build directories or generated code.
+- `pytest-cmd`: Command to run your tests. Defaults to `pytest`. You can add extra arguments here.
+- `formatter-cmds`: Formatter/linter commands. `$file` refers to the file being optimized. Disable with `["disabled"]`.
+  - **ruff** (recommended): `["ruff check --exit-zero --fix $file", "ruff format $file"]`
+  - **black**: `["black $file"]`
+- `disable-imports-sorting`: Disable isort import sorting. Defaults to `false`.
+- `disable-telemetry`: Disable anonymized telemetry. Defaults to `false`.
+- `git-remote`: Git remote for pull requests. Defaults to `"origin"`.
+- `override-fixtures`: Override pytest fixtures during optimization. Defaults to `false`.
+
+## Example
+
+```text
+acme-project/
+|- foo_module/
+|  |- __init__.py
+|  |- foo.py
+|  |- main.py
+|- tests/
+|  |- __init__.py
+|  |- test_script.py
+|- pyproject.toml
+```
+
+```toml
+[tool.codeflash]
+module-root = "foo_module"
+tests-root = "tests"
+ignore-paths = []
+```

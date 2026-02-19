@@ -1,0 +1,110 @@
+---
+title: "JavaScript / TypeScript Configuration"
+description: "Configure Codeflash for JavaScript and TypeScript projects using package.json"
+icon: "js"
+sidebarTitle: "JavaScript / TypeScript"
+keywords:
+  [
+    "configuration",
+    "package.json",
+    "javascript",
+    "typescript",
+    "jest",
+    "vitest",
+    "prettier",
+    "eslint",
+  ]
+---
+
+# JavaScript / TypeScript Configuration
+
+Codeflash stores its configuration in `package.json` under the `"codeflash"` key.
+
+## Full Reference
+
+```json
+{
+  "name": "my-project",
+  "codeflash": {
+    "moduleRoot": "src",
+    "testsRoot": "tests",
+    "testRunner": "jest",
+    "formatterCmds": ["prettier --write $file"],
+    "ignorePaths": ["src/generated/"],
+    "disableTelemetry": false,
+    "gitRemote": "origin"
+  }
+}
+```
+
+All file paths are relative to the directory containing `package.json`.
+
+<Info>
+Codeflash auto-detects most settings from your project structure. If `codeflash init` produces the right config, you may not need any manual configuration.
+</Info>
+
+## Required Options
+
+- `moduleRoot`: The source directory to optimize. Only code under this directory will be optimized.
+- `testsRoot`: The directory where your tests are located. Codeflash discovers existing tests and generates new ones here.
+
+## Optional Options
+
+- `testRunner`: Test framework to use. Auto-detected from your dependencies. Supported values: `"jest"`, `"vitest"`.
+- `formatterCmds`: Formatter commands. `$file` refers to the file being optimized. Disable with `["disabled"]`.
+  - **Prettier**: `["prettier --write $file"]`
+  - **ESLint + Prettier**: `["eslint --fix $file", "prettier --write $file"]`
+  - **Biome**: `["biome check --write $file"]`
+- `ignorePaths`: Paths within `moduleRoot` to skip during optimization.
+- `disableTelemetry`: Disable anonymized telemetry. Defaults to `false`.
+- `gitRemote`: Git remote for pull requests. Defaults to `"origin"`.
+
+## Module Systems
+
+Codeflash handles both ES Modules and CommonJS automatically. It detects the module system from your `package.json`:
+
+```json
+{
+  "type": "module"
+}
+```
+
+- `"type": "module"` — Files are treated as ESM (`import`/`export`)
+- `"type": "commonjs"` or omitted — Files are treated as CommonJS (`require`/`module.exports`)
+
+No additional configuration is needed. Codeflash respects `.mjs`/`.cjs` extensions as well.
+
+## TypeScript
+
+TypeScript projects work out of the box. Codeflash detects TypeScript from the presence of `tsconfig.json` and handles `.ts`/`.tsx` files automatically.
+
+No separate configuration is needed for TypeScript vs JavaScript.
+
+## Test Framework Support
+
+| Framework | Auto-detected from | Notes |
+|-----------|-------------------|-------|
+| **Jest** | `jest` in dependencies | Default for most projects |
+| **Vitest** | `vitest` in dependencies | ESM-native support |
+
+## Example
+
+```text
+my-app/
+|- src/
+|  |- utils.js
+|  |- index.js
+|- tests/
+|  |- utils.test.js
+|- package.json
+```
+
+```json
+{
+  "name": "my-app",
+  "codeflash": {
+    "moduleRoot": "src",
+    "testsRoot": "tests"
+  }
+}
+```
