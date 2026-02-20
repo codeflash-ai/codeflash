@@ -7,8 +7,11 @@ context subscriptions, and optimization opportunities from React components.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
+
+from codeflash.languages.javascript.frameworks.react.analyzer import detect_optimization_opportunities
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -18,6 +21,12 @@ if TYPE_CHECKING:
     from codeflash.languages.javascript.frameworks.react.analyzer import OptimizationOpportunity
     from codeflash.languages.javascript.frameworks.react.discovery import ReactComponentInfo
     from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer
+
+_HOOK_PATTERN = re.compile(r"\b(use[A-Z]\w*)\s*(?:<[^>]*>)?\s*\(")
+
+_JSX_COMPONENT_RE = re.compile(r"<([A-Z][a-zA-Z0-9.]*)")
+
+_CONTEXT_RE = re.compile(r"\buseContext\s*\(\s*(\w+)")
 
 logger = logging.getLogger(__name__)
 
@@ -83,8 +92,6 @@ def extract_react_context(
     Analyzes the component source to find props types, hooks, child components,
     and optimization opportunities.
     """
-    from codeflash.languages.javascript.frameworks.react.analyzer import detect_optimization_opportunities
-
     context = ReactContext(props_interface=component_info.props_type, is_already_memoized=component_info.is_memoized)
 
     # Extract hook usage details from the component source
@@ -109,42 +116,45 @@ def extract_react_context(
 
 def _extract_hook_usages(component_source: str) -> list[HookUsage]:
     """Parse hook calls and their dependency arrays from component source."""
-    import re
-
     hooks: list[HookUsage] = []
-    # Match useXxx( patterns
-    hook_pattern = re.compile(r"\b(use[A-Z]\w*)\s*(?:<[^>]*>)?\s*\(")
+    cs = component_source
+    n = len(cs)
 
-    for match in hook_pattern.finditer(component_source):
+    # Use precompiled pattern
+    for match in _HOOK_PATTERN.finditer(cs):
         hook_name = match.group(1)
-        # Try to determine if there's a dependency array
-        # Look for ], [ pattern after the hook call (simplified heuristic)
-        rest_of_line = component_source[match.end() :]
         has_deps = False
         dep_count = 0
 
         # Simple heuristic: count brackets to find dependency array
         bracket_depth = 1
-        for i, char in enumerate(rest_of_line):
+        j = match.end()
+        # Scan by index to avoid allocating a new substring for the rest_of_line on each iteration
+        while j < n:
+            char = cs[j]
             if char == "(":
                 bracket_depth += 1
             elif char == ")":
                 bracket_depth -= 1
                 if bracket_depth == 0:
-                    # Check if the last argument before closing paren is an array
-                    preceding = rest_of_line[:i].rstrip()
-                    if preceding.endswith("]"):
+                    # Find last non-space character before this closing paren
+                    k = j - 1
+                    while k >= match.end() and cs[k].isspace():
+                        k -= 1
+                    if k >= match.end() and cs[k] == "]":
                         has_deps = True
-                        # Count items in the array (rough: count commas + 1 for non-empty)
-                        array_start = preceding.rfind("[")
+                        # Find the opening '[' for the dependency array within the search window
+                        array_start = cs.rfind("[", match.end(), k + 1)
                         if array_start >= 0:
-                            array_content = preceding[array_start + 1 : -1].strip()
+                            array_content = cs[array_start + 1 : k].strip()
                             if array_content:
                                 dep_count = array_content.count(",") + 1
                             else:
                                 dep_count = 0  # empty deps []
                                 has_deps = True
                     break
+
+            j += 1
 
         hooks.append(HookUsage(name=hook_name, has_dependency_array=has_deps, dependency_count=dep_count))
 
@@ -153,12 +163,8 @@ def _extract_hook_usages(component_source: str) -> list[HookUsage]:
 
 def _extract_child_components(component_source: str, analyzer: TreeSitterAnalyzer, full_source: str) -> list[str]:
     """Find child component names rendered in JSX."""
-    import re
-
-    # Match JSX tags that start with uppercase (React components)
-    jsx_component_re = re.compile(r"<([A-Z][a-zA-Z0-9.]*)")
     children = set()
-    for match in jsx_component_re.finditer(component_source):
+    for match in _JSX_COMPONENT_RE.finditer(component_source):
         name = match.group(1)
         # Skip React built-ins like React.Fragment
         if name not in ("React.Fragment", "Fragment", "Suspense", "React.Suspense"):
@@ -168,10 +174,7 @@ def _extract_child_components(component_source: str, analyzer: TreeSitterAnalyze
 
 def _extract_context_subscriptions(component_source: str) -> list[str]:
     """Find React context subscriptions via useContext calls."""
-    import re
-
-    context_re = re.compile(r"\buseContext\s*\(\s*(\w+)")
-    return [match.group(1) for match in context_re.finditer(component_source)]
+    return [match.group(1) for match in _CONTEXT_RE.finditer(component_source)]
 
 
 def _find_type_definition(type_name: str, source: str, analyzer: TreeSitterAnalyzer) -> str | None:
