@@ -129,7 +129,7 @@ def _is_inside_complex_expression(node) -> bool:
             "parenthesized_expression",
             "instanceof_expression",
         }:
-            logger.debug(f"Found complex expression parent: {current.type}")
+            logger.debug("Found complex expression parent: %s", current.type)
             return True
 
         current = current.parent
@@ -737,7 +737,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 if not _is_inside_lambda(node) and not _is_inside_complex_expression(node):
                     out.append(node)
                 else:
-                    logger.debug(f"Skipping instrumentation of {func} inside lambda or complex expression")
+                    logger.debug("Skipping instrumentation of %s inside lambda or complex expression", func)
         for child in node.children:
             collect_target_calls(child, wrapper_bytes, func, out)
 
