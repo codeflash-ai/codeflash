@@ -10,10 +10,11 @@ import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from tree_sitter import Node
 
     from codeflash.languages.javascript.treesitter import FunctionNode, TreeSitterAnalyzer
@@ -191,11 +192,7 @@ def _node_contains_jsx(node: Node) -> bool:
             if _node_contains_jsx(child):
                 return True
 
-    for child in node.children:
-        if _node_contains_jsx(child):
-            return True
-
-    return False
+    return any(_node_contains_jsx(child) for child in node.children)
 
 
 HOOK_EXTRACT_RE = re.compile(r"\b(use[A-Z]\w*)\s*(?:<[^>]*>)?\s*\(")

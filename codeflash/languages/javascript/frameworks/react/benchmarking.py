@@ -28,22 +28,14 @@ class RenderBenchmark:
         """Percentage reduction in render count (0-100)."""
         if self.original_render_count == 0:
             return 0.0
-        return (
-            (self.original_render_count - self.optimized_render_count)
-            / self.original_render_count
-            * 100
-        )
+        return (self.original_render_count - self.optimized_render_count) / self.original_render_count * 100
 
     @property
     def duration_reduction_pct(self) -> float:
         """Percentage reduction in render duration (0-100)."""
         if self.original_avg_duration_ms == 0:
             return 0.0
-        return (
-            (self.original_avg_duration_ms - self.optimized_avg_duration_ms)
-            / self.original_avg_duration_ms
-            * 100
-        )
+        return (self.original_avg_duration_ms - self.optimized_avg_duration_ms) / self.original_avg_duration_ms * 100
 
     @property
     def render_speedup_x(self) -> float:
@@ -54,8 +46,7 @@ class RenderBenchmark:
 
 
 def compare_render_benchmarks(
-    original_profiles: list[RenderProfile],
-    optimized_profiles: list[RenderProfile],
+    original_profiles: list[RenderProfile], optimized_profiles: list[RenderProfile]
 ) -> RenderBenchmark | None:
     """Compare original and optimized render profiles.
 
