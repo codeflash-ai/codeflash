@@ -112,74 +112,7 @@ class PythonSupport:
     def discover_functions(
         self, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
     ) -> list[FunctionToOptimize]:
-        """Find all optimizable functions in a Python file.
-
-        Uses libcst to parse the file and find functions with return statements.
-
-        Args:
-            file_path: Path to the Python file to analyze.
-            filter_criteria: Optional criteria to filter functions.
-
-        Returns:
-            List of FunctionToOptimize objects for discovered functions.
-
-        """
-        import libcst as cst
-
-        from codeflash.discovery.functions_to_optimize import FunctionVisitor
-
-        criteria = filter_criteria or FunctionFilterCriteria()
-
-        try:
-            # Read and parse the file using libcst with metadata
-            source = file_path.read_text(encoding="utf-8")
-            try:
-                tree = cst.parse_module(source)
-            except Exception:
-                return []
-
-            # Use the libcst-based FunctionVisitor for accurate line numbers
-            wrapper = cst.metadata.MetadataWrapper(tree)
-            function_visitor = FunctionVisitor(file_path=str(file_path))
-            wrapper.visit(function_visitor)
-
-            functions: list[FunctionToOptimize] = []
-            for func in function_visitor.functions:
-                if not isinstance(func, FunctionToOptimize):
-                    continue
-
-                # Apply filter criteria
-                if not criteria.include_async and func.is_async:
-                    continue
-
-                if not criteria.include_methods and func.parents:
-                    continue
-
-                # Check for return statement requirement (FunctionVisitor already filters this)
-                # but we double-check here for consistency
-                if criteria.require_return and func.starting_line is None:
-                    continue
-
-                # Add is_method field based on parents
-                func_with_is_method = FunctionToOptimize(
-                    function_name=func.function_name,
-                    file_path=file_path,
-                    parents=func.parents,
-                    starting_line=func.starting_line,
-                    ending_line=func.ending_line,
-                    starting_col=func.starting_col,
-                    ending_col=func.ending_col,
-                    is_async=func.is_async,
-                    is_method=len(func.parents) > 0 and any(p.type == "ClassDef" for p in func.parents),
-                    language="python",
-                )
-                functions.append(func_with_is_method)
-
-            return functions
-
-        except Exception as e:
-            logger.warning("Failed to discover functions in %s: %s", file_path, e)
-            return []
+        raise NotImplementedError
 
     def discover_tests(
         self, test_root: Path, source_functions: Sequence[FunctionToOptimize]
