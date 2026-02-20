@@ -869,17 +869,16 @@ def _extract_type_names_from_code(code: str, analyzer: JavaAnalyzer) -> set[str]
 
     type_names: set[str] = set()
     try:
-        tree = analyzer.parse(code)
         source_bytes = code.encode("utf8")
+        tree = analyzer.parse(source_bytes)
 
-        def collect_type_identifiers(node: Node) -> None:
+        stack = [tree.root_node]
+        while stack:
+            node = stack.pop()
             if node.type == "type_identifier":
                 name = source_bytes[node.start_byte : node.end_byte].decode("utf8")
                 type_names.add(name)
-            for child in node.children:
-                collect_type_identifiers(child)
-
-        collect_type_identifiers(tree.root_node)
+            stack.extend(node.children)
     except Exception:
         pass
 
