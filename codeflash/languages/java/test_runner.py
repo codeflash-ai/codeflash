@@ -1240,7 +1240,7 @@ def _run_maven_tests(
         " --add-opens java.base/java.util.zip=ALL-UNNAMED"
     )
     if javaagent_arg:
-        cmd.append(f"-DargLine={javaagent_arg} {add_opens_flags}")
+        cmd.append(f'-DargLine="{javaagent_arg} {add_opens_flags}"')
     else:
         cmd.append(f"-DargLine={add_opens_flags}")
 
