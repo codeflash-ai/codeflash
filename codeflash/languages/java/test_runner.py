@@ -621,13 +621,7 @@ def _run_tests_direct(
     is_junit4 = False
     # Check if org.junit.runner.JUnitCore is in classpath (JUnit 4)
     # and org.junit.platform.console.ConsoleLauncher is not (JUnit 5)
-    check_junit4_cmd = [
-        str(java),
-        "-cp",
-        classpath,
-        "org.junit.runner.JUnitCore",
-        "-version"
-    ]
+    check_junit4_cmd = [str(java), "-cp", classpath, "org.junit.runner.JUnitCore", "-version"]
     try:
         result = subprocess.run(check_junit4_cmd, capture_output=True, text=True, timeout=2)
         # JUnit 4's JUnitCore will show version, JUnit 5 won't have this class

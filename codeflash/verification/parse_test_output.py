@@ -26,10 +26,10 @@ from codeflash.models.models import (
     ConcurrencyMetrics,
     FunctionTestInvocation,
     InvocationId,
+    TestingMode,
     TestResults,
     TestType,
     VerificationType,
-    TestingMode,
 )
 from codeflash.verification.coverage_utils import CoverageUtils, JacocoCoverageUtils, JestCoverageUtils
 
@@ -1521,7 +1521,7 @@ def parse_test_results(
     code_context: CodeOptimizationContext | None = None,
     run_result: subprocess.CompletedProcess | None = None,
     skip_sqlite_cleanup: bool = False,
-    testing_type: TestingMode = TestingMode.BEHAVIOR
+    testing_type: TestingMode = TestingMode.BEHAVIOR,
 ) -> tuple[TestResults, CoverageData | None]:
     test_results_xml = parse_test_xml(
         test_xml_path, test_files=test_files, test_config=test_config, run_result=run_result
@@ -1584,10 +1584,12 @@ def parse_test_results(
         try:
             # Extract stdout from subprocess result containing timing markers
             if isinstance(run_result.stdout, bytes):
-                results.perf_stdout = run_result.stdout.decode('utf-8', errors='replace')
+                results.perf_stdout = run_result.stdout.decode("utf-8", errors="replace")
             elif isinstance(run_result.stdout, str):
                 results.perf_stdout = run_result.stdout
-            logger.debug(f"Bug #10 Fix: Set perf_stdout for Java performance tests ({len(results.perf_stdout or '')} chars)")
+            logger.debug(
+                f"Bug #10 Fix: Set perf_stdout for Java performance tests ({len(results.perf_stdout or '')} chars)"
+            )
         except Exception as e:
             logger.debug(f"Bug #10 Fix: Failed to set perf_stdout: {e}")
 
