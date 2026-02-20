@@ -6,6 +6,7 @@ supporting both behavioral testing and benchmarking modes.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import re
@@ -570,7 +571,7 @@ def _get_test_classpath(
                 if module_dir.is_dir() and module_dir.name != test_module:
                     module_classes = module_dir / "target" / "classes"
                     if module_classes.exists():
-                        logger.debug(f"Adding multi-module classpath: {module_classes}")
+                        logger.debug("Adding multi-module classpath: %s", module_classes)
                         cp_parts.append(str(module_classes))
 
         # Add JUnit Platform Console Standalone JAR if not already on classpath.
@@ -612,7 +613,7 @@ def _find_junit_console_standalone() -> Path | None:
         mvn = find_maven_executable()
         if mvn:
             logger.debug("Console standalone not found in cache, downloading via Maven")
-            try:
+            with contextlib.suppress(subprocess.TimeoutExpired, Exception):
                 subprocess.run(
                     [
                         mvn,
@@ -626,14 +627,16 @@ def _find_junit_console_standalone() -> Path | None:
                     text=True,
                     timeout=30,
                 )
-            except (subprocess.TimeoutExpired, Exception):
-                pass
         if not m2_base.exists():
             return None
 
     # Find the latest version available
     try:
-        versions = sorted([d for d in m2_base.iterdir() if d.is_dir()], key=lambda d: tuple(int(x) for x in d.name.split('.') if x.isdigit()), reverse=True)
+        versions = sorted(
+            [d for d in m2_base.iterdir() if d.is_dir()],
+            key=lambda d: tuple(int(x) for x in d.name.split(".") if x.isdigit()),
+            reverse=True,
+        )
         for version_dir in versions:
             jar = version_dir / f"junit-platform-console-standalone-{version_dir.name}.jar"
             if jar.exists():

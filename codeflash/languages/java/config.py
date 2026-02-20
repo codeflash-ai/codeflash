@@ -205,13 +205,13 @@ def _detect_test_deps_from_pom(project_root: Path) -> tuple[bool, bool, bool]:
 
                 if group_id == "org.junit.jupiter" or (artifact_id and "junit-jupiter" in artifact_id):
                     has_junit5 = True
-                    logger.debug(f"Found JUnit 5 dependency: {group_id}:{artifact_id}")
+                    logger.debug("Found JUnit 5 dependency: %s:%s", group_id, artifact_id)
                 elif group_id == "junit" and artifact_id == "junit":
                     has_junit4 = True
-                    logger.debug(f"Found JUnit 4 dependency: {group_id}:{artifact_id}")
+                    logger.debug("Found JUnit 4 dependency: %s:%s", group_id, artifact_id)
                 elif group_id == "org.testng":
                     has_testng = True
-                    logger.debug(f"Found TestNG dependency: {group_id}:{artifact_id}")
+                    logger.debug("Found TestNG dependency: %s:%s", group_id, artifact_id)
 
     try:
         tree = ET.parse(pom_path)
@@ -220,20 +220,20 @@ def _detect_test_deps_from_pom(project_root: Path) -> tuple[bool, bool, bool]:
         # Handle namespace
         ns = {"m": "http://maven.apache.org/POM/4.0.0"}
 
-        logger.debug(f"Checking pom.xml at {pom_path}")
+        logger.debug("Checking pom.xml at %s", pom_path)
 
         # Search for direct dependencies
         for deps_path in ["dependencies", "m:dependencies"]:
             deps = root.find(deps_path, ns) if "m:" in deps_path else root.find(deps_path)
             if deps is not None:
-                logger.debug(f"Found dependencies section in {pom_path}")
+                logger.debug("Found dependencies section in %s", pom_path)
                 check_dependencies(deps, ns)
 
         # Also check dependencyManagement section (for multi-module projects)
         for dep_mgmt_path in ["dependencyManagement", "m:dependencyManagement"]:
             dep_mgmt = root.find(dep_mgmt_path, ns) if "m:" in dep_mgmt_path else root.find(dep_mgmt_path)
             if dep_mgmt is not None:
-                logger.debug(f"Found dependencyManagement section in {pom_path}")
+                logger.debug("Found dependencyManagement section in %s", pom_path)
                 for deps_path in ["dependencies", "m:dependencies"]:
                     deps = dep_mgmt.find(deps_path, ns) if "m:" in deps_path else dep_mgmt.find(deps_path)
                     if deps is not None:
@@ -249,7 +249,7 @@ def _detect_test_deps_from_pom(project_root: Path) -> tuple[bool, bool, bool]:
         for submodule_name in ["test", "tests", "src/test", "testing"]:
             submodule_pom = project_root / submodule_name / "pom.xml"
             if submodule_pom.exists():
-                logger.debug(f"Checking submodule pom at {submodule_pom}")
+                logger.debug("Checking submodule pom at %s", submodule_pom)
                 sub_junit5, sub_junit4, sub_testng = _detect_test_deps_from_pom(project_root / submodule_name)
                 has_junit5 = has_junit5 or sub_junit5
                 has_junit4 = has_junit4 or sub_junit4
@@ -257,7 +257,7 @@ def _detect_test_deps_from_pom(project_root: Path) -> tuple[bool, bool, bool]:
                 if has_junit5 or has_junit4 or has_testng:
                     break
 
-    logger.debug(f"Test framework detection result: junit5={has_junit5}, junit4={has_junit4}, testng={has_testng}")
+    logger.debug("Test framework detection result: junit5=%s, junit4=%s, testng=%s", has_junit5, has_junit4, has_testng)
     return has_junit5, has_junit4, has_testng
 
 
