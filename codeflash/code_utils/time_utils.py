@@ -74,13 +74,22 @@ def format_time(nanoseconds: int) -> str:
     if nanoseconds < 1_000:
         return f"{nanoseconds}ns"
     if nanoseconds < 1_000_000:
-        value = nanoseconds / 1_000
-        return f"{value:.2f}μs" if value < 10 else (f"{value:.1f}μs" if value < 100 else f"{int(value)}μs")
+        if nanoseconds < 10_000:
+            return f"{nanoseconds / 1_000:.2f}μs"
+        if nanoseconds < 100_000:
+            return f"{nanoseconds / 1_000:.1f}μs"
+        return f"{nanoseconds // 1_000}μs"
     if nanoseconds < 1_000_000_000:
-        value = nanoseconds / 1_000_000
-        return f"{value:.2f}ms" if value < 10 else (f"{value:.1f}ms" if value < 100 else f"{int(value)}ms")
-    value = nanoseconds / 1_000_000_000
-    return f"{value:.2f}s" if value < 10 else (f"{value:.1f}s" if value < 100 else f"{int(value)}s")
+        if nanoseconds < 10_000_000:
+            return f"{nanoseconds / 1_000_000:.2f}ms"
+        if nanoseconds < 100_000_000:
+            return f"{nanoseconds / 1_000_000:.1f}ms"
+        return f"{nanoseconds // 1_000_000}ms"
+    if nanoseconds < 10_000_000_000:
+        return f"{nanoseconds / 1_000_000_000:.2f}s"
+    if nanoseconds < 100_000_000_000:
+        return f"{nanoseconds / 1_000_000_000:.1f}s"
+    return f"{nanoseconds // 1_000_000_000}s"
 
 
 def format_perf(percentage: float) -> str:
