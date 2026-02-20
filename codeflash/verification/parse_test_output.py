@@ -1255,10 +1255,12 @@ def parse_test_results(
         try:
             # Extract stdout from subprocess result containing timing markers
             if isinstance(run_result.stdout, bytes):
-                results.perf_stdout = run_result.stdout.decode('utf-8', errors='replace')
+                results.perf_stdout = run_result.stdout.decode("utf-8", errors="replace")
             elif isinstance(run_result.stdout, str):
                 results.perf_stdout = run_result.stdout
-            logger.debug(f"Bug #10 Fix: Set perf_stdout for Java performance tests ({len(results.perf_stdout or '')} chars)")
+            logger.debug(
+                f"Bug #10 Fix: Set perf_stdout for Java performance tests ({len(results.perf_stdout or '')} chars)"
+            )
         except Exception as e:
             logger.debug(f"Bug #10 Fix: Failed to set perf_stdout: {e}")
 

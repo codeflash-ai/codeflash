@@ -241,11 +241,10 @@ def _detect_test_deps_from_pom(project_root: Path) -> tuple[bool, bool, bool]:
 
     except ET.ParseError:
         logger.debug(f"Failed to parse pom.xml at {pom_path}")
-        pass
 
     # For multi-module projects, also check submodule pom.xml files
     if not (has_junit5 or has_junit4 or has_testng):
-        logger.debug(f"No test deps in root pom, checking submodules")
+        logger.debug("No test deps in root pom, checking submodules")
         # Check common submodule locations
         for submodule_name in ["test", "tests", "src/test", "testing"]:
             submodule_pom = project_root / submodule_name / "pom.xml"
