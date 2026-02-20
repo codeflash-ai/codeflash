@@ -12,10 +12,11 @@ from __future__ import annotations
 
 import logging
 import re
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from tree_sitter import Node
 
     from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer
@@ -76,9 +77,7 @@ def instrument_component_with_profiler(source: str, component_name: str, analyze
     result = _insert_after_imports(result, counter_code, analyzer)
 
     # Ensure React is imported
-    result = _ensure_react_import(result)
-
-    return result
+    return _ensure_react_import(result)
 
 
 def instrument_all_components_for_tracing(source: str, file_path: Path, analyzer: TreeSitterAnalyzer) -> str:
@@ -161,11 +160,12 @@ def _find_jsx_returns(func_node: Node, source_bytes: bytes) -> list[Node]:
 
 def _contains_jsx(node: Node) -> bool:
     """Check if a tree-sitter node contains JSX elements."""
-    if node.type in ("jsx_element", "jsx_self_closing_element", "jsx_fragment"):
-        return True
-    for child in node.children:
-        if _contains_jsx(child):
+    stack = [node]
+    while stack:
+        node = stack.pop()
+        if node.type in ("jsx_element", "jsx_self_closing_element", "jsx_fragment"):
             return True
+        stack.extend(node.children)
     return False
 
 
