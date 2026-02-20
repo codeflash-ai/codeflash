@@ -539,7 +539,9 @@ class TreeSitterAnalyzer:
                                 alias_node = spec.child_by_field_name("alias")
                                 if name_node:
                                     name = source_text[name_node.start_byte : name_node.end_byte]
-                                    alias = source_text[alias_node.start_byte : alias_node.end_byte] if alias_node else None
+                                    alias = (
+                                        source_text[alias_node.start_byte : alias_node.end_byte] if alias_node else None
+                                    )
                                     named_imports.append((name, alias))
                     elif clause_child.type == "namespace_import":
                         # import * as X
