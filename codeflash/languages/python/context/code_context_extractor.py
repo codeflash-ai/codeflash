@@ -798,7 +798,7 @@ def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path:
         for cls, name in resolve_classes_from_modules(external_base_classes):
             if name in emitted_class_names:
                 continue
-            stub = extract_class_stub(cls, name, require_site_packages=False)
+            stub = extract_init_stub(cls, name, require_site_packages=False)
             if stub is not None:
                 code_strings.append(stub)
                 emitted_class_names.add(name)
@@ -817,7 +817,7 @@ def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path:
                 continue
             processed_classes.add(cls)
 
-            stub = extract_class_stub(cls, class_name)
+            stub = extract_init_stub(cls, class_name)
             if stub is None:
                 continue
 
@@ -927,23 +927,21 @@ def resolve_transitive_type_deps(cls: type) -> list[type]:
     return deps
 
 
-def extract_class_stub(cls: type, class_name: str, require_site_packages: bool = True) -> CodeString | None:
-    """Extract the full class source, falling back to an __init__-only stub.
-
-    Attempts ``inspect.getsource(cls)`` first so the LLM sees every method and
-    attribute.  Falls back to extracting just ``__init__`` when the full source
-    is unavailable (C extensions, dynamically generated classes).  Classes whose
-    ``__init__`` is inherited from ``object`` are still included when the full
-    source can be retrieved.
+def extract_init_stub(cls: type, class_name: str, require_site_packages: bool = True) -> CodeString | None:
+    """Extract a stub containing the class definition with only its __init__ method.
 
     Args:
-        cls: The class object to extract from
+        cls: The class object to extract __init__ from
         class_name: Name to use for the class in the stub
         require_site_packages: If True, only extract from site-packages. If False, include stdlib too.
 
     """
     import inspect
     import textwrap
+
+    init_method = getattr(cls, "__init__", None)
+    if init_method is None or init_method is object.__init__:
+        return None
 
     try:
         class_file = Path(inspect.getfile(cls))
@@ -953,29 +951,16 @@ def extract_class_stub(cls: type, class_name: str, require_site_packages: bool =
     if require_site_packages and not path_belongs_to_site_packages(class_file):
         return None
 
-    parts = class_file.parts
-    if "site-packages" in parts:
-        idx = parts.index("site-packages")
-        class_file = Path(*parts[idx + 1 :])
-
-    # Try full class source first
-    try:
-        class_source = inspect.getsource(cls)
-        class_source = textwrap.dedent(class_source)
-        return CodeString(code=class_source, file_path=class_file)
-    except (OSError, TypeError):
-        pass
-
-    # Fallback: __init__-only stub
-    init_method = getattr(cls, "__init__", None)
-    if init_method is None or init_method is object.__init__:
-        return None
-
     try:
         init_source = inspect.getsource(init_method)
         init_source = textwrap.dedent(init_source)
     except (OSError, TypeError):
         return None
+
+    parts = class_file.parts
+    if "site-packages" in parts:
+        idx = parts.index("site-packages")
+        class_file = Path(*parts[idx + 1 :])
 
     class_source = f"class {class_name}:\n" + textwrap.indent(init_source, "    ")
     return CodeString(code=class_source, file_path=class_file)
