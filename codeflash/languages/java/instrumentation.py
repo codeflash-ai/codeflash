@@ -40,6 +40,44 @@ def _get_function_name(func: Any) -> str:
     raise AttributeError(msg)
 
 
+def _extract_test_method_name(method_lines: list[str]) -> str:
+    """Extract the test method name from Java method signature lines.
+
+    Handles various Java method signatures:
+    - public void testMethodName()
+    - void testMethodName() throws Exception
+    - public void testMethodName(String param)
+    - @Test public void testMethodName()
+
+    Args:
+        method_lines: List of lines containing the method signature
+
+    Returns:
+        The method name, or "unknown" if not found
+    """
+    import re
+
+    # Join all method lines and clean up
+    method_sig = " ".join(method_lines).strip()
+
+    # Pattern to match Java method name
+    # Matches: [modifiers] [return_type] methodName([params]) [throws ...]
+    # Groups: public/private/protected, void/String/etc, methodName
+    pattern = r'\b(?:public|private|protected)?\s*(?:static)?\s*(?:final)?\s*(?:void|String|int|long|boolean|double|float|char|byte|short|\w+(?:\[\])?)\s+(\w+)\s*\('
+
+    match = re.search(pattern, method_sig)
+    if match:
+        return match.group(1)
+
+    # Fallback: look for any word followed by parenthesis
+    fallback_pattern = r'\b(\w+)\s*\('
+    fallback_match = re.search(fallback_pattern, method_sig)
+    if fallback_match:
+        return fallback_match.group(1)
+
+    return "unknown"
+
+
 # Pattern to detect primitive array types in assertions
 _PRIMITIVE_ARRAY_PATTERN = re.compile(r"new\s+(int|long|double|float|short|byte|char|boolean)\s*\[\s*\]")
 
@@ -524,6 +562,9 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 result.append(ml)
             i += 1
 
+            # Extract the test method name from the signature
+            test_method_name = _extract_test_method_name(method_lines)
+
             # We're now inside the method body
             iteration_counter += 1
             iter_id = iteration_counter
@@ -569,18 +610,8 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 f'{indent}String _cf_outputFile{iter_id} = System.getenv("CODEFLASH_OUTPUT_FILE");',
                 f'{indent}String _cf_testIteration{iter_id} = System.getenv("CODEFLASH_TEST_ITERATION");',
                 f'{indent}if (_cf_testIteration{iter_id} == null) _cf_testIteration{iter_id} = "0";',
-                # Extract test method name from stack trace - walk up to find test method
-                f'{indent}String _cf_test{iter_id} = "";',
-                f'{indent}try {{',
-                f'{indent}    StackTraceElement[] _cf_stack{iter_id} = Thread.currentThread().getStackTrace();',
-                f'{indent}    for (int _cf_i{iter_id} = 0; _cf_i{iter_id} < _cf_stack{iter_id}.length && _cf_i{iter_id} < 10; _cf_i{iter_id}++) {{',
-                f'{indent}        String _cf_method{iter_id} = _cf_stack{iter_id}[_cf_i{iter_id}].getMethodName();',
-                f'{indent}        if (_cf_method{iter_id}.startsWith("test") || _cf_method{iter_id}.contains("Test")) {{',
-                f'{indent}            _cf_test{iter_id} = _cf_method{iter_id};',
-                f'{indent}            break;',
-                f'{indent}        }}',
-                f'{indent}    }}',
-                f'{indent}}} catch (Exception e) {{}}',
+                # Use the test method name determined at instrumentation time
+                f'{indent}String _cf_test{iter_id} = "{test_method_name}";',
                 # Modified marker with test name
                 f'{indent}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + ":" + _cf_test{iter_id} + "######$!");',
                 f"{indent}byte[] _cf_serializedResult{iter_id} = null;",
@@ -786,7 +817,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         assignment = f"{name_text} = {value_text};"
         return hoisted, assignment
 
-    def build_instrumented_body(body_text: str, next_wrapper_id: int, base_indent: str) -> tuple[str, int]:
+    def build_instrumented_body(body_text: str, next_wrapper_id: int, base_indent: str, test_method_name: str) -> tuple[str, int]:
         body_bytes = body_text.encode("utf8")
         wrapper_bytes = _TS_BODY_PREFIX_BYTES + body_bytes + _TS_BODY_SUFFIX.encode("utf8")
         wrapper_tree = analyzer.parse(wrapper_bytes)
@@ -870,18 +901,8 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             else:
                 stmt_in_try = reindent_block(target_stmt, inner_body_indent)
             timing_lines = [
-                # Extract test method name before loop - walk up to find test method
-                f'{indent}String _cf_test{current_id} = "";',
-                f'{indent}try {{',
-                f'{indent}    StackTraceElement[] _cf_stack{current_id} = Thread.currentThread().getStackTrace();',
-                f'{indent}    for (int _cf_idx{current_id} = 0; _cf_idx{current_id} < _cf_stack{current_id}.length && _cf_idx{current_id} < 10; _cf_idx{current_id}++) {{',
-                f'{indent}        String _cf_method{current_id} = _cf_stack{current_id}[_cf_idx{current_id}].getMethodName();',
-                f'{indent}        if (_cf_method{current_id}.startsWith("test") || _cf_method{current_id}.contains("Test")) {{',
-                f'{indent}            _cf_test{current_id} = _cf_method{current_id};',
-                f'{indent}            break;',
-                f'{indent}        }}',
-                f'{indent}    }}',
-                f'{indent}}} catch (Exception e) {{}}',
+                # Use the test method name determined at instrumentation time
+                f'{indent}String _cf_test{current_id} = "{test_method_name}";',
                 f"{indent}for (int _cf_i{current_id} = 0; _cf_i{current_id} < _cf_innerIterations{current_id}; _cf_i{current_id}++) {{",
                 # Start marker with test name
                 f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + _cf_i{current_id} + ":" + _cf_test{current_id} + "######$!");',
@@ -949,18 +970,8 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             iteration_id_expr = f'"{current_id}_" + _cf_i{current_id}'
 
             timing_lines = [
-                # Extract test method name before loop - walk up to find test method
-                f'{indent}String _cf_test{current_id} = "";',
-                f'{indent}try {{',
-                f'{indent}    StackTraceElement[] _cf_stack{current_id} = Thread.currentThread().getStackTrace();',
-                f'{indent}    for (int _cf_idx{current_id} = 0; _cf_idx{current_id} < _cf_stack{current_id}.length && _cf_idx{current_id} < 10; _cf_idx{current_id}++) {{',
-                f'{indent}        String _cf_method{current_id} = _cf_stack{current_id}[_cf_idx{current_id}].getMethodName();',
-                f'{indent}        if (_cf_method{current_id}.startsWith("test") || _cf_method{current_id}.contains("Test")) {{',
-                f'{indent}            _cf_test{current_id} = _cf_method{current_id};',
-                f'{indent}            break;',
-                f'{indent}        }}',
-                f'{indent}    }}',
-                f'{indent}}} catch (Exception e) {{}}',
+                # Use the test method name determined at instrumentation time
+                f'{indent}String _cf_test{current_id} = "{test_method_name}";',
                 f"{indent}for (int _cf_i{current_id} = 0; _cf_i{current_id} < _cf_innerIterations{current_id}; _cf_i{current_id}++) {{",
                 # Start marker with test name
                 f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + {iteration_id_expr} + ":" + _cf_test{current_id} + "######$!");',
@@ -996,12 +1007,16 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
     method_ordinal = 0
     for method_node, body_node in test_methods:
         method_ordinal += 1
+        # Extract the test method name from the method declaration
+        method_name_node = method_node.child_by_field_name("name")
+        test_method_name = analyzer.get_node_text(method_name_node, source_bytes) if method_name_node else "unknown"
+
         body_start = body_node.start_byte + 1  # skip '{'
         body_end = body_node.end_byte - 1  # skip '}'
         body_text = source_bytes[body_start:body_end].decode("utf8")
         base_indent = " " * (method_node.start_point[1] + 4)
         next_wrapper_id = max(wrapper_id, method_ordinal - 1)
-        new_body, new_wrapper_id = build_instrumented_body(body_text, next_wrapper_id, base_indent)
+        new_body, new_wrapper_id = build_instrumented_body(body_text, next_wrapper_id, base_indent, test_method_name)
         # Reserve one id slot per @Test method even when no instrumentation is added,
         # matching existing deterministic numbering expected by tests.
         wrapper_id = method_ordinal if new_wrapper_id == next_wrapper_id else new_wrapper_id

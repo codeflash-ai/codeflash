@@ -253,10 +253,11 @@ public class FibonacciTest__perfinstrumented {
         String _cf_mod1 = "FibonacciTest";
         String _cf_cls1 = "FibonacciTest";
         String _cf_fn1 = "fibonacci";
+        String _cf_test1 = "testNegativeInput_ThrowsIllegalArgumentException";
         String _cf_outputFile1 = System.getenv("CODEFLASH_OUTPUT_FILE");
         String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
-        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
+        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_test1 + "######$!");
         byte[] _cf_serializedResult1 = null;
         long _cf_end1 = -1;
         long _cf_start1 = 0;
@@ -265,7 +266,7 @@ public class FibonacciTest__perfinstrumented {
         } finally {
             long _cf_end1_finally = System.nanoTime();
             long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
+            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + ":" + _cf_test1 + "######!");
             // Write to SQLite if output file is set
             if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
                 try {
@@ -306,10 +307,11 @@ public class FibonacciTest__perfinstrumented {
         String _cf_mod2 = "FibonacciTest";
         String _cf_cls2 = "FibonacciTest";
         String _cf_fn2 = "fibonacci";
+        String _cf_test2 = "testZeroInput_ReturnsZero";
         String _cf_outputFile2 = System.getenv("CODEFLASH_OUTPUT_FILE");
         String _cf_testIteration2 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration2 == null) _cf_testIteration2 = "0";
-        System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + "######$!");
+        System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + ":" + _cf_test2 + "######$!");
         byte[] _cf_serializedResult2 = null;
         long _cf_end2 = -1;
         long _cf_start2 = 0;
@@ -322,7 +324,7 @@ public class FibonacciTest__perfinstrumented {
         } finally {
             long _cf_end2_finally = System.nanoTime();
             long _cf_dur2 = (_cf_end2 != -1 ? _cf_end2 : _cf_end2_finally) - _cf_start2;
-            System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + ":" + _cf_dur2 + "######!");
+            System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + ":" + _cf_dur2 + ":" + _cf_test2 + "######!");
             // Write to SQLite if output file is set
             if (_cf_outputFile2 != null && !_cf_outputFile2.isEmpty()) {
                 try {
@@ -417,10 +419,11 @@ public class FibonacciTest__perfinstrumented {
         String _cf_mod1 = "FibonacciTest";
         String _cf_cls1 = "FibonacciTest";
         String _cf_fn1 = "fibonacci";
+        String _cf_test1 = "testNegativeInput_ThrowsIllegalArgumentException";
         String _cf_outputFile1 = System.getenv("CODEFLASH_OUTPUT_FILE");
         String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
-        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
+        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_test1 + "######$!");
         byte[] _cf_serializedResult1 = null;
         long _cf_end1 = -1;
         long _cf_start1 = 0;
@@ -431,7 +434,7 @@ public class FibonacciTest__perfinstrumented {
         } finally {
             long _cf_end1_finally = System.nanoTime();
             long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
+            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + ":" + _cf_test1 + "######!");
             // Write to SQLite if output file is set
             if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
                 try {
@@ -472,10 +475,11 @@ public class FibonacciTest__perfinstrumented {
         String _cf_mod2 = "FibonacciTest";
         String _cf_cls2 = "FibonacciTest";
         String _cf_fn2 = "fibonacci";
+        String _cf_test2 = "testZeroInput_ReturnsZero";
         String _cf_outputFile2 = System.getenv("CODEFLASH_OUTPUT_FILE");
         String _cf_testIteration2 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration2 == null) _cf_testIteration2 = "0";
-        System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + "######$!");
+        System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + ":" + _cf_test2 + "######$!");
         byte[] _cf_serializedResult2 = null;
         long _cf_end2 = -1;
         long _cf_start2 = 0;
@@ -488,7 +492,7 @@ public class FibonacciTest__perfinstrumented {
         } finally {
             long _cf_end2_finally = System.nanoTime();
             long _cf_dur2 = (_cf_end2 != -1 ? _cf_end2 : _cf_end2_finally) - _cf_start2;
-            System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + ":" + _cf_dur2 + "######!");
+            System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + ":" + _cf_dur2 + ":" + _cf_test2 + "######!");
             // Write to SQLite if output file is set
             if (_cf_outputFile2 != null && !_cf_outputFile2.isEmpty()) {
                 try {
@@ -568,10 +572,11 @@ public class CalculatorTest__perfonlyinstrumented {
         String _cf_mod1 = "CalculatorTest";
         String _cf_cls1 = "CalculatorTest";
         String _cf_fn1 = "add";
-        
+        String _cf_test1 = "testAdd";
+
         Calculator calc = new Calculator();
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_test1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -581,7 +586,7 @@ public class CalculatorTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + ":" + _cf_test1 + "######!");
             }
         }
     }
@@ -637,9 +642,10 @@ public class MathTest__perfonlyinstrumented {
         String _cf_mod1 = "MathTest";
         String _cf_cls1 = "MathTest";
         String _cf_fn1 = "add";
+        String _cf_test1 = "testAdd";
 
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_test1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -649,7 +655,7 @@ public class MathTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + ":" + _cf_test1 + "######!");
             }
         }
     }
@@ -662,9 +668,10 @@ public class MathTest__perfonlyinstrumented {
         String _cf_mod2 = "MathTest";
         String _cf_cls2 = "MathTest";
         String _cf_fn2 = "add";
+        String _cf_test2 = "testSubtract";
 
         for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
-            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + "######$!");
+            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + ":" + _cf_test2 + "######$!");
             long _cf_end2 = -1;
             long _cf_start2 = 0;
             try {
@@ -674,7 +681,7 @@ public class MathTest__perfonlyinstrumented {
             } finally {
                 long _cf_end2_finally = System.nanoTime();
                 long _cf_dur2 = (_cf_end2 != -1 ? _cf_end2 : _cf_end2_finally) - _cf_start2;
-                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + ":" + _cf_dur2 + "######!");
+                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + ":" + _cf_dur2 + ":" + _cf_test2 + "######!");
             }
         }
     }
@@ -737,9 +744,10 @@ public class ServiceTest__perfonlyinstrumented {
         String _cf_mod1 = "ServiceTest";
         String _cf_cls1 = "ServiceTest";
         String _cf_fn1 = "call";
+        String _cf_test1 = "testService";
 
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_test1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -749,7 +757,7 @@ public class ServiceTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + ":" + _cf_test1 + "######!");
             }
         }
     }
