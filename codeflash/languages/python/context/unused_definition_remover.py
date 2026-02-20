@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING, Optional, Union
 import libcst as cst
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
-from codeflash.languages import is_java, is_javascript
+from codeflash.languages import is_python
+from codeflash.languages.python.static_analysis.code_replacer import replace_function_definitions_in_module
 from codeflash.models.models import CodeString, CodeStringsMarkdown
 
 if TYPE_CHECKING:
@@ -587,17 +587,20 @@ def revert_unused_helper_functions(
 
     logger.debug(f"Reverting {len(unused_helpers)} unused helper function(s) to original definitions")
 
+    # Resolve all path keys for consistent comparison (Windows 8.3 short names may differ from Jedi-resolved paths)
+    resolved_original_helper_code = {p.resolve(): code for p, code in original_helper_code.items()}
+
     # Group unused helpers by file path
     unused_helpers_by_file = defaultdict(list)
     for helper in unused_helpers:
-        unused_helpers_by_file[helper.file_path].append(helper)
+        unused_helpers_by_file[helper.file_path.resolve()].append(helper)
 
     # For each file, revert the unused helper functions to their original definitions
     for file_path, helpers_in_file in unused_helpers_by_file.items():
-        if file_path in original_helper_code:
+        if file_path in resolved_original_helper_code:
             try:
                 # Get original code for this file
-                original_code = original_helper_code[file_path]
+                original_code = resolved_original_helper_code[file_path]
 
                 # Use the code replacer to selectively revert only the unused helper functions
                 helper_names = [helper.qualified_name for helper in helpers_in_file]
@@ -640,15 +643,31 @@ def _analyze_imports_in_optimized_code(
     helpers_by_file_and_func = defaultdict(dict)
     helpers_by_file = defaultdict(list)  # preserved for "import module"
     for helper in code_context.helper_functions:
-        jedi_type = helper.jedi_definition.type if helper.jedi_definition else None
-        if jedi_type != "class":  # Include when jedi_definition is None (non-Python)
+        jedi_type = helper.definition_type
+        if jedi_type != "class":  # Include when definition_type is None (non-Python)
             func_name = helper.only_function_name
             module_name = helper.file_path.stem
             # Cache function lookup for this (module, func)
             helpers_by_file_and_func[module_name].setdefault(func_name, []).append(helper)
             helpers_by_file[module_name].append(helper)
 
-    for node in ast.walk(optimized_ast):
+    # Collect only import nodes to avoid per-node isinstance checks across the whole AST
+    class _ImportCollector(ast.NodeVisitor):
+        def __init__(self) -> None:
+            self.nodes: list[ast.AST] = []
+
+        def visit_Import(self, node: ast.Import) -> None:
+            self.nodes.append(node)
+            # No need to recurse further for import nodes
+
+        def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+            self.nodes.append(node)
+            # No need to recurse further for import-from nodes
+
+    collector = _ImportCollector()
+    collector.visit(optimized_ast)
+
+    for node in collector.nodes:
         if isinstance(node, ast.ImportFrom):
             # Handle "from module import function" statements
             module_name = node.module
@@ -728,7 +747,7 @@ def detect_unused_helper_functions(
 
     """
     # Skip this analysis for non-Python languages since we use Python's ast module
-    if is_javascript() or is_java():
+    if not is_python():
         logger.debug("Skipping unused helper function detection for non-Python languages")
         return []
 
@@ -799,8 +818,8 @@ def detect_unused_helper_functions(
         unused_helpers = []
         entrypoint_file_path = function_to_optimize.file_path
         for helper_function in code_context.helper_functions:
-            jedi_type = helper_function.jedi_definition.type if helper_function.jedi_definition else None
-            if jedi_type != "class":  # Include when jedi_definition is None (non-Python)
+            jedi_type = helper_function.definition_type
+            if jedi_type != "class":  # Include when definition_type is None (non-Python)
                 # Check if the helper function is called using multiple name variants
                 helper_qualified_name = helper_function.qualified_name
                 helper_simple_name = helper_function.only_function_name
