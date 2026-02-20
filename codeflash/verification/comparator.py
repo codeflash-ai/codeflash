@@ -145,28 +145,27 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
                 return _normalize_temp_path(orig) == _normalize_temp_path(new)
             return False
 
-        if isinstance(
-            orig,
-            (
-                int,
-                bool,
-                complex,
-                type(None),
-                type(Ellipsis),
-                decimal.Decimal,
-                set,
-                bytes,
-                bytearray,
-                memoryview,
-                frozenset,
-                enum.Enum,
-                type,
-                range,
-                slice,
-                OrderedDict,
-                types.GenericAlias,
-            ),
-        ):
+        _equality_types = (
+            int,
+            bool,
+            complex,
+            type(None),
+            type(Ellipsis),
+            decimal.Decimal,
+            set,
+            bytes,
+            bytearray,
+            memoryview,
+            frozenset,
+            enum.Enum,
+            type,
+            range,
+            slice,
+            OrderedDict,
+            types.GenericAlias,
+            *((_union_type,) if (_union_type := getattr(types, "UnionType", None)) else ()),
+        )
+        if isinstance(orig, _equality_types):
             return orig == new
         if isinstance(orig, float):
             if math.isnan(orig) and math.isnan(new):

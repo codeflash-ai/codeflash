@@ -5216,3 +5216,27 @@ class TestPythonTempfilePaths:
         assert PYTHON_TEMPFILE_PATTERN.search("/tmp/tmp123456/")
         assert not PYTHON_TEMPFILE_PATTERN.search("/tmp/mydir/file.txt")
         assert not PYTHON_TEMPFILE_PATTERN.search("/home/tmp123/file.txt")
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="types.UnionType requires Python 3.10+")
+class TestUnionType:
+    def test_union_type_equal(self):
+        assert comparator(int | str, int | str)
+
+    def test_union_type_not_equal(self):
+        assert not comparator(int | str, int | float)
+
+    def test_union_type_order_independent(self):
+        assert comparator(int | str, str | int)
+
+    def test_union_type_multiple_args(self):
+        assert comparator(int | str | float, int | str | float)
+
+    def test_union_type_in_list(self):
+        assert comparator([int | str, 1], [int | str, 1])
+
+    def test_union_type_in_dict(self):
+        assert comparator({"key": int | str}, {"key": int | str})
+
+    def test_union_type_vs_none(self):
+        assert not comparator(int | str, None)
