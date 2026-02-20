@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import re
-from functools import lru_cache
+from functools import cache, lru_cache
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -327,19 +327,7 @@ def _compute_wrapped_segment(
     return jsx_start, jsx_end, wrapped
 
 
-
-@lru_cache(maxsize=None)
-def _build_render_counter_code(component_name: str, marker_prefix: str) -> str:
-    safe_name = _SAFE_NAME_RE.sub("_", component_name)
-    return f"""\
-let _codeflash_render_count_{safe_name} = 0;
-function _codeflashOnRender_{safe_name}(id, phase, actualDuration, baseDuration) {{
-  _codeflash_render_count_{safe_name}++;
-  console.log(`!######{marker_prefix}:${{id}}:${{phase}}:${{actualDuration}}:${{baseDuration}}:${{_codeflash_render_count_{safe_name}}}######!`);
-}}"""
-
-
-@lru_cache(maxsize=None)
+@cache
 def _build_render_counter_code(component_name: str, marker_prefix: str) -> str:
     safe_name = _SAFE_NAME_RE.sub("_", component_name)
     return f"""\
