@@ -658,7 +658,7 @@ class Optimizer:
                     if is_successful(best_optimization):
                         optimizations_found += 1
                         # create a diff patch for successful optimization
-                        if self.current_worktree:
+                        if self.current_worktree and not is_agent_mode():
                             best_opt = best_optimization.unwrap()
                             read_writable_code = best_opt.code_context.read_writable_code
                             relative_file_paths = [
@@ -692,12 +692,10 @@ class Optimizer:
             if hasattr(self.args, "command") and self.args.command == "optimize":
                 self.cleanup_replay_tests()
             if is_agent_mode():
-                import sys
-
                 if optimizations_found == 0:
-                    sys.stdout.write("NO OPTIMIZATIONS FOUND\n")
-                else:
-                    sys.stdout.write(f"COMPLETE: {optimizations_found} optimization(s) applied\n")
+                    import sys
+
+                    sys.stdout.write("<codeflash-summary>No optimizations found.</codeflash-summary>\n")
             elif optimizations_found == 0:
                 logger.info("❌ No optimizations found.")
             elif self.args.all:

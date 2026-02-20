@@ -140,6 +140,8 @@ def parse_args() -> Namespace:
     sys.argv[:] = [sys.argv[0], *unknown_args]
     if args.agent:
         args.yes = True
+        args.no_pr = True
+        args.worktree = True
     return process_and_validate_cmd_args(args)
 
 

@@ -1741,14 +1741,24 @@ class FunctionOptimizer:
                 self.executor, testgen_context.markdown, helper_fqns, generated_test_paths, generated_perf_test_paths
             )
 
-        future_concolic_tests = self.executor.submit(
-            generate_concolic_tests, self.test_cfg, self.args, self.function_to_optimize, self.function_to_optimize_ast
-        )
+        if is_agent_mode():
+            future_concolic_tests = None
+        else:
+            future_concolic_tests = self.executor.submit(
+                generate_concolic_tests,
+                self.test_cfg,
+                self.args,
+                self.function_to_optimize,
+                self.function_to_optimize_ast,
+            )
 
         if not self.args.no_gen_tests:
             # Wait for test futures to complete
-            concurrent.futures.wait([*future_tests, future_concolic_tests])
-        else:
+            futures_to_wait = [*future_tests]
+            if future_concolic_tests is not None:
+                futures_to_wait.append(future_concolic_tests)
+            concurrent.futures.wait(futures_to_wait)
+        elif future_concolic_tests is not None:
             concurrent.futures.wait([future_concolic_tests])
         # Process test generation results
         tests: list[GeneratedTests] = []
@@ -1777,7 +1787,10 @@ class FunctionOptimizer:
                 logger.warning(f"Failed to generate and instrument tests for {self.function_to_optimize.function_name}")
                 return Failure(f"/!\\ NO TESTS GENERATED for {self.function_to_optimize.function_name}")
 
-        function_to_concolic_tests, concolic_test_str = future_concolic_tests.result()
+        if future_concolic_tests is not None:
+            function_to_concolic_tests, concolic_test_str = future_concolic_tests.result()
+        else:
+            function_to_concolic_tests, concolic_test_str = {}, None
         count_tests = len(tests)
         if concolic_test_str:
             count_tests += 1

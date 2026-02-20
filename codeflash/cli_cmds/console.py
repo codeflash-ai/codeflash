@@ -408,30 +408,50 @@ def agent_log_optimization_result(
     review: str,
 ) -> None:
     import sys
+    from xml.sax.saxutils import escape
 
     from codeflash.code_utils.code_utils import unified_diff_strings
     from codeflash.code_utils.time_utils import humanize_runtime
 
-    lines = [
-        "=== Optimization Result ===",
-        f"Function: {function_name}",
-        f"File: {file_path}",
-        f"Performance: {perf_improvement_line}",
-        f"Original runtime: {humanize_runtime(original_runtime_ns)} | Optimized runtime: {humanize_runtime(best_runtime_ns)}",
-    ]
-    if review:
-        lines.append(f"Reviewer confidence: {review}")
-    lines.append("")
-    lines.append("Explanation:")
-    lines.append(raw_explanation.strip())
-    lines.append("")
-
+    diff_parts = []
     for path in original_code:
         old = original_code.get(path, "")
         new = new_code.get(path, "")
         if old != new:
             diff = unified_diff_strings(old, new, fromfile=str(path), tofile=str(path))
             if diff:
-                lines.append(diff)
+                diff_parts.append(diff)
 
-    sys.stdout.write("\n".join(lines) + "\n")
+    diff_str = "\n".join(diff_parts)
+
+    original_runtime = humanize_runtime(original_runtime_ns)
+    optimized_runtime = humanize_runtime(best_runtime_ns)
+
+    xml = [
+        "<codeflash-optimization>",
+        f"  <function>{escape(function_name)}</function>",
+        f"  <file>{escape(str(file_path))}</file>",
+        f"  <performance>{escape(perf_improvement_line)}</performance>",
+        f"  <original-runtime>{escape(original_runtime)}</original-runtime>",
+        f"  <optimized-runtime>{escape(optimized_runtime)}</optimized-runtime>",
+    ]
+    if review:
+        xml.append(f"  <reviewer-confidence>{escape(review)}</reviewer-confidence>")
+    xml.append(f"  <explanation>{escape(raw_explanation.strip())}</explanation>")
+    if diff_str:
+        xml.append(f"  <diff>{escape(diff_str)}</diff>")
+    for path in new_code:
+        if new_code[path] != original_code.get(path, ""):
+            xml.append(f'  <optimized-code file="{escape(str(path))}">{escape(new_code[path])}</optimized-code>')
+    xml.append("  <action>")
+    xml.append("    Present this optimization to the user using AskUserQuestion.")
+    xml.append("    Show the function name, performance improvement, and explanation as the question text.")
+    xml.append("    Provide two options: 'Apply' (write the optimized code to the file) and 'Reject' (do nothing).")
+    xml.append(
+        "    Put the full diff in the 'Apply' option's markdown preview so the user can review the exact changes."
+    )
+    xml.append("    If the user chooses 'Apply', write the content from optimized-code to the corresponding file.")
+    xml.append("  </action>")
+    xml.append("</codeflash-optimization>")
+
+    sys.stdout.write("\n".join(xml) + "\n")
