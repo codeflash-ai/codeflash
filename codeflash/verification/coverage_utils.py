@@ -327,7 +327,8 @@ class JacocoCoverageUtils:
                         bare_name = method.get("name")
                         if bare_name:
                             all_methods[bare_name] = (method, method_line)
-                        if bare_name == function_name:
+                        # Match against bare name or qualified name (e.g., "computeDigest" or "Crypto.computeDigest")
+                        if bare_name == function_name or function_name.endswith("." + bare_name):
                             method_elem = method
                             method_start_line = method_line
 
