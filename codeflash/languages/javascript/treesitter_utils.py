@@ -152,6 +152,8 @@ class TreeSitterAnalyzer:
 
         # Cache for function type sets keyed by (include_methods, include_arrow_functions)
         self._function_types_cache: dict[tuple[bool, bool], set[str]] = {}
+        # Cache for exports to avoid repeated parsing
+        self._exports_cache: dict[str, list[ExportInfo]] = {}
 
     @property
     def parser(self) -> Parser:
@@ -691,12 +693,16 @@ class TreeSitterAnalyzer:
             List of ExportInfo objects describing exports.
 
         """
+        if source in self._exports_cache:
+            return self._exports_cache[source]
+
         source_bytes = source.encode("utf8")
         tree = self.parse(source_bytes)
         exports: list[ExportInfo] = []
 
         self._walk_tree_for_exports(tree.root_node, source_bytes, exports)
 
+        self._exports_cache[source] = exports
         return exports
 
     def _walk_tree_for_exports(self, node: Node, source_bytes: bytes, exports: list[ExportInfo]) -> None:
