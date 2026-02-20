@@ -82,7 +82,7 @@ def _is_test_annotation(stripped_line: str) -> bool:
     if len(stripped_line) == 5:
         return True
     next_char = stripped_line[5]
-    return next_char == " " or next_char == "("
+    return next_char in {" ", "("}
 
 
 def _is_inside_lambda(node: Any) -> bool:
