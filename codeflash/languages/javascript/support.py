@@ -2263,22 +2263,39 @@ class JavaScriptSupport:
             return ""
 
         lines = ["Line Profile Results:"]
-        for file_path, line_data in parsed_results.get("timings", {}).items():
+        timings = parsed_results.get("timings", {})
+        
+        # Pre-build format strings outside the loop
+        header_format = "{:>6}  {:>8}  {:>12}  {:>8}  {}"
+        data_format = "{:>6}  {:>8}  {:>12.3f}  {:>7.1f}%  {}"
+        separator = "-" * 80
+        
+        for file_path, line_data in timings.items():
             lines.append(f"\nFile: {file_path}")
-            lines.append("-" * 80)
-            lines.append(f"{'Line':>6}  {'Hits':>8}  {'Time (ms)':>12}  {'% Time':>8}  {'Content'}")
-            lines.append("-" * 80)
+            lines.append(separator)
+            lines.append(header_format.format('Line', 'Hits', 'Time (ms)', '% Time', 'Content'))
+            lines.append(separator)
 
-            total_time_ms = sum(data.get("time_ms", 0) for data in line_data.values())
+            # Calculate total time using direct access instead of .get() in generator
+            total_time_ms = sum(data["time_ms"] for data in line_data.values() if "time_ms" in data)
+            
+            # Pre-compute reciprocal to avoid division in loop
+            time_factor = 100.0 / total_time_ms if total_time_ms > 0 else 0.0
+            
             for line_num, data in sorted(line_data.items()):
                 hits = data.get("hits", 0)
                 time_ms = data.get("time_ms", 0)
-                pct = (time_ms / total_time_ms * 100) if total_time_ms > 0 else 0
                 content = data.get("content", "")
+                # Truncate long lines for display
+                
+                # Calculate percentage using multiplication instead of division
+                pct = time_ms * time_factor
+                
                 # Truncate long lines for display
                 if len(content) > 50:
                     content = content[:47] + "..."
-                lines.append(f"{line_num:>6}  {hits:>8}  {time_ms:>12.3f}  {pct:>7.1f}%  {content}")
+                
+                lines.append(data_format.format(line_num, hits, time_ms, pct, content))
 
         return "\n".join(lines)
 
