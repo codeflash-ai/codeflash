@@ -816,14 +816,14 @@ def parse_test_xml(
             sys_stdout = testcase.system_out or ""
 
             # Use different patterns for Java (5-field start, 6-field end) vs Python (6-field both)
-            # Java format: !$######module:class:func:loop:iter######$! (start)
-            #              !######module:class:func:loop:iter:duration######! (end)
+            # Java format: !$######module:class.test:func:loop:iter######$! (start)
+            #              !######module:class.test:func:loop:iter:duration######! (end)
             if is_java():
                 begin_matches = list(start_pattern.finditer(sys_stdout))
                 end_matches = {}
                 for match in end_pattern.finditer(sys_stdout):
                     groups = match.groups()
-                    # Key is first 5 groups (module, class, func, loop, iter)
+                    # Key is first 5 groups (module, class.test, func, loop, iter)
                     end_matches[groups[:5]] = match
 
                 # For Java: fallback to pre-parsed subprocess stdout when XML system-out has no timing markers
@@ -884,17 +884,22 @@ def parse_test_xml(
                     groups = match.groups()
 
                     # Java and Python have different marker formats:
-                    # Java:   5 groups - (module, class, func, loop_index, iteration_id)
+                    # Java:   5 groups - (module, class.test, func, loop_index, iteration_id)
                     # Python: 6 groups - (module, class.test, _, func, loop_index, iteration_id)
                     if is_java():
-                        # Java format: !$######module:class:func:loop:iter######$!
+                        # Java format: !$######module:class.test:func:loop:iter######$!
                         end_key = groups[:5]  # Use all 5 groups as key
                         end_match = end_matches.get(end_key)
                         iteration_id = groups[4]  # iter is at index 4
                         loop_idx = int(groups[3])  # loop is at index 3
                         test_module = groups[0]  # module
-                        test_class_str = groups[1]  # class
-                        test_func = test_function  # Use the testcase name from XML
+                        # groups[1] is "class.testMethod" — extract class and test name
+                        class_test_field = groups[1]
+                        if "." in class_test_field:
+                            test_class_str, test_func = class_test_field.rsplit(".", 1)
+                        else:
+                            test_class_str = class_test_field
+                            test_func = test_function  # Fallback to testcase name from XML
                         func_getting_tested = groups[2]  # func being tested
                         runtime = None
 
