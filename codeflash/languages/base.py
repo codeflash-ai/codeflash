@@ -7,6 +7,8 @@ while FunctionToOptimize is the canonical representation of functions across all
 
 from __future__ import annotations
 
+import fnmatch
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
@@ -93,6 +95,7 @@ class CodeContext:
     read_only_context: str = ""
     imports: list[str] = field(default_factory=list)
     language: Language = Language.PYTHON
+    imported_type_skeletons: str = ""
 
 
 @dataclass
@@ -170,6 +173,23 @@ class FunctionFilterCriteria:
     include_methods: bool = True
     min_lines: int | None = None
     max_lines: int | None = None
+
+    def __post_init__(self) -> None:
+        """Pre-compile regex patterns from glob patterns for faster matching."""
+        self._include_regexes = [re.compile(fnmatch.translate(p)) for p in self.include_patterns]
+        self._exclude_regexes = [re.compile(fnmatch.translate(p)) for p in self.exclude_patterns]
+
+    def matches_include_patterns(self, name: str) -> bool:
+        """Check if name matches any include pattern."""
+        if not self._include_regexes:
+            return True
+        return any(regex.match(name) for regex in self._include_regexes)
+
+    def matches_exclude_patterns(self, name: str) -> bool:
+        """Check if name matches any exclude pattern."""
+        if not self._exclude_regexes:
+            return False
+        return any(regex.match(name) for regex in self._exclude_regexes)
 
 
 @dataclass
@@ -696,11 +716,12 @@ class LanguageSupport(Protocol):
 
     def instrument_existing_test(
         self,
-        test_path: Path,
+        test_string: str,
         call_positions: Sequence[Any],
         function_to_optimize: Any,
         tests_project_root: Path,
         mode: str,
+        test_path: Path | None,
     ) -> tuple[bool, str | None]:
         """Inject profiling code into an existing test file.
 
@@ -708,6 +729,7 @@ class LanguageSupport(Protocol):
         behavioral verification and performance benchmarking.
 
         Args:
+            test_string: String containing the test file contents.
             test_path: Path to the test file.
             call_positions: List of code positions where the function is called.
             function_to_optimize: The function being optimized.
@@ -769,6 +791,7 @@ class LanguageSupport(Protocol):
         min_loops: int = 5,
         max_loops: int = 100_000,
         target_duration_seconds: float = 10.0,
+        inner_iterations: int = 100,
     ) -> tuple[Path, Any]:
         """Run benchmarking tests for this language.
 
@@ -781,6 +804,7 @@ class LanguageSupport(Protocol):
             min_loops: Minimum number of loops for benchmarking.
             max_loops: Maximum number of loops for benchmarking.
             target_duration_seconds: Target duration for benchmarking in seconds.
+            inner_iterations: Number of inner loop iterations per test method (Java only).
 
         Returns:
             Tuple of (result_file_path, subprocess_result).

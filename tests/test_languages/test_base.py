@@ -29,17 +29,20 @@ class TestLanguageEnum:
         assert Language.PYTHON.value == "python"
         assert Language.JAVASCRIPT.value == "javascript"
         assert Language.TYPESCRIPT.value == "typescript"
+        assert Language.JAVA.value == "java"
 
     def test_language_str(self):
         """Test string conversion of Language enum."""
         assert str(Language.PYTHON) == "python"
         assert str(Language.JAVASCRIPT) == "javascript"
+        assert str(Language.JAVA) == "java"
 
     def test_language_from_string(self):
         """Test creating Language from string."""
         assert Language("python") == Language.PYTHON
         assert Language("javascript") == Language.JAVASCRIPT
         assert Language("typescript") == Language.TYPESCRIPT
+        assert Language("java") == Language.JAVA
 
     def test_invalid_language_raises(self):
         """Test that invalid language string raises ValueError."""

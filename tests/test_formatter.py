@@ -105,7 +105,7 @@ def foo():
 
 
 def test_formatter_cmds_non_existent(temp_dir):
-    """Test that default formatter-cmds is used when it doesn't exist in the toml."""
+    """Test that default formatter-cmds is empty list when it doesn't exist in the toml."""
     config_data = """
 [tool.codeflash]
 module-root = "src"
@@ -117,7 +117,8 @@ ignore-paths = []
     config_file.write_text(config_data)
 
     config, _ = parse_config_file(config_file)
-    assert config["formatter_cmds"] == ["black $file"]
+    # Default is now empty list - formatters are detected by project detector
+    assert config["formatter_cmds"] == []
 
     try:
         import black

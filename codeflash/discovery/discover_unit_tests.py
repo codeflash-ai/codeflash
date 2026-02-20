@@ -641,16 +641,19 @@ def discover_unit_tests(
     discover_only_these_tests: list[Path] | None = None,
     file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]] | None = None,
 ) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
-    from codeflash.languages import is_javascript, is_python
+    from codeflash.languages import is_java, is_javascript, is_python
 
     # Detect language from functions being optimized
     language = _detect_language_from_functions(file_to_funcs_to_optimize)
 
     # Route to language-specific test discovery for non-Python languages
     if not is_python():
-        # For JavaScript/TypeScript, tests_project_rootdir should be tests_root itself
+        # For JavaScript/TypeScript and Java, tests_project_rootdir should be tests_root itself
         # The Jest helper will be configured to NOT include "tests." prefix to match
+        # For Java, this ensures test file resolution works correctly in parse_test_xml
         if is_javascript():
+            cfg.tests_project_rootdir = cfg.tests_root
+        if is_java():
             cfg.tests_project_rootdir = cfg.tests_root
         return discover_tests_for_language(cfg, language, file_to_funcs_to_optimize)
 

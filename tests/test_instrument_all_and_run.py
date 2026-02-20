@@ -116,7 +116,7 @@ def test_sort():
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path(fto_path))
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(6, 13), CodePosition(10, 13)], func, project_root_path, mode=TestingMode.BEHAVIOR
+            code, test_path, [CodePosition(6, 13), CodePosition(10, 13)], func, project_root_path, mode=TestingMode.BEHAVIOR
         )
         os.chdir(original_cwd)
         assert success
@@ -165,8 +165,8 @@ def test_sort():
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 
@@ -210,8 +210,8 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         out_str = """codeflash stdout: Sorting list
@@ -287,7 +287,7 @@ def test_sort():
         tmp_test_path.write_text(code, encoding="utf-8")
 
         success, new_test = inject_profiling_into_existing_test(
-            tmp_test_path, [CodePosition(7, 13), CodePosition(12, 13)], fto, tmp_test_path.parent
+            code, tmp_test_path, [CodePosition(7, 13), CodePosition(12, 13)], fto, tmp_test_path.parent
         )
     assert success
     assert new_test.replace('"', "'") == expected.format(
@@ -342,8 +342,8 @@ def test_sort():
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         assert len(test_results) == 4
@@ -388,8 +388,8 @@ def test_sort():
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 
@@ -452,8 +452,8 @@ class BubbleSorter:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         assert len(new_test_results) == 4
@@ -557,7 +557,7 @@ def test_sort():
         tmp_test_path.write_text(code, encoding="utf-8")
 
         success, new_test = inject_profiling_into_existing_test(
-            tmp_test_path, [CodePosition(6, 13), CodePosition(10, 13)], fto, tmp_test_path.parent
+            code, tmp_test_path, [CodePosition(6, 13), CodePosition(10, 13)], fto, tmp_test_path.parent
         )
     assert success
     assert new_test.replace('"', "'") == expected.format(
@@ -612,8 +612,8 @@ def test_sort():
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         assert len(test_results) == 2
@@ -655,8 +655,8 @@ def test_sort():
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 
@@ -728,7 +728,7 @@ def test_sort():
         tmp_test_path.write_text(code, encoding="utf-8")
 
         success, new_test = inject_profiling_into_existing_test(
-            tmp_test_path, [CodePosition(6, 13), CodePosition(10, 13)], fto, tmp_test_path.parent
+            code, tmp_test_path, [CodePosition(6, 13), CodePosition(10, 13)], fto, tmp_test_path.parent
         )
     assert success
     assert new_test.replace('"', "'") == expected.format(
@@ -783,8 +783,8 @@ def test_sort():
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         assert len(test_results) == 2
@@ -826,8 +826,8 @@ def test_sort():
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 

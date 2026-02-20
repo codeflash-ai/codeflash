@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 import concurrent.futures
 import dataclasses
-import logging
 import os
 import queue
 import random
@@ -24,7 +23,7 @@ from rich.tree import Tree
 from codeflash.api.aiservice import AiServiceClient, AIServiceRefinerRequest, LocalAiServiceClient
 from codeflash.api.cfapi import add_code_context_hash, create_staging, get_cfapi_base_urls, mark_optimization_success
 from codeflash.benchmarking.utils import process_benchmark_data
-from codeflash.cli_cmds.console import code_print, console, logger, lsp_log, progress_bar
+from codeflash.cli_cmds.console import DEBUG_MODE, code_print, console, logger, lsp_log, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import (
     choose_weights,
@@ -61,7 +60,7 @@ from codeflash.code_utils.shell_utils import make_env_with_project_root
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
 from codeflash.either import Failure, Success, is_successful
-from codeflash.languages import is_python
+from codeflash.languages import is_java, is_python
 from codeflash.languages.base import Language
 from codeflash.languages.current import current_language_support
 from codeflash.languages.javascript.test_runner import clear_created_config_files, get_created_config_files
@@ -145,9 +144,70 @@ if TYPE_CHECKING:
     from codeflash.verification.verification_utils import TestConfig
 
 
+def log_code_after_replacement(file_path: Path, candidate_index: int) -> None:
+    """Log the full file content after code replacement in verbose mode."""
+    if not DEBUG_MODE:
+        return
+
+    try:
+        code = file_path.read_text(encoding="utf-8")
+        lang_map = {".java": "java", ".py": "python", ".js": "javascript", ".ts": "typescript"}
+        language = lang_map.get(file_path.suffix.lower(), "text")
+
+        console.print(
+            Panel(
+                Syntax(code, language, line_numbers=True, theme="monokai", word_wrap=True),
+                title=f"[bold blue]Code After Replacement (Candidate {candidate_index})[/] [dim]({file_path.name})[/]",
+                border_style="blue",
+            )
+        )
+    except Exception as e:
+        logger.debug(f"Failed to log code after replacement: {e}")
+
+
+def log_instrumented_test(test_source: str, test_name: str, test_type: str, language: str) -> None:
+    """Log instrumented test code in verbose mode."""
+    if not DEBUG_MODE:
+        return
+
+    display_source = test_source
+    if len(test_source) > 15000:
+        display_source = test_source[:15000] + "\n\n... [truncated] ..."
+
+    console.print(
+        Panel(
+            Syntax(display_source, language, line_numbers=True, theme="monokai", word_wrap=True),
+            title=f"[bold magenta]Instrumented Test: {test_name}[/] [dim]({test_type})[/]",
+            border_style="magenta",
+        )
+    )
+
+
+def log_test_run_output(stdout: str, stderr: str, test_type: str, returncode: int = 0) -> None:
+    """Log test run stdout/stderr in verbose mode."""
+    if not DEBUG_MODE:
+        return
+
+    max_len = 10000
+
+    if stdout and stdout.strip():
+        display_stdout = stdout[:max_len] + ("...[truncated]" if len(stdout) > max_len else "")
+        console.print(
+            Panel(
+                display_stdout,
+                title=f"[bold green]{test_type} - stdout[/] [dim](exit: {returncode})[/]",
+                border_style="green" if returncode == 0 else "red",
+            )
+        )
+
+    if stderr and stderr.strip():
+        display_stderr = stderr[:max_len] + ("...[truncated]" if len(stderr) > max_len else "")
+        console.print(Panel(display_stderr, title=f"[bold yellow]{test_type} - stderr[/]", border_style="yellow"))
+
+
 def log_optimization_context(function_name: str, code_context: CodeOptimizationContext) -> None:
     """Log optimization context details when in verbose mode using Rich formatting."""
-    if logger.getEffectiveLevel() > logging.DEBUG:
+    if not DEBUG_MODE:
         return
 
     console.rule()
@@ -597,23 +657,49 @@ class FunctionOptimizer:
         )
 
         logger.debug(f"[PIPELINE] Processing {count_tests} generated tests")
+        used_behavior_paths: set[Path] = set()
         for i, generated_test in enumerate(generated_tests.generated_tests):
-            logger.debug(
-                f"[PIPELINE] Test {i + 1}: behavior_path={generated_test.behavior_file_path}, perf_path={generated_test.perf_file_path}"
+            behavior_path = generated_test.behavior_file_path
+            perf_path = generated_test.perf_file_path
+
+            # For Java, fix paths to match package structure
+            if is_java():
+                behavior_path, perf_path, modified_behavior_source, modified_perf_source = self._fix_java_test_paths(
+                    generated_test.instrumented_behavior_test_source,
+                    generated_test.instrumented_perf_test_source,
+                    used_behavior_paths,
+                )
+                generated_test.behavior_file_path = behavior_path
+                generated_test.perf_file_path = perf_path
+                generated_test.instrumented_behavior_test_source = modified_behavior_source
+                generated_test.instrumented_perf_test_source = modified_perf_source
+                used_behavior_paths.add(behavior_path)
+
+            logger.debug(f"[PIPELINE] Test {i + 1}: behavior_path={behavior_path}, perf_path={perf_path}")
+
+            with behavior_path.open("w", encoding="utf8") as f:
+                f.write(generated_test.instrumented_behavior_test_source)
+            logger.debug(f"[PIPELINE] Wrote behavioral test to {behavior_path}")
+
+            # Verbose: Log instrumented behavior test
+            log_instrumented_test(
+                generated_test.instrumented_behavior_test_source,
+                behavior_path.name,
+                "Behavioral Test",
+                language=self.function_to_optimize.language,
             )
 
-            with generated_test.behavior_file_path.open("w", encoding="utf8") as f:
-                f.write(generated_test.instrumented_behavior_test_source)
-            logger.debug(f"[PIPELINE] Wrote behavioral test to {generated_test.behavior_file_path}")
-
-            # Save perf test source for debugging
-            debug_file_path = get_run_tmp_file(Path("perf_test_debug.test.ts"))
-            with debug_file_path.open("w", encoding="utf-8") as debug_f:
-                debug_f.write(generated_test.instrumented_perf_test_source)
-
-            with generated_test.perf_file_path.open("w", encoding="utf8") as f:
+            with perf_path.open("w", encoding="utf8") as f:
                 f.write(generated_test.instrumented_perf_test_source)
-            logger.debug(f"[PIPELINE] Wrote perf test to {generated_test.perf_file_path}")
+            logger.debug(f"[PIPELINE] Wrote perf test to {perf_path}")
+
+            # Verbose: Log instrumented performance test
+            log_instrumented_test(
+                generated_test.instrumented_perf_test_source,
+                perf_path.name,
+                "Performance Test",
+                language=self.function_to_optimize.language,
+            )
 
             # File paths are expected to be absolute - resolved at their source (CLI, TestConfig, etc.)
             test_file_obj = TestFile(
@@ -627,6 +713,11 @@ class FunctionOptimizer:
             self.test_files.add(test_file_obj)
             logger.debug(
                 f"[PIPELINE] Added test file to collection: behavior={test_file_obj.instrumented_behavior_file_path}, perf={test_file_obj.benchmarking_file_path}"
+            )
+            logger.debug(
+                f"[REGISTER] TestFile added: behavior={test_file_obj.instrumented_behavior_file_path}, "
+                f"exists={test_file_obj.instrumented_behavior_file_path.exists()}, "
+                f"original={test_file_obj.original_file_path}, test_type={test_file_obj.test_type}"
             )
 
             logger.info(f"Generated test {i + 1}/{count_tests}:")
@@ -665,6 +756,206 @@ class FunctionOptimizer:
                 original_conftest_content,
             )
         )
+
+    def _get_java_sources_root(self) -> Path:
+        """Get the Java sources root directory for test files.
+
+        For Java projects, tests_root might include the package path
+        (e.g., test/src/com/aerospike/test). We need to find the base directory
+        that should contain the package directories, not the tests_root itself.
+
+        This method looks for standard Java package prefixes (com, org, net, io, edu, gov)
+        in the tests_root path and returns everything before that prefix.
+
+        Returns:
+            Path to the Java sources root directory.
+
+        """
+        tests_root = self.test_cfg.tests_root
+        parts = tests_root.parts
+
+        # Check if tests_root already ends with "src" (already a Java sources root)
+        if tests_root.name == "src":
+            logger.debug(f"[JAVA] tests_root already ends with 'src': {tests_root}")
+            logger.debug(f"[JAVA-ROOT] Returning Java sources root: {tests_root}, tests_root was: {tests_root}")
+            return tests_root
+
+        # Check if tests_root already ends with src/test/java (Maven-standard)
+        if len(parts) >= 3 and parts[-3:] == ("src", "test", "java"):
+            logger.debug(f"[JAVA] tests_root already is Maven-standard test directory: {tests_root}")
+            logger.debug(f"[JAVA-ROOT] Returning Java sources root: {tests_root}, tests_root was: {tests_root}")
+            return tests_root
+
+        # Check for simple "src" subdirectory (handles test/src, test-module/src, etc.)
+        src_subdir = tests_root / "src"
+        if src_subdir.exists() and src_subdir.is_dir():
+            logger.debug(f"[JAVA] Found 'src' subdirectory: {src_subdir}")
+            logger.debug(f"[JAVA-ROOT] Returning Java sources root: {src_subdir}, tests_root was: {tests_root}")
+            return src_subdir
+
+        # Check for Maven-standard src/test/java structure as subdirectory
+        maven_test_dir = tests_root / "src" / "test" / "java"
+        if maven_test_dir.exists() and maven_test_dir.is_dir():
+            logger.debug(f"[JAVA] Found Maven-standard test directory as subdirectory: {maven_test_dir}")
+            logger.debug(f"[JAVA-ROOT] Returning Java sources root: {maven_test_dir}, tests_root was: {tests_root}")
+            return maven_test_dir
+
+        # Look for standard Java package prefixes that indicate the start of package structure
+        standard_package_prefixes = ("com", "org", "net", "io", "edu", "gov")
+
+        for i, part in enumerate(parts):
+            if part in standard_package_prefixes:
+                # Found start of package path, return everything before it
+                if i > 0:
+                    java_sources_root = Path(*parts[:i])
+                    logger.debug(
+                        f"[JAVA] Detected Java sources root: {java_sources_root} (from tests_root: {tests_root})"
+                    )
+                    logger.debug(
+                        f"[JAVA-ROOT] Returning Java sources root: {java_sources_root}, tests_root was: {tests_root}"
+                    )
+                    return java_sources_root
+
+        # If no standard package prefix found, check if there's a 'java' directory
+        # (standard Maven structure: src/test/java)
+        for i, part in enumerate(parts):
+            if part == "java" and i > 0:
+                # Return up to and including 'java'
+                java_sources_root = Path(*parts[: i + 1])
+                logger.debug(f"[JAVA] Detected Maven-style Java sources root: {java_sources_root}")
+                logger.debug(
+                    f"[JAVA-ROOT] Returning Java sources root: {java_sources_root}, tests_root was: {tests_root}"
+                )
+                return java_sources_root
+
+        # Default: return tests_root as-is (original behavior)
+        logger.debug(f"[JAVA] Using tests_root as Java sources root: {tests_root}")
+        logger.debug(f"[JAVA-ROOT] Returning Java sources root: {tests_root}, tests_root was: {tests_root}")
+        return tests_root
+
+    def _fix_java_test_paths(
+        self, behavior_source: str, perf_source: str, used_paths: set[Path]
+    ) -> tuple[Path, Path, str, str]:
+        """Fix Java test file paths to match package structure.
+
+        Java requires test files to be in directories matching their package.
+        This method extracts the package and class from the generated tests
+        and returns correct paths. If the path would conflict with an already
+        used path, it renames the class by adding an index suffix.
+
+        Args:
+            behavior_source: Source code of the behavior test.
+            perf_source: Source code of the performance test.
+            used_paths: Set of already used behavior file paths.
+
+        Returns:
+            Tuple of (behavior_path, perf_path, modified_behavior_source, modified_perf_source)
+            with correct package structure and unique class names.
+
+        """
+        import re
+
+        # Extract package from behavior source
+        package_match = re.search(r"^\s*package\s+([\w.]+)\s*;", behavior_source, re.MULTILINE)
+        package_name = package_match.group(1) if package_match else ""
+
+        # JPMS: If a test module-info.java exists, remap the package to the
+        # test module namespace to avoid split-package errors.
+        # E.g., io.questdb.cairo -> io.questdb.test.cairo
+        test_dir = self._get_java_sources_root()
+        test_module_info = test_dir / "module-info.java"
+        if package_name and test_module_info.exists():
+            mi_content = test_module_info.read_text()
+            mi_match = re.search(r"module\s+([\w.]+)", mi_content)
+            if mi_match:
+                test_module_name = mi_match.group(1)
+                main_dir = test_dir.parent.parent / "main" / "java"
+                main_module_info = main_dir / "module-info.java"
+                if main_module_info.exists():
+                    main_content = main_module_info.read_text()
+                    main_match = re.search(r"module\s+([\w.]+)", main_content)
+                    if main_match:
+                        main_module_name = main_match.group(1)
+                        if package_name.startswith(main_module_name):
+                            suffix = package_name[len(main_module_name) :]
+                            new_package = test_module_name + suffix
+                            old_decl = f"package {package_name};"
+                            new_decl = f"package {new_package};"
+                            behavior_source = behavior_source.replace(old_decl, new_decl, 1)
+                            perf_source = perf_source.replace(old_decl, new_decl, 1)
+                            package_name = new_package
+                            logger.debug(f"[JPMS] Remapped package: {old_decl} -> {new_decl}")
+
+        # Extract class name from behavior source
+        # Use more specific pattern to avoid matching words like "command" or text in comments
+        class_match = re.search(r"^(?:public\s+)?class\s+(\w+)", behavior_source, re.MULTILINE)
+        behavior_class = class_match.group(1) if class_match else "GeneratedTest"
+
+        # Extract class name from perf source
+        perf_class_match = re.search(r"^(?:public\s+)?class\s+(\w+)", perf_source, re.MULTILINE)
+        perf_class = perf_class_match.group(1) if perf_class_match else "GeneratedPerfTest"
+
+        # Build paths with package structure
+        # Use the Java sources root, not tests_root, to avoid path duplication
+        # when tests_root already includes the package path
+        test_dir = self._get_java_sources_root()
+
+        if package_name:
+            package_path = package_name.replace(".", "/")
+            behavior_path = test_dir / package_path / f"{behavior_class}.java"
+            perf_path = test_dir / package_path / f"{perf_class}.java"
+        else:
+            package_path = ""
+            behavior_path = test_dir / f"{behavior_class}.java"
+            perf_path = test_dir / f"{perf_class}.java"
+
+        # If path already used, rename class by adding index suffix
+        modified_behavior_source = behavior_source
+        modified_perf_source = perf_source
+        if behavior_path in used_paths:
+            # Find a unique index
+            index = 2
+            while True:
+                new_behavior_class = f"{behavior_class}_{index}"
+                new_perf_class = f"{perf_class}_{index}"
+                if package_path:
+                    new_behavior_path = test_dir / package_path / f"{new_behavior_class}.java"
+                    new_perf_path = test_dir / package_path / f"{new_perf_class}.java"
+                else:
+                    new_behavior_path = test_dir / f"{new_behavior_class}.java"
+                    new_perf_path = test_dir / f"{new_perf_class}.java"
+                if new_behavior_path not in used_paths:
+                    behavior_path = new_behavior_path
+                    perf_path = new_perf_path
+                    # Rename class in source code - replace the class declaration
+                    modified_behavior_source = re.sub(
+                        rf"^((?:public\s+)?class\s+){re.escape(behavior_class)}(\b)",
+                        rf"\g<1>{new_behavior_class}\g<2>",
+                        behavior_source,
+                        count=1,
+                        flags=re.MULTILINE,
+                    )
+                    modified_perf_source = re.sub(
+                        rf"^((?:public\s+)?class\s+){re.escape(perf_class)}(\b)",
+                        rf"\g<1>{new_perf_class}\g<2>",
+                        perf_source,
+                        count=1,
+                        flags=re.MULTILINE,
+                    )
+                    logger.debug(f"[JAVA] Renamed duplicate test class from {behavior_class} to {new_behavior_class}")
+                    break
+                index += 1
+
+        # Create directories if needed
+        behavior_path.parent.mkdir(parents=True, exist_ok=True)
+        perf_path.parent.mkdir(parents=True, exist_ok=True)
+
+        logger.debug(f"[JAVA] Fixed paths: behavior={behavior_path}, perf={perf_path}")
+        logger.debug(
+            f"[WRITE-PATH] Writing test to behavior_path={behavior_path}, perf_path={perf_path}, "
+            f"package={package_name}, behavior_class={behavior_class}, perf_class={perf_class}"
+        )
+        return behavior_path, perf_path, modified_behavior_source, modified_perf_source
 
     # note: this isn't called by the lsp, only called by cli
     def optimize_function(self) -> Result[BestOptimization, str]:
@@ -1048,6 +1339,9 @@ class FunctionOptimizer:
                 logger.info("No functions were replaced in the optimized code. Skipping optimization candidate.")
                 console.rule()
                 return None
+
+            # Verbose: Log code after replacement
+            log_code_after_replacement(self.function_to_optimize.file_path, candidate_index)
         except (ValueError, SyntaxError, cst.ParserSyntaxError, AttributeError) as e:
             logger.error(e)
             self.write_code_and_helpers(
@@ -1488,12 +1782,15 @@ class FunctionOptimizer:
             if helper_function.definition_type != "class":
                 read_writable_functions_by_file_path[helper_function.file_path].add(helper_function.qualified_name)
         for module_abspath, qualified_names in read_writable_functions_by_file_path.items():
+            # Pass function_to_optimize for the main file to enable precise overload matching
+            func_to_opt = self.function_to_optimize if module_abspath == self.function_to_optimize.file_path else None
             did_update |= replace_function_definitions_in_module(
                 function_names=list(qualified_names),
                 optimized_code=optimized_code,
                 module_abspath=module_abspath,
                 preexisting_objects=code_context.preexisting_objects,
                 project_root_path=self.project_root,
+                function_to_optimize=func_to_opt,
             )
         unused_helpers = detect_unused_helper_functions(self.function_to_optimize, code_context, optimized_code)
 
@@ -1560,23 +1857,29 @@ class FunctionOptimizer:
                     raise ValueError(msg)
 
                 # Use language-specific instrumentation
+                # Read the test file first
+                with path_obj_test_file.open("r", encoding="utf8") as f:
+                    original_test_source = f.read()
+
                 success, injected_behavior_test = self.language_support.instrument_existing_test(
-                    test_path=path_obj_test_file,
+                    test_string=original_test_source,
                     call_positions=[test.position for test in tests_in_file_list],
                     function_to_optimize=self.function_to_optimize,
                     tests_project_root=self.test_cfg.tests_project_rootdir,
                     mode="behavior",
+                    test_path=path_obj_test_file,
                 )
                 if not success:
                     logger.debug(f"Failed to instrument test file {test_file} for behavior testing")
                     continue
 
                 success, injected_perf_test = self.language_support.instrument_existing_test(
-                    test_path=path_obj_test_file,
+                    test_string=original_test_source,
                     call_positions=[test.position for test in tests_in_file_list],
                     function_to_optimize=self.function_to_optimize,
                     tests_project_root=self.test_cfg.tests_project_rootdir,
                     mode="performance",
+                    test_path=path_obj_test_file,
                 )
                 if not success:
                     logger.debug(f"Failed to instrument test file {test_file} for performance testing")
@@ -1604,13 +1907,36 @@ class FunctionOptimizer:
 
                     return path_obj.parent / f"{new_stem}{ext}"
 
-                new_behavioral_test_path = get_instrumented_path(test_file, "__perfinstrumented")
-                new_perf_test_path = get_instrumented_path(test_file, "__perfonlyinstrumented")
+                # Use distinct suffixes for existing tests to avoid collisions
+                # with generated test paths (which use __perfinstrumented / __perfonlyinstrumented)
+                new_behavioral_test_path = get_instrumented_path(test_file, "__existing_perfinstrumented")
+                new_perf_test_path = get_instrumented_path(test_file, "__existing_perfonlyinstrumented")
+
+                # For Java, the class name inside the file must match the file name.
+                # instrument_existing_test() renames to __perfinstrumented, but we use
+                # __existing_perfinstrumented for file paths, so fix the class name.
+                if is_java():
+                    if injected_behavior_test is not None:
+                        injected_behavior_test = injected_behavior_test.replace(
+                            "__perfinstrumented", "__existing_perfinstrumented"
+                        )
+                    if injected_perf_test is not None:
+                        injected_perf_test = injected_perf_test.replace(
+                            "__perfonlyinstrumented", "__existing_perfonlyinstrumented"
+                        )
 
                 if injected_behavior_test is not None:
                     with new_behavioral_test_path.open("w", encoding="utf8") as _f:
                         _f.write(injected_behavior_test)
                     logger.debug(f"[PIPELINE] Wrote instrumented behavior test to {new_behavioral_test_path}")
+
+                    # Verbose: Log instrumented existing behavior test
+                    log_instrumented_test(
+                        injected_behavior_test,
+                        new_behavioral_test_path.name,
+                        "Existing Behavioral Test",
+                        language=self.function_to_optimize.language,
+                    )
                 else:
                     msg = "injected_behavior_test is None"
                     raise ValueError(msg)
@@ -1619,6 +1945,14 @@ class FunctionOptimizer:
                     with new_perf_test_path.open("w", encoding="utf8") as _f:
                         _f.write(injected_perf_test)
                     logger.debug(f"[PIPELINE] Wrote instrumented perf test to {new_perf_test_path}")
+
+                    # Verbose: Log instrumented existing performance test
+                    log_instrumented_test(
+                        injected_perf_test,
+                        new_perf_test_path.name,
+                        "Existing Performance Test",
+                        language=self.function_to_optimize.language,
+                    )
 
                 unique_instrumented_test_files.add(new_behavioral_test_path)
                 unique_instrumented_test_files.add(new_perf_test_path)
@@ -1661,7 +1995,9 @@ class FunctionOptimizer:
                 else:
                     msg = f"Unexpected test type: {test_type}"
                     raise ValueError(msg)
+                test_string = path_obj_test_file.read_text(encoding="utf-8")
                 success, injected_behavior_test = inject_profiling_into_existing_test(
+                    test_string=test_string,
                     mode=TestingMode.BEHAVIOR,
                     test_path=path_obj_test_file,
                     call_positions=[test.position for test in tests_in_file_list],
@@ -1671,6 +2007,7 @@ class FunctionOptimizer:
                 if not success:
                     continue
                 success, injected_perf_test = inject_profiling_into_existing_test(
+                    test_string=test_string,
                     mode=TestingMode.PERFORMANCE,
                     test_path=path_obj_test_file,
                     call_positions=[test.position for test in tests_in_file_list],
@@ -2583,6 +2920,19 @@ class FunctionOptimizer:
             )
             console.rule()
 
+            if not is_python():
+                # Check if candidate had any passing behavioral tests before attempting SQLite comparison.
+                # Python compares in-memory TestResults (no file dependency), but Java/JS require
+                # SQLite files that only exist when test instrumentation hooks fire successfully.
+                candidate_report = candidate_behavior_results.get_test_pass_fail_report_by_type()
+                total_passed = sum(r.get("passed", 0) for r in candidate_report.values())
+                if total_passed == 0:
+                    logger.warning(
+                        "No behavioral tests passed for optimization candidate %d. Skipping correctness verification.",
+                        optimization_candidate_index,
+                    )
+                    return self.get_results_not_matched_error()
+
             # Use language-appropriate comparison
             if not is_python():
                 # Non-Python: Compare using language support with SQLite results if available
@@ -2599,11 +2949,17 @@ class FunctionOptimizer:
                     # Cleanup SQLite files after comparison
                     candidate_sqlite.unlink(missing_ok=True)
                 else:
-                    # Fallback: compare test pass/fail status (tests aren't instrumented yet)
-                    # If all tests that passed for original also pass for candidate, consider it a match
-                    match, diffs = compare_test_results(
-                        baseline_results.behavior_test_results, candidate_behavior_results, pass_fail_only=True
+                    # CORRECTNESS REQUIREMENT: SQLite files must exist for proper behavioral verification
+                    # TODO: Fix instrumentation to ensure SQLite files are always generated:
+                    # 1. Java: Verify JavaTestInstrumentation captures all return values
+                    # 2. JavaScript: Verify JS instrumentation runs before optimization
+                    # 3. Other languages: Implement proper test result capture
+                    logger.error(
+                        "Cannot verify correctness: SQLite test result files not found. "
+                        f"Expected: {original_sqlite} and {candidate_sqlite}. "
+                        "Test instrumentation must capture return values to ensure optimization correctness."
                     )
+                    return self.get_results_not_matched_error()
             else:
                 # Python: Compare using Python comparator
                 match, diffs = compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
@@ -2708,8 +3064,9 @@ class FunctionOptimizer:
         testing_time: float = TOTAL_LOOPING_TIME_EFFECTIVE,
         *,
         enable_coverage: bool = False,
-        pytest_min_loops: int = 5,
-        pytest_max_loops: int = 250,
+        min_outer_loops: int = 5,
+        max_outer_loops: int = 250,
+        inner_iterations: int | None = None,
         code_context: CodeOptimizationContext | None = None,
         line_profiler_output_file: Path | None = None,
     ) -> tuple[TestResults | dict, CoverageData | None]:
@@ -2745,16 +3102,22 @@ class FunctionOptimizer:
                     cwd=self.project_root,
                     test_env=test_env,
                     pytest_cmd=self.test_cfg.pytest_cmd,
-                    pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
-                    pytest_target_runtime_seconds=testing_time,
-                    pytest_min_loops=pytest_min_loops,
-                    pytest_max_loops=pytest_max_loops,
+                    timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
+                    target_runtime_seconds=testing_time,
+                    min_outer_loops=min_outer_loops,
+                    max_outer_loops=max_outer_loops,
+                    inner_iterations=inner_iterations,
                     test_framework=self.test_cfg.test_framework,
                     js_project_root=self.test_cfg.js_project_root,
                 )
             else:
                 msg = f"Unexpected testing type: {testing_type}"
                 raise ValueError(msg)
+
+            # Verbose: Log test run output
+            log_test_run_output(
+                run_result.stdout, run_result.stderr, f"Test Run ({testing_type.name})", run_result.returncode
+            )
         except subprocess.TimeoutExpired:
             logger.exception(
                 f"Error running tests in {', '.join(str(f) for f in test_files.test_files)}.\nTimeout Error"
@@ -2798,17 +3161,18 @@ class FunctionOptimizer:
                 coverage_database_file=coverage_database_file,
                 coverage_config_file=coverage_config_file,
                 skip_sqlite_cleanup=skip_cleanup,
+                testing_type=testing_type,
             )
             if testing_type == TestingMode.PERFORMANCE:
                 results.perf_stdout = run_result.stdout
             return results, coverage_results
         # For LINE_PROFILE mode, Python uses .lprof files while JavaScript uses JSON
         # Return TestResults for JavaScript so _line_profiler_step_javascript can parse the JSON
-        if not is_python():
-            # Return TestResults to indicate tests ran, actual parsing happens in _line_profiler_step_javascript
-            return TestResults(test_results=[]), None
-        results, coverage_results = parse_line_profile_results(line_profiler_output_file=line_profiler_output_file)
-        return results, coverage_results
+        if testing_type == TestingMode.LINE_PROFILE:
+            results, coverage_results = parse_line_profile_results(line_profiler_output_file=line_profiler_output_file)
+            return results, coverage_results
+        logger.error(f"Unexpected testing type: {testing_type}")
+        return TestResults(), None
 
     def submit_test_generation_tasks(
         self,
@@ -3006,8 +3370,8 @@ class FunctionOptimizer:
                 testing_time=5.0,  # Short benchmark time
                 enable_coverage=False,
                 code_context=code_context,
-                pytest_min_loops=1,
-                pytest_max_loops=3,
+                min_outer_loops=1,
+                max_outer_loops=3,
             )
         except Exception as e:
             logger.debug(f"Concurrency benchmark failed: {e}")

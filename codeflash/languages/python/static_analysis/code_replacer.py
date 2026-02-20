@@ -4,6 +4,7 @@ import ast
 from collections import defaultdict
 from functools import lru_cache
 from itertools import chain
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional, TypeVar
 
 import libcst as cst
@@ -467,15 +468,21 @@ def replace_function_definitions_for_language(
         and function_to_optimize.ending_line
         and function_to_optimize.file_path == module_abspath
     ):
-        # Extract just the target function from the optimized code
-        optimized_func = _extract_function_from_code(
-            lang_support, code_to_apply, function_to_optimize.function_name, module_abspath
-        )
-        if optimized_func:
-            new_code = lang_support.replace_function(original_source_code, function_to_optimize, optimized_func)
-        else:
-            # Fallback: use the entire optimized code (for simple single-function files)
+        # For Java, we need to pass the full optimized code so replace_function can
+        # extract and add any new class members (static fields, helper methods).
+        # For other languages, we extract just the target function.
+        if language == Language.JAVA:
             new_code = lang_support.replace_function(original_source_code, function_to_optimize, code_to_apply)
+        else:
+            # Extract just the target function from the optimized code
+            optimized_func = _extract_function_from_code(
+                lang_support, code_to_apply, function_to_optimize.function_name, module_abspath
+            )
+            if optimized_func:
+                new_code = lang_support.replace_function(original_source_code, function_to_optimize, optimized_func)
+            else:
+                # Fallback: use the entire optimized code (for simple single-function files)
+                new_code = lang_support.replace_function(original_source_code, function_to_optimize, code_to_apply)
     else:
         # For helper files or when we don't have precise line info:
         # Find each function by name in both original and optimized code
@@ -500,13 +507,19 @@ def replace_function_definitions_for_language(
             if func is None:
                 continue
 
-            # Extract just this function from the optimized code
-            optimized_func = _extract_function_from_code(
-                lang_support, code_to_apply, func.function_name, module_abspath
-            )
-            if optimized_func:
-                new_code = lang_support.replace_function(new_code, func, optimized_func)
+            # For Java, pass the full optimized code to handle class member insertion.
+            # For other languages, extract just the target function.
+            if language == Language.JAVA:
+                new_code = lang_support.replace_function(new_code, func, code_to_apply)
                 modified = True
+            else:
+                # Extract just this function from the optimized code
+                optimized_func = _extract_function_from_code(
+                    lang_support, code_to_apply, func.function_name, module_abspath
+                )
+                if optimized_func:
+                    new_code = lang_support.replace_function(new_code, func, optimized_func)
+                    modified = True
 
         if not modified:
             logger.warning(f"Could not find function {function_names} in {module_abspath}")
@@ -558,7 +571,8 @@ def _extract_function_from_code(
 
 def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStringsMarkdown) -> str:
     file_to_code_context = optimized_code.file_to_path()
-    module_optimized_code = file_to_code_context.get(str(relative_path))
+    relative_path_str = str(relative_path)
+    module_optimized_code = file_to_code_context.get(relative_path_str)
     if module_optimized_code is None:
         # Fallback: if there's only one code block with None file path,
         # use it regardless of the expected path (the AI server doesn't always include file paths)
@@ -566,12 +580,40 @@ def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStrin
             module_optimized_code = file_to_code_context["None"]
             logger.debug(f"Using code block with None file_path for {relative_path}")
         else:
-            logger.warning(
-                f"Optimized code not found for {relative_path} In the context\n-------\n{optimized_code}\n-------\n"
-                "re-check your 'markdown code structure'"
-                f"existing files are {file_to_code_context.keys()}"
-            )
-            module_optimized_code = ""
+            # Fallback: try to match by just the filename (for Java/JS where the AI
+            # might return just the class name like "Algorithms.java" instead of
+            # the full path like "src/main/java/com/example/Algorithms.java")
+            target_filename = relative_path.name
+            for file_path_str, code in file_to_code_context.items():
+                if file_path_str:
+                    # Extract filename without creating Path object repeatedly
+                    if file_path_str.endswith(target_filename) and (
+                        len(file_path_str) == len(target_filename)
+                        or file_path_str[-len(target_filename) - 1] in ("/", "\\")
+                    ):
+                        module_optimized_code = code
+                        logger.debug(f"Matched {file_path_str} to {relative_path} by filename")
+                        break
+
+            if module_optimized_code is None:
+                # Also try matching if there's only one code file, but ONLY for non-Python
+                # languages where path matching is less strict. For Python, we require
+                # exact path matching to avoid applying code meant for one file to another.
+                # This prevents bugs like PR #1309 where a function was duplicated because
+                # optimized code for formatter.py was incorrectly applied to support.py.
+                if len(file_to_code_context) == 1 and not is_python():
+                    only_key = next(iter(file_to_code_context.keys()))
+                    module_optimized_code = file_to_code_context[only_key]
+                    logger.debug(f"Using only code block {only_key} for {relative_path}")
+                else:
+                    # Delay expensive string formatting until actually logging
+                    if logger.isEnabledFor(logger.level):
+                        logger.warning(
+                            f"Optimized code not found for {relative_path} In the context\n-------\n{optimized_code}\n-------\n"
+                            "re-check your 'markdown code structure'"
+                            f"existing files are {file_to_code_context.keys()}"
+                        )
+                    module_optimized_code = ""
     return module_optimized_code
 
 

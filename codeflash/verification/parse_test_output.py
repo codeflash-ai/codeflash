@@ -20,7 +20,7 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
-from codeflash.languages import is_javascript
+from codeflash.languages import is_java, is_javascript, is_python
 
 # Import Jest-specific parsing from the JavaScript language module
 from codeflash.languages.javascript.parse import parse_jest_test_xml as _parse_jest_test_xml
@@ -28,11 +28,12 @@ from codeflash.models.models import (
     ConcurrencyMetrics,
     FunctionTestInvocation,
     InvocationId,
+    TestingMode,
     TestResults,
     TestType,
     VerificationType,
 )
-from codeflash.verification.coverage_utils import CoverageUtils, JestCoverageUtils
+from codeflash.verification.coverage_utils import CoverageUtils, JacocoCoverageUtils, JestCoverageUtils
 
 if TYPE_CHECKING:
     import subprocess
@@ -142,8 +143,16 @@ def parse_concurrency_metrics(test_results: TestResults, function_name: str) -> 
     )
 
 
+# Cache for resolved test file paths to avoid repeated rglob calls
+_test_file_path_cache: dict[tuple[str, Path], Path | None] = {}
+
+
+def clear_test_file_path_cache() -> None:
+    _test_file_path_cache.clear()
+
+
 def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> Path | None:
-    """Resolve test file path from pytest's test class path.
+    """Resolve test file path from pytest's test class path or Java class path.
 
     This function handles various cases where pytest's classname in JUnit XML
     includes parent directories that may already be part of base_dir.
@@ -151,6 +160,7 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
     Args:
         test_class_path: The full class path from pytest (e.g., "project.tests.test_file.TestClass")
             or a file path from Jest (e.g., "tests/test_file.test.js")
+            or a Java class path (e.g., "com.example.AlgorithmsTest")
         base_dir: The base directory for tests (tests project root)
 
     Returns:
@@ -162,12 +172,61 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         >>> # Should find: /path/to/tests/unittest/test_file.py
 
     """
+    # Check cache first
+    cache_key = (test_class_path, base_dir)
+    if cache_key in _test_file_path_cache:
+        cached_result = _test_file_path_cache[cache_key]
+        logger.debug(f"[RESOLVE] Cache hit for {test_class_path}: {cached_result}")
+        return cached_result
+
+    # Handle Java class paths (convert dots to path and add .java extension)
+    # Java class paths look like "com.example.TestClass" and should map to
+    # src/test/java/com/example/TestClass.java
+    if is_java():
+        logger.debug(f"[RESOLVE] Input: test_class_path={test_class_path}, base_dir={base_dir}")
+        # Convert dots to path separators
+        relative_path = test_class_path.replace(".", "/") + ".java"
+
+        # Try various locations
+        # 1. Directly under base_dir
+        potential_path = base_dir / relative_path
+        logger.debug(f"[RESOLVE] Attempt 1: checking {potential_path}")
+        if potential_path.exists():
+            logger.debug(f"[RESOLVE] Attempt 1 SUCCESS: found {potential_path}")
+            _test_file_path_cache[cache_key] = potential_path
+            return potential_path
+
+        # 2. Under src/test/java relative to project root
+        project_root = base_dir.parent if base_dir.name == "java" else base_dir
+        while project_root.name not in ("", "/") and not (project_root / "pom.xml").exists():
+            project_root = project_root.parent
+        if (project_root / "pom.xml").exists():
+            potential_path = project_root / "src" / "test" / "java" / relative_path
+            logger.debug(f"[RESOLVE] Attempt 2: checking {potential_path} (project_root={project_root})")
+            if potential_path.exists():
+                logger.debug(f"[RESOLVE] Attempt 2 SUCCESS: found {potential_path}")
+                _test_file_path_cache[cache_key] = potential_path
+                return potential_path
+
+        # 3. Search for the file in base_dir and its subdirectories
+        file_name = test_class_path.rsplit(".", maxsplit=1)[-1] + ".java"
+        logger.debug(f"[RESOLVE] Attempt 3: rglob for {file_name} in {base_dir}")
+        for java_file in base_dir.rglob(file_name):
+            logger.debug(f"[RESOLVE] Attempt 3 SUCCESS: rglob found {java_file}")
+            _test_file_path_cache[cache_key] = java_file
+            return java_file
+
+        logger.warning(f"[RESOLVE] FAILED to resolve {test_class_path} in base_dir {base_dir}")
+        _test_file_path_cache[cache_key] = None  # Cache negative results too
+        return None
+
     # Handle file paths (contain slashes and extensions like .js/.ts)
     if "/" in test_class_path or "\\" in test_class_path:
         # This is a file path, not a Python module path
         # Try the path as-is if it's absolute
         potential_path = Path(test_class_path)
         if potential_path.is_absolute() and potential_path.exists():
+            _test_file_path_cache[cache_key] = potential_path
             return potential_path
 
         # Try to resolve relative to base_dir's parent (project root)
@@ -177,6 +236,7 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         try:
             potential_path = potential_path.resolve()
             if potential_path.exists():
+                _test_file_path_cache[cache_key] = potential_path
                 return potential_path
         except (OSError, RuntimeError):
             pass
@@ -186,10 +246,12 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         try:
             potential_path = potential_path.resolve()
             if potential_path.exists():
+                _test_file_path_cache[cache_key] = potential_path
                 return potential_path
         except (OSError, RuntimeError):
             pass
 
+        _test_file_path_cache[cache_key] = None  # Cache negative results
         return None
 
     # First try the full path (Python module path)
@@ -220,6 +282,8 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
                 if test_file_path:
                     break
 
+    # Cache the result (could be None)
+    _test_file_path_cache[cache_key] = test_file_path
     return test_file_path
 
 
@@ -438,8 +502,9 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
     finally:
         db.close()
 
-    # Check if this is a JavaScript test (use JSON) or Python test (use pickle)
+    # Check if this is a JavaScript or Java test (use JSON) or Python test (use pickle)
     is_jest = is_javascript()
+    is_java_test = is_java()
 
     for val in data:
         try:
@@ -497,6 +562,36 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                 else:
                     # Already a file path
                     test_file_path = test_config.tests_project_rootdir / test_module_path
+            elif is_java_test:
+                # Java: test_module_path is the class name (e.g., "CounterTest")
+                # We need to find the test file by searching for it in the test files
+                test_file_path = None
+                for test_file in test_files.test_files:
+                    # Check instrumented behavior file path
+                    if test_file.instrumented_behavior_file_path:
+                        # Java class name is stored without package prefix in SQLite
+                        # Check if the file name matches the module path
+                        file_stem = test_file.instrumented_behavior_file_path.stem
+                        # The instrumented file has __perfinstrumented suffix
+                        original_class = file_stem.replace("__perfinstrumented", "").replace(
+                            "__perfonlyinstrumented", ""
+                        )
+                        if test_module_path in (original_class, file_stem):
+                            test_file_path = test_file.instrumented_behavior_file_path
+                            break
+                    # Check original file path
+                    if test_file.original_file_path:
+                        if test_file.original_file_path.stem == test_module_path:
+                            test_file_path = test_file.original_file_path
+                            break
+                if test_file_path is None:
+                    # Fallback: try to find by searching in tests_project_rootdir
+                    java_files = list(test_config.tests_project_rootdir.rglob(f"*{test_module_path}*.java"))
+                    if java_files:
+                        test_file_path = java_files[0]
+                    else:
+                        logger.debug(f"Could not find Java test file for module path: {test_module_path}")
+                        test_file_path = test_config.tests_project_rootdir / f"{test_module_path}.java"
             else:
                 # Python: convert module path to file path
                 test_file_path = file_path_from_module_name(test_module_path, test_config.tests_project_rootdir)
@@ -516,10 +611,12 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                 if test_type is None:
                     test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
                     logger.debug(f"[PARSE-DEBUG]   by_instrumented_file_path: {test_type}")
-                # Default to GENERATED_REGRESSION for Jest tests when test type can't be determined
-                if test_type is None and is_jest:
+                # Default to GENERATED_REGRESSION for Jest/Java tests when test type can't be determined
+                if test_type is None and (is_jest or is_java_test):
                     test_type = TestType.GENERATED_REGRESSION
-                    logger.debug("[PARSE-DEBUG]   defaulting to GENERATED_REGRESSION (Jest)")
+                    logger.debug(
+                        f"[PARSE-DEBUG]   defaulting to GENERATED_REGRESSION ({'Jest' if is_jest else 'Java'})"
+                    )
                 elif test_type is None:
                     # Skip results where test type cannot be determined
                     logger.debug(f"Skipping result for {test_function_name}: could not determine test type")
@@ -527,14 +624,15 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                 logger.debug(f"[PARSE-DEBUG]   FINAL test_type={test_type}")
 
             # Deserialize return value
-            # For Jest: Skip deserialization - comparison happens via language-specific comparator
+            # For Jest/Java: Store as serialized JSON - comparison happens via language-specific comparator
             # For Python: Use pickle to deserialize
             ret_val = None
             if loop_index == 1 and val[7]:
                 try:
-                    if is_jest:
-                        # Jest comparison happens via Node.js script (language_support.compare_test_results)
+                    if is_jest or is_java_test:
+                        # Jest/Java comparison happens via language-specific comparator
                         # Store a marker indicating data exists but is not deserialized in Python
+                        # For Java, val[7] is a JSON string from Gson serialization
                         ret_val = ("__serialized__", val[7])
                     else:
                         # Python uses pickle serialization
@@ -601,6 +699,30 @@ def parse_test_xml(
         return test_results
     # Always use tests_project_rootdir since pytest is now the test runner for all frameworks
     base_dir = test_config.tests_project_rootdir
+    logger.debug(f"[PARSE-XML] base_dir for resolution: {base_dir}")
+    logger.debug(
+        f"[PARSE-XML] Registered test files: {[str(tf.instrumented_behavior_file_path) for tf in test_files.test_files]}"
+    )
+
+    # For Java: pre-parse fallback stdout once (not per testcase) to avoid O(n²) complexity
+    java_fallback_stdout = None
+    java_fallback_begin_matches = None
+    java_fallback_end_matches = None
+    if is_java() and run_result is not None:
+        try:
+            fallback_stdout = run_result.stdout if isinstance(run_result.stdout, str) else run_result.stdout.decode()
+            begin_matches = list(start_pattern.finditer(fallback_stdout))
+            if begin_matches:
+                java_fallback_stdout = fallback_stdout
+                java_fallback_begin_matches = begin_matches
+                java_fallback_end_matches = {}
+                for match in end_pattern.finditer(fallback_stdout):
+                    groups = match.groups()
+                    java_fallback_end_matches[groups[:5]] = match
+                logger.debug(f"Java: Found {len(begin_matches)} timing markers in subprocess stdout (fallback)")
+        except (AttributeError, UnicodeDecodeError):
+            pass
+
     for suite in xml:
         for testcase in suite:
             class_name = testcase.classname
@@ -623,6 +745,7 @@ def parse_test_xml(
                 return test_results
 
             test_class_path = testcase.classname
+            logger.debug(f"[PARSE-XML] Processing testcase: classname={test_class_path}, name={testcase.name}")
             try:
                 if testcase.name is None:
                     logger.debug(
@@ -640,9 +763,13 @@ def parse_test_xml(
             if test_file_name is None:
                 if test_class_path:
                     # TODO : This might not be true if the test is organized under a class
+                    logger.debug(f"[PARSE-XML] Resolving test_class_path={test_class_path} in base_dir={base_dir}")
                     test_file_path = resolve_test_file_from_class_path(test_class_path, base_dir)
 
                     if test_file_path is None:
+                        logger.error(
+                            f"[PARSE-XML] ERROR: Could not resolve test_class_path={test_class_path}, base_dir={base_dir}"
+                        )
                         logger.warning(f"Could not find the test for file name - {test_class_path} ")
                         continue
                 else:
@@ -654,7 +781,16 @@ def parse_test_xml(
             if not test_file_path.exists():
                 logger.warning(f"Could not find the test for file name - {test_file_path} ")
                 continue
+            # Try to match by instrumented file path first (for generated/instrumented tests)
+            logger.debug(f"[PARSE-XML] Looking up test_type by instrumented_file_path: {test_file_path}")
             test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
+            logger.debug(f"[PARSE-XML] Lookup by instrumented path result: {test_type}")
+            if test_type is None:
+                # Fallback: try to match by original file path (for existing unit tests that were instrumented)
+                # JUnit XML may reference the original class name, resolving to the original file path
+                logger.debug(f"[PARSE-XML] Looking up test_type by original_file_path: {test_file_path}")
+                test_type = test_files.get_test_type_by_original_file_path(test_file_path)
+                logger.debug(f"[PARSE-XML] Lookup by original path result: {test_type}")
             if test_type is None:
                 # Log registered paths for debugging
                 registered_paths = [str(tf.instrumented_behavior_file_path) for tf in test_files.test_files]
@@ -675,21 +811,57 @@ def parse_test_xml(
             if len(testcase.result) > 1:
                 logger.debug(f"!!!!!Multiple results for {testcase.name or '<None>'} in {test_xml_file_path}!!!")
             if len(testcase.result) == 1:
-                message = testcase.result[0].message.lower()
-                if "failed: timeout >" in message or "timed out" in message:
-                    timed_out = True
+                message = testcase.result[0].message
+                if message is not None:
+                    message = message.lower()
+                    if "failed: timeout >" in message or "timed out" in message:
+                        timed_out = True
 
             sys_stdout = testcase.system_out or ""
-            begin_matches = list(matches_re_start.finditer(sys_stdout))
-            end_matches = {}
-            for match in matches_re_end.finditer(sys_stdout):
-                groups = match.groups()
-                if len(groups[5].split(":")) > 1:
-                    iteration_id = groups[5].split(":")[0]
-                    groups = (*groups[:5], iteration_id)
-                end_matches[groups] = match
 
-            if not begin_matches or not begin_matches:
+            # Use different patterns for Java (5-field start, 6-field end) vs Python (6-field both)
+            # Java format: !$######module:class.test:func:loop:iter######$! (start)
+            #              !######module:class.test:func:loop:iter:duration######! (end)
+            if is_java():
+                begin_matches = list(start_pattern.finditer(sys_stdout))
+                end_matches = {}
+                for match in end_pattern.finditer(sys_stdout):
+                    groups = match.groups()
+                    # Key is first 5 groups (module, class.test, func, loop, iter)
+                    end_matches[groups[:5]] = match
+
+                # For Java: fallback to pre-parsed subprocess stdout when XML system-out has no timing markers
+                # This happens when using JUnit Console Launcher directly (bypassing Maven)
+                if not begin_matches and java_fallback_begin_matches is not None:
+                    sys_stdout = java_fallback_stdout
+                    begin_matches = java_fallback_begin_matches
+                    end_matches = java_fallback_end_matches
+            else:
+                begin_matches = list(matches_re_start.finditer(sys_stdout))
+                end_matches = {}
+                for match in matches_re_end.finditer(sys_stdout):
+                    groups = match.groups()
+                    if len(groups[5].split(":")) > 1:
+                        iteration_id = groups[5].split(":")[0]
+                        groups = (*groups[:5], iteration_id)
+                    end_matches[groups] = match
+
+            # TODO: I am not sure if this is the correct approach. see if this was needed for test
+            # pass/fail status extraction in python. otherwise not needed.
+            if not begin_matches:
+                # For Java tests, use the JUnit XML time attribute for runtime
+                runtime_from_xml = None
+                # if is_java():
+                #     try:
+                #         # JUnit XML time is in seconds, convert to nanoseconds
+                #         # Use a minimum of 1000ns (1 microsecond) for any successful test
+                #         # to avoid 0 runtime being treated as "no runtime"
+                #         test_time = float(testcase.time) if hasattr(testcase, "time") and testcase.time else 0.0
+                #         runtime_from_xml = max(int(test_time * 1_000_000_000), 1000)
+                #     except (ValueError, TypeError):
+                #         # If we can't get time from XML, use 1 microsecond as minimum
+                #         runtime_from_xml = 1000
+
                 test_results.add(
                     FunctionTestInvocation(
                         loop_index=loop_index,
@@ -701,7 +873,7 @@ def parse_test_xml(
                             iteration_id="",
                         ),
                         file_name=test_file_path,
-                        runtime=None,
+                        runtime=runtime_from_xml,
                         test_framework=test_config.test_framework,
                         did_pass=result,
                         test_type=test_type,
@@ -714,46 +886,101 @@ def parse_test_xml(
             else:
                 for match_index, match in enumerate(begin_matches):
                     groups = match.groups()
-                    end_match = end_matches.get(groups)
-                    iteration_id, runtime = groups[5], None
-                    if end_match:
-                        stdout = sys_stdout[match.end() : end_match.start()]
-                        split_val = end_match.groups()[5].split(":")
-                        if len(split_val) > 1:
-                            iteration_id = split_val[0]
-                            runtime = int(split_val[1])
-                        else:
-                            iteration_id, runtime = split_val[0], None
-                    elif match_index == len(begin_matches) - 1:
-                        stdout = sys_stdout[match.end() :]
-                    else:
-                        stdout = sys_stdout[match.end() : begin_matches[match_index + 1].start()]
 
-                    test_results.add(
-                        FunctionTestInvocation(
-                            loop_index=int(groups[4]),
-                            id=InvocationId(
-                                test_module_path=groups[0],
-                                test_class_name=None if groups[1] == "" else groups[1][:-1],
-                                test_function_name=groups[2],
-                                function_getting_tested=groups[3],
-                                iteration_id=iteration_id,
-                            ),
-                            file_name=test_file_path,
-                            runtime=runtime,
-                            test_framework=test_config.test_framework,
-                            did_pass=result,
-                            test_type=test_type,
-                            return_value=None,
-                            timed_out=timed_out,
-                            stdout=stdout,
+                    # Java and Python have different marker formats:
+                    # Java:   5 groups - (module, class.test, func, loop_index, iteration_id)
+                    # Python: 6 groups - (module, class.test, _, func, loop_index, iteration_id)
+                    if is_java():
+                        # Java format: !$######module:class.test:func:loop:iter######$!
+                        end_key = groups[:5]  # Use all 5 groups as key
+                        end_match = end_matches.get(end_key)
+                        iteration_id = groups[4]  # iter is at index 4
+                        loop_idx = int(groups[3])  # loop is at index 3
+                        test_module = groups[0]  # module
+                        # groups[1] is "class.testMethod" — extract class and test name
+                        class_test_field = groups[1]
+                        if "." in class_test_field:
+                            test_class_str, test_func = class_test_field.rsplit(".", 1)
+                        else:
+                            test_class_str = class_test_field
+                            test_func = test_function  # Fallback to testcase name from XML
+                        func_getting_tested = groups[2]  # func being tested
+                        runtime = None
+
+                        if end_match:
+                            stdout = sys_stdout[match.end() : end_match.start()]
+                            runtime = int(end_match.groups()[5])  # duration is at index 5
+                        elif match_index == len(begin_matches) - 1:
+                            stdout = sys_stdout[match.end() :]
+                        else:
+                            stdout = sys_stdout[match.end() : begin_matches[match_index + 1].start()]
+
+                        test_results.add(
+                            FunctionTestInvocation(
+                                loop_index=loop_idx,
+                                id=InvocationId(
+                                    test_module_path=test_module,
+                                    test_class_name=test_class_str if test_class_str else None,
+                                    test_function_name=test_func,
+                                    function_getting_tested=func_getting_tested,
+                                    iteration_id=iteration_id,
+                                ),
+                                file_name=test_file_path,
+                                runtime=runtime,
+                                test_framework=test_config.test_framework,
+                                did_pass=result,
+                                test_type=test_type,
+                                return_value=None,
+                                timed_out=timed_out,
+                                stdout=stdout,
+                            )
                         )
-                    )
+                    else:
+                        # Python format: 6 groups
+                        end_match = end_matches.get(groups)
+                        iteration_id, runtime = groups[5], None
+                        if end_match:
+                            stdout = sys_stdout[match.end() : end_match.start()]
+                            split_val = end_match.groups()[5].split(":")
+                            if len(split_val) > 1:
+                                iteration_id = split_val[0]
+                                runtime = int(split_val[1])
+                            else:
+                                iteration_id, runtime = split_val[0], None
+                        elif match_index == len(begin_matches) - 1:
+                            stdout = sys_stdout[match.end() :]
+                        else:
+                            stdout = sys_stdout[match.end() : begin_matches[match_index + 1].start()]
+
+                        test_results.add(
+                            FunctionTestInvocation(
+                                loop_index=int(groups[4]),
+                                id=InvocationId(
+                                    test_module_path=groups[0],
+                                    test_class_name=None if groups[1] == "" else groups[1][:-1],
+                                    test_function_name=groups[2],
+                                    function_getting_tested=groups[3],
+                                    iteration_id=iteration_id,
+                                ),
+                                file_name=test_file_path,
+                                runtime=runtime,
+                                test_framework=test_config.test_framework,
+                                did_pass=result,
+                                test_type=test_type,
+                                return_value=None,
+                                timed_out=timed_out,
+                                stdout=stdout,
+                            )
+                        )
 
     if not test_results:
-        logger.info(
-            f"Tests '{[test_file.original_file_path for test_file in test_files.test_files]}' failed to run, skipping"
-        )
+        # Show actual test file paths being used (behavior or original), not just original_file_path
+        # For AI-generated tests, original_file_path is None, so show instrumented_behavior_file_path instead
+        test_paths_display = [
+            str(test_file.instrumented_behavior_file_path or test_file.original_file_path)
+            for test_file in test_files.test_files
+        ]
+        logger.info(f"Tests {test_paths_display} failed to run, skipping")
         if run_result is not None:
             stdout, stderr = "", ""
             try:
@@ -974,6 +1201,7 @@ def parse_test_results(
     code_context: CodeOptimizationContext | None = None,
     run_result: subprocess.CompletedProcess | None = None,
     skip_sqlite_cleanup: bool = False,
+    testing_type: TestingMode = TestingMode.BEHAVIOR,
 ) -> tuple[TestResults, CoverageData | None]:
     test_results_xml = parse_test_xml(
         test_xml_path, test_files=test_files, test_config=test_config, run_result=run_result
@@ -986,7 +1214,7 @@ def parse_test_results(
 
     try:
         sql_results_file = get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.sqlite"))
-        if sql_results_file.exists():
+        if sql_results_file.exists() and testing_type != TestingMode.PERFORMANCE:
             test_results_data = parse_sqlite_test_results(
                 sqlite_file_path=sql_results_file, test_files=test_files, test_config=test_config
             )
@@ -997,7 +1225,7 @@ def parse_test_results(
     # Also try to read legacy binary format for Python tests
     # Binary file may contain additional results (e.g., from codeflash_wrap) even if SQLite has data
     # from @codeflash_capture. We need to merge both sources.
-    if not is_javascript():
+    if is_python():
         try:
             bin_results_file = get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin"))
             if bin_results_file.exists():
@@ -1021,6 +1249,7 @@ def parse_test_results(
     get_run_tmp_file(Path("vitest_results.xml")).unlink(missing_ok=True)
     get_run_tmp_file(Path("vitest_perf_results.xml")).unlink(missing_ok=True)
     get_run_tmp_file(Path("vitest_line_profile_results.xml")).unlink(missing_ok=True)
+    test_xml_path.unlink(missing_ok=True)
 
     # For Jest tests, SQLite cleanup is deferred until after comparison
     # (comparison happens via language_support.compare_test_results)
@@ -1028,6 +1257,21 @@ def parse_test_results(
         get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.sqlite")).unlink(missing_ok=True)
 
     results = merge_test_results(test_results_xml, test_results_data, test_config.test_framework)
+
+    # Bug #10 Fix: For Java performance tests, preserve subprocess stdout containing timing markers
+    # This is needed for calculate_function_throughput_from_test_results to work correctly
+    if is_java() and testing_type == TestingMode.PERFORMANCE and run_result is not None:
+        try:
+            # Extract stdout from subprocess result containing timing markers
+            if isinstance(run_result.stdout, bytes):
+                results.perf_stdout = run_result.stdout.decode("utf-8", errors="replace")
+            elif isinstance(run_result.stdout, str):
+                results.perf_stdout = run_result.stdout
+            logger.debug(
+                f"Bug #10 Fix: Set perf_stdout for Java performance tests ({len(results.perf_stdout or '')} chars)"
+            )
+        except Exception as e:
+            logger.debug(f"Bug #10 Fix: Failed to set perf_stdout: {e}")
 
     all_args = False
     coverage = None
@@ -1037,6 +1281,14 @@ def parse_test_results(
             # Jest uses coverage-final.json (coverage_database_file points to this)
             coverage = JestCoverageUtils.load_from_jest_json(
                 coverage_json_path=coverage_database_file,
+                function_name=function_name,
+                code_context=code_context,
+                source_code_path=source_file,
+            )
+        elif is_java():
+            # Java uses JaCoCo XML report (coverage_database_file points to jacoco.xml)
+            coverage = JacocoCoverageUtils.load_from_jacoco_xml(
+                jacoco_xml_path=coverage_database_file,
                 function_name=function_name,
                 code_context=code_context,
                 source_code_path=source_file,

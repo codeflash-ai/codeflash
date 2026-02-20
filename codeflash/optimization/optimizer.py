@@ -30,9 +30,10 @@ from codeflash.code_utils.git_worktree_utils import (
 )
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.either import is_successful
-from codeflash.languages import current_language_support, is_javascript, set_current_language
+from codeflash.languages import current_language_support, is_java, is_javascript, set_current_language
 from codeflash.models.models import ValidCode
 from codeflash.telemetry.posthog_cf import ph
+from codeflash.verification.parse_test_output import clear_test_file_path_cache
 from codeflash.verification.verification_utils import TestConfig
 
 if TYPE_CHECKING:
@@ -303,8 +304,8 @@ class Optimizer:
 
         original_module_code: str = original_module_path.read_text(encoding="utf8")
 
-        # For JavaScript/TypeScript, skip Python-specific AST parsing
-        if is_javascript():
+        # For JavaScript/TypeScript/Java, skip Python-specific AST parsing
+        if is_javascript() or is_java():
             validated_original_code: dict[Path, ValidCode] = {
                 original_module_path: ValidCode(source_code=original_module_code, normalized_code=original_module_code)
             }
@@ -631,6 +632,15 @@ class Optimizer:
                     f"{function_to_optimize.qualified_name} (in {original_module_path.name})"
                 )
                 console.rule()
+
+                # Safety-net cleanup: remove any leftover instrumented test files from previous iterations.
+                # This prevents a broken test file from one function from cascading compilation failures
+                # to all subsequent functions (e.g., when Maven compiles all test files together).
+                leftover_files = Optimizer.find_leftover_instrumented_test_files(self.test_cfg.tests_root)
+                if leftover_files:
+                    logger.debug(f"Cleaning up {len(leftover_files)} leftover instrumented test file(s)")
+                    cleanup_paths(leftover_files)
+
                 function_optimizer = None
                 try:
                     function_optimizer = self.create_function_optimizer(
@@ -680,6 +690,7 @@ class Optimizer:
                     if function_optimizer is not None:
                         function_optimizer.executor.shutdown(wait=True)
                         function_optimizer.cleanup_generated_files()
+                        clear_test_file_path_cache()
 
             ph("cli-optimize-run-finished", {"optimizations_found": optimizations_found})
             if len(self.patch_files) > 0:
@@ -724,6 +735,12 @@ class Optimizer:
         - '*__perfinstrumented.spec.{js,ts,jsx,tsx}'
         - '*__perfonlyinstrumented.spec.{js,ts,jsx,tsx}'
 
+        Java patterns:
+        - '*Test__perfinstrumented.java'
+        - '*Test__perfonlyinstrumented.java'
+        - '*Test__perfinstrumented_{n}.java' (with optional numeric suffix)
+        - '*Test__perfonlyinstrumented_{n}.java' (with optional numeric suffix)
+
         Returns a list of matching file paths.
         """
         import re
@@ -733,7 +750,9 @@ class Optimizer:
             # Python patterns
             r"test.*__perf_test_\d?\.py|test_.*__unit_test_\d?\.py|test_.*__perfinstrumented\.py|test_.*__perfonlyinstrumented\.py|"
             # JavaScript/TypeScript patterns (new naming with .test/.spec preserved)
-            r".*__perfinstrumented\.(?:test|spec)\.(?:js|ts|jsx|tsx)|.*__perfonlyinstrumented\.(?:test|spec)\.(?:js|ts|jsx|tsx)"
+            r".*__perfinstrumented\.(?:test|spec)\.(?:js|ts|jsx|tsx)|.*__perfonlyinstrumented\.(?:test|spec)\.(?:js|ts|jsx|tsx)|"
+            # Java patterns (with optional numeric suffix _2, _3, etc., and existing_ prefix variant)
+            r".*Test__(?:existing_)?perfinstrumented(?:_\d+)?\.java|.*Test__(?:existing_)?perfonlyinstrumented(?:_\d+)?\.java"
             r")$"
         )
 

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
-from codeflash.languages import is_javascript
+from codeflash.languages import is_java, is_javascript
 from codeflash.verification.verification_utils import ModifyInspiredTests, delete_multiple_if_name_main
 
 if TYPE_CHECKING:
@@ -124,6 +124,31 @@ def generate_tests(
             )
 
             logger.debug(f"Instrumented JS/TS tests locally for {function_to_optimize.function_name}")
+        elif is_java():
+            from codeflash.languages.java.instrumentation import instrument_generated_java_test
+
+            func_name = function_to_optimize.function_name
+            qualified_name = function_to_optimize.qualified_name
+
+            # Instrument for behavior verification (renames class)
+            instrumented_behavior_test_source = instrument_generated_java_test(
+                test_code=generated_test_source,
+                function_name=func_name,
+                qualified_name=qualified_name,
+                mode="behavior",
+                function_to_optimize=function_to_optimize,
+            )
+
+            # Instrument for performance measurement (adds timing markers)
+            instrumented_perf_test_source = instrument_generated_java_test(
+                test_code=generated_test_source,
+                function_name=func_name,
+                qualified_name=qualified_name,
+                mode="performance",
+                function_to_optimize=function_to_optimize,
+            )
+
+            logger.debug(f"Instrumented Java tests locally for {func_name}")
         else:
             # Python: instrumentation is done by aiservice, just replace temp dir placeholders
             instrumented_behavior_test_source = instrumented_behavior_test_source.replace(

@@ -475,8 +475,8 @@ class MyClass:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         assert len(test_results) == 3
@@ -508,8 +508,8 @@ class MyClass:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         match, _ = compare_test_results(test_results, test_results2)
@@ -598,8 +598,8 @@ class MyClass(ParentClass):
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         assert len(test_results) == 3
@@ -632,8 +632,8 @@ class MyClass(ParentClass):
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 
@@ -725,8 +725,8 @@ class MyClass:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 
@@ -761,8 +761,8 @@ class MyClass:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 
@@ -889,8 +889,8 @@ class AnotherHelperClass:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 
@@ -910,8 +910,8 @@ class AnotherHelperClass:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 
@@ -1049,8 +1049,8 @@ class AnotherHelperClass:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 
@@ -1101,8 +1101,8 @@ class MyClass:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         # Remove instrumentation
@@ -1140,8 +1140,8 @@ class MyClass:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         # Remove instrumentation
@@ -1179,8 +1179,8 @@ class MyClass:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         # Remove instrumentation
@@ -1471,8 +1471,8 @@ def calculate_portfolio_metrics(
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 
@@ -1538,8 +1538,8 @@ def calculate_portfolio_metrics(
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         # Remove instrumentation
@@ -1601,8 +1601,8 @@ def calculate_portfolio_metrics(
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         # Remove instrumentation
@@ -1687,8 +1687,8 @@ class SlotsClass:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 

@@ -349,7 +349,7 @@ def test_run_and_parse_picklepatch() -> None:
         run_cwd = project_root
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            replay_test_path, [CodePosition(17, 15)], func, project_root, mode=TestingMode.BEHAVIOR
+            original_replay_test_code, replay_test_path, [CodePosition(17, 15)], func, project_root, mode=TestingMode.BEHAVIOR
         )
         os.chdir(original_cwd)
         assert success
@@ -397,8 +397,8 @@ def test_run_and_parse_picklepatch() -> None:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=1.0,
         )
         assert len(test_results_unused_socket) == 1
@@ -428,8 +428,8 @@ def bubble_sort_with_unused_socket(data_container):
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=1.0,
         )
         assert len(optimized_test_results_unused_socket) == 1
@@ -443,7 +443,7 @@ def bubble_sort_with_unused_socket(data_container):
             function_name="bubble_sort_with_used_socket", parents=[], file_path=Path(fto_used_socket_path)
         )
         success, new_test = inject_profiling_into_existing_test(
-            replay_test_path, [CodePosition(23, 15)], func, project_root, mode=TestingMode.BEHAVIOR
+            original_replay_test_code, replay_test_path, [CodePosition(23, 15)], func, project_root, mode=TestingMode.BEHAVIOR
         )
         os.chdir(original_cwd)
         assert success
@@ -483,8 +483,8 @@ def bubble_sort_with_unused_socket(data_container):
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=1.0,
         )
         assert len(test_results_used_socket) == 1
@@ -518,8 +518,8 @@ def bubble_sort_with_used_socket(data_container):
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=1.0,
         )
         assert len(test_results_used_socket) == 1

@@ -131,11 +131,25 @@ def run_behavioral_tests(
     # Check if there's a language support for this test framework that implements run_behavioral_tests
     language_support = get_language_support_by_framework(test_framework)
     if language_support is not None and hasattr(language_support, "run_behavioral_tests"):
+        # Java tests need longer timeout due to Maven startup overhead
+        # Use Java-specific timeout if no explicit timeout provided
+        from codeflash.code_utils.config_consts import JAVA_TESTCASE_TIMEOUT
+
+        effective_timeout = pytest_timeout
+        if test_framework in ("junit4", "junit5", "testng") and pytest_timeout is not None:
+            # For Java, use a minimum timeout to account for Maven overhead
+            effective_timeout = max(pytest_timeout, JAVA_TESTCASE_TIMEOUT)
+            if effective_timeout != pytest_timeout:
+                logger.debug(
+                    f"Increased Java test timeout from {pytest_timeout}s to {effective_timeout}s "
+                    "to account for Maven startup overhead"
+                )
+
         return language_support.run_behavioral_tests(
             test_paths=test_paths,
             test_env=test_env,
             cwd=cwd,
-            timeout=pytest_timeout,
+            timeout=effective_timeout,
             project_root=js_project_root,
             enable_coverage=enable_coverage,
             candidate_index=candidate_index,
@@ -219,6 +233,8 @@ def run_behavioral_tests(
                 coverage_cmd + common_pytest_args + blocklist_args + result_args + test_files,
                 cwd=cwd,
                 env=pytest_test_env,
+                # Timeout for test subprocess execution (seconds).
+                # Override via CODEFLASH_TEST_TIMEOUT env var. Default: 600s.
                 timeout=600,
             )
             logger.debug(
@@ -232,7 +248,9 @@ def run_behavioral_tests(
                 pytest_cmd_list + common_pytest_args + blocklist_args + result_args + test_files,
                 cwd=cwd,
                 env=pytest_test_env,
-                timeout=600,  # TODO: Make this dynamic
+                # Timeout for test subprocess execution (seconds).
+                # Override via CODEFLASH_TEST_TIMEOUT env var. Default: 600s.
+                timeout=600,
             )
             logger.debug(
                 f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
@@ -266,11 +284,17 @@ def run_line_profile_tests(
     # Check if there's a language support for this test framework that implements run_line_profile_tests
     language_support = get_language_support_by_framework(test_framework)
     if language_support is not None and hasattr(language_support, "run_line_profile_tests"):
+        from codeflash.code_utils.config_consts import JAVA_TESTCASE_TIMEOUT
+
+        effective_timeout = pytest_timeout
+        if test_framework in ("junit4", "junit5", "testng") and pytest_timeout is not None:
+            # For Java, use a minimum timeout to account for Maven overhead
+            effective_timeout = max(pytest_timeout, JAVA_TESTCASE_TIMEOUT)
         return language_support.run_line_profile_tests(
             test_paths=test_paths,
             test_env=test_env,
             cwd=cwd,
-            timeout=pytest_timeout,
+            timeout=effective_timeout,
             project_root=js_project_root,
             line_profile_output_file=line_profiler_output_file,
         )
@@ -304,7 +328,9 @@ def run_line_profile_tests(
             pytest_cmd_list + pytest_args + blocklist_args + result_args + test_files,
             cwd=cwd,
             env=pytest_test_env,
-            timeout=600,  # TODO: Make this dynamic
+            # Timeout for line-profiling subprocess execution (seconds).
+            # Override via CODEFLASH_TEST_TIMEOUT env var. Default: 600s.
+            timeout=600,
         )
     else:
         msg = f"Unsupported test framework: {test_framework}"
@@ -319,25 +345,42 @@ def run_benchmarking_tests(
     cwd: Path,
     test_framework: str,
     *,
-    pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME_EFFECTIVE,
-    pytest_timeout: int | None = None,
-    pytest_min_loops: int = 5,
-    pytest_max_loops: int = 100_000,
+    target_runtime_seconds: float = TOTAL_LOOPING_TIME_EFFECTIVE,
+    timeout: int | None = None,
+    min_outer_loops: int = 5,
+    max_outer_loops: int = 100_000,
+    inner_iterations: int | None = None,
     js_project_root: Path | None = None,
 ) -> tuple[Path, subprocess.CompletedProcess]:
     logger.debug(f"run_benchmarking_tests called: framework={test_framework}, num_files={len(test_paths.test_files)}")
     # Check if there's a language support for this test framework that implements run_benchmarking_tests
     language_support = get_language_support_by_framework(test_framework)
     if language_support is not None and hasattr(language_support, "run_benchmarking_tests"):
+        # Java tests need longer timeout due to Maven startup overhead
+        # Use Java-specific timeout if no explicit timeout provided
+        from codeflash.code_utils.config_consts import JAVA_TESTCASE_TIMEOUT
+
+        effective_timeout = timeout
+        if test_framework in ("junit4", "junit5", "testng") and timeout is not None:
+            # For Java, use a minimum timeout to account for Maven overhead
+            effective_timeout = max(timeout, JAVA_TESTCASE_TIMEOUT)
+            if effective_timeout != timeout:
+                logger.debug(
+                    f"Increased Java test timeout from {timeout}s to {effective_timeout}s "
+                    "to account for Maven startup overhead"
+                )
+
+        inner_iterations_kwargs = {"inner_iterations": inner_iterations} if inner_iterations is not None else {}
         return language_support.run_benchmarking_tests(
             test_paths=test_paths,
             test_env=test_env,
             cwd=cwd,
-            timeout=pytest_timeout,
+            timeout=effective_timeout,
             project_root=js_project_root,
-            min_loops=pytest_min_loops,
-            max_loops=pytest_max_loops,
-            target_duration_seconds=pytest_target_runtime_seconds,
+            min_loops=min_outer_loops,
+            max_loops=max_outer_loops,
+            target_duration_seconds=target_runtime_seconds,
+            **inner_iterations_kwargs,
         )
     if is_python():  # pytest runs both pytest and unittest tests
         pytest_cmd_list = (
@@ -353,13 +396,13 @@ def run_benchmarking_tests(
             "--capture=tee-sys",
             "-q",
             "--codeflash_loops_scope=session",
-            f"--codeflash_min_loops={pytest_min_loops}",
-            f"--codeflash_max_loops={pytest_max_loops}",
-            f"--codeflash_seconds={pytest_target_runtime_seconds}",
+            f"--codeflash_min_loops={min_outer_loops}",
+            f"--codeflash_max_loops={max_outer_loops}",
+            f"--codeflash_seconds={target_runtime_seconds}",
             "--codeflash_stability_check=true",
         ]
-        if pytest_timeout is not None:
-            pytest_args.append(f"--timeout={pytest_timeout}")
+        if timeout is not None:
+            pytest_args.append(f"--timeout={timeout}")
 
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
@@ -370,7 +413,9 @@ def run_benchmarking_tests(
             pytest_cmd_list + pytest_args + blocklist_args + result_args + test_files,
             cwd=cwd,
             env=pytest_test_env,
-            timeout=600,  # TODO: Make this dynamic
+            # Timeout for benchmarking subprocess execution (seconds).
+            # Override via CODEFLASH_TEST_TIMEOUT env var. Default: 600s.
+            timeout=600,
         )
     else:
         msg = f"Unsupported test framework: {test_framework}"

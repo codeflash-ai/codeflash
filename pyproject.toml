@@ -25,6 +25,7 @@ dependencies = [
     "tree-sitter>=0.23.0",
     "tree-sitter-javascript>=0.23.0",
     "tree-sitter-typescript>=0.23.0",
+    "tree-sitter-java>=0.23.0",
     "pytest-timeout>=2.1.0",
     "tomlkit>=0.11.7",
     "junitparser>=3.1.0",
@@ -361,4 +362,3 @@ markers = [
 [build-system]
 requires = ["hatchling", "uv-dynamic-versioning"]
 build-backend = "hatchling.build"
-

@@ -331,12 +331,11 @@ class CodeStringsMarkdown(BaseModel):
             dict[str, str]: Mapping from file path (as string) to code.
 
         """
-        if self._cache.get("file_to_path") is not None:
+        if "file_to_path" in self._cache:
             return self._cache["file_to_path"]
-        self._cache["file_to_path"] = {
-            str(code_string.file_path): code_string.code for code_string in self.code_strings
-        }
-        return self._cache["file_to_path"]
+        result = {str(code_string.file_path): code_string.code for code_string in self.code_strings}
+        self._cache["file_to_path"] = result
+        return result
 
     @staticmethod
     def parse_markdown_code(markdown_code: str, expected_language: str = "python") -> CodeStringsMarkdown:
@@ -665,7 +664,7 @@ class CoverageData:
         from rich.tree import Tree
 
         tree = Tree("Test Coverage Results")
-        tree.add(f"Main Function: {self.main_func_coverage.name}: {self.coverage:.2f}%")
+        tree.add(f"Main Function: {self.main_func_coverage.name}: {self.main_func_coverage.coverage:.2f}%")
         if self.dependent_func_coverage:
             tree.add(
                 f"Dependent Function: {self.dependent_func_coverage.name}: {self.dependent_func_coverage.coverage:.2f}%"

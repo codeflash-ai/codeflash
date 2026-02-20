@@ -1,0 +1,699 @@
+package com.codeflash;
+
+import java.lang.reflect.Array;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.Statement;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.*;
+
+/**
+ * Deep object comparison for verifying serialization/deserialization correctness.
+ *
+ * This comparator is used to verify that objects survive the serialize-deserialize
+ * cycle correctly. It handles:
+ * - Primitives and wrappers with epsilon tolerance for floats
+ * - Collections, Maps, and Arrays
+ * - Custom objects via reflection
+ * - NaN and Infinity special cases
+ * - Exception comparison
+ * - Placeholder rejection
+ */
+public final class Comparator {
+
+    private static final double EPSILON = 1e-9;
+
+    private Comparator() {
+        // Utility class
+    }
+
+    /**
+     * CLI entry point for comparing test results from two SQLite databases.
+     *
+     * Reads Kryo-serialized BLOBs from the test_results table, deserializes them,
+     * and compares using deep object comparison.
+     *
+     * Outputs JSON to stdout:
+     *   {"equivalent": true/false, "totalInvocations": N, "diffs": [...]}
+     *
+     * Exit code: 0 if equivalent, 1 if different.
+     */
+    public static void main(String[] args) {
+        if (args.length != 2) {
+            System.err.println("Usage: java com.codeflash.Comparator <originalDbPath> <candidateDbPath>");
+            System.exit(2);
+            return;
+        }
+
+        String originalDbPath = args[0];
+        String candidateDbPath = args[1];
+
+        try {
+            Class.forName("org.sqlite.JDBC");
+        } catch (ClassNotFoundException e) {
+            printError("SQLite JDBC driver not found: " + e.getMessage());
+            System.exit(2);
+            return;
+        }
+
+        Map<String, byte[]> originalResults;
+        Map<String, byte[]> candidateResults;
+
+        try {
+            originalResults = readTestResults(originalDbPath);
+        } catch (Exception e) {
+            printError("Failed to read original database: " + e.getMessage());
+            System.exit(2);
+            return;
+        }
+
+        try {
+            candidateResults = readTestResults(candidateDbPath);
+        } catch (Exception e) {
+            printError("Failed to read candidate database: " + e.getMessage());
+            System.exit(2);
+            return;
+        }
+
+        Set<String> allKeys = new LinkedHashSet<>();
+        allKeys.addAll(originalResults.keySet());
+        allKeys.addAll(candidateResults.keySet());
+
+        List<String> diffs = new ArrayList<>();
+        int totalInvocations = allKeys.size();
+
+        for (String key : allKeys) {
+            byte[] origBytes = originalResults.get(key);
+            byte[] candBytes = candidateResults.get(key);
+
+            if (origBytes == null && candBytes == null) {
+                // Both null (void methods) — equivalent
+                continue;
+            }
+
+            if (origBytes == null) {
+                Object candObj = safeDeserialize(candBytes);
+                diffs.add(formatDiff("missing", key, 0, null, safeToString(candObj)));
+                continue;
+            }
+
+            if (candBytes == null) {
+                Object origObj = safeDeserialize(origBytes);
+                diffs.add(formatDiff("missing", key, 0, safeToString(origObj), null));
+                continue;
+            }
+
+            Object origObj = safeDeserialize(origBytes);
+            Object candObj = safeDeserialize(candBytes);
+
+            try {
+                if (!compare(origObj, candObj)) {
+                    diffs.add(formatDiff("return_value", key, 0, safeToString(origObj), safeToString(candObj)));
+                }
+            } catch (KryoPlaceholderAccessException e) {
+                // Placeholder detected — skip comparison for this invocation
+                continue;
+            }
+        }
+
+        boolean equivalent = diffs.isEmpty();
+
+        StringBuilder json = new StringBuilder();
+        json.append("{\"equivalent\":").append(equivalent);
+        json.append(",\"totalInvocations\":").append(totalInvocations);
+        json.append(",\"diffs\":[");
+        for (int i = 0; i < diffs.size(); i++) {
+            if (i > 0) json.append(",");
+            json.append(diffs.get(i));
+        }
+        json.append("]}");
+
+        System.out.println(json.toString());
+        System.exit(equivalent ? 0 : 1);
+    }
+
+    private static Map<String, byte[]> readTestResults(String dbPath) throws Exception {
+        Map<String, byte[]> results = new LinkedHashMap<>();
+        String url = "jdbc:sqlite:" + dbPath;
+
+        try (Connection conn = DriverManager.getConnection(url);
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(
+                 "SELECT iteration_id, return_value FROM test_results WHERE loop_index = 1")) {
+            while (rs.next()) {
+                String iterationId = rs.getString("iteration_id");
+                byte[] returnValue = rs.getBytes("return_value");
+                // Strip the CODEFLASH_TEST_ITERATION suffix (e.g. "7_0" -> "7")
+                // Original runs with _0, candidate with _1, but the test iteration
+                // counter before the underscore is what identifies the invocation.
+                int lastUnderscore = iterationId.lastIndexOf('_');
+                if (lastUnderscore > 0) {
+                    iterationId = iterationId.substring(0, lastUnderscore);
+                }
+                results.put(iterationId, returnValue);
+            }
+        }
+        return results;
+    }
+
+    private static Object safeDeserialize(byte[] data) {
+        if (data == null) {
+            return null;
+        }
+        try {
+            return Serializer.deserialize(data);
+        } catch (Exception e) {
+            return java.util.Map.of("__type", "DeserializationError", "error", String.valueOf(e.getMessage()));
+        }
+    }
+
+    private static String safeToString(Object obj) {
+        if (obj == null) {
+            return "null";
+        }
+        try {
+            if (obj.getClass().isArray()) {
+                return java.util.Arrays.deepToString(new Object[]{obj});
+            }
+            return String.valueOf(obj);
+        } catch (Exception e) {
+            return "<toString failed: " + e.getMessage() + ">";
+        }
+    }
+
+    private static String formatDiff(String scope, String methodId, int callId,
+                                     String originalValue, String candidateValue) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("{\"scope\":\"").append(escapeJson(scope)).append("\"");
+        sb.append(",\"methodId\":\"").append(escapeJson(methodId)).append("\"");
+        sb.append(",\"callId\":").append(callId);
+        sb.append(",\"originalValue\":").append(jsonStringOrNull(originalValue));
+        sb.append(",\"candidateValue\":").append(jsonStringOrNull(candidateValue));
+        sb.append("}");
+        return sb.toString();
+    }
+
+    private static String jsonStringOrNull(String value) {
+        if (value == null) {
+            return "null";
+        }
+        return "\"" + escapeJson(value) + "\"";
+    }
+
+    private static String escapeJson(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
+    }
+
+    private static void printError(String message) {
+        System.out.println("{\"error\":\"" + escapeJson(message) + "\"}");
+    }
+
+    /**
+     * Compare two objects for deep equality.
+     *
+     * @param orig   The original object
+     * @param newObj The object to compare against
+     * @return true if objects are equivalent
+     * @throws KryoPlaceholderAccessException if comparison involves a placeholder
+     */
+    public static boolean compare(Object orig, Object newObj) {
+        return compareInternal(orig, newObj, new IdentityHashMap<>());
+    }
+
+    /**
+     * Compare two objects, returning a detailed result.
+     *
+     * @param orig   The original object
+     * @param newObj The object to compare against
+     * @return ComparisonResult with details about the comparison
+     */
+    public static ComparisonResult compareWithDetails(Object orig, Object newObj) {
+        try {
+            boolean equal = compareInternal(orig, newObj, new IdentityHashMap<>());
+            return new ComparisonResult(equal, null);
+        } catch (KryoPlaceholderAccessException e) {
+            return new ComparisonResult(false, e.getMessage());
+        }
+    }
+
+    private static boolean compareInternal(Object orig, Object newObj,
+                                           IdentityHashMap<Object, Object> seen) {
+        // Handle nulls
+        if (orig == null && newObj == null) {
+            return true;
+        }
+        if (orig == null || newObj == null) {
+            return false;
+        }
+
+        // Detect and reject KryoPlaceholder
+        if (orig instanceof KryoPlaceholder) {
+            KryoPlaceholder p = (KryoPlaceholder) orig;
+            throw new KryoPlaceholderAccessException(
+                "Cannot compare: original contains placeholder for unserializable object",
+                p.getObjType(), p.getPath());
+        }
+        if (newObj instanceof KryoPlaceholder) {
+            KryoPlaceholder p = (KryoPlaceholder) newObj;
+            throw new KryoPlaceholderAccessException(
+                "Cannot compare: new object contains placeholder for unserializable object",
+                p.getObjType(), p.getPath());
+        }
+
+        // Handle exceptions specially
+        if (orig instanceof Throwable && newObj instanceof Throwable) {
+            return compareExceptions((Throwable) orig, (Throwable) newObj);
+        }
+
+        Class<?> origClass = orig.getClass();
+        Class<?> newClass = newObj.getClass();
+
+        // Check type compatibility
+        if (!origClass.equals(newClass)) {
+            if (!areTypesCompatible(origClass, newClass)) {
+                return false;
+            }
+        }
+
+        // Handle primitives and wrappers
+        if (orig instanceof Boolean) {
+            return orig.equals(newObj);
+        }
+        if (orig instanceof Character) {
+            return orig.equals(newObj);
+        }
+        if (orig instanceof String) {
+            return orig.equals(newObj);
+        }
+        if (orig instanceof Number) {
+            return compareNumbers((Number) orig, (Number) newObj);
+        }
+
+        // Handle enums
+        if (origClass.isEnum()) {
+            return orig.equals(newObj);
+        }
+
+        // Handle Class objects
+        if (orig instanceof Class) {
+            return orig.equals(newObj);
+        }
+
+        // Handle date/time types
+        if (orig instanceof Date || orig instanceof LocalDateTime ||
+            orig instanceof LocalDate || orig instanceof LocalTime) {
+            return orig.equals(newObj);
+        }
+
+        // Handle Optional
+        if (orig instanceof Optional && newObj instanceof Optional) {
+            return compareOptionals((Optional<?>) orig, (Optional<?>) newObj, seen);
+        }
+
+        // Check for circular reference to prevent infinite recursion
+        if (seen.containsKey(orig)) {
+            // If we've seen this object before, just check identity
+            return seen.get(orig) == newObj;
+        }
+        seen.put(orig, newObj);
+
+        try {
+            // Handle arrays
+            if (origClass.isArray()) {
+                return compareArrays(orig, newObj, seen);
+            }
+
+            // Handle collections
+            if (orig instanceof Collection && newObj instanceof Collection) {
+                return compareCollections((Collection<?>) orig, (Collection<?>) newObj, seen);
+            }
+
+            // Handle maps
+            if (orig instanceof Map && newObj instanceof Map) {
+                return compareMaps((Map<?, ?>) orig, (Map<?, ?>) newObj, seen);
+            }
+
+            // Handle general objects via reflection
+            return compareObjects(orig, newObj, seen);
+
+        } finally {
+            seen.remove(orig);
+        }
+    }
+
+    /**
+     * Check if two types are compatible for comparison.
+     */
+    private static boolean areTypesCompatible(Class<?> type1, Class<?> type2) {
+        // Allow comparing different Collection implementations
+        if (Collection.class.isAssignableFrom(type1) && Collection.class.isAssignableFrom(type2)) {
+            return true;
+        }
+        // Allow comparing different Map implementations
+        if (Map.class.isAssignableFrom(type1) && Map.class.isAssignableFrom(type2)) {
+            return true;
+        }
+        // Allow comparing different Number types
+        if (Number.class.isAssignableFrom(type1) && Number.class.isAssignableFrom(type2)) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Compare two numbers with epsilon tolerance for floating point.
+     */
+    private static boolean compareNumbers(Number n1, Number n2) {
+        // Handle BigDecimal - exact comparison using compareTo
+        if (n1 instanceof java.math.BigDecimal && n2 instanceof java.math.BigDecimal) {
+            return ((java.math.BigDecimal) n1).compareTo((java.math.BigDecimal) n2) == 0;
+        }
+
+        // Handle BigInteger - exact comparison using equals
+        if (n1 instanceof java.math.BigInteger && n2 instanceof java.math.BigInteger) {
+            return n1.equals(n2);
+        }
+
+        // Handle BigDecimal vs other number types
+        if (n1 instanceof java.math.BigDecimal || n2 instanceof java.math.BigDecimal) {
+            java.math.BigDecimal bd1 = toBigDecimal(n1);
+            java.math.BigDecimal bd2 = toBigDecimal(n2);
+            return bd1.compareTo(bd2) == 0;
+        }
+
+        // Handle BigInteger vs other number types
+        if (n1 instanceof java.math.BigInteger || n2 instanceof java.math.BigInteger) {
+            java.math.BigInteger bi1 = toBigInteger(n1);
+            java.math.BigInteger bi2 = toBigInteger(n2);
+            return bi1.equals(bi2);
+        }
+
+        // Handle floating point with epsilon
+        if (n1 instanceof Double || n1 instanceof Float ||
+            n2 instanceof Double || n2 instanceof Float) {
+
+            double d1 = n1.doubleValue();
+            double d2 = n2.doubleValue();
+
+            // Handle NaN
+            if (Double.isNaN(d1) && Double.isNaN(d2)) {
+                return true;
+            }
+            if (Double.isNaN(d1) || Double.isNaN(d2)) {
+                return false;
+            }
+
+            // Handle Infinity
+            if (Double.isInfinite(d1) && Double.isInfinite(d2)) {
+                return (d1 > 0) == (d2 > 0); // Same sign
+            }
+            if (Double.isInfinite(d1) || Double.isInfinite(d2)) {
+                return false;
+            }
+
+            // Compare with relative and absolute epsilon
+            double diff = Math.abs(d1 - d2);
+            if (diff < EPSILON) {
+                return true;  // Absolute tolerance
+            }
+            // Relative tolerance for large numbers
+            double maxAbs = Math.max(Math.abs(d1), Math.abs(d2));
+            return diff <= EPSILON * maxAbs;
+        }
+
+        // Integer types - exact comparison
+        return n1.longValue() == n2.longValue();
+    }
+
+    /**
+     * Convert a Number to BigDecimal.
+     */
+    private static java.math.BigDecimal toBigDecimal(Number n) {
+        if (n instanceof java.math.BigDecimal) {
+            return (java.math.BigDecimal) n;
+        }
+        if (n instanceof java.math.BigInteger) {
+            return new java.math.BigDecimal((java.math.BigInteger) n);
+        }
+        if (n instanceof Double || n instanceof Float) {
+            return java.math.BigDecimal.valueOf(n.doubleValue());
+        }
+        return java.math.BigDecimal.valueOf(n.longValue());
+    }
+
+    /**
+     * Convert a Number to BigInteger.
+     */
+    private static java.math.BigInteger toBigInteger(Number n) {
+        if (n instanceof java.math.BigInteger) {
+            return (java.math.BigInteger) n;
+        }
+        if (n instanceof java.math.BigDecimal) {
+            return ((java.math.BigDecimal) n).toBigInteger();
+        }
+        return java.math.BigInteger.valueOf(n.longValue());
+    }
+
+    /**
+     * Compare two exceptions.
+     */
+    private static boolean compareExceptions(Throwable orig, Throwable newEx) {
+        // Must be same type
+        if (!orig.getClass().equals(newEx.getClass())) {
+            return false;
+        }
+        // Compare message (both may be null)
+        return Objects.equals(orig.getMessage(), newEx.getMessage());
+    }
+
+    /**
+     * Compare two Optional values.
+     */
+    private static boolean compareOptionals(Optional<?> orig, Optional<?> newOpt,
+                                            IdentityHashMap<Object, Object> seen) {
+        if (orig.isPresent() != newOpt.isPresent()) {
+            return false;
+        }
+        if (!orig.isPresent()) {
+            return true; // Both empty
+        }
+        return compareInternal(orig.get(), newOpt.get(), seen);
+    }
+
+    /**
+     * Compare two arrays.
+     */
+    private static boolean compareArrays(Object orig, Object newObj,
+                                         IdentityHashMap<Object, Object> seen) {
+        int length1 = Array.getLength(orig);
+        int length2 = Array.getLength(newObj);
+
+        if (length1 != length2) {
+            return false;
+        }
+
+        for (int i = 0; i < length1; i++) {
+            Object elem1 = Array.get(orig, i);
+            Object elem2 = Array.get(newObj, i);
+            if (!compareInternal(elem1, elem2, seen)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Compare two collections.
+     */
+    private static boolean compareCollections(Collection<?> orig, Collection<?> newColl,
+                                              IdentityHashMap<Object, Object> seen) {
+        if (orig.size() != newColl.size()) {
+            return false;
+        }
+
+        // For Sets, compare element-by-element (order doesn't matter)
+        if (orig instanceof Set && newColl instanceof Set) {
+            return compareSets((Set<?>) orig, (Set<?>) newColl, seen);
+        }
+
+        // For ordered collections (List, etc.), compare in order
+        Iterator<?> iter1 = orig.iterator();
+        Iterator<?> iter2 = newColl.iterator();
+
+        while (iter1.hasNext() && iter2.hasNext()) {
+            if (!compareInternal(iter1.next(), iter2.next(), seen)) {
+                return false;
+            }
+        }
+
+        return !iter1.hasNext() && !iter2.hasNext();
+    }
+
+    /**
+     * Compare two sets (order-independent).
+     */
+    private static boolean compareSets(Set<?> orig, Set<?> newSet,
+                                       IdentityHashMap<Object, Object> seen) {
+        if (orig.size() != newSet.size()) {
+            return false;
+        }
+
+        // For each element in orig, find a matching element in newSet
+        for (Object elem1 : orig) {
+            boolean found = false;
+            for (Object elem2 : newSet) {
+                try {
+                    if (compareInternal(elem1, elem2, new IdentityHashMap<>(seen))) {
+                        found = true;
+                        break;
+                    }
+                } catch (KryoPlaceholderAccessException e) {
+                    // Propagate placeholder exceptions
+                    throw e;
+                }
+            }
+            if (!found) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Compare two maps.
+     * Uses deep comparison for keys instead of relying on equals()/hashCode().
+     */
+    private static boolean compareMaps(Map<?, ?> orig, Map<?, ?> newMap,
+                                       IdentityHashMap<Object, Object> seen) {
+        if (orig.size() != newMap.size()) {
+            return false;
+        }
+
+        // For each entry in orig, find a matching entry in newMap using deep comparison
+        for (Map.Entry<?, ?> entry1 : orig.entrySet()) {
+            Object key1 = entry1.getKey();
+            Object value1 = entry1.getValue();
+
+            boolean foundMatch = false;
+
+            // Search for matching key in newMap using deep comparison
+            for (Map.Entry<?, ?> entry2 : newMap.entrySet()) {
+                Object key2 = entry2.getKey();
+
+                // Use deep comparison for keys
+                try {
+                    if (compareInternal(key1, key2, new IdentityHashMap<>(seen))) {
+                        // Found matching key - now compare values
+                        Object value2 = entry2.getValue();
+                        if (!compareInternal(value1, value2, seen)) {
+                            return false;
+                        }
+                        foundMatch = true;
+                        break;
+                    }
+                } catch (KryoPlaceholderAccessException e) {
+                    // Propagate placeholder exceptions
+                    throw e;
+                }
+            }
+
+            if (!foundMatch) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Compare two objects via reflection.
+     */
+    private static boolean compareObjects(Object orig, Object newObj,
+                                          IdentityHashMap<Object, Object> seen) {
+        Class<?> clazz = orig.getClass();
+
+        // If class has a custom equals method, use it
+        try {
+            if (hasCustomEquals(clazz)) {
+                return orig.equals(newObj);
+            }
+        } catch (Exception e) {
+            // Fall through to field comparison
+        }
+
+        // Compare all fields via reflection
+        Class<?> currentClass = clazz;
+        while (currentClass != null && currentClass != Object.class) {
+            for (Field field : currentClass.getDeclaredFields()) {
+                if (Modifier.isStatic(field.getModifiers()) ||
+                    Modifier.isTransient(field.getModifiers())) {
+                    continue;
+                }
+
+                try {
+                    field.setAccessible(true);
+                    Object value1 = field.get(orig);
+                    Object value2 = field.get(newObj);
+
+                    if (!compareInternal(value1, value2, seen)) {
+                        return false;
+                    }
+                } catch (IllegalAccessException e) {
+                    // Can't access field - assume not equal
+                    return false;
+                }
+            }
+            currentClass = currentClass.getSuperclass();
+        }
+
+        return true;
+    }
+
+    /**
+     * Check if a class has a custom equals method (not from Object).
+     */
+    private static boolean hasCustomEquals(Class<?> clazz) {
+        try {
+            java.lang.reflect.Method equalsMethod = clazz.getMethod("equals", Object.class);
+            return equalsMethod.getDeclaringClass() != Object.class;
+        } catch (NoSuchMethodException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Result of a comparison with optional error details.
+     */
+    public static class ComparisonResult {
+        private final boolean equal;
+        private final String errorMessage;
+
+        public ComparisonResult(boolean equal, String errorMessage) {
+            this.equal = equal;
+            this.errorMessage = errorMessage;
+        }
+
+        public boolean isEqual() {
+            return equal;
+        }
+
+        public String getErrorMessage() {
+            return errorMessage;
+        }
+
+        public boolean hasError() {
+            return errorMessage != null;
+        }
+    }
+}

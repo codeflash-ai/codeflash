@@ -141,22 +141,24 @@ def run_codeflash_command(
 def build_command(
     cwd: pathlib.Path, config: TestConfig, test_root: pathlib.Path, benchmarks_root: pathlib.Path | None = None
 ) -> list[str]:
-    python_path = "../../../codeflash/main.py" if "code_directories" in str(cwd) else "../codeflash/main.py"
+    repo_root = pathlib.Path(__file__).resolve().parent.parent.parent
+    python_path = os.path.relpath(repo_root / "codeflash" / "main.py", cwd)
 
     base_command = ["uv", "run", "--no-project", python_path, "--file", config.file_path, "--no-pr"]
 
     if config.function_name:
         base_command.extend(["--function", config.function_name])
 
-    # Check if pyproject.toml exists with codeflash config - if so, don't override it
-    pyproject_path = cwd / "pyproject.toml"
-    has_codeflash_config = False
-    if pyproject_path.exists():
-        with contextlib.suppress(Exception), open(pyproject_path, "rb") as f:
-            pyproject_data = tomllib.load(f)
-            has_codeflash_config = "tool" in pyproject_data and "codeflash" in pyproject_data["tool"]
+    # Check if codeflash config exists (pyproject.toml or codeflash.toml) - if so, don't override it
+    has_codeflash_config = (cwd / "codeflash.toml").exists()
+    if not has_codeflash_config:
+        pyproject_path = cwd / "pyproject.toml"
+        if pyproject_path.exists():
+            with contextlib.suppress(Exception), open(pyproject_path, "rb") as f:
+                pyproject_data = tomllib.load(f)
+                has_codeflash_config = "tool" in pyproject_data and "codeflash" in pyproject_data["tool"]
 
-    # Only pass --tests-root and --module-root if they're not configured in pyproject.toml
+    # Only pass --tests-root and --module-root if they're not configured
     if not has_codeflash_config:
         base_command.extend(["--tests-root", str(test_root), "--module-root", str(cwd)])
 

@@ -11,6 +11,7 @@ from codeflash.code_utils.config_consts import (
     MIN_TESTCASE_PASSED_THRESHOLD,
     MIN_THROUGHPUT_IMPROVEMENT_THRESHOLD,
 )
+from codeflash.models.models import CoverageStatus
 from codeflash.models.test_type import TestType
 
 if TYPE_CHECKING:
@@ -204,7 +205,19 @@ def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult | Origin
 
 
 def coverage_critic(original_code_coverage: CoverageData | None) -> bool:
-    """Check if the coverage meets the threshold."""
+    """Check if the coverage meets the threshold.
+
+    Returns True when:
+    - Coverage data exists, was parsed successfully, and meets the threshold, OR
+    - No coverage data is available (skip the check for languages/projects without coverage support), OR
+    - Coverage data exists but was NOT_FOUND (e.g., JaCoCo report not generated in multi-module projects)
+    """
     if original_code_coverage:
+        # If coverage data was not found (e.g., JaCoCo report doesn't exist in multi-module projects),
+        # skip the coverage check instead of failing with 0% coverage
+        if original_code_coverage.status == CoverageStatus.NOT_FOUND:
+            return True
         return original_code_coverage.coverage >= COVERAGE_THRESHOLD
-    return False
+    # When no coverage data is available (e.g., JavaScript, Java multi-module projects),
+    # skip the coverage check and allow optimization to proceed
+    return True
