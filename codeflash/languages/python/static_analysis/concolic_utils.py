@@ -18,36 +18,6 @@ from codeflash.code_utils.shell_utils import make_env_with_project_root
 CROSSHAIR_KNOWN_LIMITATION_PATTERNS = ("<locals>", " object at 0x", "<list_iterator")
 
 
-def is_valid_concolic_test(test_code: str, project_root: Optional[str] = None) -> bool:
-    try:
-        ast.parse(test_code)
-    except SyntaxError:
-        is_known_limitation = any(pattern in test_code for pattern in CROSSHAIR_KNOWN_LIMITATION_PATTERNS)
-        if not is_known_limitation:
-            sentry_sdk.capture_message(f"CrossHair generated test with syntax error:\n{test_code}")
-        return False
-
-    temp_path = (codeflash_temp_dir / f"concolic_test_{uuid.uuid4().hex}.py").resolve()
-    temp_path.write_text(test_code, encoding="utf-8")
-
-    try:
-        result = subprocess.run(
-            [SAFE_SYS_EXECUTABLE, "-m", "pytest", "--collect-only", "-q", temp_path.as_posix()],
-            check=False,
-            capture_output=True,
-            text=True,
-            cwd=project_root,
-            timeout=10,
-            env=make_env_with_project_root(project_root) if project_root else None,
-        )
-    except (subprocess.TimeoutExpired, Exception):
-        return False
-    else:
-        return result.returncode == 0
-    finally:
-        temp_path.unlink(missing_ok=True)
-
-
 class AssertCleanup:
     def transform_asserts(self, code: str) -> str:
         lines = code.splitlines()
@@ -97,6 +67,36 @@ class AssertCleanup:
             elif ch == "," and depth == 0:
                 return args[:i].strip()
         return args.strip()
+
+
+def is_valid_concolic_test(test_code: str, project_root: Optional[str] = None) -> bool:
+    try:
+        ast.parse(test_code)
+    except SyntaxError:
+        is_known_limitation = any(pattern in test_code for pattern in CROSSHAIR_KNOWN_LIMITATION_PATTERNS)
+        if not is_known_limitation:
+            sentry_sdk.capture_message(f"CrossHair generated test with syntax error:\n{test_code}")
+        return False
+
+    temp_path = (codeflash_temp_dir / f"concolic_test_{uuid.uuid4().hex}.py").resolve()
+    temp_path.write_text(test_code, encoding="utf-8")
+
+    try:
+        result = subprocess.run(
+            [SAFE_SYS_EXECUTABLE, "-m", "pytest", "--collect-only", "-q", temp_path.as_posix()],
+            check=False,
+            capture_output=True,
+            text=True,
+            cwd=project_root,
+            timeout=10,
+            env=make_env_with_project_root(project_root) if project_root else None,
+        )
+    except (subprocess.TimeoutExpired, Exception):
+        return False
+    else:
+        return result.returncode == 0
+    finally:
+        temp_path.unlink(missing_ok=True)
 
 
 def clean_concolic_tests(test_suite_code: str) -> str:

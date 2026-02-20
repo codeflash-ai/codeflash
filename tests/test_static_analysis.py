@@ -1,12 +1,10 @@
 import ast
 from pathlib import Path
 
+from codeflash.languages.python.static_analysis._ast import FunctionKind, function_kind, has_typed_parameters
 from codeflash.languages.python.static_analysis.static_analysis import (
-    FunctionKind,
     ImportedInternalModuleAnalysis,
     analyze_imported_modules,
-    function_kind,
-    has_typed_parameters,
 )
 from codeflash.models.models import FunctionParent
 

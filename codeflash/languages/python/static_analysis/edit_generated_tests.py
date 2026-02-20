@@ -11,91 +11,11 @@ from libcst import MetadataWrapper
 from libcst.metadata import PositionProvider
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.time_utils import format_perf, format_time
+from codeflash.code_utils.time_utils import format_runtime_comment
 from codeflash.models.models import GeneratedTests, GeneratedTestsList
-from codeflash.result.critic import performance_gain
 
 if TYPE_CHECKING:
     from codeflash.models.models import InvocationId
-
-
-class CommentMapper(ast.NodeVisitor):
-    def __init__(
-        self, test: GeneratedTests, original_runtimes: dict[str, int], optimized_runtimes: dict[str, int]
-    ) -> None:
-        self.results: dict[int, str] = {}
-        self.test: GeneratedTests = test
-        self.original_runtimes = original_runtimes
-        self.optimized_runtimes = optimized_runtimes
-        self.abs_path = test.behavior_file_path.with_suffix("")
-        self.context_stack: list[str] = []
-
-    def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
-        self.context_stack.append(node.name)
-        for inner_node in node.body:
-            if isinstance(inner_node, ast.FunctionDef):
-                self.visit_FunctionDef(inner_node)
-            elif isinstance(inner_node, ast.AsyncFunctionDef):
-                self.visit_AsyncFunctionDef(inner_node)
-        self.context_stack.pop()
-        return node
-
-    def get_comment(self, match_key: str) -> str:
-        # calculate speedup and output comment
-        original_time = self.original_runtimes[match_key]
-        optimized_time = self.optimized_runtimes[match_key]
-        perf_gain = format_perf(
-            abs(performance_gain(original_runtime_ns=original_time, optimized_runtime_ns=optimized_time) * 100)
-        )
-        status = "slower" if optimized_time > original_time else "faster"
-        # Create the runtime comment
-        return f"# {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain}% {status})"
-
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
-        self._process_function_def_common(node)
-        return node
-
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef:
-        self._process_function_def_common(node)
-        return node
-
-    def _process_function_def_common(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
-        self.context_stack.append(node.name)
-        i = len(node.body) - 1
-        test_qualified_name = ".".join(self.context_stack)
-        key = test_qualified_name + "#" + str(self.abs_path)
-        while i >= 0:
-            line_node = node.body[i]
-            if isinstance(line_node, (ast.With, ast.For, ast.While, ast.If)):
-                j = len(line_node.body) - 1
-                while j >= 0:
-                    compound_line_node: ast.stmt = line_node.body[j]
-                    nodes_to_check = [compound_line_node]
-                    nodes_to_check.extend(getattr(compound_line_node, "body", []))
-                    for internal_node in nodes_to_check:
-                        if isinstance(internal_node, (ast.stmt, ast.Assign)):
-                            inv_id = str(i) + "_" + str(j)
-                            match_key = key + "#" + inv_id
-                            if match_key in self.original_runtimes and match_key in self.optimized_runtimes:
-                                self.results[internal_node.lineno] = self.get_comment(match_key)
-                    j -= 1
-            else:
-                inv_id = str(i)
-                match_key = key + "#" + inv_id
-                if match_key in self.original_runtimes and match_key in self.optimized_runtimes:
-                    self.results[line_node.lineno] = self.get_comment(match_key)
-            i -= 1
-        self.context_stack.pop()
-
-
-def get_fn_call_linenos(
-    test: GeneratedTests, original_runtimes: dict[str, int], optimized_runtimes: dict[str, int]
-) -> dict[int, str]:
-    line_comment_ast_mapper = CommentMapper(test, original_runtimes, optimized_runtimes)
-    source_code = test.generated_original_test_source
-    tree = ast.parse(source_code)
-    line_comment_ast_mapper.visit(tree)
-    return line_comment_ast_mapper.results
 
 
 class CommentAdder(cst.CSTTransformer):
@@ -270,3 +190,74 @@ def _compile_function_patterns(test_functions_to_remove: list[str]) -> list[re.P
         )
         for func in test_functions_to_remove
     ]
+
+
+class CommentMapper(ast.NodeVisitor):
+    def __init__(
+        self, test: GeneratedTests, original_runtimes: dict[str, int], optimized_runtimes: dict[str, int]
+    ) -> None:
+        self.results: dict[int, str] = {}
+        self.test: GeneratedTests = test
+        self.original_runtimes = original_runtimes
+        self.optimized_runtimes = optimized_runtimes
+        self.abs_path = test.behavior_file_path.with_suffix("")
+        self.context_stack: list[str] = []
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
+        self.context_stack.append(node.name)
+        for inner_node in node.body:
+            if isinstance(inner_node, ast.FunctionDef):
+                self.visit_FunctionDef(inner_node)
+            elif isinstance(inner_node, ast.AsyncFunctionDef):
+                self.visit_AsyncFunctionDef(inner_node)
+        self.context_stack.pop()
+        return node
+
+    def get_comment(self, match_key: str) -> str:
+        return format_runtime_comment(self.original_runtimes[match_key], self.optimized_runtimes[match_key])
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
+        self._process_function_def_common(node)
+        return node
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef:
+        self._process_function_def_common(node)
+        return node
+
+    def _process_function_def_common(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        self.context_stack.append(node.name)
+        i = len(node.body) - 1
+        test_qualified_name = ".".join(self.context_stack)
+        key = test_qualified_name + "#" + str(self.abs_path)
+        while i >= 0:
+            line_node = node.body[i]
+            if isinstance(line_node, (ast.With, ast.For, ast.While, ast.If)):
+                j = len(line_node.body) - 1
+                while j >= 0:
+                    compound_line_node: ast.stmt = line_node.body[j]
+                    nodes_to_check = [compound_line_node]
+                    nodes_to_check.extend(getattr(compound_line_node, "body", []))
+                    for internal_node in nodes_to_check:
+                        if isinstance(internal_node, (ast.stmt, ast.Assign)):
+                            inv_id = str(i) + "_" + str(j)
+                            match_key = key + "#" + inv_id
+                            if match_key in self.original_runtimes and match_key in self.optimized_runtimes:
+                                self.results[internal_node.lineno] = self.get_comment(match_key)
+                    j -= 1
+            else:
+                inv_id = str(i)
+                match_key = key + "#" + inv_id
+                if match_key in self.original_runtimes and match_key in self.optimized_runtimes:
+                    self.results[line_node.lineno] = self.get_comment(match_key)
+            i -= 1
+        self.context_stack.pop()
+
+
+def get_fn_call_linenos(
+    test: GeneratedTests, original_runtimes: dict[str, int], optimized_runtimes: dict[str, int]
+) -> dict[int, str]:
+    line_comment_ast_mapper = CommentMapper(test, original_runtimes, optimized_runtimes)
+    source_code = test.generated_original_test_source
+    tree = ast.parse(source_code)
+    line_comment_ast_mapper.visit(tree)
+    return line_comment_ast_mapper.results

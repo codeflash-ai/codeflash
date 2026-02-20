@@ -532,7 +532,7 @@ import numpy as np
 async def async_process(x):
     return np.sum(x)
 """
-        assert is_numerical_code(code, "async_process") is False
+        assert is_numerical_code(code, "async_process") is True
 
 
 @patch("codeflash.languages.python.static_analysis.code_extractor.has_numba", True)

@@ -10,41 +10,6 @@ if TYPE_CHECKING:
     from codeflash.models.models import CodeOptimizationContext
 
 
-def extract_dependent_function(main_function: str, code_context: CodeOptimizationContext) -> str | Literal[False]:
-    """Extract the single dependent function from the code context excluding the main function."""
-    dependent_functions = set()
-
-    # Compare using bare name since AST extracts bare function names
-    bare_main = main_function.rsplit(".", 1)[-1] if "." in main_function else main_function
-
-    for code_string in code_context.testgen_context.code_strings:
-        # Quick heuristic: skip parsing entirely if there is no 'def' token,
-        # since no function definitions can be present without it.
-        if "def" not in code_string.code:
-            continue
-
-        ast_tree = ast.parse(code_string.code)
-        # Add function names directly, skipping the bare main name.
-        for node in ast_tree.body:
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                name = node.name
-                if name == bare_main:
-                    continue
-                dependent_functions.add(name)
-                # If more than one dependent function (other than the main) is found,
-                # we can return False early since the final result cannot be a single name.
-                if len(dependent_functions) > 1:
-                    return False
-
-    if not dependent_functions:
-        return False
-
-    if len(dependent_functions) != 1:
-        return False
-
-    return build_fully_qualified_name(dependent_functions.pop(), code_context)
-
-
 def build_fully_qualified_name(function_name: str, code_context: CodeOptimizationContext) -> str:
     # If the name is already qualified (contains a dot), return as-is
     if "." in function_name:
@@ -91,3 +56,38 @@ def prepare_coverage_files() -> tuple[Path, Path]:
     coveragerc_content = f"[run]\n branch = True\ndata_file={coverage_database_file}\n"
     coveragercfile.write_text(coveragerc_content)
     return coverage_database_file, coveragercfile
+
+
+def extract_dependent_function(main_function: str, code_context: CodeOptimizationContext) -> str | Literal[False]:
+    """Extract the single dependent function from the code context excluding the main function."""
+    dependent_functions = set()
+
+    # Compare using bare name since AST extracts bare function names
+    bare_main = main_function.rsplit(".", 1)[-1] if "." in main_function else main_function
+
+    for code_string in code_context.testgen_context.code_strings:
+        # Quick heuristic: skip parsing entirely if there is no 'def' token,
+        # since no function definitions can be present without it.
+        if "def" not in code_string.code:
+            continue
+
+        ast_tree = ast.parse(code_string.code)
+        # Add function names directly, skipping the bare main name.
+        for node in ast_tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                name = node.name
+                if name == bare_main:
+                    continue
+                dependent_functions.add(name)
+                # If more than one dependent function (other than the main) is found,
+                # we can return False early since the final result cannot be a single name.
+                if len(dependent_functions) > 1:
+                    return False
+
+    if not dependent_functions:
+        return False
+
+    if len(dependent_functions) != 1:
+        return False
+
+    return build_fully_qualified_name(dependent_functions.pop(), code_context)

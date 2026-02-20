@@ -3,11 +3,10 @@ from pathlib import Path
 
 import libcst as cst
 
+from codeflash.languages.python.static_analysis.code_extractor import find_preexisting_objects, resolve_star_import
 from codeflash.languages.python.static_analysis.code_extractor import (
     DottedImportCollector,
     add_needed_imports_from_module,
-    find_preexisting_objects,
-    resolve_star_import,
 )
 from codeflash.languages.python.static_analysis.code_replacer import replace_functions_and_add_imports
 from codeflash.models.models import FunctionParent

@@ -70,14 +70,16 @@ from codeflash.languages.python.context.unused_definition_remover import (
     detect_unused_helper_functions,
     revert_unused_helper_functions,
 )
-from codeflash.languages.python.static_analysis.code_extractor import get_opt_review_metrics, is_numerical_code
+from codeflash.languages.python.static_analysis._ast import get_first_top_level_function_or_method_ast
+from codeflash.languages.python.static_analysis.code_extractor import is_numerical_code
+from codeflash.languages.python.static_analysis.line_profile_utils import contains_jit_decorator
+from codeflash.languages.python.static_analysis.code_extractor import get_opt_review_metrics
 from codeflash.languages.python.static_analysis.code_replacer import (
     add_custom_marker_to_all_tests,
     modify_autouse_fixture,
     replace_function_definitions_in_module,
 )
-from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports, contains_jit_decorator
-from codeflash.languages.python.static_analysis.static_analysis import get_first_top_level_function_or_method_ast
+from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree_to_markdown
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
 from codeflash.models.ExperimentMetadata import ExperimentMetadata

@@ -767,3 +767,29 @@ def test_simplified_complete_implementation_no_docstring() -> None:
         remove_docstrings=True,
     )
     assert dedent(expected).strip() == output.strip()
+
+
+def test_testgen_includes_dependency_class_with_property() -> None:
+    """TESTGEN context includes dependency classes (like config classes with @property) that are used by the FTO."""
+    code = """
+    class PatchedEnvConfig:
+        @property
+        def MERGE_EMBEDDED_TEXT(self):
+            return True
+
+        @property
+        def OTHER_SETTING(self):
+            return False
+
+    patched_env_config = PatchedEnvConfig()
+
+    def target_function():
+        return patched_env_config.MERGE_EMBEDDED_TEXT
+    """
+
+    output = parse_code_and_prune_cst(dedent(code), CodeContextType.TESTGEN, {"target_function"}, set())
+
+    assert "class PatchedEnvConfig" in output
+    assert "MERGE_EMBEDDED_TEXT" in output
+    assert "patched_env_config = PatchedEnvConfig()" in output
+    assert "def target_function" in output

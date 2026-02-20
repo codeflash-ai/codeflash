@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import ast
 from collections import defaultdict
-from functools import lru_cache
 from itertools import chain
-from typing import TYPE_CHECKING, Optional, TypeVar
+from typing import TYPE_CHECKING, Optional
 
 import libcst as cst
 from libcst.metadata import PositionProvider
@@ -13,6 +11,7 @@ from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.config_parser import find_conftest_files
 from codeflash.code_utils.formatter import sort_imports
 from codeflash.languages import is_python
+from codeflash.languages.python.static_analysis._ast import normalize_code
 from codeflash.languages.python.static_analysis.code_extractor import (
     add_global_assignments,
     add_needed_imports_from_module,
@@ -27,21 +26,6 @@ if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import LanguageSupport
     from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, OptimizedCandidate, ValidCode
-
-ASTNodeT = TypeVar("ASTNodeT", bound=ast.AST)
-
-
-def normalize_node(node: ASTNodeT) -> ASTNodeT:
-    if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and ast.get_docstring(node):
-        node.body = node.body[1:]
-    if hasattr(node, "body"):
-        node.body = [normalize_node(n) for n in node.body if not isinstance(n, (ast.Import, ast.ImportFrom))]
-    return node
-
-
-@lru_cache(maxsize=3)
-def normalize_code(code: str) -> str:
-    return ast.unparse(normalize_node(ast.parse(code)))
 
 
 class AddRequestArgument(cst.CSTTransformer):
@@ -237,149 +221,6 @@ def add_custom_marker_to_all_tests(test_paths: list[Path]) -> None:
         pytest_mark_adder = PytestMarkAdder("codeflash_no_autouse")
         modified_module = modified_module.visit(pytest_mark_adder)
         test_path.write_text(modified_module.code, encoding="utf-8")
-
-
-class OptimFunctionCollector(cst.CSTVisitor):
-    METADATA_DEPENDENCIES = (cst.metadata.ParentNodeProvider,)
-
-    def __init__(
-        self,
-        preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] | None = None,
-        function_names: set[tuple[str | None, str]] | None = None,
-    ) -> None:
-        super().__init__()
-        self.preexisting_objects = preexisting_objects if preexisting_objects is not None else set()
-
-        self.function_names = function_names  # set of (class_name, function_name)
-        self.modified_functions: dict[
-            tuple[str | None, str], cst.FunctionDef
-        ] = {}  # keys are (class_name, function_name)
-        self.new_functions: list[cst.FunctionDef] = []
-        self.new_class_functions: dict[str, list[cst.FunctionDef]] = defaultdict(list)
-        self.new_classes: list[cst.ClassDef] = []
-        self.current_class = None
-        self.modified_init_functions: dict[str, cst.FunctionDef] = {}
-
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
-        if (self.current_class, node.name.value) in self.function_names:
-            self.modified_functions[(self.current_class, node.name.value)] = node
-        elif self.current_class and node.name.value == "__init__":
-            self.modified_init_functions[self.current_class] = node
-        elif (
-            self.preexisting_objects
-            and (node.name.value, ()) not in self.preexisting_objects
-            and self.current_class is None
-        ):
-            self.new_functions.append(node)
-        return False
-
-    def visit_ClassDef(self, node: cst.ClassDef) -> bool:
-        if self.current_class:
-            return False  # If already in a class, do not recurse deeper
-        self.current_class = node.name.value
-
-        parents = (FunctionParent(name=node.name.value, type="ClassDef"),)
-
-        if (node.name.value, ()) not in self.preexisting_objects:
-            self.new_classes.append(node)
-
-        for child_node in node.body.body:
-            if (
-                self.preexisting_objects
-                and isinstance(child_node, cst.FunctionDef)
-                and (child_node.name.value, parents) not in self.preexisting_objects
-            ):
-                self.new_class_functions[node.name.value].append(child_node)
-
-        return True
-
-    def leave_ClassDef(self, node: cst.ClassDef) -> None:
-        if self.current_class:
-            self.current_class = None
-
-
-class OptimFunctionReplacer(cst.CSTTransformer):
-    def __init__(
-        self,
-        modified_functions: Optional[dict[tuple[str | None, str], cst.FunctionDef]] = None,
-        new_classes: Optional[list[cst.ClassDef]] = None,
-        new_functions: Optional[list[cst.FunctionDef]] = None,
-        new_class_functions: Optional[dict[str, list[cst.FunctionDef]]] = None,
-        modified_init_functions: Optional[dict[str, cst.FunctionDef]] = None,
-    ) -> None:
-        super().__init__()
-        self.modified_functions = modified_functions if modified_functions is not None else {}
-        self.new_functions = new_functions if new_functions is not None else []
-        self.new_classes = new_classes if new_classes is not None else []
-        self.new_class_functions = new_class_functions if new_class_functions is not None else defaultdict(list)
-        self.modified_init_functions: dict[str, cst.FunctionDef] = (
-            modified_init_functions if modified_init_functions is not None else {}
-        )
-        self.current_class = None
-
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
-        return False
-
-    def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
-        if (self.current_class, original_node.name.value) in self.modified_functions:
-            node = self.modified_functions[(self.current_class, original_node.name.value)]
-            return updated_node.with_changes(body=node.body, decorators=node.decorators)
-        if original_node.name.value == "__init__" and self.current_class in self.modified_init_functions:
-            return self.modified_init_functions[self.current_class]
-
-        return updated_node
-
-    def visit_ClassDef(self, node: cst.ClassDef) -> bool:
-        if self.current_class:
-            return False  # If already in a class, do not recurse deeper
-        self.current_class = node.name.value
-        return True
-
-    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:
-        if self.current_class and self.current_class == original_node.name.value:
-            self.current_class = None
-            if original_node.name.value in self.new_class_functions:
-                return updated_node.with_changes(
-                    body=updated_node.body.with_changes(
-                        body=(list(updated_node.body.body) + list(self.new_class_functions[original_node.name.value]))
-                    )
-                )
-        return updated_node
-
-    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
-        node = updated_node
-        max_function_index = None
-        max_class_index = None
-        for index, _node in enumerate(node.body):
-            if isinstance(_node, cst.FunctionDef):
-                max_function_index = index
-            if isinstance(_node, cst.ClassDef):
-                max_class_index = index
-
-        if self.new_classes:
-            existing_class_names = {_node.name.value for _node in node.body if isinstance(_node, cst.ClassDef)}
-
-            unique_classes = [
-                new_class for new_class in self.new_classes if new_class.name.value not in existing_class_names
-            ]
-            if unique_classes:
-                new_classes_insertion_idx = max_class_index or find_insertion_index_after_imports(node)
-                new_body = list(
-                    chain(node.body[:new_classes_insertion_idx], unique_classes, node.body[new_classes_insertion_idx:])
-                )
-                node = node.with_changes(body=new_body)
-
-        if max_function_index is not None:
-            node = node.with_changes(
-                body=(*node.body[: max_function_index + 1], *self.new_functions, *node.body[max_function_index + 1 :])
-            )
-        elif max_class_index is not None:
-            node = node.with_changes(
-                body=(*node.body[: max_class_index + 1], *self.new_functions, *node.body[max_class_index + 1 :])
-            )
-        else:
-            node = node.with_changes(body=(*self.new_functions, *node.body))
-        return node
 
 
 def replace_functions_in_file(

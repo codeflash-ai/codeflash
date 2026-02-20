@@ -4682,3 +4682,70 @@ def my_func(ctx: Context) -> None:
 
     class_names = [cs.code.split("\n")[0].replace("class ", "").rstrip(":") for cs in result.code_strings]
     assert len(class_names) == len(set(class_names)), f"Duplicate class stubs found: {class_names}"
+
+
+def test_get_function_sources_from_jedi_chases_class_type_for_statement(tmp_path: Path) -> None:
+    """get_function_sources_from_jedi discovers the class type behind a module-level instance (statement definition)."""
+    from codeflash.languages.python.context.code_context_extractor import get_function_sources_from_jedi
+
+    config_code = """
+class PatchedEnvConfig:
+    @property
+    def MERGE_EMBEDDED_TEXT(self):
+        return True
+
+patched_env_config = PatchedEnvConfig()
+"""
+    fto_code = """
+from config_mod import patched_env_config
+
+def target_function():
+    return patched_env_config.MERGE_EMBEDDED_TEXT
+"""
+    config_path = tmp_path / "config_mod.py"
+    config_path.write_text(config_code, encoding="utf-8")
+    fto_path = tmp_path / "fto_mod.py"
+    fto_path.write_text(fto_code, encoding="utf-8")
+
+    # Make it importable
+    sys.path.insert(0, str(tmp_path))
+    try:
+        file_path_to_qnames = {fto_path: {"target_function"}}
+        _, function_source_list = get_function_sources_from_jedi(file_path_to_qnames, tmp_path)
+
+        qualified_names = {fs.qualified_name for fs in function_source_list}
+        assert "PatchedEnvConfig.__init__" in qualified_names
+    finally:
+        sys.path.remove(str(tmp_path))
+
+
+def test_enrich_testgen_context_extracts_class_for_instance_import(tmp_path: Path) -> None:
+    """enrich_testgen_context discovers the class definition when an imported name is a class instance."""
+    config_code = """
+class PatchedEnvConfig:
+    @property
+    def MERGE_EMBEDDED_TEXT(self):
+        return True
+
+patched_env_config = PatchedEnvConfig()
+"""
+    config_path = tmp_path / "config_mod.py"
+    config_path.write_text(config_code, encoding="utf-8")
+
+    fto_code = """from config_mod import patched_env_config
+
+def target_function():
+    return patched_env_config.MERGE_EMBEDDED_TEXT
+"""
+    fto_path = tmp_path / "fto_mod.py"
+    fto_path.write_text(fto_code, encoding="utf-8")
+
+    sys.path.insert(0, str(tmp_path))
+    try:
+        context = CodeStringsMarkdown(code_strings=[CodeString(code=fto_code, file_path=fto_path)])
+        result = enrich_testgen_context(context, tmp_path)
+
+        all_code = "\n".join(cs.code for cs in result.code_strings)
+        assert "class PatchedEnvConfig" in all_code
+    finally:
+        sys.path.remove(str(tmp_path))
