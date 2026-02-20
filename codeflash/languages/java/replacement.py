@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
+import textwrap
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -32,7 +33,8 @@ class ParsedOptimization:
 
     target_method_source: str
     new_fields: list[str]  # Source text of new fields to add
-    new_helper_methods: list[str]  # Source text of new helper methods to add
+    helpers_before_target: list[str] = field(default_factory=list)  # Helpers appearing before target in optimized code
+    helpers_after_target: list[str] = field(default_factory=list)  # Helpers appearing after target in optimized code
 
 
 def _parse_optimization_source(new_source: str, target_method_name: str, analyzer: JavaAnalyzer) -> ParsedOptimization:
@@ -58,16 +60,21 @@ def _parse_optimization_source(new_source: str, target_method_name: str, analyze
     # Check if this is a full class or just a method
     classes = analyzer.find_classes(new_source)
 
+    helpers_before_target: list[str] = []
+    helpers_after_target: list[str] = []
+
     if classes:
         # It's a class - extract components
         methods = analyzer.find_methods(new_source)
         fields = analyzer.find_fields(new_source)
 
-        # Find the target method
+        # Find the target method and its index among all methods
         target_method = None
-        for method in methods:
+        target_method_index: int | None = None
+        for i, method in enumerate(methods):
             if method.name == target_method_name:
                 target_method = method
+                target_method_index = i
                 break
 
         if target_method:
@@ -77,122 +84,154 @@ def _parse_optimization_source(new_source: str, target_method_name: str, analyze
             end = target_method.end_line
             target_method_source = "".join(lines[start:end])
 
-        # Extract helper methods (methods other than the target)
-        for method in methods:
+        # Extract helper methods, categorised by position relative to the target
+        for i, method in enumerate(methods):
             if method.name != target_method_name:
                 lines = new_source.splitlines(keepends=True)
                 start = (method.javadoc_start_line or method.start_line) - 1
                 end = method.end_line
                 helper_source = "".join(lines[start:end])
-                new_helper_methods.append(helper_source)
+                if target_method_index is None or i < target_method_index:
+                    helpers_before_target.append(helper_source)
+                else:
+                    helpers_after_target.append(helper_source)
 
         # Extract fields
-        for field in fields:
-            if field.source_text:
-                new_fields.append(field.source_text)
+        for f in fields:
+            if f.source_text:
+                new_fields.append(f.source_text)
 
     return ParsedOptimization(
-        target_method_source=target_method_source, new_fields=new_fields, new_helper_methods=new_helper_methods
+        target_method_source=target_method_source,
+        new_fields=new_fields,
+        helpers_before_target=helpers_before_target,
+        helpers_after_target=helpers_after_target,
     )
 
 
-def _insert_class_members(
-    source: str, class_name: str, fields: list[str], methods: list[str], analyzer: JavaAnalyzer
-) -> str:
-    """Insert new class members (fields and methods) into a class.
+def _dedent_member(source: str) -> str:
+    """Strip the common leading whitespace from a class member source."""
+    return textwrap.dedent(source).strip()
 
-    Fields are inserted at the beginning of the class body (after opening brace).
-    Methods are inserted at the end of the class body (before closing brace).
+
+def _lines_to_insert_byte(source_lines: list[str], end_line_1indexed: int) -> int:
+    """Return the byte offset immediately after the given 1-indexed line."""
+    return sum(len(ln.encode("utf8")) for ln in source_lines[:end_line_1indexed])
+
+
+def _insert_class_members(
+    source: str,
+    class_name: str,
+    fields: list[str],
+    helpers_before_target: list[str],
+    helpers_after_target: list[str],
+    target_method_name: str | None,
+    analyzer: JavaAnalyzer,
+) -> str:
+    """Insert new class members (fields and helper methods) into a class.
+
+    Fields are inserted after the last existing field declaration (or at the
+    start of the class body when no fields exist yet).
+
+    Helpers that appear *before* the target method in the optimized code are
+    inserted immediately before that method in the original source.
+
+    Helpers that appear *after* the target method in the optimized code are
+    appended at the end of the class body (before the closing brace).
+
+    All injected code is properly dedented then re-indented to the class member
+    level, which fixes the extra-indentation bug that arose when the extracted
+    source retained its original class-level whitespace prefix.
 
     Args:
         source: The source code.
         class_name: Name of the class to modify.
-        fields: List of field source texts to insert.
-        methods: List of method source texts to insert.
+        fields: Field source texts to insert.
+        helpers_before_target: Helper methods that precede the target in the optimised code.
+        helpers_after_target: Helper methods that follow the target in the optimised code.
+        target_method_name: Name of the method being replaced (used to locate insertion point).
         analyzer: JavaAnalyzer instance.
 
     Returns:
         Modified source code.
 
     """
-    if not fields and not methods:
+    if not fields and not helpers_before_target and not helpers_after_target:
         return source
 
-    classes = analyzer.find_classes(source)
-    target_class = None
+    def get_target_class_and_body(src: str):  # type: ignore[return]
+        for cls in analyzer.find_classes(src):
+            if cls.name == class_name:
+                body = cls.node.child_by_field_name("body")
+                return cls, body
+        return None, None
 
-    for cls in classes:
-        if cls.name == class_name:
-            target_class = cls
-            break
-
-    if not target_class:
+    target_class, body_node = get_target_class_and_body(source)
+    if not target_class or not body_node:
         logger.warning("Could not find class %s to insert members", class_name)
         return source
 
-    # Get class body
-    body_node = target_class.node.child_by_field_name("body")
-    if not body_node:
-        logger.warning("Class %s has no body", class_name)
-        return source
-
-    source_bytes = source.encode("utf8")
-    lines = source.splitlines(keepends=True)
-
-    # Get class indentation
+    lines_list = source.splitlines(keepends=True)
     class_line = target_class.start_line - 1
-    class_indent = _get_indentation(lines[class_line]) if class_line < len(lines) else ""
+    class_indent = _get_indentation(lines_list[class_line]) if class_line < len(lines_list) else ""
     member_indent = class_indent + "    "
+
+    def format_member(raw: str) -> str:
+        """Dedent then re-indent a class member to the correct level."""
+        member_lines = _dedent_member(raw).splitlines(keepends=True)
+        indented = _apply_indentation(member_lines, member_indent)
+        if indented and not indented.endswith("\n"):
+            indented += "\n"
+        return indented
 
     result = source
 
-    # Insert fields at the beginning of the class body (after opening brace)
+    # ── 1. Insert fields after the last existing field (Bug 2 fix) ──────────
     if fields:
-        # Re-parse to get current positions
-        classes = analyzer.find_classes(result)
-        for cls in classes:
-            if cls.name == class_name:
-                body_node = cls.node.child_by_field_name("body")
-                break
-
+        _, body_node = get_target_class_and_body(result)
         if body_node:
+            existing_fields = analyzer.find_fields(result, class_name=class_name)
+            result_lines = result.splitlines(keepends=True)
             result_bytes = result.encode("utf8")
-            insert_point = body_node.start_byte + 1  # After opening brace
 
-            # Format fields
-            field_text = "\n"
-            for field in fields:
-                field_lines = field.strip().splitlines(keepends=True)
-                indented_field = _apply_indentation(field_lines, member_indent)
-                field_text += indented_field
-                if not indented_field.endswith("\n"):
-                    field_text += "\n"
+            if existing_fields:
+                last_field = max(existing_fields, key=lambda f: f.end_line)
+                insert_byte = _lines_to_insert_byte(result_lines, last_field.end_line)
+                field_text = "".join(format_member(f) for f in fields)
+            else:
+                insert_byte = body_node.start_byte + 1  # after opening brace
+                field_text = "\n" + "".join(format_member(f) for f in fields)
 
-            before = result_bytes[:insert_point]
-            after = result_bytes[insert_point:]
+            before = result_bytes[:insert_byte]
+            after = result_bytes[insert_byte:]
             result = (before + field_text.encode("utf8") + after).decode("utf8")
 
-    # Insert methods at the end of the class body (before closing brace)
-    if methods:
-        # Re-parse to get current positions
-        classes = analyzer.find_classes(result)
-        for cls in classes:
-            if cls.name == class_name:
-                body_node = cls.node.child_by_field_name("body")
-                break
+    # ── 2. Insert helpers-before-target just before the target method (Bug 3 fix) ─
+    if helpers_before_target and target_method_name:
+        result_methods = analyzer.find_methods(result)
+        target_methods = [m for m in result_methods if m.name == target_method_name]
+        if target_methods:
+            target_m = target_methods[0]
+            insert_line = (target_m.javadoc_start_line or target_m.start_line) - 1  # 0-indexed
+            result_lines = result.splitlines(keepends=True)
+            insert_byte = sum(len(ln.encode("utf8")) for ln in result_lines[:insert_line])
+            result_bytes = result.encode("utf8")
 
+            # Each helper followed by a blank line (Bug 4 fix)
+            method_text = "".join(format_member(h) + "\n" for h in helpers_before_target)
+
+            before = result_bytes[:insert_byte]
+            after = result_bytes[insert_byte:]
+            result = (before + method_text.encode("utf8") + after).decode("utf8")
+
+    # ── 3. Append helpers-after-target before the closing brace (Bug 4 fix) ─
+    if helpers_after_target:
+        _, body_node = get_target_class_and_body(result)
         if body_node:
             result_bytes = result.encode("utf8")
-            insert_point = body_node.end_byte - 1  # Before closing brace
+            insert_point = body_node.end_byte - 1  # before closing brace
 
-            # Format methods
-            method_text = "\n"
-            for method in methods:
-                method_lines = method.strip().splitlines(keepends=True)
-                indented_method = _apply_indentation(method_lines, member_indent)
-                method_text += indented_method
-                if not indented_method.endswith("\n"):
-                    method_text += "\n"
+            method_text = "\n" + "".join(format_member(h) + "\n" for h in helpers_after_target)
 
             before = result_bytes[:insert_point]
             after = result_bytes[insert_point:]
@@ -295,17 +334,24 @@ def replace_function(
     class_name = target_method.class_name or function.class_name
 
     # First, add any new fields and helper methods to the class
-    if class_name and (parsed.new_fields or parsed.new_helper_methods):
+    if class_name and (parsed.new_fields or parsed.helpers_before_target or parsed.helpers_after_target):
         # Filter out fields/methods that already exist
         existing_methods = {m.name for m in methods}
         existing_fields = {f.name for f in analyzer.find_fields(source)}
 
-        # Filter helper methods
-        new_helpers_to_add = []
-        for helper_src in parsed.new_helper_methods:
+        # Filter helper methods (before target)
+        new_helpers_before = []
+        for helper_src in parsed.helpers_before_target:
             helper_methods = analyzer.find_methods(helper_src)
             if helper_methods and helper_methods[0].name not in existing_methods:
-                new_helpers_to_add.append(helper_src)
+                new_helpers_before.append(helper_src)
+
+        # Filter helper methods (after target)
+        new_helpers_after = []
+        for helper_src in parsed.helpers_after_target:
+            helper_methods = analyzer.find_methods(helper_src)
+            if helper_methods and helper_methods[0].name not in existing_methods:
+                new_helpers_after.append(helper_src)
 
         # Filter fields
         new_fields_to_add = []
@@ -319,14 +365,23 @@ def replace_function(
                     new_fields_to_add.append(field_src)
                     break  # Only add once per field declaration
 
-        if new_fields_to_add or new_helpers_to_add:
+        if new_fields_to_add or new_helpers_before or new_helpers_after:
             logger.debug(
-                "Adding %d new fields and %d helper methods to class %s",
+                "Adding %d new fields, %d before-helpers, %d after-helpers to class %s",
                 len(new_fields_to_add),
-                len(new_helpers_to_add),
+                len(new_helpers_before),
+                len(new_helpers_after),
                 class_name,
             )
-            source = _insert_class_members(source, class_name, new_fields_to_add, new_helpers_to_add, analyzer)
+            source = _insert_class_members(
+                source,
+                class_name,
+                new_fields_to_add,
+                new_helpers_before,
+                new_helpers_after,
+                func_name,
+                analyzer,
+            )
 
             # Re-find the target method after modifications
             # Line numbers have shifted, but the relative order of overloads is preserved

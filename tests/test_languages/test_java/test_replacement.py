@@ -1103,12 +1103,21 @@ public class Buffer {{
 
         assert result is True
         new_code = java_file.read_text(encoding="utf-8")
-        # Verify the static field was added and method was replaced
-        assert "private static final char[] HEX_DIGITS" in new_code
-        assert "HEX_DIGITS[v >>> 4]" in new_code
-        assert "HEX_DIGITS[v & 0x0F]" in new_code
-        # Verify old implementation is gone
-        assert 'String.format("%02x"' not in new_code
+        expected = """public class Buffer {
+    private static final char[] HEX_DIGITS = "0123456789abcdef".toCharArray();
+
+    public static String bytesToHexString(byte[] buf, int offset, int length) {
+        StringBuilder sb = new StringBuilder(length * 2);
+        for (int i = offset; i < length; i++) {
+            int v = buf[i] & 0xFF;
+            sb.append(HEX_DIGITS[v >>> 4]);
+            sb.append(HEX_DIGITS[v & 0x0F]);
+        }
+        return sb.toString();
+    }
+}
+"""
+        assert new_code == expected
 
     def test_add_precomputed_array(self, tmp_path: Path):
         """Test optimization that adds a precomputed static array."""
@@ -1151,12 +1160,23 @@ public class Encoder {{
 
         assert result is True
         new_code = java_file.read_text(encoding="utf-8")
-        # Verify static field was added
-        assert "private static final String[] BYTE_TO_HEX" in new_code
-        # Verify helper method was added
-        assert "private static String[] createByteToHex()" in new_code
-        # Verify method uses the lookup
-        assert "BYTE_TO_HEX[b & 0xFF]" in new_code
+        expected = """public class Encoder {
+    private static final String[] BYTE_TO_HEX = createByteToHex();
+
+    private static String[] createByteToHex() {
+        String[] map = new String[256];
+        for (int i = 0; i < 256; i++) {
+            map[i] = String.format("%02x", i);
+        }
+        return map;
+    }
+
+    public static String byteToHex(byte b) {
+        return BYTE_TO_HEX[b & 0xFF];
+    }
+}
+"""
+        assert new_code == expected
 
     def test_preserve_existing_fields(self, tmp_path: Path):
         """Test that existing fields are preserved when adding new ones."""
@@ -1213,14 +1233,31 @@ public class Calculator {{
 
         assert result is True
         new_code = java_file.read_text(encoding="utf-8")
-        # Verify existing field is preserved
-        assert "private static final int MAX_VALUE = 1000" in new_code
-        # Verify new field was added
-        assert "private static final int[] PRECOMPUTED" in new_code
-        # Verify helper method was added
-        assert "private static int[] precompute()" in new_code
-        # Verify optimized method body
-        assert "PRECOMPUTED[n]" in new_code
+        expected = """public class Calculator {
+    private static final int MAX_VALUE = 1000;
+    private static final int[] PRECOMPUTED = precompute();
+
+    private static int[] precompute() {
+        int[] arr = new int[1001];
+        for (int i = 1; i <= 1000; i++) {
+            arr[i] = arr[i-1] + i - 1;
+        }
+        return arr;
+    }
+
+    public int calculate(int n) {
+        if (n <= 1000) {
+            return PRECOMPUTED[n];
+        }
+        int result = PRECOMPUTED[1000];
+        for (int i = 1000; i < n; i++) {
+            result += i;
+        }
+        return result;
+    }
+}
+"""
+        assert new_code == expected
 
 
 class TestOptimizationWithHelperMethods:
@@ -1277,10 +1314,23 @@ public class StringUtils {{
 
         assert result is True
         new_code = java_file.read_text(encoding="utf-8")
-        # Verify helper method was added
-        assert "private static void swap(char[] arr, int i, int j)" in new_code
-        # Verify main method uses helper
-        assert "swap(chars, i, j)" in new_code
+        expected = """public class StringUtils {
+    private static void swap(char[] arr, int i, int j) {
+        char temp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = temp;
+    }
+
+    public static String reverse(String s) {
+        char[] chars = s.toCharArray();
+        for (int i = 0, j = chars.length - 1; i < j; i++, j--) {
+            swap(chars, i, j);
+        }
+        return new String(chars);
+    }
+}
+"""
+        assert new_code == expected
 
     def test_add_multiple_helpers(self, tmp_path: Path):
         """Test optimization that adds multiple helper methods."""
@@ -1326,11 +1376,21 @@ public class MathUtils {{
 
         assert result is True
         new_code = java_file.read_text(encoding="utf-8")
-        # Verify both helper methods were added
-        assert "private static int abs(int x)" in new_code
-        assert "private static int gcdInternal(int a, int b)" in new_code
-        # Verify main method uses helpers
-        assert "gcdInternal(abs(a), abs(b))" in new_code
+        expected = """public class MathUtils {
+    private static int abs(int x) {
+        return x < 0 ? -x : x;
+    }
+
+    private static int gcdInternal(int a, int b) {
+        return b == 0 ? a : gcdInternal(b, a % b);
+    }
+
+    public static int gcd(int a, int b) {
+        return gcdInternal(abs(a), abs(b));
+    }
+}
+"""
+        assert new_code == expected
 
 
 class TestOptimizationWithFieldsAndHelpers:
@@ -1382,13 +1442,27 @@ public class Fibonacci {{
 
         assert result is True
         new_code = java_file.read_text(encoding="utf-8")
-        # Verify static fields were added
-        assert "private static final long[] CACHE" in new_code
-        assert "private static final boolean[] COMPUTED" in new_code
-        # Verify helper method was added
-        assert "private static long fibMemo(int n)" in new_code
-        # Verify main method uses helper
-        assert "return fibMemo(n)" in new_code
+        expected = """public class Fibonacci {
+    private static final long[] CACHE = new long[100];
+    private static final boolean[] COMPUTED = new boolean[100];
+
+    private static long fibMemo(int n) {
+        if (n <= 1) return n;
+        if (n < 100 && COMPUTED[n]) return CACHE[n];
+        long result = fibMemo(n - 1) + fibMemo(n - 2);
+        if (n < 100) {
+            CACHE[n] = result;
+            COMPUTED[n] = true;
+        }
+        return result;
+    }
+
+    public static long fib(int n) {
+        return fibMemo(n);
+    }
+}
+"""
+        assert new_code == expected
 
     def test_real_world_bytes_to_hex_optimization(self, tmp_path: Path):
         """Test the actual bytesToHexString optimization pattern from aerospike."""
@@ -1453,20 +1527,34 @@ public final class Buffer {{
 
         assert result is True
         new_code = java_file.read_text(encoding="utf-8")
+        expected = """package com.example;
 
-        # Verify package is preserved
-        assert "package com.example;" in new_code
-        # Verify static field was added
-        assert "private static final String[] BYTE_TO_HEX = createByteToHex();" in new_code
-        # Verify helper method was added
-        assert "private static String[] createByteToHex()" in new_code
-        # Verify optimized method uses lookup
-        assert "BYTE_TO_HEX[buf[i] + 128]" in new_code
-        # Verify other method is preserved
-        assert "public static int otherMethod()" in new_code
-        assert "return 42;" in new_code
-        # Verify old implementation is replaced
-        assert 'String.format("%02x", buf[i])' not in new_code
+public final class Buffer {
+    private static final String[] BYTE_TO_HEX = createByteToHex();
+
+    private static String[] createByteToHex() {
+        String[] map = new String[256];
+        for (int b = -128; b <= 127; b++) {
+            map[b + 128] = String.format("%02x", (byte) b);
+        }
+        return map;
+    }
+
+    public static String bytesToHexString(byte[] buf, int offset, int length) {
+        StringBuilder sb = new StringBuilder(length * 2);
+
+        for (int i = offset; i < length; i++) {
+            sb.append(BYTE_TO_HEX[buf[i] + 128]);
+        }
+        return sb.toString();
+    }
+
+    public static int otherMethod() {
+        return 42;
+    }
+}
+"""
+        assert new_code == expected
 
 
 class TestOverloadedMethods:
@@ -1540,15 +1628,29 @@ public final class Buffer {{
 
         assert result is True
         new_code = java_file.read_text(encoding="utf-8")
+        expected = """public final class Buffer {
+    private static final char[] HEX_CHARS = {'0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f'};
 
-        # Verify the static field was added
-        assert "private static final char[] HEX_CHARS" in new_code
-        # Verify the 1-arg version is PRESERVED (not modified)
-        assert "bytesToHexString(byte[] buf)" in new_code
-        assert 'String.format("%02x", buf[i])' in new_code  # 1-arg version still uses format
-        # Verify the 3-arg version is OPTIMIZED
-        assert "HEX_CHARS[v >>> 4]" in new_code
-        # Should NOT have duplicate method definitions
-        assert new_code.count("bytesToHexString(byte[] buf, int offset, int length)") == 1
-        # Should still have both overloads
-        assert new_code.count("bytesToHexString") == 2
+    public static String bytesToHexString(byte[] buf) {
+        if (buf == null || buf.length == 0) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder(buf.length * 2);
+        for (int i = 0; i < buf.length; i++) {
+            sb.append(String.format("%02x", buf[i]));
+        }
+        return sb.toString();
+    }
+
+    public static String bytesToHexString(byte[] buf, int offset, int length) {
+        char[] out = new char[(length - offset) * 2];
+        for (int i = offset, j = 0; i < length; i++) {
+            int v = buf[i] & 0xFF;
+            out[j++] = HEX_CHARS[v >>> 4];
+            out[j++] = HEX_CHARS[v & 0x0F];
+        }
+        return new String(out);
+    }
+}
+"""
+        assert new_code == expected
