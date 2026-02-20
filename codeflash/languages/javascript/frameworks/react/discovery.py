@@ -19,13 +19,9 @@ if TYPE_CHECKING:
 
     from codeflash.languages.javascript.treesitter import FunctionNode, TreeSitterAnalyzer
 
-_JSX_TYPES = frozenset((
-    "jsx_element",
-    "jsx_self_closing_element",
-    "jsx_fragment",
-    "jsx_expression",
-    "jsx_opening_element",
-))
+_JSX_TYPES = frozenset(
+    ("jsx_element", "jsx_self_closing_element", "jsx_fragment", "jsx_expression", "jsx_opening_element")
+)
 
 logger = logging.getLogger(__name__)
 
