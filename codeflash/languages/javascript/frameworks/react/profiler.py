@@ -160,9 +160,13 @@ def _find_jsx_returns(func_node: Node, source_bytes: bytes) -> list[Node]:
 
 def _contains_jsx(node: Node) -> bool:
     """Check if a tree-sitter node contains JSX elements."""
-    if node.type in ("jsx_element", "jsx_self_closing_element", "jsx_fragment"):
-        return True
-    return any(_contains_jsx(child) for child in node.children)
+    stack = [node]
+    while stack:
+        node = stack.pop()
+        if node.type in ("jsx_element", "jsx_self_closing_element", "jsx_fragment"):
+            return True
+        stack.extend(node.children)
+    return False
 
 
 def _wrap_return_with_profiler(source: str, return_node: Node, profiler_id: str, safe_name: str) -> str:
