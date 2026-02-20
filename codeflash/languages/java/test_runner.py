@@ -677,20 +677,18 @@ def _run_tests_direct(
 
     java = _find_java_executable() or "java"
 
-    # Try to detect if JUnit 4 is being used (check for JUnit 4 runner in classpath)
-    # If JUnit 4, use JUnitCore directly instead of ConsoleLauncher
-    is_junit4 = False
-    # Check if org.junit.runner.JUnitCore is in classpath (JUnit 4)
-    # and org.junit.platform.console.ConsoleLauncher is not (JUnit 5)
-    check_junit4_cmd = [str(java), "-cp", classpath, "org.junit.runner.JUnitCore", "-version"]
-    try:
-        result = subprocess.run(check_junit4_cmd, capture_output=True, text=True, timeout=2)
-        # JUnit 4's JUnitCore will show version, JUnit 5 won't have this class
-        if "JUnit version" in result.stdout or result.returncode == 0:
-            is_junit4 = True
-            logger.debug("Detected JUnit 4, using JUnitCore for direct execution")
-    except (subprocess.TimeoutExpired, Exception):
-        pass
+    # Detect JUnit version from the classpath string.
+    # Previously this probed the classpath via subprocess, but that's unreliable:
+    # JUnit 5 projects often have JUnit 4 classes via junit-vintage-engine,
+    # causing false JUnit 4 detection and failed test execution.
+    # Instead, check if ConsoleLauncher (JUnit 5) is available on the classpath.
+    has_console_launcher = "console-standalone" in classpath or "ConsoleLauncher" in classpath
+    has_junit5 = "junit-jupiter" in classpath or "junit-platform" in classpath
+    is_junit4 = not (has_console_launcher or has_junit5)
+    if is_junit4:
+        logger.debug("JUnit 4 detected (no JUnit 5 platform JARs on classpath), using JUnitCore")
+    else:
+        logger.debug("JUnit 5 detected on classpath, using ConsoleLauncher")
 
     if is_junit4:
         # Use JUnit 4's JUnitCore runner
