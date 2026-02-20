@@ -52,27 +52,29 @@ class JavaLineProfiler:
 
         # Java executable statement types
         # Moved to an instance-level frozenset to avoid rebuilding this set on every call.
-        self._executable_types = frozenset({
-            "expression_statement",
-            "return_statement",
-            "if_statement",
-            "for_statement",
-            "enhanced_for_statement",  # for-each loop
-            "while_statement",
-            "do_statement",
-            "switch_expression",
-            "switch_statement",
-            "throw_statement",
-            "try_statement",
-            "try_with_resources_statement",
-            "local_variable_declaration",
-            "assert_statement",
-            "break_statement",
-            "continue_statement",
-            "method_invocation",
-            "object_creation_expression",
-            "assignment_expression",
-        })
+        self._executable_types = frozenset(
+            {
+                "expression_statement",
+                "return_statement",
+                "if_statement",
+                "for_statement",
+                "enhanced_for_statement",  # for-each loop
+                "while_statement",
+                "do_statement",
+                "switch_expression",
+                "switch_statement",
+                "throw_statement",
+                "try_statement",
+                "try_with_resources_statement",
+                "local_variable_declaration",
+                "assert_statement",
+                "break_statement",
+                "continue_statement",
+                "method_invocation",
+                "object_creation_expression",
+                "assignment_expression",
+            }
+        )
 
     def instrument_source(self, source: str, file_path: Path, functions: list[FunctionInfo], analyzer=None) -> str:
         """Instrument Java source code with line profiling.
