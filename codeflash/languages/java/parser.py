@@ -679,6 +679,14 @@ class JavaAnalyzer:
         return None
 
 
+    @property
+    def parser(self) -> Parser:
+        # Lazily create and cache the Parser instance to avoid repeated allocation.
+        if self._parser is None:
+            self._parser = Parser()
+        return self._parser
+
+
 def get_java_analyzer() -> JavaAnalyzer:
     """Get a JavaAnalyzer instance.
 
