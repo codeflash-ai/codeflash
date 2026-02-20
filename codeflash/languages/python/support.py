@@ -21,7 +21,8 @@ from codeflash.languages.registry import register_language
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from codeflash.models.models import FunctionSource
+    from codeflash.languages.base import DependencyResolver
+    from codeflash.models.models import FunctionSource, GeneratedTestsList, InvocationId
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,37 @@ class PythonSupport:
     @property
     def comment_prefix(self) -> str:
         return "#"
+
+    @property
+    def dir_excludes(self) -> frozenset[str]:
+        return frozenset(
+            {
+                "__pycache__",
+                ".venv",
+                "venv",
+                ".tox",
+                ".nox",
+                ".eggs",
+                ".mypy_cache",
+                ".ruff_cache",
+                ".pytest_cache",
+                ".hypothesis",
+                "htmlcov",
+                ".pytype",
+                ".pyre",
+                ".pybuilder",
+                ".ipynb_checkpoints",
+                ".codeflash",
+                ".cache",
+                ".complexipy_cache",
+                "build",
+                "dist",
+                "sdist",
+                ".coverage*",
+                ".pyright*",
+                "*.egg-info",
+            }
+        )
 
     # === Discovery ===
 
@@ -347,7 +379,7 @@ class PythonSupport:
             Modified source code with function replaced.
 
         """
-        from codeflash.code_utils.code_replacer import replace_functions_in_file
+        from codeflash.languages.python.static_analysis.code_replacer import replace_functions_in_file
 
         try:
             # Determine the function names to replace
@@ -625,6 +657,59 @@ class PythonSupport:
         except Exception:
             return test_source
 
+    def postprocess_generated_tests(
+        self, generated_tests: GeneratedTestsList, test_framework: str, project_root: Path, source_file_path: Path
+    ) -> GeneratedTestsList:
+        """Apply language-specific postprocessing to generated tests."""
+        _ = test_framework, project_root, source_file_path
+        return generated_tests
+
+    def remove_test_functions_from_generated_tests(
+        self, generated_tests: GeneratedTestsList, functions_to_remove: list[str]
+    ) -> GeneratedTestsList:
+        """Remove specific test functions from generated tests."""
+        from codeflash.languages.python.static_analysis.edit_generated_tests import (
+            remove_functions_from_generated_tests,
+        )
+
+        return remove_functions_from_generated_tests(generated_tests, functions_to_remove)
+
+    def add_runtime_comments_to_generated_tests(
+        self,
+        generated_tests: GeneratedTestsList,
+        original_runtimes: dict[InvocationId, list[int]],
+        optimized_runtimes: dict[InvocationId, list[int]],
+        tests_project_rootdir: Path | None = None,
+    ) -> GeneratedTestsList:
+        """Add runtime comments to generated tests."""
+        from codeflash.languages.python.static_analysis.edit_generated_tests import (
+            add_runtime_comments_to_generated_tests,
+        )
+
+        return add_runtime_comments_to_generated_tests(
+            generated_tests, original_runtimes, optimized_runtimes, tests_project_rootdir
+        )
+
+    def add_global_declarations(self, optimized_code: str, original_source: str, module_abspath: Path) -> str:
+        _ = optimized_code, module_abspath
+        return original_source
+
+    def extract_calling_function_source(self, source_code: str, function_name: str, ref_line: int) -> str | None:
+        """Extract the source code of a calling function in Python."""
+        try:
+            import ast
+
+            lines = source_code.splitlines()
+            tree = ast.parse(source_code)
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function_name:
+                    end_line = node.end_lineno or node.lineno
+                    if node.lineno <= ref_line <= end_line:
+                        return "\n".join(lines[node.lineno - 1 : end_line])
+        except Exception:
+            return None
+        return None
+
     # === Test Result Comparison ===
 
     def compare_test_results(
@@ -719,6 +804,15 @@ class PythonSupport:
 
         """
         return True
+
+    def create_dependency_resolver(self, project_root: Path) -> DependencyResolver | None:
+        from codeflash.languages.python.reference_graph import ReferenceGraph
+
+        try:
+            return ReferenceGraph(project_root, language=self.language.value)
+        except Exception:
+            logger.debug("Failed to initialize ReferenceGraph, falling back to per-function Jedi analysis")
+            return None
 
     def instrument_existing_test(
         self,

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.code_utils.code_replacer import (
+from codeflash.languages.python.static_analysis.code_replacer import (
     replace_function_definitions_for_language,
     replace_function_definitions_in_module,
 )

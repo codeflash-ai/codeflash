@@ -181,8 +181,8 @@ def test_optimized_code_for_different_file_not_applied_to_current_file() -> None
     3. BUG: When processing `support.py`, the fallback applies `formatter.py`'s code
     4. EXPECTED: No code should be applied to `support.py` since the paths don't match
     """
-    from codeflash.code_utils.code_extractor import find_preexisting_objects
-    from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
+    from codeflash.languages.python.static_analysis.code_extractor import find_preexisting_objects
+    from codeflash.languages.python.static_analysis.code_replacer import replace_function_definitions_in_module
     from codeflash.models.models import CodeStringsMarkdown
 
     root_dir = Path(__file__).parent.parent.resolve()

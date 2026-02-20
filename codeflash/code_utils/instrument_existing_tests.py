@@ -710,6 +710,7 @@ def inject_profiling_into_existing_test(
     tests_project_root: Path,
     mode: TestingMode = TestingMode.BEHAVIOR,
 ) -> tuple[bool, str | None]:
+    tests_project_root = tests_project_root.resolve()
     # Route to language-specific implementations
     if is_javascript():
         from codeflash.languages.javascript.instrument import inject_profiling_into_existing_js_test

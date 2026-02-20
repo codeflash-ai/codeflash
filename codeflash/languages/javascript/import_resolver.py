@@ -44,8 +44,7 @@ class ImportResolver:
             project_root: Root directory of the project.
 
         """
-        # Resolve to real path to handle macOS symlinks like /var -> /private/var
-        self.project_root = project_root.resolve()
+        self.project_root = project_root
         self._resolution_cache: dict[tuple[Path, str], Path | None] = {}
 
     def resolve_import(self, import_info: ImportInfo, source_file: Path) -> ResolvedImport | None:

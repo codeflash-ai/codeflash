@@ -19,7 +19,9 @@ Usage:
 
 from codeflash.languages.base import (
     CodeContext,
+    DependencyResolver,
     HelperFunction,
+    IndexResult,
     Language,
     LanguageSupport,
     ParentInfo,
@@ -90,8 +92,10 @@ def __getattr__(name: str):
 __all__ = [
     # Base types
     "CodeContext",
+    "DependencyResolver",
     "FunctionInfo",
     "HelperFunction",
+    "IndexResult",
     "Language",
     "LanguageSupport",
     "ParentInfo",
