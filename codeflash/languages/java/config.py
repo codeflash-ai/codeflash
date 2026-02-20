@@ -183,7 +183,7 @@ def _detect_test_deps_from_pom(project_root: Path) -> tuple[bool, bool, bool]:
     has_junit4 = False
     has_testng = False
 
-    def check_dependencies(deps_element, ns):
+    def check_dependencies(deps_element: ET.Element | None, ns: dict[str, str]) -> None:
         """Check dependencies element for test frameworks."""
         nonlocal has_junit5, has_junit4, has_testng
 

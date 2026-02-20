@@ -35,9 +35,9 @@ logger = logging.getLogger(__name__)
 def _get_function_name(func: Any) -> str:
     """Get the function name from FunctionToOptimize."""
     if hasattr(func, "function_name"):
-        return func.function_name
+        return str(func.function_name)
     if hasattr(func, "name"):
-        return func.name
+        return str(func.name)
     msg = f"Cannot get function name from {type(func)}"
     raise AttributeError(msg)
 
@@ -82,7 +82,7 @@ def _is_test_annotation(stripped_line: str) -> bool:
     return bool(_TEST_ANNOTATION_RE.match(stripped_line))
 
 
-def _is_inside_lambda(node) -> bool:
+def _is_inside_lambda(node: Any) -> bool:
     """Check if a tree-sitter node is inside a lambda_expression."""
     current = node.parent
     while current is not None:
@@ -94,7 +94,7 @@ def _is_inside_lambda(node) -> bool:
     return False
 
 
-def _is_inside_complex_expression(node) -> bool:
+def _is_inside_complex_expression(node: Any) -> bool:
     """Check if a tree-sitter node is inside a complex expression that shouldn't be instrumented directly.
 
     This includes:
@@ -163,7 +163,7 @@ def wrap_target_calls_with_treesitter(
     tree = analyzer.parse(wrapper_bytes)
 
     # Collect all matching calls with their metadata
-    calls = []
+    calls: list[dict[str, Any]] = []
     _collect_calls(tree.root_node, wrapper_bytes, body_bytes, prefix_len, func_name, analyzer, calls)
 
     if not calls:
@@ -177,7 +177,7 @@ def wrap_target_calls_with_treesitter(
         offset += len(line.encode("utf8")) + 1  # +1 for \n from join
 
     # Group non-lambda and non-complex-expression calls by their line index
-    calls_by_line: dict[int, list] = {}
+    calls_by_line: dict[int, list[dict[str, Any]]] = {}
     for call in calls:
         if call["in_lambda"] or call.get("in_complex", False):
             logger.debug("Skipping behavior instrumentation for call in lambda or complex expression")
@@ -263,7 +263,15 @@ def wrap_target_calls_with_treesitter(
     return wrapped, call_counter
 
 
-def _collect_calls(node, wrapper_bytes, body_bytes, prefix_len, func_name, analyzer, out):
+def _collect_calls(
+    node: Any,
+    wrapper_bytes: bytes,
+    body_bytes: bytes,
+    prefix_len: int,
+    func_name: str,
+    analyzer: JavaAnalyzer,
+    out: list[dict[str, Any]],
+) -> None:
     """Recursively collect method_invocation nodes matching func_name."""
     node_type = node.type
     if node_type == "method_invocation":
@@ -331,7 +339,7 @@ def _infer_array_cast_type(line: str) -> str | None:
 def _get_qualified_name(func: Any) -> str:
     """Get the qualified name from FunctionToOptimize."""
     if hasattr(func, "qualified_name"):
-        return func.qualified_name
+        return str(func.qualified_name)
     # Build qualified name from function_name and parents
     if hasattr(func, "function_name"):
         parts = []
@@ -702,7 +710,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
     analyzer = get_java_analyzer()
     tree = analyzer.parse(source_bytes)
 
-    def has_test_annotation(method_node) -> bool:
+    def has_test_annotation(method_node: Any) -> bool:
         modifiers = None
         for child in method_node.children:
             if child.type == "modifiers":
@@ -721,7 +729,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                     return True
         return False
 
-    def collect_test_methods(node, out) -> None:
+    def collect_test_methods(node: Any, out: list[tuple[Any, Any]]) -> None:
         if node.type == "method_declaration" and has_test_annotation(node):
             body_node = node.child_by_field_name("body")
             if body_node is not None:
@@ -729,7 +737,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         for child in node.children:
             collect_test_methods(child, out)
 
-    def collect_target_calls(node, wrapper_bytes: bytes, func: str, out) -> None:
+    def collect_target_calls(node: Any, wrapper_bytes: bytes, func: str, out: list[Any]) -> None:
         if node.type == "method_invocation":
             name_node = node.child_by_field_name("name")
             if name_node and analyzer.get_node_text(name_node, wrapper_bytes) == func:
@@ -756,13 +764,13 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             reindented.append(f"{target_indent}{line[min_leading:]}")
         return "\n".join(reindented)
 
-    def find_top_level_statement(node, body_node):
+    def find_top_level_statement(node: Any, body_node: Any) -> Any:
         current = node
         while current is not None and current.parent is not None and current.parent != body_node:
             current = current.parent
         return current if current is not None and current.parent == body_node else None
 
-    def split_var_declaration(stmt_node, source_bytes_ref: bytes) -> tuple[str, str] | None:
+    def split_var_declaration(stmt_node: Any, source_bytes_ref: bytes) -> tuple[str, str] | None:
         """Split a local_variable_declaration into a hoisted declaration and an assignment.
 
         When a target call is inside a variable declaration like:
@@ -834,7 +842,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         wrapped_body = wrapped_method.child_by_field_name("body")
         if wrapped_body is None:
             return body_text, next_wrapper_id
-        calls = []
+        calls: list[Any] = []
         collect_target_calls(wrapped_body, wrapper_bytes, func_name, calls)
 
         indent = base_indent
@@ -933,14 +941,14 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             result_parts.append(suffix)
             return "".join(result_parts), current_id
 
-        result_parts: list[str] = []
+        multi_result_parts: list[str] = []
         cursor = 0
         wrapper_id = next_wrapper_id
 
         for stmt_start, stmt_end, stmt_ast_node in unique_ranges:
             prefix = body_text[cursor:stmt_start]
             target_stmt = body_text[stmt_start:stmt_end]
-            result_parts.append(prefix.rstrip(" \t"))
+            multi_result_parts.append(prefix.rstrip(" \t"))
 
             wrapper_id += 1
             current_id = wrapper_id
@@ -982,14 +990,14 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 f"{indent}}}",
             ]
 
-            result_parts.append("\n" + "\n".join(setup_lines))
-            result_parts.append("\n".join(timing_lines))
+            multi_result_parts.append("\n" + "\n".join(setup_lines))
+            multi_result_parts.append("\n".join(timing_lines))
             cursor = stmt_end
 
-        result_parts.append(body_text[cursor:])
-        return "".join(result_parts), wrapper_id
+        multi_result_parts.append(body_text[cursor:])
+        return "".join(multi_result_parts), wrapper_id
 
-    test_methods = []
+    test_methods: list[tuple[Any, Any]] = []
     collect_test_methods(tree.root_node, test_methods)
     if not test_methods:
         return source
@@ -1137,12 +1145,13 @@ def instrument_generated_java_test(
             function_name,
         )
     elif mode == "behavior":
-        _, modified_code = instrument_existing_test(
+        _, behavior_code = instrument_existing_test(
             test_string=test_code,
             mode=mode,
             function_to_optimize=function_to_optimize,
             test_class_name=original_class_name,
         )
+        modified_code = behavior_code or test_code
     else:
         modified_code = test_code
 
