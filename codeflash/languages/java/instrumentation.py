@@ -26,6 +26,8 @@ if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.java.parser import JavaAnalyzer
 
+_ASSERTION_METHODS = ("assertArrayEquals", "assertArrayNotEquals")
+
 logger = logging.getLogger(__name__)
 
 
@@ -251,17 +253,16 @@ def _infer_array_cast_type(line: str) -> str | None:
 
     """
     # Only apply to assertion methods that take arrays
-    assertion_methods = ("assertArrayEquals", "assertArrayNotEquals")
-    if not any(method in line for method in assertion_methods):
+    if "assertArrayEquals" not in line and "assertArrayNotEquals" not in line:
         return None
 
     # Look for primitive array type in the line (usually the first/expected argument)
     match = _PRIMITIVE_ARRAY_PATTERN.search(line)
-    if match:
-        primitive_type = match.group(1)
-        return f"{primitive_type}[]"
-
-    return None
+    if not match:
+        return None
+    
+    primitive_type = match.group(1)
+    return f"{primitive_type}[]"
 
 
 def _get_qualified_name(func: Any) -> str:
