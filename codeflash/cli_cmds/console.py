@@ -21,7 +21,7 @@ from rich.progress import (
 
 from codeflash.cli_cmds.console_constants import SPINNER_TYPES
 from codeflash.cli_cmds.logging_config import BARE_LOGGING_FORMAT
-from codeflash.lsp.helpers import is_LSP_enabled
+from codeflash.lsp.helpers import is_LSP_enabled, is_subagent_mode
 from codeflash.lsp.lsp_logger import enhanced_log
 from codeflash.lsp.lsp_message import LspCodeMessage, LspTextMessage
 
@@ -34,33 +34,60 @@ if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import DependencyResolver, IndexResult
     from codeflash.lsp.lsp_message import LspMessage
+    from codeflash.models.models import TestResults
 
 DEBUG_MODE = logging.getLogger().getEffectiveLevel() == logging.DEBUG
 
 console = Console()
 
-if is_LSP_enabled():
+if is_LSP_enabled() or is_subagent_mode():
     console.quiet = True
 
-logging.basicConfig(
-    level=logging.INFO,
-    handlers=[RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False)],
-    format=BARE_LOGGING_FORMAT,
-)
+if is_subagent_mode():
+    import re
+    import sys
+
+    _lsp_prefix_re = re.compile(r"^(?:!?lsp,?|h[2-4]|loading)\|")
+    _subagent_drop_patterns = (
+        "Test log -",
+        "Test failed to load",
+        "Examining file ",
+        "Generated ",
+        "Add custom marker",
+        "Disabling all autouse",
+        "Reverting code and helpers",
+    )
+
+    class _AgentLogFilter(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:
+            record.msg = _lsp_prefix_re.sub("", str(record.msg))
+            msg = record.getMessage()
+            return not any(msg.startswith(p) for p in _subagent_drop_patterns)
+
+    _agent_handler = logging.StreamHandler(sys.stderr)
+    _agent_handler.addFilter(_AgentLogFilter())
+    logging.basicConfig(level=logging.INFO, handlers=[_agent_handler], format="%(levelname)s: %(message)s")
+else:
+    logging.basicConfig(
+        level=logging.INFO,
+        handlers=[RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False)],
+        format=BARE_LOGGING_FORMAT,
+    )
 
 logger = logging.getLogger("rich")
 logging.getLogger("parso").setLevel(logging.WARNING)
 
 # override the logger to reformat the messages for the lsp
-for level in ("info", "debug", "warning", "error"):
-    real_fn = getattr(logger, level)
-    setattr(
-        logger,
-        level,
-        lambda msg, *args, _real_fn=real_fn, _level=level, **kwargs: enhanced_log(
-            msg, _real_fn, _level, *args, **kwargs
-        ),
-    )
+if not is_subagent_mode():
+    for level in ("info", "debug", "warning", "error"):
+        real_fn = getattr(logger, level)
+        setattr(
+            logger,
+            level,
+            lambda msg, *args, _real_fn=real_fn, _level=level, **kwargs: enhanced_log(
+                msg, _real_fn, _level, *args, **kwargs
+            ),
+        )
 
 
 class DummyTask:
@@ -87,6 +114,8 @@ def paneled_text(
     text: str, panel_args: dict[str, str | bool] | None = None, text_args: dict[str, str] | None = None
 ) -> None:
     """Print text in a panel."""
+    if is_subagent_mode():
+        return
     from rich.panel import Panel
     from rich.text import Text
 
@@ -115,6 +144,8 @@ def code_print(
         language: Programming language for syntax highlighting ('python', 'javascript', 'typescript')
 
     """
+    if is_subagent_mode():
+        return
     if is_LSP_enabled():
         lsp_log(
             LspCodeMessage(code=code_str, file_name=file_name, function_name=function_name, message_id=lsp_message_id)
@@ -152,6 +183,10 @@ def progress_bar(
     """
     global _progress_bar_active
 
+    if is_subagent_mode():
+        yield DummyTask().id
+        return
+
     if is_LSP_enabled():
         lsp_log(LspTextMessage(text=message, takes_time=True))
         yield
@@ -183,6 +218,10 @@ def progress_bar(
 @contextmanager
 def test_files_progress_bar(total: int, description: str) -> Generator[tuple[Progress, TaskID], None, None]:
     """Progress bar for test files."""
+    if is_subagent_mode():
+        yield DummyProgress(), DummyTask().id
+        return
+
     if is_LSP_enabled():
         lsp_log(LspTextMessage(text=description, takes_time=True))
         dummy_progress = DummyProgress()
@@ -215,6 +254,10 @@ def call_graph_live_display(
     from rich.panel import Panel
     from rich.text import Text
     from rich.tree import Tree
+
+    if is_subagent_mode():
+        yield lambda _: None
+        return
 
     if is_LSP_enabled():
         lsp_log(LspTextMessage(text="Building call graph", takes_time=True))
@@ -323,6 +366,9 @@ def call_graph_summary(call_graph: DependencyResolver, file_to_funcs: dict[Path,
     if not total_functions:
         return
 
+    if is_subagent_mode():
+        return
+
     # Build the mapping expected by the dependency resolver
     file_items = file_to_funcs.items()
     mapping = {file_path: {func.qualified_name for func in funcs} for file_path, funcs in file_items}
@@ -349,3 +395,87 @@ def call_graph_summary(call_graph: DependencyResolver, file_to_funcs: dict[Path,
         return
 
     console.print(Panel(summary, title="Call Graph Summary", border_style="cyan"))
+
+
+def subagent_log_optimization_result(
+    function_name: str,
+    file_path: Path,
+    perf_improvement_line: str,
+    original_runtime_ns: int,
+    best_runtime_ns: int,
+    raw_explanation: str,
+    original_code: dict[Path, str],
+    new_code: dict[Path, str],
+    review: str,
+    test_results: TestResults,
+) -> None:
+    import sys
+    from xml.sax.saxutils import escape
+
+    from codeflash.code_utils.code_utils import unified_diff_strings
+    from codeflash.code_utils.time_utils import humanize_runtime
+    from codeflash.models.test_type import TestType
+
+    diff_parts = []
+    for path in original_code:
+        old = original_code.get(path, "")
+        new = new_code.get(path, "")
+        if old != new:
+            diff = unified_diff_strings(old, new, fromfile=str(path), tofile=str(path))
+            if diff:
+                diff_parts.append(diff)
+
+    diff_str = "\n".join(diff_parts)
+
+    original_runtime = humanize_runtime(original_runtime_ns)
+    optimized_runtime = humanize_runtime(best_runtime_ns)
+
+    report = test_results.get_test_pass_fail_report_by_type()
+    verification_rows = []
+    for test_type in TestType:
+        if test_type is TestType.INIT_STATE_TEST:
+            continue
+        name = test_type.to_name()
+        if not name:
+            continue
+        passed = report[test_type]["passed"]
+        failed = report[test_type]["failed"]
+        if passed == 0 and failed == 0:
+            status = "None Found"
+        elif failed > 0:
+            status = f"{failed} Failed, {passed} Passed"
+        else:
+            status = f"{passed} Passed"
+        verification_rows.append(f'    <test type="{escape(name)}" status="{escape(status)}"/>')
+
+    xml = [
+        "<codeflash-optimization>",
+        f"  <function>{escape(function_name)}</function>",
+        f"  <file>{escape(str(file_path))}</file>",
+        f"  <performance>{escape(perf_improvement_line)}</performance>",
+        f"  <original-runtime>{escape(original_runtime)}</original-runtime>",
+        f"  <optimized-runtime>{escape(optimized_runtime)}</optimized-runtime>",
+    ]
+    if review:
+        xml.append(f"  <reviewer-confidence>{escape(review)}</reviewer-confidence>")
+    xml.append(f"  <explanation>{escape(raw_explanation.strip())}</explanation>")
+    xml.append("  <verification>")
+    xml.extend(verification_rows)
+    xml.append("  </verification>")
+    if diff_str:
+        xml.append(f"  <diff>{escape(diff_str)}</diff>")
+    for path in new_code:
+        if new_code[path] != original_code.get(path, ""):
+            xml.append(f'  <optimized-code file="{escape(str(path))}">{escape(new_code[path])}</optimized-code>')
+    xml.append("  <action>")
+    xml.append("    Present this optimization to the user using AskUserQuestion.")
+    xml.append("    Show the function name, performance improvement, and explanation as the question text.")
+    xml.append("    Provide two options: 'Apply' (write the optimized code to the file) and 'Reject' (do nothing).")
+    xml.append(
+        "    Put the full diff in the 'Apply' option's markdown preview so the user can review the exact changes."
+    )
+    xml.append("    If the user chooses 'Apply', write the content from optimized-code to the corresponding file.")
+    xml.append("  </action>")
+    xml.append("</codeflash-optimization>")
+
+    sys.stdout.write("\n".join(xml) + "\n")

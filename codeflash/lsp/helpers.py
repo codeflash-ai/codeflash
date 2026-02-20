@@ -18,6 +18,11 @@ def is_LSP_enabled() -> bool:
     return os.getenv("CODEFLASH_LSP", default="false").lower() == "true"
 
 
+@lru_cache(maxsize=1)
+def is_subagent_mode() -> bool:
+    return os.getenv("CODEFLASH_SUBAGENT_MODE", default="false").lower() == "true"
+
+
 def tree_to_markdown(tree: Tree, level: int = 0) -> str:
     """Convert a rich Tree into a Markdown bullet list."""
     indent = "  " * level

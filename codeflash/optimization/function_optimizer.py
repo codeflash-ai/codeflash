@@ -24,7 +24,14 @@ from rich.tree import Tree
 from codeflash.api.aiservice import AiServiceClient, AIServiceRefinerRequest, LocalAiServiceClient
 from codeflash.api.cfapi import add_code_context_hash, create_staging, get_cfapi_base_urls, mark_optimization_success
 from codeflash.benchmarking.utils import process_benchmark_data
-from codeflash.cli_cmds.console import code_print, console, logger, lsp_log, progress_bar
+from codeflash.cli_cmds.console import (
+    code_print,
+    console,
+    logger,
+    lsp_log,
+    progress_bar,
+    subagent_log_optimization_result,
+)
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import (
     choose_weights,
@@ -78,7 +85,7 @@ from codeflash.languages.python.static_analysis.code_replacer import (
 )
 from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports, contains_jit_decorator
 from codeflash.languages.python.static_analysis.static_analysis import get_first_top_level_function_or_method_ast
-from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree_to_markdown
+from codeflash.lsp.helpers import is_LSP_enabled, is_subagent_mode, report_to_markdown_table, tree_to_markdown
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
@@ -1349,6 +1356,8 @@ class FunctionOptimizer:
     def log_successful_optimization(
         self, explanation: Explanation, generated_tests: GeneratedTestsList, exp_type: str
     ) -> None:
+        if is_subagent_mode():
+            return
         if is_LSP_enabled():
             md_lines = [
                 "### ⚡️ Optimization Summary",
@@ -1739,14 +1748,24 @@ class FunctionOptimizer:
                 self.executor, testgen_context.markdown, helper_fqns, generated_test_paths, generated_perf_test_paths
             )
 
-        future_concolic_tests = self.executor.submit(
-            generate_concolic_tests, self.test_cfg, self.args, self.function_to_optimize, self.function_to_optimize_ast
-        )
+        if is_subagent_mode():
+            future_concolic_tests = None
+        else:
+            future_concolic_tests = self.executor.submit(
+                generate_concolic_tests,
+                self.test_cfg,
+                self.args,
+                self.function_to_optimize,
+                self.function_to_optimize_ast,
+            )
 
         if not self.args.no_gen_tests:
             # Wait for test futures to complete
-            concurrent.futures.wait([*future_tests, future_concolic_tests])
-        else:
+            futures_to_wait = [*future_tests]
+            if future_concolic_tests is not None:
+                futures_to_wait.append(future_concolic_tests)
+            concurrent.futures.wait(futures_to_wait)
+        elif future_concolic_tests is not None:
             concurrent.futures.wait([future_concolic_tests])
         # Process test generation results
         tests: list[GeneratedTests] = []
@@ -1775,7 +1794,10 @@ class FunctionOptimizer:
                 logger.warning(f"Failed to generate and instrument tests for {self.function_to_optimize.function_name}")
                 return Failure(f"/!\\ NO TESTS GENERATED for {self.function_to_optimize.function_name}")
 
-        function_to_concolic_tests, concolic_test_str = future_concolic_tests.result()
+        if future_concolic_tests is not None:
+            function_to_concolic_tests, concolic_test_str = future_concolic_tests.result()
+        else:
+            function_to_concolic_tests, concolic_test_str = {}, None
         count_tests = len(tests)
         if concolic_test_str:
             count_tests += 1
@@ -2198,7 +2220,20 @@ class FunctionOptimizer:
         self.optimization_review = opt_review_result.review
 
         # Display the reviewer result to the user
-        if opt_review_result.review:
+        if is_subagent_mode():
+            subagent_log_optimization_result(
+                function_name=new_explanation.function_name,
+                file_path=new_explanation.file_path,
+                perf_improvement_line=new_explanation.perf_improvement_line,
+                original_runtime_ns=new_explanation.original_runtime_ns,
+                best_runtime_ns=new_explanation.best_runtime_ns,
+                raw_explanation=new_explanation.raw_explanation_message,
+                original_code=original_code_combined,
+                new_code=new_code_combined,
+                review=opt_review_result.review,
+                test_results=new_explanation.winning_behavior_test_results,
+            )
+        elif opt_review_result.review:
             review_display = {
                 "high": ("[bold green]High[/bold green]", "green", "Recommended to merge"),
                 "medium": ("[bold yellow]Medium[/bold yellow]", "yellow", "Review recommended before merging"),

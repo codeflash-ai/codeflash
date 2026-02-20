@@ -605,7 +605,6 @@ tests = [
 
 [[package]]
 name = "codeflash-benchmark"
-version = "0.3.0"
 source = { editable = "codeflash-benchmark" }
 dependencies = [
     { name = "pytest", version = "8.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },

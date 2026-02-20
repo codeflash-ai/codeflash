@@ -130,9 +130,18 @@ def parse_args() -> Namespace:
         "--reset-config", action="store_true", help="Remove codeflash configuration from project config file."
     )
     parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompts (useful for CI/scripts).")
+    parser.add_argument(
+        "--subagent",
+        action="store_true",
+        help="Subagent mode: skip all interactive prompts with sensible defaults. Designed for AI agent integrations.",
+    )
 
     args, unknown_args = parser.parse_known_args()
     sys.argv[:] = [sys.argv[0], *unknown_args]
+    if args.subagent:
+        args.yes = True
+        args.no_pr = True
+        args.worktree = True
     return process_and_validate_cmd_args(args)
 
 
