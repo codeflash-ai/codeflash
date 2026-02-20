@@ -259,11 +259,11 @@ def _infer_array_cast_type(line: str) -> str | None:
 
     # Look for primitive array type in the line (usually the first/expected argument)
     match = _PRIMITIVE_ARRAY_PATTERN.search(line)
-    if match:
-        primitive_type = match.group(1)
-        return f"{primitive_type}[]"
+    if not match:
+        return None
 
-    return None
+    primitive_type = match.group(1)
+    return f"{primitive_type}[]"
 
 
 def _get_qualified_name(func: Any) -> str:
