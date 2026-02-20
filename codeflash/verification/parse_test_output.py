@@ -26,10 +26,10 @@ from codeflash.models.models import (
     ConcurrencyMetrics,
     FunctionTestInvocation,
     InvocationId,
+    TestingMode,
     TestResults,
     TestType,
     VerificationType,
-    TestingMode,
 )
 from codeflash.verification.coverage_utils import CoverageUtils, JacocoCoverageUtils, JestCoverageUtils
 
@@ -1500,7 +1500,7 @@ def parse_test_results(
     code_context: CodeOptimizationContext | None = None,
     run_result: subprocess.CompletedProcess | None = None,
     skip_sqlite_cleanup: bool = False,
-    testing_type: TestingMode = TestingMode.BEHAVIOR
+    testing_type: TestingMode = TestingMode.BEHAVIOR,
 ) -> tuple[TestResults, CoverageData | None]:
     test_results_xml = parse_test_xml(
         test_xml_path, test_files=test_files, test_config=test_config, run_result=run_result
