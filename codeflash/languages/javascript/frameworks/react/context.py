@@ -174,7 +174,7 @@ def _extract_child_components(component_source: str, analyzer: TreeSitterAnalyze
 
 def _extract_context_subscriptions(component_source: str) -> list[str]:
     """Find React context subscriptions via useContext calls."""
-    return [match.group(1) for match in _CONTEXT_RE.finditer(component_source)]
+    return _CONTEXT_RE.findall(component_source)
 
 
 def _find_type_definition(type_name: str, source: str, analyzer: TreeSitterAnalyzer) -> str | None:
