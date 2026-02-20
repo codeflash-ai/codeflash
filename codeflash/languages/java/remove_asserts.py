@@ -28,6 +28,8 @@ if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.java.parser import JavaAnalyzer
 
+_ASSIGN_RE = re.compile(r"(\w+(?:<[^>]+>)?)\s+(\w+)\s*=\s*$")
+
 logger = logging.getLogger(__name__)
 
 
@@ -207,6 +209,12 @@ class JavaAssertTransformer:
             return source
 
         # Detect framework from imports
+
+        # Lazily create analyzer if it was not provided at construction time.
+        if self.analyzer is None:
+            self.analyzer = get_java_analyzer()
+
+        # Detect framework from imports
         self._detected_framework = self._detect_framework(source)
 
         # Find all assertion statements
@@ -220,15 +228,16 @@ class JavaAssertTransformer:
 
         # Filter out nested assertions (e.g., assertEquals inside assertAll)
         non_nested: list[AssertionMatch] = []
-        for i, assertion in enumerate(assertions):
-            is_nested = False
-            for j, other in enumerate(assertions):
-                if i != j:
-                    if other.start_pos <= assertion.start_pos and assertion.end_pos <= other.end_pos:
-                        is_nested = True
-                        break
-            if not is_nested:
-                non_nested.append(assertion)
+        max_end = -1
+        for assertion in assertions:
+            # If any previous assertion ends at or after this one's end, this is nested.
+            if max_end >= assertion.end_pos:
+                continue
+            non_nested.append(assertion)
+            if assertion.end_pos > max_end:
+                max_end = assertion.end_pos
+
+        # Pre-compute all replacements with correct counter values
 
         # Pre-compute all replacements with correct counter values
         replacements: list[tuple[int, int, str]] = []
@@ -236,12 +245,19 @@ class JavaAssertTransformer:
             replacement = self._generate_replacement(assertion)
             replacements.append((assertion.start_pos, assertion.end_pos, replacement))
 
-        # Apply replacements in reverse order to preserve positions
-        result = source
-        for start_pos, end_pos, replacement in reversed(replacements):
-            result = result[:start_pos] + replacement + result[end_pos:]
+        # Apply replacements in ascending order by assembling parts to avoid repeated slicing.
+        if not replacements:
+            return source
 
-        return result
+        parts: list[str] = []
+        prev = 0
+        for start_pos, end_pos, replacement in replacements:
+            parts.append(source[prev:start_pos])
+            parts.append(replacement)
+            prev = end_pos
+        parts.append(source[prev:])
+
+        return "".join(parts)
 
     def _detect_framework(self, source: str) -> str:
         """Detect which testing framework is being used from imports.
