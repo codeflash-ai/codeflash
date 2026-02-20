@@ -1805,15 +1805,6 @@ class JavaScriptSupport:
         """
         return ".test.js"
 
-    def get_comment_prefix(self) -> str:
-        """Get the comment prefix for JavaScript.
-
-        Returns:
-            JavaScript single-line comment prefix.
-
-        """
-        return "//"
-
     def find_test_root(self, project_root: Path) -> Path | None:
         """Find the test root directory for a JavaScript project.
 

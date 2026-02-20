@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 import libcst as cst
+from git import Repo as GitRepo
 from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -71,8 +72,6 @@ from codeflash.code_utils.line_profile_utils import add_decorator_imports, conta
 from codeflash.code_utils.shell_utils import make_env_with_project_root
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
-from codeflash.context import code_context_extractor
-from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
 from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
 from codeflash.either import Failure, Success, is_successful
 from codeflash.languages import is_java, is_javascript, is_python
@@ -80,6 +79,11 @@ from codeflash.languages.base import Language
 from codeflash.languages.current import current_language_support, is_typescript
 from codeflash.languages.javascript.module_system import detect_module_system
 from codeflash.languages.javascript.test_runner import clear_created_config_files, get_created_config_files
+from codeflash.languages.python.context import code_context_extractor
+from codeflash.languages.python.context.unused_definition_remover import (
+    detect_unused_helper_functions,
+    revert_unused_helper_functions,
+)
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree_to_markdown
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
@@ -2231,6 +2235,7 @@ class FunctionOptimizer:
             if self.args.override_fixtures:
                 restore_conftest(original_conftest_content)
             cleanup_paths(paths_to_cleanup)
+            self.cleanup_async_helper_file()
             return Failure(baseline_result.failure())
 
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
@@ -2242,6 +2247,7 @@ class FunctionOptimizer:
             if self.args.override_fixtures:
                 restore_conftest(original_conftest_content)
             cleanup_paths(paths_to_cleanup)
+            self.cleanup_async_helper_file()
             return Failure("The threshold for test confidence was not met.")
 
         return Success(
@@ -2411,7 +2417,10 @@ class FunctionOptimizer:
         generated_tests_str = ""
         code_lang = self.function_to_optimize.language
         for test in generated_tests.generated_tests:
-            if map_gen_test_file_to_no_of_tests[test.behavior_file_path] > 0:
+            if any(
+                test_file.name == test.behavior_file_path.name and count > 0
+                for test_file, count in map_gen_test_file_to_no_of_tests.items()
+            ):
                 formatted_generated_test = format_generated_code(
                     test.generated_original_test_source, self.args.formatter_cmds
                 )
@@ -2551,11 +2560,11 @@ class FunctionOptimizer:
                 console.print(Panel(panel_content, title="Optimization Review", border_style=display_info[1]))
 
         if raise_pr or staging_review:
-            data["root_dir"] = git_root_dir()
+            data["root_dir"] = git_root_dir(GitRepo(str(self.args.module_root), search_parent_directories=True))
         if raise_pr and not staging_review and opt_review_result.review != "low":
             # Ensure root_dir is set for PR creation (needed for async functions that skip opt_review)
             if "root_dir" not in data:
-                data["root_dir"] = git_root_dir()
+                data["root_dir"] = git_root_dir(GitRepo(str(self.args.module_root), search_parent_directories=True))
             data["git_remote"] = self.args.git_remote
             # Remove language from data dict as check_create_pr doesn't accept it
             pr_data = {k: v for k, v in data.items() if k != "language"}
@@ -2610,6 +2619,13 @@ class FunctionOptimizer:
         self.write_code_and_helpers(
             self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
         )
+        self.cleanup_async_helper_file()
+
+    def cleanup_async_helper_file(self) -> None:
+        from codeflash.code_utils.instrument_existing_tests import ASYNC_HELPER_FILENAME
+
+        helper_path = self.project_root / ASYNC_HELPER_FILENAME
+        helper_path.unlink(missing_ok=True)
 
     def establish_original_code_baseline(
         self,
@@ -2627,7 +2643,10 @@ class FunctionOptimizer:
             from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
             success = add_async_decorator_to_function(
-                self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.BEHAVIOR
+                self.function_to_optimize.file_path,
+                self.function_to_optimize,
+                TestingMode.BEHAVIOR,
+                project_root=self.project_root,
             )
 
         # Instrument codeflash capture
@@ -2692,7 +2711,10 @@ class FunctionOptimizer:
                 from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
                 add_async_decorator_to_function(
-                    self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
+                    self.function_to_optimize.file_path,
+                    self.function_to_optimize,
+                    TestingMode.PERFORMANCE,
+                    project_root=self.project_root,
                 )
 
             try:
@@ -2866,7 +2888,10 @@ class FunctionOptimizer:
                 from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
                 add_async_decorator_to_function(
-                    self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.BEHAVIOR
+                    self.function_to_optimize.file_path,
+                    self.function_to_optimize,
+                    TestingMode.BEHAVIOR,
+                    project_root=self.project_root,
                 )
 
             try:
@@ -2961,7 +2986,10 @@ class FunctionOptimizer:
                 from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
                 add_async_decorator_to_function(
-                    self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
+                    self.function_to_optimize.file_path,
+                    self.function_to_optimize,
+                    TestingMode.PERFORMANCE,
+                    project_root=self.project_root,
                 )
 
             try:
@@ -3330,7 +3358,10 @@ class FunctionOptimizer:
         try:
             # Add concurrency decorator to the source function
             add_async_decorator_to_function(
-                self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.CONCURRENCY
+                self.function_to_optimize.file_path,
+                self.function_to_optimize,
+                TestingMode.CONCURRENCY,
+                project_root=self.project_root,
             )
 
             # Run the concurrency benchmark tests

@@ -13,7 +13,7 @@ def run_test(expected_improvement_pct: int) -> bool:
             CoverageExpectation(
                 function_name="retry_with_backoff",
                 expected_coverage=100.0,
-                expected_lines=[10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
+                expected_lines=[9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
             )
         ],
     )
