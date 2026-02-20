@@ -33,6 +33,7 @@ from codeflash.either import is_successful
 from codeflash.languages import current_language_support, is_java, is_javascript, set_current_language
 from codeflash.models.models import ValidCode
 from codeflash.telemetry.posthog_cf import ph
+from codeflash.verification.parse_test_output import clear_test_file_path_cache
 from codeflash.verification.verification_utils import TestConfig
 
 if TYPE_CHECKING:
@@ -689,6 +690,7 @@ class Optimizer:
                     if function_optimizer is not None:
                         function_optimizer.executor.shutdown(wait=True)
                         function_optimizer.cleanup_generated_files()
+                        clear_test_file_path_cache()
 
             ph("cli-optimize-run-finished", {"optimizations_found": optimizations_found})
             if len(self.patch_files) > 0:

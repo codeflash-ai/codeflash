@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, TestInfo, TestResult
     from codeflash.languages.java.concurrency_analyzer import ConcurrencyInfo
-    from codeflash.models.models import GeneratedTestsList
+    from codeflash.models.models import GeneratedTestsList, InvocationId
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +198,75 @@ class JavaSupport(LanguageSupport):
     def remove_test_functions(self, test_source: str, functions_to_remove: list[str]) -> str:
         """Remove specific test functions from test source code."""
         return remove_test_functions(test_source, functions_to_remove, self._analyzer)
+
+    def remove_test_functions_from_generated_tests(
+        self, generated_tests: GeneratedTestsList, functions_to_remove: list[str]
+    ) -> GeneratedTestsList:
+        from codeflash.models.models import GeneratedTests, GeneratedTestsList
+
+        updated_tests: list[GeneratedTests] = []
+        for test in generated_tests.generated_tests:
+            updated_tests.append(
+                GeneratedTests(
+                    generated_original_test_source=self.remove_test_functions(
+                        test.generated_original_test_source, functions_to_remove
+                    ),
+                    instrumented_behavior_test_source=test.instrumented_behavior_test_source,
+                    instrumented_perf_test_source=test.instrumented_perf_test_source,
+                    behavior_file_path=test.behavior_file_path,
+                    perf_file_path=test.perf_file_path,
+                )
+            )
+        return GeneratedTestsList(generated_tests=updated_tests)
+
+    def add_runtime_comments_to_generated_tests(
+        self,
+        generated_tests: GeneratedTestsList,
+        original_runtimes: dict[InvocationId, list[int]],
+        optimized_runtimes: dict[InvocationId, list[int]],
+        tests_project_rootdir: Path | None = None,
+    ) -> GeneratedTestsList:
+        from codeflash.models.models import GeneratedTests, GeneratedTestsList
+
+        original_runtimes_dict = self._build_runtime_map(original_runtimes)
+        optimized_runtimes_dict = self._build_runtime_map(optimized_runtimes)
+
+        modified_tests: list[GeneratedTests] = []
+        for test in generated_tests.generated_tests:
+            modified_source = self.add_runtime_comments(
+                test.generated_original_test_source, original_runtimes_dict, optimized_runtimes_dict
+            )
+            modified_tests.append(
+                GeneratedTests(
+                    generated_original_test_source=modified_source,
+                    instrumented_behavior_test_source=test.instrumented_behavior_test_source,
+                    instrumented_perf_test_source=test.instrumented_perf_test_source,
+                    behavior_file_path=test.behavior_file_path,
+                    perf_file_path=test.perf_file_path,
+                )
+            )
+        return GeneratedTestsList(generated_tests=modified_tests)
+
+    def _build_runtime_map(self, inv_id_runtimes: dict[InvocationId, list[int]]) -> dict[str, int]:
+        unique_inv_ids: dict[str, int] = {}
+        for inv_id, runtimes in inv_id_runtimes.items():
+            test_qualified_name = (
+                inv_id.test_class_name + "." + inv_id.test_function_name
+                if inv_id.test_class_name
+                else inv_id.test_function_name
+            )
+            if not test_qualified_name:
+                continue
+
+            key = test_qualified_name
+            if inv_id.iteration_id:
+                parts = inv_id.iteration_id.split("_")
+                cur_invid = parts[0] if len(parts) < 3 else "_".join(parts[:-1])
+                key = key + "#" + cur_invid
+            if key not in unique_inv_ids:
+                unique_inv_ids[key] = 0
+            unique_inv_ids[key] += min(runtimes)
+        return unique_inv_ids
 
     # === Test Result Comparison ===
 

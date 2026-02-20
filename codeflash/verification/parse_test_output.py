@@ -143,6 +143,14 @@ def parse_concurrency_metrics(test_results: TestResults, function_name: str) -> 
     )
 
 
+# Cache for resolved test file paths to avoid repeated rglob calls
+_test_file_path_cache: dict[tuple[str, Path], Path | None] = {}
+
+
+def clear_test_file_path_cache() -> None:
+    _test_file_path_cache.clear()
+
+
 def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> Path | None:
     """Resolve test file path from pytest's test class path or Java class path.
 
@@ -164,6 +172,13 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         >>> # Should find: /path/to/tests/unittest/test_file.py
 
     """
+    # Check cache first
+    cache_key = (test_class_path, base_dir)
+    if cache_key in _test_file_path_cache:
+        cached_result = _test_file_path_cache[cache_key]
+        logger.debug(f"[RESOLVE] Cache hit for {test_class_path}: {cached_result}")
+        return cached_result
+
     # Handle Java class paths (convert dots to path and add .java extension)
     # Java class paths look like "com.example.TestClass" and should map to
     # src/test/java/com/example/TestClass.java
@@ -178,6 +193,7 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         logger.debug(f"[RESOLVE] Attempt 1: checking {potential_path}")
         if potential_path.exists():
             logger.debug(f"[RESOLVE] Attempt 1 SUCCESS: found {potential_path}")
+            _test_file_path_cache[cache_key] = potential_path
             return potential_path
 
         # 2. Under src/test/java relative to project root
@@ -189,6 +205,7 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
             logger.debug(f"[RESOLVE] Attempt 2: checking {potential_path} (project_root={project_root})")
             if potential_path.exists():
                 logger.debug(f"[RESOLVE] Attempt 2 SUCCESS: found {potential_path}")
+                _test_file_path_cache[cache_key] = potential_path
                 return potential_path
 
         # 3. Search for the file in base_dir and its subdirectories
@@ -196,9 +213,11 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         logger.debug(f"[RESOLVE] Attempt 3: rglob for {file_name} in {base_dir}")
         for java_file in base_dir.rglob(file_name):
             logger.debug(f"[RESOLVE] Attempt 3 SUCCESS: rglob found {java_file}")
+            _test_file_path_cache[cache_key] = java_file
             return java_file
 
         logger.warning(f"[RESOLVE] FAILED to resolve {test_class_path} in base_dir {base_dir}")
+        _test_file_path_cache[cache_key] = None  # Cache negative results too
         return None
 
     # Handle file paths (contain slashes and extensions like .js/.ts)
@@ -207,6 +226,7 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         # Try the path as-is if it's absolute
         potential_path = Path(test_class_path)
         if potential_path.is_absolute() and potential_path.exists():
+            _test_file_path_cache[cache_key] = potential_path
             return potential_path
 
         # Try to resolve relative to base_dir's parent (project root)
@@ -216,6 +236,7 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         try:
             potential_path = potential_path.resolve()
             if potential_path.exists():
+                _test_file_path_cache[cache_key] = potential_path
                 return potential_path
         except (OSError, RuntimeError):
             pass
@@ -225,10 +246,12 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         try:
             potential_path = potential_path.resolve()
             if potential_path.exists():
+                _test_file_path_cache[cache_key] = potential_path
                 return potential_path
         except (OSError, RuntimeError):
             pass
 
+        _test_file_path_cache[cache_key] = None  # Cache negative results
         return None
 
     # First try the full path (Python module path)
@@ -259,6 +282,8 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
                 if test_file_path:
                     break
 
+    # Cache the result (could be None)
+    _test_file_path_cache[cache_key] = test_file_path
     return test_file_path
 
 
@@ -795,14 +820,14 @@ def parse_test_xml(
             sys_stdout = testcase.system_out or ""
 
             # Use different patterns for Java (5-field start, 6-field end) vs Python (6-field both)
-            # Java format: !$######module:class:func:loop:iter######$! (start)
-            #              !######module:class:func:loop:iter:duration######! (end)
+            # Java format: !$######module:class.test:func:loop:iter######$! (start)
+            #              !######module:class.test:func:loop:iter:duration######! (end)
             if is_java():
                 begin_matches = list(start_pattern.finditer(sys_stdout))
                 end_matches = {}
                 for match in end_pattern.finditer(sys_stdout):
                     groups = match.groups()
-                    # Key is first 5 groups (module, class, func, loop, iter)
+                    # Key is first 5 groups (module, class.test, func, loop, iter)
                     end_matches[groups[:5]] = match
 
                 # For Java: fallback to pre-parsed subprocess stdout when XML system-out has no timing markers
@@ -863,17 +888,22 @@ def parse_test_xml(
                     groups = match.groups()
 
                     # Java and Python have different marker formats:
-                    # Java:   5 groups - (module, class, func, loop_index, iteration_id)
+                    # Java:   5 groups - (module, class.test, func, loop_index, iteration_id)
                     # Python: 6 groups - (module, class.test, _, func, loop_index, iteration_id)
                     if is_java():
-                        # Java format: !$######module:class:func:loop:iter######$!
+                        # Java format: !$######module:class.test:func:loop:iter######$!
                         end_key = groups[:5]  # Use all 5 groups as key
                         end_match = end_matches.get(end_key)
                         iteration_id = groups[4]  # iter is at index 4
                         loop_idx = int(groups[3])  # loop is at index 3
                         test_module = groups[0]  # module
-                        test_class_str = groups[1]  # class
-                        test_func = test_function  # Use the testcase name from XML
+                        # groups[1] is "class.testMethod" — extract class and test name
+                        class_test_field = groups[1]
+                        if "." in class_test_field:
+                            test_class_str, test_func = class_test_field.rsplit(".", 1)
+                        else:
+                            test_class_str = class_test_field
+                            test_func = test_function  # Fallback to testcase name from XML
                         func_getting_tested = groups[2]  # func being tested
                         runtime = None
 
@@ -1227,6 +1257,21 @@ def parse_test_results(
         get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.sqlite")).unlink(missing_ok=True)
 
     results = merge_test_results(test_results_xml, test_results_data, test_config.test_framework)
+
+    # Bug #10 Fix: For Java performance tests, preserve subprocess stdout containing timing markers
+    # This is needed for calculate_function_throughput_from_test_results to work correctly
+    if is_java() and testing_type == TestingMode.PERFORMANCE and run_result is not None:
+        try:
+            # Extract stdout from subprocess result containing timing markers
+            if isinstance(run_result.stdout, bytes):
+                results.perf_stdout = run_result.stdout.decode("utf-8", errors="replace")
+            elif isinstance(run_result.stdout, str):
+                results.perf_stdout = run_result.stdout
+            logger.debug(
+                f"Bug #10 Fix: Set perf_stdout for Java performance tests ({len(results.perf_stdout or '')} chars)"
+            )
+        except Exception as e:
+            logger.debug(f"Bug #10 Fix: Failed to set perf_stdout: {e}")
 
     all_args = False
     coverage = None

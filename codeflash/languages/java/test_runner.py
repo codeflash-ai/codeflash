@@ -6,6 +6,7 @@ supporting both behavioral testing and benchmarking modes.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import re
@@ -562,6 +563,26 @@ def _get_test_classpath(
         if main_classes.exists():
             cp_parts.append(str(main_classes))
 
+        # For multi-module projects, also include target/classes from all modules
+        # This is needed because the test module may depend on other modules
+        if test_module:
+            # Find all target/classes directories in sibling modules
+            for module_dir in project_root.iterdir():
+                if module_dir.is_dir() and module_dir.name != test_module:
+                    module_classes = module_dir / "target" / "classes"
+                    if module_classes.exists():
+                        logger.debug("Adding multi-module classpath: %s", module_classes)
+                        cp_parts.append(str(module_classes))
+
+        # Add JUnit Platform Console Standalone JAR if not already on classpath.
+        # This is required for direct JVM execution with ConsoleLauncher,
+        # which is NOT included in the standard junit-jupiter dependency tree.
+        if "console-standalone" not in classpath and "ConsoleLauncher" not in classpath:
+            console_jar = _find_junit_console_standalone()
+            if console_jar:
+                logger.debug("Adding JUnit Console Standalone to classpath: %s", console_jar)
+                cp_parts.append(str(console_jar))
+
         return os.pathsep.join(cp_parts)
 
     except subprocess.TimeoutExpired:
@@ -574,6 +595,56 @@ def _get_test_classpath(
         # Clean up temp file
         if cp_file.exists():
             cp_file.unlink()
+
+
+def _find_junit_console_standalone() -> Path | None:
+    """Find the JUnit Platform Console Standalone JAR in the local Maven repository.
+
+    This JAR contains ConsoleLauncher which is required for direct JVM test execution
+    with JUnit 5. It is NOT included in the standard junit-jupiter dependency tree.
+
+    Returns:
+        Path to the console standalone JAR, or None if not found.
+
+    """
+    m2_base = Path.home() / ".m2" / "repository" / "org" / "junit" / "platform" / "junit-platform-console-standalone"
+    if not m2_base.exists():
+        # Try to download it via Maven
+        mvn = find_maven_executable()
+        if mvn:
+            logger.debug("Console standalone not found in cache, downloading via Maven")
+            with contextlib.suppress(subprocess.TimeoutExpired, Exception):
+                subprocess.run(
+                    [
+                        mvn,
+                        "dependency:get",
+                        "-Dartifact=org.junit.platform:junit-platform-console-standalone:1.10.0",
+                        "-q",
+                        "-B",
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+        if not m2_base.exists():
+            return None
+
+    # Find the latest version available
+    try:
+        versions = sorted(
+            [d for d in m2_base.iterdir() if d.is_dir()],
+            key=lambda d: tuple(int(x) for x in d.name.split(".") if x.isdigit()),
+            reverse=True,
+        )
+        for version_dir in versions:
+            jar = version_dir / f"junit-platform-console-standalone-{version_dir.name}.jar"
+            if jar.exists():
+                return jar
+    except Exception:
+        pass
+
+    return None
 
 
 def _run_tests_direct(
@@ -605,49 +676,103 @@ def _run_tests_direct(
 
     java = _find_java_executable() or "java"
 
-    # Build command using JUnit Platform Console Launcher
-    # The launcher is included in junit-platform-console-standalone or junit-jupiter
-    cmd = [
-        str(java),
-        # Java 16+ module system: Kryo needs reflective access to internal JDK classes
-        "--add-opens",
-        "java.base/java.util=ALL-UNNAMED",
-        "--add-opens",
-        "java.base/java.lang=ALL-UNNAMED",
-        "--add-opens",
-        "java.base/java.lang.reflect=ALL-UNNAMED",
-        "--add-opens",
-        "java.base/java.io=ALL-UNNAMED",
-        "--add-opens",
-        "java.base/java.math=ALL-UNNAMED",
-        "--add-opens",
-        "java.base/java.net=ALL-UNNAMED",
-        "--add-opens",
-        "java.base/java.util.zip=ALL-UNNAMED",
-        "-cp",
-        classpath,
-        "org.junit.platform.console.ConsoleLauncher",
-        "--disable-banner",
-        "--disable-ansi-colors",
-        # Use 'none' details to avoid duplicate output
-        # Timing markers are captured in XML via stdout capture config
-        "--details=none",
-        # Enable stdout/stderr capture in XML reports
-        # This ensures timing markers are included in the XML system-out element
-        "--config=junit.platform.output.capture.stdout=true",
-        "--config=junit.platform.output.capture.stderr=true",
-    ]
+    # Detect JUnit version from the classpath string.
+    # We check for junit-jupiter (the JUnit 5 test API) as the indicator of JUnit 5 tests.
+    # Note: console-standalone and junit-platform are NOT reliable indicators because
+    # we inject console-standalone ourselves in _get_test_classpath(), so it's always present.
+    # ConsoleLauncher can run both JUnit 5 and JUnit 4 tests (via vintage engine),
+    # so we prefer it when available and only fall back to JUnitCore for pure JUnit 4
+    # projects without ConsoleLauncher on the classpath.
+    has_junit5_tests = "junit-jupiter" in classpath
+    has_console_launcher = "console-standalone" in classpath or "ConsoleLauncher" in classpath
+    # Use ConsoleLauncher if available (works for both JUnit 4 via vintage and JUnit 5).
+    # Only use JUnitCore when ConsoleLauncher is not on the classpath at all.
+    is_junit4 = not has_console_launcher
+    if is_junit4:
+        logger.debug("JUnit 4 project, no ConsoleLauncher available, using JUnitCore")
+    elif has_junit5_tests:
+        logger.debug("JUnit 5 project, using ConsoleLauncher")
+    else:
+        logger.debug("JUnit 4 project, using ConsoleLauncher (via vintage engine)")
 
-    # Add reports directory if specified (for XML output)
-    if reports_dir:
-        reports_dir.mkdir(parents=True, exist_ok=True)
-        cmd.extend(["--reports-dir", str(reports_dir)])
+    if is_junit4:
+        if reports_dir:
+            logger.debug(
+                "JUnitCore does not support XML report generation; reports_dir=%s ignored. "
+                "XML reports require ConsoleLauncher.",
+                reports_dir,
+            )
+        # Use JUnit 4's JUnitCore runner
+        cmd = [
+            str(java),
+            # Java 16+ module system: Kryo needs reflective access to internal JDK classes
+            "--add-opens",
+            "java.base/java.util=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.lang=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.io=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.math=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.net=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.util.zip=ALL-UNNAMED",
+            "-cp",
+            classpath,
+            "org.junit.runner.JUnitCore",
+        ]
+        # Add test classes
+        cmd.extend(test_classes)
+    else:
+        # Build command using JUnit Platform Console Launcher (JUnit 5)
+        # The launcher is included in junit-platform-console-standalone or junit-jupiter
+        cmd = [
+            str(java),
+            # Java 16+ module system: Kryo needs reflective access to internal JDK classes
+            "--add-opens",
+            "java.base/java.util=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.lang=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.io=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.math=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.net=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.util.zip=ALL-UNNAMED",
+            "-cp",
+            classpath,
+            "org.junit.platform.console.ConsoleLauncher",
+            "--disable-banner",
+            "--disable-ansi-colors",
+            # Use 'none' details to avoid duplicate output
+            # Timing markers are captured in XML via stdout capture config
+            "--details=none",
+            # Enable stdout/stderr capture in XML reports
+            # This ensures timing markers are included in the XML system-out element
+            "--config=junit.platform.output.capture.stdout=true",
+            "--config=junit.platform.output.capture.stderr=true",
+        ]
 
-    # Add test classes to select
-    for test_class in test_classes:
-        cmd.extend(["--select-class", test_class])
+        # Add reports directory if specified (for XML output)
+        if reports_dir:
+            reports_dir.mkdir(parents=True, exist_ok=True)
+            cmd.extend(["--reports-dir", str(reports_dir)])
 
-    logger.debug("Running tests directly: java -cp ... ConsoleLauncher --select-class %s", test_classes)
+        # Add test classes to select
+        for test_class in test_classes:
+            cmd.extend(["--select-class", test_class])
+
+    if is_junit4:
+        logger.debug("Running tests directly: java -cp ... JUnitCore %s", test_classes)
+    else:
+        logger.debug("Running tests directly: java -cp ... ConsoleLauncher --select-class %s", test_classes)
 
     try:
         return subprocess.run(
@@ -981,6 +1106,10 @@ def run_benchmarking_tests(
             all_stderr.append(result.stderr)
 
         logger.debug("Loop %d completed in %.2fs (returncode=%d)", loop_idx, loop_time, result.returncode)
+
+        # Log stderr if direct JVM execution failed (for debugging)
+        if result.returncode != 0 and result.stderr:
+            logger.debug("Direct JVM stderr: %s", result.stderr[:500])
 
         # Check if direct JVM execution failed on the first loop.
         # Fall back to Maven-based execution for:
