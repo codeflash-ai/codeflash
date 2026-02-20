@@ -509,15 +509,18 @@ class TreeSitterAnalyzer:
         namespace_import = None
         is_type_only = False
 
+        # Decode once for performance
+        source_text = source_bytes.decode("utf8")
+
         # Get the module path (source)
         source_node = node.child_by_field_name("source")
         if source_node:
             # Remove quotes from string
-            module_path = self.get_node_text(source_node, source_bytes).strip("'\"")
+            module_path = source_text[source_node.start_byte : source_node.end_byte].strip("'\"")
 
         # Check for type-only import (TypeScript)
         for child in node.children:
-            if child.type == "type" or self.get_node_text(child, source_bytes) == "type":
+            if child.type == "type" or source_text[child.start_byte : child.end_byte] == "type":
                 is_type_only = True
                 break
 
@@ -528,21 +531,21 @@ class TreeSitterAnalyzer:
                 # Re-extract after processing
                 for clause_child in child.children:
                     if clause_child.type == "identifier":
-                        default_import = self.get_node_text(clause_child, source_bytes)
+                        default_import = source_text[clause_child.start_byte : clause_child.end_byte]
                     elif clause_child.type == "named_imports":
                         for spec in clause_child.children:
                             if spec.type == "import_specifier":
                                 name_node = spec.child_by_field_name("name")
                                 alias_node = spec.child_by_field_name("alias")
                                 if name_node:
-                                    name = self.get_node_text(name_node, source_bytes)
-                                    alias = self.get_node_text(alias_node, source_bytes) if alias_node else None
+                                    name = source_text[name_node.start_byte : name_node.end_byte]
+                                    alias = source_text[alias_node.start_byte : alias_node.end_byte] if alias_node else None
                                     named_imports.append((name, alias))
                     elif clause_child.type == "namespace_import":
                         # import * as X
                         for ns_child in clause_child.children:
                             if ns_child.type == "identifier":
-                                namespace_import = self.get_node_text(ns_child, source_bytes)
+                                namespace_import = source_text[ns_child.start_byte : ns_child.end_byte]
 
         if not module_path:
             return None
