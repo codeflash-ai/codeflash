@@ -18,6 +18,7 @@ import bisect
 import logging
 import re
 from typing import TYPE_CHECKING
+from bisect import bisect_right as _bisect_right
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -235,8 +236,8 @@ def _collect_calls(node, wrapper_bytes, body_bytes, prefix_len, func_name, analy
 
 def _byte_to_line_index(byte_offset: int, line_byte_starts: list[int]) -> int:
     """Map a byte offset in body_text to a body_lines index."""
-    idx = bisect.bisect_right(line_byte_starts, byte_offset) - 1
-    return max(0, idx)
+    idx = _bisect_right(line_byte_starts, byte_offset) - 1
+    return idx if idx > 0 else 0
 
 
 def _infer_array_cast_type(line: str) -> str | None:
