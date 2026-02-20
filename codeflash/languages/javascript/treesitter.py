@@ -1770,61 +1770,6 @@ class TreeSitterAnalyzer:
                 )
 
 
-    @property
-    def parser(self) -> Parser:
-        """Lazily initialize and cache a Parser for this analyzer's language.
-
-        This reuses parser instances across analyzer instances to avoid the
-        overhead of creating Parser objects repeatedly. It also attempts a
-        best-effort language setup using common shared-library names; if the
-        language cannot be loaded, the Parser is still returned (parse may
-        raise later).
-        """
-        # Fast path: already initialized for this instance
-        if self._parser is not None:
-            return self._parser
-
-        # Use a class-level cache keyed by language to share Parser instances
-        cls = self.__class__
-        if not hasattr(cls, "_parsers"):
-            cls._parsers: dict[TreeSitterLanguage, Parser] = {}
-
-        cached = cls._parsers.get(self.language)
-        if cached is not None:
-            self._parser = cached
-            return self._parser
-
-        parser = Parser()
-        # Best-effort: try to load a compiled Language if available.
-        # Failure to find/set a language is non-fatal here; downstream code
-        # may raise when attempting to parse without a language.
-        try:
-            from tree_sitter import Language  # type: ignore
-        except Exception:
-            Language = None  # type: ignore
-
-        if Language is not None:
-            # Common fallback filenames where compiled languages might live.
-            candidate_libs = (
-                "build/my-languages.so",
-                "build/tree_sitter_languages.so",
-                f"{self.language.value}.so",
-                "parsers.so",
-            )
-            for lib_path in candidate_libs:
-                try:
-                    lang_obj = Language(lib_path, self.language.value)
-                    parser.set_language(lang_obj)
-                    break
-                except Exception:
-                    # Try next candidate; do not fail initialization here.
-                    continue
-
-        cls._parsers[self.language] = parser
-        self._parser = parser
-        return parser
-
-
 def get_analyzer_for_file(file_path: Path) -> TreeSitterAnalyzer:
     """Get the appropriate TreeSitterAnalyzer for a file based on its extension.
 
