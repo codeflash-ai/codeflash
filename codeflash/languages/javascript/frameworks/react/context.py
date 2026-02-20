@@ -10,6 +10,7 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
+import re
 
 if TYPE_CHECKING:
     from tree_sitter import Node
@@ -17,6 +18,10 @@ if TYPE_CHECKING:
     from codeflash.languages.javascript.frameworks.react.analyzer import OptimizationOpportunity
     from codeflash.languages.javascript.frameworks.react.discovery import ReactComponentInfo
     from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer
+
+_JSX_COMPONENT_RE = re.compile(r"<([A-Z][a-zA-Z0-9.]*)")
+
+_REACT_BUILTINS = frozenset(("React.Fragment", "Fragment", "Suspense", "React.Suspense"))
 
 logger = logging.getLogger(__name__)
 
@@ -152,16 +157,8 @@ def _extract_hook_usages(component_source: str) -> list[HookUsage]:
 
 def _extract_child_components(component_source: str, analyzer: TreeSitterAnalyzer, full_source: str) -> list[str]:
     """Find child component names rendered in JSX."""
-    import re
-
-    # Match JSX tags that start with uppercase (React components)
-    jsx_component_re = re.compile(r"<([A-Z][a-zA-Z0-9.]*)")
-    children = set()
-    for match in jsx_component_re.finditer(component_source):
-        name = match.group(1)
-        # Skip React built-ins like React.Fragment
-        if name not in ("React.Fragment", "Fragment", "Suspense", "React.Suspense"):
-            children.add(name)
+    names = _JSX_COMPONENT_RE.findall(component_source)
+    children = {name for name in names if name not in _REACT_BUILTINS}
     return sorted(children)
 
 
