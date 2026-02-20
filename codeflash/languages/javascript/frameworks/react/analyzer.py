@@ -64,7 +64,10 @@ def detect_optimization_opportunities(source: str, component_info: ReactComponen
     start = component_info.start_line - 1
     end = min(component_info.end_line, len(lines))
     component_lines = lines[start:end]
-    component_source = "\n".join(component_lines)
+    # Avoid building a large joined string; detectors will inspect lines directly.
+    component_source = ""  # kept for signature compatibility with helpers
+
+    # Check for inline objects in JSX props
 
     # Check for inline objects in JSX props
     _detect_inline_props(component_lines, start, opportunities)
@@ -94,6 +97,9 @@ def _detect_inline_props(lines: list[str], offset: int, opportunities: list[Opti
     """Detect inline object/array literals in JSX prop positions."""
     for i, line in enumerate(lines):
         line_num = offset + i + 1
+        # Quick check to avoid running regexes when no JSX prop assignment is present
+        if "={" not in line:
+            continue
         if INLINE_OBJECT_IN_JSX_RE.search(line):
             opportunities.append(
                 OptimizationOpportunity(
@@ -120,11 +126,23 @@ def _detect_missing_usecallback(
     component_source: str, lines: list[str], offset: int, opportunities: list[OptimizationOpportunity]
 ) -> None:
     """Detect arrow functions or function expressions that could use useCallback."""
-    has_usecallback = bool(USECALLBACK_RE.search(component_source))
+    # Determine whether the component uses useCallback anywhere by scanning lines (avoid joining)
+    has_usecallback = False
+    for l in lines:
+        if "useCallback" in l:
+            # cheap substring check before regex to avoid unnecessary work
+            if USECALLBACK_RE.search(l):
+                has_usecallback = True
+                break
+
 
     for i, line in enumerate(lines):
         line_num = offset + i + 1
         stripped = line.strip()
+        # Look for arrow function or function expression definitions inside the component
+        # Quick substring check: FUNCTION_DEF_RE targets lines with var/const/let/function
+        if ("const" not in stripped and "let" not in stripped and "var" not in stripped and "function" not in stripped):
+            continue
         # Look for arrow function or function expression definitions inside the component
         if FUNCTION_DEF_RE.search(stripped) and "useCallback" not in stripped and "useMemo" not in stripped:
             # Skip if the component already uses useCallback extensively
@@ -147,6 +165,10 @@ def _detect_missing_usememo(
     for i, line in enumerate(lines):
         line_num = offset + i + 1
         stripped = line.strip()
+        # Quick exclusions to avoid running the expensive regex when impossible to match
+        # expensive ops are accessed via a dot call like arr.map(
+        if "." not in stripped:
+            continue
         if EXPENSIVE_OPS_RE.search(stripped) and "useMemo" not in stripped:
             opportunities.append(
                 OptimizationOpportunity(
