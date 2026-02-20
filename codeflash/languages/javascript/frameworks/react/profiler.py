@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import re
-from functools import lru_cache
+from functools import cache, lru_cache
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -31,13 +31,7 @@ MARKER_PREFIX = "REACT_RENDER"
 
 def generate_render_counter_code(component_name: str) -> str:
     """Generate the onRender callback and counter variable for Profiler instrumentation."""
-    safe_name = _SAFE_NAME_RE.sub("_", component_name)
-    return f"""\
-let _codeflash_render_count_{safe_name} = 0;
-function _codeflashOnRender_{safe_name}(id, phase, actualDuration, baseDuration) {{
-  _codeflash_render_count_{safe_name}++;
-  console.log(`!######{MARKER_PREFIX}:${{id}}:${{phase}}:${{actualDuration}}:${{baseDuration}}:${{_codeflash_render_count_{safe_name}}}######!`);
-}}"""
+    return _build_render_counter_code(component_name, MARKER_PREFIX)
 
 
 def instrument_component_with_profiler(source: str, component_name: str, analyzer: TreeSitterAnalyzer) -> str:
@@ -331,3 +325,14 @@ def _compute_wrapped_segment(
     )
 
     return jsx_start, jsx_end, wrapped
+
+
+@cache
+def _build_render_counter_code(component_name: str, marker_prefix: str) -> str:
+    safe_name = _SAFE_NAME_RE.sub("_", component_name)
+    return f"""\
+let _codeflash_render_count_{safe_name} = 0;
+function _codeflashOnRender_{safe_name}(id, phase, actualDuration, baseDuration) {{
+  _codeflash_render_count_{safe_name}++;
+  console.log(`!######{marker_prefix}:${{id}}:${{phase}}:${{actualDuration}}:${{baseDuration}}:${{_codeflash_render_count_{safe_name}}}######!`);
+}}"""
