@@ -674,17 +674,23 @@ def _run_tests_direct(
     java = _find_java_executable() or "java"
 
     # Detect JUnit version from the classpath string.
-    # Previously this probed the classpath via subprocess, but that's unreliable:
-    # JUnit 5 projects often have JUnit 4 classes via junit-vintage-engine,
-    # causing false JUnit 4 detection and failed test execution.
-    # Instead, check if ConsoleLauncher (JUnit 5) is available on the classpath.
+    # We check for junit-jupiter (the JUnit 5 test API) as the indicator of JUnit 5 tests.
+    # Note: console-standalone and junit-platform are NOT reliable indicators because
+    # we inject console-standalone ourselves in _get_test_classpath(), so it's always present.
+    # ConsoleLauncher can run both JUnit 5 and JUnit 4 tests (via vintage engine),
+    # so we prefer it when available and only fall back to JUnitCore for pure JUnit 4
+    # projects without ConsoleLauncher on the classpath.
+    has_junit5_tests = "junit-jupiter" in classpath
     has_console_launcher = "console-standalone" in classpath or "ConsoleLauncher" in classpath
-    has_junit5 = "junit-jupiter" in classpath or "junit-platform" in classpath
-    is_junit4 = not (has_console_launcher or has_junit5)
+    # Use ConsoleLauncher if available (works for both JUnit 4 via vintage and JUnit 5).
+    # Only use JUnitCore when ConsoleLauncher is not on the classpath at all.
+    is_junit4 = not has_console_launcher
     if is_junit4:
-        logger.debug("JUnit 4 detected (no JUnit 5 platform JARs on classpath), using JUnitCore")
+        logger.debug("JUnit 4 project, no ConsoleLauncher available, using JUnitCore")
+    elif has_junit5_tests:
+        logger.debug("JUnit 5 project, using ConsoleLauncher")
     else:
-        logger.debug("JUnit 5 detected on classpath, using ConsoleLauncher")
+        logger.debug("JUnit 4 project, using ConsoleLauncher (via vintage engine)")
 
     if is_junit4:
         # Use JUnit 4's JUnitCore runner
