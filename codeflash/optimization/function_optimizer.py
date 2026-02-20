@@ -2231,6 +2231,7 @@ class FunctionOptimizer:
                 original_code=original_code_combined,
                 new_code=new_code_combined,
                 review=opt_review_result.review,
+                test_results=new_explanation.winning_behavior_test_results,
             )
         elif opt_review_result.review:
             review_display = {

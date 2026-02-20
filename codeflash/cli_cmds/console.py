@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import DependencyResolver, IndexResult
     from codeflash.lsp.lsp_message import LspMessage
+    from codeflash.models.models import TestResults
 
 DEBUG_MODE = logging.getLogger().getEffectiveLevel() == logging.DEBUG
 
@@ -406,12 +407,14 @@ def subagent_log_optimization_result(
     original_code: dict[Path, str],
     new_code: dict[Path, str],
     review: str,
+    test_results: TestResults,
 ) -> None:
     import sys
     from xml.sax.saxutils import escape
 
     from codeflash.code_utils.code_utils import unified_diff_strings
     from codeflash.code_utils.time_utils import humanize_runtime
+    from codeflash.models.test_type import TestType
 
     diff_parts = []
     for path in original_code:
@@ -427,6 +430,24 @@ def subagent_log_optimization_result(
     original_runtime = humanize_runtime(original_runtime_ns)
     optimized_runtime = humanize_runtime(best_runtime_ns)
 
+    report = test_results.get_test_pass_fail_report_by_type()
+    verification_rows = []
+    for test_type in TestType:
+        if test_type is TestType.INIT_STATE_TEST:
+            continue
+        name = test_type.to_name()
+        if not name:
+            continue
+        passed = report[test_type]["passed"]
+        failed = report[test_type]["failed"]
+        if passed == 0 and failed == 0:
+            status = "None Found"
+        elif failed > 0:
+            status = f"{failed} Failed, {passed} Passed"
+        else:
+            status = f"{passed} Passed"
+        verification_rows.append(f'    <test type="{escape(name)}" status="{escape(status)}"/>')
+
     xml = [
         "<codeflash-optimization>",
         f"  <function>{escape(function_name)}</function>",
@@ -438,6 +459,9 @@ def subagent_log_optimization_result(
     if review:
         xml.append(f"  <reviewer-confidence>{escape(review)}</reviewer-confidence>")
     xml.append(f"  <explanation>{escape(raw_explanation.strip())}</explanation>")
+    xml.append("  <verification>")
+    xml.extend(verification_rows)
+    xml.append("  </verification>")
     if diff_str:
         xml.append(f"  <diff>{escape(diff_str)}</diff>")
     for path in new_code:
