@@ -721,13 +721,6 @@ class JavaAnalyzer:
         # bisect_right returns insertion point; subtract 1 to get character count
         return bisect_right(cum, byte_offset) - 1
 
-    @property
-    def parser(self) -> Parser:
-        """Lazy-initialize and return the parser."""
-        if self._parser is None:
-            self._parser = Parser()
-        return self._parser
-
 
 def get_java_analyzer() -> JavaAnalyzer:
     """Get a JavaAnalyzer instance.
