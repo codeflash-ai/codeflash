@@ -171,9 +171,7 @@ class JacocoCoverageUtils:
 
     @staticmethod
     def _extract_lines_for_method(
-        method_start_line: int | None,
-        all_method_start_lines: list[int],
-        line_data: dict[int, dict[str, int]],
+        method_start_line: int | None, all_method_start_lines: list[int], line_data: dict[int, dict[str, int]]
     ) -> tuple[list[int], list[int], list[list[int]], list[list[int]]]:
         """Extract executed/unexecuted lines and branches for a method given its start line."""
         executed_lines: list[int] = []
@@ -219,11 +217,7 @@ class JacocoCoverageUtils:
         return executed_lines, unexecuted_lines, executed_branches, unexecuted_branches
 
     @staticmethod
-    def _compute_coverage_pct(
-        executed_lines: list[int],
-        unexecuted_lines: list[int],
-        method_elem: Any | None,
-    ) -> float:
+    def _compute_coverage_pct(executed_lines: list[int], unexecuted_lines: list[int], method_elem: Any | None) -> float:
         """Compute coverage %, preferring method-level LINE counter over line-by-line calculation."""
         total_lines = set(executed_lines) | set(unexecuted_lines)
         coverage_pct = (len(executed_lines) / len(total_lines) * 100) if total_lines else 0.0

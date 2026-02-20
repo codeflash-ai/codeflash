@@ -182,7 +182,7 @@ POM_NO_NAMESPACE = """<?xml version="1.0" encoding="UTF-8"?>
 class TestJacocoCoverageUtils:
     """Tests for JaCoCo XML parsing."""
 
-    def test_load_from_jacoco_xml_basic(self, tmp_path: Path):
+    def test_load_from_jacoco_xml_basic(self, tmp_path: Path) -> None:
         """Test loading coverage data from a JaCoCo XML report."""
         # Create JaCoCo XML file
         jacoco_xml = tmp_path / "jacoco.xml"
@@ -205,7 +205,7 @@ class TestJacocoCoverageUtils:
         assert coverage_data.status == CoverageStatus.PARSED_SUCCESSFULLY
         assert coverage_data.function_name == "add"
 
-    def test_load_from_jacoco_xml_covered_method(self, tmp_path: Path):
+    def test_load_from_jacoco_xml_covered_method(self, tmp_path: Path) -> None:
         """Test parsing a fully covered method."""
         jacoco_xml = tmp_path / "jacoco.xml"
         jacoco_xml.write_text(SAMPLE_JACOCO_XML)
@@ -225,7 +225,7 @@ class TestJacocoCoverageUtils:
         assert len(coverage_data.main_func_coverage.executed_lines) == 2
         assert len(coverage_data.main_func_coverage.unexecuted_lines) == 0
 
-    def test_load_from_jacoco_xml_uncovered_method(self, tmp_path: Path):
+    def test_load_from_jacoco_xml_uncovered_method(self, tmp_path: Path) -> None:
         """Test parsing a fully uncovered method."""
         jacoco_xml = tmp_path / "jacoco.xml"
         jacoco_xml.write_text(SAMPLE_JACOCO_XML)
@@ -245,7 +245,7 @@ class TestJacocoCoverageUtils:
         assert len(coverage_data.main_func_coverage.executed_lines) == 0
         assert len(coverage_data.main_func_coverage.unexecuted_lines) == 2
 
-    def test_load_from_jacoco_xml_branch_coverage(self, tmp_path: Path):
+    def test_load_from_jacoco_xml_branch_coverage(self, tmp_path: Path) -> None:
         """Test parsing branch coverage data."""
         jacoco_xml = tmp_path / "jacoco.xml"
         jacoco_xml.write_text(SAMPLE_JACOCO_XML)
@@ -266,7 +266,7 @@ class TestJacocoCoverageUtils:
         assert len(coverage_data.main_func_coverage.executed_branches) > 0
         assert len(coverage_data.main_func_coverage.unexecuted_branches) > 0
 
-    def test_load_from_jacoco_xml_missing_file(self, tmp_path: Path):
+    def test_load_from_jacoco_xml_missing_file(self, tmp_path: Path) -> None:
         """Test handling of missing JaCoCo XML file."""
         # Non-existent file
         jacoco_xml = tmp_path / "nonexistent.xml"
@@ -285,7 +285,7 @@ class TestJacocoCoverageUtils:
         assert coverage_data.status == CoverageStatus.NOT_FOUND
         assert coverage_data.coverage == 0.0
 
-    def test_load_from_jacoco_xml_invalid_xml(self, tmp_path: Path):
+    def test_load_from_jacoco_xml_invalid_xml(self, tmp_path: Path) -> None:
         """Test handling of invalid XML."""
         jacoco_xml = tmp_path / "jacoco.xml"
         jacoco_xml.write_text("this is not valid xml")
@@ -304,7 +304,7 @@ class TestJacocoCoverageUtils:
         assert coverage_data.status == CoverageStatus.NOT_FOUND
         assert coverage_data.coverage == 0.0
 
-    def test_load_from_jacoco_xml_no_matching_source(self, tmp_path: Path):
+    def test_load_from_jacoco_xml_no_matching_source(self, tmp_path: Path) -> None:
         """Test handling when source file is not found in report."""
         jacoco_xml = tmp_path / "jacoco.xml"
         jacoco_xml.write_text(SAMPLE_JACOCO_XML)
@@ -324,7 +324,7 @@ class TestJacocoCoverageUtils:
         assert coverage_data.status == CoverageStatus.NOT_FOUND
         assert coverage_data.coverage == 0.0
 
-    def test_no_helper_functions_no_dependent_coverage(self, tmp_path: Path):
+    def test_no_helper_functions_no_dependent_coverage(self, tmp_path: Path) -> None:
         """With zero helper functions, dependent_func_coverage stays None and total == main."""
         jacoco_xml = tmp_path / "jacoco.xml"
         jacoco_xml.write_text(SAMPLE_JACOCO_XML)
@@ -342,7 +342,7 @@ class TestJacocoCoverageUtils:
         assert coverage_data.functions_being_tested == ["add"]
         assert coverage_data.coverage == 100.0  # add is fully covered
 
-    def test_multiple_helpers_no_dependent_coverage(self, tmp_path: Path):
+    def test_multiple_helpers_no_dependent_coverage(self, tmp_path: Path) -> None:
         """With more than one helper, dependent_func_coverage stays None (mirrors Python behavior)."""
         jacoco_xml = tmp_path / "jacoco.xml"
         jacoco_xml.write_text(SAMPLE_JACOCO_XML)
@@ -363,7 +363,7 @@ class TestJacocoCoverageUtils:
         assert coverage_data.dependent_func_coverage is None
         assert coverage_data.functions_being_tested == ["add"]
 
-    def test_single_helper_found_in_jacoco_xml(self, tmp_path: Path):
+    def test_single_helper_found_in_jacoco_xml(self, tmp_path: Path) -> None:
         """With exactly one helper present in the JaCoCo XML, dependent_func_coverage is populated."""
         jacoco_xml = tmp_path / "jacoco.xml"
         jacoco_xml.write_text(SAMPLE_JACOCO_XML)
@@ -386,7 +386,7 @@ class TestJacocoCoverageUtils:
         assert coverage_data.functions_being_tested == ["add", "Calculator.multiply"]
         assert "Calculator.multiply" in coverage_data.graph
 
-    def test_single_helper_absent_from_jacoco_xml(self, tmp_path: Path):
+    def test_single_helper_absent_from_jacoco_xml(self, tmp_path: Path) -> None:
         """Helper listed in code_context but not in the JaCoCo XML → dependent_func_coverage stays None."""
         jacoco_xml = tmp_path / "jacoco.xml"
         jacoco_xml.write_text(SAMPLE_JACOCO_XML)
@@ -404,7 +404,7 @@ class TestJacocoCoverageUtils:
         assert coverage_data.dependent_func_coverage is None
         assert coverage_data.functions_being_tested == ["add"]
 
-    def test_total_coverage_aggregates_main_and_helper(self, tmp_path: Path):
+    def test_total_coverage_aggregates_main_and_helper(self, tmp_path: Path) -> None:
         """Total coverage is computed over main + helper lines combined, not just main."""
         jacoco_xml = tmp_path / "jacoco.xml"
         jacoco_xml.write_text(SAMPLE_JACOCO_XML)
@@ -431,28 +431,28 @@ class TestJacocoCoverageUtils:
 class TestJacocoPluginDetection:
     """Tests for JaCoCo plugin detection in pom.xml."""
 
-    def test_is_jacoco_configured_with_plugin(self, tmp_path: Path):
+    def test_is_jacoco_configured_with_plugin(self, tmp_path: Path) -> None:
         """Test detecting JaCoCo when it's configured."""
         pom_path = tmp_path / "pom.xml"
         pom_path.write_text(POM_WITH_JACOCO)
 
         assert is_jacoco_configured(pom_path) is True
 
-    def test_is_jacoco_configured_without_plugin(self, tmp_path: Path):
+    def test_is_jacoco_configured_without_plugin(self, tmp_path: Path) -> None:
         """Test detecting JaCoCo when it's not configured."""
         pom_path = tmp_path / "pom.xml"
         pom_path.write_text(POM_WITHOUT_JACOCO)
 
         assert is_jacoco_configured(pom_path) is False
 
-    def test_is_jacoco_configured_minimal_pom(self, tmp_path: Path):
+    def test_is_jacoco_configured_minimal_pom(self, tmp_path: Path) -> None:
         """Test detecting JaCoCo in minimal pom without build section."""
         pom_path = tmp_path / "pom.xml"
         pom_path.write_text(POM_MINIMAL)
 
         assert is_jacoco_configured(pom_path) is False
 
-    def test_is_jacoco_configured_missing_file(self, tmp_path: Path):
+    def test_is_jacoco_configured_missing_file(self, tmp_path: Path) -> None:
         """Test detection when pom.xml doesn't exist."""
         pom_path = tmp_path / "pom.xml"
 
@@ -462,7 +462,7 @@ class TestJacocoPluginDetection:
 class TestJacocoPluginAddition:
     """Tests for adding JaCoCo plugin to pom.xml."""
 
-    def test_add_jacoco_plugin_to_minimal_pom(self, tmp_path: Path):
+    def test_add_jacoco_plugin_to_minimal_pom(self, tmp_path: Path) -> None:
         """Test adding JaCoCo to a minimal pom.xml."""
         pom_path = tmp_path / "pom.xml"
         pom_path.write_text(POM_MINIMAL)
@@ -481,7 +481,7 @@ class TestJacocoPluginAddition:
         assert "prepare-agent" in content
         assert "report" in content
 
-    def test_add_jacoco_plugin_to_pom_with_build(self, tmp_path: Path):
+    def test_add_jacoco_plugin_to_pom_with_build(self, tmp_path: Path) -> None:
         """Test adding JaCoCo to pom.xml that has a build section."""
         pom_path = tmp_path / "pom.xml"
         pom_path.write_text(POM_WITHOUT_JACOCO)
@@ -493,7 +493,7 @@ class TestJacocoPluginAddition:
         # Verify it's now configured
         assert is_jacoco_configured(pom_path) is True
 
-    def test_add_jacoco_plugin_already_present(self, tmp_path: Path):
+    def test_add_jacoco_plugin_already_present(self, tmp_path: Path) -> None:
         """Test adding JaCoCo when it's already configured."""
         pom_path = tmp_path / "pom.xml"
         pom_path.write_text(POM_WITH_JACOCO)
@@ -505,7 +505,7 @@ class TestJacocoPluginAddition:
         # Verify it's still configured
         assert is_jacoco_configured(pom_path) is True
 
-    def test_add_jacoco_plugin_no_namespace(self, tmp_path: Path):
+    def test_add_jacoco_plugin_no_namespace(self, tmp_path: Path) -> None:
         """Test adding JaCoCo to pom.xml without XML namespace."""
         pom_path = tmp_path / "pom.xml"
         pom_path.write_text(POM_NO_NAMESPACE)
@@ -517,14 +517,14 @@ class TestJacocoPluginAddition:
         # Verify it's now configured
         assert is_jacoco_configured(pom_path) is True
 
-    def test_add_jacoco_plugin_missing_file(self, tmp_path: Path):
+    def test_add_jacoco_plugin_missing_file(self, tmp_path: Path) -> None:
         """Test adding JaCoCo when pom.xml doesn't exist."""
         pom_path = tmp_path / "pom.xml"
 
         result = add_jacoco_plugin_to_pom(pom_path)
         assert result is False
 
-    def test_add_jacoco_plugin_invalid_xml(self, tmp_path: Path):
+    def test_add_jacoco_plugin_invalid_xml(self, tmp_path: Path) -> None:
         """Test adding JaCoCo to invalid pom.xml."""
         pom_path = tmp_path / "pom.xml"
         pom_path.write_text("this is not valid xml")
@@ -536,12 +536,12 @@ class TestJacocoPluginAddition:
 class TestJacocoXmlPath:
     """Tests for JaCoCo XML path resolution."""
 
-    def test_get_jacoco_xml_path(self, tmp_path: Path):
+    def test_get_jacoco_xml_path(self, tmp_path: Path) -> None:
         """Test getting the expected JaCoCo XML path."""
         path = get_jacoco_xml_path(tmp_path)
 
         assert path == tmp_path / "target" / "site" / "jacoco" / "jacoco.xml"
 
-    def test_jacoco_plugin_version(self):
+    def test_jacoco_plugin_version(self) -> None:
         """Test that JaCoCo version constant is defined."""
         assert JACOCO_PLUGIN_VERSION == "0.8.13"
