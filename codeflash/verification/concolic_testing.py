@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import subprocess
 import tempfile
 import time
@@ -9,13 +10,16 @@ from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
-from codeflash.code_utils.concolic_utils import clean_concolic_tests, is_valid_concolic_test
-from codeflash.code_utils.static_analysis import has_typed_parameters
+from codeflash.code_utils.shell_utils import make_env_with_project_root
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.languages import is_python
+from codeflash.languages.python.static_analysis.concolic_utils import clean_concolic_tests, is_valid_concolic_test
+from codeflash.languages.python.static_analysis.static_analysis import has_typed_parameters
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.verification_utils import TestConfig
+
+CROSSHAIR_AVAILABLE = importlib.util.find_spec("crosshair") is not None
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -51,6 +55,10 @@ def generate_concolic_tests(
         logger.debug("Skipping concolic test generation for non-Python languages (CrossHair is Python-only)")
         return function_to_concolic_tests, concolic_test_suite_code
 
+    if not CROSSHAIR_AVAILABLE:
+        logger.debug("Skipping concolic test generation (crosshair-tool is not installed)")
+        return function_to_concolic_tests, concolic_test_suite_code
+
     if is_LSP_enabled():
         logger.debug("Skipping concolic test generation in LSP mode")
         return function_to_concolic_tests, concolic_test_suite_code
@@ -63,6 +71,7 @@ def generate_concolic_tests(
         logger.info("Generating concolic opcode coverage tests for the original code…")
         console.rule()
         try:
+            env = make_env_with_project_root(args.project_root)
             cover_result = subprocess.run(
                 [
                     SAFE_SYS_EXECUTABLE,
@@ -89,6 +98,7 @@ def generate_concolic_tests(
                 # Override via CODEFLASH_CONCOLIC_TIMEOUT env var,
                 # falling back to CODEFLASH_TEST_TIMEOUT, then default 600s.
                 timeout=600,
+                env=env,
             )
         except subprocess.TimeoutExpired:
             logger.debug("CrossHair Cover test generation timed out")

@@ -107,39 +107,62 @@ function installUv() {
 }
 
 /**
+ * Check if git is available
+ */
+function hasGit() {
+  try {
+    const result = spawnSync('git', ['--version'], {
+      stdio: 'ignore',
+      shell: true,
+    });
+    return result.status === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Install codeflash Python CLI using uv tool
+ *
+ * Installation priority:
+ * 1. GitHub main branch (if git available) - gets latest features
+ * 2. PyPI (fallback) - stable release
+ *
+ * We prefer GitHub because it has the latest JS/TS support that may not
+ * be published to PyPI yet. uv handles cloning internally in its cache.
  */
 function installCodeflash(uvBin) {
   logStep('2/3', 'Installing codeflash Python CLI...');
 
+  const GITHUB_REPO = 'git+https://github.com/codeflash-ai/codeflash.git';
+
+  // Priority 1: Install from GitHub (latest features, requires git)
+  if (hasGit()) {
+    try {
+      execSync(`"${uvBin}" tool install --force --python python3.12 "${GITHUB_REPO}"`, {
+        stdio: 'inherit',
+        shell: true,
+      });
+      logSuccess('codeflash CLI installed from GitHub (latest)');
+      return true;
+    } catch (error) {
+      logWarning(`GitHub installation failed: ${error.message}`);
+      logWarning('Falling back to PyPI...');
+    }
+  } else {
+    logWarning('Git not found, installing from PyPI...');
+  }
+
+  // Priority 2: Install from PyPI (stable release fallback)
   try {
-    // Use uv tool install to install codeflash in an isolated environment
-    // This avoids conflicts with any existing Python environments
     execSync(`"${uvBin}" tool install --force --python python3.12 codeflash`, {
       stdio: 'inherit',
       shell: true,
     });
-    logSuccess('codeflash CLI installed successfully');
+    logSuccess('codeflash CLI installed from PyPI');
     return true;
   } catch (error) {
-    // If codeflash is not on PyPI yet, try installing from the local package
-    logWarning('codeflash not found on PyPI, trying local installation...');
-    try {
-      // Try installing from the current codeflash repo if we're in development
-      const cliRoot = path.resolve(__dirname, '..', '..', '..');
-      const pyprojectPath = path.join(cliRoot, 'pyproject.toml');
-
-      if (fs.existsSync(pyprojectPath)) {
-        execSync(`"${uvBin}" tool install --force "${cliRoot}"`, {
-          stdio: 'inherit',
-          shell: true,
-        });
-        logSuccess('codeflash CLI installed from local source');
-        return true;
-      }
-    } catch (localError) {
-      logError(`Failed to install codeflash: ${localError.message}`);
-    }
+    logError(`Failed to install codeflash: ${error.message}`);
     return false;
   }
 }

@@ -12,7 +12,6 @@ from libcst.metadata import PositionProvider
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.time_utils import format_perf, format_time
-from codeflash.languages.registry import get_language_support
 from codeflash.models.models import GeneratedTests, GeneratedTestsList
 from codeflash.result.critic import performance_gain
 
@@ -155,7 +154,6 @@ def _is_python_file(file_path: Path) -> bool:
     return file_path.suffix == ".py"
 
 
-# TODO:{self} Needs cleanup for jest logic in else block
 def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]], tests_project_rootdir: Path) -> dict[str, int]:
     unique_inv_ids: dict[str, int] = {}
     logger.debug(f"[unique_inv_id] Processing {len(inv_id_runtimes)} invocation IDs")
@@ -166,53 +164,11 @@ def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]], tests_project_
             else inv_id.test_function_name
         )
 
-        # Detect if test_module_path is a file path (like in js tests) or a Python module name
-        # File paths contain slashes, module names use dots
         test_module_path = inv_id.test_module_path
         if "/" in test_module_path or "\\" in test_module_path:
-            # Already a file path - use directly
             abs_path = tests_project_rootdir / Path(test_module_path)
         else:
-            # Check for Jest test file extensions (e.g., tests.fibonacci.test.ts)
-            # These need special handling to avoid converting .test.ts -> /test/ts
-            jest_test_extensions = (
-                ".test.ts",
-                ".test.js",
-                ".test.tsx",
-                ".test.jsx",
-                ".spec.ts",
-                ".spec.js",
-                ".spec.tsx",
-                ".spec.jsx",
-                ".ts",
-                ".js",
-                ".tsx",
-                ".jsx",
-                ".mjs",
-                ".mts",
-            )
-            matched_ext = None
-            for ext in jest_test_extensions:
-                if test_module_path.endswith(ext):
-                    matched_ext = ext
-                    break
-
-            if matched_ext:
-                # JavaScript/TypeScript: convert module-style path to file path
-                # "tests.fibonacci__perfonlyinstrumented.test.ts" -> "tests/fibonacci__perfonlyinstrumented.test.ts"
-                base_path = test_module_path[: -len(matched_ext)]
-                file_path = base_path.replace(".", os.sep) + matched_ext
-                # Check if the module path includes the tests directory name
-                tests_dir_name = tests_project_rootdir.name
-                if file_path.startswith((tests_dir_name + os.sep, tests_dir_name + "/")):
-                    # Module path includes "tests." - use parent directory
-                    abs_path = tests_project_rootdir.parent / Path(file_path)
-                else:
-                    # Module path doesn't include tests dir - use tests root directly
-                    abs_path = tests_project_rootdir / Path(file_path)
-            else:
-                # Python module name - convert dots to path separators and add .py
-                abs_path = tests_project_rootdir / Path(test_module_path.replace(".", os.sep)).with_suffix(".py")
+            abs_path = tests_project_rootdir / Path(test_module_path.replace(".", os.sep)).with_suffix(".py")
 
         abs_path_str = str(abs_path.resolve().with_suffix(""))
         # Include both unit test and perf test paths for runtime annotations
@@ -268,22 +224,7 @@ def add_runtime_comments_to_generated_tests(
                 logger.debug(f"Failed to add runtime comments to test: {e}")
                 modified_tests.append(test)
         else:
-            try:
-                language_support = get_language_support(test.behavior_file_path)
-                modified_source = language_support.add_runtime_comments(
-                    test.generated_original_test_source, original_runtimes_dict, optimized_runtimes_dict
-                )
-                modified_test = GeneratedTests(
-                    generated_original_test_source=modified_source,
-                    instrumented_behavior_test_source=test.instrumented_behavior_test_source,
-                    instrumented_perf_test_source=test.instrumented_perf_test_source,
-                    behavior_file_path=test.behavior_file_path,
-                    perf_file_path=test.perf_file_path,
-                )
-                modified_tests.append(modified_test)
-            except Exception as e:
-                logger.debug(f"Failed to add runtime comments to test: {e}")
-                modified_tests.append(test)
+            modified_tests.append(test)
 
     return GeneratedTestsList(generated_tests=modified_tests)
 
@@ -329,103 +270,3 @@ def _compile_function_patterns(test_functions_to_remove: list[str]) -> list[re.P
         )
         for func in test_functions_to_remove
     ]
-
-
-# Patterns for normalizing codeflash imports (legacy -> npm package)
-_CODEFLASH_REQUIRE_PATTERN = re.compile(
-    r"(const|let|var)\s+(\w+)\s*=\s*require\s*\(\s*['\"]\.?/?codeflash-jest-helper['\"]\s*\)"
-)
-_CODEFLASH_IMPORT_PATTERN = re.compile(r"import\s+(?:\*\s+as\s+)?(\w+)\s+from\s+['\"]\.?/?codeflash-jest-helper['\"]")
-
-
-def normalize_codeflash_imports(source: str) -> str:
-    """Normalize codeflash imports to use the npm package.
-
-    Replaces legacy local file imports:
-        const codeflash = require('./codeflash-jest-helper')
-        import codeflash from './codeflash-jest-helper'
-
-    With npm package imports:
-        const codeflash = require('codeflash')
-
-    Args:
-        source: JavaScript/TypeScript source code.
-
-    Returns:
-        Source code with normalized imports.
-
-    """
-    # Replace CommonJS require
-    source = _CODEFLASH_REQUIRE_PATTERN.sub(r"\1 \2 = require('codeflash')", source)
-    # Replace ES module import
-    return _CODEFLASH_IMPORT_PATTERN.sub(r"import \1 from 'codeflash'", source)
-
-
-def inject_test_globals(generated_tests: GeneratedTestsList) -> GeneratedTestsList:
-    # TODO: inside the prompt tell the llm if it should import jest functions or it's already injected in the global window
-    """Inject test globals into all generated tests.
-
-    Args:
-        generated_tests: List of generated tests.
-
-    Returns:
-        Generated tests with test globals injected.
-
-    """
-    # we only inject test globals for esm modules
-    global_import = (
-        "import { jest, describe, it, expect, beforeEach, afterEach, beforeAll, test } from '@jest/globals'\n"
-    )
-
-    for test in generated_tests.generated_tests:
-        test.generated_original_test_source = global_import + test.generated_original_test_source
-        test.instrumented_behavior_test_source = global_import + test.instrumented_behavior_test_source
-        test.instrumented_perf_test_source = global_import + test.instrumented_perf_test_source
-    return generated_tests
-
-
-def disable_ts_check(generated_tests: GeneratedTestsList) -> GeneratedTestsList:
-    """Disable TypeScript type checking in all generated tests.
-
-    Args:
-        generated_tests: List of generated tests.
-
-    Returns:
-        Generated tests with TypeScript type checking disabled.
-
-    """
-    # we only inject test globals for esm modules
-    ts_nocheck = "// @ts-nocheck\n"
-
-    for test in generated_tests.generated_tests:
-        test.generated_original_test_source = ts_nocheck + test.generated_original_test_source
-        test.instrumented_behavior_test_source = ts_nocheck + test.instrumented_behavior_test_source
-        test.instrumented_perf_test_source = ts_nocheck + test.instrumented_perf_test_source
-    return generated_tests
-
-
-def normalize_generated_tests_imports(generated_tests: GeneratedTestsList) -> GeneratedTestsList:
-    """Normalize codeflash imports in all generated tests.
-
-    Args:
-        generated_tests: List of generated tests.
-
-    Returns:
-        Generated tests with normalized imports.
-
-    """
-    normalized_tests = []
-    for test in generated_tests.generated_tests:
-        # Only normalize JS/TS files
-        if test.behavior_file_path.suffix in (".js", ".ts", ".jsx", ".tsx", ".mjs", ".mts"):
-            normalized_test = GeneratedTests(
-                generated_original_test_source=normalize_codeflash_imports(test.generated_original_test_source),
-                instrumented_behavior_test_source=normalize_codeflash_imports(test.instrumented_behavior_test_source),
-                instrumented_perf_test_source=normalize_codeflash_imports(test.instrumented_perf_test_source),
-                behavior_file_path=test.behavior_file_path,
-                perf_file_path=test.perf_file_path,
-            )
-            normalized_tests.append(normalized_test)
-        else:
-            normalized_tests.append(test)
-    return GeneratedTestsList(generated_tests=normalized_tests)

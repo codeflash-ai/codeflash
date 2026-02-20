@@ -1088,7 +1088,7 @@ def _extract_public_method_signatures(source: str, class_name: str, analyzer: Ja
                 sig_parts_bytes.append(mod_slice)
                 continue
 
-            if ctype == "block" or ctype == "constructor_body":
+            if ctype in {"block", "constructor_body"}:
                 break
 
             sig_parts_bytes.append(source_bytes[child.start_byte : child.end_byte])

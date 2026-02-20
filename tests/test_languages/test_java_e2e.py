@@ -89,7 +89,7 @@ class TestJavaCodeContext:
 
     def test_extract_code_context_for_java(self, java_project_dir):
         """Test extracting code context for a Java method."""
-        from codeflash.context.code_context_extractor import get_code_optimization_context
+        from codeflash.languages.python.context.code_context_extractor import get_code_optimization_context
         from codeflash.languages import current as lang_current
         from codeflash.languages.base import Language
 

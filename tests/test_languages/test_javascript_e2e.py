@@ -106,9 +106,9 @@ class TestJavaScriptCodeContext:
     def test_extract_code_context_for_javascript(self, js_project_dir):
         """Test extracting code context for a JavaScript function."""
         skip_if_js_not_supported()
-        from codeflash.context.code_context_extractor import get_code_optimization_context
         from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
         from codeflash.languages import current as lang_current
+        from codeflash.languages.python.context.code_context_extractor import get_code_optimization_context
 
         lang_current._current_language = Language.JAVASCRIPT
 
@@ -155,16 +155,16 @@ class TestJavaScriptCodeReplacement:
         from codeflash.languages.base import FunctionInfo
 
         original_source = """
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }
 
-function multiply(a, b) {
+export function multiply(a, b) {
     return a * b;
 }
 """
 
-        new_function = """function add(a, b) {
+        new_function = """export function add(a, b) {
     // Optimized version
     return a + b;
 }"""
@@ -178,12 +178,12 @@ function multiply(a, b) {
         result = js_support.replace_function(original_source, func_info, new_function)
 
         expected_result = """
-function add(a, b) {
+export function add(a, b) {
     // Optimized version
     return a + b;
 }
 
-function multiply(a, b) {
+export function multiply(a, b) {
     return a * b;
 }
 """
@@ -234,7 +234,7 @@ class TestJavaScriptPipelineIntegration:
 
         with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
             f.write("""
-class Calculator {
+export class Calculator {
     add(a, b) {
         return a + b;
     }
@@ -244,7 +244,7 @@ class Calculator {
     }
 }
 
-function standalone(x) {
+export function standalone(x) {
     return x * 2;
 }
 """)

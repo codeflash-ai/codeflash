@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, TestInfo, TestResult
     from codeflash.languages.java.concurrency_analyzer import ConcurrencyInfo
+    from codeflash.models.models import GeneratedTestsList
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,24 @@ class JavaSupport(LanguageSupport):
     def comment_prefix(self) -> str:
         """Comment prefix for Java."""
         return "//"
+
+    @property
+    def default_file_extension(self) -> str:
+        return ".java"
+
+    @property
+    def dir_excludes(self) -> frozenset[str]:
+        return frozenset({"target", "build", ".gradle", ".mvn", ".idea"})
+
+    def postprocess_generated_tests(
+        self, generated_tests: GeneratedTestsList, test_framework: str, project_root: Path, source_file_path: Path
+    ) -> GeneratedTestsList:
+        _ = test_framework, project_root, source_file_path
+        return generated_tests
+
+    def add_global_declarations(self, optimized_code: str, original_source: str, module_abspath: Path) -> str:
+        _ = optimized_code, module_abspath
+        return original_source
 
     # === Discovery ===
 

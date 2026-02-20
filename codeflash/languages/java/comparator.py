@@ -10,7 +10,10 @@ import json
 import logging
 import math
 import os
+import platform
+import shutil
 import subprocess
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -69,6 +72,7 @@ def _find_comparator_jar(project_root: Path | None = None) -> Path | None:
     return None
 
 
+@lru_cache(maxsize=1)
 def _find_java_executable() -> str | None:
     """Find the Java executable.
 
@@ -76,9 +80,6 @@ def _find_java_executable() -> str | None:
         Path to java executable, or None if not found.
 
     """
-    import platform
-    import shutil
-
     # Check JAVA_HOME
     java_home = os.environ.get("JAVA_HOME")
     if java_home:

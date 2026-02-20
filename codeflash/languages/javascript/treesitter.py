@@ -69,6 +69,7 @@ class FunctionNode:
     parent_function: str | None
     source_text: str
     doc_start_line: int | None = None  # Line where JSDoc comment starts (or None if no JSDoc)
+    is_exported: bool = False  # Whether the function is exported
 
 
 @dataclass
@@ -94,6 +95,9 @@ class ExportInfo:
     reexport_source: str | None  # Module path for re-exports
     start_line: int
     end_line: int
+    # Functions passed as arguments to wrapper calls in default exports
+    # e.g., export default curry(traverseEntity) -> ["traverseEntity"]
+    wrapped_default_args: list[str] | None = None
 
 
 @dataclass
@@ -292,6 +296,7 @@ class TreeSitterAnalyzer:
         is_generator = False
         is_method = False
         is_arrow = node.type == "arrow_function"
+        is_exported = False
 
         # Check for async modifier
         for child in node.children:
@@ -302,6 +307,12 @@ class TreeSitterAnalyzer:
         # Check for generator
         if "generator" in node.type:
             is_generator = True
+
+        # Check if function is exported
+        # For function_declaration: check if parent is export_statement
+        # For arrow functions: check if parent variable_declarator's grandparent is export_statement
+        # For CommonJS: check module.exports = { name } or exports.name = ...
+        is_exported = self._is_node_exported(node, source_bytes)
 
         # Get function name based on node type
         if node.type in ("function_declaration", "generator_function_declaration"):
@@ -352,7 +363,156 @@ class TreeSitterAnalyzer:
             parent_function=current_function,
             source_text=source_text,
             doc_start_line=doc_start_line,
+            is_exported=is_exported,
         )
+
+    def _is_node_exported(self, node: Node, source_bytes: bytes | None = None) -> bool:
+        """Check if a function node is exported.
+
+        Handles various export patterns:
+        - export function foo() {}
+        - export const foo = () => {}
+        - export default function foo() {}
+        - Class methods in exported classes
+        - module.exports = { foo } (CommonJS)
+        - exports.foo = ... (CommonJS)
+
+        Args:
+            node: The function node to check.
+            source_bytes: Source code bytes (needed for CommonJS export detection).
+
+        Returns:
+            True if the function is exported, False otherwise.
+
+        """
+        # Check direct parent for export_statement
+        if node.parent and node.parent.type == "export_statement":
+            return True
+
+        # For arrow functions and function expressions assigned to variables
+        # e.g., export const foo = () => {}
+        if node.type in ("arrow_function", "function_expression", "generator_function"):
+            parent = node.parent
+            if parent and parent.type == "variable_declarator":
+                grandparent = parent.parent
+                if grandparent and grandparent.type in ("lexical_declaration", "variable_declaration"):
+                    great_grandparent = grandparent.parent
+                    if great_grandparent and great_grandparent.type == "export_statement":
+                        return True
+
+        # For methods in exported classes
+        if node.type == "method_definition":
+            # Walk up to find class_declaration
+            current = node.parent
+            while current:
+                if current.type in ("class_declaration", "class"):
+                    # Check if this class is exported via ES module export
+                    if current.parent and current.parent.type == "export_statement":
+                        return True
+                    # Check if class is exported via CommonJS
+                    if source_bytes:
+                        class_name_node = current.child_by_field_name("name")
+                        if class_name_node:
+                            class_name = self.get_node_text(class_name_node, source_bytes)
+                            if self._is_name_in_commonjs_exports(node, class_name, source_bytes):
+                                return True
+                    break
+                current = current.parent
+
+        # Check CommonJS exports: module.exports = { foo } or exports.foo = ...
+        if source_bytes:
+            func_name = self._get_function_name_for_export_check(node, source_bytes)
+            if func_name and self._is_name_in_commonjs_exports(node, func_name, source_bytes):
+                return True
+
+        return False
+
+    def _get_function_name_for_export_check(self, node: Node, source_bytes: bytes) -> str | None:
+        """Get the function name for export checking."""
+        if node.type in ("function_declaration", "generator_function_declaration"):
+            name_node = node.child_by_field_name("name")
+            if name_node:
+                return self.get_node_text(name_node, source_bytes)
+        elif node.type in ("arrow_function", "function_expression", "generator_function"):
+            # Get name from variable assignment
+            parent = node.parent
+            if parent and parent.type == "variable_declarator":
+                name_node = parent.child_by_field_name("name")
+                if name_node and name_node.type == "identifier":
+                    return self.get_node_text(name_node, source_bytes)
+        return None
+
+    def _is_name_in_commonjs_exports(self, node: Node, name: str, source_bytes: bytes) -> bool:
+        """Check if a name is exported via CommonJS module.exports or exports.
+
+        Handles patterns like:
+        - module.exports = { foo, bar }
+        - module.exports = { foo: someFunc }
+        - exports.foo = ...
+        - module.exports.foo = ...
+
+        Args:
+            node: Any node in the tree (used to find the program root).
+            name: The name to check for in exports.
+            source_bytes: Source code bytes.
+
+        Returns:
+            True if the name is in CommonJS exports.
+
+        """
+        # Walk up to find program root
+        root = node
+        while root.parent:
+            root = root.parent
+
+        # Search for CommonJS export patterns in program children
+        for child in root.children:
+            if child.type == "expression_statement":
+                # Look for assignment expressions
+                for expr in child.children:
+                    if expr.type == "assignment_expression":
+                        if self._check_commonjs_assignment_exports(expr, name, source_bytes):
+                            return True
+
+        return False
+
+    def _check_commonjs_assignment_exports(self, node: Node, name: str, source_bytes: bytes) -> bool:
+        """Check if a CommonJS assignment exports the given name."""
+        left_node = node.child_by_field_name("left")
+        right_node = node.child_by_field_name("right")
+
+        if not left_node or not right_node:
+            return False
+
+        left_text = self.get_node_text(left_node, source_bytes)
+
+        # Check module.exports = { name, ... } or module.exports = { key: name, ... }
+        if left_text == "module.exports" and right_node.type == "object":
+            for child in right_node.children:
+                if child.type == "shorthand_property_identifier":
+                    # { foo } - shorthand export
+                    if self.get_node_text(child, source_bytes) == name:
+                        return True
+                elif child.type == "pair":
+                    # { key: value } - check both key and value
+                    key_node = child.child_by_field_name("key")
+                    value_node = child.child_by_field_name("value")
+                    if key_node and self.get_node_text(key_node, source_bytes) == name:
+                        return True
+                    if value_node and value_node.type == "identifier":
+                        if self.get_node_text(value_node, source_bytes) == name:
+                            return True
+
+        # Check module.exports = name (single export)
+        if left_text == "module.exports" and right_node.type == "identifier":
+            if self.get_node_text(right_node, source_bytes) == name:
+                return True
+
+        # Check module.exports.name = ... or exports.name = ...
+        if left_text in {f"module.exports.{name}", f"exports.{name}"}:
+            return True
+
+        return False
 
     def _find_preceding_jsdoc(self, node: Node, source_bytes: bytes) -> int | None:
         """Find JSDoc comment immediately preceding a function node.
@@ -707,6 +867,7 @@ class TreeSitterAnalyzer:
         default_export: str | None = None
         is_reexport = False
         reexport_source: str | None = None
+        wrapped_default_args: list[str] | None = None
 
         # Check for re-export source (export { x } from './other')
         source_node = node.child_by_field_name("source")
@@ -726,6 +887,12 @@ class TreeSitterAnalyzer:
                         default_export = self.get_node_text(sibling, source_bytes)
                     elif sibling.type in ("arrow_function", "function_expression", "object", "array"):
                         default_export = "default"
+                    elif sibling.type == "call_expression":
+                        # Handle wrapped exports: export default curry(traverseEntity)
+                        # The default export is the result of the call, but we track
+                        # the wrapped function names for export checking
+                        default_export = "default"
+                        wrapped_default_args = self._extract_call_expression_identifiers(sibling, source_bytes)
                 break
 
             # Handle named exports: export { a, b as c }
@@ -773,7 +940,36 @@ class TreeSitterAnalyzer:
             reexport_source=reexport_source,
             start_line=node.start_point[0] + 1,
             end_line=node.end_point[0] + 1,
+            wrapped_default_args=wrapped_default_args,
         )
+
+    def _extract_call_expression_identifiers(self, node: Node, source_bytes: bytes) -> list[str]:
+        """Extract identifier names from arguments of a call expression.
+
+        For patterns like curry(traverseEntity) or compose(fn1, fn2), this extracts
+        the function names passed as arguments: ["traverseEntity"] or ["fn1", "fn2"].
+
+        Args:
+            node: A call_expression node.
+            source_bytes: The source code as bytes.
+
+        Returns:
+            List of identifier names found in the call arguments.
+
+        """
+        identifiers: list[str] = []
+
+        # Get the arguments node
+        args_node = node.child_by_field_name("arguments")
+        if args_node:
+            for child in args_node.children:
+                if child.type == "identifier":
+                    identifiers.append(self.get_node_text(child, source_bytes))
+                # Also handle nested call expressions: compose(curry(fn))
+                elif child.type == "call_expression":
+                    identifiers.extend(self._extract_call_expression_identifiers(child, source_bytes))
+
+        return identifiers
 
     def _extract_commonjs_export(self, node: Node, source_bytes: bytes) -> ExportInfo | None:
         """Extract export information from CommonJS module.exports or exports.* patterns.
@@ -876,6 +1072,7 @@ class TreeSitterAnalyzer:
         """Check if a function is exported and get its export name.
 
         For class methods, also checks if the containing class is exported.
+        Also handles wrapped exports like: export default curry(traverseEntity)
 
         Args:
             source: The source code to analyze.
@@ -900,6 +1097,11 @@ class TreeSitterAnalyzer:
             for name, alias in export.exported_names:
                 if name == function_name:
                     return (True, alias if alias else name)
+
+            # Check wrapped default exports: export default curry(traverseEntity)
+            # The function is exported via wrapper, so it's accessible as "default"
+            if export.wrapped_default_args and function_name in export.wrapped_default_args:
+                return (True, "default")
 
         # For class methods, check if the containing class is exported
         if class_name:
@@ -1586,3 +1788,39 @@ def get_analyzer_for_file(file_path: Path) -> TreeSitterAnalyzer:
         return TreeSitterAnalyzer(TreeSitterLanguage.TSX)
     # Default to JavaScript for .js, .jsx, .mjs, .cjs
     return TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
+
+
+# Author: Saurabh Misra <misra.saurabh1@gmail.com>
+def extract_calling_function_source(source_code: str, function_name: str, ref_line: int) -> str | None:
+    """Extract the source code of a calling function in JavaScript/TypeScript.
+
+    Args:
+        source_code: Full source code of the file.
+        function_name: Name of the function to extract.
+        ref_line: Line number where the reference is (helps identify the right function).
+
+    Returns:
+        Source code of the function, or None if not found.
+
+    """
+    try:
+        from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage
+
+        # Try TypeScript first, fall back to JavaScript
+        for lang in [TreeSitterLanguage.TYPESCRIPT, TreeSitterLanguage.TSX, TreeSitterLanguage.JAVASCRIPT]:
+            try:
+                analyzer = TreeSitterAnalyzer(lang)
+                functions = analyzer.find_functions(source_code, include_methods=True)
+
+                for func in functions:
+                    if func.name == function_name:
+                        # Check if the reference line is within this function
+                        if func.start_line <= ref_line <= func.end_line:
+                            return func.source_text
+                break
+            except Exception:
+                continue
+
+        return None
+    except Exception:
+        return None

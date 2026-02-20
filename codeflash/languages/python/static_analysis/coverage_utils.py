@@ -13,14 +13,28 @@ if TYPE_CHECKING:
 def extract_dependent_function(main_function: str, code_context: CodeOptimizationContext) -> str | Literal[False]:
     """Extract the single dependent function from the code context excluding the main function."""
     dependent_functions = set()
-    for code_string in code_context.testgen_context.code_strings:
-        ast_tree = ast.parse(code_string.code)
-        dependent_functions.update(
-            {node.name for node in ast_tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
-        )
 
-    if main_function in dependent_functions:
-        dependent_functions.discard(main_function)
+    # Compare using bare name since AST extracts bare function names
+    bare_main = main_function.rsplit(".", 1)[-1] if "." in main_function else main_function
+
+    for code_string in code_context.testgen_context.code_strings:
+        # Quick heuristic: skip parsing entirely if there is no 'def' token,
+        # since no function definitions can be present without it.
+        if "def" not in code_string.code:
+            continue
+
+        ast_tree = ast.parse(code_string.code)
+        # Add function names directly, skipping the bare main name.
+        for node in ast_tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                name = node.name
+                if name == bare_main:
+                    continue
+                dependent_functions.add(name)
+                # If more than one dependent function (other than the main) is found,
+                # we can return False early since the final result cannot be a single name.
+                if len(dependent_functions) > 1:
+                    return False
 
     if not dependent_functions:
         return False
@@ -32,6 +46,9 @@ def extract_dependent_function(main_function: str, code_context: CodeOptimizatio
 
 
 def build_fully_qualified_name(function_name: str, code_context: CodeOptimizationContext) -> str:
+    # If the name is already qualified (contains a dot), return as-is
+    if "." in function_name:
+        return function_name
     full_name = function_name
     for obj_name, parents in code_context.preexisting_objects:
         if obj_name == function_name:

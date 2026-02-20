@@ -38,7 +38,7 @@ def add(a, b):
     return a + b
 """,
     javascript="""
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }
 """,
@@ -58,15 +58,15 @@ def multiply(a, b):
     return a * b
 """,
     javascript="""
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }
 
-function subtract(a, b) {
+export function subtract(a, b) {
     return a - b;
 }
 
-function multiply(a, b) {
+export function multiply(a, b) {
     return a * b;
 }
 """,
@@ -83,11 +83,11 @@ def without_return():
     print("hello")
 """,
     javascript="""
-function withReturn() {
+export function withReturn() {
     return 1;
 }
 
-function withoutReturn() {
+export function withoutReturn() {
     console.log("hello");
 }
 """,
@@ -105,7 +105,7 @@ class Calculator:
         return a * b
 """,
     javascript="""
-class Calculator {
+export class Calculator {
     add(a, b) {
         return a + b;
     }
@@ -128,11 +128,11 @@ def sync_function():
     return 1
 """,
     javascript="""
-async function fetchData(url) {
+export async function fetchData(url) {
     return await fetch(url);
 }
 
-function syncFunction() {
+export function syncFunction() {
     return 1;
 }
 """,
@@ -148,7 +148,7 @@ def outer():
     return inner()
 """,
     javascript="""
-function outer() {
+export function outer() {
     function inner() {
         return 1;
     }
@@ -167,7 +167,7 @@ class Utils:
         return x * 2
 """,
     javascript="""
-class Utils {
+export class Utils {
     static helper(x) {
         return x * 2;
     }
@@ -194,7 +194,7 @@ def standalone():
     return 42
 """,
     javascript="""
-class Calculator {
+export class Calculator {
     add(a, b) {
         return a + b;
     }
@@ -204,13 +204,13 @@ class Calculator {
     }
 }
 
-class StringUtils {
+export class StringUtils {
     reverse(s) {
         return s.split('').reverse().join('');
     }
 }
 
-function standalone() {
+export function standalone() {
     return 42;
 }
 """,
@@ -227,11 +227,11 @@ def sync_func():
     return 2
 """,
     javascript="""
-async function asyncFunc() {
+export async function asyncFunc() {
     return 1;
 }
 
-function syncFunc() {
+export function syncFunc() {
     return 2;
 }
 """,
@@ -249,11 +249,11 @@ class MyClass:
         return 2
 """,
     javascript="""
-function standalone() {
+export function standalone() {
     return 1;
 }
 
-class MyClass {
+export class MyClass {
     method() {
         return 2;
     }
@@ -906,7 +906,7 @@ class TestIntegrationParity:
         return n
     return fibonacci(n - 1) + fibonacci(n - 2)
 """
-        js_original = """function fibonacci(n) {
+        js_original = """export function fibonacci(n) {
     if (n <= 1) {
         return n;
     }
@@ -933,7 +933,7 @@ class TestIntegrationParity:
         memo[i] = memo[i-1] + memo[i-2]
     return memo[n]
 """
-        js_optimized = """function fibonacci(n) {
+        js_optimized = """export function fibonacci(n) {
     // Memoized version
     const memo = {0: 0, 1: 1};
     for (let i = 2; i <= n; i++) {
@@ -994,13 +994,13 @@ class TestFeatureGaps:
     def test_arrow_functions_unique_to_js(self, js_support):
         """JavaScript arrow functions should be discovered (no Python equivalent)."""
         js_code = """
-const add = (a, b) => {
+export const add = (a, b) => {
     return a + b;
 };
 
-const multiply = (x, y) => x * y;
+export const multiply = (x, y) => x * y;
 
-const identity = x => x;
+export const identity = x => x;
 """
         js_file = write_temp_file(js_code, ".js")
         funcs = js_support.discover_functions(js_file)
@@ -1021,7 +1021,7 @@ def number_generator():
     return 3
 """
         js_code = """
-function* numberGenerator() {
+export function* numberGenerator() {
     yield 1;
     yield 2;
     return 3;
@@ -1065,11 +1065,11 @@ def multi_decorated():
     def test_function_expressions_js(self, js_support):
         """JavaScript function expressions should be discovered."""
         js_code = """
-const add = function(a, b) {
+export const add = function(a, b) {
     return a + b;
 };
 
-const namedExpr = function myFunc(x) {
+export const namedExpr = function myFunc(x) {
     return x * 2;
 };
 """
@@ -1132,7 +1132,7 @@ def greeting():
     return "Hello, 世界! 🌍"
 """
         js_code = """
-function greeting() {
+export function greeting() {
     return "Hello, 世界! 🌍";
 }
 """

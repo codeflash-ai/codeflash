@@ -1,11 +1,11 @@
 [project]
 name = "codeflash-benchmark"
-version = "0.2.0"
+dynamic = ["version"]
 description = "Pytest benchmarking plugin for codeflash.ai - automatic code performance optimization"
 authors = [{ name = "CodeFlash Inc.", email = "contact@codeflash.ai" }]
 requires-python = ">=3.9"
 readme = "README.md"
-license = {text = "BSL-1.1"}
+license-files = ["LICENSE"]
 keywords = [
     "codeflash",
     "benchmark",
@@ -25,8 +25,19 @@ Repository = "https://github.com/codeflash-ai/codeflash-benchmark"
 codeflash-benchmark = "codeflash_benchmark.plugin"
 
 [build-system]
-requires = ["setuptools>=45", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling", "uv-dynamic-versioning"]
+build-backend = "hatchling.build"
 
-[tool.setuptools]
-packages = ["codeflash_benchmark"]
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[tool.uv-dynamic-versioning]
+enable = true
+style = "pep440"
+vcs = "git"
+
+[tool.hatch.build.hooks.version]
+path = "codeflash_benchmark/version.py"
+template = """# These version placeholders will be replaced by uv-dynamic-versioning during build.
+__version__ = "{version}"
+"""

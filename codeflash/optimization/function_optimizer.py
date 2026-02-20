@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import concurrent.futures
+import dataclasses
 import os
 import queue
 import random
@@ -12,7 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 import libcst as cst
-import sentry_sdk
+from git import Repo as GitRepo
 from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -24,12 +25,6 @@ from codeflash.api.cfapi import add_code_context_hash, create_staging, get_cfapi
 from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import DEBUG_MODE, code_print, console, logger, lsp_log, progress_bar
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.code_extractor import get_opt_review_metrics, is_numerical_code
-from codeflash.code_utils.code_replacer import (
-    add_custom_marker_to_all_tests,
-    modify_autouse_fixture,
-    replace_function_definitions_in_module,
-)
 from codeflash.code_utils.code_utils import (
     choose_weights,
     cleanup_paths,
@@ -57,28 +52,31 @@ from codeflash.code_utils.config_consts import (
     get_effort_value,
 )
 from codeflash.code_utils.deduplicate_code import normalize_code
-from codeflash.code_utils.edit_generated_tests import (
-    add_runtime_comments_to_generated_tests,
-    disable_ts_check,
-    inject_test_globals,
-    normalize_generated_tests_imports,
-    remove_functions_from_generated_tests,
-)
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.formatter import format_code, format_generated_code, sort_imports
 from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
-from codeflash.code_utils.line_profile_utils import add_decorator_imports, contains_jit_decorator
-from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
+from codeflash.code_utils.shell_utils import make_env_with_project_root
 from codeflash.code_utils.time_utils import humanize_runtime
-from codeflash.context import code_context_extractor
-from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
 from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
 from codeflash.either import Failure, Success, is_successful
-from codeflash.languages import is_java, is_javascript, is_python
+from codeflash.languages import is_java, is_python
 from codeflash.languages.base import Language
-from codeflash.languages.current import current_language_support, is_typescript
-from codeflash.languages.javascript.module_system import detect_module_system
+from codeflash.languages.current import current_language_support
+from codeflash.languages.javascript.test_runner import clear_created_config_files, get_created_config_files
+from codeflash.languages.python.context import code_context_extractor
+from codeflash.languages.python.context.unused_definition_remover import (
+    detect_unused_helper_functions,
+    revert_unused_helper_functions,
+)
+from codeflash.languages.python.static_analysis.code_extractor import get_opt_review_metrics, is_numerical_code
+from codeflash.languages.python.static_analysis.code_replacer import (
+    add_custom_marker_to_all_tests,
+    modify_autouse_fixture,
+    replace_function_definitions_in_module,
+)
+from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports, contains_jit_decorator
+from codeflash.languages.python.static_analysis.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree_to_markdown
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
@@ -133,6 +131,7 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.either import Result
+    from codeflash.languages.base import DependencyResolver
     from codeflash.models.models import (
         BenchmarkKey,
         CodeStringsMarkdown,
@@ -497,10 +496,14 @@ class FunctionOptimizer:
         total_benchmark_timings: dict[BenchmarkKey, int] | None = None,
         args: Namespace | None = None,
         replay_tests_dir: Path | None = None,
+        call_graph: DependencyResolver | None = None,
     ) -> None:
-        self.project_root = test_cfg.project_root_path
+        self.project_root = test_cfg.project_root_path.resolve()
         self.test_cfg = test_cfg
         self.aiservice_client = aiservice_client if aiservice_client else AiServiceClient()
+        resolved_file_path = function_to_optimize.file_path.resolve()
+        if resolved_file_path != function_to_optimize.file_path:
+            function_to_optimize = dataclasses.replace(function_to_optimize, file_path=resolved_file_path)
         self.function_to_optimize = function_to_optimize
         self.function_to_optimize_source_code = (
             function_to_optimize_source_code
@@ -539,6 +542,7 @@ class FunctionOptimizer:
         self.function_benchmark_timings = function_benchmark_timings if function_benchmark_timings else {}
         self.total_benchmark_timings = total_benchmark_timings if total_benchmark_timings else {}
         self.replay_tests_dir = replay_tests_dir if replay_tests_dir else None
+        self.call_graph = call_graph
         n_tests = get_effort_value(EffortKeys.N_GENERATED_TESTS, self.effort)
         self.executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=n_tests + 3 if self.experiment_id is None else n_tests + 4
@@ -605,15 +609,24 @@ class FunctionOptimizer:
     ]:
         """Generate and instrument tests for the function."""
         n_tests = get_effort_value(EffortKeys.N_GENERATED_TESTS, self.effort)
+        source_file = Path(self.function_to_optimize.file_path)
         generated_test_paths = [
             get_test_file_path(
-                self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="unit"
+                self.test_cfg.tests_root,
+                self.function_to_optimize.function_name,
+                test_index,
+                test_type="unit",
+                source_file_path=source_file,
             )
             for test_index in range(n_tests)
         ]
         generated_perf_test_paths = [
             get_test_file_path(
-                self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="perf"
+                self.test_cfg.tests_root,
+                self.function_to_optimize.function_name,
+                test_index,
+                test_type="perf",
+                source_file_path=source_file,
             )
             for test_index in range(n_tests)
         ]
@@ -625,6 +638,7 @@ class FunctionOptimizer:
         test_results = self.generate_tests(
             testgen_context=code_context.testgen_context,
             helper_functions=code_context.helper_functions,
+            testgen_helper_fqns=code_context.testgen_helper_fqns,
             generated_test_paths=generated_test_paths,
             generated_perf_test_paths=generated_perf_test_paths,
         )
@@ -634,16 +648,13 @@ class FunctionOptimizer:
 
         count_tests, generated_tests, function_to_concolic_tests, concolic_test_str = test_results.unwrap()
 
-        # Normalize codeflash imports in JS/TS tests to use npm package
-        if is_javascript():
-            module_system = detect_module_system(self.project_root, self.function_to_optimize.file_path)
-            if module_system == "esm":
-                generated_tests = inject_test_globals(generated_tests)
-            if is_typescript():
-                # disable ts check for typescript tests
-                generated_tests = disable_ts_check(generated_tests)
-
-            generated_tests = normalize_generated_tests_imports(generated_tests)
+        # Language-specific postprocessing for generated tests
+        generated_tests = self.language_support.postprocess_generated_tests(
+            generated_tests,
+            test_framework=self.test_cfg.test_framework,
+            project_root=self.project_root,
+            source_file_path=self.function_to_optimize.file_path,
+        )
 
         logger.debug(f"[PIPELINE] Processing {count_tests} generated tests")
         used_behavior_paths: set[Path] = set()
@@ -967,30 +978,6 @@ class FunctionOptimizer:
         ):
             console.rule()
             new_code_context = code_context
-            if (
-                self.is_numerical_code and not self.args.no_jit_opts
-            ):  # if the code is numerical in nature (uses numpy/tensorflow/math/pytorch/jax)
-                jit_compiled_opt_candidate = self.aiservice_client.get_jit_rewritten_code(
-                    code_context.read_writable_code.markdown, self.function_trace_id
-                )
-                if jit_compiled_opt_candidate:  # jit rewrite was successful
-                    # write files
-                    # Try to replace function with optimized code
-                    self.replace_function_and_helpers_with_optimized_code(
-                        code_context=code_context,
-                        optimized_code=jit_compiled_opt_candidate[0].source_code,
-                        original_helper_code=original_helper_code,
-                    )
-                    # get code context
-                    try:
-                        new_code_context = self.get_code_optimization_context().unwrap()
-                    except Exception as e:
-                        sentry_sdk.capture_exception(e)
-                        logger.debug("!lsp|Getting new code context failed, revert to original one")
-                    # unwrite files
-                    self.write_code_and_helpers(
-                        self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
-                    )
             # Generate tests and optimizations in parallel
             future_tests = self.executor.submit(self.generate_and_instrument_tests, new_code_context)
             future_optimizations = self.executor.submit(
@@ -1754,7 +1741,7 @@ class FunctionOptimizer:
         optimized_code = ""
         if optimized_context is not None:
             file_to_code_context = optimized_context.file_to_path()
-            optimized_code = file_to_code_context.get(str(path.relative_to(self.project_root)), "")
+            optimized_code = file_to_code_context.get(str(path.resolve().relative_to(self.project_root)), "")
 
         new_code = format_code(
             self.args.formatter_cmds, path, optimized_code=optimized_code, check_diff=True, exit_on_failure=False
@@ -1791,8 +1778,8 @@ class FunctionOptimizer:
             self.function_to_optimize.qualified_name
         )
         for helper_function in code_context.helper_functions:
-            # Skip class definitions (jedi_definition may be None for non-Python languages)
-            if helper_function.jedi_definition is None or helper_function.jedi_definition.type != "class":
+            # Skip class definitions (definition_type may be None for non-Python languages)
+            if helper_function.definition_type != "class":
                 read_writable_functions_by_file_path[helper_function.file_path].add(helper_function.qualified_name)
         for module_abspath, qualified_names in read_writable_functions_by_file_path.items():
             # Pass function_to_optimize for the main file to enable precise overload matching
@@ -1816,7 +1803,7 @@ class FunctionOptimizer:
     def get_code_optimization_context(self) -> Result[CodeOptimizationContext, str]:
         try:
             new_code_ctx = code_context_extractor.get_code_optimization_context(
-                self.function_to_optimize, self.project_root
+                self.function_to_optimize, self.project_root, call_graph=self.call_graph
             )
         except ValueError as e:
             return Failure(str(e))
@@ -1828,7 +1815,8 @@ class FunctionOptimizer:
                 read_only_context_code=new_code_ctx.read_only_context_code,
                 hashing_code_context=new_code_ctx.hashing_code_context,
                 hashing_code_context_hash=new_code_ctx.hashing_code_context_hash,
-                helper_functions=new_code_ctx.helper_functions,  # only functions that are read writable
+                helper_functions=new_code_ctx.helper_functions,
+                testgen_helper_fqns=new_code_ctx.testgen_helper_fqns,
                 preexisting_objects=new_code_ctx.preexisting_objects,
             )
         )
@@ -2074,6 +2062,7 @@ class FunctionOptimizer:
         self,
         testgen_context: CodeStringsMarkdown,
         helper_functions: list[FunctionSource],
+        testgen_helper_fqns: list[str],
         generated_test_paths: list[Path],
         generated_perf_test_paths: list[Path],
     ) -> Result[tuple[int, GeneratedTestsList, dict[str, set[FunctionCalledInTest]], str], str]:
@@ -2082,13 +2071,9 @@ class FunctionOptimizer:
         assert len(generated_test_paths) == n_tests
 
         if not self.args.no_gen_tests:
-            # Submit test generation tasks
+            helper_fqns = testgen_helper_fqns or [definition.fully_qualified_name for definition in helper_functions]
             future_tests = self.submit_test_generation_tasks(
-                self.executor,
-                testgen_context.markdown,
-                [definition.fully_qualified_name for definition in helper_functions],
-                generated_test_paths,
-                generated_perf_test_paths,
+                self.executor, testgen_context.markdown, helper_fqns, generated_test_paths, generated_perf_test_paths
             )
 
         future_concolic_tests = self.executor.submit(
@@ -2245,16 +2230,19 @@ class FunctionOptimizer:
             if self.args.override_fixtures:
                 restore_conftest(original_conftest_content)
             cleanup_paths(paths_to_cleanup)
+            self.cleanup_async_helper_file()
             return Failure(baseline_result.failure())
 
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
-        if isinstance(original_code_baseline, OriginalCodeBaseline) and (
-            not coverage_critic(original_code_baseline.coverage_results)
-            or not quantity_of_tests_critic(original_code_baseline)
-        ):
+        # Check test quantity for all languages
+        quantity_ok = quantity_of_tests_critic(original_code_baseline)
+        # TODO: {Self} Only check coverage for Python - coverage infrastructure not yet reliable for JS/TS
+        coverage_ok = coverage_critic(original_code_baseline.coverage_results) if is_python() else True
+        if isinstance(original_code_baseline, OriginalCodeBaseline) and (not coverage_ok or not quantity_ok):
             if self.args.override_fixtures:
                 restore_conftest(original_conftest_content)
             cleanup_paths(paths_to_cleanup)
+            self.cleanup_async_helper_file()
             return Failure("The threshold for test confidence was not met.")
 
         return Success(
@@ -2405,8 +2393,8 @@ class FunctionOptimizer:
             else "Coverage data not available"
         )
 
-        generated_tests = remove_functions_from_generated_tests(
-            generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
+        generated_tests = self.language_support.remove_test_functions_from_generated_tests(
+            generated_tests, test_functions_to_remove
         )
         map_gen_test_file_to_no_of_tests = original_code_baseline.behavior_test_results.file_to_no_of_tests(
             test_functions_to_remove
@@ -2417,14 +2405,17 @@ class FunctionOptimizer:
             best_optimization.winning_benchmarking_test_results.usable_runtime_data_by_test_case()
         )
 
-        generated_tests = add_runtime_comments_to_generated_tests(
+        generated_tests = self.language_support.add_runtime_comments_to_generated_tests(
             generated_tests, original_runtime_by_test, optimized_runtime_by_test, self.test_cfg.tests_project_rootdir
         )
 
         generated_tests_str = ""
         code_lang = self.function_to_optimize.language
         for test in generated_tests.generated_tests:
-            if map_gen_test_file_to_no_of_tests[test.behavior_file_path] > 0:
+            if any(
+                test_file.name == test.behavior_file_path.name and count > 0
+                for test_file, count in map_gen_test_file_to_no_of_tests.items()
+            ):
                 formatted_generated_test = format_generated_code(
                     test.generated_original_test_source, self.args.formatter_cmds
                 )
@@ -2564,11 +2555,11 @@ class FunctionOptimizer:
                 console.print(Panel(panel_content, title="Optimization Review", border_style=display_info[1]))
 
         if raise_pr or staging_review:
-            data["root_dir"] = git_root_dir()
+            data["root_dir"] = git_root_dir(GitRepo(str(self.args.module_root), search_parent_directories=True))
         if raise_pr and not staging_review and opt_review_result.review != "low":
             # Ensure root_dir is set for PR creation (needed for async functions that skip opt_review)
             if "root_dir" not in data:
-                data["root_dir"] = git_root_dir()
+                data["root_dir"] = git_root_dir(GitRepo(str(self.args.module_root), search_parent_directories=True))
             data["git_remote"] = self.args.git_remote
             # Remove language from data dict as check_create_pr doesn't accept it
             pr_data = {k: v for k, v in data.items() if k != "language"}
@@ -2623,6 +2614,13 @@ class FunctionOptimizer:
         self.write_code_and_helpers(
             self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
         )
+        self.cleanup_async_helper_file()
+
+    def cleanup_async_helper_file(self) -> None:
+        from codeflash.code_utils.instrument_existing_tests import ASYNC_HELPER_FILENAME
+
+        helper_path = self.project_root / ASYNC_HELPER_FILENAME
+        helper_path.unlink(missing_ok=True)
 
     def establish_original_code_baseline(
         self,
@@ -2640,7 +2638,10 @@ class FunctionOptimizer:
             from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
             success = add_async_decorator_to_function(
-                self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.BEHAVIOR
+                self.function_to_optimize.file_path,
+                self.function_to_optimize,
+                TestingMode.BEHAVIOR,
+                project_root=self.project_root,
             )
 
         # Instrument codeflash capture
@@ -2695,11 +2696,20 @@ class FunctionOptimizer:
             )
         console.rule()
         with progress_bar("Running performance benchmarks..."):
+            logger.debug(
+                f"[BENCHMARK-START] Starting benchmarking tests with {len(self.test_files.test_files)} test files"
+            )
+            for idx, tf in enumerate(self.test_files.test_files):
+                logger.debug(f"[BENCHMARK-FILES] Test file {idx}: perf_file={tf.benchmarking_file_path}")
+
             if self.function_to_optimize.is_async and is_python():
                 from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
                 add_async_decorator_to_function(
-                    self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
+                    self.function_to_optimize.file_path,
+                    self.function_to_optimize,
+                    TestingMode.PERFORMANCE,
+                    project_root=self.project_root,
                 )
 
             try:
@@ -2712,6 +2722,7 @@ class FunctionOptimizer:
                     enable_coverage=False,
                     code_context=code_context,
                 )
+                logger.debug(f"[BENCHMARK-DONE] Got {len(benchmarking_results.test_results)} benchmark results")
             finally:
                 if self.function_to_optimize.is_async:
                     self.write_code_and_helpers(
@@ -2743,7 +2754,7 @@ class FunctionOptimizer:
         if not success:
             return Failure("Failed to establish a baseline for the original code.")
 
-        loop_count = max([int(result.loop_index) for result in benchmarking_results.test_results])
+        loop_count = benchmarking_results.effective_loop_count()
         logger.info(
             f"h3|⌚ Original code summed runtime measured over '{loop_count}' loop{'s' if loop_count > 1 else ''}: "
             f"'{humanize_runtime(total_timing)}' per full loop"
@@ -2872,7 +2883,10 @@ class FunctionOptimizer:
                 from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
                 add_async_decorator_to_function(
-                    self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.BEHAVIOR
+                    self.function_to_optimize.file_path,
+                    self.function_to_optimize,
+                    TestingMode.BEHAVIOR,
+                    project_root=self.project_root,
                 )
 
             try:
@@ -2967,7 +2981,10 @@ class FunctionOptimizer:
                 from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
                 add_async_decorator_to_function(
-                    self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
+                    self.function_to_optimize.file_path,
+                    self.function_to_optimize,
+                    TestingMode.PERFORMANCE,
+                    project_root=self.project_root,
                 )
 
             try:
@@ -2985,11 +3002,10 @@ class FunctionOptimizer:
                     self.write_code_and_helpers(
                         candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
                     )
-            loop_count = (
-                max(all_loop_indices)
-                if (all_loop_indices := {result.loop_index for result in candidate_benchmarking_results.test_results})
-                else 0
-            )
+            # Use effective_loop_count which represents the minimum number of timing samples
+            # across all test cases. This is more accurate for JavaScript tests where
+            # capturePerf does internal looping with potentially different iteration counts per test.
+            loop_count = candidate_benchmarking_results.effective_loop_count()
 
             if (total_candidate_timing := candidate_benchmarking_results.total_passed_runtime()) == 0:
                 logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
@@ -3137,7 +3153,7 @@ class FunctionOptimizer:
                 test_config=self.test_cfg,
                 optimization_iteration=optimization_iteration,
                 run_result=run_result,
-                function_name=self.function_to_optimize.function_name,
+                function_name=self.function_to_optimize.qualified_name,
                 source_file=self.function_to_optimize.file_path,
                 code_context=code_context,
                 coverage_database_file=coverage_database_file,
@@ -3191,19 +3207,22 @@ class FunctionOptimizer:
             paths_to_cleanup.append(test_file.instrumented_behavior_file_path)
             paths_to_cleanup.append(test_file.benchmarking_file_path)
 
+        # Clean up created config files (jest.codeflash.config.js, tsconfig.codeflash.json)
+        config_files = get_created_config_files()
+        if config_files:
+            paths_to_cleanup.extend(config_files)
+            logger.debug(f"Cleaning up {len(config_files)} codeflash config file(s)")
+            clear_created_config_files()
+
         cleanup_paths(paths_to_cleanup)
 
     def get_test_env(
         self, codeflash_loop_index: int, codeflash_test_iteration: int, codeflash_tracer_disable: int = 1
     ) -> dict:
-        test_env = os.environ.copy()
+        test_env = make_env_with_project_root(self.args.project_root)
         test_env["CODEFLASH_TEST_ITERATION"] = str(codeflash_test_iteration)
         test_env["CODEFLASH_TRACER_DISABLE"] = str(codeflash_tracer_disable)
         test_env["CODEFLASH_LOOP_INDEX"] = str(codeflash_loop_index)
-        if "PYTHONPATH" not in test_env:
-            test_env["PYTHONPATH"] = str(self.args.project_root)
-        else:
-            test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
         return test_env
 
     def line_profiler_step(
@@ -3334,7 +3353,10 @@ class FunctionOptimizer:
         try:
             # Add concurrency decorator to the source function
             add_async_decorator_to_function(
-                self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.CONCURRENCY
+                self.function_to_optimize.file_path,
+                self.function_to_optimize,
+                TestingMode.CONCURRENCY,
+                project_root=self.project_root,
             )
 
             # Run the concurrency benchmark tests

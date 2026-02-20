@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import HelperFunction
-    from codeflash.languages.treesitter_utils import ImportInfo, TreeSitterAnalyzer
+    from codeflash.languages.javascript.treesitter import ImportInfo, TreeSitterAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +44,7 @@ class ImportResolver:
             project_root: Root directory of the project.
 
         """
-        # Resolve to real path to handle macOS symlinks like /var -> /private/var
-        self.project_root = project_root.resolve()
+        self.project_root = project_root
         self._resolution_cache: dict[tuple[Path, str], Path | None] = {}
 
     def resolve_import(self, import_info: ImportInfo, source_file: Path) -> ResolvedImport | None:
@@ -486,7 +485,7 @@ class MultiFileHelperFinder:
 
         """
         from codeflash.languages.base import HelperFunction
-        from codeflash.languages.treesitter_utils import get_analyzer_for_file
+        from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
         try:
             source = file_path.read_text(encoding="utf-8")
@@ -558,7 +557,8 @@ class MultiFileHelperFinder:
 
         """
         from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-        from codeflash.languages.treesitter_utils import get_analyzer_for_file
+        from codeflash.languages.javascript.treesitter import get_analyzer_for_file
+        from codeflash.languages.registry import get_language_support
 
         if context.current_depth >= context.max_depth:
             return {}
@@ -578,12 +578,15 @@ class MultiFileHelperFinder:
         imports = analyzer.find_imports(source)
 
         # Create FunctionToOptimize for the helper
+        # Get language from the language support registry
+        lang_support = get_language_support(file_path)
         func_info = FunctionToOptimize(
             function_name=helper.name,
             file_path=file_path,
             parents=[],
             starting_line=helper.start_line,
             ending_line=helper.end_line,
+            language=str(lang_support.language),
         )
 
         # Recursively find helpers

@@ -8,7 +8,7 @@
  * @param b - Second number
  * @returns Sum of a and b
  */
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }
 
@@ -18,7 +18,7 @@ function add(a, b) {
  * @param b - Second number
  * @returns Product of a and b
  */
-function multiply(a, b) {
+export function multiply(a, b) {
     return a * b;
 }
 
@@ -27,7 +27,7 @@ function multiply(a, b) {
  * @param n - Non-negative integer
  * @returns Factorial of n
  */
-function factorial(n) {
+export function factorial(n) {
     // Intentionally inefficient recursive implementation
     if (n <= 1) return 1;
     return n * factorial(n - 1);
@@ -39,7 +39,7 @@ function factorial(n) {
  * @param exp - Exponent
  * @returns base raised to exp
  */
-function power(base, exp) {
+export function power(base, exp) {
     // Inefficient: linear time instead of log time
     let result = 1;
     for (let i = 0; i < exp; i++) {

@@ -264,9 +264,15 @@ WARP.MD
 .mcp.json
 .tessl/
 tessl.json
+
+# Claude Code - track shared rules, ignore local config
+.claude/*
+!.claude/rules/
 **/node_modules/**
 **/dist-nuitka/**
 **/.npmrc
 
 # Tessl auto-generates AGENTS.md on install; ignore to avoid cluttering git status
 AGENTS.md
+.serena/
+.codeflash/
