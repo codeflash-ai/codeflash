@@ -131,14 +131,27 @@ def _extract_hook_usages(component_source: str) -> list[HookUsage]:
         j = match.end()
         # Scan by index to avoid allocating a new substring for the rest_of_line on each iteration
         while j < n:
-            char = cs[j]
-            if char == "(":
+            next_open = cs.find("(", j)
+            next_close = cs.find(")", j)
+
+            # If there is no next closing parenthesis, abort scanning for this hook
+            if next_close == -1:
+                break
+
+            # If next '(' occurs before next ')', it's an opening; otherwise it's a closing
+            if next_open != -1 and next_open < next_close:
+                # opening parenthesis
                 bracket_depth += 1
-            elif char == ")":
+                j = next_open + 1
+                continue
+            else:
+                # closing parenthesis
                 bracket_depth -= 1
+                # position of this closing paren
+                kpos = next_close
                 if bracket_depth == 0:
                     # Find last non-space character before this closing paren
-                    k = j - 1
+                    k = kpos - 1
                     while k >= match.end() and cs[k].isspace():
                         k -= 1
                     if k >= match.end() and cs[k] == "]":
@@ -154,7 +167,9 @@ def _extract_hook_usages(component_source: str) -> list[HookUsage]:
                                 has_deps = True
                     break
 
-            j += 1
+                # continue scanning after this close
+                j = next_close + 1
+
 
         hooks.append(HookUsage(name=hook_name, has_dependency_array=has_deps, dependency_count=dep_count))
 
