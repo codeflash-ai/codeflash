@@ -3064,8 +3064,9 @@ class FunctionOptimizer:
         testing_time: float = TOTAL_LOOPING_TIME_EFFECTIVE,
         *,
         enable_coverage: bool = False,
-        pytest_min_loops: int = 5,
-        pytest_max_loops: int = 250,
+        min_outer_loops: int = 5,
+        max_outer_loops: int = 250,
+        inner_iterations: int | None = None,
         code_context: CodeOptimizationContext | None = None,
         line_profiler_output_file: Path | None = None,
     ) -> tuple[TestResults | dict, CoverageData | None]:
@@ -3101,10 +3102,11 @@ class FunctionOptimizer:
                     cwd=self.project_root,
                     test_env=test_env,
                     pytest_cmd=self.test_cfg.pytest_cmd,
-                    pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
-                    pytest_target_runtime_seconds=testing_time,
-                    pytest_min_loops=pytest_min_loops,
-                    pytest_max_loops=pytest_max_loops,
+                    timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
+                    target_runtime_seconds=testing_time,
+                    min_outer_loops=min_outer_loops,
+                    max_outer_loops=max_outer_loops,
+                    inner_iterations=inner_iterations,
                     test_framework=self.test_cfg.test_framework,
                     js_project_root=self.test_cfg.js_project_root,
                 )
@@ -3368,8 +3370,8 @@ class FunctionOptimizer:
                 testing_time=5.0,  # Short benchmark time
                 enable_coverage=False,
                 code_context=code_context,
-                pytest_min_loops=1,
-                pytest_max_loops=3,
+                min_outer_loops=1,
+                max_outer_loops=3,
             )
         except Exception as e:
             logger.debug(f"Concurrency benchmark failed: {e}")

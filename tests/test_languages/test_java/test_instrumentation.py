@@ -2056,8 +2056,8 @@ public class CalculatorTest {
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 
@@ -2204,8 +2204,8 @@ public class MathUtilsTest__perfonlyinstrumented {
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,  # Only 1 outer loop (Maven invocation)
+            min_outer_loops=1,
+            max_outer_loops=1,  # Only 1 outer loop (Maven invocation)
             testing_time=1.0,
         )
 
@@ -2328,8 +2328,8 @@ public class StringUtilsTest {
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 
@@ -2430,8 +2430,8 @@ public class BrokenCalcTest {
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 
@@ -2613,8 +2613,8 @@ public class CounterTest__perfinstrumented {
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 

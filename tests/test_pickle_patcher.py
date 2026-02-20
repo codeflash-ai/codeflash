@@ -397,8 +397,8 @@ def test_run_and_parse_picklepatch() -> None:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=1.0,
         )
         assert len(test_results_unused_socket) == 1
@@ -428,8 +428,8 @@ def bubble_sort_with_unused_socket(data_container):
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=1.0,
         )
         assert len(optimized_test_results_unused_socket) == 1
@@ -483,8 +483,8 @@ def bubble_sort_with_unused_socket(data_container):
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=1.0,
         )
         assert len(test_results_used_socket) == 1
@@ -518,8 +518,8 @@ def bubble_sort_with_used_socket(data_container):
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=1.0,
         )
         assert len(test_results_used_socket) == 1
