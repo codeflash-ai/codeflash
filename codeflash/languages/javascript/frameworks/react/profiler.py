@@ -193,7 +193,10 @@ def _contains_jsx(node: Node) -> bool:
     """Check if a tree-sitter node contains JSX elements."""
     if node.type in ("jsx_element", "jsx_self_closing_element", "jsx_fragment"):
         return True
-    return any(_contains_jsx(child) for child in node.children)
+    for child in node.children:
+        if _contains_jsx(child):
+            return True
+    return False
 
 
 def _wrap_return_with_profiler(source: str, return_node: Node, profiler_id: str, safe_name: str) -> str:
@@ -306,25 +309,18 @@ def _compute_wrapped_segment(
             jsx_end = child.start_byte
             continue
         if _contains_jsx(child):
-            jsx_start = child.start_byte
-            jsx_end = child.end_byte
+            if child.type == "parenthesized_expression":
+                jsx_start = child.start_byte + 1
+                jsx_end = child.end_byte - 1
+            else:
+                jsx_start = child.start_byte
+                jsx_end = child.end_byte
             break
 
     if jsx_start is None:
         return None
 
-    # Default jsx_content from bytes slice
     jsx_content = source_bytes[jsx_start:jsx_end].decode("utf-8").strip()
-
-    # Check if the return uses parentheses: return (...)
-    # If so, we need to wrap inside the parens
-    for child in return_node.children:
-        if child.type == "parenthesized_expression":
-            # skip outer parentheses
-            jsx_start = child.start_byte + 1  # skip (
-            jsx_end = child.end_byte - 1  # skip )
-            jsx_content = source_bytes[jsx_start:jsx_end].decode("utf-8").strip()
-            break
 
     wrapped = (
         f'<React.Profiler id="{profiler_id}" onRender={{_codeflashOnRender_{safe_name}}}>'
