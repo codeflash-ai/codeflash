@@ -18,13 +18,15 @@ if TYPE_CHECKING:
 
     from tree_sitter import Node, Tree
 
-_FUNCTION_BODY_TYPES = frozenset({
-    "function_declaration",
-    "method_definition",
-    "arrow_function",
-    "function_expression",
-    "function",  # Generic function in some grammars
-})
+_FUNCTION_BODY_TYPES = frozenset(
+    {
+        "function_declaration",
+        "method_definition",
+        "arrow_function",
+        "function_expression",
+        "function",  # Generic function in some grammars
+    }
+)
 
 logger = logging.getLogger(__name__)
 
@@ -483,7 +485,7 @@ class TreeSitterAnalyzer:
         # Track when we enter function/method bodies
         # These node types contain function/method bodies where require() should not be treated as imports
         node_type = node.type
-        
+
         if node_type == "import_statement":
             import_info = self._extract_import_info(node, source_bytes)
             if import_info:
@@ -499,7 +501,6 @@ class TreeSitterAnalyzer:
 
         # Update in_function flag for children
         child_in_function = in_function or node_type in _FUNCTION_BODY_TYPES
-
 
         for child in node.children:
             self._walk_tree_for_imports(child, source_bytes, imports, child_in_function)
