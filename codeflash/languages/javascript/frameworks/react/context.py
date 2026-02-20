@@ -10,6 +10,7 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
+import re
 
 if TYPE_CHECKING:
     from tree_sitter import Node
@@ -17,6 +18,8 @@ if TYPE_CHECKING:
     from codeflash.languages.javascript.frameworks.react.analyzer import OptimizationOpportunity
     from codeflash.languages.javascript.frameworks.react.discovery import ReactComponentInfo
     from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer
+
+_CONTEXT_RE = re.compile(r"\buseContext\s*\(\s*(\w+)")
 
 logger = logging.getLogger(__name__)
 
@@ -167,10 +170,7 @@ def _extract_child_components(component_source: str, analyzer: TreeSitterAnalyze
 
 def _extract_context_subscriptions(component_source: str) -> list[str]:
     """Find React context subscriptions via useContext calls."""
-    import re
-
-    context_re = re.compile(r"\buseContext\s*\(\s*(\w+)")
-    return [match.group(1) for match in context_re.finditer(component_source)]
+    return _CONTEXT_RE.findall(component_source)
 
 
 def _find_type_definition(type_name: str, source: str, analyzer: TreeSitterAnalyzer) -> str | None:
