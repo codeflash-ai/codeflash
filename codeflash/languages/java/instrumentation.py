@@ -79,7 +79,12 @@ def _is_test_annotation(stripped_line: str) -> bool:
         @TestFactory
         @TestTemplate
     """
-    return bool(_TEST_ANNOTATION_RE.match(stripped_line))
+    if not stripped_line.startswith("@Test"):
+        return False
+    if len(stripped_line) == 5:
+        return True
+    next_char = stripped_line[5]
+    return next_char == " " or next_char == "("
 
 
 def _is_inside_lambda(node: Any) -> bool:
@@ -154,8 +159,11 @@ def wrap_target_calls_with_treesitter(
     """
     from codeflash.languages.java.parser import get_java_analyzer
 
-    analyzer = get_java_analyzer()
     body_text = "\n".join(body_lines)
+    if func_name not in body_text:
+        return list(body_lines), 0
+
+    analyzer = get_java_analyzer()
     body_bytes = body_text.encode("utf8")
     prefix_len = len(_TS_BODY_PREFIX_BYTES)
 
