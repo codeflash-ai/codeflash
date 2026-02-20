@@ -663,7 +663,7 @@ def find_helper_functions(
         # Skip non-existent files early to avoid expensive exception handling
         if not file_path.exists():
             continue
-            
+
         try:
             source = file_path.read_text(encoding="utf-8")
             file_functions = discover_functions_from_source(source, file_path, analyzer=analyzer)
@@ -716,7 +716,6 @@ def _find_same_class_helpers(function: FunctionToOptimize, analyzer: JavaAnalyze
 
     if not function.class_name:
         return helpers
-
 
     # Check if file exists before trying to read it
     if not function.file_path.exists():
