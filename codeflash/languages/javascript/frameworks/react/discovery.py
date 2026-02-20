@@ -19,6 +19,14 @@ if TYPE_CHECKING:
 
     from codeflash.languages.javascript.treesitter import FunctionNode, TreeSitterAnalyzer
 
+_JSX_TYPES = frozenset((
+    "jsx_element",
+    "jsx_self_closing_element",
+    "jsx_fragment",
+    "jsx_expression",
+    "jsx_opening_element",
+))
+
 logger = logging.getLogger(__name__)
 
 PASCAL_CASE_RE = re.compile(r"^[A-Z][a-zA-Z0-9]*$")
@@ -177,22 +185,13 @@ def _function_returns_jsx(func: FunctionNode, source: str, analyzer: TreeSitterA
 
 def _node_contains_jsx(node: Node) -> bool:
     """Recursively check if a tree-sitter node contains JSX."""
-    if node.type in (
-        "jsx_element",
-        "jsx_self_closing_element",
-        "jsx_fragment",
-        "jsx_expression",
-        "jsx_opening_element",
-    ):
-        return True
-
-    # Check return statements
-    if node.type == "return_statement":
-        for child in node.children:
-            if _node_contains_jsx(child):
-                return True
-
-    return any(_node_contains_jsx(child) for child in node.children)
+    stack = [node]
+    while stack:
+        current = stack.pop()
+        if current.type in _JSX_TYPES:
+            return True
+        stack.extend(current.children)
+    return False
 
 
 HOOK_EXTRACT_RE = re.compile(r"\b(use[A-Z]\w*)\s*(?:<[^>]*>)?\s*\(")
