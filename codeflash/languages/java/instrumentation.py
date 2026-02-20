@@ -14,10 +14,10 @@ This allows codeflash to extract timing data from stdout for accurate benchmarki
 
 from __future__ import annotations
 
+import bisect
 import logging
 import re
 from typing import TYPE_CHECKING
-import bisect
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
