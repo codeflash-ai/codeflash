@@ -1227,7 +1227,6 @@ class TreeSitterAnalyzer:
             True if the function has a return statement.
 
         """
-        source_bytes = source.encode("utf8")
 
         # Generator functions always implicitly return a Generator/Iterator
         if function_node.is_generator:
@@ -1244,20 +1243,32 @@ class TreeSitterAnalyzer:
 
     def _node_has_return(self, node: Node) -> bool:
         """Recursively check if a node contains a return statement."""
-        if node.type == "return_statement":
-            return True
+        # Use an explicit stack to avoid recursion overhead while preserving traversal order.
+        func_types = ("function_declaration", "function_expression", "arrow_function", "method_definition")
+        stack = [node]
+        while stack:
+            current = stack.pop()
+            # Direct return statement check
+            if current.type == "return_statement":
+                return True
 
-        # Don't recurse into nested function definitions
-        if node.type in ("function_declaration", "function_expression", "arrow_function", "method_definition"):
-            # Only check the current function, not nested ones
-            body_node = node.child_by_field_name("body")
-            if body_node:
-                for child in body_node.children:
-                    if self._node_has_return(child):
-                        return True
-            return False
+            # If this node is a function-like node, only traverse its body children
+            if current.type in func_types:
+                body_node = current.child_by_field_name("body")
+                if body_node:
+                    # Push children in reverse so they are processed in original order
+                    children = body_node.children
+                    if children:
+                        stack.extend(reversed(children))
+                # Do not traverse other parts of the function node
+                continue
 
-        return any(self._node_has_return(child) for child in node.children)
+            # General case: traverse all children
+            children = current.children
+            if children:
+                stack.extend(reversed(children))
+
+        return False
 
     def extract_type_annotations(self, source: str, function_name: str, function_line: int) -> set[str]:
         """Extract type annotation names from a function's parameters and return type.
