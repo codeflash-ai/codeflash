@@ -1772,21 +1772,6 @@ class TreeSitterAnalyzer:
                 )
 
 
-    @property
-    def parser(self) -> Parser:
-        """
-        Lazily create and cache a tree-sitter Parser instance.
-
-        Returns:
-            Cached Parser instance.
-        """
-        if self._parser is None:
-            # Create a Parser instance on first access and cache it.
-            # Note: language setup (e.g., set_language) may be handled externally.
-            self._parser = Parser()
-        return self._parser
-
-
 def get_analyzer_for_file(file_path: Path) -> TreeSitterAnalyzer:
     """Get the appropriate TreeSitterAnalyzer for a file based on its extension.
 
