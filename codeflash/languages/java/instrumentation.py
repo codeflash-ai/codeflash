@@ -260,7 +260,7 @@ def _infer_array_cast_type(line: str) -> str | None:
     match = _PRIMITIVE_ARRAY_PATTERN.search(line)
     if not match:
         return None
-    
+
     primitive_type = match.group(1)
     return f"{primitive_type}[]"
 
