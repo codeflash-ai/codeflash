@@ -136,18 +136,14 @@ def _should_include_method(
         return False
 
     # Check include patterns
-    if criteria.include_patterns:
-        import fnmatch
-
-        if not any(fnmatch.fnmatch(method.name, pattern) for pattern in criteria.include_patterns):
-            return False
+    if not criteria.matches_include_patterns(method.name):
+        return False
 
     # Check exclude patterns
-    if criteria.exclude_patterns:
-        import fnmatch
+    if criteria.matches_exclude_patterns(method.name):
+        return False
 
-        if any(fnmatch.fnmatch(method.name, pattern) for pattern in criteria.exclude_patterns):
-            return False
+    # Check require_return - void methods don't have return values
 
     # Check require_return - void methods don't have return values
     if criteria.require_return:

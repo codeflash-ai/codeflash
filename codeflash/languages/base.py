@@ -7,6 +7,8 @@ while FunctionToOptimize is the canonical representation of functions across all
 
 from __future__ import annotations
 
+import fnmatch
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
@@ -28,7 +30,8 @@ ParentInfo = FunctionParent
 # This allows `from codeflash.languages.base import FunctionInfo` to work at runtime
 def __getattr__(name: str) -> Any:
     if name == "FunctionInfo":
-        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash.discovery.functions_to_optimize import \
+            FunctionToOptimize
 
         return FunctionToOptimize
     msg = f"module {__name__!r} has no attribute {name!r}"
@@ -171,6 +174,23 @@ class FunctionFilterCriteria:
     include_methods: bool = True
     min_lines: int | None = None
     max_lines: int | None = None
+    
+    def __post_init__(self):
+        """Pre-compile regex patterns from glob patterns for faster matching."""
+        self._include_regexes = [re.compile(fnmatch.translate(p)) for p in self.include_patterns]
+        self._exclude_regexes = [re.compile(fnmatch.translate(p)) for p in self.exclude_patterns]
+    
+    def matches_include_patterns(self, name: str) -> bool:
+        """Check if name matches any include pattern."""
+        if not self._include_regexes:
+            return True
+        return any(regex.match(name) for regex in self._include_regexes)
+    
+    def matches_exclude_patterns(self, name: str) -> bool:
+        """Check if name matches any exclude pattern."""
+        if not self._exclude_regexes:
+            return False
+        return any(regex.match(name) for regex in self._exclude_regexes)
 
 
 @dataclass
