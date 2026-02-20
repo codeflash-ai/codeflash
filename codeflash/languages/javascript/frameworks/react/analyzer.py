@@ -128,20 +128,19 @@ def _detect_missing_usecallback(
     """Detect arrow functions or function expressions that could use useCallback."""
     # Determine whether the component uses useCallback anywhere by scanning lines (avoid joining)
     has_usecallback = False
-    for l in lines:
-        if "useCallback" in l:
+    for line in lines:
+        if "useCallback" in line:
             # cheap substring check before regex to avoid unnecessary work
-            if USECALLBACK_RE.search(l):
+            if USECALLBACK_RE.search(line):
                 has_usecallback = True
                 break
-
 
     for i, line in enumerate(lines):
         line_num = offset + i + 1
         stripped = line.strip()
         # Look for arrow function or function expression definitions inside the component
         # Quick substring check: FUNCTION_DEF_RE targets lines with var/const/let/function
-        if ("const" not in stripped and "let" not in stripped and "var" not in stripped and "function" not in stripped):
+        if "const" not in stripped and "let" not in stripped and "var" not in stripped and "function" not in stripped:
             continue
         # Look for arrow function or function expression definitions inside the component
         if FUNCTION_DEF_RE.search(stripped) and "useCallback" not in stripped and "useMemo" not in stripped:
