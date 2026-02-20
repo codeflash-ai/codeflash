@@ -18,6 +18,10 @@ if TYPE_CHECKING:
 
     from tree_sitter import Node, Tree
 
+_FUNC_LIKE_TYPES: frozenset[str] = frozenset(
+    ("function_declaration", "function_expression", "arrow_function", "method_definition")
+)
+
 _FUNCTION_BODY_TYPES = frozenset(
     {
         "function_declaration",
@@ -1242,9 +1246,9 @@ class TreeSitterAnalyzer:
 
     def _node_has_return(self, node: Node) -> bool:
         """Recursively check if a node contains a return statement."""
-        # Use an explicit stack to avoid recursion overhead while preserving traversal order.
-        func_types = ("function_declaration", "function_expression", "arrow_function", "method_definition")
         stack = [node]
+        # Localize extend for minor speedup and avoid repeated attribute lookups on the list object
+        stack_extend = stack.extend
         while stack:
             current = stack.pop()
             # Direct return statement check
@@ -1252,20 +1256,22 @@ class TreeSitterAnalyzer:
                 return True
 
             # If this node is a function-like node, only traverse its body children
-            if current.type in func_types:
+            if current.type in _FUNC_LIKE_TYPES:
                 body_node = current.child_by_field_name("body")
                 if body_node:
                     # Push children in reverse so they are processed in original order
                     children = body_node.children
                     if children:
-                        stack.extend(reversed(children))
+                        # reversed() returns an iterator; extend consumes it without creating an intermediate list
+                        stack_extend(reversed(children))
+                # Do not traverse other parts of the function node
                 # Do not traverse other parts of the function node
                 continue
 
             # General case: traverse all children
             children = current.children
             if children:
-                stack.extend(reversed(children))
+                stack_extend(reversed(children))
 
         return False
 
