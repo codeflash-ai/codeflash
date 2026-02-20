@@ -22,6 +22,8 @@ if TYPE_CHECKING:
     from codeflash.languages.javascript.frameworks.react.discovery import ReactComponentInfo
     from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer
 
+_BUILT_IN_COMPONENTS = frozenset(("React.Fragment", "Fragment", "Suspense", "React.Suspense"))
+
 _HOOK_PATTERN = re.compile(r"\b(use[A-Z]\w*)\s*(?:<[^>]*>)?\s*\(")
 
 _JSX_COMPONENT_RE = re.compile(r"<([A-Z][a-zA-Z0-9.]*)")
@@ -163,12 +165,9 @@ def _extract_hook_usages(component_source: str) -> list[HookUsage]:
 
 def _extract_child_components(component_source: str, analyzer: TreeSitterAnalyzer, full_source: str) -> list[str]:
     """Find child component names rendered in JSX."""
-    children = set()
-    for match in _JSX_COMPONENT_RE.finditer(component_source):
-        name = match.group(1)
-        # Skip React built-ins like React.Fragment
-        if name not in ("React.Fragment", "Fragment", "Suspense", "React.Suspense"):
-            children.add(name)
+    names = _JSX_COMPONENT_RE.findall(component_source)
+    # Skip React built-ins like React.Fragment
+    children = {name for name in names if name not in _BUILT_IN_COMPONENTS}
     return sorted(children)
 
 
