@@ -73,76 +73,7 @@ class JavaScriptSupport:
     def discover_functions(
         self, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
     ) -> list[FunctionToOptimize]:
-        """Find all optimizable functions in a JavaScript file.
-
-        Uses tree-sitter to parse the file and find functions.
-
-        Args:
-            file_path: Path to the JavaScript file to analyze.
-            filter_criteria: Optional criteria to filter functions.
-
-        Returns:
-            List of FunctionToOptimize objects for discovered functions.
-
-        """
-        criteria = filter_criteria or FunctionFilterCriteria()
-
-        try:
-            source = file_path.read_text(encoding="utf-8")
-        except Exception as e:
-            logger.warning("Failed to read %s: %s", file_path, e)
-            return []
-
-        try:
-            analyzer = get_analyzer_for_file(file_path)
-            tree_functions = analyzer.find_functions(
-                source, include_methods=criteria.include_methods, include_arrow_functions=True, require_name=True
-            )
-
-            functions: list[FunctionToOptimize] = []
-            for func in tree_functions:
-                # Check for return statement if required
-                if criteria.require_return and not analyzer.has_return_statement(func, source):
-                    continue
-
-                # Check async filter
-                if not criteria.include_async and func.is_async:
-                    continue
-
-                # Skip non-exported functions (can't be imported in tests)
-                # Exception: nested functions and methods are allowed if their parent is exported
-                if not func.is_exported and not func.parent_function:
-                    logger.debug(f"Skipping non-exported function: {func.name}")  # noqa: G004
-                    continue
-
-                # Build parents list
-                parents: list[FunctionParent] = []
-                if func.class_name:
-                    parents.append(FunctionParent(name=func.class_name, type="ClassDef"))
-                if func.parent_function:
-                    parents.append(FunctionParent(name=func.parent_function, type="FunctionDef"))
-
-                functions.append(
-                    FunctionToOptimize(
-                        function_name=func.name,
-                        file_path=file_path,
-                        parents=parents,
-                        starting_line=func.start_line,
-                        ending_line=func.end_line,
-                        starting_col=func.start_col,
-                        ending_col=func.end_col,
-                        is_async=func.is_async,
-                        is_method=func.is_method,
-                        language=str(self.language),
-                        doc_start_line=func.doc_start_line,
-                    )
-                )
-
-            return functions
-
-        except Exception as e:
-            logger.warning("Failed to parse %s: %s", file_path, e)
-            return []
+        raise NotImplementedError
 
     def discover_functions_from_source(self, source: str, file_path: Path | None = None) -> list[FunctionToOptimize]:
         """Find all functions in source code string.
