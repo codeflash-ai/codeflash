@@ -18,6 +18,16 @@ if TYPE_CHECKING:
 
     from tree_sitter import Node, Tree
 
+_FUNCTION_BODY_TYPES = frozenset(
+    {
+        "function_declaration",
+        "method_definition",
+        "arrow_function",
+        "function_expression",
+        "function",  # Generic function in some grammars
+    }
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -159,7 +169,8 @@ class TreeSitterAnalyzer:
         """
         if isinstance(source, str):
             source = source.encode("utf8")
-        return self.parser.parse(source)
+        parser = self.parser
+        return parser.parse(source)
 
     def get_node_text(self, node: Node, source: bytes) -> str:
         """Extract the source text for a tree-sitter node.
@@ -473,22 +484,15 @@ class TreeSitterAnalyzer:
         """
         # Track when we enter function/method bodies
         # These node types contain function/method bodies where require() should not be treated as imports
-        function_body_types = {
-            "function_declaration",
-            "method_definition",
-            "arrow_function",
-            "function_expression",
-            "function",  # Generic function in some grammars
-        }
+        node_type = node.type
 
-        if node.type == "import_statement":
+        if node_type == "import_statement":
             import_info = self._extract_import_info(node, source_bytes)
             if import_info:
                 imports.append(import_info)
-
         # Also handle require() calls for CommonJS, but only at module level
         # require() inside functions is a dynamic import, not a module import
-        if node.type == "call_expression" and not in_function:
+        elif node_type == "call_expression" and not in_function:
             func_node = node.child_by_field_name("function")
             if func_node and self.get_node_text(func_node, source_bytes) == "require":
                 import_info = self._extract_require_info(node, source_bytes)
@@ -496,7 +500,7 @@ class TreeSitterAnalyzer:
                     imports.append(import_info)
 
         # Update in_function flag for children
-        child_in_function = in_function or node.type in function_body_types
+        child_in_function = in_function or node_type in _FUNCTION_BODY_TYPES
 
         for child in node.children:
             self._walk_tree_for_imports(child, source_bytes, imports, child_in_function)
