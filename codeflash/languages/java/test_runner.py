@@ -573,6 +573,15 @@ def _get_test_classpath(
                         logger.debug(f"Adding multi-module classpath: {module_classes}")
                         cp_parts.append(str(module_classes))
 
+        # Add JUnit Platform Console Standalone JAR if not already on classpath.
+        # This is required for direct JVM execution with ConsoleLauncher,
+        # which is NOT included in the standard junit-jupiter dependency tree.
+        if "console-standalone" not in classpath and "ConsoleLauncher" not in classpath:
+            console_jar = _find_junit_console_standalone()
+            if console_jar:
+                logger.debug("Adding JUnit Console Standalone to classpath: %s", console_jar)
+                cp_parts.append(str(console_jar))
+
         return os.pathsep.join(cp_parts)
 
     except subprocess.TimeoutExpired:
@@ -585,6 +594,58 @@ def _get_test_classpath(
         # Clean up temp file
         if cp_file.exists():
             cp_file.unlink()
+
+
+def _find_junit_console_standalone() -> Path | None:
+    """Find the JUnit Platform Console Standalone JAR in the local Maven repository.
+
+    This JAR contains ConsoleLauncher which is required for direct JVM test execution
+    with JUnit 5. It is NOT included in the standard junit-jupiter dependency tree.
+
+    Returns:
+        Path to the console standalone JAR, or None if not found.
+
+    """
+    m2_base = Path.home() / ".m2" / "repository" / "org" / "junit" / "platform" / "junit-platform-console-standalone"
+    if not m2_base.exists():
+        # Try to download it via Maven
+        mvn = find_maven_executable()
+        if mvn:
+            logger.debug("Console standalone not found in cache, downloading via Maven")
+            try:
+                subprocess.run(
+                    [
+                        mvn,
+                        "dependency:get",
+                        "-Dartifact=org.junit.platform:junit-platform-console-standalone:1.10.0",
+                        "-q",
+                        "-B",
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+            except (subprocess.TimeoutExpired, Exception):
+                pass
+        if not m2_base.exists():
+            return None
+
+    # Find the latest version available
+    try:
+        versions = sorted(
+            [d for d in m2_base.iterdir() if d.is_dir()],
+            key=lambda d: d.name,
+            reverse=True,
+        )
+        for version_dir in versions:
+            jar = version_dir / f"junit-platform-console-standalone-{version_dir.name}.jar"
+            if jar.exists():
+                return jar
+    except Exception:
+        pass
+
+    return None
 
 
 def _run_tests_direct(
