@@ -11,7 +11,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
-from codeflash.languages.treesitter_utils import get_analyzer_for_file
+from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
 if TYPE_CHECKING:
     from pathlib import Path

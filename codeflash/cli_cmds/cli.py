@@ -10,7 +10,7 @@ from codeflash.cli_cmds.cmd_init import init_codeflash, install_github_actions
 from codeflash.cli_cmds.console import logger
 from codeflash.cli_cmds.extension import install_vscode_extension
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.code_utils import exit_with_message
+from codeflash.code_utils.code_utils import exit_with_message, normalize_ignore_paths
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.languages.test_framework import set_current_test_framework
 from codeflash.lsp.helpers import is_LSP_enabled
@@ -296,16 +296,12 @@ def process_pyproject_config(args: Namespace) -> Namespace:
 
             require_github_app_or_exit(owner, repo_name)
 
-    if hasattr(args, "ignore_paths") and args.ignore_paths is not None:
-        normalized_ignore_paths = []
-        for path in args.ignore_paths:
-            path_obj = Path(path)
-            if path_obj.exists():
-                normalized_ignore_paths.append(path_obj.resolve())
-            # Silently skip non-existent paths (e.g., .next, dist before build)
-        args.ignore_paths = normalized_ignore_paths
     # Project root path is one level above the specified directory, because that's where the module can be imported from
     args.module_root = Path(args.module_root).resolve()
+    if hasattr(args, "ignore_paths") and args.ignore_paths is not None:
+        # Normalize ignore paths, supporting both literal paths and glob patterns
+        # Use module_root as base path for resolving relative paths and patterns
+        args.ignore_paths = normalize_ignore_paths(args.ignore_paths, base_path=args.module_root)
     # If module-root is "." then all imports are relatives to it.
     # in this case, the ".." becomes outside project scope, causing issues with un-importable paths
     args.project_root = project_root_from_module_root(args.module_root, pyproject_file_path)

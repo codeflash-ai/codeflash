@@ -47,7 +47,7 @@ dependencies = [
     "pygls>=2.0.0,<3.0.0",
     "codeflash-benchmark",
     "filelock",
-    "pytest-asyncio>=1.2.0",
+    "pytest-asyncio>=0.18.0",
 ]
 
 [project.urls]
@@ -88,6 +88,7 @@ tests = [
     "jax>=0.4.30",
     "numpy>=2.0.2",
     "pandas>=2.3.3",
+    "pyarrow>=15.0.0",
     "pyrsistent>=0.20.0",
     "scipy>=1.13.1",
     "torch>=2.8.0",

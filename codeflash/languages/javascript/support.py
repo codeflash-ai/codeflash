@@ -14,15 +14,15 @@ from typing import TYPE_CHECKING, Any
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, Language, TestInfo, TestResult
+from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
 from codeflash.languages.registry import register_language
-from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
 from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from codeflash.languages.base import ReferenceInfo
-    from codeflash.languages.treesitter_utils import TypeDefinition
+    from codeflash.languages.javascript.treesitter import TypeDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -1846,8 +1846,11 @@ class JavaScriptSupport:
         Checks for:
         1. Node.js installation
         2. npm availability
-        3. Test framework (jest/vitest) installation
-        4. node_modules existence
+        3. Test framework (jest/vitest) installation (with monorepo support)
+
+        Uses find_node_modules_with_package() from init_javascript to search up the
+        directory tree for node_modules containing the test framework. This supports
+        monorepo setups where dependencies are hoisted to the workspace root.
 
         Args:
             project_root: The project root directory.
@@ -1879,16 +1882,21 @@ class JavaScriptSupport:
         except Exception as e:
             errors.append(f"Failed to check npm: {e}")
 
-        # Check node_modules exists
-        node_modules = project_root / "node_modules"
-        if not node_modules.exists():
-            errors.append(
-                f"node_modules not found in {project_root}. Please run 'npm install' to install dependencies."
-            )
+        # Check test framework is installed (with monorepo support)
+        # Uses find_node_modules_with_package which searches up the directory tree
+        from codeflash.cli_cmds.init_javascript import find_node_modules_with_package
+
+        node_modules = find_node_modules_with_package(project_root, test_framework)
+        if node_modules:
+            logger.debug("Found %s in node_modules at %s", test_framework, node_modules / test_framework)
         else:
-            # Check test framework is installed
-            framework_path = node_modules / test_framework
-            if not framework_path.exists():
+            # Check if local node_modules exists at all
+            local_node_modules = project_root / "node_modules"
+            if not local_node_modules.exists():
+                errors.append(
+                    f"node_modules not found in {project_root}. Please run 'npm install' to install dependencies."
+                )
+            else:
                 errors.append(
                     f"{test_framework} is not installed. "
                     f"Please run 'npm install --save-dev {test_framework}' to install it."
@@ -2092,6 +2100,10 @@ class JavaScriptSupport:
             candidate_index=candidate_index,
         )
 
+    # JavaScript/TypeScript benchmarking uses high max_loops like Python (100,000)
+    # The actual loop count is limited by target_duration_seconds, not max_loops
+    JS_BENCHMARKING_MAX_LOOPS = 100_000
+
     def run_benchmarking_tests(
         self,
         test_paths: Any,
@@ -2124,10 +2136,15 @@ class JavaScriptSupport:
         from codeflash.languages.test_framework import get_js_test_framework_or_default
 
         framework = test_framework or get_js_test_framework_or_default()
+        logger.debug("run_benchmarking_tests called with framework=%s", framework)
+
+        # Use JS-specific high max_loops - actual loop count is limited by target_duration
+        effective_max_loops = self.JS_BENCHMARKING_MAX_LOOPS
 
         if framework == "vitest":
             from codeflash.languages.javascript.vitest_runner import run_vitest_benchmarking_tests
 
+            logger.debug("Dispatching to run_vitest_benchmarking_tests")
             return run_vitest_benchmarking_tests(
                 test_paths=test_paths,
                 test_env=test_env,
@@ -2135,7 +2152,7 @@ class JavaScriptSupport:
                 timeout=timeout,
                 project_root=project_root,
                 min_loops=min_loops,
-                max_loops=max_loops,
+                max_loops=effective_max_loops,
                 target_duration_ms=int(target_duration_seconds * 1000),
             )
 
@@ -2148,7 +2165,7 @@ class JavaScriptSupport:
             timeout=timeout,
             project_root=project_root,
             min_loops=min_loops,
-            max_loops=max_loops,
+            max_loops=effective_max_loops,
             target_duration_ms=int(target_duration_seconds * 1000),
         )
 

@@ -605,15 +605,24 @@ class FunctionOptimizer:
     ]:
         """Generate and instrument tests for the function."""
         n_tests = get_effort_value(EffortKeys.N_GENERATED_TESTS, self.effort)
+        source_file = Path(self.function_to_optimize.file_path)
         generated_test_paths = [
             get_test_file_path(
-                self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="unit"
+                self.test_cfg.tests_root,
+                self.function_to_optimize.function_name,
+                test_index,
+                test_type="unit",
+                source_file_path=source_file,
             )
             for test_index in range(n_tests)
         ]
         generated_perf_test_paths = [
             get_test_file_path(
-                self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="perf"
+                self.test_cfg.tests_root,
+                self.function_to_optimize.function_name,
+                test_index,
+                test_type="perf",
+                source_file_path=source_file,
             )
             for test_index in range(n_tests)
         ]
@@ -638,7 +647,7 @@ class FunctionOptimizer:
         if is_javascript():
             module_system = detect_module_system(self.project_root, self.function_to_optimize.file_path)
             if module_system == "esm":
-                generated_tests = inject_test_globals(generated_tests)
+                generated_tests = inject_test_globals(generated_tests, self.test_cfg.test_framework)
             if is_typescript():
                 # disable ts check for typescript tests
                 generated_tests = disable_ts_check(generated_tests)
@@ -2248,10 +2257,11 @@ class FunctionOptimizer:
             return Failure(baseline_result.failure())
 
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
-        if isinstance(original_code_baseline, OriginalCodeBaseline) and (
-            not coverage_critic(original_code_baseline.coverage_results)
-            or not quantity_of_tests_critic(original_code_baseline)
-        ):
+        # Check test quantity for all languages
+        quantity_ok = quantity_of_tests_critic(original_code_baseline)
+        # TODO: {Self} Only check coverage for Python - coverage infrastructure not yet reliable for JS/TS
+        coverage_ok = coverage_critic(original_code_baseline.coverage_results) if is_python() else True
+        if isinstance(original_code_baseline, OriginalCodeBaseline) and (not coverage_ok or not quantity_ok):
             if self.args.override_fixtures:
                 restore_conftest(original_conftest_content)
             cleanup_paths(paths_to_cleanup)
@@ -2695,6 +2705,12 @@ class FunctionOptimizer:
             )
         console.rule()
         with progress_bar("Running performance benchmarks..."):
+            logger.debug(
+                f"[BENCHMARK-START] Starting benchmarking tests with {len(self.test_files.test_files)} test files"
+            )
+            for idx, tf in enumerate(self.test_files.test_files):
+                logger.debug(f"[BENCHMARK-FILES] Test file {idx}: perf_file={tf.benchmarking_file_path}")
+
             if self.function_to_optimize.is_async and is_python():
                 from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
@@ -2712,6 +2728,7 @@ class FunctionOptimizer:
                     enable_coverage=False,
                     code_context=code_context,
                 )
+                logger.debug(f"[BENCHMARK-DONE] Got {len(benchmarking_results.test_results)} benchmark results")
             finally:
                 if self.function_to_optimize.is_async:
                     self.write_code_and_helpers(
