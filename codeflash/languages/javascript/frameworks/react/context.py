@@ -144,32 +144,30 @@ def _extract_hook_usages(component_source: str) -> list[HookUsage]:
                 bracket_depth += 1
                 j = next_open + 1
                 continue
-            else:
-                # closing parenthesis
-                bracket_depth -= 1
-                # position of this closing paren
-                kpos = next_close
-                if bracket_depth == 0:
-                    # Find last non-space character before this closing paren
-                    k = kpos - 1
-                    while k >= match.end() and cs[k].isspace():
-                        k -= 1
-                    if k >= match.end() and cs[k] == "]":
-                        has_deps = True
-                        # Find the opening '[' for the dependency array within the search window
-                        array_start = cs.rfind("[", match.end(), k + 1)
-                        if array_start >= 0:
-                            array_content = cs[array_start + 1 : k].strip()
-                            if array_content:
-                                dep_count = array_content.count(",") + 1
-                            else:
-                                dep_count = 0  # empty deps []
-                                has_deps = True
-                    break
+            # closing parenthesis
+            bracket_depth -= 1
+            # position of this closing paren
+            kpos = next_close
+            if bracket_depth == 0:
+                # Find last non-space character before this closing paren
+                k = kpos - 1
+                while k >= match.end() and cs[k].isspace():
+                    k -= 1
+                if k >= match.end() and cs[k] == "]":
+                    has_deps = True
+                    # Find the opening '[' for the dependency array within the search window
+                    array_start = cs.rfind("[", match.end(), k + 1)
+                    if array_start >= 0:
+                        array_content = cs[array_start + 1 : k].strip()
+                        if array_content:
+                            dep_count = array_content.count(",") + 1
+                        else:
+                            dep_count = 0  # empty deps []
+                            has_deps = True
+                break
 
-                # continue scanning after this close
-                j = next_close + 1
-
+            # continue scanning after this close
+            j = next_close + 1
 
         hooks.append(HookUsage(name=hook_name, has_dependency_array=has_deps, dependency_count=dep_count))
 
