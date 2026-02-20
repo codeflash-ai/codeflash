@@ -118,8 +118,8 @@ async def test_async_sort():
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 
@@ -244,8 +244,8 @@ async def test_async_class_sort():
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 
@@ -369,8 +369,8 @@ async def test_async_perf():
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 
@@ -489,8 +489,8 @@ async def async_error_function(lst):
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 
@@ -594,8 +594,8 @@ async def test_async_multi():
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=2,
-            pytest_max_loops=5,
+            min_outer_loops=2,
+            max_outer_loops=5,
             testing_time=0.2,
         )
 
@@ -714,8 +714,8 @@ async def test_async_edge_cases():
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 
@@ -860,8 +860,8 @@ def test_sync_sort():
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 
@@ -1035,8 +1035,8 @@ async def test_mixed_sorting():
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 
