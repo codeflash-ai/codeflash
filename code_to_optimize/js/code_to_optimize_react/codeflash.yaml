@@ -1,0 +1,4 @@
+language: typescript
+module_root: .
+tests_root: tests
+test_framework: jest
