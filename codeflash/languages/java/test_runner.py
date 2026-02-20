@@ -696,6 +696,12 @@ def _run_tests_direct(
         logger.debug("JUnit 4 project, using ConsoleLauncher (via vintage engine)")
 
     if is_junit4:
+        if reports_dir:
+            logger.debug(
+                "JUnitCore does not support XML report generation; reports_dir=%s ignored. "
+                "XML reports require ConsoleLauncher.",
+                reports_dir,
+            )
         # Use JUnit 4's JUnitCore runner
         cmd = [
             str(java),
