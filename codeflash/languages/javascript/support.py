@@ -13,10 +13,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, Language, TestInfo, TestResult
+from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, TestInfo, TestResult
 from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
+from codeflash.languages.language_enum import Language
 from codeflash.languages.registry import register_language
-from codeflash.models.models import FunctionParent
+from codeflash.models.function_types import FunctionParent
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -647,7 +648,7 @@ class JavaScriptSupport:
         class_name: str,
         target_method_name: str,
         helpers: list[HelperFunction],
-        tree_functions: list,
+        tree_functions: list[Any],
         lines: list[str],
     ) -> list[tuple[str, str]]:
         """Find helper methods that belong to the same class as the target method.
@@ -993,7 +994,7 @@ class JavaScriptSupport:
         tree = analyzer.parse(source_bytes)
         type_names: set[str] = set()
 
-        def walk_for_types(node):
+        def walk_for_types(node: Any) -> None:
             # Look for type_identifier nodes (user-defined types)
             if node.type == "type_identifier":
                 type_name = source_bytes[node.start_byte : node.end_byte].decode("utf8")
@@ -1294,7 +1295,7 @@ class JavaScriptSupport:
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
 
-        def find_function_node(node, target_name: str):
+        def find_function_node(node: Any, target_name: str) -> Any:
             """Recursively find a function/method with the given name."""
             # Check method definitions
             if node.type == "method_definition":
@@ -1371,7 +1372,7 @@ class JavaScriptSupport:
         tree = analyzer.parse(source_bytes)
 
         # Find the original function node
-        def find_function_at_line(node, target_name: str, target_line: int):
+        def find_function_at_line(node: Any, target_name: str, target_line: int) -> Any:
             """Find a function with matching name and line number."""
             if node.type == "method_definition":
                 name_node = node.child_by_field_name("name")
@@ -1410,6 +1411,9 @@ class JavaScriptSupport:
 
             return None
 
+        if function.starting_line is None:
+            logger.warning("Cannot replace function %s: starting_line is None", function.function_name)
+            return source
         func_node = find_function_at_line(tree.root_node, function.function_name, function.starting_line)
         if not func_node:
             logger.warning("Could not find function %s at line %s", function.function_name, function.starting_line)
@@ -1508,6 +1512,10 @@ class JavaScriptSupport:
             Modified source code with function replaced.
 
         """
+        if function.starting_line is None:
+            logger.warning("Cannot replace function %s: starting_line is None", function.function_name)
+            return source
+
         lines = source.splitlines(keepends=True)
 
         # Handle case where source doesn't end with newline
@@ -1522,7 +1530,7 @@ class JavaScriptSupport:
                 break
 
         # Use doc_start_line if available, otherwise fall back to start_line
-        effective_start = (target_func.doc_start_line if target_func else None) or function.starting_line
+        effective_start: int = (target_func.doc_start_line if target_func else None) or function.starting_line
 
         # Get indentation from original function's first line
         if function.starting_line <= len(lines):
