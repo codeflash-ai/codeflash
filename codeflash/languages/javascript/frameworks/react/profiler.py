@@ -162,10 +162,7 @@ def _contains_jsx(node: Node) -> bool:
     """Check if a tree-sitter node contains JSX elements."""
     if node.type in ("jsx_element", "jsx_self_closing_element", "jsx_fragment"):
         return True
-    for child in node.children:
-        if _contains_jsx(child):
-            return True
-    return False
+    return any(_contains_jsx(child) for child in node.children)
 
 
 def _wrap_return_with_profiler(source: str, return_node: Node, profiler_id: str, safe_name: str) -> str:
@@ -193,7 +190,6 @@ def _wrap_return_with_profiler(source: str, return_node: Node, profiler_id: str,
 
     if jsx_start is None:
         return source
-
 
     # Check if the return uses parentheses: return (...)
     # If so, we need to wrap inside the parens
