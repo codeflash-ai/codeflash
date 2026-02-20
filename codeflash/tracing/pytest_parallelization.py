@@ -33,7 +33,7 @@ def pytest_split(
 
     except ImportError:
         return None, None
-    test_files = set()
+    test_files_set: set[str] = set()
 
     # Find all test_*.py files recursively in the directory
     for test_path in test_paths:
@@ -42,12 +42,12 @@ def pytest_split(
             return None, None
         if _test_path.is_dir():
             # Find all test files matching the pattern test_*.py
-            test_files.update(map(str, _test_path.rglob("test_*.py")))
-            test_files.update(map(str, _test_path.rglob("*_test.py")))
+            test_files_set.update(map(str, _test_path.rglob("test_*.py")))
+            test_files_set.update(map(str, _test_path.rglob("*_test.py")))
         elif _test_path.is_file():
-            test_files.add(str(_test_path))
+            test_files_set.add(str(_test_path))
 
-    if not test_files:
+    if not test_files_set:
         return [[]], None
 
     # Determine number of splits
@@ -55,7 +55,7 @@ def pytest_split(
         num_splits = os.cpu_count() or 4
 
     # randomize to increase chances of all splits being balanced
-    test_files = list(test_files)
+    test_files = list(test_files_set)
     shuffle(test_files)
 
     # Apply limit if specified
@@ -75,7 +75,7 @@ def pytest_split(
     chunk_size = ceil(total_files / num_splits)
 
     # Initialize result groups
-    result_groups = [[] for _ in range(num_splits)]
+    result_groups: list[list[str]] = [[] for _ in range(num_splits)]
 
     # Distribute files across groups
     for i, test_file in enumerate(test_files):

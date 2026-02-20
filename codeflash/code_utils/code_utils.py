@@ -37,21 +37,6 @@ def is_glob_pattern(path_str: str) -> bool:
 
 
 def normalize_ignore_paths(paths: list[str], base_path: Path | None = None) -> list[Path]:
-    """Normalize ignore paths, expanding glob patterns and resolving paths.
-
-    Accepts a list of path strings that can be either:
-    - Literal paths (relative or absolute): e.g., "node_modules", "/absolute/path"
-    - Glob patterns: e.g., "**/*.test.js", "dist/*", "*.log"
-
-    Args:
-        paths: List of path strings (literal paths or glob patterns).
-        base_path: Base path for resolving relative paths and patterns.
-                   If None, uses current working directory.
-
-    Returns:
-        List of resolved Path objects, deduplicated.
-
-    """
     if base_path is None:
         base_path = Path.cwd()
 
@@ -59,22 +44,25 @@ def normalize_ignore_paths(paths: list[str], base_path: Path | None = None) -> l
     normalized: set[Path] = set()
 
     for path_str in paths:
+        if not path_str:
+            continue
+
+        path_str = str(path_str)
+
         if is_glob_pattern(path_str):
-            # It's a glob pattern - expand it
-            # Use base_path as the root for glob expansion
-            pattern_path = base_path / path_str
-            # glob returns an iterator of matching paths
+            # pathlib requires relative glob patterns
+            path_str = path_str.removeprefix("./")
+            if path_str.startswith("/"):
+                path_str = path_str.lstrip("/")
+
             for matched_path in base_path.glob(path_str):
-                if matched_path.exists():
-                    normalized.add(matched_path.resolve())
+                normalized.add(matched_path.resolve())
         else:
-            # It's a literal path
             path_obj = Path(path_str)
             if not path_obj.is_absolute():
                 path_obj = base_path / path_obj
             if path_obj.exists():
                 normalized.add(path_obj.resolve())
-            # Silently skip non-existent literal paths (e.g., .next, dist before build)
 
     return list(normalized)
 

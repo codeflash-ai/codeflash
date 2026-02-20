@@ -89,11 +89,11 @@ def multiply(a, b):
         """Test that JavaScript files use the JavaScript handler."""
         with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
             f.write("""
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }
 
-function multiply(a, b) {
+export function multiply(a, b) {
     return a * b;
 }
 """)
@@ -124,7 +124,7 @@ function multiply(a, b) {
         """Test that FunctionToOptimize has all required fields populated."""
         with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
             f.write("""
-class Calculator {
+export class Calculator {
     add(a, b) {
         return a + b;
     }
@@ -162,7 +162,7 @@ def add(a, b):
     def test_discovers_javascript_files_when_specified(self, tmp_path):
         """Test that JavaScript files are discovered when language is specified."""
         (tmp_path / "module.js").write_text("""
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }
 """)
@@ -177,7 +177,7 @@ def py_func():
     return 1
 """)
         (tmp_path / "js_module.js").write_text("""
-function jsFunc() {
+export function jsFunc() {
     return 1;
 }
 """)

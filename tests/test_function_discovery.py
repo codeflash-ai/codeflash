@@ -1150,3 +1150,130 @@ def test_is_object_empty():
 
         # Strict check: exactly 2 functions
         assert count == 2, f"Expected exactly 2 functions, got {count}"
+
+
+def test_filter_functions_python_test_prefix_convention():
+    """Test that files following Python's test_*.py naming convention are filtered.
+
+    Python's standard test file naming uses the test_ prefix (e.g., test_utils.py),
+    which was previously not caught by the pattern matching in overlapping mode.
+    """
+    with tempfile.TemporaryDirectory() as temp_dir_str:
+        temp_dir = Path(temp_dir_str)
+
+        # Source file that should NOT be filtered
+        source_file = temp_dir / "utils.py"
+        with source_file.open("w") as f:
+            f.write("def process(): return 1")
+
+        # Python test file with test_ prefix - SHOULD be filtered
+        test_prefix_file = temp_dir / "test_utils.py"
+        with test_prefix_file.open("w") as f:
+            f.write("def test_process(): return 1")
+
+        # conftest.py - SHOULD be filtered
+        conftest_file = temp_dir / "conftest.py"
+        with conftest_file.open("w") as f:
+            f.write("""
+import pytest
+
+@pytest.fixture
+def sample_data():
+    return [1, 2, 3]
+""")
+
+        # File in a test_ prefixed directory - should NOT be filtered by file patterns
+        # (directory patterns don't cover test_ prefix dirs, which is fine)
+        test_subdir = temp_dir / "test_integration"
+        test_subdir.mkdir()
+        file_in_test_dir = test_subdir / "helpers.py"
+        with file_in_test_dir.open("w") as f:
+            f.write("def helper(): return 1")
+
+        # test_ prefix file inside a subdirectory - SHOULD be filtered
+        test_in_subdir = test_subdir / "test_helpers.py"
+        with test_in_subdir.open("w") as f:
+            f.write("def test_helper(): return 1")
+
+        all_functions = {}
+        for file_path in [source_file, test_prefix_file, conftest_file, file_in_test_dir, test_in_subdir]:
+            discovered = find_all_functions_in_file(file_path)
+            all_functions.update(discovered)
+
+        with unittest.mock.patch(
+            "codeflash.discovery.functions_to_optimize.get_blocklisted_functions", return_value={}
+        ):
+            filtered, count = filter_functions(
+                all_functions,
+                tests_root=temp_dir,  # Overlapping case
+                ignore_paths=[],
+                project_root=temp_dir,
+                module_root=temp_dir,
+            )
+
+        # source_file and file_in_test_dir should remain
+        # test_prefix_file, conftest_file, and test_in_subdir should be filtered
+        expected_files = {source_file, file_in_test_dir}
+        assert set(filtered.keys()) == expected_files, (
+            f"Expected {expected_files}, got {set(filtered.keys())}"
+        )
+        assert count == 2, f"Expected exactly 2 functions, got {count}"
+
+
+def test_pytest_fixture_not_discovered():
+    """Test that @pytest.fixture decorated functions are not discovered via libcst path."""
+    from codeflash.languages.python.support import PythonSupport
+
+    with tempfile.TemporaryDirectory() as temp_dir_str:
+        temp_dir = Path(temp_dir_str)
+
+        fixture_file = temp_dir / "conftest.py"
+        with fixture_file.open("w") as f:
+            f.write("""
+import pytest
+from pytest import fixture
+
+def regular_function():
+    return 42
+
+@pytest.fixture
+def sample_data():
+    return [1, 2, 3]
+
+@pytest.fixture()
+def sample_config():
+    return {"key": "value"}
+
+@fixture
+def direct_import_fixture():
+    return "data"
+
+@fixture()
+def direct_import_fixture_with_parens():
+    return "data"
+
+@pytest.fixture(scope="session")
+def session_fixture():
+    return "session"
+
+class TestHelpers:
+    @pytest.fixture
+    def class_fixture(self):
+        return "class_data"
+
+    def helper_method(self):
+        return "helper"
+""")
+
+        support = PythonSupport()
+        functions = support.discover_functions(fixture_file)
+        function_names = [fn.function_name for fn in functions]
+
+        assert "regular_function" in function_names
+        assert "helper_method" in function_names
+        assert "sample_data" not in function_names
+        assert "sample_config" not in function_names
+        assert "direct_import_fixture" not in function_names
+        assert "direct_import_fixture_with_parens" not in function_names
+        assert "session_fixture" not in function_names
+        assert "class_fixture" not in function_names
