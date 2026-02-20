@@ -660,6 +660,10 @@ def find_helper_functions(
     helper_files = find_helper_files(function.file_path, project_root, max_depth, analyzer)
 
     for file_path in helper_files:
+        # Skip non-existent files early to avoid expensive exception handling
+        if not file_path.exists():
+            continue
+            
         try:
             source = file_path.read_text(encoding="utf-8")
             file_functions = discover_functions_from_source(source, file_path, analyzer=analyzer)
@@ -711,6 +715,11 @@ def _find_same_class_helpers(function: FunctionToOptimize, analyzer: JavaAnalyze
     helpers: list[HelperFunction] = []
 
     if not function.class_name:
+        return helpers
+
+
+    # Check if file exists before trying to read it
+    if not function.file_path.exists():
         return helpers
 
     try:
