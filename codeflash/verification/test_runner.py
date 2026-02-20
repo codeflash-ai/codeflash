@@ -370,20 +370,18 @@ def run_benchmarking_tests(
                     "to account for Maven startup overhead"
                 )
 
-        kwargs = {
-            "test_paths": test_paths,
-            "test_env": test_env,
-            "cwd": cwd,
-            "timeout": effective_timeout,
-            "project_root": js_project_root,
-            "min_loops": min_outer_loops,
-            "max_loops": max_outer_loops,
-            "target_duration_seconds": target_runtime_seconds,
-        }
-        # Pass inner_iterations if specified (for Java/JavaScript)
-        if inner_iterations is not None:
-            kwargs["inner_iterations"] = inner_iterations
-        return language_support.run_benchmarking_tests(**kwargs)
+        inner_iterations_kwargs = {"inner_iterations": inner_iterations} if inner_iterations is not None else {}
+        return language_support.run_benchmarking_tests(
+            test_paths=test_paths,
+            test_env=test_env,
+            cwd=cwd,
+            timeout=effective_timeout,
+            project_root=js_project_root,
+            min_loops=min_outer_loops,
+            max_loops=max_outer_loops,
+            target_duration_seconds=target_runtime_seconds,
+            **inner_iterations_kwargs,
+        )
     if is_python():  # pytest runs both pytest and unittest tests
         pytest_cmd_list = (
             shlex.split(f"{SAFE_SYS_EXECUTABLE} -m pytest", posix=IS_POSIX)
