@@ -1772,14 +1772,6 @@ class TreeSitterAnalyzer:
                 )
 
 
-    @property
-    def parser(self) -> Parser:
-        # Lazy-initialize the Parser to avoid doing work until parsing is needed.
-        if self._parser is None:
-            self._parser = Parser()
-        return self._parser
-
-
 def get_analyzer_for_file(file_path: Path) -> TreeSitterAnalyzer:
     """Get the appropriate TreeSitterAnalyzer for a file based on its extension.
 
