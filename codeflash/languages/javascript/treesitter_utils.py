@@ -150,6 +150,9 @@ class TreeSitterAnalyzer:
         self.language = language
         self._parser: Parser | None = None
 
+        # Cache for function type sets keyed by (include_methods, include_arrow_functions)
+        self._function_types_cache: dict[tuple[bool, bool], set[str]] = {}
+
     @property
     def parser(self) -> Parser:
         """Get the parser, creating it lazily."""
@@ -230,69 +233,72 @@ class TreeSitterAnalyzer:
     ) -> None:
         """Recursively walk the tree to find function definitions."""
         # Function types in JavaScript/TypeScript
-        function_types = {
-            "function_declaration",
-            "function_expression",
-            "generator_function_declaration",
-            "generator_function",
-        }
+        # Use a cached set to avoid rebuilding on every node visit
+        key = (include_methods, include_arrow_functions)
+        function_types = self._function_types_cache.get(key)
+        if function_types is None:
+            ft = {"function_declaration", "function_expression", "generator_function_declaration", "generator_function"}
+            if include_arrow_functions:
+                ft.add("arrow_function")
+            if include_methods:
+                ft.add("method_definition")
+            self._function_types_cache[key] = ft
+            function_types = ft
 
-        if include_arrow_functions:
-            function_types.add("arrow_function")
+        # Iterative DFS using an explicit stack to avoid Python recursion overhead.
+        # Each stack entry: (node, current_class, current_function)
+        stack: list[tuple[Node, str | None, str | None]] = [(node, current_class, current_function)]
 
-        if include_methods:
-            function_types.add("method_definition")
+        while stack:
+            node, curr_class, curr_func = stack.pop()
+            n_type = node.type
 
-        # Track class context
-        new_class = current_class
-        new_function = current_function
+            new_class = curr_class
+            new_function = curr_func
 
-        if node.type in {"class_declaration", "class"}:
-            # Get class name
-            name_node = node.child_by_field_name("name")
-            if name_node:
-                new_class = self.get_node_text(name_node, source_bytes)
+            if n_type in {"class_declaration", "class"}:
+                # Get class name
+                name_node = node.child_by_field_name("name")
+                if name_node:
+                    new_class = self.get_node_text(name_node, source_bytes)
 
-        if node.type in function_types:
-            func_info = self._extract_function_info(node, source_bytes, current_class, current_function)
+            if n_type in function_types:
+                func_info = self._extract_function_info(node, source_bytes, curr_class, curr_func)
 
-            if func_info:
-                # Check if we should include this function
-                should_include = True
+                if func_info:
+                    # Check if we should include this function
+                    should_include = True
 
-                if require_name and not func_info.name:
-                    should_include = False
+                    if require_name and not func_info.name:
+                        should_include = False
 
-                if func_info.is_method and not include_methods:
-                    should_include = False
+                    if func_info.is_method and not include_methods:
+                        should_include = False
 
-                if func_info.is_arrow and not include_arrow_functions:
-                    should_include = False
+                    if func_info.is_arrow and not include_arrow_functions:
+                        should_include = False
 
-                # Skip arrow functions that are object properties (e.g., { foo: () => {} })
-                # These are not standalone functions - they're values in object literals
-                if func_info.is_arrow and node.parent and node.parent.type == "pair":
-                    should_include = False
+                    # Skip arrow functions that are object properties (e.g., { foo: () => {} })
+                    # These are not standalone functions - they're values in object literals
+                    parent = node.parent
+                    if func_info.is_arrow and parent and parent.type == "pair":
+                        should_include = False
 
-                if should_include:
-                    functions.append(func_info)
+                    if should_include:
+                        functions.append(func_info)
 
-                # Track as current function for nested functions
-                if func_info.name:
-                    new_function = func_info.name
+                    # Track as current function for nested functions
+                    if func_info.name:
+                        new_function = func_info.name
 
-        # Recurse into children
-        for child in node.children:
-            self._walk_tree_for_functions(
-                child,
-                source_bytes,
-                functions,
-                include_methods=include_methods,
-                include_arrow_functions=include_arrow_functions,
-                require_name=require_name,
-                current_class=new_class,
-                current_function=new_function if node.type in function_types else current_function,
-            )
+            # Recurse into children (push in reversed order to preserve original left-to-right traversal)
+            children = node.children
+            if children:
+                # If this node is a function type, nested children should see new_function; otherwise preserve curr_func
+                child_func_to_pass = new_function if n_type in function_types else curr_func
+                child_class_to_pass = new_class
+                for child in reversed(children):
+                    stack.append((child, child_class_to_pass, child_func_to_pass))
 
     def _extract_function_info(
         self, node: Node, source_bytes: bytes, current_class: str | None, current_function: str | None
