@@ -50,6 +50,30 @@ class JavaLineProfiler:
         self.profiler_var = "__codeflashProfiler__"
         self.line_contents: dict[str, str] = {}
 
+        # Java executable statement types
+        # Moved to an instance-level frozenset to avoid rebuilding this set on every call.
+        self._executable_types = frozenset({
+            "expression_statement",
+            "return_statement",
+            "if_statement",
+            "for_statement",
+            "enhanced_for_statement",  # for-each loop
+            "while_statement",
+            "do_statement",
+            "switch_expression",
+            "switch_statement",
+            "throw_statement",
+            "try_statement",
+            "try_with_resources_statement",
+            "local_variable_declaration",
+            "assert_statement",
+            "break_statement",
+            "continue_statement",
+            "method_invocation",
+            "object_creation_expression",
+            "assignment_expression",
+        })
+
     def instrument_source(self, source: str, file_path: Path, functions: list[FunctionInfo], analyzer=None) -> str:
         """Instrument Java source code with line profiling.
 
@@ -338,40 +362,25 @@ class {self.profiler_class} {{
             Set of line numbers with executable statements.
 
         """
-        executable_lines = set()
+        executable_lines: set[int] = set()
 
-        # Java executable statement types
-        executable_types = {
-            "expression_statement",
-            "return_statement",
-            "if_statement",
-            "for_statement",
-            "enhanced_for_statement",  # for-each loop
-            "while_statement",
-            "do_statement",
-            "switch_expression",
-            "switch_statement",
-            "throw_statement",
-            "try_statement",
-            "try_with_resources_statement",
-            "local_variable_declaration",
-            "assert_statement",
-            "break_statement",
-            "continue_statement",
-            "method_invocation",
-            "object_creation_expression",
-            "assignment_expression",
-        }
+        # Use an explicit stack to avoid recursion overhead on deep ASTs.
+        stack = [node]
+        types = self._executable_types
+        add_line = executable_lines.add
 
-        def walk(n: Node) -> None:
-            if n.type in executable_types:
+        while stack:
+            n = stack.pop()
+            if n.type in types:
                 # Add the starting line (1-indexed)
-                executable_lines.add(n.start_point[0] + 1)
+                add_line(n.start_point[0] + 1)
 
-            for child in n.children:
-                walk(child)
+            # Push children onto the stack for further traversal
+            # Access children once per node to minimize attribute lookups.
+            children = n.children
+            if children:
+                stack.extend(children)
 
-        walk(node)
         return executable_lines
 
     @staticmethod
