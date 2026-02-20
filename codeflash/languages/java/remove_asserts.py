@@ -209,12 +209,6 @@ class JavaAssertTransformer:
             return source
 
         # Detect framework from imports
-
-        # Lazily create analyzer if it was not provided at construction time.
-        if self.analyzer is None:
-            self.analyzer = get_java_analyzer()
-
-        # Detect framework from imports
         self._detected_framework = self._detect_framework(source)
 
         # Find all assertion statements
@@ -234,8 +228,7 @@ class JavaAssertTransformer:
             if max_end >= assertion.end_pos:
                 continue
             non_nested.append(assertion)
-            if assertion.end_pos > max_end:
-                max_end = assertion.end_pos
+            max_end = max(max_end, assertion.end_pos)
 
         # Pre-compute all replacements with correct counter values
 
