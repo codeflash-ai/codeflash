@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import FunctionFilterCriteria
@@ -203,7 +203,7 @@ def discover_test_methods(file_path: Path, analyzer: JavaAnalyzer | None = None)
 
 
 def _walk_tree_for_test_methods(
-    node,
+    node: Any,
     source_bytes: bytes,
     file_path: Path,
     test_methods: list[FunctionToOptimize],

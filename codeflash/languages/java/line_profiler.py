@@ -14,10 +14,10 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from codeflash.languages.base import FunctionInfo
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ class JavaLineProfiler:
         self.warmup_iterations = warmup_iterations
 
     def generate_agent_config(
-        self, source: str, file_path: Path, functions: list[FunctionInfo], config_output_path: Path
+        self, source: str, file_path: Path, functions: list[FunctionToOptimize], config_output_path: Path
     ) -> Path:
         """Generate config JSON for the profiler agent.
 
@@ -66,7 +66,9 @@ class JavaLineProfiler:
         method_targets = []
 
         for func in functions:
-            for line_num in range(func.starting_line, func.ending_line + 1):
+            start = func.starting_line or 0
+            end = func.ending_line or 0
+            for line_num in range(start, end + 1):
                 if 1 <= line_num <= len(lines):
                     content = lines[line_num - 1].strip()
                     if (
@@ -79,12 +81,7 @@ class JavaLineProfiler:
                         line_contents[key] = content
 
             method_targets.append(
-                {
-                    "name": func.function_name,
-                    "startLine": func.starting_line,
-                    "endLine": func.ending_line,
-                    "sourceFile": file_path.as_posix(),
-                }
+                {"name": func.function_name, "startLine": start, "endLine": end, "sourceFile": file_path.as_posix()}
             )
 
         config = {
@@ -107,7 +104,7 @@ class JavaLineProfiler:
         return f"-javaagent:{agent_jar}=config={config_path}"
 
     @staticmethod
-    def parse_results(profile_file: Path) -> dict:
+    def parse_results(profile_file: Path) -> dict[str, Any]:
         """Parse line profiling results from the agent's JSON output.
 
         Returns the same format as parse_line_profile_test_output.parse_line_profile_results()
@@ -183,7 +180,7 @@ class JavaLineProfiler:
                     if sorted_stats:
                         grouped_timings[(fp, sorted_stats[0][0], Path(fp).name)] = sorted_stats
 
-            result: dict = {"timings": grouped_timings, "unit": 1e-9, "line_contents": line_contents}
+            result: dict[str, Any] = {"timings": grouped_timings, "unit": 1e-9, "line_contents": line_contents}
             result["str_out"] = format_line_profile_results(result, line_contents)
             return result
 
@@ -267,7 +264,9 @@ def resolve_internal_class_name(file_path: Path, source: str) -> str:
     return file_path.stem
 
 
-def format_line_profile_results(results: dict, line_contents: dict[tuple[str, int], str] | None = None) -> str:
+def format_line_profile_results(
+    results: dict[str, Any], line_contents: dict[tuple[str, int], str] | None = None
+) -> str:
     """Format line profiling results using the same tabulate pipe format as Python.
 
     Args:
@@ -283,7 +282,8 @@ def format_line_profile_results(results: dict, line_contents: dict[tuple[str, in
         return ""
 
     if line_contents is None:
-        line_contents = results.get("line_contents", {})
+        raw_contents: Any = results.get("line_contents", {})
+        line_contents = raw_contents if isinstance(raw_contents, dict) else {}
 
     from codeflash.verification.parse_line_profile_test_output import show_text_non_python
 

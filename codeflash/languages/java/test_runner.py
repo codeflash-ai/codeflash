@@ -463,7 +463,7 @@ def run_behavioral_tests(
 
 def _compile_tests(
     project_root: Path, env: dict[str, str], test_module: str | None = None, timeout: int = 120
-) -> subprocess.CompletedProcess:
+) -> subprocess.CompletedProcess[str]:
     """Compile test code using Maven (without running tests).
 
     Args:
@@ -583,7 +583,7 @@ def _run_tests_direct(
     working_dir: Path,
     timeout: int = 60,
     reports_dir: Path | None = None,
-) -> subprocess.CompletedProcess:
+) -> subprocess.CompletedProcess[str]:
     """Run JUnit tests directly using java command (bypassing Maven).
 
     This is much faster than Maven invocation (~500ms vs ~5-10s overhead).
@@ -1183,7 +1183,7 @@ def _run_maven_tests(
     enable_coverage: bool = False,
     test_module: str | None = None,
     javaagent_arg: str | None = None,
-) -> subprocess.CompletedProcess:
+) -> subprocess.CompletedProcess[str]:
     """Run Maven tests with Surefire.
 
     Args:

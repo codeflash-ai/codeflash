@@ -184,7 +184,7 @@ class JavaSupport(LanguageSupport):
 
     def compare_test_results(
         self, original_results_path: Path, candidate_results_path: Path, project_root: Path | None = None
-    ) -> tuple[bool, list]:
+    ) -> tuple[bool, list[Any]]:
         """Compare test results between original and candidate code."""
         return _compare_test_results(original_results_path, candidate_results_path, project_root=project_root)
 
@@ -330,7 +330,7 @@ class JavaSupport(LanguageSupport):
             logger.exception("Failed to prepare line profiling for %s", func_info.function_name)
             return False
 
-    def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict:
+    def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict[str, Any]:
         """Parse line profiler output for Java.
 
         Args:
