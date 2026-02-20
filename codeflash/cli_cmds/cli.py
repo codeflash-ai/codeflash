@@ -352,7 +352,7 @@ def _handle_show_config() -> None:
     from codeflash.setup.detector import detect_project, has_existing_config
 
     project_root = Path.cwd()
-    config_exists, config_file = has_existing_config(project_root)
+    config_exists, _ = has_existing_config(project_root)
 
     if config_exists:
         from codeflash.code_utils.config_parser import parse_config_file
@@ -373,10 +373,7 @@ def _handle_show_config() -> None:
         table.add_row("Module root", config.get("module_root", "(not set)"))
         table.add_row("Tests root", config.get("tests_root", "(not set)"))
         table.add_row("Test runner", config.get("test_framework", config.get("pytest_cmd", "(not set)")))
-        table.add_row(
-            "Formatter",
-            ", ".join(config["formatter_cmds"]) if config.get("formatter_cmds") else "(not set)",
-        )
+        table.add_row("Formatter", ", ".join(config["formatter_cmds"]) if config.get("formatter_cmds") else "(not set)")
         ignore_paths = config.get("ignore_paths", [])
         table.add_row("Ignore paths", ", ".join(str(p) for p in ignore_paths) if ignore_paths else "(none)")
     else:
@@ -396,12 +393,9 @@ def _handle_show_config() -> None:
         table.add_row("Module root", str(detected.module_root))
         table.add_row("Tests root", str(detected.tests_root) if detected.tests_root else "(not detected)")
         table.add_row("Test runner", detected.test_runner or "(not detected)")
+        table.add_row("Formatter", ", ".join(detected.formatter_cmds) if detected.formatter_cmds else "(not detected)")
         table.add_row(
-            "Formatter", ", ".join(detected.formatter_cmds) if detected.formatter_cmds else "(not detected)"
-        )
-        table.add_row(
-            "Ignore paths",
-            ", ".join(str(p) for p in detected.ignore_paths) if detected.ignore_paths else "(none)",
+            "Ignore paths", ", ".join(str(p) for p in detected.ignore_paths) if detected.ignore_paths else "(none)"
         )
         table.add_row("Confidence", f"{detected.confidence:.0%}")
 

@@ -98,4 +98,6 @@ def format_runtime_comment(original_time_ns: int, optimized_time_ns: int, commen
         abs(performance_gain(original_runtime_ns=original_time_ns, optimized_runtime_ns=optimized_time_ns) * 100)
     )
     status = "slower" if optimized_time_ns > original_time_ns else "faster"
-    return f"{comment_prefix} {format_time(original_time_ns)} -> {format_time(optimized_time_ns)} ({perf_gain}% {status})"
+    return (
+        f"{comment_prefix} {format_time(original_time_ns)} -> {format_time(optimized_time_ns)} ({perf_gain}% {status})"
+    )
