@@ -208,7 +208,6 @@ def wrap_target_calls_with_treesitter(
         line_byte_start = line_byte_starts[line_idx]
         line_bytes = encoded_lines[line_idx]
 
-
         new_line = body_line
         # Track cumulative char shift from earlier edits on this line
         char_shift = 0
@@ -296,10 +295,10 @@ def _collect_calls(
                 if parent_type == "expression_statement":
                     es_start = parent.start_byte - prefix_len
                     es_end = parent.end_byte - prefix_len
-                
+
                 # Compute skip flags once during collection
                 skip_instrumentation = _should_skip_instrumentation(node)
-                
+
                 out.append(
                     {
                         "start_byte": start,
@@ -1200,15 +1199,12 @@ def _add_import(source: str, import_statement: str) -> str:
     return "".join(lines)
 
 
-
-
-
 def _should_skip_instrumentation(node: Any) -> bool:
     """Check if a node should skip instrumentation (in lambda or complex expression)."""
     current = node.parent
     while current is not None:
         node_type = current.type
-        
+
         # Stop at statement boundaries
         if node_type in {
             "method_declaration",
@@ -1220,11 +1216,11 @@ def _should_skip_instrumentation(node: Any) -> bool:
             "expression_statement",
         }:
             return False
-        
+
         # Lambda check
         if node_type == "lambda_expression":
             return True
-        
+
         # Complex expression check
         if node_type in {
             "cast_expression",
@@ -1237,47 +1233,6 @@ def _should_skip_instrumentation(node: Any) -> bool:
         }:
             logger.debug("Found complex expression parent: %s", node_type)
             return True
-        
-        current = current.parent
-    return False
 
-
-
-
-def _should_skip_instrumentation(node: Any) -> bool:
-    """Check if a node should skip instrumentation (in lambda or complex expression)."""
-    current = node.parent
-    while current is not None:
-        node_type = current.type
-        
-        # Stop at statement boundaries
-        if node_type in {
-            "method_declaration",
-            "block",
-            "if_statement",
-            "for_statement",
-            "while_statement",
-            "try_statement",
-            "expression_statement",
-        }:
-            return False
-        
-        # Lambda check
-        if node_type == "lambda_expression":
-            return True
-        
-        # Complex expression check
-        if node_type in {
-            "cast_expression",
-            "ternary_expression",
-            "array_access",
-            "binary_expression",
-            "unary_expression",
-            "parenthesized_expression",
-            "instanceof_expression",
-        }:
-            logger.debug("Found complex expression parent: %s", node_type)
-            return True
-        
         current = current.parent
     return False
