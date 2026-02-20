@@ -1,5 +1,7 @@
 """Tests for Java coverage utilities (JaCoCo integration)."""
 
+from __future__ import annotations
+
 from pathlib import Path
 
 from codeflash.languages.java.build_tools import (
