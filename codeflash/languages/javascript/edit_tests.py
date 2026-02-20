@@ -6,6 +6,7 @@ including adding runtime comments and removing test functions.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from pathlib import Path
@@ -13,6 +14,10 @@ from pathlib import Path
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.time_utils import format_runtime_comment
 from codeflash.models.models import GeneratedTests, GeneratedTestsList
+
+_TEST_PATTERN = re.compile(r"(?:test|it)\s*\(\s*['\"]([^'\"]+)['\"]")
+
+_FUNC_CALL_PATTERN = re.compile(r"(?:expect\s*\(\s*)?(\w+)\s*\([^)]*\)")
 
 
 def add_runtime_comments(source: str, original_runtimes: dict[str, int], optimized_runtimes: dict[str, int]) -> str:
@@ -30,11 +35,17 @@ def add_runtime_comments(source: str, original_runtimes: dict[str, int], optimiz
         Source code with runtime comments added.
 
     """
-    logger.debug(f"[js-annotations] original_runtimes has {len(original_runtimes)} entries")
-    logger.debug(f"[js-annotations] optimized_runtimes has {len(optimized_runtimes)} entries")
+    # Check logger level once to avoid repeated checks
+    debug_enabled = logger.isEnabledFor(logging.DEBUG)
+    
+    if debug_enabled:
+        logger.debug(f"[js-annotations] original_runtimes has {len(original_runtimes)} entries")
+        logger.debug(f"[js-annotations] optimized_runtimes has {len(optimized_runtimes)} entries")
+
 
     if not original_runtimes or not optimized_runtimes:
-        logger.debug("[js-annotations] No runtimes available, returning unchanged source")
+        if debug_enabled:
+            logger.debug("[js-annotations] No runtimes available, returning unchanged source")
         return source
 
     lines = source.split("\n")
@@ -44,13 +55,18 @@ def add_runtime_comments(source: str, original_runtimes: dict[str, int], optimiz
     # The keys in original_runtimes look like: "full_test_name#/path/to/test#invocation_id"
     # where full_test_name includes describe blocks: "fibonacci Edge cases should return 0"
     timing_by_full_name: dict[str, tuple[int, int]] = {}
+    # Use set for faster membership testing
+    optimized_keys = set(optimized_runtimes.keys())
+    
     for key in original_runtimes:
-        if key in optimized_runtimes:
+        if key in optimized_keys:
+            # Extract test function name from the key (first part before #)
             # Extract test function name from the key (first part before #)
             parts = key.split("#")
             if parts:
                 full_test_name = parts[0]
-                logger.debug(f"[js-annotations] Found timing for full test name: '{full_test_name}'")
+                if debug_enabled:
+                    logger.debug(f"[js-annotations] Found timing for full test name: '{full_test_name}'")
                 if full_test_name not in timing_by_full_name:
                     timing_by_full_name[full_test_name] = (original_runtimes[key], optimized_runtimes[key])
                 else:
@@ -61,7 +77,9 @@ def add_runtime_comments(source: str, original_runtimes: dict[str, int], optimiz
                         old_opt + optimized_runtimes[key],
                     )
 
-    logger.debug(f"[js-annotations] Built timing_by_full_name with {len(timing_by_full_name)} entries")
+    if debug_enabled:
+        logger.debug(f"[js-annotations] Built timing_by_full_name with {len(timing_by_full_name)} entries")
+
 
     def find_matching_test(test_description: str) -> str | None:
         """Find a timing key that ends with the given test description (suffix match).
@@ -71,38 +89,42 @@ def add_runtime_comments(source: str, original_runtimes: dict[str, int], optimiz
         We need to match by suffix because timing includes all describe block names.
         """
         # Try to match by finding a key that ends with the test description
+        # Try to match by finding a key that ends with the test description
+        test_description_lower = test_description.lower()
         for full_name in timing_by_full_name:
             # Check if the full name ends with the test description (case-insensitive)
-            if full_name.lower().endswith(test_description.lower()):
-                logger.debug(f"[js-annotations] Suffix match: '{test_description}' matches '{full_name}'")
+            if full_name.lower().endswith(test_description_lower):
+                if debug_enabled:
+                    logger.debug(f"[js-annotations] Suffix match: '{test_description}' matches '{full_name}'")
                 return full_name
         return None
 
     # Track current test context
     current_test_name = None
     current_matched_full_name = None
-    test_pattern = re.compile(r"(?:test|it)\s*\(\s*['\"]([^'\"]+)['\"]")
-    # Match function calls that look like: funcName(args) or expect(funcName(args))
-    func_call_pattern = re.compile(r"(?:expect\s*\(\s*)?(\w+)\s*\([^)]*\)")
 
     for line in lines:
         # Check if this line starts a new test
-        test_match = test_pattern.search(line)
+        test_match = _TEST_PATTERN.search(line)
         if test_match:
             current_test_name = test_match.group(1)
-            logger.debug(f"[js-annotations] Found test: '{current_test_name}'")
+            if debug_enabled:
+                logger.debug(f"[js-annotations] Found test: '{current_test_name}'")
+            # Find the matching full name from timing data using suffix match
             # Find the matching full name from timing data using suffix match
             current_matched_full_name = find_matching_test(current_test_name)
-            if current_matched_full_name:
+            if current_matched_full_name and debug_enabled:
                 logger.debug(f"[js-annotations] Test '{current_test_name}' matched to '{current_matched_full_name}'")
 
         # Check if this line has a function call and we have timing for current test
         if current_matched_full_name and current_matched_full_name in timing_by_full_name:
             # Only add comment if line has a function call and doesn't already have a comment
-            if func_call_pattern.search(line) and "//" not in line and "expect(" in line:
+            if _FUNC_CALL_PATTERN.search(line) and "//" not in line and "expect(" in line:
                 orig_time, opt_time = timing_by_full_name[current_matched_full_name]
                 comment = format_runtime_comment(orig_time, opt_time, comment_prefix="//")
-                logger.debug(f"[js-annotations] Adding comment to test '{current_test_name}': {comment}")
+                if debug_enabled:
+                    logger.debug(f"[js-annotations] Adding comment to test '{current_test_name}': {comment}")
+                # Add comment at end of line
                 # Add comment at end of line
                 line = f"{line.rstrip()}  {comment}"
                 # Clear timing so we only annotate first call in each test
