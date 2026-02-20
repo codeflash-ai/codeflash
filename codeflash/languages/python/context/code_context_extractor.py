@@ -554,7 +554,7 @@ def get_function_sources_from_jedi(
                         try:
                             for inferred in name.infer():
                                 if (
-                                    inferred.type == "class"
+                                    inferred.type in ("class", "instance")
                                     and inferred.full_name
                                     and inferred.module_path
                                     and is_project_path(inferred.module_path, project_root_path)
