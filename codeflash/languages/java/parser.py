@@ -15,6 +15,10 @@ from tree_sitter import Language, Parser
 if TYPE_CHECKING:
     from tree_sitter import Node, Tree
 
+_TYPE_DECLARATIONS = ("class_declaration", "interface_declaration", "enum_declaration")
+
+_BLOCK_TYPES = {"block", "constructor_body"}
+
 logger = logging.getLogger(__name__)
 
 # Lazy-loaded language instance
@@ -677,6 +681,130 @@ class JavaAnalyzer:
                         return self.get_node_text(pkg_child, source_bytes)
 
         return None
+
+
+    @property
+    def parser(self) -> Parser:
+        """Lazily create and cache a Parser instance.
+
+        The parser's language should be set by the caller (external setup)
+        via analyzer.parser.language = <Language> before parse() is used,
+        if required. We avoid recreating Parser instances across calls.
+        """
+        p = self._parser
+        if p is None:
+            p = Parser()
+            self._parser = p
+        return p
+
+    def get_node_text(self, node: Node, source_bytes: bytes) -> str:
+        """Return decoded text for a node using the source bytes slice."""
+        return source_bytes[node.start_byte:node.end_byte].decode("utf8")
+
+    def _extract_method_info(
+        self, node: Node, source_bytes: bytes, current_class: str | None
+    ) -> JavaMethodNode | None:
+        """Extract basic method info from a method node.
+
+        This implementation is intentionally focused and minimal: it pulls
+        out modifier flags, method name, return type (if present), and
+        line/column positions. It returns None only if required fields
+        are missing; otherwise it returns a JavaMethodNode.
+
+        Behavior is consistent with previous contract: node is preserved
+        on the returned JavaMethodNode to allow downstream code to slice
+        source bytes as needed.
+        """
+        # Basic safety: node must exist
+        if node is None:
+            return None
+
+        # Name: try field "name" (method_declaration), or fall back to node text
+        name_node = node.child_by_field_name("name")
+        try:
+            name = (
+                source_bytes[name_node.start_byte:name_node.end_byte].decode("utf8")
+                if name_node is not None
+                else source_bytes[node.start_byte:node.end_byte].decode("utf8")
+            )
+        except Exception:
+            # Fallback to empty name in case of unexpected structure
+            name = ""
+
+        # Initialize flags by scanning modifiers child (if present)
+        is_static = False
+        is_public = False
+        is_private = False
+        is_protected = False
+        is_abstract = False
+        is_synchronized = False
+
+        modifiers_node = None
+        # Try to find 'modifiers' child (fast scan)
+        for child in node.children:
+            if child.type == "modifiers":
+                modifiers_node = child
+                break
+
+        if modifiers_node is not None:
+            mod_slice = source_bytes[modifiers_node.start_byte:modifiers_node.end_byte]
+            # simple bytes membership checks (fast)
+            if b"static" in mod_slice:
+                is_static = True
+            if b"public" in mod_slice:
+                is_public = True
+            if b"private" in mod_slice:
+                is_private = True
+            if b"protected" in mod_slice:
+                is_protected = True
+            if b"abstract" in mod_slice:
+                is_abstract = True
+            if b"synchronized" in mod_slice:
+                is_synchronized = True
+
+        # Return type: for constructors this may be absent
+        return_type_node = node.child_by_field_name("type")
+        return_type = None
+        if return_type_node is not None:
+            try:
+                return_type = source_bytes[
+                    return_type_node.start_byte : return_type_node.end_byte
+                ].decode("utf8")
+            except Exception:
+                return_type = None
+
+        # Source text for node
+        try:
+            source_text = source_bytes[node.start_byte:node.end_byte].decode("utf8")
+        except Exception:
+            source_text = ""
+
+        # Line/col information from node points (tree-sitter uses 0-based rows/cols)
+        try:
+            start_row, start_col = node.start_point
+            end_row, end_col = node.end_point
+        except Exception:
+            # Default to zeros if node doesn't provide points
+            start_row = end_row = start_col = end_col = 0
+
+        return JavaMethodNode(
+            name=name,
+            node=node,
+            start_line=start_row,
+            end_line=end_row,
+            start_col=start_col,
+            end_col=end_col,
+            is_static=is_static,
+            is_public=is_public,
+            is_private=is_private,
+            is_protected=is_protected,
+            is_abstract=is_abstract,
+            is_synchronized=is_synchronized,
+            return_type=return_type,
+            class_name=current_class,
+            source_text=source_text,
+            javadoc_start_line=None,
+        )
 
 
 def get_java_analyzer() -> JavaAnalyzer:
