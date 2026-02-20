@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import re
+from functools import cache, lru_cache
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -21,6 +22,8 @@ if TYPE_CHECKING:
 
     from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer
 
+_SAFE_NAME_RE = re.compile(r"[^a-zA-Z0-9_]")
+
 logger = logging.getLogger(__name__)
 
 MARKER_PREFIX = "REACT_RENDER"
@@ -28,13 +31,7 @@ MARKER_PREFIX = "REACT_RENDER"
 
 def generate_render_counter_code(component_name: str) -> str:
     """Generate the onRender callback and counter variable for Profiler instrumentation."""
-    safe_name = re.sub(r"[^a-zA-Z0-9_]", "_", component_name)
-    return f"""\
-let _codeflash_render_count_{safe_name} = 0;
-function _codeflashOnRender_{safe_name}(id, phase, actualDuration, baseDuration) {{
-  _codeflash_render_count_{safe_name}++;
-  console.log(`!######{MARKER_PREFIX}:${{id}}:${{phase}}:${{actualDuration}}:${{baseDuration}}:${{_codeflash_render_count_{safe_name}}}######!`);
-}}"""
+    return _build_render_counter_code(component_name, MARKER_PREFIX)
 
 
 def instrument_component_with_profiler(source: str, component_name: str, analyzer: TreeSitterAnalyzer) -> str:
@@ -49,10 +46,10 @@ def instrument_component_with_profiler(source: str, component_name: str, analyze
     - Fragment returns (<>...</>)
     - Early returns (leaves non-JSX returns alone)
     """
-    source_bytes = source.encode("utf-8")
+    source_bytes = _encode_cached(source)
     tree = analyzer.parse(source_bytes)
 
-    safe_name = re.sub(r"[^a-zA-Z0-9_]", "_", component_name)
+    safe_name = _SAFE_NAME_RE.sub("_", component_name)
     profiler_id = component_name
 
     # Find the component function node
@@ -67,14 +64,48 @@ def instrument_component_with_profiler(source: str, component_name: str, analyze
         logger.debug("No JSX return statements found in: %s", component_name)
         return source
 
-    # Apply transformations in reverse order to preserve byte offsets
-    result = source
-    for ret_node in sorted(return_nodes, key=lambda n: n.start_byte, reverse=True):
-        result = _wrap_return_with_profiler(result, ret_node, profiler_id, safe_name)
+    # Compute all wrapped segments based on original source bytes, then build final string once.
+    # This avoids repeated slicing/concatenation of the full source for each replacement.
+    replacements: list[tuple[int, int, str]] = []
+    for ret_node in sorted(return_nodes, key=lambda n: n.start_byte):
+        computed = _compute_wrapped_segment(source_bytes, ret_node, profiler_id, safe_name)
+        if computed is not None:
+            replacements.append(computed)
+
+    if replacements:
+        # Reconstruct result in a single pass
+        parts: list[str] = []
+        prev = 0
+        for start, end, wrapped in replacements:
+            # Use original source slices (string indices expected by original logic)
+            parts.append(source[prev:start])
+            parts.append(wrapped)
+            prev = end
+        parts.append(source[prev:])
+        result = "".join(parts)
+    else:
+        result = source
+
+    # Add render counter code at the top (after imports) using the already-parsed tree
 
     # Add render counter code at the top (after imports)
     counter_code = generate_render_counter_code(component_name)
-    result = _insert_after_imports(result, counter_code, analyzer)
+
+    # Inline logic similar to _insert_after_imports but reuse existing `tree` to avoid re-parsing
+    last_import_end = 0
+    for child in tree.root_node.children:
+        if child.type == "import_statement":
+            last_import_end = child.end_byte
+
+    insert_pos = last_import_end
+    while insert_pos < len(result) and result[insert_pos] != "\n":
+        insert_pos += 1
+    if insert_pos < len(result):
+        insert_pos += 1  # skip the newline
+
+    result = result[:insert_pos] + "\n" + counter_code + "\n\n" + result[insert_pos:]
+
+    # Ensure React is imported
 
     # Ensure React is imported
     return _ensure_react_import(result)
@@ -249,3 +280,67 @@ def _ensure_react_import(source: str) -> str:
             return 'import React from "react";\n' + source
         return source
     return 'import React from "react";\n' + source
+
+
+# Cache small number of encoded strings to avoid repeated encode() overhead
+@lru_cache(maxsize=64)
+def _encode_cached(s: str) -> bytes:
+    return s.encode("utf-8")
+
+
+def _compute_wrapped_segment(
+    source_bytes: bytes, return_node: Node, profiler_id: str, safe_name: str
+) -> tuple[int, int, str] | None:
+    """Compute the replacement segment (start, end, wrapped) for a return node.
+
+    Returns None if no JSX segment was found.
+    """
+    # Find the JSX part of the return (skip "return" keyword and whitespace)
+    jsx_start = None
+    jsx_end = return_node.end_byte
+
+    for child in return_node.children:
+        if child.type == "return":
+            continue
+        if child.type == ";":
+            jsx_end = child.start_byte
+            continue
+        if _contains_jsx(child):
+            jsx_start = child.start_byte
+            jsx_end = child.end_byte
+            break
+
+    if jsx_start is None:
+        return None
+
+    # Default jsx_content from bytes slice
+    jsx_content = source_bytes[jsx_start:jsx_end].decode("utf-8").strip()
+
+    # Check if the return uses parentheses: return (...)
+    # If so, we need to wrap inside the parens
+    for child in return_node.children:
+        if child.type == "parenthesized_expression":
+            # skip outer parentheses
+            jsx_start = child.start_byte + 1  # skip (
+            jsx_end = child.end_byte - 1  # skip )
+            jsx_content = source_bytes[jsx_start:jsx_end].decode("utf-8").strip()
+            break
+
+    wrapped = (
+        f'<React.Profiler id="{profiler_id}" onRender={{_codeflashOnRender_{safe_name}}}>'
+        f"\n{jsx_content}\n"
+        f"</React.Profiler>"
+    )
+
+    return jsx_start, jsx_end, wrapped
+
+
+@cache
+def _build_render_counter_code(component_name: str, marker_prefix: str) -> str:
+    safe_name = _SAFE_NAME_RE.sub("_", component_name)
+    return f"""\
+let _codeflash_render_count_{safe_name} = 0;
+function _codeflashOnRender_{safe_name}(id, phase, actualDuration, baseDuration) {{
+  _codeflash_render_count_{safe_name}++;
+  console.log(`!######{marker_prefix}:${{id}}:${{phase}}:${{actualDuration}}:${{baseDuration}}:${{_codeflash_render_count_{safe_name}}}######!`);
+}}"""
