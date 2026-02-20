@@ -7,15 +7,12 @@ import json
 import linecache
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 import dill as pickle
 
 from codeflash.code_utils.tabulate import tabulate
 from codeflash.languages import is_python
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def show_func(
