@@ -81,7 +81,7 @@ def _extract_test_method_name(method_lines: list[str]) -> str:
         for typ in ("void ", "String ", "int ", "long ", "boolean ", "double ", "float ", "char ", "byte ", "short "):
             idx = s.find(typ)
             if idx != -1:
-                sub = s[idx + len(typ):]  # start after the type token
+                sub = s[idx + len(typ) :]  # start after the type token
                 paren = sub.find("(")
                 if paren != -1:
                     left = sub[:paren].strip()
