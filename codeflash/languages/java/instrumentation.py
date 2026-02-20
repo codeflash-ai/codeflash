@@ -14,6 +14,7 @@ This allows codeflash to extract timing data from stdout for accurate benchmarki
 
 from __future__ import annotations
 
+import bisect
 import logging
 import re
 from typing import TYPE_CHECKING
@@ -37,6 +38,24 @@ def _get_function_name(func: Any) -> str:
         return func.name
     msg = f"Cannot get function name from {type(func)}"
     raise AttributeError(msg)
+
+
+_METHOD_SIG_PATTERN = re.compile(
+    r"\b(?:public|private|protected)?\s*(?:static)?\s*(?:final)?\s*"
+    r"(?:void|String|int|long|boolean|double|float|char|byte|short|\w+(?:\[\])?)\s+(\w+)\s*\("
+)
+_FALLBACK_METHOD_PATTERN = re.compile(r"\b(\w+)\s*\(")
+
+
+def _extract_test_method_name(method_lines: list[str]) -> str:
+    method_sig = " ".join(method_lines).strip()
+    match = _METHOD_SIG_PATTERN.search(method_sig)
+    if match:
+        return match.group(1)
+    fallback_match = _FALLBACK_METHOD_PATTERN.search(method_sig)
+    if fallback_match:
+        return fallback_match.group(1)
+    return "unknown"
 
 
 # Pattern to detect primitive array types in assertions
@@ -87,14 +106,27 @@ def _is_inside_complex_expression(node) -> bool:
     current = node.parent
     while current is not None:
         # Stop at statement boundaries
-        if current.type in {"method_declaration", "block", "if_statement", "for_statement",
-                          "while_statement", "try_statement", "expression_statement"}:
+        if current.type in {
+            "method_declaration",
+            "block",
+            "if_statement",
+            "for_statement",
+            "while_statement",
+            "try_statement",
+            "expression_statement",
+        }:
             return False
 
         # These are complex expressions that shouldn't have instrumentation inserted in the middle
-        if current.type in {"cast_expression", "ternary_expression", "array_access",
-                          "binary_expression", "unary_expression", "parenthesized_expression",
-                          "instanceof_expression"}:
+        if current.type in {
+            "cast_expression",
+            "ternary_expression",
+            "array_access",
+            "binary_expression",
+            "unary_expression",
+            "parenthesized_expression",
+            "instanceof_expression",
+        }:
             logger.debug(f"Found complex expression parent: {current.type}")
             return True
 
@@ -146,7 +178,7 @@ def wrap_target_calls_with_treesitter(
     calls_by_line: dict[int, list] = {}
     for call in calls:
         if call["in_lambda"] or call.get("in_complex", False):
-            logger.debug(f"Skipping behavior instrumentation for call in lambda or complex expression")
+            logger.debug("Skipping behavior instrumentation for call in lambda or complex expression")
             continue
         line_idx = _byte_to_line_index(call["start_byte"], line_byte_starts)
         calls_by_line.setdefault(line_idx, []).append(call)
@@ -261,10 +293,8 @@ def _collect_calls(node, wrapper_bytes, body_bytes, prefix_len, func_name, analy
 
 def _byte_to_line_index(byte_offset: int, line_byte_starts: list[int]) -> int:
     """Map a byte offset in body_text to a body_lines index."""
-    for i in range(len(line_byte_starts) - 1, -1, -1):
-        if byte_offset >= line_byte_starts[i]:
-            return i
-    return 0
+    idx = bisect.bisect_right(line_byte_starts, byte_offset) - 1
+    return max(0, idx)
 
 
 def _infer_array_cast_type(line: str) -> str | None:
@@ -526,6 +556,9 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 result.append(ml)
             i += 1
 
+            # Extract the test method name from the method signature
+            test_method_name = _extract_test_method_name(method_lines)
+
             # We're now inside the method body
             iteration_counter += 1
             iter_id = iteration_counter
@@ -571,6 +604,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 f'{indent}String _cf_outputFile{iter_id} = System.getenv("CODEFLASH_OUTPUT_FILE");',
                 f'{indent}String _cf_testIteration{iter_id} = System.getenv("CODEFLASH_TEST_ITERATION");',
                 f'{indent}if (_cf_testIteration{iter_id} == null) _cf_testIteration{iter_id} = "0";',
+                f'{indent}String _cf_test{iter_id} = "{test_method_name}";',
                 f'{indent}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + "######$!");',
                 f"{indent}byte[] _cf_serializedResult{iter_id} = null;",
                 f"{indent}long _cf_end{iter_id} = -1;",
@@ -608,7 +642,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 f"{indent}                try (PreparedStatement _cf_pstmt{iter_id} = _cf_conn{iter_id}.prepareStatement(_cf_sql{iter_id})) {{",
                 f"{indent}                    _cf_pstmt{iter_id}.setString(1, _cf_mod{iter_id});",
                 f"{indent}                    _cf_pstmt{iter_id}.setString(2, _cf_cls{iter_id});",
-                f'{indent}                    _cf_pstmt{iter_id}.setString(3, "{class_name}Test");',
+                f"{indent}                    _cf_pstmt{iter_id}.setString(3, _cf_test{iter_id});",
                 f"{indent}                    _cf_pstmt{iter_id}.setString(4, _cf_fn{iter_id});",
                 f"{indent}                    _cf_pstmt{iter_id}.setInt(5, _cf_loop{iter_id});",
                 f'{indent}                    _cf_pstmt{iter_id}.setString(6, _cf_iter{iter_id} + "_" + _cf_testIteration{iter_id});',
@@ -766,8 +800,14 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         # conditionally executed, so an uninitialized declaration would cause
         # "variable might not have been initialized" errors.
         _PRIMITIVE_DEFAULTS = {
-            "byte": "0", "short": "0", "int": "0", "long": "0L",
-            "float": "0.0f", "double": "0.0", "char": "'\\0'", "boolean": "false",
+            "byte": "0",
+            "short": "0",
+            "int": "0",
+            "long": "0L",
+            "float": "0.0f",
+            "double": "0.0",
+            "char": "'\\0'",
+            "boolean": "false",
         }
         default_val = _PRIMITIVE_DEFAULTS.get(type_text, "null")
         hoisted = f"{type_text} {name_text} = {default_val};"
