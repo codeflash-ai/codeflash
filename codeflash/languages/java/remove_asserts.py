@@ -797,15 +797,18 @@ class JavaAssertTransformer:
         if open_paren_pos >= len(code) or code[open_paren_pos] != "(":
             return None, -1
 
+        end = len(code)
         depth = 1
         pos = open_paren_pos + 1
         in_string = False
         string_char = None
         in_char = False
 
-        while pos < len(code) and depth > 0:
+        # Track previous character locally to avoid repeated indexing (code[pos-1]).
+        prev_char = code[open_paren_pos]
+
+        while pos < end and depth > 0:
             char = code[pos]
-            prev_char = code[pos - 1] if pos > 0 else ""
 
             # Handle character literals
             if char == "'" and not in_string and prev_char != "\\":
@@ -825,6 +828,8 @@ class JavaAssertTransformer:
                     depth -= 1
 
             pos += 1
+
+            prev_char = char
 
         if depth != 0:
             return None, -1
