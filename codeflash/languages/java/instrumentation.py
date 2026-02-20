@@ -840,7 +840,9 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         assignment = f"{name_text} = {value_text};"
         return hoisted, assignment
 
-    def build_instrumented_body(body_text: str, next_wrapper_id: int, base_indent: str, test_method_name: str = "unknown") -> tuple[str, int]:
+    def build_instrumented_body(
+        body_text: str, next_wrapper_id: int, base_indent: str, test_method_name: str = "unknown"
+    ) -> tuple[str, int]:
         body_bytes = body_text.encode("utf8")
         wrapper_bytes = _TS_BODY_PREFIX_BYTES + body_bytes + _TS_BODY_SUFFIX.encode("utf8")
         wrapper_tree = analyzer.parse(wrapper_bytes)
