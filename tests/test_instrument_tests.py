@@ -454,8 +454,8 @@ def test_sort():
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -489,8 +489,8 @@ def test_sort():
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         assert test_results_perf[0].id.function_getting_tested == "sorter"
@@ -541,8 +541,8 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
             line_profiler_output_file=line_profiler_output_file,
         )
@@ -701,8 +701,8 @@ def test_sort_parametrized(input, expected_output):
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -755,8 +755,8 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         assert test_results_perf[0].id.function_getting_tested == "sorter"
@@ -812,8 +812,8 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
             line_profiler_output_file=line_profiler_output_file,
         )
@@ -990,8 +990,8 @@ def test_sort_parametrized_loop(input, expected_output):
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -1081,8 +1081,8 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 
@@ -1171,8 +1171,8 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
             line_profiler_output_file=line_profiler_output_file,
         )
@@ -1347,8 +1347,8 @@ def test_sort():
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -1389,8 +1389,8 @@ def test_sort():
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -1453,8 +1453,8 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
             line_profiler_output_file=line_profiler_output_file,
         )
@@ -1729,8 +1729,8 @@ class TestPigLatin(unittest.TestCase):
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -1779,8 +1779,8 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -1979,8 +1979,8 @@ import unittest
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -2034,8 +2034,8 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -2235,8 +2235,8 @@ import unittest
             testing_type=TestingMode.BEHAVIOR,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -2290,8 +2290,8 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
             testing_type=TestingMode.PERFORMANCE,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -2487,8 +2487,8 @@ import unittest
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -2574,8 +2574,8 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -3160,8 +3160,8 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=2,
-            pytest_max_loops=2,
+            min_outer_loops=2,
+            max_outer_loops=2,
             testing_time=0.1,
         )
 
@@ -3285,8 +3285,8 @@ import unittest
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
 
