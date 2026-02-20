@@ -31,6 +31,7 @@ from codeflash.code_utils.git_worktree_utils import (
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.either import is_successful
 from codeflash.languages import current_language_support, is_javascript, set_current_language
+from codeflash.lsp.helpers import is_agent_mode
 from codeflash.models.models import ValidCode
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.verification_utils import TestConfig
@@ -603,7 +604,7 @@ class Optimizer:
                 return
 
             function_to_tests, _ = self.discover_tests(file_to_funcs_to_optimize)
-            if self.args.all:
+            if self.args.all and not getattr(self.args, "agent", False):
                 self.functions_checkpoint = CodeflashRunCheckpoint(self.args.module_root)
 
             # GLOBAL RANKING: Rank all functions together before optimizing
@@ -690,7 +691,14 @@ class Optimizer:
                 self.functions_checkpoint.cleanup()
             if hasattr(self.args, "command") and self.args.command == "optimize":
                 self.cleanup_replay_tests()
-            if optimizations_found == 0:
+            if is_agent_mode():
+                import sys
+
+                if optimizations_found == 0:
+                    sys.stdout.write("NO OPTIMIZATIONS FOUND\n")
+                else:
+                    sys.stdout.write(f"COMPLETE: {optimizations_found} optimization(s) applied\n")
+            elif optimizations_found == 0:
                 logger.info("❌ No optimizations found.")
             elif self.args.all:
                 logger.info("✨ All functions have been optimized! ✨")

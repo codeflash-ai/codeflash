@@ -21,7 +21,7 @@ from rich.progress import (
 
 from codeflash.cli_cmds.console_constants import SPINNER_TYPES
 from codeflash.cli_cmds.logging_config import BARE_LOGGING_FORMAT
-from codeflash.lsp.helpers import is_LSP_enabled
+from codeflash.lsp.helpers import is_agent_mode, is_LSP_enabled
 from codeflash.lsp.lsp_logger import enhanced_log
 from codeflash.lsp.lsp_message import LspCodeMessage, LspTextMessage
 
@@ -39,28 +39,54 @@ DEBUG_MODE = logging.getLogger().getEffectiveLevel() == logging.DEBUG
 
 console = Console()
 
-if is_LSP_enabled():
+if is_LSP_enabled() or is_agent_mode():
     console.quiet = True
 
-logging.basicConfig(
-    level=logging.INFO,
-    handlers=[RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False)],
-    format=BARE_LOGGING_FORMAT,
-)
+if is_agent_mode():
+    import re
+    import sys
+
+    _lsp_prefix_re = re.compile(r"^(?:!?lsp,?|h[2-4]|loading)\|")
+    _agent_drop_patterns = (
+        "Test log -",
+        "Test failed to load",
+        "Examining file ",
+        "Generated ",
+        "Add custom marker",
+        "Disabling all autouse",
+        "Reverting code and helpers",
+    )
+
+    class _AgentLogFilter(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:
+            record.msg = _lsp_prefix_re.sub("", str(record.msg))
+            msg = record.getMessage()
+            return not any(msg.startswith(p) for p in _agent_drop_patterns)
+
+    _agent_handler = logging.StreamHandler(sys.stderr)
+    _agent_handler.addFilter(_AgentLogFilter())
+    logging.basicConfig(level=logging.INFO, handlers=[_agent_handler], format="%(levelname)s: %(message)s")
+else:
+    logging.basicConfig(
+        level=logging.INFO,
+        handlers=[RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False)],
+        format=BARE_LOGGING_FORMAT,
+    )
 
 logger = logging.getLogger("rich")
 logging.getLogger("parso").setLevel(logging.WARNING)
 
 # override the logger to reformat the messages for the lsp
-for level in ("info", "debug", "warning", "error"):
-    real_fn = getattr(logger, level)
-    setattr(
-        logger,
-        level,
-        lambda msg, *args, _real_fn=real_fn, _level=level, **kwargs: enhanced_log(
-            msg, _real_fn, _level, *args, **kwargs
-        ),
-    )
+if not is_agent_mode():
+    for level in ("info", "debug", "warning", "error"):
+        real_fn = getattr(logger, level)
+        setattr(
+            logger,
+            level,
+            lambda msg, *args, _real_fn=real_fn, _level=level, **kwargs: enhanced_log(
+                msg, _real_fn, _level, *args, **kwargs
+            ),
+        )
 
 
 class DummyTask:
@@ -87,6 +113,8 @@ def paneled_text(
     text: str, panel_args: dict[str, str | bool] | None = None, text_args: dict[str, str] | None = None
 ) -> None:
     """Print text in a panel."""
+    if is_agent_mode():
+        return
     from rich.panel import Panel
     from rich.text import Text
 
@@ -115,6 +143,8 @@ def code_print(
         language: Programming language for syntax highlighting ('python', 'javascript', 'typescript')
 
     """
+    if is_agent_mode():
+        return
     if is_LSP_enabled():
         lsp_log(
             LspCodeMessage(code=code_str, file_name=file_name, function_name=function_name, message_id=lsp_message_id)
@@ -152,6 +182,10 @@ def progress_bar(
     """
     global _progress_bar_active
 
+    if is_agent_mode():
+        yield DummyTask().id
+        return
+
     if is_LSP_enabled():
         lsp_log(LspTextMessage(text=message, takes_time=True))
         yield
@@ -183,6 +217,10 @@ def progress_bar(
 @contextmanager
 def test_files_progress_bar(total: int, description: str) -> Generator[tuple[Progress, TaskID], None, None]:
     """Progress bar for test files."""
+    if is_agent_mode():
+        yield DummyProgress(), DummyTask().id
+        return
+
     if is_LSP_enabled():
         lsp_log(LspTextMessage(text=description, takes_time=True))
         dummy_progress = DummyProgress()
@@ -215,6 +253,10 @@ def call_graph_live_display(
     from rich.panel import Panel
     from rich.text import Text
     from rich.tree import Tree
+
+    if is_agent_mode():
+        yield lambda _: None
+        return
 
     if is_LSP_enabled():
         lsp_log(LspTextMessage(text="Building call graph", takes_time=True))
@@ -344,8 +386,52 @@ def call_graph_summary(call_graph: DependencyResolver, file_to_funcs: dict[Path,
         f"Standalone: {leaf_functions}"
     )
 
+    if is_agent_mode():
+        return
+
     if is_LSP_enabled():
         lsp_log(LspTextMessage(text=summary))
         return
 
     console.print(Panel(summary, title="Call Graph Summary", border_style="cyan"))
+
+
+def agent_log_optimization_result(
+    function_name: str,
+    file_path: Path,
+    perf_improvement_line: str,
+    original_runtime_ns: int,
+    best_runtime_ns: int,
+    raw_explanation: str,
+    original_code: dict[Path, str],
+    new_code: dict[Path, str],
+    review: str,
+) -> None:
+    import sys
+
+    from codeflash.code_utils.code_utils import unified_diff_strings
+    from codeflash.code_utils.time_utils import humanize_runtime
+
+    lines = [
+        "=== Optimization Result ===",
+        f"Function: {function_name}",
+        f"File: {file_path}",
+        f"Performance: {perf_improvement_line}",
+        f"Original runtime: {humanize_runtime(original_runtime_ns)} | Optimized runtime: {humanize_runtime(best_runtime_ns)}",
+    ]
+    if review:
+        lines.append(f"Reviewer confidence: {review}")
+    lines.append("")
+    lines.append("Explanation:")
+    lines.append(raw_explanation.strip())
+    lines.append("")
+
+    for path in original_code:
+        old = original_code.get(path, "")
+        new = new_code.get(path, "")
+        if old != new:
+            diff = unified_diff_strings(old, new, fromfile=str(path), tofile=str(path))
+            if diff:
+                lines.append(diff)
+
+    sys.stdout.write("\n".join(lines) + "\n")

@@ -5,7 +5,20 @@ BARE_LOGGING_FORMAT = "%(message)s"
 
 def set_level(level: int, *, echo_setting: bool = True) -> None:
     import logging
+    import sys
     import time
+
+    from codeflash.lsp.helpers import is_agent_mode
+
+    if is_agent_mode():
+        logging.basicConfig(
+            level=level,
+            handlers=[logging.StreamHandler(sys.stderr)],
+            format="%(levelname)s: %(message)s",
+            force=True,
+        )
+        logging.getLogger().setLevel(level)
+        return
 
     from rich.logging import RichHandler
 
