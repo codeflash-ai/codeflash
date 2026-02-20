@@ -179,17 +179,21 @@ def _find_type_definition(type_name: str, source: str, analyzer: TreeSitterAnaly
     source_bytes = source.encode("utf-8")
     tree = analyzer.parse(source_bytes)
 
-    def search_node(node: Node) -> str | None:
-        if node.type in ("interface_declaration", "type_alias_declaration"):
+    type_name_bytes = type_name.encode("utf-8")
+    node_types = ("interface_declaration", "type_alias_declaration")
+
+    # Iterative DFS to avoid recursion overhead and repeated function allocations.
+    stack: list[Node] = [tree.root_node]
+    while stack:
+        node = stack.pop()
+        if node.type in node_types:
             name_node = node.child_by_field_name("name")
             if name_node:
-                name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf-8")
-                if name == type_name:
+                name_bytes = source_bytes[name_node.start_byte : name_node.end_byte]
+                if name_bytes == type_name_bytes:
                     return source_bytes[node.start_byte : node.end_byte].decode("utf-8")
-        for child in node.children:
-            result = search_node(child)
-            if result:
-                return result
-        return None
+        # Reverse children to maintain left-to-right DFS traversal order
+        if node.children:
+            stack.extend(reversed(node.children))
 
-    return search_node(tree.root_node)
+    return None
