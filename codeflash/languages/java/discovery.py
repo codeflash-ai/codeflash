@@ -16,6 +16,8 @@ from codeflash.languages.java.parser import get_java_analyzer
 from codeflash.models.function_types import FunctionParent
 
 if TYPE_CHECKING:
+    from tree_sitter import Node
+
     from codeflash.languages.java.parser import JavaAnalyzer, JavaMethodNode
 
 logger = logging.getLogger(__name__)
@@ -199,7 +201,7 @@ def discover_test_methods(file_path: Path, analyzer: JavaAnalyzer | None = None)
 
 
 def _walk_tree_for_test_methods(
-    node,
+    node: Node,
     source_bytes: bytes,
     file_path: Path,
     test_methods: list[FunctionToOptimize],
