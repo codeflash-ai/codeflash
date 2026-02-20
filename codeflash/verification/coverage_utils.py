@@ -7,8 +7,11 @@ import sentry_sdk
 from coverage.exceptions import NoDataError
 
 from codeflash.cli_cmds.console import logger
-from codeflash.languages.python.static_analysis.coverage_utils import extract_dependent_function
-from codeflash.languages.python.static_analysis.coverage_utils import build_fully_qualified_name, generate_candidates
+from codeflash.languages.python.static_analysis.coverage_utils import (
+    build_fully_qualified_name,
+    extract_dependent_function,
+    generate_candidates,
+)
 from codeflash.models.models import CoverageData, CoverageStatus, FunctionCoverage
 
 if TYPE_CHECKING:

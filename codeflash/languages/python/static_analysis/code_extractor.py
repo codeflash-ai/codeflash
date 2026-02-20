@@ -1113,9 +1113,7 @@ def get_code(functions_to_optimize: list[FunctionToOptimize]) -> tuple[str | Non
         target: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Assign | ast.AnnAssign | None = None
         node: ast.stmt
         for node in node_list:
-            if (
-                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name == name_parts[0]
-            ):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name == name_parts[0]:
                 target = node
                 break
             if (

@@ -23,7 +23,10 @@ from codeflash.languages.python.context.unused_definition_remover import (
     recurse_sections,
     remove_unused_definitions_by_function_names,
 )
-from codeflash.languages.python.static_analysis.code_extractor import add_needed_imports_from_module, find_preexisting_objects
+from codeflash.languages.python.static_analysis.code_extractor import (
+    add_needed_imports_from_module,
+    find_preexisting_objects,
+)
 from codeflash.models.models import (
     CodeContextType,
     CodeOptimizationContext,
