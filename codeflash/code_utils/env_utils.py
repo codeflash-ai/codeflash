@@ -22,7 +22,16 @@ def check_formatter_installed(
     if not formatter_cmds or formatter_cmds[0] == "disabled":
         return True
     first_cmd = formatter_cmds[0]
-    cmd_tokens = shlex.split(first_cmd) if isinstance(first_cmd, str) else [first_cmd]
+    # Avoid shlex.split if input is already a simple string without special characters
+    if isinstance(first_cmd, str):
+        # Fast path: check if we need shlex at all
+        if ' ' not in first_cmd or ('"' not in first_cmd and "'" not in first_cmd):
+            cmd_tokens = first_cmd.split()
+        else:
+            cmd_tokens = shlex.split(first_cmd)
+    else:
+        cmd_tokens = [first_cmd]
+
 
     if not cmd_tokens:
         return True
