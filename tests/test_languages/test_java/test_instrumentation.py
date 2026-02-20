@@ -145,6 +145,7 @@ public class CalculatorTest__perfinstrumented {
         String _cf_outputFile1 = System.getenv("CODEFLASH_OUTPUT_FILE");
         String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
+        String _cf_test1 = "testAdd";
         System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
         byte[] _cf_serializedResult1 = null;
         long _cf_end1 = -1;
@@ -175,7 +176,7 @@ public class CalculatorTest__perfinstrumented {
                         try (PreparedStatement _cf_pstmt1 = _cf_conn1.prepareStatement(_cf_sql1)) {
                             _cf_pstmt1.setString(1, _cf_mod1);
                             _cf_pstmt1.setString(2, _cf_cls1);
-                            _cf_pstmt1.setString(3, "CalculatorTestTest");
+                            _cf_pstmt1.setString(3, _cf_test1);
                             _cf_pstmt1.setString(4, _cf_fn1);
                             _cf_pstmt1.setInt(5, _cf_loop1);
                             _cf_pstmt1.setString(6, _cf_iter1 + "_" + _cf_testIteration1);
@@ -256,6 +257,7 @@ public class FibonacciTest__perfinstrumented {
         String _cf_outputFile1 = System.getenv("CODEFLASH_OUTPUT_FILE");
         String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
+        String _cf_test1 = "testNegativeInput_ThrowsIllegalArgumentException";
         System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
         byte[] _cf_serializedResult1 = null;
         long _cf_end1 = -1;
@@ -281,7 +283,7 @@ public class FibonacciTest__perfinstrumented {
                         try (PreparedStatement _cf_pstmt1 = _cf_conn1.prepareStatement(_cf_sql1)) {
                             _cf_pstmt1.setString(1, _cf_mod1);
                             _cf_pstmt1.setString(2, _cf_cls1);
-                            _cf_pstmt1.setString(3, "FibonacciTestTest");
+                            _cf_pstmt1.setString(3, _cf_test1);
                             _cf_pstmt1.setString(4, _cf_fn1);
                             _cf_pstmt1.setInt(5, _cf_loop1);
                             _cf_pstmt1.setString(6, _cf_iter1 + "_" + _cf_testIteration1);
@@ -309,6 +311,7 @@ public class FibonacciTest__perfinstrumented {
         String _cf_outputFile2 = System.getenv("CODEFLASH_OUTPUT_FILE");
         String _cf_testIteration2 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration2 == null) _cf_testIteration2 = "0";
+        String _cf_test2 = "testZeroInput_ReturnsZero";
         System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + "######$!");
         byte[] _cf_serializedResult2 = null;
         long _cf_end2 = -1;
@@ -338,7 +341,7 @@ public class FibonacciTest__perfinstrumented {
                         try (PreparedStatement _cf_pstmt2 = _cf_conn2.prepareStatement(_cf_sql2)) {
                             _cf_pstmt2.setString(1, _cf_mod2);
                             _cf_pstmt2.setString(2, _cf_cls2);
-                            _cf_pstmt2.setString(3, "FibonacciTestTest");
+                            _cf_pstmt2.setString(3, _cf_test2);
                             _cf_pstmt2.setString(4, _cf_fn2);
                             _cf_pstmt2.setInt(5, _cf_loop2);
                             _cf_pstmt2.setString(6, _cf_iter2 + "_" + _cf_testIteration2);
@@ -420,6 +423,7 @@ public class FibonacciTest__perfinstrumented {
         String _cf_outputFile1 = System.getenv("CODEFLASH_OUTPUT_FILE");
         String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
+        String _cf_test1 = "testNegativeInput_ThrowsIllegalArgumentException";
         System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
         byte[] _cf_serializedResult1 = null;
         long _cf_end1 = -1;
@@ -447,7 +451,7 @@ public class FibonacciTest__perfinstrumented {
                         try (PreparedStatement _cf_pstmt1 = _cf_conn1.prepareStatement(_cf_sql1)) {
                             _cf_pstmt1.setString(1, _cf_mod1);
                             _cf_pstmt1.setString(2, _cf_cls1);
-                            _cf_pstmt1.setString(3, "FibonacciTestTest");
+                            _cf_pstmt1.setString(3, _cf_test1);
                             _cf_pstmt1.setString(4, _cf_fn1);
                             _cf_pstmt1.setInt(5, _cf_loop1);
                             _cf_pstmt1.setString(6, _cf_iter1 + "_" + _cf_testIteration1);
@@ -475,6 +479,7 @@ public class FibonacciTest__perfinstrumented {
         String _cf_outputFile2 = System.getenv("CODEFLASH_OUTPUT_FILE");
         String _cf_testIteration2 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration2 == null) _cf_testIteration2 = "0";
+        String _cf_test2 = "testZeroInput_ReturnsZero";
         System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + "######$!");
         byte[] _cf_serializedResult2 = null;
         long _cf_end2 = -1;
@@ -504,7 +509,7 @@ public class FibonacciTest__perfinstrumented {
                         try (PreparedStatement _cf_pstmt2 = _cf_conn2.prepareStatement(_cf_sql2)) {
                             _cf_pstmt2.setString(1, _cf_mod2);
                             _cf_pstmt2.setString(2, _cf_cls2);
-                            _cf_pstmt2.setString(3, "FibonacciTestTest");
+                            _cf_pstmt2.setString(3, _cf_test2);
                             _cf_pstmt2.setString(4, _cf_fn2);
                             _cf_pstmt2.setInt(5, _cf_loop2);
                             _cf_pstmt2.setString(6, _cf_iter2 + "_" + _cf_testIteration2);
@@ -816,6 +821,7 @@ public class MyTest {
         String _cf_outputFile1 = System.getenv("CODEFLASH_OUTPUT_FILE");
         String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
+        String _cf_test1 = "testFoo";
         System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
         byte[] _cf_serializedResult1 = null;
         long _cf_end1 = -1;
@@ -844,7 +850,7 @@ public class MyTest {
                         try (PreparedStatement _cf_pstmt1 = _cf_conn1.prepareStatement(_cf_sql1)) {
                             _cf_pstmt1.setString(1, _cf_mod1);
                             _cf_pstmt1.setString(2, _cf_cls1);
-                            _cf_pstmt1.setString(3, "MyTestTest");
+                            _cf_pstmt1.setString(3, _cf_test1);
                             _cf_pstmt1.setString(4, _cf_fn1);
                             _cf_pstmt1.setInt(5, _cf_loop1);
                             _cf_pstmt1.setString(6, _cf_iter1 + "_" + _cf_testIteration1);
@@ -1317,6 +1323,7 @@ public class CalculatorTest__perfinstrumented {
         String _cf_outputFile1 = System.getenv("CODEFLASH_OUTPUT_FILE");
         String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
+        String _cf_test1 = "testAdd";
         System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
         byte[] _cf_serializedResult1 = null;
         long _cf_end1 = -1;
@@ -1346,7 +1353,7 @@ public class CalculatorTest__perfinstrumented {
                         try (PreparedStatement _cf_pstmt1 = _cf_conn1.prepareStatement(_cf_sql1)) {
                             _cf_pstmt1.setString(1, _cf_mod1);
                             _cf_pstmt1.setString(2, _cf_cls1);
-                            _cf_pstmt1.setString(3, "CalculatorTestTest");
+                            _cf_pstmt1.setString(3, _cf_test1);
                             _cf_pstmt1.setString(4, _cf_fn1);
                             _cf_pstmt1.setInt(5, _cf_loop1);
                             _cf_pstmt1.setString(6, _cf_iter1 + "_" + _cf_testIteration1);
@@ -2522,6 +2529,7 @@ public class CounterTest__perfinstrumented {
         String _cf_outputFile1 = System.getenv("CODEFLASH_OUTPUT_FILE");
         String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
+        String _cf_test1 = "testIncrement";
         System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
         byte[] _cf_serializedResult1 = null;
         long _cf_end1 = -1;
@@ -2552,7 +2560,7 @@ public class CounterTest__perfinstrumented {
                         try (PreparedStatement _cf_pstmt1 = _cf_conn1.prepareStatement(_cf_sql1)) {
                             _cf_pstmt1.setString(1, _cf_mod1);
                             _cf_pstmt1.setString(2, _cf_cls1);
-                            _cf_pstmt1.setString(3, "CounterTestTest");
+                            _cf_pstmt1.setString(3, _cf_test1);
                             _cf_pstmt1.setString(4, _cf_fn1);
                             _cf_pstmt1.setInt(5, _cf_loop1);
                             _cf_pstmt1.setString(6, _cf_iter1 + "_" + _cf_testIteration1);
