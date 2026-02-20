@@ -52,7 +52,9 @@ def get_test_file_path(
         path = test_dir / f"test_{function_name_safe}__{test_type}_test_{iteration}{extension}"
 
     if path.exists():
-        return get_test_file_path(test_dir, function_name, iteration + 1, test_type, package_name, class_name, source_file_path)
+        return get_test_file_path(
+            test_dir, function_name, iteration + 1, test_type, package_name, class_name, source_file_path
+        )
     return path
 
 

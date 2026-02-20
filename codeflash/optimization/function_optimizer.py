@@ -2931,8 +2931,7 @@ class FunctionOptimizer:
                 total_passed = sum(r.get("passed", 0) for r in candidate_report.values())
                 if total_passed == 0:
                     logger.warning(
-                        "No behavioral tests passed for optimization candidate %d. "
-                        "Skipping correctness verification.",
+                        "No behavioral tests passed for optimization candidate %d. Skipping correctness verification.",
                         optimization_candidate_index,
                     )
                     return self.get_results_not_matched_error()
@@ -3161,7 +3160,7 @@ class FunctionOptimizer:
                 coverage_database_file=coverage_database_file,
                 coverage_config_file=coverage_config_file,
                 skip_sqlite_cleanup=skip_cleanup,
-                testing_type=testing_type
+                testing_type=testing_type,
             )
             if testing_type == TestingMode.PERFORMANCE:
                 results.perf_stdout = run_result.stdout
