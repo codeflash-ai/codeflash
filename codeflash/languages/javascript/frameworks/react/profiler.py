@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING
 from functools import lru_cache
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -286,62 +286,9 @@ def _encode_cached(s: str) -> bytes:
     return s.encode("utf-8")
 
 
-
-
-
-def _compute_wrapped_segment(source_bytes: bytes, return_node: Node, profiler_id: str, safe_name: str) -> tuple[int, int, str] | None:
-    """Compute the replacement segment (start, end, wrapped) for a return node.
-
-    Returns None if no JSX segment was found.
-    """
-    # Find the JSX part of the return (skip "return" keyword and whitespace)
-    jsx_start = None
-    jsx_end = return_node.end_byte
-
-    for child in return_node.children:
-        if child.type == "return":
-            continue
-        if child.type == ";":
-            jsx_end = child.start_byte
-            continue
-        if _contains_jsx(child):
-            jsx_start = child.start_byte
-            jsx_end = child.end_byte
-            break
-
-    if jsx_start is None:
-        return None
-
-    # Default jsx_content from bytes slice
-    jsx_content = source_bytes[jsx_start:jsx_end].decode("utf-8").strip()
-
-    # Check if the return uses parentheses: return (...)
-    # If so, we need to wrap inside the parens
-    for child in return_node.children:
-        if child.type == "parenthesized_expression":
-            # skip outer parentheses
-            jsx_start = child.start_byte + 1  # skip (
-            jsx_end = child.end_byte - 1  # skip )
-            jsx_content = source_bytes[jsx_start:jsx_end].decode("utf-8").strip()
-            break
-
-    wrapped = (
-        f'<React.Profiler id="{profiler_id}" onRender={{_codeflashOnRender_{safe_name}}}>'
-        f"\n{jsx_content}\n"
-        f"</React.Profiler>"
-    )
-
-    return jsx_start, jsx_end, wrapped
-
-# Cache small number of encoded strings to avoid repeated encode() overhead
-@lru_cache(maxsize=64)
-def _encode_cached(s: str) -> bytes:
-    return s.encode("utf-8")
-
-
-
-
-def _compute_wrapped_segment(source_bytes: bytes, return_node: Node, profiler_id: str, safe_name: str) -> tuple[int, int, str] | None:
+def _compute_wrapped_segment(
+    source_bytes: bytes, return_node: Node, profiler_id: str, safe_name: str
+) -> tuple[int, int, str] | None:
     """Compute the replacement segment (start, end, wrapped) for a return node.
 
     Returns None if no JSX segment was found.
