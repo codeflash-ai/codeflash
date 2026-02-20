@@ -8,11 +8,11 @@ from codeflash.languages.java.build_tools import (
     get_jacoco_xml_path,
     is_jacoco_configured,
 )
-from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, CoverageStatus
+from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, CoverageStatus, FunctionSource
 from codeflash.verification.coverage_utils import JacocoCoverageUtils
 
 
-def create_mock_code_context() -> CodeOptimizationContext:
+def create_mock_code_context(helper_functions: list[FunctionSource] | None = None) -> CodeOptimizationContext:
     """Create a minimal mock CodeOptimizationContext for testing."""
     empty_markdown = CodeStringsMarkdown(code_strings=[], language="java")
     return CodeOptimizationContext(
@@ -21,8 +21,18 @@ def create_mock_code_context() -> CodeOptimizationContext:
         read_only_context_code="",
         hashing_code_context="",
         hashing_code_context_hash="",
-        helper_functions=[],
+        helper_functions=helper_functions or [],
         preexisting_objects=set(),
+    )
+
+
+def make_function_source(only_function_name: str, qualified_name: str, file_path: Path) -> FunctionSource:
+    return FunctionSource(
+        file_path=file_path,
+        qualified_name=qualified_name,
+        fully_qualified_name=qualified_name,
+        only_function_name=only_function_name,
+        source_code="",
     )
 
 
@@ -313,6 +323,109 @@ class TestJacocoCoverageUtils:
         # Should return empty coverage (no matching sourcefile)
         assert coverage_data.status == CoverageStatus.NOT_FOUND
         assert coverage_data.coverage == 0.0
+
+    def test_no_helper_functions_no_dependent_coverage(self, tmp_path: Path):
+        """With zero helper functions, dependent_func_coverage stays None and total == main."""
+        jacoco_xml = tmp_path / "jacoco.xml"
+        jacoco_xml.write_text(SAMPLE_JACOCO_XML)
+        source_path = tmp_path / "Calculator.java"
+        source_path.write_text("// placeholder")
+
+        coverage_data = JacocoCoverageUtils.load_from_jacoco_xml(
+            jacoco_xml_path=jacoco_xml,
+            function_name="add",
+            code_context=create_mock_code_context(helper_functions=[]),
+            source_code_path=source_path,
+        )
+
+        assert coverage_data.dependent_func_coverage is None
+        assert coverage_data.functions_being_tested == ["add"]
+        assert coverage_data.coverage == 100.0  # add is fully covered
+
+    def test_multiple_helpers_no_dependent_coverage(self, tmp_path: Path):
+        """With more than one helper, dependent_func_coverage stays None (mirrors Python behavior)."""
+        jacoco_xml = tmp_path / "jacoco.xml"
+        jacoco_xml.write_text(SAMPLE_JACOCO_XML)
+        source_path = tmp_path / "Calculator.java"
+        source_path.write_text("// placeholder")
+
+        helpers = [
+            make_function_source("subtract", "Calculator.subtract", source_path),
+            make_function_source("multiply", "Calculator.multiply", source_path),
+        ]
+        coverage_data = JacocoCoverageUtils.load_from_jacoco_xml(
+            jacoco_xml_path=jacoco_xml,
+            function_name="add",
+            code_context=create_mock_code_context(helper_functions=helpers),
+            source_code_path=source_path,
+        )
+
+        assert coverage_data.dependent_func_coverage is None
+        assert coverage_data.functions_being_tested == ["add"]
+
+    def test_single_helper_found_in_jacoco_xml(self, tmp_path: Path):
+        """With exactly one helper present in the JaCoCo XML, dependent_func_coverage is populated."""
+        jacoco_xml = tmp_path / "jacoco.xml"
+        jacoco_xml.write_text(SAMPLE_JACOCO_XML)
+        source_path = tmp_path / "Calculator.java"
+        source_path.write_text("// placeholder")
+
+        # "add" is the main function; "multiply" is the helper
+        helpers = [make_function_source("multiply", "Calculator.multiply", source_path)]
+        coverage_data = JacocoCoverageUtils.load_from_jacoco_xml(
+            jacoco_xml_path=jacoco_xml,
+            function_name="add",
+            code_context=create_mock_code_context(helper_functions=helpers),
+            source_code_path=source_path,
+        )
+
+        assert coverage_data.dependent_func_coverage is not None
+        assert coverage_data.dependent_func_coverage.name == "Calculator.multiply"
+        # multiply has LINE counter: missed=0, covered=3 → 100%
+        assert coverage_data.dependent_func_coverage.coverage == 100.0
+        assert coverage_data.functions_being_tested == ["add", "Calculator.multiply"]
+        assert "Calculator.multiply" in coverage_data.graph
+
+    def test_single_helper_absent_from_jacoco_xml(self, tmp_path: Path):
+        """Helper listed in code_context but not in the JaCoCo XML → dependent_func_coverage stays None."""
+        jacoco_xml = tmp_path / "jacoco.xml"
+        jacoco_xml.write_text(SAMPLE_JACOCO_XML)
+        source_path = tmp_path / "Calculator.java"
+        source_path.write_text("// placeholder")
+
+        helpers = [make_function_source("nonExistentMethod", "Calculator.nonExistentMethod", source_path)]
+        coverage_data = JacocoCoverageUtils.load_from_jacoco_xml(
+            jacoco_xml_path=jacoco_xml,
+            function_name="add",
+            code_context=create_mock_code_context(helper_functions=helpers),
+            source_code_path=source_path,
+        )
+
+        assert coverage_data.dependent_func_coverage is None
+        assert coverage_data.functions_being_tested == ["add"]
+
+    def test_total_coverage_aggregates_main_and_helper(self, tmp_path: Path):
+        """Total coverage is computed over main + helper lines combined, not just main."""
+        jacoco_xml = tmp_path / "jacoco.xml"
+        jacoco_xml.write_text(SAMPLE_JACOCO_XML)
+        source_path = tmp_path / "Calculator.java"
+        source_path.write_text("// placeholder")
+
+        # add (100% covered, lines 40-41) + subtract (0% covered, lines 50-51)
+        # Combined: 2 executed + 2 unexecuted = 50% total
+        helpers = [make_function_source("subtract", "Calculator.subtract", source_path)]
+        coverage_data = JacocoCoverageUtils.load_from_jacoco_xml(
+            jacoco_xml_path=jacoco_xml,
+            function_name="add",
+            code_context=create_mock_code_context(helper_functions=helpers),
+            source_code_path=source_path,
+        )
+
+        assert coverage_data.dependent_func_coverage is not None
+        assert coverage_data.main_func_coverage.coverage == 100.0
+        assert coverage_data.dependent_func_coverage.coverage == 0.0
+        # 2 covered (add) + 0 covered (subtract) out of 4 total lines = 50%
+        assert coverage_data.coverage == 50.0
 
 
 class TestJacocoPluginDetection:
