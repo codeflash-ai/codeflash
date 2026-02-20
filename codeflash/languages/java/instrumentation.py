@@ -731,8 +731,14 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         # conditionally executed, so an uninitialized declaration would cause
         # "variable might not have been initialized" errors.
         _PRIMITIVE_DEFAULTS = {
-            "byte": "0", "short": "0", "int": "0", "long": "0L",
-            "float": "0.0f", "double": "0.0", "char": "'\\0'", "boolean": "false",
+            "byte": "0",
+            "short": "0",
+            "int": "0",
+            "long": "0L",
+            "float": "0.0f",
+            "double": "0.0",
+            "char": "'\\0'",
+            "boolean": "false",
         }
         default_val = _PRIMITIVE_DEFAULTS.get(type_text, "null")
         hoisted = f"{type_text} {name_text} = {default_val};"
