@@ -432,13 +432,11 @@ def get_java_formatter_cmd(formatter: str, build_tool: JavaBuildTool) -> list[st
     if formatter == "google-java-format":
         return ["google-java-format --replace $file"]
     if formatter == "spotless":
-        if build_tool == JavaBuildTool.MAVEN:
-            return ["mvn spotless:apply -DspotlessFiles=$file"]
-        if build_tool == JavaBuildTool.GRADLE:
-            return ["./gradlew spotlessApply"]
-        return ["spotless $file"]
+        return _SPOTLESS_COMMANDS.get(build_tool, ["spotless $file"])
     if formatter == "other":
-        click.echo("In codeflash.toml, please replace 'your-formatter' with your formatter command.")
+        if not hasattr(get_java_formatter_cmd, '_warning_shown'):
+            click.echo("In codeflash.toml, please replace 'your-formatter' with your formatter command.")
+            get_java_formatter_cmd._warning_shown = True
         return ["your-formatter $file"]
     return ["disabled"]
 
@@ -544,3 +542,8 @@ def get_java_test_command(build_tool: JavaBuildTool) -> str:
     if build_tool == JavaBuildTool.GRADLE:
         return "./gradlew test"
     return "mvn test"
+
+_SPOTLESS_COMMANDS = {
+    JavaBuildTool.MAVEN: ["mvn spotless:apply -DspotlessFiles=$file"],
+    JavaBuildTool.GRADLE: ["./gradlew spotlessApply"],
+}
