@@ -887,11 +887,7 @@ def _extract_type_names_from_code(code: str, analyzer: JavaAnalyzer) -> set[str]
 
 
 def get_java_imported_type_skeletons(
-    imports: list,
-    project_root: Path,
-    module_root: Path | None,
-    analyzer: JavaAnalyzer,
-    target_code: str = "",
+    imports: list, project_root: Path, module_root: Path | None, analyzer: JavaAnalyzer, target_code: str = ""
 ) -> str:
     """Extract type skeletons for project-internal imported types.
 
@@ -1011,9 +1007,7 @@ def _extract_constructor_summaries(skeleton: TypeSkeleton) -> list[str]:
     return summaries
 
 
-def _format_skeleton_for_context(
-    skeleton: TypeSkeleton, source: str, class_name: str, analyzer: JavaAnalyzer
-) -> str:
+def _format_skeleton_for_context(skeleton: TypeSkeleton, source: str, class_name: str, analyzer: JavaAnalyzer) -> str:
     """Format a TypeSkeleton into a context string with method signatures.
 
     Includes: type declaration, fields, constructors, and public method signatures
@@ -1094,7 +1088,7 @@ def _extract_public_method_signatures(source: str, class_name: str, analyzer: Ja
                 sig_parts_bytes.append(mod_slice)
                 continue
 
-            if ctype == "block" or ctype == "constructor_body":
+            if ctype in {"block", "constructor_body"}:
                 break
 
             sig_parts_bytes.append(source_bytes[child.start_byte : child.end_byte])

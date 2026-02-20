@@ -374,13 +374,7 @@ def replace_function(
                 class_name,
             )
             source = _insert_class_members(
-                source,
-                class_name,
-                new_fields_to_add,
-                new_helpers_before,
-                new_helpers_after,
-                func_name,
-                analyzer,
+                source, class_name, new_fields_to_add, new_helpers_before, new_helpers_after, func_name, analyzer
             )
 
             # Re-find the target method after modifications
