@@ -23,6 +23,8 @@ from typing import TYPE_CHECKING
 from codeflash.languages.java.parser import get_java_analyzer
 
 if TYPE_CHECKING:
+    from tree_sitter import Node
+
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.java.parser import JavaAnalyzer
 
@@ -548,7 +550,7 @@ class JavaAssertTransformer:
 
     def _collect_target_invocations(
         self,
-        node,
+        node: Node,
         wrapper_bytes: bytes,
         content_bytes: bytes,
         base_offset: int,
@@ -601,7 +603,7 @@ class JavaAssertTransformer:
             self._collect_target_invocations(child, wrapper_bytes, content_bytes, base_offset, out, seen_top_level)
 
     def _build_target_call(
-        self, node, wrapper_bytes: bytes, content_bytes: bytes, start_byte: int, end_byte: int, base_offset: int
+        self, node: Node, wrapper_bytes: bytes, content_bytes: bytes, start_byte: int, end_byte: int, base_offset: int
     ) -> TargetCall:
         """Build a TargetCall from a tree-sitter method_invocation node."""
         object_node = node.child_by_field_name("object")
@@ -634,7 +636,7 @@ class JavaAssertTransformer:
             end_pos=base_offset + end_char,
         )
 
-    def _find_top_level_arg_node(self, target_node, wrapper_bytes: bytes):
+    def _find_top_level_arg_node(self, target_node: Node, wrapper_bytes: bytes) -> Node | None:
         """Find the top-level argument expression containing a nested target call.
 
         Walks up the AST from target_node to the wrapper _d() call's argument_list.
