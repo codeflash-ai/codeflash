@@ -1772,6 +1772,23 @@ class TreeSitterAnalyzer:
                 )
 
 
+    @property
+    def parser(self) -> Parser:
+        """Get or create the parser instance.
+
+        Returns:
+            The parser instance.
+
+        """
+        if self._parser is None:
+            self._parser = Parser()
+            # Import here to avoid circular imports and lazy load language
+            from tree_sitter_languages import get_language
+            
+            self._parser.set_language(get_language(self.language.value))
+        return self._parser
+
+
 def get_analyzer_for_file(file_path: Path) -> TreeSitterAnalyzer:
     """Get the appropriate TreeSitterAnalyzer for a file based on its extension.
 

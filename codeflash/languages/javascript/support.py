@@ -27,6 +27,21 @@ if TYPE_CHECKING:
     from codeflash.languages.javascript.treesitter import TypeDefinition
     from codeflash.models.models import GeneratedTestsList, InvocationId
 
+_PRIMITIVE_TYPES = frozenset({
+    "number",
+    "string",
+    "boolean",
+    "void",
+    "null",
+    "undefined",
+    "any",
+    "never",
+    "unknown",
+    "object",
+    "symbol",
+    "bigint",
+})
+
 logger = logging.getLogger(__name__)
 
 
@@ -999,20 +1014,7 @@ class JavaScriptSupport:
             if node.type == "type_identifier":
                 type_name = source_bytes[node.start_byte : node.end_byte].decode("utf8")
                 # Skip primitive types
-                if type_name not in (
-                    "number",
-                    "string",
-                    "boolean",
-                    "void",
-                    "null",
-                    "undefined",
-                    "any",
-                    "never",
-                    "unknown",
-                    "object",
-                    "symbol",
-                    "bigint",
-                ):
+                if type_name not in _PRIMITIVE_TYPES:
                     type_names.add(type_name)
             for child in node.children:
                 walk_for_types(child)
