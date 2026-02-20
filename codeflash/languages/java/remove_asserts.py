@@ -23,6 +23,8 @@ from typing import TYPE_CHECKING
 from codeflash.languages.java.parser import get_java_analyzer
 
 if TYPE_CHECKING:
+    from tree_sitter import Node
+
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.java.parser import JavaAnalyzer
 
@@ -548,7 +550,7 @@ class JavaAssertTransformer:
 
     def _collect_target_invocations(
         self,
-        node,
+        node: Node,
         wrapper_bytes: bytes,
         content_bytes: bytes,
         base_offset: int,
@@ -601,32 +603,40 @@ class JavaAssertTransformer:
             self._collect_target_invocations(child, wrapper_bytes, content_bytes, base_offset, out, seen_top_level)
 
     def _build_target_call(
-        self, node, wrapper_bytes: bytes, content_bytes: bytes, start_byte: int, end_byte: int, base_offset: int
+        self, node: Node, wrapper_bytes: bytes, content_bytes: bytes, start_byte: int, end_byte: int, base_offset: int
     ) -> TargetCall:
         """Build a TargetCall from a tree-sitter method_invocation node."""
-        get_text = self.analyzer.get_node_text
-
         object_node = node.child_by_field_name("object")
         args_node = node.child_by_field_name("arguments")
-        args_text = get_text(args_node, wrapper_bytes) if args_node else ""
+
+        if args_node:
+            args_text = wrapper_bytes[args_node.start_byte : args_node.end_byte].decode("utf8")
+        else:
+            args_text = ""
         # argument_list node includes parens, strip them
-        if args_text.startswith("(") and args_text.endswith(")"):
+        if args_text and args_text[0] == "(" and args_text[-1] == ")":
             args_text = args_text[1:-1]
 
-        # Byte offsets -> char offsets for correct Python string indexing
-        start_char = len(content_bytes[:start_byte].decode("utf8"))
-        end_char = len(content_bytes[:end_byte].decode("utf8"))
+        # Byte offsets -> char offsets for correct Python string indexing using analyzer mapping
+        start_char = self.analyzer.byte_to_char_index(start_byte, content_bytes)
+        end_char = self.analyzer.byte_to_char_index(end_byte, content_bytes)
+
+        # Extract receiver and full call text from the wrapper bytes directly (fast for small wrappers)
+        receiver_text = (
+            wrapper_bytes[object_node.start_byte : object_node.end_byte].decode("utf8") if object_node else None
+        )
+        full_call_text = wrapper_bytes[node.start_byte : node.end_byte].decode("utf8")
 
         return TargetCall(
-            receiver=get_text(object_node, wrapper_bytes) if object_node else None,
+            receiver=receiver_text,
             method_name=self.func_name,
             arguments=args_text,
-            full_call=get_text(node, wrapper_bytes),
+            full_call=full_call_text,
             start_pos=base_offset + start_char,
             end_pos=base_offset + end_char,
         )
 
-    def _find_top_level_arg_node(self, target_node, wrapper_bytes: bytes):
+    def _find_top_level_arg_node(self, target_node: Node, wrapper_bytes: bytes) -> Node | None:
         """Find the top-level argument expression containing a nested target call.
 
         Walks up the AST from target_node to the wrapper _d() call's argument_list.
