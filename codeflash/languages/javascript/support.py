@@ -27,20 +27,22 @@ if TYPE_CHECKING:
     from codeflash.languages.javascript.treesitter import TypeDefinition
     from codeflash.models.models import GeneratedTestsList, InvocationId
 
-_PRIMITIVE_TYPES = frozenset({
-    "number",
-    "string",
-    "boolean",
-    "void",
-    "null",
-    "undefined",
-    "any",
-    "never",
-    "unknown",
-    "object",
-    "symbol",
-    "bigint",
-})
+_PRIMITIVE_TYPES = frozenset(
+    {
+        "number",
+        "string",
+        "boolean",
+        "void",
+        "null",
+        "undefined",
+        "any",
+        "never",
+        "unknown",
+        "object",
+        "symbol",
+        "bigint",
+    }
+)
 
 logger = logging.getLogger(__name__)
 
