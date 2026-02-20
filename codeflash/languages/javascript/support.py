@@ -1940,8 +1940,7 @@ class JavaScriptSupport:
     def _build_runtime_map(
         self, inv_id_runtimes: dict[InvocationId, list[int]], tests_project_rootdir: Path
     ) -> dict[str, int]:
-        from codeflash.languages.javascript.edit_tests import \
-            resolve_js_test_module_path
+        from codeflash.languages.javascript.edit_tests import resolve_js_test_module_path
 
         unique_inv_ids: dict[str, int] = {}
         # Cache resolved path strings per module path to avoid repeated filesystem resolves
