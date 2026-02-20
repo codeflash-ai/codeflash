@@ -109,6 +109,7 @@ class TestConfig:
     use_cache: bool = True
     _language: Optional[str] = None  # Language identifier for multi-language support
     js_project_root: Optional[Path] = None  # JavaScript project root (directory containing package.json)
+    _test_framework: Optional[str] = None  # Cached test framework detection result
 
     @property
     def test_framework(self) -> str:
@@ -116,14 +117,19 @@ class TestConfig:
 
         For JavaScript/TypeScript: uses the configured framework (vitest, jest, or mocha).
         For Python: uses pytest as default.
+        Result is cached after first detection to avoid repeated pom.xml parsing.
         """
+        if self._test_framework is not None:
+            return self._test_framework
         if is_javascript():
             from codeflash.languages.test_framework import get_js_test_framework_or_default
 
-            return get_js_test_framework_or_default()
-        if is_java():
-            return self._detect_java_test_framework()
-        return "pytest"
+            self._test_framework = get_js_test_framework_or_default()
+        elif is_java():
+            self._test_framework = self._detect_java_test_framework()
+        else:
+            self._test_framework = "pytest"
+        return self._test_framework
 
     def _detect_java_test_framework(self) -> str:
         """Detect the Java test framework from the project configuration.
