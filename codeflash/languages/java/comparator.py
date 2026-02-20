@@ -80,7 +80,6 @@ def _find_java_executable() -> str | None:
         Path to java executable, or None if not found.
 
     """
-
     # Check JAVA_HOME
     java_home = os.environ.get("JAVA_HOME")
     if java_home:
