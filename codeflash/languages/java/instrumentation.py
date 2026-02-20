@@ -14,6 +14,7 @@ This allows codeflash to extract timing data from stdout for accurate benchmarki
 
 from __future__ import annotations
 
+import bisect
 import logging
 import re
 from typing import TYPE_CHECKING
@@ -25,6 +26,8 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.java.parser import JavaAnalyzer
+
+_ASSERTION_METHODS = ("assertArrayEquals", "assertArrayNotEquals")
 
 logger = logging.getLogger(__name__)
 
@@ -201,12 +204,14 @@ def wrap_target_calls_with_treesitter(
 
 def _collect_calls(node, wrapper_bytes, body_bytes, prefix_len, func_name, analyzer, out):
     """Recursively collect method_invocation nodes matching func_name."""
-    if node.type == "method_invocation":
+    node_type = node.type
+    if node_type == "method_invocation":
         name_node = node.child_by_field_name("name")
         if name_node and analyzer.get_node_text(name_node, wrapper_bytes) == func_name:
             start = node.start_byte - prefix_len
             end = node.end_byte - prefix_len
-            if start >= 0 and end <= len(body_bytes):
+            body_len = len(body_bytes)
+            if start >= 0 and end <= body_len:
                 parent = node.parent
                 parent_type = parent.type if parent else ""
                 es_start = es_end = 0
@@ -230,10 +235,8 @@ def _collect_calls(node, wrapper_bytes, body_bytes, prefix_len, func_name, analy
 
 def _byte_to_line_index(byte_offset: int, line_byte_starts: list[int]) -> int:
     """Map a byte offset in body_text to a body_lines index."""
-    for i in range(len(line_byte_starts) - 1, -1, -1):
-        if byte_offset >= line_byte_starts[i]:
-            return i
-    return 0
+    idx = bisect.bisect_right(line_byte_starts, byte_offset) - 1
+    return max(0, idx)
 
 
 def _infer_array_cast_type(line: str) -> str | None:
@@ -251,8 +254,7 @@ def _infer_array_cast_type(line: str) -> str | None:
 
     """
     # Only apply to assertion methods that take arrays
-    assertion_methods = ("assertArrayEquals", "assertArrayNotEquals")
-    if not any(method in line for method in assertion_methods):
+    if "assertArrayEquals" not in line and "assertArrayNotEquals" not in line:
         return None
 
     # Look for primitive array type in the line (usually the first/expected argument)
