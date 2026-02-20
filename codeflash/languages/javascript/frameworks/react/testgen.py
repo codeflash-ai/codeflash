@@ -7,7 +7,7 @@ test templates, and post-processing for generated React tests.
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from codeflash.languages.base import CodeContext
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 def build_react_testgen_context(
     component_info: ReactComponentInfo, react_context: ReactContext, code_context: CodeContext
-) -> dict:
+) -> dict[str, Any]:
     """Assemble context dict for the React testgen LLM prompt."""
     return {
         "component_name": component_info.function_name,
