@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from tree_sitter import Node
+
     from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -81,7 +83,7 @@ def instrument_component_with_profiler(source: str, component_name: str, analyze
 
 def instrument_all_components_for_tracing(source: str, file_path: Path, analyzer: TreeSitterAnalyzer) -> str:
     """Instrument ALL components in a file for tracing/discovery mode."""
-    from codeflash.languages.javascript.frameworks.react.discovery import find_react_components  # noqa: PLC0415
+    from codeflash.languages.javascript.frameworks.react.discovery import find_react_components
 
     components = find_react_components(source, file_path, analyzer)
     if not components:
@@ -96,13 +98,13 @@ def instrument_all_components_for_tracing(source: str, file_path: Path, analyzer
     return result
 
 
-def _find_component_function(root_node, component_name: str, source_bytes: bytes):
+def _find_component_function(root_node: Node, component_name: str, source_bytes: bytes) -> Node | None:
     """Find the tree-sitter node for a named component function."""
     # Check function declarations
     if root_node.type == "function_declaration":
         name_node = root_node.child_by_field_name("name")
         if name_node:
-            name = source_bytes[name_node.start_byte:name_node.end_byte].decode("utf-8")
+            name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf-8")
             if name == component_name:
                 return root_node
 
@@ -110,7 +112,7 @@ def _find_component_function(root_node, component_name: str, source_bytes: bytes
     if root_node.type == "variable_declarator":
         name_node = root_node.child_by_field_name("name")
         if name_node:
-            name = source_bytes[name_node.start_byte:name_node.end_byte].decode("utf-8")
+            name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf-8")
             if name == component_name:
                 return root_node
 
@@ -129,14 +131,17 @@ def _find_component_function(root_node, component_name: str, source_bytes: bytes
     return None
 
 
-def _find_jsx_returns(func_node, source_bytes: bytes) -> list:
+def _find_jsx_returns(func_node: Node, source_bytes: bytes) -> list[Node]:
     """Find all return statements that contain JSX within a function node."""
-    returns = []
+    returns: list[Node] = []
 
-    def walk(node):
+    def walk(node: Node) -> None:
         # Don't descend into nested functions
         if node != func_node and node.type in (
-            "function_declaration", "arrow_function", "function", "method_definition",
+            "function_declaration",
+            "arrow_function",
+            "function",
+            "method_definition",
         ):
             return
 
@@ -154,11 +159,9 @@ def _find_jsx_returns(func_node, source_bytes: bytes) -> list:
     return returns
 
 
-def _contains_jsx(node) -> bool:
+def _contains_jsx(node: Node) -> bool:
     """Check if a tree-sitter node contains JSX elements."""
-    if node.type in (
-        "jsx_element", "jsx_self_closing_element", "jsx_fragment",
-    ):
+    if node.type in ("jsx_element", "jsx_self_closing_element", "jsx_fragment"):
         return True
     for child in node.children:
         if _contains_jsx(child):
@@ -166,7 +169,7 @@ def _contains_jsx(node) -> bool:
     return False
 
 
-def _wrap_return_with_profiler(source: str, return_node, profiler_id: str, safe_name: str) -> str:
+def _wrap_return_with_profiler(source: str, return_node: Node, profiler_id: str, safe_name: str) -> str:
     """Wrap a return statement's JSX with React.Profiler."""
     source_bytes = source.encode("utf-8")
 
@@ -238,7 +241,7 @@ def _ensure_react_import(source: str) -> str:
     if "from 'react'" in source or 'from "react"' in source:
         # React is imported but maybe not as the default. That's fine for JSX.
         # We need React.Profiler so add it
-        if "React" not in source.split("from")[0] if "from" in source else "":
+        if "React" not in source.split("from", maxsplit=1)[0] if "from" in source else "":
             return 'import React from "react";\n' + source
         return source
     return 'import React from "react";\n' + source

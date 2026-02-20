@@ -44,9 +44,7 @@ class OptimizationOpportunity:
 
 
 # Patterns for expensive operations inside render body
-EXPENSIVE_OPS_RE = re.compile(
-    r"\.(filter|map|sort|reduce|flatMap|find|findIndex|every|some)\s*\("
-)
+EXPENSIVE_OPS_RE = re.compile(r"\.(filter|map|sort|reduce|flatMap|find|findIndex|every|some)\s*\(")
 INLINE_OBJECT_IN_JSX_RE = re.compile(r"=\{\s*\{")  # ={{ ... }} in JSX
 INLINE_ARRAY_IN_JSX_RE = re.compile(r"=\{\s*\[")  # ={[ ... ]} in JSX
 FUNCTION_DEF_RE = re.compile(
@@ -57,9 +55,7 @@ USECALLBACK_RE = re.compile(r"\buseCallback\s*\(")
 USEMEMO_RE = re.compile(r"\buseMemo\s*\(")
 
 
-def detect_optimization_opportunities(
-    source: str, component_info: ReactComponentInfo
-) -> list[OptimizationOpportunity]:
+def detect_optimization_opportunities(source: str, component_info: ReactComponentInfo) -> list[OptimizationOpportunity]:
     """Detect optimization opportunities in a React component."""
     opportunities: list[OptimizationOpportunity] = []
     lines = source.splitlines()
@@ -81,46 +77,47 @@ def detect_optimization_opportunities(
 
     # Check if component should be wrapped in React.memo
     if not component_info.is_memoized:
-        opportunities.append(OptimizationOpportunity(
-            type=OpportunityType.MISSING_REACT_MEMO,
-            line=component_info.start_line,
-            description=f"Component '{component_info.function_name}' is not wrapped in React.memo(). "
-                        "If it receives stable props, wrapping can prevent unnecessary re-renders.",
-            severity=OpportunitySeverity.MEDIUM,
-        ))
+        opportunities.append(
+            OptimizationOpportunity(
+                type=OpportunityType.MISSING_REACT_MEMO,
+                line=component_info.start_line,
+                description=f"Component '{component_info.function_name}' is not wrapped in React.memo(). "
+                "If it receives stable props, wrapping can prevent unnecessary re-renders.",
+                severity=OpportunitySeverity.MEDIUM,
+            )
+        )
 
     return opportunities
 
 
-def _detect_inline_props(
-    lines: list[str], offset: int, opportunities: list[OptimizationOpportunity]
-) -> None:
+def _detect_inline_props(lines: list[str], offset: int, opportunities: list[OptimizationOpportunity]) -> None:
     """Detect inline object/array literals in JSX prop positions."""
     for i, line in enumerate(lines):
         line_num = offset + i + 1
         if INLINE_OBJECT_IN_JSX_RE.search(line):
-            opportunities.append(OptimizationOpportunity(
-                type=OpportunityType.INLINE_OBJECT_PROP,
-                line=line_num,
-                description="Inline object literal in JSX prop creates a new reference on every render. "
-                            "Extract to useMemo or a module-level constant.",
-                severity=OpportunitySeverity.HIGH,
-            ))
+            opportunities.append(
+                OptimizationOpportunity(
+                    type=OpportunityType.INLINE_OBJECT_PROP,
+                    line=line_num,
+                    description="Inline object literal in JSX prop creates a new reference on every render. "
+                    "Extract to useMemo or a module-level constant.",
+                    severity=OpportunitySeverity.HIGH,
+                )
+            )
         if INLINE_ARRAY_IN_JSX_RE.search(line):
-            opportunities.append(OptimizationOpportunity(
-                type=OpportunityType.INLINE_ARRAY_PROP,
-                line=line_num,
-                description="Inline array literal in JSX prop creates a new reference on every render. "
-                            "Extract to useMemo or a module-level constant.",
-                severity=OpportunitySeverity.HIGH,
-            ))
+            opportunities.append(
+                OptimizationOpportunity(
+                    type=OpportunityType.INLINE_ARRAY_PROP,
+                    line=line_num,
+                    description="Inline array literal in JSX prop creates a new reference on every render. "
+                    "Extract to useMemo or a module-level constant.",
+                    severity=OpportunitySeverity.HIGH,
+                )
+            )
 
 
 def _detect_missing_usecallback(
-    component_source: str,
-    lines: list[str],
-    offset: int,
-    opportunities: list[OptimizationOpportunity],
+    component_source: str, lines: list[str], offset: int, opportunities: list[OptimizationOpportunity]
 ) -> None:
     """Detect arrow functions or function expressions that could use useCallback."""
     has_usecallback = bool(USECALLBACK_RE.search(component_source))
@@ -132,30 +129,31 @@ def _detect_missing_usecallback(
         if FUNCTION_DEF_RE.search(stripped) and "useCallback" not in stripped and "useMemo" not in stripped:
             # Skip if the component already uses useCallback extensively
             if not has_usecallback:
-                opportunities.append(OptimizationOpportunity(
-                    type=OpportunityType.MISSING_USECALLBACK,
-                    line=line_num,
-                    description="Function defined inside render body creates a new reference on every render. "
-                                "Wrap with useCallback() if passed as a prop to child components.",
-                    severity=OpportunitySeverity.MEDIUM,
-                ))
+                opportunities.append(
+                    OptimizationOpportunity(
+                        type=OpportunityType.MISSING_USECALLBACK,
+                        line=line_num,
+                        description="Function defined inside render body creates a new reference on every render. "
+                        "Wrap with useCallback() if passed as a prop to child components.",
+                        severity=OpportunitySeverity.MEDIUM,
+                    )
+                )
 
 
 def _detect_missing_usememo(
-    component_source: str,
-    lines: list[str],
-    offset: int,
-    opportunities: list[OptimizationOpportunity],
+    component_source: str, lines: list[str], offset: int, opportunities: list[OptimizationOpportunity]
 ) -> None:
     """Detect expensive computations that could benefit from useMemo."""
     for i, line in enumerate(lines):
         line_num = offset + i + 1
         stripped = line.strip()
         if EXPENSIVE_OPS_RE.search(stripped) and "useMemo" not in stripped:
-            opportunities.append(OptimizationOpportunity(
-                type=OpportunityType.MISSING_USEMEMO,
-                line=line_num,
-                description="Expensive array operation in render body runs on every render. "
-                            "Wrap with useMemo() and specify dependencies.",
-                severity=OpportunitySeverity.HIGH,
-            ))
+            opportunities.append(
+                OptimizationOpportunity(
+                    type=OpportunityType.MISSING_USEMEMO,
+                    line=line_num,
+                    description="Expensive array operation in render body runs on every render. "
+                    "Wrap with useMemo() and specify dependencies.",
+                    severity=OpportunitySeverity.HIGH,
+                )
+            )

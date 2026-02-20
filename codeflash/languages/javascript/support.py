@@ -75,7 +75,7 @@ class JavaScriptSupport:
     def get_framework_info(self, project_root: Path) -> FrameworkInfo:
         """Get cached framework info for the project."""
         if self._cached_framework_root != project_root or self._cached_framework_info is None:
-            from codeflash.languages.javascript.frameworks.detector import detect_framework  # noqa: PLC0415
+            from codeflash.languages.javascript.frameworks.detector import detect_framework
 
             self._cached_framework_info = detect_framework(project_root)
             self._cached_framework_root = project_root
@@ -120,14 +120,12 @@ class JavaScriptSupport:
             react_component_map: dict[str, Any] = {}
             project_root = file_path.parent  # Will be refined by caller
             try:
-                from codeflash.languages.javascript.frameworks.react.discovery import (  # noqa: PLC0415
-                    classify_component,
-                )
+                from codeflash.languages.javascript.frameworks.react.discovery import classify_component
 
                 for func in tree_functions:
                     comp_type = classify_component(func, source, analyzer)
                     if comp_type is not None:
-                        from codeflash.languages.javascript.frameworks.react.discovery import (  # noqa: PLC0415
+                        from codeflash.languages.javascript.frameworks.react.discovery import (
                             _extract_hooks_used,
                             _is_wrapped_in_memo,
                         )
@@ -473,13 +471,8 @@ class JavaScriptSupport:
         react_context_str = ""
         if function.metadata and function.metadata.get("is_react_component"):
             try:
-                from codeflash.languages.javascript.frameworks.react.discovery import (  # noqa: PLC0415
-                    ReactComponentInfo,
-                    find_react_components,
-                )
-                from codeflash.languages.javascript.frameworks.react.context import (  # noqa: PLC0415
-                    extract_react_context,
-                )
+                from codeflash.languages.javascript.frameworks.react.context import extract_react_context
+                from codeflash.languages.javascript.frameworks.react.discovery import find_react_components
 
                 components = find_react_components(source, function.file_path, analyzer)
                 for comp in components:
@@ -535,7 +528,7 @@ class JavaScriptSupport:
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
 
-        def find_class_node(node):
+        def find_class_node(node: Any) -> Any:
             """Recursively find a class declaration with the given name."""
             if node.type in ("class_declaration", "class"):
                 name_node = node.child_by_field_name("name")
@@ -1953,10 +1946,9 @@ class JavaScriptSupport:
                 continue
 
             key = test_qualified_name + "#" + abs_path_str
-            parts = inv_id.iteration_id.split("_").__len__()  # type: ignore[union-attr]
-            cur_invid = (
-                inv_id.iteration_id.split("_")[0] if parts < 3 else "_".join(inv_id.iteration_id.split("_")[:-1])
-            )  # type: ignore[union-attr]
+            iteration_id = inv_id.iteration_id or ""
+            parts = iteration_id.split("_").__len__()
+            cur_invid = iteration_id.split("_")[0] if parts < 3 else "_".join(iteration_id.split("_")[:-1])
             match_key = key + "#" + cur_invid
             if match_key not in unique_inv_ids:
                 unique_inv_ids[match_key] = 0
@@ -1967,7 +1959,7 @@ class JavaScriptSupport:
 
     def compare_test_results(
         self, original_results_path: Path, candidate_results_path: Path, project_root: Path | None = None
-    ) -> tuple[bool, list]:
+    ) -> tuple[bool, list[Any]]:
         """Compare test results between original and candidate code.
 
         Args:
@@ -2084,8 +2076,8 @@ class JavaScriptSupport:
             return rel_path
         except ValueError:
             # Fallback if paths are on different drives (Windows)
-            rel_path = source_file.relative_to(project_root)
-            return "../" + rel_path.with_suffix("").as_posix()
+            fallback_path = source_file.relative_to(project_root)
+            return "../" + fallback_path.with_suffix("").as_posix()
 
     def verify_requirements(self, project_root: Path, test_framework: str = "jest") -> tuple[bool, list[str]]:
         """Verify that all JavaScript requirements are met.
@@ -2253,7 +2245,7 @@ class JavaScriptSupport:
             logger.warning("Failed to instrument source for line profiling: %s", e)
             return False
 
-    def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict:
+    def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict[str, Any]:
         from codeflash.languages.javascript.line_profiler import JavaScriptLineProfiler
 
         if line_profiler_output_file.exists():
@@ -2265,7 +2257,7 @@ class JavaScriptSupport:
         logger.warning("No line profiler output file found at %s", line_profiler_output_file)
         return {"timings": {}, "unit": 0, "str_out": ""}
 
-    def _format_js_line_profile_output(self, parsed_results: dict) -> str:
+    def _format_js_line_profile_output(self, parsed_results: dict[str, Any]) -> str:
         """Format JavaScript line profiler results for display."""
         if not parsed_results.get("timings"):
             return ""

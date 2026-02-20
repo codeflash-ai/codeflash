@@ -34,9 +34,7 @@ jest_end_pattern = re.compile(r"!######([^:]+):([^:]+):([^:]+):([^:]+):([^:]+):(
 
 # React Profiler render marker pattern
 # Format: !######REACT_RENDER:{component}:{phase}:{actualDuration}:{baseDuration}:{renderCount}######!
-REACT_RENDER_MARKER_PATTERN = re.compile(
-    r"!######REACT_RENDER:([^:]+):([^:]+):([^:]+):([^:]+):(\d+)######!"
-)
+REACT_RENDER_MARKER_PATTERN = re.compile(r"!######REACT_RENDER:([^:]+):([^:]+):([^:]+):([^:]+):(\d+)######!")
 
 
 @dataclass(frozen=True)
@@ -58,13 +56,15 @@ def parse_react_render_markers(stdout: str) -> list[RenderProfile]:
     profiles: list[RenderProfile] = []
     for match in REACT_RENDER_MARKER_PATTERN.finditer(stdout):
         try:
-            profiles.append(RenderProfile(
-                component_name=match.group(1),
-                phase=match.group(2),
-                actual_duration_ms=float(match.group(3)),
-                base_duration_ms=float(match.group(4)),
-                render_count=int(match.group(5)),
-            ))
+            profiles.append(
+                RenderProfile(
+                    component_name=match.group(1),
+                    phase=match.group(2),
+                    actual_duration_ms=float(match.group(3)),
+                    base_duration_ms=float(match.group(4)),
+                    render_count=int(match.group(5)),
+                )
+            )
         except (ValueError, IndexError) as e:
             logger.debug("Failed to parse React render marker: %s", e)
     return profiles

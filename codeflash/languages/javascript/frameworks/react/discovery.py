@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from tree_sitter import Node
+
     from codeflash.languages.javascript.treesitter import FunctionNode, TreeSitterAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -23,13 +25,28 @@ HOOK_CALL_RE = re.compile(r"\buse[A-Z]\w*\s*\(")
 HOOK_NAME_RE = re.compile(r"^use[A-Z]\w*$")
 
 # Built-in React hooks
-BUILTIN_HOOKS = frozenset({
-    "useState", "useEffect", "useContext", "useReducer", "useCallback",
-    "useMemo", "useRef", "useImperativeHandle", "useLayoutEffect",
-    "useInsertionEffect", "useDebugValue", "useDeferredValue",
-    "useTransition", "useId", "useSyncExternalStore", "useOptimistic",
-    "useActionState", "useFormStatus",
-})
+BUILTIN_HOOKS = frozenset(
+    {
+        "useState",
+        "useEffect",
+        "useContext",
+        "useReducer",
+        "useCallback",
+        "useMemo",
+        "useRef",
+        "useImperativeHandle",
+        "useLayoutEffect",
+        "useInsertionEffect",
+        "useDebugValue",
+        "useDeferredValue",
+        "useTransition",
+        "useId",
+        "useSyncExternalStore",
+        "useOptimistic",
+        "useActionState",
+        "useFormStatus",
+    }
+)
 
 
 class ComponentType(str, Enum):
@@ -105,9 +122,7 @@ def find_react_components(source: str, file_path: Path, analyzer: TreeSitterAnal
         logger.debug("Skipping server component file: %s", file_path)
         return []
 
-    functions = analyzer.find_functions(
-        source, include_methods=False, include_arrow_functions=True, require_name=True
-    )
+    functions = analyzer.find_functions(source, include_methods=False, include_arrow_functions=True, require_name=True)
 
     components: list[ReactComponentInfo] = []
     for func in functions:
@@ -119,16 +134,18 @@ def find_react_components(source: str, file_path: Path, analyzer: TreeSitterAnal
         props_type = _extract_props_type(func, source, analyzer)
         is_memoized = _is_wrapped_in_memo(func, source)
 
-        components.append(ReactComponentInfo(
-            function_name=func.name,
-            component_type=comp_type,
-            uses_hooks=tuple(hooks_used),
-            returns_jsx=comp_type != ComponentType.HOOK and _function_returns_jsx(func, source, analyzer),
-            props_type=props_type,
-            is_memoized=is_memoized,
-            start_line=func.start_line,
-            end_line=func.end_line,
-        ))
+        components.append(
+            ReactComponentInfo(
+                function_name=func.name,
+                component_type=comp_type,
+                uses_hooks=tuple(hooks_used),
+                returns_jsx=comp_type != ComponentType.HOOK and _function_returns_jsx(func, source, analyzer),
+                props_type=props_type,
+                is_memoized=is_memoized,
+                start_line=func.start_line,
+                end_line=func.end_line,
+            )
+        )
 
     return components
 
@@ -157,11 +174,14 @@ def _function_returns_jsx(func: FunctionNode, source: str, analyzer: TreeSitterA
     return False
 
 
-def _node_contains_jsx(node) -> bool:
+def _node_contains_jsx(node: Node) -> bool:
     """Recursively check if a tree-sitter node contains JSX."""
     if node.type in (
-        "jsx_element", "jsx_self_closing_element", "jsx_fragment",
-        "jsx_expression", "jsx_opening_element",
+        "jsx_element",
+        "jsx_self_closing_element",
+        "jsx_fragment",
+        "jsx_expression",
+        "jsx_opening_element",
     ):
         return True
 
@@ -208,7 +228,7 @@ def _extract_props_type(func: FunctionNode, source: str, analyzer: TreeSitterAna
                 # Get the type annotation node (skip the colon)
                 for child in type_node.children:
                     if child.type != ":":
-                        return source_bytes[child.start_byte:child.end_byte].decode("utf-8")
+                        return source_bytes[child.start_byte : child.end_byte].decode("utf-8")
         # Destructured params with type: { foo, bar }: Props
         if param.type == "object_pattern":
             # Look for next sibling that is a type_annotation
@@ -216,7 +236,7 @@ def _extract_props_type(func: FunctionNode, source: str, analyzer: TreeSitterAna
             if next_sib and next_sib.type == "type_annotation":
                 for child in next_sib.children:
                     if child.type != ":":
-                        return source_bytes[child.start_byte:child.end_byte].decode("utf-8")
+                        return source_bytes[child.start_byte : child.end_byte].decode("utf-8")
 
     return None
 
@@ -234,7 +254,7 @@ def _is_wrapped_in_memo(func: FunctionNode, source: str) -> bool:
             func_node = parent.child_by_field_name("function")
             if func_node:
                 source_bytes = source.encode("utf-8")
-                func_text = source_bytes[func_node.start_byte:func_node.end_byte].decode("utf-8")
+                func_text = source_bytes[func_node.start_byte : func_node.end_byte].decode("utf-8")
                 if func_text in ("React.memo", "memo"):
                     return True
         parent = parent.parent
@@ -242,10 +262,5 @@ def _is_wrapped_in_memo(func: FunctionNode, source: str) -> bool:
     # Also check for memo wrapping at the export level:
     # export default memo(MyComponent)
     name = func.name
-    memo_patterns = [
-        f"React.memo({name})",
-        f"memo({name})",
-        f"React.memo({name},",
-        f"memo({name},",
-    ]
+    memo_patterns = [f"React.memo({name})", f"memo({name})", f"React.memo({name},", f"memo({name},"]
     return any(pattern in source for pattern in memo_patterns)

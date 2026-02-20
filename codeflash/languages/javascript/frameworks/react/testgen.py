@@ -16,9 +16,7 @@ if TYPE_CHECKING:
 
 
 def build_react_testgen_context(
-    component_info: ReactComponentInfo,
-    react_context: ReactContext,
-    code_context: CodeContext,
+    component_info: ReactComponentInfo, react_context: ReactContext, code_context: CodeContext
 ) -> dict:
     """Assemble context dict for the React testgen LLM prompt."""
     return {
@@ -101,14 +99,12 @@ def post_process_react_tests(test_source: str, component_info: ReactComponentInf
 
     # Ensure act import if state updates are detected
     if "act(" in result and "import" in result and "act" not in result.split("from '@testing-library/react'")[0]:
-        result = result.replace(
-            "from '@testing-library/react'",
-            "act, " + "from '@testing-library/react'",
-            1,
-        )
+        result = result.replace("from '@testing-library/react'", "act, " + "from '@testing-library/react'", 1)
 
     # Ensure user-event import if user interactions are tested
-    if ("click" in result.lower() or "type" in result.lower() or "userEvent" in result) and "@testing-library/user-event" not in result:
+    if (
+        "click" in result.lower() or "type" in result.lower() or "userEvent" in result
+    ) and "@testing-library/user-event" not in result:
         # Add user-event import after testing-library import
         result = re.sub(
             r"(import .+ from '@testing-library/react';?\n)",

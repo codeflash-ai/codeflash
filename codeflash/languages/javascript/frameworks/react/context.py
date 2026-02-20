@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from tree_sitter import Node
+
     from codeflash.languages.javascript.frameworks.react.analyzer import OptimizationOpportunity
     from codeflash.languages.javascript.frameworks.react.discovery import ReactComponentInfo
     from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer
@@ -73,24 +75,16 @@ class ReactContext:
 
 
 def extract_react_context(
-    component_info: ReactComponentInfo,
-    source: str,
-    analyzer: TreeSitterAnalyzer,
-    module_root: Path,
+    component_info: ReactComponentInfo, source: str, analyzer: TreeSitterAnalyzer, module_root: Path
 ) -> ReactContext:
     """Extract React-specific context for a component.
 
     Analyzes the component source to find props types, hooks, child components,
     and optimization opportunities.
     """
-    from codeflash.languages.javascript.frameworks.react.analyzer import (  # noqa: PLC0415
-        detect_optimization_opportunities,
-    )
+    from codeflash.languages.javascript.frameworks.react.analyzer import detect_optimization_opportunities
 
-    context = ReactContext(
-        props_interface=component_info.props_type,
-        is_already_memoized=component_info.is_memoized,
-    )
+    context = ReactContext(props_interface=component_info.props_type, is_already_memoized=component_info.is_memoized)
 
     # Extract hook usage details from the component source
     lines = source.splitlines()
@@ -114,7 +108,7 @@ def extract_react_context(
 
 def _extract_hook_usages(component_source: str) -> list[HookUsage]:
     """Parse hook calls and their dependency arrays from component source."""
-    import re  # noqa: PLC0415
+    import re
 
     hooks: list[HookUsage] = []
     # Match useXxx( patterns
@@ -124,7 +118,7 @@ def _extract_hook_usages(component_source: str) -> list[HookUsage]:
         hook_name = match.group(1)
         # Try to determine if there's a dependency array
         # Look for ], [ pattern after the hook call (simplified heuristic)
-        rest_of_line = component_source[match.end():]
+        rest_of_line = component_source[match.end() :]
         has_deps = False
         dep_count = 0
 
@@ -143,7 +137,7 @@ def _extract_hook_usages(component_source: str) -> list[HookUsage]:
                         # Count items in the array (rough: count commas + 1 for non-empty)
                         array_start = preceding.rfind("[")
                         if array_start >= 0:
-                            array_content = preceding[array_start + 1:-1].strip()
+                            array_content = preceding[array_start + 1 : -1].strip()
                             if array_content:
                                 dep_count = array_content.count(",") + 1
                             else:
@@ -151,18 +145,14 @@ def _extract_hook_usages(component_source: str) -> list[HookUsage]:
                                 has_deps = True
                     break
 
-        hooks.append(HookUsage(
-            name=hook_name,
-            has_dependency_array=has_deps,
-            dependency_count=dep_count,
-        ))
+        hooks.append(HookUsage(name=hook_name, has_dependency_array=has_deps, dependency_count=dep_count))
 
     return hooks
 
 
 def _extract_child_components(component_source: str, analyzer: TreeSitterAnalyzer, full_source: str) -> list[str]:
     """Find child component names rendered in JSX."""
-    import re  # noqa: PLC0415
+    import re
 
     # Match JSX tags that start with uppercase (React components)
     jsx_component_re = re.compile(r"<([A-Z][a-zA-Z0-9.]*)")
@@ -177,7 +167,7 @@ def _extract_child_components(component_source: str, analyzer: TreeSitterAnalyze
 
 def _extract_context_subscriptions(component_source: str) -> list[str]:
     """Find React context subscriptions via useContext calls."""
-    import re  # noqa: PLC0415
+    import re
 
     context_re = re.compile(r"\buseContext\s*\(\s*(\w+)")
     return [match.group(1) for match in context_re.finditer(component_source)]
@@ -188,13 +178,13 @@ def _find_type_definition(type_name: str, source: str, analyzer: TreeSitterAnaly
     source_bytes = source.encode("utf-8")
     tree = analyzer.parse(source_bytes)
 
-    def search_node(node):
+    def search_node(node: Node) -> str | None:
         if node.type in ("interface_declaration", "type_alias_declaration"):
             name_node = node.child_by_field_name("name")
             if name_node:
-                name = source_bytes[name_node.start_byte:name_node.end_byte].decode("utf-8")
+                name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf-8")
                 if name == type_name:
-                    return source_bytes[node.start_byte:node.end_byte].decode("utf-8")
+                    return source_bytes[node.start_byte : node.end_byte].decode("utf-8")
         for child in node.children:
             result = search_node(child)
             if result:
