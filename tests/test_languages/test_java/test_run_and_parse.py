@@ -413,7 +413,8 @@ class TestJavaRunAndParsePerformance:
     """Tests that the performance instrumentation produces correct timing data.
 
     Uses precise busy-wait with System.nanoTime() (monotonic clock) to achieve
-    <1% timing variance, validating measurement system accuracy.
+    <5% timing variance, accounting for JIT warmup effects where first iterations
+    are cold and subsequent iterations benefit from JIT optimization.
     """
 
     PRECISE_WAITER_TEST = """package com.example;
@@ -487,7 +488,7 @@ public class PreciseWaiterTest {
         return test_results
 
     def test_performance_inner_loop_count_and_timing(self, java_project):
-        """2 outer × 2 inner = 4 results with <2% variance and accurate 10ms timing."""
+        """2 outer × 2 inner = 4 results with <5% variance and accurate 10ms timing."""
         skip_if_maven_not_available()
         project_root, src_dir, test_dir = self._setup_precise_waiter_project(java_project)
 
@@ -520,18 +521,18 @@ public class PreciseWaiterTest {
         stddev_runtime = statistics.stdev(runtimes)
         coefficient_of_variation = stddev_runtime / mean_runtime
 
-        # Target: 10ms (10,000,000 ns), allow <2% coefficient of variation
-        # (userspace busy-wait can still experience minor OS scheduling effects)
+        # Target: 10ms (10,000,000 ns), allow <5% coefficient of variation
+        # (accounts for JIT warmup - first iteration is cold, subsequent are optimized)
         expected_ns = 10_000_000
         runtimes_ms = [r / 1_000_000 for r in runtimes]
 
-        assert coefficient_of_variation < 0.02, (
-            f"Timing variance too high: CV={coefficient_of_variation:.2%} (should be <2%). "
+        assert coefficient_of_variation < 0.05, (
+            f"Timing variance too high: CV={coefficient_of_variation:.2%} (should be <5%). "
             f"Runtimes: {runtimes_ms} ms (mean={mean_runtime / 1_000_000:.3f}ms)"
         )
 
-        # Verify measured time is close to expected 10ms (allow ±2% for measurement overhead)
-        assert expected_ns * 0.98 <= mean_runtime <= expected_ns * 1.02, (
+        # Verify measured time is close to expected 10ms (allow ±5% for JIT warmup)
+        assert expected_ns * 0.95 <= mean_runtime <= expected_ns * 1.05, (
             f"Mean runtime {mean_runtime / 1_000_000:.3f}ms not close to expected 10.0ms"
         )
 
@@ -554,14 +555,15 @@ public class PreciseWaiterTest {
             )
 
         # Total should be sum of 2 minimums (one per inner iteration) ≈ 20ms
+        # Minimums filter out JIT warmup, so use tighter ±2% tolerance
         expected_total_ns = 2 * expected_ns
-        assert expected_total_ns * 0.96 <= total_runtime <= expected_total_ns * 1.04, (
+        assert expected_total_ns * 0.98 <= total_runtime <= expected_total_ns * 1.02, (
             f"total_passed_runtime {total_runtime / 1_000_000:.3f}ms not close to expected "
-            f"{expected_total_ns / 1_000_000:.1f}ms (2 inner iterations × 10ms each)"
+            f"{expected_total_ns / 1_000_000:.1f}ms (2 inner iterations × 10ms each, ±2%)"
         )
 
     def test_performance_multiple_test_methods_inner_loop(self, java_project):
-        """Two @Test methods: 2 outer × 2 inner = 8 results with <2% variance."""
+        """Two @Test methods: 2 outer × 2 inner = 8 results with <5% variance."""
         skip_if_maven_not_available()
         project_root, src_dir, test_dir = self._setup_precise_waiter_project(java_project)
 
@@ -612,18 +614,18 @@ public class PreciseWaiterMultiTest {
         stddev_runtime = statistics.stdev(runtimes)
         coefficient_of_variation = stddev_runtime / mean_runtime
 
-        # Target: 10ms (10,000,000 ns), allow <2% coefficient of variation
-        # (userspace busy-wait can still experience minor OS scheduling effects)
+        # Target: 10ms (10,000,000 ns), allow <5% coefficient of variation
+        # (accounts for JIT warmup - first iteration is cold, subsequent are optimized)
         expected_ns = 10_000_000
         runtimes_ms = [r / 1_000_000 for r in runtimes]
 
-        assert coefficient_of_variation < 0.02, (
-            f"Timing variance too high: CV={coefficient_of_variation:.2%} (should be <2%). "
+        assert coefficient_of_variation < 0.05, (
+            f"Timing variance too high: CV={coefficient_of_variation:.2%} (should be <5%). "
             f"Runtimes: {runtimes_ms} ms (mean={mean_runtime / 1_000_000:.3f}ms)"
         )
 
-        # Verify measured time is close to expected 10ms (allow ±2% for measurement overhead)
-        assert expected_ns * 0.98 <= mean_runtime <= expected_ns * 1.02, (
+        # Verify measured time is close to expected 10ms (allow ±5% for JIT warmup)
+        assert expected_ns * 0.95 <= mean_runtime <= expected_ns * 1.05, (
             f"Mean runtime {mean_runtime / 1_000_000:.3f}ms not close to expected 10.0ms"
         )
 
@@ -646,8 +648,9 @@ public class PreciseWaiterMultiTest {
             )
 
         # Total should be sum of 4 minimums ≈ 40ms
+        # Minimums filter out JIT warmup, so use tighter ±2% tolerance
         expected_total_ns = 4 * expected_ns  # 4 test cases × 10ms each
-        assert expected_total_ns * 0.96 <= total_runtime <= expected_total_ns * 1.04, (
+        assert expected_total_ns * 0.98 <= total_runtime <= expected_total_ns * 1.02, (
             f"total_passed_runtime {total_runtime / 1_000_000:.3f}ms not close to expected "
-            f"{expected_total_ns / 1_000_000:.1f}ms (2 methods × 2 inner iterations × 10ms)"
+            f"{expected_total_ns / 1_000_000:.1f}ms (2 methods × 2 inner iterations × 10ms, ±2%)"
         )
