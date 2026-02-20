@@ -788,7 +788,7 @@ def validate_and_fix_import_style(test_code: str, source_file_path: Path, functi
         Fixed test code with correct import style.
 
     """
-    from codeflash.languages.treesitter_utils import get_analyzer_for_file
+    from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
     # Read source file to determine export style
     try:
@@ -895,6 +895,115 @@ def validate_and_fix_import_style(test_code: str, source_file_path: Path, functi
                 test_code = test_code.replace(old_import, new_import)
 
     return test_code
+
+
+def fix_import_path_for_test_location(
+    test_code: str, source_file_path: Path, test_file_path: Path, module_root: Path
+) -> str:
+    """Fix import paths in generated test code to be relative to test file location.
+
+    The AI may generate tests with import paths that are relative to the module root
+    (e.g., 'apps/web/app/file') instead of relative to where the test file is located
+    (e.g., '../../app/file'). This function fixes such imports.
+
+    Args:
+        test_code: The generated test code.
+        source_file_path: Absolute path to the source file being tested.
+        test_file_path: Absolute path to where the test file will be written.
+        module_root: Root directory of the module/project.
+
+    Returns:
+        Test code with corrected import paths.
+
+    """
+    import os
+
+    # Calculate the correct relative import path from test file to source file
+    test_dir = test_file_path.parent
+    try:
+        correct_rel_path = os.path.relpath(source_file_path, test_dir)
+        correct_rel_path = correct_rel_path.replace("\\", "/")
+        # Remove file extension for JS/TS imports
+        for ext in [".tsx", ".ts", ".jsx", ".js", ".mjs", ".cjs"]:
+            if correct_rel_path.endswith(ext):
+                correct_rel_path = correct_rel_path[: -len(ext)]
+                break
+        # Ensure it starts with ./ or ../
+        if not correct_rel_path.startswith("."):
+            correct_rel_path = "./" + correct_rel_path
+    except ValueError:
+        # Can't compute relative path (different drives on Windows)
+        return test_code
+
+    # Try to compute what incorrect path the AI might have generated
+    # The AI often uses module_root-relative paths like 'apps/web/app/...'
+    try:
+        source_rel_to_module = os.path.relpath(source_file_path, module_root)
+        source_rel_to_module = source_rel_to_module.replace("\\", "/")
+        # Remove extension
+        for ext in [".tsx", ".ts", ".jsx", ".js", ".mjs", ".cjs"]:
+            if source_rel_to_module.endswith(ext):
+                source_rel_to_module = source_rel_to_module[: -len(ext)]
+                break
+    except ValueError:
+        return test_code
+
+    # Also check for project root-relative paths (including module_root in path)
+    try:
+        project_root = module_root.parent if module_root.name in ["src", "lib", "app", "web", "apps"] else module_root
+        source_rel_to_project = os.path.relpath(source_file_path, project_root)
+        source_rel_to_project = source_rel_to_project.replace("\\", "/")
+        for ext in [".tsx", ".ts", ".jsx", ".js", ".mjs", ".cjs"]:
+            if source_rel_to_project.endswith(ext):
+                source_rel_to_project = source_rel_to_project[: -len(ext)]
+                break
+    except ValueError:
+        source_rel_to_project = None
+
+    # Source file name (for matching module paths that end with the file name)
+    source_name = source_file_path.stem
+
+    # Patterns to find import statements
+    # ESM: import { func } from 'path' or import func from 'path'
+    esm_import_pattern = re.compile(r"(import\s+(?:{[^}]+}|\w+)\s+from\s+['\"])([^'\"]+)(['\"])")
+    # CommonJS: const { func } = require('path') or const func = require('path')
+    cjs_require_pattern = re.compile(
+        r"((?:const|let|var)\s+(?:{[^}]+}|\w+)\s*=\s*require\s*\(\s*['\"])([^'\"]+)(['\"])"
+    )
+
+    def should_fix_path(import_path: str) -> bool:
+        """Check if this import path looks like it should point to our source file."""
+        # Skip relative imports that already look correct
+        if import_path.startswith(("./", "../")):
+            return False
+        # Skip package imports (no path separators or start with @)
+        if "/" not in import_path and "\\" not in import_path:
+            return False
+        if import_path.startswith("@") and "/" in import_path:
+            # Could be an alias like @/utils - skip these
+            return False
+        # Check if it looks like it points to our source file
+        if import_path == source_rel_to_module:
+            return True
+        if source_rel_to_project and import_path == source_rel_to_project:
+            return True
+        if import_path.endswith((source_name, "/" + source_name)):
+            return True
+        return False
+
+    def fix_import(match: re.Match[str]) -> str:
+        """Replace incorrect import path with correct relative path."""
+        prefix = match.group(1)
+        import_path = match.group(2)
+        suffix = match.group(3)
+
+        if should_fix_path(import_path):
+            logger.debug(f"Fixing import path: {import_path} -> {correct_rel_path}")
+            return f"{prefix}{correct_rel_path}{suffix}"
+        return match.group(0)
+
+    test_code = esm_import_pattern.sub(fix_import, test_code)
+    return cjs_require_pattern.sub(fix_import, test_code)
 
 
 def get_instrumented_test_path(original_path: Path, mode: str) -> Path:

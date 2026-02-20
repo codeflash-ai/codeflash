@@ -160,7 +160,8 @@ class TestBuildVitestBehavioralCommand:
 
             cmd = _build_vitest_behavioral_command([test_file], timeout=60, output_file=output_file)
 
-            assert f"--outputFile={output_file}" in cmd
+            # Vitest requires dot notation for junit output when using multiple reporters
+            assert f"--outputFile.junit={output_file}" in cmd
 
 
 class TestBuildVitestBenchmarkingCommand:
