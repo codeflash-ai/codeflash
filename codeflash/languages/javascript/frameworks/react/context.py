@@ -7,9 +7,10 @@ context subscriptions, and optimization opportunities from React components.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
-import re
+
 from codeflash.languages.javascript.frameworks.react.analyzer import detect_optimization_opportunities
 
 if TYPE_CHECKING:
@@ -91,7 +92,6 @@ def extract_react_context(
     Analyzes the component source to find props types, hooks, child components,
     and optimization opportunities.
     """
-
     context = ReactContext(props_interface=component_info.props_type, is_already_memoized=component_info.is_memoized)
 
     # Extract hook usage details from the component source
@@ -116,7 +116,6 @@ def extract_react_context(
 
 def _extract_hook_usages(component_source: str) -> list[HookUsage]:
     """Parse hook calls and their dependency arrays from component source."""
-
     hooks: list[HookUsage] = []
     cs = component_source
     n = len(cs)
