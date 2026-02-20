@@ -664,7 +664,7 @@ class CoverageData:
         from rich.tree import Tree
 
         tree = Tree("Test Coverage Results")
-        tree.add(f"Main Function: {self.main_func_coverage.name}: {self.coverage:.2f}%")
+        tree.add(f"Main Function: {self.main_func_coverage.name}: {self.main_func_coverage.coverage:.2f}%")
         if self.dependent_func_coverage:
             tree.add(
                 f"Dependent Function: {self.dependent_func_coverage.name}: {self.dependent_func_coverage.coverage:.2f}%"
