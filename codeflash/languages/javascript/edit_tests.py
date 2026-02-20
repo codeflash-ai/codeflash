@@ -37,11 +37,10 @@ def add_runtime_comments(source: str, original_runtimes: dict[str, int], optimiz
     """
     # Check logger level once to avoid repeated checks
     debug_enabled = logger.isEnabledFor(logging.DEBUG)
-    
+
     if debug_enabled:
         logger.debug(f"[js-annotations] original_runtimes has {len(original_runtimes)} entries")
         logger.debug(f"[js-annotations] optimized_runtimes has {len(optimized_runtimes)} entries")
-
 
     if not original_runtimes or not optimized_runtimes:
         if debug_enabled:
@@ -57,10 +56,9 @@ def add_runtime_comments(source: str, original_runtimes: dict[str, int], optimiz
     timing_by_full_name: dict[str, tuple[int, int]] = {}
     # Use set for faster membership testing
     optimized_keys = set(optimized_runtimes.keys())
-    
+
     for key in original_runtimes:
         if key in optimized_keys:
-            # Extract test function name from the key (first part before #)
             # Extract test function name from the key (first part before #)
             parts = key.split("#")
             if parts:
@@ -80,7 +78,6 @@ def add_runtime_comments(source: str, original_runtimes: dict[str, int], optimiz
     if debug_enabled:
         logger.debug(f"[js-annotations] Built timing_by_full_name with {len(timing_by_full_name)} entries")
 
-
     def find_matching_test(test_description: str) -> str | None:
         """Find a timing key that ends with the given test description (suffix match).
 
@@ -88,7 +85,6 @@ def add_runtime_comments(source: str, original_runtimes: dict[str, int], optimiz
         Source test names are like: "should return 0"
         We need to match by suffix because timing includes all describe block names.
         """
-        # Try to match by finding a key that ends with the test description
         # Try to match by finding a key that ends with the test description
         test_description_lower = test_description.lower()
         for full_name in timing_by_full_name:
@@ -111,7 +107,6 @@ def add_runtime_comments(source: str, original_runtimes: dict[str, int], optimiz
             if debug_enabled:
                 logger.debug(f"[js-annotations] Found test: '{current_test_name}'")
             # Find the matching full name from timing data using suffix match
-            # Find the matching full name from timing data using suffix match
             current_matched_full_name = find_matching_test(current_test_name)
             if current_matched_full_name and debug_enabled:
                 logger.debug(f"[js-annotations] Test '{current_test_name}' matched to '{current_matched_full_name}'")
@@ -124,7 +119,6 @@ def add_runtime_comments(source: str, original_runtimes: dict[str, int], optimiz
                 comment = format_runtime_comment(orig_time, opt_time, comment_prefix="//")
                 if debug_enabled:
                     logger.debug(f"[js-annotations] Adding comment to test '{current_test_name}': {comment}")
-                # Add comment at end of line
                 # Add comment at end of line
                 line = f"{line.rstrip()}  {comment}"
                 # Clear timing so we only annotate first call in each test
