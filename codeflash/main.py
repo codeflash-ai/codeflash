@@ -11,8 +11,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-if "--agent" in sys.argv:
-    os.environ["CODEFLASH_AGENT_MODE"] = "true"
+if "--subagent" in sys.argv:
+    os.environ["CODEFLASH_SUBAGENT_MODE"] = "true"
     import warnings
 
     warnings.filterwarnings("ignore")

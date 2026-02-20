@@ -141,7 +141,7 @@ def get_all_historical_functions(module_root: Path, checkpoint_dir: Path) -> dic
 
 def ask_should_use_checkpoint_get_functions(args: argparse.Namespace) -> Optional[dict[str, dict[str, str]]]:
     previous_checkpoint_functions = None
-    if getattr(args, "agent", False):
+    if getattr(args, "subagent", False):
         console.rule()
         return None
     if args.all and codeflash_temp_dir.is_dir():

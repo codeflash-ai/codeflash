@@ -8,9 +8,9 @@ def set_level(level: int, *, echo_setting: bool = True) -> None:
     import sys
     import time
 
-    from codeflash.lsp.helpers import is_agent_mode
+    from codeflash.lsp.helpers import is_subagent_mode
 
-    if is_agent_mode():
+    if is_subagent_mode():
         logging.basicConfig(
             level=level, handlers=[logging.StreamHandler(sys.stderr)], format="%(levelname)s: %(message)s", force=True
         )

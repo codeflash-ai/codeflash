@@ -19,8 +19,8 @@ def is_LSP_enabled() -> bool:
 
 
 @lru_cache(maxsize=1)
-def is_agent_mode() -> bool:
-    return os.getenv("CODEFLASH_AGENT_MODE", default="false").lower() == "true"
+def is_subagent_mode() -> bool:
+    return os.getenv("CODEFLASH_SUBAGENT_MODE", default="false").lower() == "true"
 
 
 def tree_to_markdown(tree: Tree, level: int = 0) -> str:

@@ -131,14 +131,14 @@ def parse_args() -> Namespace:
     )
     parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompts (useful for CI/scripts).")
     parser.add_argument(
-        "--agent",
+        "--subagent",
         action="store_true",
-        help="Agent mode: skip all interactive prompts with sensible defaults. Designed for AI agent integrations.",
+        help="Subagent mode: skip all interactive prompts with sensible defaults. Designed for AI agent integrations.",
     )
 
     args, unknown_args = parser.parse_known_args()
     sys.argv[:] = [sys.argv[0], *unknown_args]
-    if args.agent:
+    if args.subagent:
         args.yes = True
         args.no_pr = True
         args.worktree = True

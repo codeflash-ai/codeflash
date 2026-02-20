@@ -21,7 +21,7 @@ from rich.progress import (
 
 from codeflash.cli_cmds.console_constants import SPINNER_TYPES
 from codeflash.cli_cmds.logging_config import BARE_LOGGING_FORMAT
-from codeflash.lsp.helpers import is_agent_mode, is_LSP_enabled
+from codeflash.lsp.helpers import is_LSP_enabled, is_subagent_mode
 from codeflash.lsp.lsp_logger import enhanced_log
 from codeflash.lsp.lsp_message import LspCodeMessage, LspTextMessage
 
@@ -39,15 +39,15 @@ DEBUG_MODE = logging.getLogger().getEffectiveLevel() == logging.DEBUG
 
 console = Console()
 
-if is_LSP_enabled() or is_agent_mode():
+if is_LSP_enabled() or is_subagent_mode():
     console.quiet = True
 
-if is_agent_mode():
+if is_subagent_mode():
     import re
     import sys
 
     _lsp_prefix_re = re.compile(r"^(?:!?lsp,?|h[2-4]|loading)\|")
-    _agent_drop_patterns = (
+    _subagent_drop_patterns = (
         "Test log -",
         "Test failed to load",
         "Examining file ",
@@ -61,7 +61,7 @@ if is_agent_mode():
         def filter(self, record: logging.LogRecord) -> bool:
             record.msg = _lsp_prefix_re.sub("", str(record.msg))
             msg = record.getMessage()
-            return not any(msg.startswith(p) for p in _agent_drop_patterns)
+            return not any(msg.startswith(p) for p in _subagent_drop_patterns)
 
     _agent_handler = logging.StreamHandler(sys.stderr)
     _agent_handler.addFilter(_AgentLogFilter())
@@ -77,7 +77,7 @@ logger = logging.getLogger("rich")
 logging.getLogger("parso").setLevel(logging.WARNING)
 
 # override the logger to reformat the messages for the lsp
-if not is_agent_mode():
+if not is_subagent_mode():
     for level in ("info", "debug", "warning", "error"):
         real_fn = getattr(logger, level)
         setattr(
@@ -113,7 +113,7 @@ def paneled_text(
     text: str, panel_args: dict[str, str | bool] | None = None, text_args: dict[str, str] | None = None
 ) -> None:
     """Print text in a panel."""
-    if is_agent_mode():
+    if is_subagent_mode():
         return
     from rich.panel import Panel
     from rich.text import Text
@@ -143,7 +143,7 @@ def code_print(
         language: Programming language for syntax highlighting ('python', 'javascript', 'typescript')
 
     """
-    if is_agent_mode():
+    if is_subagent_mode():
         return
     if is_LSP_enabled():
         lsp_log(
@@ -182,7 +182,7 @@ def progress_bar(
     """
     global _progress_bar_active
 
-    if is_agent_mode():
+    if is_subagent_mode():
         yield DummyTask().id
         return
 
@@ -217,7 +217,7 @@ def progress_bar(
 @contextmanager
 def test_files_progress_bar(total: int, description: str) -> Generator[tuple[Progress, TaskID], None, None]:
     """Progress bar for test files."""
-    if is_agent_mode():
+    if is_subagent_mode():
         yield DummyProgress(), DummyTask().id
         return
 
@@ -254,7 +254,7 @@ def call_graph_live_display(
     from rich.text import Text
     from rich.tree import Tree
 
-    if is_agent_mode():
+    if is_subagent_mode():
         yield lambda _: None
         return
 
@@ -386,7 +386,7 @@ def call_graph_summary(call_graph: DependencyResolver, file_to_funcs: dict[Path,
         f"Standalone: {leaf_functions}"
     )
 
-    if is_agent_mode():
+    if is_subagent_mode():
         return
 
     if is_LSP_enabled():
@@ -396,7 +396,7 @@ def call_graph_summary(call_graph: DependencyResolver, file_to_funcs: dict[Path,
     console.print(Panel(summary, title="Call Graph Summary", border_style="cyan"))
 
 
-def agent_log_optimization_result(
+def subagent_log_optimization_result(
     function_name: str,
     file_path: Path,
     perf_improvement_line: str,

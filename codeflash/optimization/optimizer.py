@@ -31,7 +31,7 @@ from codeflash.code_utils.git_worktree_utils import (
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.either import is_successful
 from codeflash.languages import current_language_support, is_javascript, set_current_language
-from codeflash.lsp.helpers import is_agent_mode
+from codeflash.lsp.helpers import is_subagent_mode
 from codeflash.models.models import ValidCode
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.verification_utils import TestConfig
@@ -658,7 +658,7 @@ class Optimizer:
                     if is_successful(best_optimization):
                         optimizations_found += 1
                         # create a diff patch for successful optimization
-                        if self.current_worktree and not is_agent_mode():
+                        if self.current_worktree and not is_subagent_mode():
                             best_opt = best_optimization.unwrap()
                             read_writable_code = best_opt.code_context.read_writable_code
                             relative_file_paths = [
@@ -691,7 +691,7 @@ class Optimizer:
                 self.functions_checkpoint.cleanup()
             if hasattr(self.args, "command") and self.args.command == "optimize":
                 self.cleanup_replay_tests()
-            if is_agent_mode():
+            if is_subagent_mode():
                 if optimizations_found == 0:
                     import sys
 
