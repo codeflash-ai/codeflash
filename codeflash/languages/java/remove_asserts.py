@@ -604,7 +604,6 @@ class JavaAssertTransformer:
         self, node, wrapper_bytes: bytes, content_bytes: bytes, start_byte: int, end_byte: int, base_offset: int
     ) -> TargetCall:
         """Build a TargetCall from a tree-sitter method_invocation node."""
-
         object_node = node.child_by_field_name("object")
         args_node = node.child_by_field_name("arguments")
 
@@ -625,7 +624,6 @@ class JavaAssertTransformer:
             wrapper_bytes[object_node.start_byte : object_node.end_byte].decode("utf8") if object_node else None
         )
         full_call_text = wrapper_bytes[node.start_byte : node.end_byte].decode("utf8")
-
 
         return TargetCall(
             receiver=receiver_text,
