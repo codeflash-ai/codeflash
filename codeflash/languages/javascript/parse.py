@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -30,6 +31,43 @@ if TYPE_CHECKING:
 # Format: !######testName:testName:funcName:loopIndex:lineId:durationNs######! (end)
 jest_start_pattern = re.compile(r"!\$######([^:]+):([^:]+):([^:]+):([^:]+):([^#]+)######\$!")
 jest_end_pattern = re.compile(r"!######([^:]+):([^:]+):([^:]+):([^:]+):([^:]+):(\d+)######!")
+
+# React Profiler render marker pattern
+# Format: !######REACT_RENDER:{component}:{phase}:{actualDuration}:{baseDuration}:{renderCount}######!
+REACT_RENDER_MARKER_PATTERN = re.compile(
+    r"!######REACT_RENDER:([^:]+):([^:]+):([^:]+):([^:]+):(\d+)######!"
+)
+
+
+@dataclass(frozen=True)
+class RenderProfile:
+    """Parsed React Profiler render data from a single marker."""
+
+    component_name: str
+    phase: str  # "mount" or "update"
+    actual_duration_ms: float
+    base_duration_ms: float
+    render_count: int
+
+
+def parse_react_render_markers(stdout: str) -> list[RenderProfile]:
+    """Parse React Profiler render markers from test output.
+
+    Returns a list of RenderProfile instances, one per marker found.
+    """
+    profiles: list[RenderProfile] = []
+    for match in REACT_RENDER_MARKER_PATTERN.finditer(stdout):
+        try:
+            profiles.append(RenderProfile(
+                component_name=match.group(1),
+                phase=match.group(2),
+                actual_duration_ms=float(match.group(3)),
+                base_duration_ms=float(match.group(4)),
+                render_count=int(match.group(5)),
+            ))
+        except (ValueError, IndexError) as e:
+            logger.debug("Failed to parse React render marker: %s", e)
+    return profiles
 
 
 def _extract_jest_console_output(suite_elem) -> str:

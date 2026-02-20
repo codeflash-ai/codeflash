@@ -93,6 +93,7 @@ class CodeContext:
     read_only_context: str = ""
     imports: list[str] = field(default_factory=list)
     language: Language = Language.PYTHON
+    react_context: str | None = None
 
 
 @dataclass

@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from codeflash.languages.base import ReferenceInfo
+    from codeflash.languages.javascript.frameworks.detector import FrameworkInfo
     from codeflash.languages.javascript.treesitter import TypeDefinition
     from codeflash.models.models import GeneratedTestsList, InvocationId
 
@@ -68,6 +69,22 @@ class JavaScriptSupport:
     def dir_excludes(self) -> frozenset[str]:
         return frozenset({"node_modules", "dist", "build", ".next", ".nuxt", "coverage", ".cache", ".turbo", ".vercel"})
 
+    _cached_framework_info: FrameworkInfo | None = None
+    _cached_framework_root: Path | None = None
+
+    def get_framework_info(self, project_root: Path) -> FrameworkInfo:
+        """Get cached framework info for the project."""
+        if self._cached_framework_root != project_root or self._cached_framework_info is None:
+            from codeflash.languages.javascript.frameworks.detector import detect_framework  # noqa: PLC0415
+
+            self._cached_framework_info = detect_framework(project_root)
+            self._cached_framework_root = project_root
+        return self._cached_framework_info
+
+    def is_react_project(self, project_root: Path) -> bool:
+        """Check if the project uses React."""
+        return self.get_framework_info(project_root).name == "react"
+
     # === Discovery ===
 
     def discover_functions(
@@ -99,6 +116,31 @@ class JavaScriptSupport:
                 source, include_methods=criteria.include_methods, include_arrow_functions=True, require_name=True
             )
 
+            # Build React component lookup if this is a React project
+            react_component_map: dict[str, Any] = {}
+            project_root = file_path.parent  # Will be refined by caller
+            try:
+                from codeflash.languages.javascript.frameworks.react.discovery import (  # noqa: PLC0415
+                    classify_component,
+                )
+
+                for func in tree_functions:
+                    comp_type = classify_component(func, source, analyzer)
+                    if comp_type is not None:
+                        from codeflash.languages.javascript.frameworks.react.discovery import (  # noqa: PLC0415
+                            _extract_hooks_used,
+                            _is_wrapped_in_memo,
+                        )
+
+                        react_component_map[func.name] = {
+                            "component_type": comp_type.value,
+                            "hooks_used": _extract_hooks_used(func.source_text),
+                            "is_memoized": _is_wrapped_in_memo(func, source),
+                            "is_react_component": True,
+                        }
+            except Exception as e:
+                logger.debug("React detection skipped: %s", e)
+
             functions: list[FunctionToOptimize] = []
             for func in tree_functions:
                 # Check for return statement if required
@@ -122,6 +164,9 @@ class JavaScriptSupport:
                 if func.parent_function:
                     parents.append(FunctionParent(name=func.parent_function, type="FunctionDef"))
 
+                # Attach React metadata if this function is a component
+                metadata = react_component_map.get(func.name)
+
                 functions.append(
                     FunctionToOptimize(
                         function_name=func.name,
@@ -135,6 +180,7 @@ class JavaScriptSupport:
                         is_method=func.is_method,
                         language=str(self.language),
                         doc_start_line=func.doc_start_line,
+                        metadata=metadata,
                     )
                 )
 
@@ -423,6 +469,33 @@ class JavaScriptSupport:
             else:
                 read_only_context = type_definitions_context
 
+        # Append React-specific context if this is a React component
+        react_context_str = ""
+        if function.metadata and function.metadata.get("is_react_component"):
+            try:
+                from codeflash.languages.javascript.frameworks.react.discovery import (  # noqa: PLC0415
+                    ReactComponentInfo,
+                    find_react_components,
+                )
+                from codeflash.languages.javascript.frameworks.react.context import (  # noqa: PLC0415
+                    extract_react_context,
+                )
+
+                components = find_react_components(source, function.file_path, analyzer)
+                for comp in components:
+                    if comp.function_name == function.function_name:
+                        react_ctx = extract_react_context(comp, source, analyzer, module_root)
+                        react_context_str = react_ctx.to_prompt_string()
+                        if react_context_str:
+                            react_header = "\n\n// === React Component Context ===\n"
+                            if read_only_context:
+                                read_only_context = read_only_context + react_header + react_context_str
+                            else:
+                                read_only_context = react_context_str
+                        break
+            except Exception as e:
+                logger.debug("React context extraction failed: %s", e)
+
         # Validate that the extracted code is syntactically valid
         # If not, raise an error to fail the optimization early
         if target_code and not self.validate_syntax(target_code):
@@ -440,6 +513,7 @@ class JavaScriptSupport:
             read_only_context=read_only_context,
             imports=import_lines,
             language=Language.JAVASCRIPT,
+            react_context=react_context_str if react_context_str else None,
         )
 
     def _find_class_definition(
