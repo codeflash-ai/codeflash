@@ -728,6 +728,10 @@ def discover_tests_pytest(
         logger.debug(f"Pytest collection exit code: {exitcode}")
     if pytest_rootdir is not None:
         cfg.tests_project_rootdir = Path(pytest_rootdir)
+    if discover_only_these_tests:
+        resolved_discover_only = {p.resolve() for p in discover_only_these_tests}
+    else:
+        resolved_discover_only = None
     file_to_test_map: dict[Path, list[FunctionCalledInTest]] = defaultdict(list)
     for test in tests:
         if "__replay_test" in test["test_file"]:
@@ -737,13 +741,14 @@ def discover_tests_pytest(
         else:
             test_type = TestType.EXISTING_UNIT_TEST
 
+        test_file_path = Path(test["test_file"]).resolve()
         test_obj = TestsInFile(
-            test_file=Path(test["test_file"]),
+            test_file=test_file_path,
             test_class=test["test_class"],
             test_function=test["test_function"],
             test_type=test_type,
         )
-        if discover_only_these_tests and test_obj.test_file not in discover_only_these_tests:
+        if resolved_discover_only and test_obj.test_file not in resolved_discover_only:
             continue
         file_to_test_map[test_obj.test_file].append(test_obj)
     # Within these test files, find the project functions they are referring to and return their names/locations

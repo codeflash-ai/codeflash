@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from codeflash.result.critic import performance_gain
+
 
 def humanize_runtime(time_in_ns: int) -> str:
     runtime_human: str = str(time_in_ns)
@@ -89,3 +91,11 @@ def format_perf(percentage: float) -> str:
     if abs_perc >= 1:
         return f"{percentage:.2f}"
     return f"{percentage:.3f}"
+
+
+def format_runtime_comment(original_time_ns: int, optimized_time_ns: int, comment_prefix: str = "#") -> str:
+    perf_gain = format_perf(
+        abs(performance_gain(original_runtime_ns=original_time_ns, optimized_runtime_ns=optimized_time_ns) * 100)
+    )
+    status = "slower" if optimized_time_ns > original_time_ns else "faster"
+    return f"{comment_prefix} {format_time(original_time_ns)} -> {format_time(optimized_time_ns)} ({perf_gain}% {status})"
