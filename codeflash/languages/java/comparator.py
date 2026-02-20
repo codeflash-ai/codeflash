@@ -20,6 +20,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from codeflash.models.models import TestDiff
 
+_IS_DARWIN = platform.system() == "Darwin"
+
 logger = logging.getLogger(__name__)
 
 
@@ -88,16 +90,17 @@ def _find_java_executable() -> str | None:
             return str(java_path)
 
     # On macOS, try to get JAVA_HOME from the system helper or Maven
-    if platform.system() == "Darwin":
+    if _IS_DARWIN:
         # Try to extract Java home from Maven (which always finds it)
         try:
             result = subprocess.run(["mvn", "--version"], capture_output=True, text=True, timeout=10, check=False)
-            for line in result.stdout.split("\n"):
-                if "runtime:" in line:
-                    runtime_path = line.split("runtime:")[-1].strip()
-                    java_path = Path(runtime_path) / "bin" / "java"
-                    if java_path.exists():
-                        return str(java_path)
+            if result.returncode == 0:
+                for line in result.stdout.split("\n"):
+                    if "runtime:" in line:
+                        runtime_path = line.split("runtime:")[-1].strip()
+                        java_path = Path(runtime_path) / "bin" / "java"
+                        if java_path.exists():
+                            return str(java_path)
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
 
