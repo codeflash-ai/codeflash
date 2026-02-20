@@ -1869,6 +1869,157 @@ public class InnerClassTest__perfonlyinstrumented {
         assert result == expected
 
 
+class TestMultiByteUtf8Instrumentation:
+    """Tests that timing instrumentation handles multi-byte UTF-8 source correctly.
+
+    The instrumentation uses tree-sitter byte offsets which must be converted to
+    character offsets for Python string slicing (instrumentation.py:782).
+    Multi-byte characters (CJK, accented chars) shift byte positions
+    relative to character positions, so incorrect conversion corrupts the output.
+    """
+
+    def test_instrument_with_cjk_in_string_literal(self, tmp_path: Path):
+        """Target function call after a string literal containing CJK characters."""
+        test_file = tmp_path / "Utf8Test.java"
+        source = """import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class Utf8Test {
+    @Test
+    public void testWithCjk() {
+        String label = "テスト名前";
+        assertEquals(42, compute(21));
+    }
+}
+"""
+        test_file.write_text(source, encoding="utf-8")
+
+        func = FunctionToOptimize(
+            function_name="compute",
+            file_path=tmp_path / "Target.java",
+            starting_line=1,
+            ending_line=5,
+            parents=[],
+            is_method=True,
+            language="java",
+        )
+
+        success, result = instrument_existing_test(
+            test_string=source,
+            function_to_optimize=func,
+            mode="performance",
+            test_path=test_file,
+        )
+
+        # The blank line between _cf_fn1 and the prefix body has 8 trailing spaces
+        # (the indent level) — this is the f"{indent}\n" separator in the instrumentation code.
+        expected = (
+            'import org.junit.jupiter.api.Test;\n'
+            'import static org.junit.jupiter.api.Assertions.*;\n'
+            '\n'
+            'public class Utf8Test__perfonlyinstrumented {\n'
+            '    @Test\n'
+            '    public void testWithCjk() {\n'
+            '        // Codeflash timing instrumentation with inner loop for JIT warmup\n'
+            '        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));\n'
+            '        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));\n'
+            '        String _cf_mod1 = "Utf8Test";\n'
+            '        String _cf_cls1 = "Utf8Test";\n'
+            '        String _cf_fn1 = "compute";\n'
+            '        \n'
+            '        String label = "\u30c6\u30b9\u30c8\u540d\u524d";\n'
+            '        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {\n'
+            '            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");\n'
+            '            long _cf_end1 = -1;\n'
+            '            long _cf_start1 = 0;\n'
+            '            try {\n'
+            '                _cf_start1 = System.nanoTime();\n'
+            '                assertEquals(42, compute(21));\n'
+            '                _cf_end1 = System.nanoTime();\n'
+            '            } finally {\n'
+            '                long _cf_end1_finally = System.nanoTime();\n'
+            '                long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;\n'
+            '                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");\n'
+            '            }\n'
+            '        }\n'
+            '    }\n'
+            '}\n'
+        )
+        assert success is True
+        assert result == expected
+
+    def test_instrument_with_multibyte_in_comment(self, tmp_path: Path):
+        """Target function call after a comment with accented characters (multi-byte UTF-8)."""
+        test_file = tmp_path / "AccentTest.java"
+        source = """import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class AccentTest {
+    @Test
+    public void testWithAccent() {
+        // R\u00e9sum\u00e9 processing test with accented chars
+        String name = "caf\u00e9";
+        assertEquals(10, calculate(5));
+    }
+}
+"""
+        test_file.write_text(source, encoding="utf-8")
+
+        func = FunctionToOptimize(
+            function_name="calculate",
+            file_path=tmp_path / "Target.java",
+            starting_line=1,
+            ending_line=5,
+            parents=[],
+            is_method=True,
+            language="java",
+        )
+
+        success, result = instrument_existing_test(
+            test_string=source,
+            function_to_optimize=func,
+            mode="performance",
+            test_path=test_file,
+        )
+
+        assert success is True
+
+        expected = (
+            'import org.junit.jupiter.api.Test;\n'
+            'import static org.junit.jupiter.api.Assertions.*;\n'
+            '\n'
+            'public class AccentTest__perfonlyinstrumented {\n'
+            '    @Test\n'
+            '    public void testWithAccent() {\n'
+            '        // Codeflash timing instrumentation with inner loop for JIT warmup\n'
+            '        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));\n'
+            '        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));\n'
+            '        String _cf_mod1 = "AccentTest";\n'
+            '        String _cf_cls1 = "AccentTest";\n'
+            '        String _cf_fn1 = "calculate";\n'
+            '        \n'
+            '        // R\u00e9sum\u00e9 processing test with accented chars\n'
+            '        String name = "caf\u00e9";\n'
+            '        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {\n'
+            '            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");\n'
+            '            long _cf_end1 = -1;\n'
+            '            long _cf_start1 = 0;\n'
+            '            try {\n'
+            '                _cf_start1 = System.nanoTime();\n'
+            '                assertEquals(10, calculate(5));\n'
+            '                _cf_end1 = System.nanoTime();\n'
+            '            } finally {\n'
+            '                long _cf_end1_finally = System.nanoTime();\n'
+            '                long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;\n'
+            '                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");\n'
+            '            }\n'
+            '        }\n'
+            '    }\n'
+            '}\n'
+        )
+        assert result == expected
+
+
 # Skip all E2E tests if Maven is not available
 requires_maven = pytest.mark.skipif(
     find_maven_executable() is None,
@@ -2921,3 +3072,205 @@ public class MathOpsTest {
 
         assert iter_0_count == 2, f"Expected 2 markers for iteration 0, got {iter_0_count}"
         assert iter_1_count == 2, f"Expected 2 markers for iteration 1, got {iter_1_count}"
+
+    def test_time_correction_instrumentation(self, java_project):
+        """Test timing accuracy of performance instrumentation with known durations.
+
+        Mirrors Python's test_time_correction_instrumentation — uses a busy-wait
+        function (SpinWait) with known nanosecond durations and verifies that:
+        1. Instrumented source matches exactly (full string equality)
+        2. Pipeline produces correct number of timing results
+        3. Measured runtimes match expected durations within tolerance
+
+        Python equivalent uses accurate_sleepfunc(0.01) → 100ms and accurate_sleepfunc(0.02) → 200ms
+        with rel_tol=0.01. Java uses System.nanoTime() busy-wait with 50ms and 100ms durations.
+        """
+        import math
+
+        project_root, src_dir, test_dir = java_project
+
+        # Create SpinWait class — Java equivalent of Python's accurate_sleepfunc
+        (src_dir / "SpinWait.java").write_text("""package com.example;
+
+public class SpinWait {
+    public static long spinWait(long durationNs) {
+        long start = System.nanoTime();
+        while (System.nanoTime() - start < durationNs) {
+        }
+        return durationNs;
+    }
+}
+""", encoding="utf-8")
+
+        # Two test methods with known durations — mirrors Python's parametrize with
+        # (0.01, 0.010) and (0.02, 0.020) which map to 100ms and 200ms
+        test_source = """package com.example;
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class SpinWaitTest {
+    @Test
+    public void testSpinShort() {
+        assertEquals(50_000_000L, SpinWait.spinWait(50_000_000L));
+    }
+
+    @Test
+    public void testSpinLong() {
+        assertEquals(100_000_000L, SpinWait.spinWait(100_000_000L));
+    }
+}
+"""
+        test_file = test_dir / "SpinWaitTest.java"
+        test_file.write_text(test_source, encoding="utf-8")
+
+        func_info = FunctionToOptimize(
+            function_name="spinWait",
+            file_path=src_dir / "SpinWait.java",
+            starting_line=4,
+            ending_line=9,
+            parents=[],
+            is_method=True,
+            language="java",
+        )
+
+        # Instrument for performance mode
+        success, instrumented = instrument_existing_test(
+            test_string=test_source,
+            function_to_optimize=func_info,
+            mode="performance",
+            test_path=test_file,
+        )
+        assert success, "Instrumentation should succeed"
+
+        # Assert exact instrumented source (full string equality) — mirrors Python's
+        # assert new_test.replace('"', "'") == expected.format(...).replace('"', "'")
+        expected_instrumented = """package com.example;
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class SpinWaitTest__perfonlyinstrumented {
+    @Test
+    public void testSpinShort() {
+        // Codeflash timing instrumentation with inner loop for JIT warmup
+        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        String _cf_mod1 = "SpinWaitTest";
+        String _cf_cls1 = "SpinWaitTest";
+        String _cf_fn1 = "spinWait";
+
+        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            long _cf_end1 = -1;
+            long _cf_start1 = 0;
+            try {
+                _cf_start1 = System.nanoTime();
+                assertEquals(50_000_000L, SpinWait.spinWait(50_000_000L));
+                _cf_end1 = System.nanoTime();
+            } finally {
+                long _cf_end1_finally = System.nanoTime();
+                long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+            }
+        }
+    }
+
+    @Test
+    public void testSpinLong() {
+        // Codeflash timing instrumentation with inner loop for JIT warmup
+        int _cf_loop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        String _cf_mod2 = "SpinWaitTest";
+        String _cf_cls2 = "SpinWaitTest";
+        String _cf_fn2 = "spinWait";
+
+        for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
+            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + "######$!");
+            long _cf_end2 = -1;
+            long _cf_start2 = 0;
+            try {
+                _cf_start2 = System.nanoTime();
+                assertEquals(100_000_000L, SpinWait.spinWait(100_000_000L));
+                _cf_end2 = System.nanoTime();
+            } finally {
+                long _cf_end2_finally = System.nanoTime();
+                long _cf_dur2 = (_cf_end2 != -1 ? _cf_end2 : _cf_end2_finally) - _cf_start2;
+                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + ":" + _cf_dur2 + "######!");
+            }
+        }
+    }
+}
+"""
+        assert instrumented == expected_instrumented
+
+        instrumented_file = test_dir / "SpinWaitTest__perfonlyinstrumented.java"
+        instrumented_file.write_text(instrumented, encoding="utf-8")
+
+        # Run benchmarking with inner_iterations=2 — mirrors Python's
+        # pytest_min_loops=2, pytest_max_loops=2 which produces 4 results
+        from codeflash.languages.java.test_runner import run_benchmarking_tests
+
+        test_env = os.environ.copy()
+
+        class MockTestFiles:
+            def __init__(self, files):
+                self.test_files = files
+
+        class MockTestFile:
+            def __init__(self, path):
+                self.benchmarking_file_path = path
+                self.instrumented_behavior_file_path = path
+
+        test_files = MockTestFiles([MockTestFile(instrumented_file)])
+
+        result_xml_path, result = run_benchmarking_tests(
+            test_paths=test_files,
+            test_env=test_env,
+            cwd=project_root,
+            timeout=120,
+            project_root=project_root,
+            min_loops=1,
+            max_loops=1,
+            target_duration_seconds=1.0,
+            inner_iterations=2,
+        )
+
+        assert result.returncode == 0, f"Maven test failed: {result.stderr}"
+
+        # Parse timing markers from stdout
+        stdout = result.stdout
+        end_pattern = re.compile(r"!######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+):([^:]+)######!")
+        end_matches = end_pattern.findall(stdout)
+
+        # Should have 4 timing markers (2 test methods × 2 inner iterations)
+        # Mirrors Python's: assert len(test_results) == 4
+        assert len(end_matches) == 4, (
+            f"Expected 4 end markers (2 methods × 2 inner iterations), got {len(end_matches)}: {end_matches}"
+        )
+
+        # Verify all tests passed and timing accuracy — mirrors Python's:
+        # assert math.isclose(test_result.runtime, ((i % 2) + 1) * 100_000_000, rel_tol=0.01)
+        short_durations = []
+        long_durations = []
+        for match in end_matches:
+            duration_ns = int(match[5])
+            assert duration_ns > 0
+
+            if duration_ns < 75_000_000:
+                short_durations.append(duration_ns)
+            else:
+                long_durations.append(duration_ns)
+
+        assert len(short_durations) == 2, f"Expected 2 short results, got {len(short_durations)}"
+        assert len(long_durations) == 2, f"Expected 2 long results, got {len(long_durations)}"
+
+        for duration in short_durations:
+            assert math.isclose(duration, 50_000_000, rel_tol=0.15), (
+                f"Short spin measured {duration}ns, expected ~50_000_000ns (15% tolerance)"
+            )
+
+        for duration in long_durations:
+            assert math.isclose(duration, 100_000_000, rel_tol=0.15), (
+                f"Long spin measured {duration}ns, expected ~100_000_000ns (15% tolerance)"
+            )

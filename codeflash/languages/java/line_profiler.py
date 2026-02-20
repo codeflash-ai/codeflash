@@ -72,7 +72,7 @@ class JavaLineProfiler:
 
         for func in functions:
             for line_num in range(func.starting_line, func.ending_line + 1):
-                if line_num <= len(lines):
+                if 1 <= line_num <= len(lines):
                     content = lines[line_num - 1].strip()
                     if content and not content.startswith("//") and not content.startswith("/*") and not content.startswith("*"):
                         key = f"{file_path.as_posix()}:{line_num}"
