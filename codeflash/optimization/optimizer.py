@@ -183,17 +183,53 @@ class Optimizer:
         """Discover functions to optimize."""
         from codeflash.discovery.functions_to_optimize import get_functions_to_optimize
 
-        return get_functions_to_optimize(
+        # In worktree mode for git-diff discovery, file paths come from the original repo
+        # (via get_git_diff using cwd), but module_root/project_root have been mirrored to
+        # the worktree. Use the original roots for filtering so path comparisons match,
+        # then remap the discovered file paths to the worktree.
+        project_root = self.args.project_root
+        module_root = self.args.module_root
+        use_original_roots = (
+            self.current_worktree and self.original_args_and_test_cfg and not self.args.all and not self.args.file
+        )
+        if use_original_roots:
+            assert self.original_args_and_test_cfg is not None
+            original_args, _ = self.original_args_and_test_cfg
+            project_root = original_args.project_root
+            module_root = original_args.module_root
+
+        result = get_functions_to_optimize(
             optimize_all=self.args.all,
             replay_test=self.args.replay_test,
             file=self.args.file,
             only_get_this_function=self.args.function,
             test_cfg=self.test_cfg,
             ignore_paths=self.args.ignore_paths,
-            project_root=self.args.project_root,
-            module_root=self.args.module_root,
+            project_root=project_root,
+            module_root=module_root,
             previous_checkpoint_functions=self.args.previous_checkpoint_functions,
         )
+
+        # Remap discovered file paths from the original repo to the worktree so
+        # downstream optimization reads/writes happen in the worktree.
+        if use_original_roots:
+            import dataclasses
+
+            assert self.current_worktree is not None
+            original_git_root = git_root_dir()
+            file_to_funcs, count, trace = result
+            remapped: dict[Path, list[FunctionToOptimize]] = {}
+            for file_path, funcs in file_to_funcs.items():
+                new_path = mirror_path(Path(file_path), original_git_root, self.current_worktree)
+                remapped[new_path] = [
+                    dataclasses.replace(
+                        func, file_path=mirror_path(func.file_path, original_git_root, self.current_worktree)
+                    )
+                    for func in funcs
+                ]
+            return remapped, count, trace
+
+        return result
 
     def create_function_optimizer(
         self,
