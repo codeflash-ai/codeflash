@@ -1227,7 +1227,6 @@ class TreeSitterAnalyzer:
             True if the function has a return statement.
 
         """
-
         # Generator functions always implicitly return a Generator/Iterator
         if function_node.is_generator:
             return True
