@@ -7,10 +7,10 @@ context subscriptions, and optimization opportunities from React components.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
-import re
 
 if TYPE_CHECKING:
     from tree_sitter import Node
