@@ -1011,17 +1011,24 @@ class JavaScriptSupport:
         tree = analyzer.parse(source_bytes)
         type_names: set[str] = set()
 
-        def walk_for_types(node: Any) -> None:
+        # Iterative traversal to avoid recursion and reduce call overhead.
+        # Look for type_identifier nodes (user-defined types)
+        # Skip primitive types
+        stack = [tree.root_node]
+        while stack:
+            node = stack.pop()
             # Look for type_identifier nodes (user-defined types)
             if node.type == "type_identifier":
                 type_name = source_bytes[node.start_byte : node.end_byte].decode("utf8")
                 # Skip primitive types
                 if type_name not in _PRIMITIVE_TYPES:
                     type_names.add(type_name)
-            for child in node.children:
-                walk_for_types(child)
+            # push children onto the stack
+            # using extend is efficient and keeps the traversal iterative
+            children = node.children
+            if children:
+                stack.extend(children)
 
-        walk_for_types(tree.root_node)
         return type_names
 
     def _find_imported_type_definitions(
