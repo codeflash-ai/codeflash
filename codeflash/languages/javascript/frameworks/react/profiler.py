@@ -173,12 +173,16 @@ def _wrap_return_with_profiler(source: str, return_node: Node, profiler_id: str,
     jsx_start = None
     jsx_end = return_node.end_byte
 
+    paren_child = None
+
     for child in return_node.children:
         if child.type == "return":
             continue
         if child.type == ";":
             jsx_end = child.start_byte
             continue
+        if child.type == "parenthesized_expression" and paren_child is None:
+            paren_child = child
         if _contains_jsx(child):
             jsx_start = child.start_byte
             jsx_end = child.end_byte
@@ -187,18 +191,16 @@ def _wrap_return_with_profiler(source: str, return_node: Node, profiler_id: str,
     if jsx_start is None:
         return source
 
-    jsx_content = source_bytes[jsx_start:jsx_end].decode("utf-8").strip()
-
     # Check if the return uses parentheses: return (...)
     # If so, we need to wrap inside the parens
-    has_parens = False
-    for child in return_node.children:
-        if child.type == "parenthesized_expression":
-            has_parens = True
-            jsx_start = child.start_byte + 1  # skip (
-            jsx_end = child.end_byte - 1  # skip )
-            jsx_content = source_bytes[jsx_start:jsx_end].decode("utf-8").strip()
-            break
+    if paren_child is not None:
+        has_parens = True
+        jsx_start = paren_child.start_byte + 1  # skip (
+        jsx_end = paren_child.end_byte - 1  # skip )
+    else:
+        has_parens = False
+
+    jsx_content = source_bytes[jsx_start:jsx_end].decode("utf-8").strip()
 
     wrapped = (
         f'<React.Profiler id="{profiler_id}" onRender={{_codeflashOnRender_{safe_name}}}>'
