@@ -7,12 +7,13 @@ context subscriptions, and optimization opportunities from React components.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import TYPE_CHECKING
 import re
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from tree_sitter import Node
 
     from codeflash.languages.javascript.frameworks.react.analyzer import OptimizationOpportunity
