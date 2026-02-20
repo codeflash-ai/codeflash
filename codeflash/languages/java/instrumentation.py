@@ -84,9 +84,10 @@ def _is_inside_lambda(node: Any) -> bool:
     """Check if a tree-sitter node is inside a lambda_expression."""
     current = node.parent
     while current is not None:
-        if current.type == "lambda_expression":
+        t = current.type
+        if t == "lambda_expression":
             return True
-        if current.type == "method_declaration":
+        if t == "method_declaration":
             return False
         current = current.parent
     return False
