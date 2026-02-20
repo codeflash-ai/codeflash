@@ -1940,9 +1940,13 @@ class JavaScriptSupport:
     def _build_runtime_map(
         self, inv_id_runtimes: dict[InvocationId, list[int]], tests_project_rootdir: Path
     ) -> dict[str, int]:
-        from codeflash.languages.javascript.edit_tests import resolve_js_test_module_path
+        from codeflash.languages.javascript.edit_tests import \
+            resolve_js_test_module_path
 
         unique_inv_ids: dict[str, int] = {}
+        # Cache resolved path strings per module path to avoid repeated filesystem resolves
+        _resolved_path_cache: dict[str, str] = {}
+
         for inv_id, runtimes in inv_id_runtimes.items():
             test_qualified_name = (
                 inv_id.test_class_name + "." + inv_id.test_function_name  # type: ignore[operator]
@@ -1951,20 +1955,28 @@ class JavaScriptSupport:
             )
             if not test_qualified_name:
                 continue
-            abs_path = resolve_js_test_module_path(inv_id.test_module_path, tests_project_rootdir)
 
-            abs_path_str = str(abs_path.resolve().with_suffix(""))
+            module_path_key = inv_id.test_module_path
+            abs_path_str = _resolved_path_cache.get(module_path_key)
+            if abs_path_str is None:
+                abs_path = resolve_js_test_module_path(module_path_key, tests_project_rootdir)
+                try:
+                    abs_path_str = str(abs_path.resolve().with_suffix(""))
+                except Exception:
+                    # Fallback in case resolve() fails for any reason; preserve behavior
+                    abs_path_str = str(abs_path.with_suffix(""))
+                _resolved_path_cache[module_path_key] = abs_path_str
+
             if "__unit_test_" not in abs_path_str and "__perf_test_" not in abs_path_str:
                 continue
 
             key = test_qualified_name + "#" + abs_path_str
             iteration_id = inv_id.iteration_id or ""
-            parts = iteration_id.split("_").__len__()
-            cur_invid = iteration_id.split("_")[0] if parts < 3 else "_".join(iteration_id.split("_")[:-1])
+            parts = iteration_id.split("_")
+            parts_len = len(parts)
+            cur_invid = parts[0] if parts_len < 3 else "_".join(parts[:-1])
             match_key = key + "#" + cur_invid
-            if match_key not in unique_inv_ids:
-                unique_inv_ids[match_key] = 0
-            unique_inv_ids[match_key] += min(runtimes)
+            unique_inv_ids[match_key] = unique_inv_ids.get(match_key, 0) + min(runtimes)
         return unique_inv_ids
 
     # === Test Result Comparison ===
