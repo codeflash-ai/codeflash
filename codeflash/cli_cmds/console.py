@@ -365,6 +365,9 @@ def call_graph_summary(call_graph: DependencyResolver, file_to_funcs: dict[Path,
     if not total_functions:
         return
 
+    if is_subagent_mode():
+        return
+
     # Build the mapping expected by the dependency resolver
     file_items = file_to_funcs.items()
     mapping = {file_path: {func.qualified_name for func in funcs} for file_path, funcs in file_items}
@@ -385,9 +388,6 @@ def call_graph_summary(call_graph: DependencyResolver, file_to_funcs: dict[Path,
         f"Uses other functions: {with_context} · "
         f"Standalone: {leaf_functions}"
     )
-
-    if is_subagent_mode():
-        return
 
     if is_LSP_enabled():
         lsp_log(LspTextMessage(text=summary))
