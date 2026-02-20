@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 PASCAL_CASE_RE = re.compile(r"^[A-Z][a-zA-Z0-9]*$")
-HOOK_CALL_RE = re.compile(r"\buse[A-Z]\w*\s*\(")
+HOOK_CALL_RE = re.compile(r"\buse[A-Z]\w*\s*(?:<[^>]*>)?\s*\(")
 HOOK_NAME_RE = re.compile(r"^use[A-Z]\w*$")
 
 # Built-in React hooks
@@ -198,12 +198,15 @@ def _node_contains_jsx(node: Node) -> bool:
     return False
 
 
+HOOK_EXTRACT_RE = re.compile(r"\b(use[A-Z]\w*)\s*(?:<[^>]*>)?\s*\(")
+
+
 def _extract_hooks_used(function_source: str) -> list[str]:
     """Extract hook names called within a function body."""
     hooks = []
     seen = set()
-    for match in HOOK_CALL_RE.finditer(function_source):
-        hook_name = match.group(0).rstrip("( \t")
+    for match in HOOK_EXTRACT_RE.finditer(function_source):
+        hook_name = match.group(1)
         if hook_name not in seen:
             seen.add(hook_name)
             hooks.append(hook_name)

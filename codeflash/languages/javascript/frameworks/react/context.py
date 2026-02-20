@@ -112,7 +112,7 @@ def _extract_hook_usages(component_source: str) -> list[HookUsage]:
 
     hooks: list[HookUsage] = []
     # Match useXxx( patterns
-    hook_pattern = re.compile(r"\b(use[A-Z]\w*)\s*\(")
+    hook_pattern = re.compile(r"\b(use[A-Z]\w*)\s*(?:<[^>]*>)?\s*\(")
 
     for match in hook_pattern.finditer(component_source):
         hook_name = match.group(1)
