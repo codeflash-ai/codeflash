@@ -298,9 +298,10 @@ class JavaSupport(LanguageSupport):
     ) -> bool:
         """Prepare line profiling via the bytecode-instrumentation agent.
 
-        No source files are modified. Instead, generates a config JSON that the
-        Java agent uses at class-load time to know which methods to instrument.
-        The agent is loaded via -javaagent when the JVM starts.
+        Generates a config JSON that the Java agent uses at class-load time to
+        know which methods to instrument. The agent is loaded via -javaagent
+        when the JVM starts. The config includes warmup iterations so the agent
+        discards JIT warmup data before measurement.
 
         Args:
             func_info: Function to profile.
@@ -326,6 +327,7 @@ class JavaSupport(LanguageSupport):
             )
 
             self._line_profiler_agent_arg = profiler.build_javaagent_arg(config_path)
+            self._line_profiler_warmup_iterations = profiler.warmup_iterations
             return True
         except Exception:
             logger.exception("Failed to prepare line profiling for %s", func_info.function_name)

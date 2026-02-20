@@ -21,6 +21,7 @@ import java.util.Set;
 public final class ProfilerConfig {
 
     private String outputFile = "";
+    private int warmupIterations = 10;
     private final Map<String, List<MethodTarget>> targets = new HashMap<>();
     private final Map<String, String> lineContents = new HashMap<>();
     private final Set<String> targetClassNames = new HashSet<>();
@@ -75,6 +76,10 @@ public final class ProfilerConfig {
 
     public String getOutputFile() {
         return outputFile;
+    }
+
+    public int getWarmupIterations() {
+        return warmupIterations;
     }
 
     public Set<String> getTargetClasses() {
@@ -149,6 +154,9 @@ public final class ProfilerConfig {
             switch (key) {
                 case "outputFile":
                     this.outputFile = readString(json, pos);
+                    break;
+                case "warmupIterations":
+                    this.warmupIterations = readInt(json, pos);
                     break;
                 case "targets":
                     parseTargets(json, pos);

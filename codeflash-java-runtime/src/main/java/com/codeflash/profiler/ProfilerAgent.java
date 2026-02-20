@@ -33,6 +33,9 @@ public class ProfilerAgent {
         // Pre-allocate registry with estimated capacity
         ProfilerRegistry.initialize(config.getExpectedLineCount());
 
+        // Configure warmup phase
+        ProfilerData.setWarmupThreshold(config.getWarmupIterations());
+
         // Register the bytecode transformer
         inst.addTransformer(new LineProfilingTransformer(config), true);
 
@@ -42,7 +45,9 @@ public class ProfilerAgent {
             ProfilerReporter.writeResults(outputFile, config);
         }, "codeflash-profiler-shutdown"));
 
+        int warmup = config.getWarmupIterations();
+        String warmupMsg = warmup > 0 ? ", warmup=" + warmup + " calls" : "";
         System.err.println("[codeflash-profiler] Agent loaded, profiling "
-                + config.getTargetClasses().size() + " class(es)");
+                + config.getTargetClasses().size() + " class(es)" + warmupMsg);
     }
 }

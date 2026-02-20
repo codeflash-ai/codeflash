@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 AGENT_JAR_NAME = "codeflash-runtime-1.0.0.jar"
+DEFAULT_WARMUP_ITERATIONS = 100
 
 
 class JavaLineProfiler:
@@ -37,8 +38,9 @@ class JavaLineProfiler:
 
     """
 
-    def __init__(self, output_file: Path) -> None:
+    def __init__(self, output_file: Path, warmup_iterations: int = DEFAULT_WARMUP_ITERATIONS) -> None:
         self.output_file = output_file
+        self.warmup_iterations = warmup_iterations
 
     def generate_agent_config(
         self,
@@ -87,6 +89,7 @@ class JavaLineProfiler:
 
         config = {
             "outputFile": str(self.output_file),
+            "warmupIterations": self.warmup_iterations,
             "targets": [
                 {
                     "className": class_name,

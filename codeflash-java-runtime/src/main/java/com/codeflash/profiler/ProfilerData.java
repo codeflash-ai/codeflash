@@ -1,5 +1,6 @@
 package com.codeflash.profiler;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -45,6 +46,12 @@ public final class ProfilerData {
     private static final List<long[]> allHitArrays = new CopyOnWriteArrayList<>();
     private static final List<long[]> allTimeArrays = new CopyOnWriteArrayList<>();
 
+    // Warmup state: the method visitor injects a self-calling warmup loop,
+    // warmupInProgress guards against recursive re-entry into the warmup block.
+    private static volatile int warmupThreshold = 0;
+    private static volatile boolean warmupComplete = false;
+    private static volatile boolean warmupInProgress = false;
+
     private ProfilerData() {}
 
     private static long[] registerArray(long[] arr) {
@@ -55,6 +62,65 @@ public final class ProfilerData {
     private static long[] registerTimeArray(long[] arr) {
         allTimeArrays.add(arr);
         return arr;
+    }
+
+    /**
+     * Set the number of self-call warmup iterations before measurement begins.
+     * Called once from {@link ProfilerAgent#premain} before any classes are loaded.
+     *
+     * @param threshold number of warmup iterations (0 = no warmup)
+     */
+    public static void setWarmupThreshold(int threshold) {
+        warmupThreshold = threshold;
+        warmupComplete = (threshold <= 0);
+    }
+
+    /**
+     * Check whether warmup is still needed. Called by injected bytecode at target method entry.
+     * Returns {@code true} only on the very first call — subsequent calls (including recursive
+     * warmup calls) return {@code false}.
+     */
+    public static boolean isWarmupNeeded() {
+        return !warmupComplete && !warmupInProgress && warmupThreshold > 0;
+    }
+
+    /**
+     * Enter warmup phase. Sets a guard flag so recursive warmup calls skip the warmup block.
+     */
+    public static void startWarmup() {
+        warmupInProgress = true;
+    }
+
+    /**
+     * Return the configured warmup iteration count.
+     */
+    public static int getWarmupThreshold() {
+        return warmupThreshold;
+    }
+
+    /**
+     * End warmup: zero all profiling counters, mark warmup complete, clear the guard flag.
+     * The next execution of the method body is the clean measurement.
+     */
+    public static void finishWarmup() {
+        resetAll();
+        warmupComplete = true;
+        warmupInProgress = false;
+        System.err.println("[codeflash-profiler] Warmup complete after " + warmupThreshold
+                + " iterations, measurement started");
+    }
+
+    /**
+     * Reset all profiling counters across all threads.
+     * Called once when warmup phase completes to discard warmup data.
+     */
+    private static void resetAll() {
+        for (long[] arr : allHitArrays) {
+            Arrays.fill(arr, 0L);
+        }
+        for (long[] arr : allTimeArrays) {
+            Arrays.fill(arr, 0L);
+        }
     }
 
     /**
