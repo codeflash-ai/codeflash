@@ -633,11 +633,7 @@ def _find_junit_console_standalone() -> Path | None:
 
     # Find the latest version available
     try:
-        versions = sorted(
-            [d for d in m2_base.iterdir() if d.is_dir()],
-            key=lambda d: d.name,
-            reverse=True,
-        )
+        versions = sorted([d for d in m2_base.iterdir() if d.is_dir()], key=lambda d: d.name, reverse=True)
         for version_dir in versions:
             jar = version_dir / f"junit-platform-console-standalone-{version_dir.name}.jar"
             if jar.exists():
