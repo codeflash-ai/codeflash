@@ -752,7 +752,6 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             if current.children:
                 stack.extend(reversed(current.children))
 
-
     def reindent_block(text: str, target_indent: str) -> str:
         lines = text.splitlines()
         non_empty = [line for line in lines if line.strip()]
@@ -848,7 +847,6 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             return body_text, next_wrapper_id
         calls: list[Any] = []
         collect_target_calls(wrapped_body, wrapper_bytes, func_name, calls)
-
 
         indent = base_indent
         inner_indent = f"{indent}    "
