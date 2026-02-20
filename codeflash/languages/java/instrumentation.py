@@ -294,7 +294,7 @@ def _collect_calls(node, wrapper_bytes, body_bytes, prefix_len, func_name, analy
 def _byte_to_line_index(byte_offset: int, line_byte_starts: list[int]) -> int:
     """Map a byte offset in body_text to a body_lines index."""
     idx = bisect.bisect_right(line_byte_starts, byte_offset) - 1
-    return max(0, idx)
+    return 0 if idx < 0 else idx
 
 
 def _infer_array_cast_type(line: str) -> str | None:
