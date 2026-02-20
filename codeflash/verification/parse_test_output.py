@@ -147,6 +147,10 @@ def parse_concurrency_metrics(test_results: TestResults, function_name: str) -> 
 _test_file_path_cache: dict[tuple[str, Path], Path | None] = {}
 
 
+def clear_test_file_path_cache() -> None:
+    _test_file_path_cache.clear()
+
+
 def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> Path | None:
     """Resolve test file path from pytest's test class path or Java class path.
 
