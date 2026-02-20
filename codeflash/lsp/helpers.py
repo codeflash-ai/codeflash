@@ -7,20 +7,22 @@ from rich.tree import Tree
 
 from codeflash.models.test_type import TestType
 
+_LSP_ENABLED = os.getenv("CODEFLASH_LSP", default="false").lower() == "true"
+
+_AGENT_MODE = os.getenv("CODEFLASH_AGENT_MODE", default="false").lower() == "true"
+
 _double_quote_pat = re.compile(r'"(.*?)"')
 _single_quote_pat = re.compile(r"'(.*?)'")
 # Match worktree paths on both Unix (/path/to/worktrees/...) and Windows (C:\path\to\worktrees\... or C:/path/to/worktrees/...)
 worktree_path_regex = re.compile(r'[^"]*worktrees[\\/][^"]\S*')
 
 
-@lru_cache(maxsize=1)
 def is_LSP_enabled() -> bool:
-    return os.getenv("CODEFLASH_LSP", default="false").lower() == "true"
+    return _LSP_ENABLED
 
 
-@lru_cache(maxsize=1)
 def is_agent_mode() -> bool:
-    return os.getenv("CODEFLASH_AGENT_MODE", default="false").lower() == "true"
+    return _AGENT_MODE
 
 
 def tree_to_markdown(tree: Tree, level: int = 0) -> str:
