@@ -27,25 +27,29 @@ if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.java.parser import JavaAnalyzer
 
-_STATEMENT_BOUNDARIES = frozenset({
-    "method_declaration",
-    "block",
-    "if_statement",
-    "for_statement",
-    "while_statement",
-    "try_statement",
-    "expression_statement",
-})
+_STATEMENT_BOUNDARIES = frozenset(
+    {
+        "method_declaration",
+        "block",
+        "if_statement",
+        "for_statement",
+        "while_statement",
+        "try_statement",
+        "expression_statement",
+    }
+)
 
-_COMPLEX_EXPRESSIONS = frozenset({
-    "cast_expression",
-    "ternary_expression",
-    "array_access",
-    "binary_expression",
-    "unary_expression",
-    "parenthesized_expression",
-    "instanceof_expression",
-})
+_COMPLEX_EXPRESSIONS = frozenset(
+    {
+        "cast_expression",
+        "ternary_expression",
+        "array_access",
+        "binary_expression",
+        "unary_expression",
+        "parenthesized_expression",
+        "instanceof_expression",
+    }
+)
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +130,7 @@ def _is_inside_complex_expression(node) -> bool:
     current = node.parent
     while current is not None:
         current_type = current.type
-        
+
         # Stop at statement boundaries
         if current_type in _STATEMENT_BOUNDARIES:
             return False
