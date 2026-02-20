@@ -226,12 +226,7 @@ class TreeSitterAnalyzer:
         key = (include_methods, include_arrow_functions)
         function_types = self._function_types_cache.get(key)
         if function_types is None:
-            ft = {
-                "function_declaration",
-                "function_expression",
-                "generator_function_declaration",
-                "generator_function",
-            }
+            ft = {"function_declaration", "function_expression", "generator_function_declaration", "generator_function"}
             if include_arrow_functions:
                 ft.add("arrow_function")
             if include_methods:
