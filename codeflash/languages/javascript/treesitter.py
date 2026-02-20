@@ -162,8 +162,10 @@ class TreeSitterAnalyzer:
 
         """
         if isinstance(source, str):
-            source = source.encode("utf8")
-        return self.parser.parse(source)
+            source_bytes = source.encode("utf8")
+        else:
+            source_bytes = source
+        return self.parser.parse(source_bytes)
 
     def get_node_text(self, node: Node, source: bytes) -> str:
         """Extract the source text for a tree-sitter node.

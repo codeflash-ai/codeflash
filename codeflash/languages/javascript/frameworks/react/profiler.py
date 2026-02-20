@@ -217,18 +217,24 @@ def _insert_after_imports(source: str, code: str, analyzer: TreeSitterAnalyzer) 
     tree = analyzer.parse(source_bytes)
 
     last_import_end = 0
-    for child in tree.root_node.children:
+    # Search from the end and stop at the first import_statement encountered
+    # to avoid scanning all children when the last import is near the end.
+    for child in reversed(tree.root_node.children):
         if child.type == "import_statement":
             last_import_end = child.end_byte
+            break
 
-    # Find end of line after last import
-    insert_pos = last_import_end
-    while insert_pos < len(source) and source[insert_pos] != "\n":
-        insert_pos += 1
-    if insert_pos < len(source):
-        insert_pos += 1  # skip the newline
+    # Find end of line after last import using byte offsets to match tree-sitter.
+    nl_pos = source_bytes.find(b"\n", last_import_end)
+    if nl_pos == -1:
+        insert_pos = len(source_bytes)
+    else:
+        insert_pos = nl_pos + 1  # skip the newline
 
-    return source[:insert_pos] + "\n" + code + "\n\n" + source[insert_pos:]
+    code_bytes = code.encode("utf-8")
+    new_bytes = source_bytes[:insert_pos] + b"\n" + code_bytes + b"\n\n" + source_bytes[insert_pos:]
+
+    return new_bytes.decode("utf-8")
 
 
 def _ensure_react_import(source: str) -> str:
