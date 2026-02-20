@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import os
 import re
 import sqlite3
@@ -22,6 +21,9 @@ from codeflash.code_utils.code_utils import (
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.languages import is_java, is_javascript, is_python
+
+# Import Jest-specific parsing from the JavaScript language module
+from codeflash.languages.javascript.parse import parse_jest_test_xml as _parse_jest_test_xml
 from codeflash.models.models import (
     ConcurrencyMetrics,
     FunctionTestInvocation,
@@ -46,18 +48,31 @@ def parse_func(file_path: Path) -> XMLParser:
     return parse(file_path, xml_parser)
 
 
-matches_re_start = re.compile(r"!\$######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######\$!\n")
-matches_re_end = re.compile(r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######!")
+matches_re_start = re.compile(
+    r"!\$######([^:]*)"  # group 1: module path
+    r":((?:[^:.]*\.)*)"  # group 2: class prefix with trailing dot, or empty
+    r"([^.:]*)"  # group 3: test function name
+    r":([^:]*)"  # group 4: function being tested
+    r":([^:]*)"  # group 5: loop index
+    r":([^#]*)"  # group 6: iteration id
+    r"######\$!\n"
+)
+matches_re_end = re.compile(
+    r"!######([^:]*)"  # group 1: module path
+    r":((?:[^:.]*\.)*)"  # group 2: class prefix with trailing dot, or empty
+    r"([^.:]*)"  # group 3: test function name
+    r":([^:]*)"  # group 4: function being tested
+    r":([^:]*)"  # group 5: loop index
+    r":([^#]*)"  # group 6: iteration_id or iteration_id:runtime
+    r"######!"
+)
 
 
 start_pattern = re.compile(r"!\$######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+)######\$!")
 end_pattern = re.compile(r"!######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+):([^:]+)######!")
 
-# Jest timing marker patterns (from codeflash-jest-helper.js console.log output)
-# Format: !$######testName:testName:funcName:loopIndex:lineId######$! (start)
-# Format: !######testName:testName:funcName:loopIndex:lineId:durationNs######! (end)
-jest_start_pattern = re.compile(r"!\$######([^:]+):([^:]+):([^:]+):([^:]+):([^#]+)######\$!")
-jest_end_pattern = re.compile(r"!######([^:]+):([^:]+):([^:]+):([^:]+):([^:]+):(\d+)######!")
+# Jest timing marker patterns are imported from codeflash.languages.javascript.parse
+# and re-exported here for backwards compatibility
 
 
 def calculate_function_throughput_from_test_results(test_results: TestResults, function_name: str) -> int:
@@ -128,6 +143,14 @@ def parse_concurrency_metrics(test_results: TestResults, function_name: str) -> 
     )
 
 
+# Cache for resolved test file paths to avoid repeated rglob calls
+_test_file_path_cache: dict[tuple[str, Path], Path | None] = {}
+
+
+def clear_test_file_path_cache() -> None:
+    _test_file_path_cache.clear()
+
+
 def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> Path | None:
     """Resolve test file path from pytest's test class path or Java class path.
 
@@ -149,6 +172,13 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         >>> # Should find: /path/to/tests/unittest/test_file.py
 
     """
+    # Check cache first
+    cache_key = (test_class_path, base_dir)
+    if cache_key in _test_file_path_cache:
+        cached_result = _test_file_path_cache[cache_key]
+        logger.debug(f"[RESOLVE] Cache hit for {test_class_path}: {cached_result}")
+        return cached_result
+
     # Handle Java class paths (convert dots to path and add .java extension)
     # Java class paths look like "com.example.TestClass" and should map to
     # src/test/java/com/example/TestClass.java
@@ -163,6 +193,7 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         logger.debug(f"[RESOLVE] Attempt 1: checking {potential_path}")
         if potential_path.exists():
             logger.debug(f"[RESOLVE] Attempt 1 SUCCESS: found {potential_path}")
+            _test_file_path_cache[cache_key] = potential_path
             return potential_path
 
         # 2. Under src/test/java relative to project root
@@ -174,6 +205,7 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
             logger.debug(f"[RESOLVE] Attempt 2: checking {potential_path} (project_root={project_root})")
             if potential_path.exists():
                 logger.debug(f"[RESOLVE] Attempt 2 SUCCESS: found {potential_path}")
+                _test_file_path_cache[cache_key] = potential_path
                 return potential_path
 
         # 3. Search for the file in base_dir and its subdirectories
@@ -181,9 +213,11 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         logger.debug(f"[RESOLVE] Attempt 3: rglob for {file_name} in {base_dir}")
         for java_file in base_dir.rglob(file_name):
             logger.debug(f"[RESOLVE] Attempt 3 SUCCESS: rglob found {java_file}")
+            _test_file_path_cache[cache_key] = java_file
             return java_file
 
         logger.warning(f"[RESOLVE] FAILED to resolve {test_class_path} in base_dir {base_dir}")
+        _test_file_path_cache[cache_key] = None  # Cache negative results too
         return None
 
     # Handle file paths (contain slashes and extensions like .js/.ts)
@@ -192,6 +226,7 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         # Try the path as-is if it's absolute
         potential_path = Path(test_class_path)
         if potential_path.is_absolute() and potential_path.exists():
+            _test_file_path_cache[cache_key] = potential_path
             return potential_path
 
         # Try to resolve relative to base_dir's parent (project root)
@@ -201,6 +236,7 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         try:
             potential_path = potential_path.resolve()
             if potential_path.exists():
+                _test_file_path_cache[cache_key] = potential_path
                 return potential_path
         except (OSError, RuntimeError):
             pass
@@ -210,10 +246,12 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         try:
             potential_path = potential_path.resolve()
             if potential_path.exists():
+                _test_file_path_cache[cache_key] = potential_path
                 return potential_path
         except (OSError, RuntimeError):
             pass
 
+        _test_file_path_cache[cache_key] = None  # Cache negative results
         return None
 
     # First try the full path (Python module path)
@@ -244,6 +282,8 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
                 if test_file_path:
                     break
 
+    # Cache the result (could be None)
+    _test_file_path_cache[cache_key] = test_file_path
     return test_file_path
 
 
@@ -629,356 +669,6 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
     return test_results
 
 
-def _extract_jest_console_output(suite_elem) -> str:
-    """Extract console output from Jest's JUnit XML system-out element.
-
-    Jest-junit writes console.log output as a JSON array in the testsuite's system-out.
-    Each entry has: {"message": "...", "origin": "...", "type": "log"}
-
-    Args:
-        suite_elem: The testsuite lxml element
-
-    Returns:
-        Concatenated message content from all log entries
-
-    """
-    import json
-
-    system_out_elem = suite_elem.find("system-out")
-    if system_out_elem is None or system_out_elem.text is None:
-        return ""
-
-    raw_content = system_out_elem.text.strip()
-    if not raw_content:
-        return ""
-
-    # Jest-junit wraps console output in a JSON array
-    # Try to parse as JSON first
-    try:
-        log_entries = json.loads(raw_content)
-        if isinstance(log_entries, list):
-            # Extract message field from each log entry
-            messages = []
-            for entry in log_entries:
-                if isinstance(entry, dict) and "message" in entry:
-                    messages.append(entry["message"])
-            return "\n".join(messages)
-    except (json.JSONDecodeError, TypeError):
-        # Not JSON - return as plain text (fallback for pytest-style output)
-        pass
-
-    return raw_content
-
-
-# TODO: {Claude} we need to move to the support directory.
-def parse_jest_test_xml(
-    test_xml_file_path: Path,
-    test_files: TestFiles,
-    test_config: TestConfig,
-    run_result: subprocess.CompletedProcess | None = None,
-) -> TestResults:
-    """Parse Jest JUnit XML test results.
-
-    Jest-junit has a different structure than pytest:
-    - system-out is at the testsuite level (not testcase)
-    - system-out contains a JSON array of log entries
-    - Timing markers are in the message field of log entries
-
-    Args:
-        test_xml_file_path: Path to the Jest JUnit XML file
-        test_files: TestFiles object with test file information
-        test_config: Test configuration
-        run_result: Optional subprocess result for logging
-
-    Returns:
-        TestResults containing parsed test invocations
-
-    """
-    test_results = TestResults()
-
-    if not test_xml_file_path.exists():
-        logger.warning(f"No JavaScript test results for {test_xml_file_path} found.")
-        return test_results
-
-    # Log file size for debugging
-    file_size = test_xml_file_path.stat().st_size
-    logger.debug(f"Jest XML file size: {file_size} bytes at {test_xml_file_path}")
-
-    try:
-        xml = JUnitXml.fromfile(str(test_xml_file_path), parse_func=parse_func)
-        logger.debug(f"Successfully parsed Jest JUnit XML from {test_xml_file_path}")
-    except Exception as e:
-        logger.warning(f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}")
-        return test_results
-
-    base_dir = test_config.tests_project_rootdir
-    logger.debug(f"Jest XML parsing: base_dir={base_dir}, num_test_files={len(test_files.test_files)}")
-
-    # Build lookup from instrumented file path to TestFile for direct matching
-    # This handles cases where instrumented files are in temp directories
-    instrumented_path_lookup: dict[str, tuple[Path, TestType]] = {}
-    for test_file in test_files.test_files:
-        if test_file.instrumented_behavior_file_path:
-            # Store both the absolute path and resolved path as keys
-            abs_path = str(test_file.instrumented_behavior_file_path.resolve())
-            instrumented_path_lookup[abs_path] = (test_file.instrumented_behavior_file_path, test_file.test_type)
-            # Also store the string representation in case of minor path differences
-            instrumented_path_lookup[str(test_file.instrumented_behavior_file_path)] = (
-                test_file.instrumented_behavior_file_path,
-                test_file.test_type,
-            )
-            logger.debug(f"Jest XML lookup: registered {abs_path}")
-
-    # Fallback: if JUnit XML doesn't have system-out, use subprocess stdout directly
-    global_stdout = ""
-    if run_result is not None:
-        try:
-            global_stdout = run_result.stdout if isinstance(run_result.stdout, str) else run_result.stdout.decode()
-            # Debug: log if timing markers are found in stdout
-            if global_stdout:
-                marker_count = len(jest_start_pattern.findall(global_stdout))
-                if marker_count > 0:
-                    logger.debug(f"Found {marker_count} timing start markers in Jest stdout")
-                else:
-                    logger.debug(f"No timing start markers found in Jest stdout (len={len(global_stdout)})")
-        except (AttributeError, UnicodeDecodeError):
-            global_stdout = ""
-
-    suite_count = 0
-    testcase_count = 0
-    for suite in xml:
-        suite_count += 1
-        # Extract console output from suite-level system-out (Jest specific)
-        suite_stdout = _extract_jest_console_output(suite._elem)  # noqa: SLF001
-
-        # Fallback: use subprocess stdout if XML system-out is empty
-        if not suite_stdout and global_stdout:
-            suite_stdout = global_stdout
-
-        # Parse timing markers from the suite's console output
-        start_matches = list(jest_start_pattern.finditer(suite_stdout))
-        end_matches_dict = {}
-        for match in jest_end_pattern.finditer(suite_stdout):
-            # Key: (testName, testName2, funcName, loopIndex, lineId)
-            key = match.groups()[:5]
-            end_matches_dict[key] = match
-
-        for testcase in suite:
-            testcase_count += 1
-            test_class_path = testcase.classname  # For Jest, this is the file path
-            test_name = testcase.name
-
-            if test_name is None:
-                logger.debug(f"testcase.name is None in Jest XML {test_xml_file_path}, skipping")
-                continue
-
-            logger.debug(f"Jest XML: processing testcase name={test_name}, classname={test_class_path}")
-
-            # First, try direct lookup in instrumented file paths
-            # This handles cases where instrumented files are in temp directories
-            test_file_path = None
-            test_type = None
-
-            if test_class_path:
-                # Try exact match with classname (which should be the filepath from jest-junit)
-                if test_class_path in instrumented_path_lookup:
-                    test_file_path, test_type = instrumented_path_lookup[test_class_path]
-                else:
-                    # Try resolving the path and matching
-                    try:
-                        resolved_path = str(Path(test_class_path).resolve())
-                        if resolved_path in instrumented_path_lookup:
-                            test_file_path, test_type = instrumented_path_lookup[resolved_path]
-                    except Exception:
-                        pass
-
-            # If direct lookup failed, try the file attribute
-            if test_file_path is None:
-                test_file_name = suite._elem.attrib.get("file") or testcase._elem.attrib.get("file")  # noqa: SLF001
-                if test_file_name:
-                    if test_file_name in instrumented_path_lookup:
-                        test_file_path, test_type = instrumented_path_lookup[test_file_name]
-                    else:
-                        try:
-                            resolved_path = str(Path(test_file_name).resolve())
-                            if resolved_path in instrumented_path_lookup:
-                                test_file_path, test_type = instrumented_path_lookup[resolved_path]
-                        except Exception:
-                            pass
-
-            # Fall back to traditional path resolution if direct lookup failed
-            if test_file_path is None:
-                test_file_path = resolve_test_file_from_class_path(test_class_path, base_dir)
-                if test_file_path is None:
-                    test_file_name = suite._elem.attrib.get("file") or testcase._elem.attrib.get("file")  # noqa: SLF001
-                    if test_file_name:
-                        test_file_path = base_dir.parent / test_file_name
-                        if not test_file_path.exists():
-                            test_file_path = base_dir / test_file_name
-
-            # For Jest tests in monorepos, test files may not exist after cleanup
-            # but we can still parse results and infer test type from the path
-            if test_file_path is None:
-                logger.warning(f"Could not resolve test file for Jest test: {test_class_path}")
-                continue
-
-            # Get test type if not already set from lookup
-            if test_type is None and test_file_path.exists():
-                test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
-            if test_type is None:
-                # Infer test type from filename pattern
-                filename = test_file_path.name
-                if "__perf_test_" in filename or "_perf_test_" in filename:
-                    test_type = TestType.GENERATED_PERFORMANCE
-                elif "__unit_test_" in filename or "_unit_test_" in filename:
-                    test_type = TestType.GENERATED_REGRESSION
-                else:
-                    # Default to GENERATED_REGRESSION for Jest tests
-                    test_type = TestType.GENERATED_REGRESSION
-
-            # For Jest tests, keep the relative file path with extension intact
-            # (Python uses module_name_from_file_path which strips extensions)
-            try:
-                test_module_path = str(test_file_path.relative_to(test_config.tests_project_rootdir))
-            except ValueError:
-                test_module_path = test_file_path.name
-            result = testcase.is_passed
-
-            # Check for timeout
-            timed_out = False
-            if len(testcase.result) >= 1:
-                message = (testcase.result[0].message or "").lower()
-                if "timeout" in message or "timed out" in message:
-                    timed_out = True
-
-            # Find matching timing markers for this test
-            # Jest test names in markers are sanitized by codeflash-jest-helper's sanitizeTestId()
-            # which replaces: !#: (space) ()[]{}|\/*?^$.+- with underscores
-            # IMPORTANT: Must match Jest helper's sanitization exactly for marker matching to work
-            # Pattern from capture.js: /[!#: ()\[\]{}|\\/*?^$.+\-]/g
-            sanitized_test_name = re.sub(r"[!#: ()\[\]{}|\\/*?^$.+\-]", "_", test_name)
-            matching_starts = [m for m in start_matches if sanitized_test_name in m.group(2)]
-
-            # For performance tests (capturePerf), there are no START markers - only END markers with duration
-            # Check for END markers directly if no START markers found
-            matching_ends_direct = []
-            if not matching_starts:
-                # Look for END markers that match this test (performance test format)
-                # END marker format: !######module:testName:funcName:loopIndex:invocationId:durationNs######!
-                for end_key, end_match in end_matches_dict.items():
-                    # end_key is (module, testName, funcName, loopIndex, invocationId)
-                    if len(end_key) >= 2 and sanitized_test_name in end_key[1]:
-                        matching_ends_direct.append(end_match)
-
-            if not matching_starts and not matching_ends_direct:
-                # No timing markers found - add basic result
-                test_results.add(
-                    FunctionTestInvocation(
-                        loop_index=1,
-                        id=InvocationId(
-                            test_module_path=test_module_path,
-                            test_class_name=None,
-                            test_function_name=test_name,
-                            function_getting_tested="",
-                            iteration_id="",
-                        ),
-                        file_name=test_file_path,
-                        runtime=None,
-                        test_framework=test_config.test_framework,
-                        did_pass=result,
-                        test_type=test_type,
-                        return_value=None,
-                        timed_out=timed_out,
-                        stdout="",
-                    )
-                )
-            elif matching_ends_direct:
-                # Performance test format: process END markers directly (no START markers)
-                for end_match in matching_ends_direct:
-                    groups = end_match.groups()
-                    # groups: (module, testName, funcName, loopIndex, invocationId, durationNs)
-                    func_name = groups[2]
-                    loop_index = int(groups[3]) if groups[3].isdigit() else 1
-                    line_id = groups[4]
-                    try:
-                        runtime = int(groups[5])
-                    except (ValueError, IndexError):
-                        runtime = None
-                    test_results.add(
-                        FunctionTestInvocation(
-                            loop_index=loop_index,
-                            id=InvocationId(
-                                test_module_path=test_module_path,
-                                test_class_name=None,
-                                test_function_name=test_name,
-                                function_getting_tested=func_name,
-                                iteration_id=line_id,
-                            ),
-                            file_name=test_file_path,
-                            runtime=runtime,
-                            test_framework=test_config.test_framework,
-                            did_pass=result,
-                            test_type=test_type,
-                            return_value=None,
-                            timed_out=timed_out,
-                            stdout="",
-                        )
-                    )
-            else:
-                # Process each timing marker
-                for match in matching_starts:
-                    groups = match.groups()
-                    # groups: (testName, testName2, funcName, loopIndex, lineId)
-                    func_name = groups[2]
-                    loop_index = int(groups[3]) if groups[3].isdigit() else 1
-                    line_id = groups[4]
-
-                    # Find matching end marker
-                    end_key = groups[:5]
-                    end_match = end_matches_dict.get(end_key)
-
-                    runtime = None
-                    if end_match:
-                        # Duration is in the 6th group (index 5)
-                        with contextlib.suppress(ValueError, IndexError):
-                            runtime = int(end_match.group(6))
-                    test_results.add(
-                        FunctionTestInvocation(
-                            loop_index=loop_index,
-                            id=InvocationId(
-                                test_module_path=test_module_path,
-                                test_class_name=None,
-                                test_function_name=test_name,
-                                function_getting_tested=func_name,
-                                iteration_id=line_id,
-                            ),
-                            file_name=test_file_path,
-                            runtime=runtime,
-                            test_framework=test_config.test_framework,
-                            did_pass=result,
-                            test_type=test_type,
-                            return_value=None,
-                            timed_out=timed_out,
-                            stdout="",
-                        )
-                    )
-
-    if not test_results:
-        logger.info(
-            f"No Jest test results parsed from {test_xml_file_path} "
-            f"(found {suite_count} suites, {testcase_count} testcases)"
-        )
-        if run_result is not None:
-            logger.debug(f"Jest stdout: {run_result.stdout[:1000] if run_result.stdout else 'empty'}")
-    else:
-        logger.debug(
-            f"Jest XML parsing complete: {len(test_results.test_results)} results "
-            f"from {suite_count} suites, {testcase_count} testcases"
-        )
-
-    return test_results
-
-
 def parse_test_xml(
     test_xml_file_path: Path,
     test_files: TestFiles,
@@ -987,7 +677,14 @@ def parse_test_xml(
 ) -> TestResults:
     # Route to Jest-specific parser for JavaScript/TypeScript tests
     if is_javascript():
-        return parse_jest_test_xml(test_xml_file_path, test_files, test_config, run_result)
+        return _parse_jest_test_xml(
+            test_xml_file_path,
+            test_files,
+            test_config,
+            run_result,
+            parse_func=parse_func,
+            resolve_test_file_from_class_path=resolve_test_file_from_class_path,
+        )
 
     test_results = TestResults()
     # Parse unittest output
@@ -1123,14 +820,14 @@ def parse_test_xml(
             sys_stdout = testcase.system_out or ""
 
             # Use different patterns for Java (5-field start, 6-field end) vs Python (6-field both)
-            # Java format: !$######module:class:func:loop:iter######$! (start)
-            #              !######module:class:func:loop:iter:duration######! (end)
+            # Java format: !$######module:class.test:func:loop:iter######$! (start)
+            #              !######module:class.test:func:loop:iter:duration######! (end)
             if is_java():
                 begin_matches = list(start_pattern.finditer(sys_stdout))
                 end_matches = {}
                 for match in end_pattern.finditer(sys_stdout):
                     groups = match.groups()
-                    # Key is first 5 groups (module, class, func, loop, iter)
+                    # Key is first 5 groups (module, class.test, func, loop, iter)
                     end_matches[groups[:5]] = match
 
                 # For Java: fallback to pre-parsed subprocess stdout when XML system-out has no timing markers
@@ -1191,17 +888,22 @@ def parse_test_xml(
                     groups = match.groups()
 
                     # Java and Python have different marker formats:
-                    # Java:   5 groups - (module, class, func, loop_index, iteration_id)
+                    # Java:   5 groups - (module, class.test, func, loop_index, iteration_id)
                     # Python: 6 groups - (module, class.test, _, func, loop_index, iteration_id)
                     if is_java():
-                        # Java format: !$######module:class:func:loop:iter######$!
+                        # Java format: !$######module:class.test:func:loop:iter######$!
                         end_key = groups[:5]  # Use all 5 groups as key
                         end_match = end_matches.get(end_key)
                         iteration_id = groups[4]  # iter is at index 4
                         loop_idx = int(groups[3])  # loop is at index 3
                         test_module = groups[0]  # module
-                        test_class_str = groups[1]  # class
-                        test_func = test_function  # Use the testcase name from XML
+                        # groups[1] is "class.testMethod" — extract class and test name
+                        class_test_field = groups[1]
+                        if "." in class_test_field:
+                            test_class_str, test_func = class_test_field.rsplit(".", 1)
+                        else:
+                            test_class_str = class_test_field
+                            test_func = test_function  # Fallback to testcase name from XML
                         func_getting_tested = groups[2]  # func being tested
                         runtime = None
 
@@ -1434,7 +1136,6 @@ def merge_test_results(
     return merged_test_results
 
 
-FAILURES_HEADER_RE = re.compile(r"=+ FAILURES =+")
 TEST_HEADER_RE = re.compile(r"_{3,}\s*(.*?)\s*_{3,}$")
 
 
@@ -1444,7 +1145,7 @@ def parse_test_failures_from_stdout(stdout: str) -> dict[str, str]:
     start = end = None
 
     for i, line in enumerate(lines):
-        if FAILURES_HEADER_RE.search(line.strip()):
+        if "= FAILURES =" in line:
             start = i
             break
 
@@ -1556,6 +1257,21 @@ def parse_test_results(
         get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.sqlite")).unlink(missing_ok=True)
 
     results = merge_test_results(test_results_xml, test_results_data, test_config.test_framework)
+
+    # Bug #10 Fix: For Java performance tests, preserve subprocess stdout containing timing markers
+    # This is needed for calculate_function_throughput_from_test_results to work correctly
+    if is_java() and testing_type == TestingMode.PERFORMANCE and run_result is not None:
+        try:
+            # Extract stdout from subprocess result containing timing markers
+            if isinstance(run_result.stdout, bytes):
+                results.perf_stdout = run_result.stdout.decode("utf-8", errors="replace")
+            elif isinstance(run_result.stdout, str):
+                results.perf_stdout = run_result.stdout
+            logger.debug(
+                f"Bug #10 Fix: Set perf_stdout for Java performance tests ({len(results.perf_stdout or '')} chars)"
+            )
+        except Exception as e:
+            logger.debug(f"Bug #10 Fix: Failed to set perf_stdout: {e}")
 
     all_args = False
     coverage = None

@@ -90,10 +90,10 @@ public class Calculator {
 
             # javaagent arg should be set on the support instance
             agent_jar = find_agent_jar()
-            assert support._line_profiler_agent_arg == f"-javaagent:{agent_jar}=config={config_path}"
+            assert support.line_profiler_agent_arg == f"-javaagent:{agent_jar}=config={config_path}"
 
             # Warmup iterations should be stored
-            assert support._line_profiler_warmup_iterations == DEFAULT_WARMUP_ITERATIONS
+            assert support.line_profiler_warmup_iterations == DEFAULT_WARMUP_ITERATIONS
 
     def test_instrument_without_package(self):
         """Test instrumentation for a class without a package declaration.

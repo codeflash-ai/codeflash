@@ -100,22 +100,39 @@ def detect_module_system(project_root: Path, file_path: Path | None = None) -> s
         try:
             content = file_path.read_text()
 
-            # Look for ES module syntax
+            # Look for ES module syntax - these are explicit ESM markers
             has_import = "import " in content and "from " in content
-            has_export = "export " in content or "export default" in content or "export {" in content
+            # Check for export function/class/const/default which are unambiguous ESM syntax
+            has_esm_export = (
+                "export function " in content
+                or "export class " in content
+                or "export const " in content
+                or "export let " in content
+                or "export default " in content
+                or "export async function " in content
+            )
+            has_export_block = "export {" in content
 
             # Look for CommonJS syntax
             has_require = "require(" in content
             has_module_exports = "module.exports" in content or "exports." in content
 
-            # Determine based on what we found
-            if (has_import or has_export) and not (has_require or has_module_exports):
-                logger.debug("Detected ES Module from import/export statements")
+            # Prioritize ESM when explicit ESM export syntax is found
+            # This handles hybrid files that have both `export function` and `module.exports`
+            # The ESM syntax is more explicit and should take precedence
+            if has_esm_export or has_import:
+                logger.debug("Detected ES Module from explicit export/import statements")
                 return ModuleSystem.ES_MODULE
 
-            if (has_require or has_module_exports) and not (has_import or has_export):
+            # Pure CommonJS
+            if (has_require or has_module_exports) and not has_export_block:
                 logger.debug("Detected CommonJS from require/module.exports")
                 return ModuleSystem.COMMONJS
+
+            # Export block without other ESM markers - still ESM
+            if has_export_block:
+                logger.debug("Detected ES Module from export block")
+                return ModuleSystem.ES_MODULE
 
         except Exception as e:
             logger.warning("Failed to analyze file %s: %s", file_path, e)
@@ -416,8 +433,10 @@ def ensure_module_system_compatibility(code: str, target_module_system: str, pro
     is_esm = has_import or has_export
 
     # Convert if needed
-    if target_module_system == ModuleSystem.ES_MODULE and is_commonjs and not is_esm:
-        logger.debug("Converting CommonJS to ES Module syntax")
+    # For ESM target: convert any require statements, even if there are also import statements
+    # This handles generated tests that have ESM imports for test globals but CommonJS for the function
+    if target_module_system == ModuleSystem.ES_MODULE and has_require:
+        logger.debug("Converting CommonJS require statements to ES Module syntax")
         return convert_commonjs_to_esm(code)
 
     if target_module_system == ModuleSystem.COMMONJS and is_esm and not is_commonjs:

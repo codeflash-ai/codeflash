@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import FunctionFilterCriteria
@@ -16,6 +16,8 @@ from codeflash.languages.java.parser import get_java_analyzer
 from codeflash.models.function_types import FunctionParent
 
 if TYPE_CHECKING:
+    from tree_sitter import Node
+
     from codeflash.languages.java.parser import JavaAnalyzer, JavaMethodNode
 
 logger = logging.getLogger(__name__)
@@ -136,18 +138,14 @@ def _should_include_method(
         return False
 
     # Check include patterns
-    if criteria.include_patterns:
-        import fnmatch
-
-        if not any(fnmatch.fnmatch(method.name, pattern) for pattern in criteria.include_patterns):
-            return False
+    if not criteria.matches_include_patterns(method.name):
+        return False
 
     # Check exclude patterns
-    if criteria.exclude_patterns:
-        import fnmatch
+    if criteria.matches_exclude_patterns(method.name):
+        return False
 
-        if any(fnmatch.fnmatch(method.name, pattern) for pattern in criteria.exclude_patterns):
-            return False
+    # Check require_return - void methods don't have return values
 
     # Check require_return - void methods don't have return values
     if criteria.require_return:
@@ -203,7 +201,7 @@ def discover_test_methods(file_path: Path, analyzer: JavaAnalyzer | None = None)
 
 
 def _walk_tree_for_test_methods(
-    node: Any,
+    node: Node,
     source_bytes: bytes,
     file_path: Path,
     test_methods: list[FunctionToOptimize],

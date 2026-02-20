@@ -152,16 +152,20 @@ def _detect_test_framework(project_root: Path, build_tool: BuildTool) -> tuple[s
             except Exception:
                 pass
 
-    # Determine primary framework (prefer JUnit 5)
+    # Determine primary framework (prefer JUnit 5 if explicitly found)
     if has_junit5:
+        logger.debug("Selected JUnit 5 as test framework")
         return "junit5", has_junit5, has_junit4, has_testng
     if has_junit4:
+        logger.debug("Selected JUnit 4 as test framework")
         return "junit4", has_junit5, has_junit4, has_testng
     if has_testng:
+        logger.debug("Selected TestNG as test framework")
         return "testng", has_junit5, has_junit4, has_testng
 
-    # Default to JUnit 5 if nothing detected
-    return "junit5", has_junit5, has_junit4, has_testng
+    # Default to JUnit 4 if nothing detected (more common in legacy projects)
+    logger.debug("No test framework detected, defaulting to JUnit 4")
+    return "junit4", has_junit5, has_junit4, has_testng
 
 
 def _detect_test_deps_from_pom(project_root: Path) -> tuple[bool, bool, bool]:
@@ -179,6 +183,36 @@ def _detect_test_deps_from_pom(project_root: Path) -> tuple[bool, bool, bool]:
     has_junit4 = False
     has_testng = False
 
+    def check_dependencies(deps_element: ET.Element | None, ns: dict[str, str]) -> None:
+        """Check dependencies element for test frameworks."""
+        nonlocal has_junit5, has_junit4, has_testng
+
+        if deps_element is None:
+            return
+
+        for dep_path in ["dependency", "m:dependency"]:
+            deps_list = deps_element.findall(dep_path, ns) if "m:" in dep_path else deps_element.findall(dep_path)
+            for dep in deps_list:
+                artifact_id = None
+                group_id = None
+
+                for child in dep:
+                    tag = child.tag.replace("{http://maven.apache.org/POM/4.0.0}", "")
+                    if tag == "artifactId":
+                        artifact_id = child.text
+                    elif tag == "groupId":
+                        group_id = child.text
+
+                if group_id == "org.junit.jupiter" or (artifact_id and "junit-jupiter" in artifact_id):
+                    has_junit5 = True
+                    logger.debug("Found JUnit 5 dependency: %s:%s", group_id, artifact_id)
+                elif group_id == "junit" and artifact_id == "junit":
+                    has_junit4 = True
+                    logger.debug("Found JUnit 4 dependency: %s:%s", group_id, artifact_id)
+                elif group_id == "org.testng":
+                    has_testng = True
+                    logger.debug("Found TestNG dependency: %s:%s", group_id, artifact_id)
+
     try:
         tree = ET.parse(pom_path)
         root = tree.getroot()
@@ -186,35 +220,44 @@ def _detect_test_deps_from_pom(project_root: Path) -> tuple[bool, bool, bool]:
         # Handle namespace
         ns = {"m": "http://maven.apache.org/POM/4.0.0"}
 
-        # Search for dependencies
+        logger.debug("Checking pom.xml at %s", pom_path)
+
+        # Search for direct dependencies
         for deps_path in ["dependencies", "m:dependencies"]:
             deps = root.find(deps_path, ns) if "m:" in deps_path else root.find(deps_path)
-            if deps is None:
-                continue
+            if deps is not None:
+                logger.debug("Found dependencies section in %s", pom_path)
+                check_dependencies(deps, ns)
 
-            for dep_path in ["dependency", "m:dependency"]:
-                deps_list = deps.findall(dep_path, ns) if "m:" in dep_path else deps.findall(dep_path)
-                for dep in deps_list:
-                    artifact_id = None
-                    group_id = None
-
-                    for child in dep:
-                        tag = child.tag.replace("{http://maven.apache.org/POM/4.0.0}", "")
-                        if tag == "artifactId":
-                            artifact_id = child.text
-                        elif tag == "groupId":
-                            group_id = child.text
-
-                    if group_id == "org.junit.jupiter" or (artifact_id and "junit-jupiter" in artifact_id):
-                        has_junit5 = True
-                    elif group_id == "junit" and artifact_id == "junit":
-                        has_junit4 = True
-                    elif group_id == "org.testng":
-                        has_testng = True
+        # Also check dependencyManagement section (for multi-module projects)
+        for dep_mgmt_path in ["dependencyManagement", "m:dependencyManagement"]:
+            dep_mgmt = root.find(dep_mgmt_path, ns) if "m:" in dep_mgmt_path else root.find(dep_mgmt_path)
+            if dep_mgmt is not None:
+                logger.debug("Found dependencyManagement section in %s", pom_path)
+                for deps_path in ["dependencies", "m:dependencies"]:
+                    deps = dep_mgmt.find(deps_path, ns) if "m:" in deps_path else dep_mgmt.find(deps_path)
+                    if deps is not None:
+                        check_dependencies(deps, ns)
 
     except ET.ParseError:
-        pass
+        logger.debug("Failed to parse pom.xml at %s", pom_path)
 
+    # For multi-module projects, also check submodule pom.xml files
+    if not (has_junit5 or has_junit4 or has_testng):
+        logger.debug("No test deps in root pom, checking submodules")
+        # Check common submodule locations
+        for submodule_name in ["test", "tests", "src/test", "testing"]:
+            submodule_pom = project_root / submodule_name / "pom.xml"
+            if submodule_pom.exists():
+                logger.debug("Checking submodule pom at %s", submodule_pom)
+                sub_junit5, sub_junit4, sub_testng = _detect_test_deps_from_pom(project_root / submodule_name)
+                has_junit5 = has_junit5 or sub_junit5
+                has_junit4 = has_junit4 or sub_junit4
+                has_testng = has_testng or sub_testng
+                if has_junit5 or has_junit4 or has_testng:
+                    break
+
+    logger.debug("Test framework detection result: junit5=%s, junit4=%s, testng=%s", has_junit5, has_junit4, has_testng)
     return has_junit5, has_junit4, has_testng
 
 

@@ -1,23 +1,18 @@
 from __future__ import annotations
 
-import os
 import re
 import subprocess
 from pathlib import Path
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
-from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
+from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args, make_env_with_project_root
 
 
 def trace_benchmarks_pytest(
     benchmarks_root: Path, tests_root: Path, project_root: Path, trace_file: Path, timeout: int = 300
 ) -> None:
-    benchmark_env = os.environ.copy()
-    if "PYTHONPATH" not in benchmark_env:
-        benchmark_env["PYTHONPATH"] = str(project_root)
-    else:
-        benchmark_env["PYTHONPATH"] += os.pathsep + str(project_root)
+    benchmark_env = make_env_with_project_root(project_root)
     run_args = get_cross_platform_subprocess_run_args(
         cwd=project_root, env=benchmark_env, timeout=timeout, check=False, text=True, capture_output=True
     )

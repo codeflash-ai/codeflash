@@ -8,7 +8,7 @@ and other dependencies.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from codeflash.code_utils.code_utils import encoded_tokens_len
 from codeflash.languages.base import CodeContext, HelperFunction, Language
@@ -360,7 +360,7 @@ def _extract_type_declaration(type_node: Node, source_bytes: bytes, type_kind: s
 
 
 # Keep old function name for backwards compatibility
-def _extract_class_declaration(node: Any, source_bytes: bytes) -> str:
+def _extract_class_declaration(node, source_bytes):
     return _extract_type_declaration(node, source_bytes, "class")
 
 
@@ -627,12 +627,10 @@ def _extract_function_source_by_lines(source: str, function: FunctionToOptimize)
     """Extract function source using pre-computed line numbers (fallback)."""
     lines = source.splitlines(keepends=True)
 
-    start_line: int | None = function.doc_start_line or function.starting_line
+    start_line = function.doc_start_line or function.starting_line
     end_line = function.ending_line
 
     # Convert from 1-indexed to 0-indexed
-    assert start_line is not None
-    assert end_line is not None
     start_idx = start_line - 1
     end_idx = end_line
 
@@ -680,8 +678,8 @@ def find_helper_functions(
                             qualified_name=func.qualified_name,
                             file_path=file_path,
                             source_code=func_source,
-                            start_line=func.starting_line or 0,
-                            end_line=func.ending_line or 0,
+                            start_line=func.starting_line,
+                            end_line=func.ending_line,
                         )
                     )
 
@@ -789,7 +787,7 @@ def extract_read_only_context(source: str, function: FunctionToOptimize, analyze
     return "\n".join(context_parts)
 
 
-def _import_to_statement(import_info: Any) -> str:
+def _import_to_statement(import_info) -> str:
     """Convert a JavaImportInfo to an import statement string.
 
     Args:
@@ -871,17 +869,16 @@ def _extract_type_names_from_code(code: str, analyzer: JavaAnalyzer) -> set[str]
 
     type_names: set[str] = set()
     try:
-        tree = analyzer.parse(code)
         source_bytes = code.encode("utf8")
+        tree = analyzer.parse(source_bytes)
 
-        def collect_type_identifiers(node: Node) -> None:
+        stack = [tree.root_node]
+        while stack:
+            node = stack.pop()
             if node.type == "type_identifier":
                 name = source_bytes[node.start_byte : node.end_byte].decode("utf8")
                 type_names.add(name)
-            for child in node.children:
-                collect_type_identifiers(child)
-
-        collect_type_identifiers(tree.root_node)
+            stack.extend(node.children)
     except Exception:
         pass
 
@@ -889,7 +886,7 @@ def _extract_type_names_from_code(code: str, analyzer: JavaAnalyzer) -> set[str]
 
 
 def get_java_imported_type_skeletons(
-    imports: list[Any], project_root: Path, module_root: Path | None, analyzer: JavaAnalyzer, target_code: str = ""
+    imports: list, project_root: Path, module_root: Path | None, analyzer: JavaAnalyzer, target_code: str = ""
 ) -> str:
     """Extract type skeletons for project-internal imported types.
 
@@ -924,7 +921,7 @@ def get_java_imported_type_skeletons(
     priority_types = _extract_type_names_from_code(target_code, analyzer)
 
     # Pre-resolve all imports, expanding wildcards into individual types
-    resolved_imports: list[Any] = []
+    resolved_imports: list = []
     for imp in imports:
         if imp.is_wildcard:
             # Expand wildcard imports (e.g., com.aerospike.client.policy.*) into individual types

@@ -16,6 +16,7 @@ def get_test_file_path(
     test_type: str = "unit",
     package_name: str | None = None,
     class_name: str | None = None,
+    source_file_path: Path | None = None,
 ) -> Path:
     assert test_type in {"unit", "inspired", "replay", "perf"}
     function_name_safe = function_name.replace(".", "_")
@@ -41,11 +42,80 @@ def get_test_file_path(
         # Create package directory if needed
         path.parent.mkdir(parents=True, exist_ok=True)
     else:
+        # For JavaScript/TypeScript, place generated tests in a subdirectory that matches
+        # Vitest/Jest include patterns (e.g., test/**/*.test.ts)
+        if is_javascript():
+            package_test_dir = _find_js_package_test_dir(test_dir, source_file_path)
+            if package_test_dir:
+                test_dir = package_test_dir
+
         path = test_dir / f"test_{function_name_safe}__{test_type}_test_{iteration}{extension}"
 
     if path.exists():
-        return get_test_file_path(test_dir, function_name, iteration + 1, test_type, package_name, class_name)
+        return get_test_file_path(
+            test_dir, function_name, iteration + 1, test_type, package_name, class_name, source_file_path
+        )
     return path
+
+
+def _find_js_package_test_dir(tests_root: Path, source_file_path: Path | None) -> Path | None:
+    """Find the appropriate test directory for a JavaScript/TypeScript package.
+
+    For monorepos, this finds the package's test directory from the source file path.
+    For example: packages/workflow/src/utils.ts -> packages/workflow/test/codeflash-generated/
+
+    Args:
+        tests_root: The root tests directory (may be monorepo packages root).
+        source_file_path: Path to the source file being tested.
+
+    Returns:
+        The test directory path, or None if not found.
+
+    """
+    if source_file_path is None:
+        # No source path provided, check if test_dir itself has a test subdirectory
+        for test_subdir_name in ["test", "tests", "__tests__", "src/__tests__"]:
+            test_subdir = tests_root / test_subdir_name
+            if test_subdir.is_dir():
+                codeflash_test_dir = test_subdir / "codeflash-generated"
+                codeflash_test_dir.mkdir(parents=True, exist_ok=True)
+                return codeflash_test_dir
+        return None
+
+    try:
+        # Resolve paths for reliable comparison
+        tests_root = tests_root.resolve()
+        source_path = Path(source_file_path).resolve()
+
+        # Walk up from the source file to find a directory with package.json or test/ folder
+        package_dir = None
+
+        for parent in source_path.parents:
+            # Stop if we've gone above or reached the tests_root level
+            # For monorepos, tests_root might be /packages/ and we want to search within packages
+            if parent in (tests_root, tests_root.parent):
+                break
+
+            # Check if this looks like a package root
+            has_package_json = (parent / "package.json").exists()
+            has_test_dir = any((parent / d).is_dir() for d in ["test", "tests", "__tests__"])
+
+            if has_package_json or has_test_dir:
+                package_dir = parent
+                break
+
+        if package_dir:
+            # Find the test directory in this package
+            for test_subdir_name in ["test", "tests", "__tests__", "src/__tests__"]:
+                test_subdir = package_dir / test_subdir_name
+                if test_subdir.is_dir():
+                    codeflash_test_dir = test_subdir / "codeflash-generated"
+                    codeflash_test_dir.mkdir(parents=True, exist_ok=True)
+                    return codeflash_test_dir
+
+        return None
+    except Exception:
+        return None
 
 
 def delete_multiple_if_name_main(test_ast: ast.Module) -> ast.Module:
@@ -109,6 +179,12 @@ class TestConfig:
     use_cache: bool = True
     _language: Optional[str] = None  # Language identifier for multi-language support
     js_project_root: Optional[Path] = None  # JavaScript project root (directory containing package.json)
+    _test_framework: Optional[str] = None  # Cached test framework detection result
+
+    def __post_init__(self) -> None:
+        self.tests_root = self.tests_root.resolve()
+        self.project_root_path = self.project_root_path.resolve()
+        self.tests_project_rootdir = self.tests_project_rootdir.resolve()
 
     @property
     def test_framework(self) -> str:
@@ -116,14 +192,19 @@ class TestConfig:
 
         For JavaScript/TypeScript: uses the configured framework (vitest, jest, or mocha).
         For Python: uses pytest as default.
+        Result is cached after first detection to avoid repeated pom.xml parsing.
         """
+        if self._test_framework is not None:
+            return self._test_framework
         if is_javascript():
             from codeflash.languages.test_framework import get_js_test_framework_or_default
 
-            return get_js_test_framework_or_default()
-        if is_java():
-            return self._detect_java_test_framework()
-        return "pytest"
+            self._test_framework = get_js_test_framework_or_default()
+        elif is_java():
+            self._test_framework = self._detect_java_test_framework()
+        else:
+            self._test_framework = "pytest"
+        return self._test_framework
 
     def _detect_java_test_framework(self) -> str:
         """Detect the Java test framework from the project configuration.
@@ -157,7 +238,7 @@ class TestConfig:
                 return config.test_framework
         except Exception:
             pass
-        return "junit5"  # Default fallback
+        return "junit4"  # Default fallback (JUnit 4 is more common in legacy projects)
 
     def set_language(self, language: str) -> None:
         """Set the language for this test config.

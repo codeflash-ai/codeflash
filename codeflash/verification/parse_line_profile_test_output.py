@@ -7,7 +7,7 @@ import json
 import linecache
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 import dill as pickle
 
@@ -35,22 +35,22 @@ def show_func(
     out_table += "## Total time: %g s\n" % (total_time * unit)
     # Define minimum column sizes so text fits and usually looks consistent
     default_column_sizes = {"hits": 9, "time": 12, "perhit": 8, "percent": 8}
-    display: dict[int, tuple[str, str, str, str]] = {}
+    display = {}
     # Loop over each line to determine better column formatting.
     # Fallback to scientific notation if columns are larger than a threshold.
-    for lineno, nhits_raw, time_raw in timings:
-        percent_str = "" if total_time == 0 else "%5.1f" % (100 * time_raw / total_time)
+    for lineno, nhits, time in timings:
+        percent = "" if total_time == 0 else "%5.1f" % (100 * time / total_time)
 
-        time_disp = "%5.1f" % (time_raw * scalar)
+        time_disp = "%5.1f" % (time * scalar)
         if len(time_disp) > default_column_sizes["time"]:
-            time_disp = "%5.1g" % (time_raw * scalar)
-        perhit_disp = "%5.1f" % (float(time_raw) * scalar / nhits_raw)
+            time_disp = "%5.1g" % (time * scalar)
+        perhit_disp = "%5.1f" % (float(time) * scalar / nhits)
         if len(perhit_disp) > default_column_sizes["perhit"]:
-            perhit_disp = "%5.1g" % (float(time_raw) * scalar / nhits_raw)
-        nhits_disp = "%d" % nhits_raw  # noqa: UP031
+            perhit_disp = "%5.1g" % (float(time) * scalar / nhits)
+        nhits_disp = "%d" % nhits  # noqa: UP031
         if len(nhits_disp) > default_column_sizes["hits"]:
-            nhits_disp = f"{nhits_raw:g}"
-        display[lineno] = (nhits_disp, time_disp, perhit_disp, percent_str)
+            nhits_disp = f"{nhits:g}"
+        display[lineno] = (nhits_disp, time_disp, perhit_disp, percent)
     linenos = range(start_lineno, start_lineno + len(sublines))
     empty = ("", "", "", "")
     table_cols = ("Hits", "Time", "Per Hit", "% Time", "Line Contents")
@@ -66,7 +66,7 @@ def show_func(
     return out_table
 
 
-def show_text(stats: dict[str, Any]) -> str:
+def show_text(stats: dict) -> str:
     """Show text for the given timings."""
     out_table = ""
     out_table += "# Timer unit: {:g} s\n".format(stats["unit"])
@@ -78,7 +78,7 @@ def show_text(stats: dict[str, Any]) -> str:
     return out_table
 
 
-def show_text_non_python(stats: dict[str, Any], line_contents: dict[tuple[str, int], str]) -> str:
+def show_text_non_python(stats: dict, line_contents: dict[tuple[str, int], str]) -> str:
     """Show text for non-Python timings using profiler-provided line contents."""
     out_table = ""
     out_table += "# Timer unit: {:g} s\n".format(stats["unit"])
@@ -98,7 +98,7 @@ def show_text_non_python(stats: dict[str, Any], line_contents: dict[tuple[str, i
             if nhits == 0:
                 table_rows.append(("", "", "", "", line_contents.get((fn, lineno), "")))
                 continue
-            percent = "" if total_time == 0 else f"{100 * time / total_time:5.1f}"
+            percent = "" if total_time == 0 else "%5.1f" % (100 * time / total_time)
             time_disp = f"{time:5.1f}"
             if len(time_disp) > default_column_sizes["time"]:
                 time_disp = f"{time:5.1g}"
@@ -106,7 +106,7 @@ def show_text_non_python(stats: dict[str, Any], line_contents: dict[tuple[str, i
             perhit_disp = f"{perhit:5.1f}"
             if len(perhit_disp) > default_column_sizes["perhit"]:
                 perhit_disp = f"{perhit:5.1g}"
-            nhits_disp = f"{nhits:d}"
+            nhits_disp = "%d" % nhits  # noqa: UP031
             if len(nhits_disp) > default_column_sizes["hits"]:
                 nhits_disp = f"{nhits:g}"
 
@@ -120,11 +120,10 @@ def show_text_non_python(stats: dict[str, Any], line_contents: dict[tuple[str, i
     return out_table
 
 
-def parse_line_profile_results(line_profiler_output_file: Optional[Path]) -> tuple[dict[str, Any], None]:
+def parse_line_profile_results(line_profiler_output_file: Optional[Path]) -> dict:
     if is_python():
-        assert line_profiler_output_file is not None
         line_profiler_output_file = line_profiler_output_file.with_suffix(".lprof")
-        stats_dict: dict[str, Any] = {}
+        stats_dict = {}
         if not line_profiler_output_file.exists():
             return {"timings": {}, "unit": 0, "str_out": ""}, None
         with line_profiler_output_file.open("rb") as f:
@@ -135,7 +134,7 @@ def parse_line_profile_results(line_profiler_output_file: Optional[Path]) -> tup
             stats_dict["str_out"] = str_out
         return stats_dict, None
 
-    stats_dict = dict[str, Any]()
+    stats_dict = {}
     if line_profiler_output_file is None or not line_profiler_output_file.exists():
         return {"timings": {}, "unit": 0, "str_out": ""}, None
 

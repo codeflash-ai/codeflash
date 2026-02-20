@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, TestInfo, TestResult
     from codeflash.languages.java.concurrency_analyzer import ConcurrencyInfo
+    from codeflash.models.models import GeneratedTestsList, InvocationId
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,8 @@ class JavaSupport(LanguageSupport):
     def __init__(self) -> None:
         """Initialize Java support."""
         self._analyzer = get_java_analyzer()
+        self.line_profiler_agent_arg: str | None = None
+        self.line_profiler_warmup_iterations: int = 0
 
     @property
     def language(self) -> Language:
@@ -81,6 +84,24 @@ class JavaSupport(LanguageSupport):
     def comment_prefix(self) -> str:
         """Comment prefix for Java."""
         return "//"
+
+    @property
+    def default_file_extension(self) -> str:
+        return ".java"
+
+    @property
+    def dir_excludes(self) -> frozenset[str]:
+        return frozenset({"target", "build", ".gradle", ".mvn", ".idea"})
+
+    def postprocess_generated_tests(
+        self, generated_tests: GeneratedTestsList, test_framework: str, project_root: Path, source_file_path: Path
+    ) -> GeneratedTestsList:
+        _ = test_framework, project_root, source_file_path
+        return generated_tests
+
+    def add_global_declarations(self, optimized_code: str, original_source: str, module_abspath: Path) -> str:
+        _ = optimized_code, module_abspath
+        return original_source
 
     # === Discovery ===
 
@@ -180,11 +201,80 @@ class JavaSupport(LanguageSupport):
         """Remove specific test functions from test source code."""
         return remove_test_functions(test_source, functions_to_remove, self._analyzer)
 
+    def remove_test_functions_from_generated_tests(
+        self, generated_tests: GeneratedTestsList, functions_to_remove: list[str]
+    ) -> GeneratedTestsList:
+        from codeflash.models.models import GeneratedTests, GeneratedTestsList
+
+        updated_tests: list[GeneratedTests] = []
+        for test in generated_tests.generated_tests:
+            updated_tests.append(
+                GeneratedTests(
+                    generated_original_test_source=self.remove_test_functions(
+                        test.generated_original_test_source, functions_to_remove
+                    ),
+                    instrumented_behavior_test_source=test.instrumented_behavior_test_source,
+                    instrumented_perf_test_source=test.instrumented_perf_test_source,
+                    behavior_file_path=test.behavior_file_path,
+                    perf_file_path=test.perf_file_path,
+                )
+            )
+        return GeneratedTestsList(generated_tests=updated_tests)
+
+    def add_runtime_comments_to_generated_tests(
+        self,
+        generated_tests: GeneratedTestsList,
+        original_runtimes: dict[InvocationId, list[int]],
+        optimized_runtimes: dict[InvocationId, list[int]],
+        tests_project_rootdir: Path | None = None,
+    ) -> GeneratedTestsList:
+        from codeflash.models.models import GeneratedTests, GeneratedTestsList
+
+        original_runtimes_dict = self._build_runtime_map(original_runtimes)
+        optimized_runtimes_dict = self._build_runtime_map(optimized_runtimes)
+
+        modified_tests: list[GeneratedTests] = []
+        for test in generated_tests.generated_tests:
+            modified_source = self.add_runtime_comments(
+                test.generated_original_test_source, original_runtimes_dict, optimized_runtimes_dict
+            )
+            modified_tests.append(
+                GeneratedTests(
+                    generated_original_test_source=modified_source,
+                    instrumented_behavior_test_source=test.instrumented_behavior_test_source,
+                    instrumented_perf_test_source=test.instrumented_perf_test_source,
+                    behavior_file_path=test.behavior_file_path,
+                    perf_file_path=test.perf_file_path,
+                )
+            )
+        return GeneratedTestsList(generated_tests=modified_tests)
+
+    def _build_runtime_map(self, inv_id_runtimes: dict[InvocationId, list[int]]) -> dict[str, int]:
+        unique_inv_ids: dict[str, int] = {}
+        for inv_id, runtimes in inv_id_runtimes.items():
+            test_qualified_name = (
+                inv_id.test_class_name + "." + inv_id.test_function_name
+                if inv_id.test_class_name
+                else inv_id.test_function_name
+            )
+            if not test_qualified_name:
+                continue
+
+            key = test_qualified_name
+            if inv_id.iteration_id:
+                parts = inv_id.iteration_id.split("_")
+                cur_invid = parts[0] if len(parts) < 3 else "_".join(parts[:-1])
+                key = key + "#" + cur_invid
+            if key not in unique_inv_ids:
+                unique_inv_ids[key] = 0
+            unique_inv_ids[key] += min(runtimes)
+        return unique_inv_ids
+
     # === Test Result Comparison ===
 
     def compare_test_results(
         self, original_results_path: Path, candidate_results_path: Path, project_root: Path | None = None
-    ) -> tuple[bool, list[Any]]:
+    ) -> tuple[bool, list]:
         """Compare test results between original and candidate code."""
         return _compare_test_results(original_results_path, candidate_results_path, project_root=project_root)
 
@@ -320,17 +410,20 @@ class JavaSupport(LanguageSupport):
 
             config_path = line_profiler_output_file.with_suffix(".config.json")
             profiler.generate_agent_config(
-                source=source, file_path=func_info.file_path, functions=[func_info], config_output_path=config_path
+                source=source,
+                file_path=func_info.file_path,
+                functions=[func_info],
+                config_output_path=config_path,
             )
 
-            self._line_profiler_agent_arg = profiler.build_javaagent_arg(config_path)
-            self._line_profiler_warmup_iterations = profiler.warmup_iterations
+            self.line_profiler_agent_arg = profiler.build_javaagent_arg(config_path)
+            self.line_profiler_warmup_iterations = profiler.warmup_iterations
             return True
         except Exception:
             logger.exception("Failed to prepare line profiling for %s", func_info.function_name)
             return False
 
-    def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict[str, Any]:
+    def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict:
         """Parse line profiler output for Java.
 
         Args:
@@ -414,7 +507,7 @@ class JavaSupport(LanguageSupport):
             timeout=timeout,
             project_root=project_root,
             line_profile_output_file=line_profile_output_file,
-            javaagent_arg=getattr(self, "_line_profiler_agent_arg", None),
+            javaagent_arg=self.line_profiler_agent_arg,
         )
 
 

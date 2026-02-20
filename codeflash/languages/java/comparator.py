@@ -10,12 +10,17 @@ import json
 import logging
 import math
 import os
+import platform
+import shutil
 import subprocess
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from codeflash.models.models import TestDiff
+
+_IS_DARWIN = platform.system() == "Darwin"
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +74,7 @@ def _find_comparator_jar(project_root: Path | None = None) -> Path | None:
     return None
 
 
+@lru_cache(maxsize=1)
 def _find_java_executable() -> str | None:
     """Find the Java executable.
 
@@ -76,9 +82,6 @@ def _find_java_executable() -> str | None:
         Path to java executable, or None if not found.
 
     """
-    import platform
-    import shutil
-
     # Check JAVA_HOME
     java_home = os.environ.get("JAVA_HOME")
     if java_home:
@@ -87,16 +90,17 @@ def _find_java_executable() -> str | None:
             return str(java_path)
 
     # On macOS, try to get JAVA_HOME from the system helper or Maven
-    if platform.system() == "Darwin":
+    if _IS_DARWIN:
         # Try to extract Java home from Maven (which always finds it)
         try:
             result = subprocess.run(["mvn", "--version"], capture_output=True, text=True, timeout=10, check=False)
-            for line in result.stdout.split("\n"):
-                if "runtime:" in line:
-                    runtime_path = line.split("runtime:")[-1].strip()
-                    java_path = Path(runtime_path) / "bin" / "java"
-                    if java_path.exists():
-                        return str(java_path)
+            if result.returncode == 0:
+                for line in result.stdout.split("\n"):
+                    if "runtime:" in line:
+                        runtime_path = line.split("runtime:")[-1].strip()
+                        java_path = Path(runtime_path) / "bin" / "java"
+                        if java_path.exists():
+                            return str(java_path)
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
 

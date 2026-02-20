@@ -29,7 +29,7 @@ class TestDiscoverTests:
             # Create source file
             source_file = tmpdir / "math.js"
             source_file.write_text("""
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }
 
@@ -71,7 +71,7 @@ describe('add function', () => {
             # Create source file
             source_file = tmpdir / "calculator.js"
             source_file.write_text("""
-function multiply(a, b) {
+export function multiply(a, b) {
     return a * b;
 }
 
@@ -103,7 +103,7 @@ describe('multiply', () => {
             # Create source file
             source_file = tmpdir / "utils.js"
             source_file.write_text("""
-function formatDate(date) {
+export function formatDate(date) {
     return date.toISOString();
 }
 
@@ -136,11 +136,11 @@ test('formats date correctly', () => {
 
             source_file = tmpdir / "string_utils.js"
             source_file.write_text("""
-function capitalize(str) {
+export function capitalize(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-function lowercase(str) {
+export function lowercase(str) {
     return str.toLowerCase();
 }
 
@@ -186,7 +186,7 @@ describe('String Utils', () => {
 
             source_file = tmpdir / "array_utils.js"
             source_file.write_text("""
-function sum(arr) {
+export function sum(arr) {
     return arr.reduce((a, b) => a + b, 0);
 }
 
@@ -254,7 +254,7 @@ test('subtract two numbers', () => {
 
             source_file = tmpdir / "greeter.js"
             source_file.write_text("""
-function greet(name) {
+export function greet(name) {
     return `Hello, ${name}!`;
 }
 
@@ -282,7 +282,7 @@ test('greets by name', () => {
 
             source_file = tmpdir / "calculator_class.js"
             source_file.write_text("""
-class Calculator {
+export class Calculator {
     add(a, b) {
         return a + b;
     }
@@ -333,7 +333,7 @@ describe('Calculator class', () => {
 
             source_file = src_dir / "helpers.js"
             source_file.write_text("""
-function clamp(value, min, max) {
+export function clamp(value, min, max) {
     return Math.min(Math.max(value, min), max);
 }
 
@@ -375,11 +375,11 @@ describe('clamp', () => {
 
             source_file = tmpdir / "async_utils.js"
             source_file.write_text("""
-async function fetchData(url) {
+export async function fetchData(url) {
     return await fetch(url).then(r => r.json());
 }
 
-async function delay(ms) {
+export async function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
@@ -413,7 +413,7 @@ describe('async utilities', () => {
             source_file.write_text("""
 import React from 'react';
 
-function Button({ onClick, children }) {
+export function Button({ onClick, children }) {
     return <button onClick={onClick}>{children}</button>;
 }
 
@@ -449,7 +449,7 @@ describe('Button component', () => {
 
             source_file = tmpdir / "untested.js"
             source_file.write_text("""
-function untestedFunction() {
+export function untestedFunction() {
     return 42;
 }
 
@@ -479,11 +479,11 @@ test('other test', () => {
 
             source_file = tmpdir / "validators.js"
             source_file.write_text("""
-function isEmail(str) {
+export function isEmail(str) {
     return str.includes('@');
 }
 
-function isUrl(str) {
+export function isUrl(str) {
     return str.startsWith('http');
 }
 
@@ -515,11 +515,11 @@ describe('validators', () => {
 
             source_file = tmpdir / "shared_utils.js"
             source_file.write_text("""
-function helper1() {
+export function helper1() {
     return 1;
 }
 
-function helper2() {
+export function helper2() {
     return 2;
 }
 
@@ -558,7 +558,7 @@ test('helper2 returns 2', () => {
 
             source_file = tmpdir / "format.js"
             source_file.write_text("""
-function formatNumber(n) {
+export function formatNumber(n) {
     return n.toFixed(2);
 }
 
@@ -587,7 +587,7 @@ test(`formatNumber with decimal`, () => {
 
             source_file = tmpdir / "transform.js"
             source_file.write_text("""
-function transformData(data) {
+export function transformData(data) {
     return data.map(x => x * 2);
 }
 
@@ -627,7 +627,7 @@ it('third test', () => {});
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -652,7 +652,7 @@ describe('Suite B', () => {
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -676,7 +676,7 @@ describe('Outer', () => {
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -700,7 +700,7 @@ describe.skip('skipped describe', () => {
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -721,7 +721,7 @@ describe.only('only describe', () => {
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -739,7 +739,7 @@ describe('describe single', () => {});
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -758,7 +758,7 @@ describe("describe double", () => {});
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -774,7 +774,7 @@ describe("describe double", () => {});
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -792,8 +792,8 @@ class TestImportAnalysis:
 
             source_file = tmpdir / "funcs.js"
             source_file.write_text("""
-function funcA() { return 1; }
-function funcB() { return 2; }
+export function funcA() { return 1; }
+export function funcB() { return 2; }
 module.exports = { funcA, funcB };
 """)
 
@@ -846,7 +846,7 @@ test('funcX works', () => {
 
             source_file = tmpdir / "default_export.js"
             source_file.write_text("""
-function mainFunc() { return 'main'; }
+export function mainFunc() { return 'main'; }
 module.exports = mainFunc;
 """)
 
@@ -875,7 +875,7 @@ class TestEdgeCases:
 
             source_file = tmpdir / "commented.js"
             source_file.write_text("""
-function compute() { return 42; }
+export function compute() { return 42; }
 module.exports = { compute };
 """)
 
@@ -908,7 +908,7 @@ test('block commented', () => {
 
             source_file = tmpdir / "valid.js"
             source_file.write_text("""
-function validFunc() { return 1; }
+export function validFunc() { return 1; }
 module.exports = { validFunc };
 """)
 
@@ -933,8 +933,8 @@ test('broken test' {  // Missing arrow function
 
             source_file = tmpdir / "conflict.js"
             source_file.write_text("""
-function test(value) { return value > 0; }
-function describe(obj) { return JSON.stringify(obj); }
+export function test(value) { return value > 0; }
+export function describe(obj) { return JSON.stringify(obj); }
 module.exports = { test, describe };
 """)
 
@@ -962,7 +962,7 @@ describe('conflict tests', () => {
 
             source_file = tmpdir / "lonely.js"
             source_file.write_text("""
-function lonelyFunc() { return 'alone'; }
+export function lonelyFunc() { return 'alone'; }
 module.exports = { lonelyFunc };
 """)
 
@@ -980,14 +980,14 @@ module.exports = { lonelyFunc };
             file_a = tmpdir / "moduleA.js"
             file_a.write_text("""
 const { funcB } = require('./moduleB');
-function funcA() { return 'A' + (funcB ? funcB() : ''); }
+export function funcA() { return 'A' + (funcB ? funcB() : ''); }
 module.exports = { funcA };
 """)
 
             file_b = tmpdir / "moduleB.js"
             file_b.write_text("""
 const { funcA } = require('./moduleA');
-function funcB() { return 'B'; }
+export function funcB() { return 'B'; }
 module.exports = { funcB };
 """)
 
@@ -1020,7 +1020,7 @@ describe('日本語テスト', () => {
             file_path = Path(f.name)
 
             source = file_path.read_text(encoding="utf-8")
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -1048,7 +1048,7 @@ test.each([
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -1074,7 +1074,7 @@ describe.each([
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -1099,7 +1099,7 @@ describe('Math operations', () => {
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -1126,17 +1126,17 @@ class TestTestDiscoveryIntegration:
             # Source file
             source_file = src_dir / "utils.js"
             source_file.write_text(r"""
-function validateEmail(email) {
+export function validateEmail(email) {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return re.test(email);
 }
 
-function validatePhone(phone) {
+export function validatePhone(phone) {
     const re = /^\d{10}$/;
     return re.test(phone);
 }
 
-function formatName(first, last) {
+export function formatName(first, last) {
     return `${first} ${last}`.trim();
 }
 
@@ -1197,7 +1197,7 @@ describe('formatName', () => {
 
             source_file = tmpdir / "database.js"
             source_file.write_text("""
-class Database {
+export class Database {
     constructor() {
         this.data = [];
     }
@@ -1259,13 +1259,13 @@ class TestImportFilteringDetailed:
             # Create two source files
             source_a = tmpdir / "moduleA.js"
             source_a.write_text("""
-function funcA() { return 'A'; }
+export function funcA() { return 'A'; }
 module.exports = { funcA };
 """)
 
             source_b = tmpdir / "moduleB.js"
             source_b.write_text("""
-function funcB() { return 'B'; }
+export function funcB() { return 'B'; }
 module.exports = { funcB };
 """)
 
@@ -1296,9 +1296,9 @@ test('funcA works', () => {
 
             source_file = tmpdir / "utils.js"
             source_file.write_text("""
-function funcOne() { return 1; }
-function funcTwo() { return 2; }
-function funcThree() { return 3; }
+export function funcOne() { return 1; }
+export function funcTwo() { return 2; }
+export function funcThree() { return 3; }
 module.exports = { funcOne, funcTwo, funcThree };
 """)
 
@@ -1325,7 +1325,7 @@ test('funcOne returns 1', () => {
 
             source_file = tmpdir / "target.js"
             source_file.write_text("""
-function targetFunc() { return 'target'; }
+export function targetFunc() { return 'target'; }
 module.exports = { targetFunc };
 """)
 
@@ -1354,7 +1354,7 @@ test('mentions targetFunc in string', () => {
 
             source_file = tmpdir / "math.js"
             source_file.write_text("""
-function calculate(x) { return x * 2; }
+export function calculate(x) { return x * 2; }
 module.exports = { calculate };
 """)
 
@@ -1380,7 +1380,7 @@ test('calculate doubles', () => {
 
             source_file = tmpdir / "myclass.js"
             source_file.write_text("""
-class MyClass {
+export class MyClass {
     methodA() { return 'A'; }
     methodB() { return 'B'; }
 }
@@ -1416,7 +1416,7 @@ describe('MyClass', () => {
 
             source_file = src_dir / "helpers.js"
             source_file.write_text("""
-function deepHelper() { return 'deep'; }
+export function deepHelper() { return 'deep'; }
 module.exports = { deepHelper };
 """)
 
@@ -1457,7 +1457,7 @@ testCases.forEach(name => {
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -1485,7 +1485,7 @@ describe('conditional tests', () => {
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -1509,7 +1509,7 @@ test('slow test', () => {
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -1532,7 +1532,7 @@ test.todo('also needs implementation');
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -1555,7 +1555,7 @@ test.concurrent('concurrent test 2', async () => {
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -1574,9 +1574,9 @@ class TestFunctionToTestMapping:
 
             source_file = tmpdir / "multiple.js"
             source_file.write_text("""
-function addNumbers(a, b) { return a + b; }
-function subtractNumbers(a, b) { return a - b; }
-function multiplyNumbers(a, b) { return a * b; }
+export function addNumbers(a, b) { return a + b; }
+export function subtractNumbers(a, b) { return a - b; }
+export function multiplyNumbers(a, b) { return a * b; }
 module.exports = { addNumbers, subtractNumbers, multiplyNumbers };
 """)
 
@@ -1613,7 +1613,7 @@ describe('subtractNumbers', () => {
 
             source_file = tmpdir / "funcs.js"
             source_file.write_text("""
-function targetFunc() { return 'target'; }
+export function targetFunc() { return 'target'; }
 module.exports = { targetFunc };
 """)
 
@@ -1654,7 +1654,7 @@ describe('Array', function() {
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -1685,7 +1685,7 @@ describe('User', () => {
             file_path = Path(f.name)
 
             source = file_path.read_text()
-            from codeflash.languages.treesitter_utils import get_analyzer_for_file
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
@@ -1705,7 +1705,7 @@ class TestQualifiedNames:
 
             source_file = tmpdir / "calculator.js"
             source_file.write_text("""
-class Calculator {
+export class Calculator {
     add(a, b) { return a + b; }
     subtract(a, b) { return a - b; }
 }
@@ -1726,7 +1726,7 @@ module.exports = { Calculator };
 
             source_file = tmpdir / "nested.js"
             source_file.write_text("""
-class Outer {
+export class Outer {
     innerMethod() {
         class Inner {
             deepMethod() { return 'deep'; }

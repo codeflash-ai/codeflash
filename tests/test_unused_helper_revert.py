@@ -5,8 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.languages.python.context.unused_definition_remover import (
+    detect_unused_helper_functions,
+    revert_unused_helper_functions,
+)
 from codeflash.models.models import CodeStringsMarkdown
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
@@ -915,7 +918,7 @@ class OuterClass:
                                 "only_function_name": "global_helper_1",
                                 "fully_qualified_name": "main.global_helper_1",
                                 "file_path": main_file,
-                                "jedi_definition": type("MockJedi", (), {"type": "function"})(),
+                                "definition_type": "function",
                             },
                         )(),
                         type(
@@ -926,7 +929,7 @@ class OuterClass:
                                 "only_function_name": "global_helper_2",
                                 "fully_qualified_name": "main.global_helper_2",
                                 "file_path": main_file,
-                                "jedi_definition": type("MockJedi", (), {"type": "function"})(),
+                                "definition_type": "function",
                             },
                         )(),
                     ]

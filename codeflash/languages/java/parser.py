@@ -7,6 +7,7 @@ using tree-sitter, following the same patterns as the JavaScript/TypeScript impl
 from __future__ import annotations
 
 import logging
+from bisect import bisect_right
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -110,6 +111,13 @@ class JavaAnalyzer:
     def __init__(self) -> None:
         """Initialize the Java analyzer."""
         self._parser: Parser | None = None
+
+        # Caches for the last decoded source to avoid repeated decodes.
+        self._cached_source_bytes: bytes | None = None
+        self._cached_source_str: str | None = None
+        # cumulative byte counts per character: cum_bytes[i] == total bytes for first i characters
+        # length is number_of_chars + 1, cum_bytes[0] == 0
+        self._cached_cum_bytes: list[int] | None = None
 
     @property
     def parser(self) -> Parser:
@@ -677,6 +685,41 @@ class JavaAnalyzer:
                         return self.get_node_text(pkg_child, source_bytes)
 
         return None
+
+    def _ensure_decoded(self, source: bytes) -> None:
+        """Ensure the provided source bytes are decoded and cumulative byte mapping is built.
+
+        Caches the decoded string and cumulative byte-lengths for the last-seen `source` bytes
+        to make slicing by node byte offsets into string slices much cheaper.
+        """
+        if source is self._cached_source_bytes:
+            return
+
+        decoded = source.decode("utf8")
+        # Build cumulative bytes per character. cum[0] = 0, cum[i] = bytes for first i chars.
+        cum: list[int] = [0]
+        # Building the cumulative mapping is done once per distinct source and is faster than
+        # repeatedly decoding prefixes for many nodes.
+        # A local variable for append and encode reduces attribute lookups.
+        append = cum.append
+        for ch in decoded:
+            append(cum[-1] + len(ch.encode("utf8")))
+
+        self._cached_source_bytes = source
+        self._cached_source_str = decoded
+        self._cached_cum_bytes = cum
+
+    def byte_to_char_index(self, byte_offset: int, source: bytes) -> int:
+        """Convert a byte offset into a character index for the given source bytes.
+
+        This uses a cached cumulative byte-length mapping so repeated conversions are O(log n)
+        (binary search) instead of re-decoding prefixes O(n).
+        """
+        self._ensure_decoded(source)
+        # cum is a non-decreasing list: find largest k where cum[k] <= byte_offset
+        cum = self._cached_cum_bytes  # type: ignore[assignment]
+        # bisect_right returns insertion point; subtract 1 to get character count
+        return bisect_right(cum, byte_offset) - 1
 
 
 def get_java_analyzer() -> JavaAnalyzer:

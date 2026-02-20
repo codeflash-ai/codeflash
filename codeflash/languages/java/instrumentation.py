@@ -6,24 +6,28 @@ This module provides functionality to instrument Java code for:
 
 Timing instrumentation adds System.nanoTime() calls around the function being tested
 and prints timing markers in a format compatible with Python/JS implementations:
-  Start: !$######testModule:testClass:funcName:loopIndex:iterationId######$!
-  End:   !######testModule:testClass:funcName:loopIndex:iterationId:durationNs######!
+  Start: !$######testModule:testClass.testMethod:funcName:loopIndex:iterationId######$!
+  End:   !######testModule:testClass.testMethod:funcName:loopIndex:iterationId:durationNs######!
 
 This allows codeflash to extract timing data from stdout for accurate benchmarking.
 """
 
 from __future__ import annotations
 
+import bisect
 import logging
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from pathlib import Path
+    from typing import Any
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.java.parser import JavaAnalyzer
+
+_ASSERTION_METHODS = ("assertArrayEquals", "assertArrayNotEquals")
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +40,24 @@ def _get_function_name(func: Any) -> str:
         return str(func.name)
     msg = f"Cannot get function name from {type(func)}"
     raise AttributeError(msg)
+
+
+_METHOD_SIG_PATTERN = re.compile(
+    r"\b(?:public|private|protected)?\s*(?:static)?\s*(?:final)?\s*"
+    r"(?:void|String|int|long|boolean|double|float|char|byte|short|\w+(?:\[\])?)\s+(\w+)\s*\("
+)
+_FALLBACK_METHOD_PATTERN = re.compile(r"\b(\w+)\s*\(")
+
+
+def _extract_test_method_name(method_lines: list[str]) -> str:
+    method_sig = " ".join(method_lines).strip()
+    match = _METHOD_SIG_PATTERN.search(method_sig)
+    if match:
+        return match.group(1)
+    fallback_match = _FALLBACK_METHOD_PATTERN.search(method_sig)
+    if fallback_match:
+        return fallback_match.group(1)
+    return "unknown"
 
 
 # Pattern to detect primitive array types in assertions
@@ -57,17 +79,65 @@ def _is_test_annotation(stripped_line: str) -> bool:
         @TestFactory
         @TestTemplate
     """
-    return bool(_TEST_ANNOTATION_RE.match(stripped_line))
+    if not stripped_line.startswith("@Test"):
+        return False
+    if len(stripped_line) == 5:
+        return True
+    next_char = stripped_line[5]
+    return next_char in {" ", "("}
 
 
 def _is_inside_lambda(node: Any) -> bool:
     """Check if a tree-sitter node is inside a lambda_expression."""
     current = node.parent
     while current is not None:
-        if current.type == "lambda_expression":
+        t = current.type
+        if t == "lambda_expression":
             return True
-        if current.type == "method_declaration":
+        if t == "method_declaration":
             return False
+        current = current.parent
+    return False
+
+
+def _is_inside_complex_expression(node: Any) -> bool:
+    """Check if a tree-sitter node is inside a complex expression that shouldn't be instrumented directly.
+
+    This includes:
+    - Cast expressions: (Long)list.get(2)
+    - Ternary expressions: condition ? func() : other
+    - Array access: arr[func()]
+    - Binary operations: func() + 1
+
+    Returns True if the node should not be directly instrumented.
+    """
+    current = node.parent
+    while current is not None:
+        # Stop at statement boundaries
+        if current.type in {
+            "method_declaration",
+            "block",
+            "if_statement",
+            "for_statement",
+            "while_statement",
+            "try_statement",
+            "expression_statement",
+        }:
+            return False
+
+        # These are complex expressions that shouldn't have instrumentation inserted in the middle
+        if current.type in {
+            "cast_expression",
+            "ternary_expression",
+            "array_access",
+            "binary_expression",
+            "unary_expression",
+            "parenthesized_expression",
+            "instanceof_expression",
+        }:
+            logger.debug("Found complex expression parent: %s", current.type)
+            return True
+
         current = current.parent
     return False
 
@@ -90,8 +160,11 @@ def wrap_target_calls_with_treesitter(
     """
     from codeflash.languages.java.parser import get_java_analyzer
 
-    analyzer = get_java_analyzer()
     body_text = "\n".join(body_lines)
+    if func_name not in body_text:
+        return list(body_lines), 0
+
+    analyzer = get_java_analyzer()
     body_bytes = body_text.encode("utf8")
     prefix_len = len(_TS_BODY_PREFIX_BYTES)
 
@@ -112,10 +185,11 @@ def wrap_target_calls_with_treesitter(
         line_byte_starts.append(offset)
         offset += len(line.encode("utf8")) + 1  # +1 for \n from join
 
-    # Group non-lambda calls by their line index
+    # Group non-lambda and non-complex-expression calls by their line index
     calls_by_line: dict[int, list[dict[str, Any]]] = {}
     for call in calls:
-        if call["in_lambda"]:
+        if call["in_lambda"] or call.get("in_complex", False):
+            logger.debug("Skipping behavior instrumentation for call in lambda or complex expression")
             continue
         line_idx = _byte_to_line_index(call["start_byte"], line_byte_starts)
         calls_by_line.setdefault(line_idx, []).append(call)
@@ -208,12 +282,14 @@ def _collect_calls(
     out: list[dict[str, Any]],
 ) -> None:
     """Recursively collect method_invocation nodes matching func_name."""
-    if node.type == "method_invocation":
+    node_type = node.type
+    if node_type == "method_invocation":
         name_node = node.child_by_field_name("name")
         if name_node and analyzer.get_node_text(name_node, wrapper_bytes) == func_name:
             start = node.start_byte - prefix_len
             end = node.end_byte - prefix_len
-            if start >= 0 and end <= len(body_bytes):
+            body_len = len(body_bytes)
+            if start >= 0 and end <= body_len:
                 parent = node.parent
                 parent_type = parent.type if parent else ""
                 es_start = es_end = 0
@@ -227,6 +303,7 @@ def _collect_calls(
                         "full_call": analyzer.get_node_text(node, wrapper_bytes),
                         "parent_type": parent_type,
                         "in_lambda": _is_inside_lambda(node),
+                        "in_complex": _is_inside_complex_expression(node),
                         "es_start_byte": es_start,
                         "es_end_byte": es_end,
                     }
@@ -237,10 +314,8 @@ def _collect_calls(
 
 def _byte_to_line_index(byte_offset: int, line_byte_starts: list[int]) -> int:
     """Map a byte offset in body_text to a body_lines index."""
-    for i in range(len(line_byte_starts) - 1, -1, -1):
-        if byte_offset >= line_byte_starts[i]:
-            return i
-    return 0
+    idx = bisect.bisect_right(line_byte_starts, byte_offset) - 1
+    return max(idx, 0)
 
 
 def _infer_array_cast_type(line: str) -> str | None:
@@ -258,17 +333,16 @@ def _infer_array_cast_type(line: str) -> str | None:
 
     """
     # Only apply to assertion methods that take arrays
-    assertion_methods = ("assertArrayEquals", "assertArrayNotEquals")
-    if not any(method in line for method in assertion_methods):
+    if "assertArrayEquals" not in line and "assertArrayNotEquals" not in line:
         return None
 
     # Look for primitive array type in the line (usually the first/expected argument)
     match = _PRIMITIVE_ARRAY_PATTERN.search(line)
-    if match:
-        primitive_type = match.group(1)
-        return f"{primitive_type}[]"
+    if not match:
+        return None
 
-    return None
+    primitive_type = match.group(1)
+    return f"{primitive_type}[]"
 
 
 def _get_qualified_name(func: Any) -> str:
@@ -502,6 +576,9 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 result.append(ml)
             i += 1
 
+            # Extract the test method name from the method signature
+            test_method_name = _extract_test_method_name(method_lines)
+
             # We're now inside the method body
             iteration_counter += 1
             iter_id = iteration_counter
@@ -547,7 +624,8 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 f'{indent}String _cf_outputFile{iter_id} = System.getenv("CODEFLASH_OUTPUT_FILE");',
                 f'{indent}String _cf_testIteration{iter_id} = System.getenv("CODEFLASH_TEST_ITERATION");',
                 f'{indent}if (_cf_testIteration{iter_id} == null) _cf_testIteration{iter_id} = "0";',
-                f'{indent}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + "######$!");',
+                f'{indent}String _cf_test{iter_id} = "{test_method_name}";',
+                f'{indent}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + "." + _cf_test{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + "######$!");',
                 f"{indent}byte[] _cf_serializedResult{iter_id} = null;",
                 f"{indent}long _cf_end{iter_id} = -1;",
                 f"{indent}long _cf_start{iter_id} = 0;",
@@ -568,7 +646,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 f"{indent}}} finally {{",
                 f"{indent}    long _cf_end{iter_id}_finally = System.nanoTime();",
                 f"{indent}    long _cf_dur{iter_id} = (_cf_end{iter_id} != -1 ? _cf_end{iter_id} : _cf_end{iter_id}_finally) - _cf_start{iter_id};",
-                f'{indent}    System.out.println("!######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + ":" + _cf_dur{iter_id} + "######!");',
+                f'{indent}    System.out.println("!######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + "." + _cf_test{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + ":" + _cf_dur{iter_id} + "######!");',
                 f"{indent}    // Write to SQLite if output file is set",
                 f"{indent}    if (_cf_outputFile{iter_id} != null && !_cf_outputFile{iter_id}.isEmpty()) {{",
                 f"{indent}        try {{",
@@ -584,7 +662,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 f"{indent}                try (PreparedStatement _cf_pstmt{iter_id} = _cf_conn{iter_id}.prepareStatement(_cf_sql{iter_id})) {{",
                 f"{indent}                    _cf_pstmt{iter_id}.setString(1, _cf_mod{iter_id});",
                 f"{indent}                    _cf_pstmt{iter_id}.setString(2, _cf_cls{iter_id});",
-                f'{indent}                    _cf_pstmt{iter_id}.setString(3, "{class_name}Test");',
+                f"{indent}                    _cf_pstmt{iter_id}.setString(3, _cf_test{iter_id});",
                 f"{indent}                    _cf_pstmt{iter_id}.setString(4, _cf_fn{iter_id});",
                 f"{indent}                    _cf_pstmt{iter_id}.setInt(5, _cf_loop{iter_id});",
                 f'{indent}                    _cf_pstmt{iter_id}.setString(6, _cf_iter{iter_id} + "_" + _cf_testIteration{iter_id});',
@@ -661,20 +739,30 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         return False
 
     def collect_test_methods(node: Any, out: list[tuple[Any, Any]]) -> None:
-        if node.type == "method_declaration" and has_test_annotation(node):
-            body_node = node.child_by_field_name("body")
-            if body_node is not None:
-                out.append((node, body_node))
-        for child in node.children:
-            collect_test_methods(child, out)
+        stack = [node]
+        while stack:
+            current = stack.pop()
+            if current.type == "method_declaration" and has_test_annotation(current):
+                body_node = current.child_by_field_name("body")
+                if body_node is not None:
+                    out.append((current, body_node))
+                continue
+            if current.children:
+                stack.extend(reversed(current.children))
 
     def collect_target_calls(node: Any, wrapper_bytes: bytes, func: str, out: list[Any]) -> None:
-        if node.type == "method_invocation":
-            name_node = node.child_by_field_name("name")
-            if name_node and analyzer.get_node_text(name_node, wrapper_bytes) == func and not _is_inside_lambda(node):
-                out.append(node)
-        for child in node.children:
-            collect_target_calls(child, wrapper_bytes, func, out)
+        stack = [node]
+        while stack:
+            current = stack.pop()
+            if current.type == "method_invocation":
+                name_node = current.child_by_field_name("name")
+                if name_node and analyzer.get_node_text(name_node, wrapper_bytes) == func:
+                    if not _is_inside_lambda(current) and not _is_inside_complex_expression(current):
+                        out.append(current)
+                    else:
+                        logger.debug("Skipping instrumentation of %s inside lambda or complex expression", func)
+            if current.children:
+                stack.extend(reversed(current.children))
 
     def reindent_block(text: str, target_indent: str) -> str:
         lines = text.splitlines()
@@ -752,7 +840,9 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         assignment = f"{name_text} = {value_text};"
         return hoisted, assignment
 
-    def build_instrumented_body(body_text: str, next_wrapper_id: int, base_indent: str) -> tuple[str, int]:
+    def build_instrumented_body(
+        body_text: str, next_wrapper_id: int, base_indent: str, test_method_name: str = "unknown"
+    ) -> tuple[str, int]:
         body_bytes = body_text.encode("utf8")
         wrapper_bytes = _TS_BODY_PREFIX_BYTES + body_bytes + _TS_BODY_SUFFIX.encode("utf8")
         wrapper_tree = analyzer.parse(wrapper_bytes)
@@ -821,6 +911,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 f'{indent}int _cf_innerIterations{current_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));',
                 f'{indent}String _cf_mod{current_id} = "{class_name}";',
                 f'{indent}String _cf_cls{current_id} = "{class_name}";',
+                f'{indent}String _cf_test{current_id} = "{test_method_name}";',
                 f'{indent}String _cf_fn{current_id} = "{func_name}";',
                 "",
             ]
@@ -837,7 +928,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 stmt_in_try = reindent_block(target_stmt, inner_body_indent)
             timing_lines = [
                 f"{indent}for (int _cf_i{current_id} = 0; _cf_i{current_id} < _cf_innerIterations{current_id}; _cf_i{current_id}++) {{",
-                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + _cf_i{current_id} + "######$!");',
+                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + _cf_i{current_id} + "######$!");',
                 f"{inner_indent}long _cf_end{current_id} = -1;",
                 f"{inner_indent}long _cf_start{current_id} = 0;",
                 f"{inner_indent}try {{",
@@ -847,7 +938,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 f"{inner_indent}}} finally {{",
                 f"{inner_body_indent}long _cf_end{current_id}_finally = System.nanoTime();",
                 f"{inner_body_indent}long _cf_dur{current_id} = (_cf_end{current_id} != -1 ? _cf_end{current_id} : _cf_end{current_id}_finally) - _cf_start{current_id};",
-                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + _cf_i{current_id} + ":" + _cf_dur{current_id} + "######!");',
+                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + _cf_i{current_id} + ":" + _cf_dur{current_id} + "######!");',
                 f"{inner_indent}}}",
                 f"{indent}}}",
             ]
@@ -868,14 +959,14 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             result_parts.append(suffix)
             return "".join(result_parts), current_id
 
-        result_parts = list[str]()
+        multi_result_parts: list[str] = []
         cursor = 0
         wrapper_id = next_wrapper_id
 
         for stmt_start, stmt_end, stmt_ast_node in unique_ranges:
             prefix = body_text[cursor:stmt_start]
             target_stmt = body_text[stmt_start:stmt_end]
-            result_parts.append(prefix.rstrip(" \t"))
+            multi_result_parts.append(prefix.rstrip(" \t"))
 
             wrapper_id += 1
             current_id = wrapper_id
@@ -886,6 +977,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 f'{indent}int _cf_innerIterations{current_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));',
                 f'{indent}String _cf_mod{current_id} = "{class_name}";',
                 f'{indent}String _cf_cls{current_id} = "{class_name}";',
+                f'{indent}String _cf_test{current_id} = "{test_method_name}";',
                 f'{indent}String _cf_fn{current_id} = "{func_name}";',
                 "",
             ]
@@ -902,7 +994,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
 
             timing_lines = [
                 f"{indent}for (int _cf_i{current_id} = 0; _cf_i{current_id} < _cf_innerIterations{current_id}; _cf_i{current_id}++) {{",
-                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + {iteration_id_expr} + "######$!");',
+                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + {iteration_id_expr} + "######$!");',
                 f"{inner_indent}long _cf_end{current_id} = -1;",
                 f"{inner_indent}long _cf_start{current_id} = 0;",
                 f"{inner_indent}try {{",
@@ -912,17 +1004,17 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 f"{inner_indent}}} finally {{",
                 f"{inner_body_indent}long _cf_end{current_id}_finally = System.nanoTime();",
                 f"{inner_body_indent}long _cf_dur{current_id} = (_cf_end{current_id} != -1 ? _cf_end{current_id} : _cf_end{current_id}_finally) - _cf_start{current_id};",
-                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + {iteration_id_expr} + ":" + _cf_dur{current_id} + "######!");',
+                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + {iteration_id_expr} + ":" + _cf_dur{current_id} + "######!");',
                 f"{inner_indent}}}",
                 f"{indent}}}",
             ]
 
-            result_parts.append("\n" + "\n".join(setup_lines))
-            result_parts.append("\n".join(timing_lines))
+            multi_result_parts.append("\n" + "\n".join(setup_lines))
+            multi_result_parts.append("\n".join(timing_lines))
             cursor = stmt_end
 
-        result_parts.append(body_text[cursor:])
-        return "".join(result_parts), wrapper_id
+        multi_result_parts.append(body_text[cursor:])
+        return "".join(multi_result_parts), wrapper_id
 
     test_methods: list[tuple[Any, Any]] = []
     collect_test_methods(tree.root_node, test_methods)
@@ -936,8 +1028,11 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         body_end = body_node.end_byte - 1  # skip '}'
         body_text = source_bytes[body_start:body_end].decode("utf8")
         base_indent = " " * (method_node.start_point[1] + 4)
+        # Extract test method name from AST
+        name_node = method_node.child_by_field_name("name")
+        test_method_name = analyzer.get_node_text(name_node, source_bytes) if name_node else "unknown"
         next_wrapper_id = max(wrapper_id, method_ordinal - 1)
-        new_body, new_wrapper_id = build_instrumented_body(body_text, next_wrapper_id, base_indent)
+        new_body, new_wrapper_id = build_instrumented_body(body_text, next_wrapper_id, base_indent, test_method_name)
         # Reserve one id slot per @Test method even when no instrumentation is added,
         # matching existing deterministic numbering expected by tests.
         wrapper_id = method_ordinal if new_wrapper_id == next_wrapper_id else new_wrapper_id
@@ -1072,13 +1167,13 @@ def instrument_generated_java_test(
             function_name,
         )
     elif mode == "behavior":
-        _, maybe_modified_code = instrument_existing_test(
+        _, behavior_code = instrument_existing_test(
             test_string=test_code,
             mode=mode,
             function_to_optimize=function_to_optimize,
             test_class_name=original_class_name,
         )
-        modified_code = maybe_modified_code if maybe_modified_code is not None else test_code
+        modified_code = behavior_code or test_code
     else:
         modified_code = test_code
 

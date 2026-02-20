@@ -21,7 +21,24 @@ from codeflash.languages.registry import register_language
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from codeflash.languages.base import DependencyResolver
+    from codeflash.models.models import FunctionSource, GeneratedTestsList, InvocationId
+
 logger = logging.getLogger(__name__)
+
+
+def function_sources_to_helpers(sources: list[FunctionSource]) -> list[HelperFunction]:
+    return [
+        HelperFunction(
+            name=fs.only_function_name,
+            qualified_name=fs.qualified_name,
+            file_path=fs.file_path,
+            source_code=fs.source_code,
+            start_line=fs.jedi_definition.line if fs.jedi_definition else 1,
+            end_line=fs.jedi_definition.line if fs.jedi_definition else 1,
+        )
+        for fs in sources
+    ]
 
 
 @register_language
@@ -58,6 +75,37 @@ class PythonSupport:
     @property
     def comment_prefix(self) -> str:
         return "#"
+
+    @property
+    def dir_excludes(self) -> frozenset[str]:
+        return frozenset(
+            {
+                "__pycache__",
+                ".venv",
+                "venv",
+                ".tox",
+                ".nox",
+                ".eggs",
+                ".mypy_cache",
+                ".ruff_cache",
+                ".pytest_cache",
+                ".hypothesis",
+                "htmlcov",
+                ".pytype",
+                ".pyre",
+                ".pybuilder",
+                ".ipynb_checkpoints",
+                ".codeflash",
+                ".cache",
+                ".complexipy_cache",
+                "build",
+                "dist",
+                "sdist",
+                ".coverage*",
+                ".pyright*",
+                "*.egg-info",
+            }
+        )
 
     # === Discovery ===
 
@@ -171,127 +219,39 @@ class PythonSupport:
     # === Code Analysis ===
 
     def extract_code_context(self, function: FunctionToOptimize, project_root: Path, module_root: Path) -> CodeContext:
-        """Extract function code and its dependencies.
+        """Extract function code and its dependencies via the canonical context pipeline."""
+        from codeflash.languages.python.context.code_context_extractor import get_code_optimization_context
 
-        Uses jedi and libcst for Python code analysis.
-
-        Args:
-            function: The function to extract context for.
-            project_root: Root of the project.
-            module_root: Root of the module containing the function.
-
-        Returns:
-            CodeContext with target code and dependencies.
-
-        """
         try:
-            source = function.file_path.read_text()
+            result = get_code_optimization_context(function, project_root)
         except Exception as e:
-            logger.exception("Failed to read %s: %s", function.file_path, e)
+            logger.warning("Failed to extract code context for %s: %s", function.function_name, e)
             return CodeContext(target_code="", target_file=function.file_path, language=Language.PYTHON)
 
-        # Extract the function source
-        lines = source.splitlines(keepends=True)
-        if function.starting_line and function.ending_line:
-            target_lines = lines[function.starting_line - 1 : function.ending_line]
-            target_code = "".join(target_lines)
-        else:
-            target_code = ""
-
-        # Find helper functions
-        helpers = self.find_helper_functions(function, project_root)
-
-        # Extract imports
-        import_lines = []
-        for line in lines:
-            stripped = line.strip()
-            if stripped.startswith(("import ", "from ")):
-                import_lines.append(stripped)
-            elif stripped and not stripped.startswith("#"):
-                # Stop at first non-import, non-comment line
-                break
+        helpers = function_sources_to_helpers(result.helper_functions)
 
         return CodeContext(
-            target_code=target_code,
+            target_code=result.read_writable_code.markdown,
             target_file=function.file_path,
             helper_functions=helpers,
-            read_only_context="",
-            imports=import_lines,
+            read_only_context=result.read_only_context_code,
+            imports=[],
             language=Language.PYTHON,
         )
 
     def find_helper_functions(self, function: FunctionToOptimize, project_root: Path) -> list[HelperFunction]:
-        """Find helper functions called by the target function.
-
-        Uses jedi for Python code analysis.
-
-        Args:
-            function: The target function to analyze.
-            project_root: Root of the project.
-
-        Returns:
-            List of HelperFunction objects.
-
-        """
-        helpers: list[HelperFunction] = []
+        """Find helper functions called by the target function via the canonical jedi pipeline."""
+        from codeflash.languages.python.context.code_context_extractor import get_function_sources_from_jedi
 
         try:
-            import jedi
-
-            from codeflash.code_utils.code_utils import get_qualified_name, path_belongs_to_site_packages
-            from codeflash.optimization.function_context import belongs_to_function_qualified
-
-            script = jedi.Script(path=function.file_path, project=jedi.Project(path=project_root))
-            file_refs = script.get_names(all_scopes=True, definitions=False, references=True)
-
-            qualified_name = function.qualified_name
-
-            for ref in file_refs:
-                if not ref.full_name or not belongs_to_function_qualified(ref, qualified_name):
-                    continue
-
-                try:
-                    definitions = ref.goto(follow_imports=True, follow_builtin_imports=False)
-                except Exception:
-                    continue
-
-                for definition in definitions:
-                    definition_path = definition.module_path
-                    if definition_path is None:
-                        continue
-
-                    # Check if it's a valid helper (in project, not in target function)
-                    is_valid = (
-                        str(definition_path).startswith(str(project_root))
-                        and not path_belongs_to_site_packages(definition_path)
-                        and definition.full_name
-                        and not belongs_to_function_qualified(definition, qualified_name)
-                        and definition.type == "function"
-                    )
-
-                    if is_valid:
-                        helper_qualified_name = get_qualified_name(definition.module_name, definition.full_name)
-                        # Get source code
-                        try:
-                            helper_source = definition.get_line_code()
-                        except Exception:
-                            helper_source = ""
-
-                        helpers.append(
-                            HelperFunction(
-                                name=definition.name,
-                                qualified_name=helper_qualified_name,
-                                file_path=definition_path,
-                                source_code=helper_source,
-                                start_line=definition.line or 1,
-                                end_line=definition.line or 1,
-                            )
-                        )
-
+            _dict, sources = get_function_sources_from_jedi(
+                {function.file_path: {function.qualified_name}}, project_root
+            )
         except Exception as e:
             logger.warning("Failed to find helpers for %s: %s", function.function_name, e)
+            return []
 
-        return helpers
+        return function_sources_to_helpers(sources)
 
     def find_references(
         self, function: FunctionToOptimize, project_root: Path, tests_root: Path | None = None, max_files: int = 500
@@ -419,7 +379,7 @@ class PythonSupport:
             Modified source code with function replaced.
 
         """
-        from codeflash.code_utils.code_replacer import replace_functions_in_file
+        from codeflash.languages.python.static_analysis.code_replacer import replace_functions_in_file
 
         try:
             # Determine the function names to replace
@@ -697,6 +657,59 @@ class PythonSupport:
         except Exception:
             return test_source
 
+    def postprocess_generated_tests(
+        self, generated_tests: GeneratedTestsList, test_framework: str, project_root: Path, source_file_path: Path
+    ) -> GeneratedTestsList:
+        """Apply language-specific postprocessing to generated tests."""
+        _ = test_framework, project_root, source_file_path
+        return generated_tests
+
+    def remove_test_functions_from_generated_tests(
+        self, generated_tests: GeneratedTestsList, functions_to_remove: list[str]
+    ) -> GeneratedTestsList:
+        """Remove specific test functions from generated tests."""
+        from codeflash.languages.python.static_analysis.edit_generated_tests import (
+            remove_functions_from_generated_tests,
+        )
+
+        return remove_functions_from_generated_tests(generated_tests, functions_to_remove)
+
+    def add_runtime_comments_to_generated_tests(
+        self,
+        generated_tests: GeneratedTestsList,
+        original_runtimes: dict[InvocationId, list[int]],
+        optimized_runtimes: dict[InvocationId, list[int]],
+        tests_project_rootdir: Path | None = None,
+    ) -> GeneratedTestsList:
+        """Add runtime comments to generated tests."""
+        from codeflash.languages.python.static_analysis.edit_generated_tests import (
+            add_runtime_comments_to_generated_tests,
+        )
+
+        return add_runtime_comments_to_generated_tests(
+            generated_tests, original_runtimes, optimized_runtimes, tests_project_rootdir
+        )
+
+    def add_global_declarations(self, optimized_code: str, original_source: str, module_abspath: Path) -> str:
+        _ = optimized_code, module_abspath
+        return original_source
+
+    def extract_calling_function_source(self, source_code: str, function_name: str, ref_line: int) -> str | None:
+        """Extract the source code of a calling function in Python."""
+        try:
+            import ast
+
+            lines = source_code.splitlines()
+            tree = ast.parse(source_code)
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function_name:
+                    end_line = node.end_lineno or node.lineno
+                    if node.lineno <= ref_line <= end_line:
+                        return "\n".join(lines[node.lineno - 1 : end_line])
+        except Exception:
+            return None
+        return None
+
     # === Test Result Comparison ===
 
     def compare_test_results(
@@ -727,15 +740,6 @@ class PythonSupport:
 
         """
         return ".py"
-
-    def get_comment_prefix(self) -> str:
-        """Get the comment prefix for Python.
-
-        Returns:
-            Python single-line comment prefix.
-
-        """
-        return "#"
 
     def find_test_root(self, project_root: Path) -> Path | None:
         """Find the test root directory for a Python project.
@@ -800,6 +804,15 @@ class PythonSupport:
 
         """
         return True
+
+    def create_dependency_resolver(self, project_root: Path) -> DependencyResolver | None:
+        from codeflash.languages.python.reference_graph import ReferenceGraph
+
+        try:
+            return ReferenceGraph(project_root, language=self.language.value)
+        except Exception:
+            logger.debug("Failed to initialize ReferenceGraph, falling back to per-function Jedi analysis")
+            return None
 
     def instrument_existing_test(
         self,

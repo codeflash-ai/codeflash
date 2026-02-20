@@ -177,8 +177,8 @@ def test_single_element_list():
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -217,8 +217,8 @@ class BubbleSorter:
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         # assert test_results_mutated_attr[0].return_value[1]["self"].x == 1 TODO: add self as input to function
@@ -318,8 +318,8 @@ def test_single_element_list():
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         # Verify instance_state result, which checks instance state right after __init__, using  codeflash_capture
@@ -395,8 +395,8 @@ class BubbleSorter:
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         # assert test_results_mutated_attr[0].return_value[0]["self"].x == 1 TODO: add self as input
@@ -449,8 +449,8 @@ class BubbleSorter:
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            pytest_min_loops=1,
-            pytest_max_loops=1,
+            min_outer_loops=1,
+            max_outer_loops=1,
             testing_time=0.1,
         )
         assert test_results_new_attr[0].id.function_getting_tested == "BubbleSorter.__init__"
