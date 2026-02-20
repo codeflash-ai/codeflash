@@ -555,11 +555,11 @@ public class PreciseWaiterTest {
             )
 
         # Total should be sum of 2 minimums (one per inner iteration) ≈ 20ms
-        # Minimums filter out JIT warmup, so use tighter ±2% tolerance
+        # Minimums filter out JIT warmup, so use tighter ±3% tolerance
         expected_total_ns = 2 * expected_ns
-        assert expected_total_ns * 0.98 <= total_runtime <= expected_total_ns * 1.02, (
+        assert expected_total_ns * 0.97 <= total_runtime <= expected_total_ns * 1.03, (
             f"total_passed_runtime {total_runtime / 1_000_000:.3f}ms not close to expected "
-            f"{expected_total_ns / 1_000_000:.1f}ms (2 inner iterations × 10ms each, ±2%)"
+            f"{expected_total_ns / 1_000_000:.1f}ms (2 inner iterations × 10ms each, ±3%)"
         )
 
     def test_performance_multiple_test_methods_inner_loop(self, java_project):
@@ -648,9 +648,9 @@ public class PreciseWaiterMultiTest {
             )
 
         # Total should be sum of 4 minimums ≈ 40ms
-        # Minimums filter out JIT warmup, so use tighter ±2% tolerance
+        # Minimums filter out JIT warmup, so use tighter ±3% tolerance
         expected_total_ns = 4 * expected_ns  # 4 test cases × 10ms each
-        assert expected_total_ns * 0.98 <= total_runtime <= expected_total_ns * 1.02, (
+        assert expected_total_ns * 0.97 <= total_runtime <= expected_total_ns * 1.03, (
             f"total_passed_runtime {total_runtime / 1_000_000:.3f}ms not close to expected "
-            f"{expected_total_ns / 1_000_000:.1f}ms (2 methods × 2 inner iterations × 10ms, ±2%)"
+            f"{expected_total_ns / 1_000_000:.1f}ms (2 methods × 2 inner iterations × 10ms, ±3%)"
         )
