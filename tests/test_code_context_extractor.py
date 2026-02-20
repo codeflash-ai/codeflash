@@ -12,10 +12,13 @@ from codeflash.code_utils.code_extractor import GlobalAssignmentCollector, add_g
 from codeflash.code_utils.code_replacer import replace_functions_and_add_imports
 from codeflash.context.code_context_extractor import (
     collect_names_from_annotation,
+    extract_classes_from_type_hint,
     extract_imports_for_class,
     get_code_optimization_context,
     get_external_base_class_inits,
+    get_external_class_inits,
     get_imported_class_definitions,
+    resolve_transitive_type_deps,
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodeString, CodeStringsMarkdown, FunctionParent
@@ -4620,3 +4623,283 @@ class MyClass:
     # counter should be in context since __init__ uses it
     read_writable = code_ctx.read_writable_code.markdown
     assert "counter" in read_writable
+
+
+def test_get_external_class_inits_extracts_click_option(tmp_path: Path) -> None:
+    """Extracts __init__ from click.Option when directly imported."""
+    code = """from click import Option
+
+def my_func(opt: Option) -> None:
+    pass
+"""
+    code_path = tmp_path / "myfunc.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = get_external_class_inits(context, tmp_path)
+
+    assert len(result.code_strings) == 1
+    code_string = result.code_strings[0]
+    assert "class Option:" in code_string.code
+    assert "def __init__" in code_string.code
+    assert code_string.file_path is not None and "click" in code_string.file_path.as_posix()
+
+
+def test_get_external_class_inits_skips_project_classes(tmp_path: Path) -> None:
+    """Returns empty when imported class is from the project, not external."""
+    # Create a project module with a class
+    (tmp_path / "mymodule.py").write_text("class ProjectClass:\n    pass\n", encoding="utf-8")
+
+    code = """from mymodule import ProjectClass
+
+def my_func(obj: ProjectClass) -> None:
+    pass
+"""
+    code_path = tmp_path / "myfunc.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = get_external_class_inits(context, tmp_path)
+
+    assert result.code_strings == []
+
+
+def test_get_external_class_inits_skips_non_classes(tmp_path: Path) -> None:
+    """Returns empty when imported name is a function, not a class."""
+    code = """from collections import OrderedDict
+from os.path import join
+
+def my_func() -> None:
+    pass
+"""
+    code_path = tmp_path / "myfunc.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = get_external_class_inits(context, tmp_path)
+
+    # join is a function, not a class — should be skipped
+    # OrderedDict is a class and should be included
+    class_names = [cs.code.split("\n")[0] for cs in result.code_strings]
+    assert not any("join" in name for name in class_names)
+
+
+def test_get_external_class_inits_skips_already_defined_classes(tmp_path: Path) -> None:
+    """Skips classes already defined in the context (e.g., added by get_imported_class_definitions)."""
+    code = """from collections import UserDict
+
+class UserDict:
+    def __init__(self):
+        pass
+
+def my_func(d: UserDict) -> None:
+    pass
+"""
+    code_path = tmp_path / "myfunc.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = get_external_class_inits(context, tmp_path)
+
+    # UserDict is already defined in the context, so it should be skipped
+    assert result.code_strings == []
+
+
+def test_get_external_class_inits_skips_builtins(tmp_path: Path) -> None:
+    """Returns empty for builtin classes like list/dict that have no inspectable source."""
+    code = """x: list = []
+y: dict = {}
+
+def my_func() -> None:
+    pass
+"""
+    code_path = tmp_path / "myfunc.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = get_external_class_inits(context, tmp_path)
+
+    assert result.code_strings == []
+
+
+def test_get_external_class_inits_skips_object_init(tmp_path: Path) -> None:
+    """Skips classes whose __init__ is just object.__init__ (trivial)."""
+    # enum.Enum has a metaclass-based __init__, but individual enum members
+    # effectively use object.__init__. Use a class we know has object.__init__.
+    code = """from xml.etree.ElementTree import QName
+
+def my_func(q: QName) -> None:
+    pass
+"""
+    code_path = tmp_path / "myfunc.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = get_external_class_inits(context, tmp_path)
+
+    # QName has its own __init__, so it should be included if it's in site-packages.
+    # But since it's stdlib (not site-packages), it should be skipped.
+    assert result.code_strings == []
+
+
+def test_get_external_class_inits_empty_when_no_imports(tmp_path: Path) -> None:
+    """Returns empty when there are no from-imports."""
+    code = """def my_func() -> None:
+    pass
+"""
+    code_path = tmp_path / "myfunc.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = get_external_class_inits(context, tmp_path)
+
+    assert result.code_strings == []
+
+
+# --- Tests for extract_classes_from_type_hint ---
+
+
+def test_extract_classes_from_type_hint_plain_class() -> None:
+    """Extracts a plain class directly."""
+    from click import Option
+
+    result = extract_classes_from_type_hint(Option)
+    assert Option in result
+
+
+def test_extract_classes_from_type_hint_optional() -> None:
+    """Unwraps Optional[X] to find X."""
+    from typing import Optional
+
+    from click import Option
+
+    result = extract_classes_from_type_hint(Optional[Option])
+    assert Option in result
+
+
+def test_extract_classes_from_type_hint_union() -> None:
+    """Unwraps Union[X, Y] to find both X and Y."""
+    from typing import Union
+
+    from click import Command, Option
+
+    result = extract_classes_from_type_hint(Union[Option, Command])
+    assert Option in result
+    assert Command in result
+
+
+def test_extract_classes_from_type_hint_list() -> None:
+    """Unwraps List[X] to find X."""
+    from typing import List
+
+    from click import Option
+
+    result = extract_classes_from_type_hint(List[Option])
+    assert Option in result
+
+
+def test_extract_classes_from_type_hint_filters_builtins() -> None:
+    """Filters out builtins like str, int, None."""
+    from typing import Optional
+
+    result = extract_classes_from_type_hint(Optional[str])
+    assert len(result) == 0
+
+
+def test_extract_classes_from_type_hint_callable() -> None:
+    """Handles bare Callable without error."""
+    from typing import Callable
+
+    result = extract_classes_from_type_hint(Callable)
+    assert isinstance(result, list)
+
+
+def test_extract_classes_from_type_hint_callable_with_args() -> None:
+    """Unwraps Callable[[X], Y] to find classes."""
+    from typing import Callable
+
+    from click import Context
+
+    result = extract_classes_from_type_hint(Callable[[Context], None])
+    assert Context in result
+
+
+# --- Tests for resolve_transitive_type_deps ---
+
+
+def test_resolve_transitive_type_deps_click_context() -> None:
+    """click.Context.__init__ references Command, which should be found."""
+    from click import Command, Context
+
+    deps = resolve_transitive_type_deps(Context)
+    dep_names = {cls.__name__ for cls in deps}
+    assert "Command" in dep_names or Command in deps
+
+
+def test_resolve_transitive_type_deps_handles_failure_gracefully() -> None:
+    """Returns empty list for a class where get_type_hints fails."""
+
+    class BadClass:
+        def __init__(self, x: "NonexistentType") -> None:  # type: ignore[name-defined]  # noqa: F821
+            pass
+
+    result = resolve_transitive_type_deps(BadClass)
+    assert result == []
+
+
+# --- Integration tests for transitive resolution in get_external_class_inits ---
+
+
+def test_get_external_class_inits_transitive_deps(tmp_path: Path) -> None:
+    """Extracts transitive type dependencies from __init__ annotations."""
+    code = """from click import Context
+
+def my_func(ctx: Context) -> None:
+    pass
+"""
+    code_path = tmp_path / "myfunc.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = get_external_class_inits(context, tmp_path)
+
+    class_names = {cs.code.split("\n")[0].replace("class ", "").rstrip(":") for cs in result.code_strings}
+    assert "Context" in class_names
+    # Command is a transitive dep via Context.__init__
+    assert "Command" in class_names
+
+
+def test_get_external_class_inits_no_infinite_loops(tmp_path: Path) -> None:
+    """Handles classes with circular type references without infinite loops."""
+    # click.Context references Command, and Command references Context back
+    # This should terminate without issues due to the processed_classes set
+    code = """from click import Context
+
+def my_func(ctx: Context) -> None:
+    pass
+"""
+    code_path = tmp_path / "myfunc.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = get_external_class_inits(context, tmp_path)
+
+    # Should complete without hanging; just verify we got results
+    assert len(result.code_strings) >= 1
+
+
+def test_get_external_class_inits_no_duplicate_stubs(tmp_path: Path) -> None:
+    """Does not emit duplicate stubs for the same class name."""
+    code = """from click import Context
+
+def my_func(ctx: Context) -> None:
+    pass
+"""
+    code_path = tmp_path / "myfunc.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = get_external_class_inits(context, tmp_path)
+
+    class_names = [cs.code.split("\n")[0].replace("class ", "").rstrip(":") for cs in result.code_strings]
+    assert len(class_names) == len(set(class_names)), f"Duplicate class stubs found: {class_names}"

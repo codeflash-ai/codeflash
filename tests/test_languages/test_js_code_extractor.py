@@ -109,12 +109,7 @@ class Calculator {
         factorial_helper = helper_dict["factorial"]
 
         expected_factorial_code = """\
-/**
- * Calculate factorial recursively.
- * @param n - Non-negative integer
- * @returns Factorial of n
- */
-function factorial(n) {
+export function factorial(n) {
     // Intentionally inefficient recursive implementation
     if (n <= 1) return 1;
     return n * factorial(n - 1);
@@ -196,46 +191,22 @@ class Calculator {
 
         # STRICT: Verify each helper's code exactly
         expected_add_code = """\
-/**
- * Add two numbers.
- * @param a - First number
- * @param b - Second number
- * @returns Sum of a and b
- */
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }"""
 
         expected_multiply_code = """\
-/**
- * Multiply two numbers.
- * @param a - First number
- * @param b - Second number
- * @returns Product of a and b
- */
-function multiply(a, b) {
+export function multiply(a, b) {
     return a * b;
 }"""
 
         expected_format_number_code = """\
-/**
- * Format a number to specified decimal places.
- * @param num - Number to format
- * @param decimals - Number of decimal places
- * @returns Formatted number
- */
-function formatNumber(num, decimals) {
+export function formatNumber(num, decimals) {
     return Number(num.toFixed(decimals));
 }"""
 
         expected_validate_input_code = """\
-/**
- * Validate that input is a valid number.
- * @param value - Value to validate
- * @param name - Parameter name for error message
- * @throws Error if value is not a valid number
- */
-function validateInput(value, name) {
+export function validateInput(value, name) {
     if (typeof value !== 'number' || isNaN(value)) {
         throw new Error(`Invalid ${name}: must be a number`);
     }
@@ -317,13 +288,7 @@ class Calculator {
         assert set(helper_dict.keys()) == {"add"}, f"Expected 'add' helper, got: {list(helper_dict.keys())}"
 
         expected_add_code = """\
-/**
- * Add two numbers.
- * @param a - First number
- * @param b - Second number
- * @returns Sum of a and b
- */
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }"""
 
@@ -702,7 +667,7 @@ class TestCodeExtractorEdgeCases:
     def test_standalone_function(self, js_support, tmp_path):
         """Test standalone function with no helpers."""
         source = """\
-function standalone(x) {
+export function standalone(x) {
     return x * 2;
 }
 
@@ -718,7 +683,7 @@ module.exports = { standalone };
 
         # STRICT: Exact code comparison
         expected_code = """\
-function standalone(x) {
+export function standalone(x) {
     return x * 2;
 }"""
         assert context.target_code.strip() == expected_code.strip(), (
@@ -735,7 +700,7 @@ function standalone(x) {
         source = """\
 const _ = require('lodash');
 
-function processArray(arr) {
+export function processArray(arr) {
     return _.map(arr, x => x * 2);
 }
 
@@ -750,7 +715,7 @@ module.exports = { processArray };
         context = js_support.extract_code_context(function=func, project_root=tmp_path, module_root=tmp_path)
 
         expected_code = """\
-function processArray(arr) {
+export function processArray(arr) {
     return _.map(arr, x => x * 2);
 }"""
 
@@ -769,7 +734,7 @@ function processArray(arr) {
     def test_recursive_function(self, js_support, tmp_path):
         """Test recursive function doesn't list itself as helper."""
         source = """\
-function fibonacci(n) {
+export function fibonacci(n) {
     if (n <= 1) return n;
     return fibonacci(n - 1) + fibonacci(n - 2);
 }
@@ -786,7 +751,7 @@ module.exports = { fibonacci };
 
         # STRICT: Exact code comparison
         expected_code = """\
-function fibonacci(n) {
+export function fibonacci(n) {
     if (n <= 1) return n;
     return fibonacci(n - 1) + fibonacci(n - 2);
 }"""
@@ -803,7 +768,7 @@ function fibonacci(n) {
         source = """\
 const helper = (x) => x * 2;
 
-const processValue = (value) => {
+export const processValue = (value) => {
     return helper(value) + 1;
 };
 
@@ -818,7 +783,7 @@ module.exports = { processValue };
         context = js_support.extract_code_context(function=func, project_root=tmp_path, module_root=tmp_path)
 
         expected_code = """\
-const processValue = (value) => {
+export const processValue = (value) => {
     return helper(value) + 1;
 };"""
 
@@ -854,7 +819,7 @@ class TestClassContextExtraction:
     def test_method_extraction_includes_constructor(self, js_support, tmp_path):
         """Test that extracting a class method includes the constructor."""
         source = """\
-class Counter {
+export class Counter {
     constructor(initial = 0) {
         this.count = initial;
     }
@@ -894,7 +859,7 @@ class Counter {
     def test_method_extraction_class_without_constructor(self, js_support, tmp_path):
         """Test extracting a method from a class that has no constructor."""
         source = """\
-class MathUtils {
+export class MathUtils {
     add(a, b) {
         return a + b;
     }
@@ -928,7 +893,7 @@ class MathUtils {
     def test_typescript_method_extraction_includes_fields(self, ts_support, tmp_path):
         """Test that TypeScript method extraction includes class fields."""
         source = """\
-class User {
+export class User {
     private name: string;
     public age: number;
 
@@ -941,8 +906,6 @@ class User {
         return this.name;
     }
 }
-
-export { User };
 """
         test_file = tmp_path / "user.ts"
         test_file.write_text(source)
@@ -974,7 +937,7 @@ class User {
     def test_typescript_fields_only_no_constructor(self, ts_support, tmp_path):
         """Test TypeScript class with fields but no constructor."""
         source = """\
-class Config {
+export class Config {
     readonly apiUrl: string = "https://api.example.com";
     timeout: number = 5000;
 
@@ -982,8 +945,6 @@ class Config {
         return this.apiUrl;
     }
 }
-
-export { Config };
 """
         test_file = tmp_path / "config.ts"
         test_file.write_text(source)
@@ -1010,7 +971,7 @@ class Config {
     def test_constructor_with_jsdoc(self, js_support, tmp_path):
         """Test that constructor with JSDoc is fully extracted."""
         source = """\
-class Logger {
+export class Logger {
     /**
      * Create a new Logger instance.
      * @param {string} prefix - The prefix to use for log messages.
@@ -1056,7 +1017,7 @@ class Logger {
     def test_static_method_includes_constructor(self, js_support, tmp_path):
         """Test that static method extraction also includes constructor context."""
         source = """\
-class Factory {
+export class Factory {
     constructor(config) {
         this.config = config;
     }
@@ -1212,13 +1173,11 @@ interface Point {
     y: number;
 }
 
-function distance(p1: Point, p2: Point): number {
+export function distance(p1: Point, p2: Point): number {
     const dx = p2.x - p1.x;
     const dy = p2.y - p1.y;
     return Math.sqrt(dx * dx + dy * dy);
 }
-
-export { distance };
 """
         test_file = tmp_path / "geometry.ts"
         test_file.write_text(source)
@@ -1251,7 +1210,7 @@ enum Status {
     FAILURE = 'failure',
 }
 
-function processStatus(status: Status): string {
+export function processStatus(status: Status): string {
     switch (status) {
         case Status.PENDING:
             return 'Processing...';
@@ -1261,8 +1220,6 @@ function processStatus(status: Status): string {
             return 'Failed!';
     }
 }
-
-export { processStatus };
 """
         test_file = tmp_path / "status.ts"
         test_file.write_text(source)
@@ -1295,11 +1252,9 @@ type Result<T> = {
     success: boolean;
 };
 
-function compute(x: number): Result<number> {
+export function compute(x: number): Result<number> {
     return { value: x * 2, success: true };
 }
-
-export { compute };
 """
         test_file = tmp_path / "compute.ts"
         test_file.write_text(source)
@@ -1331,7 +1286,7 @@ interface Config {
     retries: number;
 }
 
-class Service {
+export class Service {
     private config: Config;
 
     constructor(config: Config) {
@@ -1342,8 +1297,6 @@ class Service {
         return this.config.timeout;
     }
 }
-
-export { Service };
 """
         test_file = tmp_path / "service.ts"
         test_file.write_text(source)
@@ -1372,11 +1325,9 @@ interface Config {
     def test_primitive_types_not_included(self, ts_support, tmp_path):
         """Test that primitive types (number, string, etc.) are not extracted."""
         source = """\
-function add(a: number, b: number): number {
+export function add(a: number, b: number): number {
     return a + b;
 }
-
-export { add };
 """
         test_file = tmp_path / "add.ts"
         test_file.write_text(source)
@@ -1405,11 +1356,9 @@ interface Size {
     height: number;
 }
 
-function createRect(origin: Point, size: Size): { origin: Point; size: Size } {
+export function createRect(origin: Point, size: Size): { origin: Point; size: Size } {
     return { origin, size };
 }
-
-export { createRect };
 """
         test_file = tmp_path / "rect.ts"
         test_file.write_text(source)
@@ -1447,7 +1396,7 @@ interface Size {
         geometry_file.write_text("""\
 import { Point, CalculationConfig } from './types';
 
-function calculateDistance(p1: Point, p2: Point, config: CalculationConfig): number {
+export function calculateDistance(p1: Point, p2: Point, config: CalculationConfig): number {
     const dx = p2.x - p1.x;
     const dy = p2.y - p1.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
@@ -1458,8 +1407,6 @@ function calculateDistance(p1: Point, p2: Point, config: CalculationConfig): num
     }
     return distance;
 }
-
-export { calculateDistance };
 """)
 
         functions = ts_support.discover_functions(geometry_file)
@@ -1506,11 +1453,9 @@ interface User {
     name: string;
 }
 
-function greetUser(user: User): string {
+export function greetUser(user: User): string {
     return `Hello, ${user.name}!`;
 }
-
-export { greetUser };
 """
         test_file = tmp_path / "user.ts"
         test_file.write_text(source)

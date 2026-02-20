@@ -23,7 +23,7 @@ class TestJavaScriptFunctionDiscovery:
         """Test discovering a simple JavaScript function with return statement."""
         js_file = tmp_path / "simple.js"
         js_file.write_text("""
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }
 """)
@@ -39,15 +39,15 @@ function add(a, b) {
         """Test discovering multiple JavaScript functions."""
         js_file = tmp_path / "multiple.js"
         js_file.write_text("""
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }
 
-function multiply(a, b) {
+export function multiply(a, b) {
     return a * b;
 }
 
-function divide(a, b) {
+export function divide(a, b) {
     return a / b;
 }
 """)
@@ -61,11 +61,11 @@ function divide(a, b) {
         """Test that functions without return statements are excluded."""
         js_file = tmp_path / "no_return.js"
         js_file.write_text("""
-function withReturn() {
+export function withReturn() {
     return 42;
 }
 
-function withoutReturn() {
+export function withoutReturn() {
     console.log("hello");
 }
 """)
@@ -78,11 +78,11 @@ function withoutReturn() {
         """Test discovering arrow functions with explicit return."""
         js_file = tmp_path / "arrow.js"
         js_file.write_text("""
-const add = (a, b) => {
+export const add = (a, b) => {
     return a + b;
 };
 
-const multiply = (a, b) => a * b;
+export const multiply = (a, b) => a * b;
 """)
         functions = find_all_functions_in_file(js_file)
 
@@ -95,7 +95,7 @@ const multiply = (a, b) => a * b;
         """Test discovering methods inside a JavaScript class."""
         js_file = tmp_path / "class.js"
         js_file.write_text("""
-class Calculator {
+export class Calculator {
     add(a, b) {
         return a + b;
     }
@@ -120,11 +120,11 @@ class Calculator {
         """Test discovering async JavaScript functions."""
         js_file = tmp_path / "async.js"
         js_file.write_text("""
-async function fetchData(url) {
+export async function fetchData(url) {
     return await fetch(url);
 }
 
-function syncFunc() {
+export function syncFunc() {
     return 42;
 }
 """)
@@ -141,7 +141,7 @@ function syncFunc() {
         """Test that nested functions are handled correctly."""
         js_file = tmp_path / "nested.js"
         js_file.write_text("""
-function outer() {
+export function outer() {
     function inner() {
         return 1;
     }
@@ -158,11 +158,11 @@ function outer() {
         """Test discovering functions in JSX files."""
         jsx_file = tmp_path / "component.jsx"
         jsx_file.write_text("""
-function Button({ onClick }) {
+export function Button({ onClick }) {
     return <button onClick={onClick}>Click me</button>;
 }
 
-function formatText(text) {
+export function formatText(text) {
     return text.toUpperCase();
 }
 """)
@@ -176,7 +176,7 @@ function formatText(text) {
         """Test that invalid JavaScript code returns empty results."""
         js_file = tmp_path / "invalid.js"
         js_file.write_text("""
-function broken( {
+export function broken( {
     return 42;
 }
 """)
@@ -189,11 +189,11 @@ function broken( {
         """Test that function line numbers are correctly detected."""
         js_file = tmp_path / "lines.js"
         js_file.write_text("""
-function firstFunc() {
+export function firstFunc() {
     return 1;
 }
 
-function secondFunc() {
+export function secondFunc() {
     return 2;
 }
 """)
@@ -217,7 +217,7 @@ class TestJavaScriptFunctionFiltering:
         """Test that filter_functions correctly includes JavaScript files."""
         js_file = tmp_path / "module.js"
         js_file.write_text("""
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }
 """)
@@ -240,7 +240,7 @@ function add(a, b) {
         tests_dir.mkdir()
         test_file = tests_dir / "test_module.test.js"
         test_file.write_text("""
-function testHelper() {
+export function testHelper() {
     return 42;
 }
 """)
@@ -260,7 +260,7 @@ function testHelper() {
         ignored_dir.mkdir()
         js_file = ignored_dir / "ignored_module.js"
         js_file.write_text("""
-function ignoredFunc() {
+export function ignoredFunc() {
     return 42;
 }
 """)
@@ -282,7 +282,7 @@ function ignoredFunc() {
         """Test that JavaScript files with dashes in name are included (unlike Python)."""
         js_file = tmp_path / "my-module.js"
         js_file.write_text("""
-function myFunc() {
+export function myFunc() {
     return 42;
 }
 """)
@@ -312,11 +312,11 @@ class TestGetFunctionsToOptimizeJavaScript:
         """Test getting functions to optimize from a JavaScript file."""
         js_file = tmp_path / "string_utils.js"
         js_file.write_text("""
-function reverseString(str) {
+export function reverseString(str) {
     return str.split('').reverse().join('');
 }
 
-function capitalize(str) {
+export function capitalize(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
 }
 """)
@@ -422,12 +422,12 @@ class TestGetAllFilesAndFunctionsJavaScript:
         """Test discovering all JavaScript functions in a directory."""
         # Create multiple JS files
         (tmp_path / "math.js").write_text("""
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }
 """)
         (tmp_path / "string.js").write_text("""
-function reverse(str) {
+export function reverse(str) {
     return str.split('').reverse().join('');
 }
 """)
@@ -451,7 +451,7 @@ def py_func():
     return 1
 """)
         (tmp_path / "js_module.js").write_text("""
-function jsFunc() {
+export function jsFunc() {
     return 1;
 }
 """)
@@ -476,7 +476,7 @@ class TestFunctionToOptimizeJavaScript:
         """Test qualified name for top-level function."""
         js_file = tmp_path / "module.js"
         js_file.write_text("""
-function topLevel() {
+export function topLevel() {
     return 42;
 }
 """)
@@ -490,7 +490,7 @@ function topLevel() {
         """Test qualified name for class method."""
         js_file = tmp_path / "module.js"
         js_file.write_text("""
-class MyClass {
+export class MyClass {
     myMethod() {
         return 42;
     }
@@ -506,7 +506,7 @@ class MyClass {
         """Test that JavaScript functions have correct language attribute."""
         js_file = tmp_path / "module.js"
         js_file.write_text("""
-function myFunc() {
+export function myFunc() {
     return 42;
 }
 """)

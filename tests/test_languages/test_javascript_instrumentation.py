@@ -664,3 +664,313 @@ class TestInstrumentationFullStringEquality:
         expected = "        return codeflash.capture('Class.fibonacci', '1', this.fibonacci.bind(this), n - 1);"
         assert transformed == expected, f"Expected:\n{expected}\nGot:\n{transformed}"
         assert counter == 1
+
+
+class TestFixImportsInsideTestBlocks:
+    """Tests for fix_imports_inside_test_blocks function."""
+
+    def test_fix_named_import_inside_test_block(self):
+        """Test fixing named import inside test function."""
+        from codeflash.languages.javascript.instrument import fix_imports_inside_test_blocks
+
+        code = """
+test('should work', () => {
+    const mock = jest.fn();
+    import { foo } from '../src/module';
+    expect(foo()).toBe(true);
+});
+"""
+        fixed = fix_imports_inside_test_blocks(code)
+
+        assert "const { foo } = require('../src/module');" in fixed
+        assert "import { foo }" not in fixed
+
+    def test_fix_default_import_inside_test_block(self):
+        """Test fixing default import inside test function."""
+        from codeflash.languages.javascript.instrument import fix_imports_inside_test_blocks
+
+        code = """
+test('should work', () => {
+    env.isTest.mockReturnValue(false);
+    import queuesModule from '../src/queue/queue';
+    expect(queuesModule).toBeDefined();
+});
+"""
+        fixed = fix_imports_inside_test_blocks(code)
+
+        assert "const queuesModule = require('../src/queue/queue');" in fixed
+        assert "import queuesModule from" not in fixed
+
+    def test_fix_namespace_import_inside_test_block(self):
+        """Test fixing namespace import inside test function."""
+        from codeflash.languages.javascript.instrument import fix_imports_inside_test_blocks
+
+        code = """
+test('should work', () => {
+    import * as utils from '../src/utils';
+    expect(utils.foo()).toBe(true);
+});
+"""
+        fixed = fix_imports_inside_test_blocks(code)
+
+        assert "const utils = require('../src/utils');" in fixed
+        assert "import * as utils" not in fixed
+
+    def test_preserve_top_level_imports(self):
+        """Test that top-level imports are not modified."""
+        from codeflash.languages.javascript.instrument import fix_imports_inside_test_blocks
+
+        code = """
+import { jest, describe, test, expect } from '@jest/globals';
+import { foo } from '../src/module';
+
+describe('test suite', () => {
+    test('should work', () => {
+        expect(foo()).toBe(true);
+    });
+});
+"""
+        fixed = fix_imports_inside_test_blocks(code)
+
+        # Top-level imports should remain unchanged
+        assert "import { jest, describe, test, expect } from '@jest/globals';" in fixed
+        assert "import { foo } from '../src/module';" in fixed
+
+    def test_empty_code(self):
+        """Test handling empty code."""
+        from codeflash.languages.javascript.instrument import fix_imports_inside_test_blocks
+
+        assert fix_imports_inside_test_blocks("") == ""
+        assert fix_imports_inside_test_blocks("   ") == "   "
+
+
+class TestFixJestMockPaths:
+    """Tests for fix_jest_mock_paths function."""
+
+    def test_fix_mock_path_when_source_relative(self):
+        """Test fixing mock path that's relative to source file."""
+        from codeflash.languages.javascript.instrument import fix_jest_mock_paths
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create directory structure
+            src_dir = Path(tmpdir) / "src" / "queue"
+            tests_dir = Path(tmpdir) / "tests"
+            env_file = Path(tmpdir) / "src" / "environment.ts"
+
+            src_dir.mkdir(parents=True)
+            tests_dir.mkdir(parents=True)
+            env_file.parent.mkdir(parents=True, exist_ok=True)
+            env_file.write_text("export const env = {};")
+
+            source_file = src_dir / "queue.ts"
+            source_file.write_text("import env from '../environment';")
+
+            test_file = tests_dir / "test_queue.test.ts"
+
+            # Test code with incorrect mock path (relative to source, not test)
+            test_code = """
+import { jest, describe, test, expect } from '@jest/globals';
+jest.mock('../environment');
+jest.mock('../redis/utils');
+
+describe('queue', () => {
+    test('works', () => {});
+});
+"""
+            fixed = fix_jest_mock_paths(test_code, test_file, source_file, tests_dir)
+
+            # Should fix the path to be relative to the test file
+            assert "jest.mock('../src/environment')" in fixed
+
+    def test_preserve_valid_mock_path(self):
+        """Test that valid mock paths are not modified."""
+        from codeflash.languages.javascript.instrument import fix_jest_mock_paths
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create directory structure
+            src_dir = Path(tmpdir) / "src"
+            tests_dir = Path(tmpdir) / "tests"
+
+            src_dir.mkdir(parents=True)
+            tests_dir.mkdir(parents=True)
+
+            # Create the file being mocked at the correct location
+            mock_file = src_dir / "utils.ts"
+            mock_file.write_text("export const utils = {};")
+
+            source_file = src_dir / "main.ts"
+            source_file.write_text("")
+            test_file = tests_dir / "test_main.test.ts"
+
+            # Test code with correct mock path (valid from test location)
+            test_code = """
+jest.mock('../src/utils');
+
+describe('main', () => {
+    test('works', () => {});
+});
+"""
+            fixed = fix_jest_mock_paths(test_code, test_file, source_file, tests_dir)
+
+            # Should keep the path unchanged since it's valid
+            assert "jest.mock('../src/utils')" in fixed
+
+    def test_fix_doMock_path(self):
+        """Test fixing jest.doMock path."""
+        from codeflash.languages.javascript.instrument import fix_jest_mock_paths
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create directory structure: src/queue/queue.ts imports ../environment (-> src/environment.ts)
+            src_dir = Path(tmpdir) / "src"
+            queue_dir = src_dir / "queue"
+            tests_dir = Path(tmpdir) / "tests"
+            env_file = src_dir / "environment.ts"
+
+            queue_dir.mkdir(parents=True)
+            tests_dir.mkdir(parents=True)
+            env_file.write_text("export const env = {};")
+
+            source_file = queue_dir / "queue.ts"
+            source_file.write_text("")
+            test_file = tests_dir / "test_queue.test.ts"
+
+            # From src/queue/queue.ts, ../environment resolves to src/environment.ts
+            # Test file is at tests/test_queue.test.ts
+            # So the correct mock path from test should be ../src/environment
+            test_code = """
+jest.doMock('../environment', () => ({ isTest: jest.fn() }));
+"""
+            fixed = fix_jest_mock_paths(test_code, test_file, source_file, tests_dir)
+
+            # Should fix the doMock path
+            assert "jest.doMock('../src/environment'" in fixed
+
+    def test_empty_code(self):
+        """Test handling empty code."""
+        from codeflash.languages.javascript.instrument import fix_jest_mock_paths
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tests_dir = Path(tmpdir) / "tests"
+            tests_dir.mkdir()
+            source_file = Path(tmpdir) / "src" / "main.ts"
+            test_file = tests_dir / "test.ts"
+
+            assert fix_jest_mock_paths("", test_file, source_file, tests_dir) == ""
+            assert fix_jest_mock_paths("   ", test_file, source_file, tests_dir) == "   "
+
+
+class TestFunctionCallsInStrings:
+    """Tests for skipping function calls inside string literals."""
+
+    def test_skip_function_in_test_description_single_quotes(self):
+        """Test that function calls in single-quoted test descriptions are not transformed."""
+        from codeflash.languages.javascript.instrument import transform_standalone_calls
+
+        func = make_func("fibonacci")
+        code = """
+test('should compute fibonacci(20) and fibonacci(30) to known values', () => {
+    const result = fibonacci(10);
+    expect(result).toBe(55);
+});
+"""
+        transformed, _counter = transform_standalone_calls(code, func, "capture")
+
+        # The function call in the test description should NOT be transformed
+        assert "fibonacci(20)" in transformed
+        assert "fibonacci(30)" in transformed
+        # The actual call should be transformed
+        assert "codeflash.capture('fibonacci'" in transformed
+
+    def test_skip_function_in_test_description_double_quotes(self):
+        """Test that function calls in double-quoted test descriptions are not transformed."""
+        from codeflash.languages.javascript.instrument import transform_standalone_calls
+
+        func = make_func("fibonacci")
+        code = '''
+test("should compute fibonacci(20) correctly", () => {
+    const result = fibonacci(10);
+});
+'''
+        transformed, _counter = transform_standalone_calls(code, func, "capture")
+
+        # The function call in the test description should NOT be transformed
+        assert 'fibonacci(20)' in transformed
+        # The actual call should be transformed
+        assert "codeflash.capture('fibonacci'" in transformed
+
+    def test_skip_function_in_template_literal(self):
+        """Test that function calls in template literals are not transformed."""
+        from codeflash.languages.javascript.instrument import transform_standalone_calls
+
+        func = make_func("fibonacci")
+        code = """
+test(`should compute fibonacci(20) correctly`, () => {
+    const result = fibonacci(10);
+});
+"""
+        transformed, _counter = transform_standalone_calls(code, func, "capture")
+
+        # The function call in the template literal should NOT be transformed
+        assert "fibonacci(20)" in transformed
+        # The actual call should be transformed
+        assert "codeflash.capture('fibonacci'" in transformed
+
+    def test_skip_expect_in_string_literal(self):
+        """Test that expect(func()) in string literals is not transformed."""
+        from codeflash.languages.javascript.instrument import transform_expect_calls
+
+        func = make_func("fibonacci")
+        code = """
+describe('testing expect(fibonacci(n)) patterns', () => {
+    test('works', () => {
+        expect(fibonacci(10)).toBe(55);
+    });
+});
+"""
+        transformed, _counter = transform_expect_calls(code, func, "capture")
+
+        # The expect in the describe string should NOT be transformed
+        assert "expect(fibonacci(n))" in transformed
+        # The actual expect call should be transformed
+        assert "codeflash.capture('fibonacci'" in transformed
+
+    def test_handle_escaped_quotes_in_string(self):
+        """Test that escaped quotes in strings are handled correctly."""
+        from codeflash.languages.javascript.instrument import transform_standalone_calls
+
+        func = make_func("fibonacci")
+        code = """
+test('test \\'fibonacci(5)\\' escaping', () => {
+    const result = fibonacci(10);
+});
+"""
+        transformed, _counter = transform_standalone_calls(code, func, "capture")
+
+        # The function call in the escaped string should NOT be transformed
+        assert "fibonacci(5)" in transformed
+        # The actual call should be transformed
+        assert "codeflash.capture('fibonacci'" in transformed
+
+    def test_is_inside_string_helper(self):
+        """Test the is_inside_string helper function directly."""
+        from codeflash.languages.javascript.instrument import is_inside_string
+
+        # Position inside single-quoted string
+        code1 = "test('fibonacci(5)', () => {})"
+        assert is_inside_string(code1, 10) is True  # Inside the string
+
+        # Position outside string
+        assert is_inside_string(code1, 0) is False  # Before string
+        assert is_inside_string(code1, 25) is False  # After string
+
+        # Double quotes
+        code2 = 'test("fibonacci(5)", () => {})'
+        assert is_inside_string(code2, 10) is True
+
+        # Template literal
+        code3 = "test(`fibonacci(5)`, () => {})"
+        assert is_inside_string(code3, 10) is True
+
+        # Escaped quote doesn't end string
+        code4 = "test('fib\\'s result', () => {})"
+        assert is_inside_string(code4, 15) is True  # Still inside after escaped quote

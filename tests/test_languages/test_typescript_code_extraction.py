@@ -119,7 +119,7 @@ class TestTypeScriptCodeExtraction:
         """Test extracting code context for a simple function."""
         with tempfile.NamedTemporaryFile(suffix=".ts", mode="w", delete=False) as f:
             f.write("""
-function add(a: number, b: number): number {
+export function add(a: number, b: number): number {
     return a + b;
 }
 """)
@@ -147,7 +147,7 @@ import * as utils from "./utils";
 
 const command_args = process.argv.slice(3);
 
-async function execMongoEval(queryExpression, appsmithMongoURI) {
+export async function execMongoEval(queryExpression, appsmithMongoURI) {
     queryExpression = queryExpression.trim();
 
     if (command_args.includes("--pretty")) {
@@ -186,7 +186,7 @@ async function execMongoEval(queryExpression, appsmithMongoURI) {
 import fsPromises from "fs/promises";
 import path from "path";
 
-async function figureOutContentsPath(root: string): Promise<string> {
+export async function figureOutContentsPath(root: string): Promise<string> {
     const subfolders = await fsPromises.readdir(root, { withFileTypes: true });
 
     try {
@@ -238,7 +238,7 @@ async function figureOutContentsPath(root: string): Promise<string> {
 import fs from "fs";
 import path from "path";
 
-function readConfig(filename: string): string {
+export function readConfig(filename: string): string {
     const fullPath = path.join(__dirname, filename);
     return fs.readFileSync(fullPath, "utf8");
 }
@@ -264,7 +264,7 @@ function readConfig(filename: string): string {
 const CONFIG = { timeout: 5000 };
 const MAX_RETRIES = 3;
 
-async function fetchWithRetry(url: string): Promise<any> {
+export async function fetchWithRetry(url: string): Promise<any> {
     for (let i = 0; i < MAX_RETRIES; i++) {
         try {
             const response = await fetch(url, { signal: AbortSignal.timeout(CONFIG.timeout) });
@@ -287,6 +287,164 @@ async function fetchWithRetry(url: string): Promise<any> {
 
             # Verify extracted code is valid
             assert ts_support.validate_syntax(code_context.target_code) is True
+
+
+class TestSameClassHelperExtraction:
+    """Tests for same-class helper method extraction.
+
+    When a class method calls other methods from the same class, those helper
+    methods should be included inside the class wrapper (not appended outside),
+    because they may use class-specific syntax like 'private'.
+    """
+
+    def test_private_helper_method_inside_class_wrapper(self, ts_support):
+        """Test that private helper methods are included inside the class wrapper."""
+        with tempfile.NamedTemporaryFile(suffix=".ts", mode="w", delete=False) as f:
+            # Export the class and add return statements so discover_functions finds the methods
+            f.write("""
+export class EndpointGroup {
+    private endpoints: any[] = [];
+
+    constructor() {
+        this.endpoints = [];
+    }
+
+    post(path: string, handler: Function): EndpointGroup {
+        this.addEndpoint("POST", path, handler);
+        return this;
+    }
+
+    private addEndpoint(method: string, path: string, handler: Function): void {
+        this.endpoints.push({ method, path, handler });
+        return;
+    }
+}
+""")
+            f.flush()
+            file_path = Path(f.name)
+
+            # Discover the 'post' method
+            functions = ts_support.discover_functions(file_path)
+            post_method = None
+            for func in functions:
+                if func.function_name == "post":
+                    post_method = func
+                    break
+
+            assert post_method is not None, "post method should be discovered"
+
+            # Extract code context
+            code_context = ts_support.extract_code_context(
+                post_method, file_path.parent, file_path.parent
+            )
+
+            # The extracted code should be syntactically valid
+            assert ts_support.validate_syntax(code_context.target_code) is True, (
+                f"Extracted code should be valid TypeScript:\n{code_context.target_code}"
+            )
+
+            # Both post and addEndpoint should be inside the class
+            assert "class EndpointGroup" in code_context.target_code
+            assert "post(" in code_context.target_code
+            assert "private addEndpoint" in code_context.target_code
+
+            # The private method should be inside the class, not outside
+            # Check that addEndpoint appears BEFORE the closing brace of the class
+            class_end_index = code_context.target_code.rfind("}")
+            add_endpoint_index = code_context.target_code.find("addEndpoint")
+            assert add_endpoint_index < class_end_index, (
+                "addEndpoint should be inside the class wrapper"
+            )
+
+    def test_multiple_private_helpers_inside_class(self, ts_support):
+        """Test that multiple private helpers are all included inside the class."""
+        with tempfile.NamedTemporaryFile(suffix=".ts", mode="w", delete=False) as f:
+            f.write("""
+export class Router {
+    private routes: Map<string, any> = new Map();
+
+    addRoute(path: string, handler: Function): boolean {
+        const normalizedPath = this.normalizePath(path);
+        this.validatePath(normalizedPath);
+        this.routes.set(normalizedPath, handler);
+        return true;
+    }
+
+    private normalizePath(path: string): string {
+        return path.toLowerCase().trim();
+    }
+
+    private validatePath(path: string): boolean {
+        if (!path.startsWith("/")) {
+            throw new Error("Path must start with /");
+        }
+        return true;
+    }
+}
+""")
+            f.flush()
+            file_path = Path(f.name)
+
+            # Discover the 'addRoute' method
+            functions = ts_support.discover_functions(file_path)
+            add_route_method = None
+            for func in functions:
+                if func.function_name == "addRoute":
+                    add_route_method = func
+                    break
+
+            assert add_route_method is not None
+
+            code_context = ts_support.extract_code_context(
+                add_route_method, file_path.parent, file_path.parent
+            )
+
+            # Should be valid TypeScript
+            assert ts_support.validate_syntax(code_context.target_code) is True
+
+            # All methods should be inside the class
+            assert "private normalizePath" in code_context.target_code
+            assert "private validatePath" in code_context.target_code
+
+    def test_same_class_helpers_filtered_from_helper_list(self, ts_support):
+        """Test that same-class helpers are not duplicated in the helpers list."""
+        with tempfile.NamedTemporaryFile(suffix=".ts", mode="w", delete=False) as f:
+            f.write("""
+export class Calculator {
+    add(a: number, b: number): number {
+        return this.compute(a, b, "+");
+    }
+
+    private compute(a: number, b: number, op: string): number {
+        if (op === "+") return a + b;
+        return 0;
+    }
+}
+""")
+            f.flush()
+            file_path = Path(f.name)
+
+            functions = ts_support.discover_functions(file_path)
+            add_method = None
+            for func in functions:
+                if func.function_name == "add":
+                    add_method = func
+                    break
+
+            assert add_method is not None
+
+            code_context = ts_support.extract_code_context(
+                add_method, file_path.parent, file_path.parent
+            )
+
+            # 'compute' should be in target_code (inside class)
+            assert "compute" in code_context.target_code
+
+            # 'compute' should NOT be in helper_functions (would be duplicate)
+            helper_names = [h.name for h in code_context.helper_functions]
+            assert "compute" not in helper_names, (
+                "Same-class helper 'compute' should not be in helper_functions list"
+            )
 
 
 class TestTypeScriptLanguageProperties:

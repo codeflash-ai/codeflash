@@ -1,0 +1,40 @@
+{
+  "total_scenarios": 5,
+  "capabilities_coverage": {
+    "total_capabilities": 16,
+    "capabilities_tested": 12,
+    "coverage_percentage": 75.0
+  },
+  "complexity_distribution": {
+    "basic": 1,
+    "intermediate": 3,
+    "advanced": 1
+  },
+  "scenarios": [
+    {
+      "index": 1,
+      "capability": "code-strings-markdown-format, read-writable-vs-read-only",
+      "complexity": "intermediate"
+    },
+    {
+      "index": 2,
+      "capability": "candidate-source-types, candidate-forest-dag, repair-request-structure",
+      "complexity": "intermediate"
+    },
+    {
+      "index": 3,
+      "capability": "deterministic-patch-values, plugin-blocklists",
+      "complexity": "advanced"
+    },
+    {
+      "index": 4,
+      "capability": "effort-level-values, best-candidate-selection",
+      "complexity": "intermediate"
+    },
+    {
+      "index": 5,
+      "capability": "function-to-optimize-fields, concurrent-testgen-optimization, pipeline-stage-ordering",
+      "complexity": "basic"
+    }
+  ]
+}
