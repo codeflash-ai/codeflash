@@ -13,13 +13,10 @@ from codeflash.code_utils.code_extractor import GlobalAssignmentCollector, add_g
 from codeflash.code_utils.code_replacer import replace_functions_and_add_imports
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.python.context.code_context_extractor import (
-    collect_names_from_function_body,
     collect_type_names_from_annotation,
     enrich_testgen_context,
-    enrich_type_context_classes,
-    extract_full_class_from_module,
     extract_init_stub_from_class,
-    extract_type_context_for_testgen,
+    extract_parameter_type_constructors,
     get_code_optimization_context,
     resolve_instance_class_name,
 )
@@ -3556,7 +3553,8 @@ def test_enrich_testgen_context_deduplicates(tmp_path: Path) -> None:
     package_dir.mkdir()
     (package_dir / "__init__.py").write_text("", encoding="utf-8")
     (package_dir / "base.py").write_text(
-        "class Base:\n    def __init__(self, x: int):\n        self.x = x\n", encoding="utf-8"
+        "class Base:\n    def __init__(self, x: int):\n        self.x = x\n",
+        encoding="utf-8",
     )
 
     code = "from mypkg.base import Base\n\nclass A(Base):\n    pass\n\nclass B(Base):\n    pass\n"
@@ -3699,7 +3697,8 @@ def test_testgen_context_includes_external_base_inits(tmp_path: Path) -> None:
     package_dir.mkdir()
     (package_dir / "__init__.py").write_text("", encoding="utf-8")
     (package_dir / "base.py").write_text(
-        "class BaseDict:\n    def __init__(self, data=None):\n        self.data = data or {}\n", encoding="utf-8"
+        "class BaseDict:\n    def __init__(self, data=None):\n        self.data = data or {}\n",
+        encoding="utf-8",
     )
 
     code = "from mypkg.base import BaseDict\n\nclass MyCustomDict(BaseDict):\n    def target_method(self):\n        return self.data\n"
@@ -3753,7 +3752,8 @@ def test_enrich_testgen_context_attribute_base(tmp_path: Path) -> None:
     package_dir.mkdir()
     (package_dir / "__init__.py").write_text("", encoding="utf-8")
     (package_dir / "base.py").write_text(
-        "class CustomDict:\n    def __init__(self, data=None):\n        self.data = data or {}\n", encoding="utf-8"
+        "class CustomDict:\n    def __init__(self, data=None):\n        self.data = data or {}\n",
+        encoding="utf-8",
     )
 
     code = "from mypkg.base import CustomDict\n\nclass MyDict(CustomDict):\n    def custom_method(self):\n        return self.data\n"
@@ -4208,10 +4208,10 @@ class Other:
     assert stub is None
 
 
-# --- Tests for extract_type_context_for_testgen ---
+# --- Tests for extract_parameter_type_constructors ---
 
 
-def test_extract_type_context_for_testgen_project_type(tmp_path: Path) -> None:
+def test_extract_parameter_type_constructors_project_type(tmp_path: Path) -> None:
     # Create a module with a class
     pkg = tmp_path / "mypkg"
     pkg.mkdir()
@@ -4239,7 +4239,7 @@ def process(w: Widget) -> str:
     fto = FunctionToOptimize(
         function_name="process", file_path=(pkg / "processor.py").resolve(), starting_line=3, ending_line=4
     )
-    result = extract_type_context_for_testgen(fto, tmp_path.resolve(), set())
+    result = extract_parameter_type_constructors(fto, tmp_path.resolve(), set())
     assert len(result.code_strings) == 1
     code = result.code_strings[0].code
     assert "class Widget:" in code
@@ -4247,7 +4247,7 @@ def process(w: Widget) -> str:
     assert "size" in code
 
 
-def test_extract_type_context_for_testgen_excludes_builtins(tmp_path: Path) -> None:
+def test_extract_parameter_type_constructors_excludes_builtins(tmp_path: Path) -> None:
     pkg = tmp_path / "mypkg"
     pkg.mkdir()
     (pkg / "__init__.py").write_text("", encoding="utf-8")
@@ -4262,11 +4262,11 @@ def my_func(x: int, y: str, z: list) -> None:
     fto = FunctionToOptimize(
         function_name="my_func", file_path=(pkg / "func.py").resolve(), starting_line=2, ending_line=3
     )
-    result = extract_type_context_for_testgen(fto, tmp_path.resolve(), set())
+    result = extract_parameter_type_constructors(fto, tmp_path.resolve(), set())
     assert len(result.code_strings) == 0
 
 
-def test_extract_type_context_for_testgen_skips_existing_classes(tmp_path: Path) -> None:
+def test_extract_parameter_type_constructors_skips_existing_classes(tmp_path: Path) -> None:
     pkg = tmp_path / "mypkg"
     pkg.mkdir()
     (pkg / "__init__.py").write_text("", encoding="utf-8")
@@ -4291,11 +4291,11 @@ def process(w: Widget) -> str:
         function_name="process", file_path=(pkg / "processor.py").resolve(), starting_line=3, ending_line=4
     )
     # Widget is already in the context — should not be duplicated
-    result = extract_type_context_for_testgen(fto, tmp_path.resolve(), {"Widget"})
+    result = extract_parameter_type_constructors(fto, tmp_path.resolve(), {"Widget"})
     assert len(result.code_strings) == 0
 
 
-def test_extract_type_context_for_testgen_no_init(tmp_path: Path) -> None:
+def test_extract_parameter_type_constructors_no_init(tmp_path: Path) -> None:
     pkg = tmp_path / "mypkg"
     pkg.mkdir()
     (pkg / "__init__.py").write_text("", encoding="utf-8")
@@ -4318,11 +4318,8 @@ def process(c: Config) -> str:
     fto = FunctionToOptimize(
         function_name="process", file_path=(pkg / "processor.py").resolve(), starting_line=3, ending_line=4
     )
-    result = extract_type_context_for_testgen(fto, tmp_path.resolve(), set())
-    assert len(result.code_strings) == 1
-    code = result.code_strings[0].code
-    assert "class Config:" in code
-    assert "x = 10" in code
+    result = extract_parameter_type_constructors(fto, tmp_path.resolve(), set())
+    assert len(result.code_strings) == 0
 
 
 # --- Tests for resolve_instance_class_name ---
@@ -4447,394 +4444,3 @@ def get_log_level() -> str:
     combined = "\n".join(cs.code for cs in result.code_strings)
     assert "class AppConfig:" in combined
     assert "@property" in combined
-
-
-# --- Tests for collect_names_from_function_body ---
-
-
-def test_collect_names_from_function_body_constructor_calls() -> None:
-    source = """\
-def f():
-    x = MyClass(1, 2)
-    y = OtherClass()
-"""
-    tree = ast.parse(source)
-    func_node = tree.body[0]
-    names = collect_names_from_function_body(func_node)
-    assert "MyClass" in names
-    assert "OtherClass" in names
-
-
-def test_collect_names_from_function_body_attribute_access() -> None:
-    source = """\
-def f():
-    val = config.PROP
-    x = MyEnum.VALUE
-"""
-    tree = ast.parse(source)
-    func_node = tree.body[0]
-    names = collect_names_from_function_body(func_node)
-    assert "config" in names
-    assert "MyEnum" in names
-
-
-def test_collect_names_from_function_body_isinstance() -> None:
-    source = """\
-def f(x):
-    if isinstance(x, SomeClass):
-        pass
-    if issubclass(type(x), (A, B)):
-        pass
-"""
-    tree = ast.parse(source)
-    func_node = tree.body[0]
-    names = collect_names_from_function_body(func_node)
-    assert "SomeClass" in names
-    assert "A" in names
-    assert "B" in names
-
-
-def test_collect_names_from_function_body_class_method_call() -> None:
-    source = """\
-def f():
-    obj = Builder.create(42)
-"""
-    tree = ast.parse(source)
-    func_node = tree.body[0]
-    names = collect_names_from_function_body(func_node)
-    assert "Builder" in names
-
-
-# --- Tests for extract_full_class_from_module ---
-
-
-def test_extract_full_class_from_module_basic() -> None:
-    source = """\
-class Foo:
-    x = 10
-    def bar(self):
-        return self.x
-"""
-    tree = ast.parse(source)
-    result = extract_full_class_from_module("Foo", source, tree)
-    assert result is not None
-    assert "class Foo:" in result
-    assert "x = 10" in result
-    assert "def bar(self):" in result
-
-
-def test_extract_full_class_from_module_missing_class() -> None:
-    source = """\
-class Foo:
-    pass
-"""
-    tree = ast.parse(source)
-    result = extract_full_class_from_module("Bar", source, tree)
-    assert result is None
-
-
-# --- Integration tests for extract_type_context_for_testgen with body references ---
-
-
-def test_extract_type_context_for_testgen_body_enum_reference(tmp_path: Path) -> None:
-    pkg = tmp_path / "mypkg"
-    pkg.mkdir()
-    (pkg / "__init__.py").write_text("", encoding="utf-8")
-    (pkg / "enums.py").write_text(
-        """\
-import enum
-
-class Color(enum.Enum):
-    RED = "red"
-    BLUE = "blue"
-""",
-        encoding="utf-8",
-    )
-    (pkg / "processor.py").write_text(
-        """\
-from mypkg.enums import Color
-
-def paint(name: str) -> str:
-    return name + Color.RED.value
-""",
-        encoding="utf-8",
-    )
-
-    fto = FunctionToOptimize(
-        function_name="paint", file_path=(pkg / "processor.py").resolve(), starting_line=3, ending_line=4
-    )
-    result = extract_type_context_for_testgen(fto, tmp_path.resolve(), set())
-    assert len(result.code_strings) == 1
-    code = result.code_strings[0].code
-    assert "class Color" in code
-    assert "RED" in code
-
-
-def test_extract_type_context_for_testgen_body_config_class(tmp_path: Path) -> None:
-    pkg = tmp_path / "mypkg"
-    pkg.mkdir()
-    (pkg / "__init__.py").write_text("", encoding="utf-8")
-    (pkg / "config.py").write_text(
-        """\
-class AppConfig:
-    DEBUG = True
-    LOG_LEVEL = "INFO"
-""",
-        encoding="utf-8",
-    )
-    (pkg / "service.py").write_text(
-        """\
-from mypkg.config import AppConfig
-
-def run() -> str:
-    return AppConfig.LOG_LEVEL
-""",
-        encoding="utf-8",
-    )
-
-    fto = FunctionToOptimize(
-        function_name="run", file_path=(pkg / "service.py").resolve(), starting_line=3, ending_line=4
-    )
-    result = extract_type_context_for_testgen(fto, tmp_path.resolve(), set())
-    assert len(result.code_strings) == 1
-    code = result.code_strings[0].code
-    assert "class AppConfig:" in code
-    assert "LOG_LEVEL" in code
-
-
-def test_extract_type_context_for_testgen_instance_resolution(tmp_path: Path) -> None:
-    pkg = tmp_path / "mypkg"
-    pkg.mkdir()
-    (pkg / "__init__.py").write_text("", encoding="utf-8")
-    (pkg / "config.py").write_text(
-        """\
-class AppConfig:
-    DEBUG = True
-    LOG_LEVEL = "INFO"
-
-app_config = AppConfig()
-""",
-        encoding="utf-8",
-    )
-    (pkg / "service.py").write_text(
-        """\
-from mypkg.config import app_config
-
-def run() -> str:
-    return app_config.LOG_LEVEL
-""",
-        encoding="utf-8",
-    )
-
-    fto = FunctionToOptimize(
-        function_name="run", file_path=(pkg / "service.py").resolve(), starting_line=3, ending_line=4
-    )
-    result = extract_type_context_for_testgen(fto, tmp_path.resolve(), set())
-    assert len(result.code_strings) == 1
-    code = result.code_strings[0].code
-    assert "class AppConfig:" in code
-
-
-def test_extract_type_context_for_testgen_non_imported_names_filtered(tmp_path: Path) -> None:
-    pkg = tmp_path / "mypkg"
-    pkg.mkdir()
-    (pkg / "__init__.py").write_text("", encoding="utf-8")
-    (pkg / "processor.py").write_text(
-        """\
-def process(x: int) -> int:
-    result = SomeLocal(x)
-    return result
-""",
-        encoding="utf-8",
-    )
-
-    fto = FunctionToOptimize(
-        function_name="process", file_path=(pkg / "processor.py").resolve(), starting_line=1, ending_line=3
-    )
-    result = extract_type_context_for_testgen(fto, tmp_path.resolve(), set())
-    assert len(result.code_strings) == 0
-
-
-def test_enrich_testgen_context_cross_module_base_class(tmp_path: Path) -> None:
-    """Base classes from other modules are resolved and extracted."""
-    pkg = tmp_path / "mypkg"
-    pkg.mkdir()
-    (pkg / "__init__.py").write_text("", encoding="utf-8")
-
-    (pkg / "base.py").write_text(
-        """\
-class Base:
-    def __init__(self, x: int):
-        self.x = x
-
-    def do_stuff(self) -> int:
-        return self.x * 2
-""",
-        encoding="utf-8",
-    )
-
-    (pkg / "child.py").write_text(
-        """\
-from mypkg.base import Base
-
-class Child(Base):
-    def __init__(self, x: int, y: int):
-        super().__init__(x)
-        self.y = y
-""",
-        encoding="utf-8",
-    )
-
-    context = CodeStringsMarkdown(
-        code_strings=[
-            CodeString(
-                code="""\
-from mypkg.child import Child
-
-def process(c: Child) -> int:
-    return c.do_stuff()
-""",
-                file_path=pkg / "user.py",
-            )
-        ]
-    )
-
-    result = enrich_testgen_context(context, tmp_path)
-    all_code = "\n".join(cs.code for cs in result.code_strings)
-    assert "class Child(Base)" in all_code
-    assert "class Base:" in all_code
-
-
-def test_enrich_testgen_context_cross_module_base_depth_limit(tmp_path: Path) -> None:
-    """Deep inheritance chains across modules stop at the depth limit without crashing."""
-    pkg = tmp_path / "mypkg"
-    pkg.mkdir()
-    (pkg / "__init__.py").write_text("", encoding="utf-8")
-
-    # Create a chain of 6 modules: Level0 -> Level1 -> ... -> Level5
-    for i in range(6):
-        if i == 0:
-            code = f"class Level{i}:\n    pass\n"
-        else:
-            code = f"from mypkg.level{i - 1} import Level{i - 1}\n\nclass Level{i}(Level{i - 1}):\n    pass\n"
-        (pkg / f"level{i}.py").write_text(code, encoding="utf-8")
-
-    context = CodeStringsMarkdown(
-        code_strings=[
-            CodeString(
-                code="from mypkg.level5 import Level5\n\ndef process(obj: Level5) -> None:\n    pass\n",
-                file_path=pkg / "user.py",
-            )
-        ]
-    )
-
-    # Should not crash and should extract Level5 plus some ancestors (limited by depth=3)
-    result = enrich_testgen_context(context, tmp_path)
-    all_code = "\n".join(cs.code for cs in result.code_strings)
-    assert "class Level5" in all_code
-    # Depth limit prevents extracting the full chain — Level0 through Level2 may not appear
-    # but Level3+ should be present
-    assert "class Level3" in all_code or "class Level4" in all_code
-
-
-def test_enrich_type_context_classes_extracts_field_types(tmp_path: Path) -> None:
-    """Classes referenced as field types in type-context classes are extracted."""
-    pkg = tmp_path / "mypkg"
-    pkg.mkdir()
-    (pkg / "__init__.py").write_text("", encoding="utf-8")
-
-    (pkg / "source.py").write_text(
-        """\
-class Source:
-    def __init__(self, name: str):
-        self.name = name
-""",
-        encoding="utf-8",
-    )
-
-    (pkg / "regions.py").write_text(
-        """\
-from mypkg.source import Source
-
-class TextRegions:
-    sources: list[Source]
-    label: str
-
-    def __init__(self, sources: list[Source], label: str):
-        self.sources = sources
-        self.label = label
-""",
-        encoding="utf-8",
-    )
-
-    type_context = CodeStringsMarkdown(
-        code_strings=[
-            CodeString(
-                code="""\
-class TextRegions:
-    sources: list[Source]
-    label: str
-
-    def __init__(self, sources: list[Source], label: str):
-        self.sources = sources
-        self.label = label
-""",
-                file_path=pkg / "regions.py",
-            )
-        ]
-    )
-
-    result = enrich_type_context_classes(type_context, {"TextRegions"}, tmp_path)
-    assert len(result.code_strings) == 1
-    assert "class Source:" in result.code_strings[0].code
-
-
-def test_enrich_type_context_classes_skips_existing_and_builtins(tmp_path: Path) -> None:
-    """Builtins and already-existing class names are not re-extracted."""
-    pkg = tmp_path / "mypkg"
-    pkg.mkdir()
-    (pkg / "__init__.py").write_text("", encoding="utf-8")
-
-    (pkg / "models.py").write_text(
-        """\
-from mypkg.other import Other
-
-class MyClass:
-    x: int
-    y: str
-    z: Other
-""",
-        encoding="utf-8",
-    )
-
-    (pkg / "other.py").write_text(
-        """\
-class Other:
-    def __init__(self):
-        pass
-""",
-        encoding="utf-8",
-    )
-
-    type_context = CodeStringsMarkdown(
-        code_strings=[
-            CodeString(
-                code="""\
-class MyClass:
-    x: int
-    y: str
-    z: Other
-""",
-                file_path=pkg / "models.py",
-            )
-        ]
-    )
-
-    # Other is already existing — should not be extracted
-    result = enrich_type_context_classes(type_context, {"MyClass", "Other"}, tmp_path)
-    assert len(result.code_strings) == 0
-
-    # Without Other in existing_class_names, it should be extracted
-    result = enrich_type_context_classes(type_context, {"MyClass"}, tmp_path)
-    assert len(result.code_strings) == 1
-    assert "class Other:" in result.code_strings[0].code
