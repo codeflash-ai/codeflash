@@ -192,6 +192,7 @@ class JavaAssertTransformer:
 
         # Precompile the assignment-detection regex to avoid recompiling on each call.
         self._assign_re = re.compile(r"(\w+(?:<[^>]+>)?)\s+(\w+)\s*=\s*$")
+        self._special_re = re.compile(r"""['"()]""")
 
     def transform(self, source: str) -> str:
         """Remove assertions from source code, preserving target function calls.
@@ -804,17 +805,20 @@ class JavaAssertTransformer:
         string_char = None
         in_char = False
 
-        # Track previous character locally to avoid repeated indexing (code[pos-1]).
-        prev_char = code[open_paren_pos]
+        while depth > 0:
+            m = self._special_re.search(code, pos)
+            if m is None:
+                return None, -1
 
-        while pos < end and depth > 0:
-            char = code[pos]
+            i = m.start()
+            char = m.group()
+            escaped = i > 0 and code[i - 1] == "\\"
 
             # Handle character literals
-            if char == "'" and not in_string and prev_char != "\\":
+            if char == "'" and not in_string and not escaped:
                 in_char = not in_char
             # Handle string literals (double quotes)
-            elif char == '"' and not in_char and prev_char != "\\":
+            elif char == '"' and not in_char and not escaped:
                 if not in_string:
                     in_string = True
                     string_char = char
@@ -827,13 +831,7 @@ class JavaAssertTransformer:
                 elif char == ")":
                     depth -= 1
 
-            pos += 1
-
-            prev_char = char
-
-        if depth != 0:
-            return None, -1
-
+            pos = i + 1
         return code[open_paren_pos + 1 : pos - 1], pos
 
     def _find_balanced_braces(self, code: str, open_brace_pos: int) -> tuple[str | None, int]:
