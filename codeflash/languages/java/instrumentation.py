@@ -27,6 +27,8 @@ if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.java.parser import JavaAnalyzer
 
+_WORD_RE = re.compile(r"^\w+$")
+
 _ASSERTION_METHODS = ("assertArrayEquals", "assertArrayNotEquals")
 
 logger = logging.getLogger(__name__)
@@ -51,6 +53,46 @@ _FALLBACK_METHOD_PATTERN = re.compile(r"\b(\w+)\s*\(")
 
 def _extract_test_method_name(method_lines: list[str]) -> str:
     method_sig = " ".join(method_lines).strip()
+
+    # Fast-path heuristic: if a common modifier or built-in return type appears,
+    # try to extract the identifier immediately before the following '(' using
+    # simple string operations which are much cheaper than regex on large inputs.
+    # Fall back to the original regex-based logic if the heuristic doesn't
+    # confidently produce a result.
+    s = method_sig
+    if s:
+        # Look for common modifiers first; modifiers are strong signals of a method declaration
+        for mod in ("public ", "private ", "protected "):
+            idx = s.find(mod)
+            if idx != -1:
+                sub = s[idx:]
+                paren = sub.find("(")
+                if paren != -1:
+                    left = sub[:paren].strip()
+                    parts = left.split()
+                    if parts:
+                        candidate = parts[-1]
+                        if _WORD_RE.match(candidate):
+                            return candidate
+                break  # if modifier was found but fast-path failed, avoid trying other modifiers
+
+        # If no modifier found or modifier path didn't return, check common primitive/reference return types.
+        # This helps with package-private methods declared like "void foo(", "int bar(", "String baz(", etc.
+        for typ in ("void ", "String ", "int ", "long ", "boolean ", "double ", "float ", "char ", "byte ", "short "):
+            idx = s.find(typ)
+            if idx != -1:
+                sub = s[idx + len(typ) :]  # start after the type token
+                paren = sub.find("(")
+                if paren != -1:
+                    left = sub[:paren].strip()
+                    parts = left.split()
+                    if parts:
+                        candidate = parts[-1]
+                        if _WORD_RE.match(candidate):
+                            return candidate
+                break  # stop after first matching type token
+
+    # Original behavior: fall back to the precompiled regex patterns.
     match = _METHOD_SIG_PATTERN.search(method_sig)
     if match:
         return match.group(1)
