@@ -62,6 +62,8 @@ def _extract_test_method_name(method_lines: list[str]) -> str:
 
 # Pattern to detect primitive array types in assertions
 _PRIMITIVE_ARRAY_PATTERN = re.compile(r"new\s+(int|long|double|float|short|byte|char|boolean)\s*\[\s*\]")
+# Pattern to extract type from variable declaration: Type varName = ...
+_VAR_DECL_TYPE_PATTERN = re.compile(r"^\s*([\w<>[\],\s]+?)\s+\w+\s*=")
 
 # Pattern to match @Test annotation exactly (not @TestOnly, @TestFactory, etc.)
 _TEST_ANNOTATION_RE = re.compile(r"^@Test(?:\s*\(.*\))?(?:\s.*)?$")
@@ -147,14 +149,73 @@ _TS_BODY_SUFFIX = "\n}}"
 _TS_BODY_PREFIX_BYTES = _TS_BODY_PREFIX.encode("utf8")
 
 
+def _generate_sqlite_write_code(
+    iter_id: int, call_counter: int, indent: str, class_name: str, func_name: str, test_method_name: str
+) -> list[str]:
+    """Generate SQLite write code for a single function call.
+
+    Args:
+        iter_id: Test method iteration ID
+        call_counter: Call counter for unique variable naming
+        indent: Base indentation string
+        class_name: Test class name
+        func_name: Function being tested
+        test_method_name: Test method name
+
+    Returns:
+        List of code lines for SQLite write in finally block.
+    """
+    inner_indent = indent + "    "
+    return [
+        f"{indent}}} finally {{",
+        f"{inner_indent}long _cf_end{iter_id}_{call_counter}_finally = System.nanoTime();",
+        f"{inner_indent}long _cf_dur{iter_id}_{call_counter} = (_cf_end{iter_id}_{call_counter} != -1 ? _cf_end{iter_id}_{call_counter} : _cf_end{iter_id}_{call_counter}_finally) - _cf_start{iter_id}_{call_counter};",
+        f'{inner_indent}System.out.println("!######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + "." + _cf_test{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + "{call_counter}" + "######!");',
+        f"{inner_indent}// Write to SQLite if output file is set",
+        f"{inner_indent}if (_cf_outputFile{iter_id} != null && !_cf_outputFile{iter_id}.isEmpty()) {{",
+        f"{inner_indent}    try {{",
+        f'{inner_indent}        Class.forName("org.sqlite.JDBC");',
+        f'{inner_indent}        try (Connection _cf_conn{iter_id}_{call_counter} = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile{iter_id})) {{',
+        f"{inner_indent}            try (java.sql.Statement _cf_stmt{iter_id}_{call_counter} = _cf_conn{iter_id}_{call_counter}.createStatement()) {{",
+        f'{inner_indent}                _cf_stmt{iter_id}_{call_counter}.execute("CREATE TABLE IF NOT EXISTS test_results (" +',
+        f'{inner_indent}                    "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +',
+        f'{inner_indent}                    "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +',
+        f'{inner_indent}                    "runtime INTEGER, return_value BLOB, verification_type TEXT)");',
+        f"{inner_indent}            }}",
+        f'{inner_indent}            String _cf_sql{iter_id}_{call_counter} = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";',
+        f"{inner_indent}            try (PreparedStatement _cf_pstmt{iter_id}_{call_counter} = _cf_conn{iter_id}_{call_counter}.prepareStatement(_cf_sql{iter_id}_{call_counter})) {{",
+        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(1, _cf_mod{iter_id});",
+        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(2, _cf_cls{iter_id});",
+        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(3, _cf_test{iter_id});",
+        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(4, _cf_fn{iter_id});",
+        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setInt(5, _cf_loop{iter_id});",
+        f'{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(6, "{call_counter}_" + _cf_testIteration{iter_id});',
+        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setLong(7, _cf_dur{iter_id}_{call_counter});",
+        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setBytes(8, _cf_serializedResult{iter_id}_{call_counter});",
+        f'{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(9, "function_call");',
+        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.executeUpdate();",
+        f"{inner_indent}            }}",
+        f"{inner_indent}        }}",
+        f"{inner_indent}    }} catch (Exception _cf_e{iter_id}_{call_counter}) {{",
+        f'{inner_indent}        System.err.println("CodeflashHelper: SQLite error: " + _cf_e{iter_id}_{call_counter}.getMessage());',
+        f"{inner_indent}    }}",
+        f"{inner_indent}}}",
+        f"{indent}}}",
+    ]
+
+
 def wrap_target_calls_with_treesitter(
-    body_lines: list[str], func_name: str, iter_id: int, precise_call_timing: bool = False
+    body_lines: list[str], func_name: str, iter_id: int, precise_call_timing: bool = False,
+    class_name: str = "", test_method_name: str = ""
 ) -> tuple[list[str], int]:
     """Replace target method calls in body_lines with capture + serialize using tree-sitter.
 
     Parses the method body with tree-sitter, walks the AST for method_invocation nodes
     matching func_name, and generates capture/serialize lines. Uses the parent node type
     to determine whether to keep or remove the original line after replacement.
+
+    For behavior mode (precise_call_timing=True), each call is wrapped in its own
+    try-finally block with immediate SQLite write to prevent data loss from multiple calls.
 
     Returns (wrapped_body_lines, call_counter).
     """
@@ -217,10 +278,21 @@ def wrap_target_calls_with_treesitter(
             cast_type = _infer_array_cast_type(body_line)
             var_with_cast = f"({cast_type}){var_name}" if cast_type else var_name
 
-            capture_stmt = f"var {var_name} = {call['full_call']};"
-            serialize_stmt = f"_cf_serializedResult{iter_id} = com.codeflash.Serializer.serialize((Object) {var_name});"
-            start_stmt = f"_cf_start{iter_id} = System.nanoTime();"
-            end_stmt = f"_cf_end{iter_id} = System.nanoTime();"
+            # Use per-call unique variables (with call_counter suffix) for behavior mode
+            # For behavior mode, we declare the variable outside try block, so use assignment not declaration here
+            # For performance mode, use shared variables without call_counter suffix
+            capture_stmt_with_decl = f"var {var_name} = {call['full_call']};"
+            capture_stmt_assign = f"{var_name} = {call['full_call']};"
+            if precise_call_timing:
+                # Behavior mode: per-call unique variables
+                serialize_stmt = f"_cf_serializedResult{iter_id}_{call_counter} = com.codeflash.Serializer.serialize((Object) {var_name});"
+                start_stmt = f"_cf_start{iter_id}_{call_counter} = System.nanoTime();"
+                end_stmt = f"_cf_end{iter_id}_{call_counter} = System.nanoTime();"
+            else:
+                # Performance mode: shared variables without call_counter suffix
+                serialize_stmt = f"_cf_serializedResult{iter_id} = com.codeflash.Serializer.serialize((Object) {var_name});"
+                start_stmt = f"_cf_start{iter_id} = System.nanoTime();"
+                end_stmt = f"_cf_end{iter_id} = System.nanoTime();"
 
             if call["parent_type"] == "expression_statement":
                 # Replace the expression_statement IN PLACE with capture+serialize.
@@ -231,15 +303,38 @@ def wrap_target_calls_with_treesitter(
                 es_start_char = len(line_bytes[:es_start_byte].decode("utf8"))
                 es_end_char = len(line_bytes[:es_end_byte].decode("utf8"))
                 if precise_call_timing:
-                    # Place timing boundaries tightly around the target function call only.
-                    replacement = (
-                        f"{start_stmt}\n"
-                        f"{line_indent_str}{capture_stmt}\n"
-                        f"{line_indent_str}{end_stmt}\n"
-                        f"{line_indent_str}{serialize_stmt}"
+                    # For behavior mode: wrap each call in its own try-finally with SQLite write.
+                    # This ensures data from all calls is captured independently.
+                    # Declare per-call variables
+                    var_decls = [
+                        f"Object {var_name} = null;",
+                        f"long _cf_end{iter_id}_{call_counter} = -1;",
+                        f"long _cf_start{iter_id}_{call_counter} = 0;",
+                        f"byte[] _cf_serializedResult{iter_id}_{call_counter} = null;",
+                    ]
+                    # Start marker
+                    start_marker = f'System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + "." + _cf_test{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":{call_counter}" + "######$!");'
+                    # Try block with capture (use assignment, not declaration, since variable is declared above)
+                    try_block = [
+                        "try {",
+                        f"    {start_stmt}",
+                        f"    {capture_stmt_assign}",
+                        f"    {end_stmt}",
+                        f"    {serialize_stmt}",
+                    ]
+                    # Finally block with SQLite write
+                    finally_block = _generate_sqlite_write_code(
+                        iter_id, call_counter, "", class_name, func_name, test_method_name
                     )
+
+                    replacement_lines = var_decls + [start_marker] + try_block + finally_block
+                    # Don't add indent to first line (it's placed after existing indent), but add to subsequent lines
+                    if replacement_lines:
+                        replacement = replacement_lines[0] + "\n" + "\n".join(f"{line_indent_str}{line}" for line in replacement_lines[1:])
+                    else:
+                        replacement = ""
                 else:
-                    replacement = f"{capture_stmt} {serialize_stmt}"
+                    replacement = f"{capture_stmt_with_decl} {serialize_stmt}"
                 adj_start = es_start_char + char_shift
                 adj_end = es_end_char + char_shift
                 new_line = new_line[:adj_start] + replacement + new_line[adj_end:]
@@ -248,13 +343,30 @@ def wrap_target_calls_with_treesitter(
                 # The call is embedded in a larger expression (assignment, assertion, etc.)
                 # Emit capture+serialize before the line, then replace the call with the variable.
                 if precise_call_timing:
-                    wrapped.append(f"{line_indent_str}{start_stmt}")
-                capture_line = f"{line_indent_str}{capture_stmt}"
-                wrapped.append(capture_line)
-                if precise_call_timing:
-                    wrapped.append(f"{line_indent_str}{end_stmt}")
-                serialize_line = f"{line_indent_str}{serialize_stmt}"
-                wrapped.append(serialize_line)
+                    # For behavior mode: wrap in try-finally with SQLite write
+                    # Declare per-call variables
+                    wrapped.append(f"{line_indent_str}Object {var_name} = null;")
+                    wrapped.append(f"{line_indent_str}long _cf_end{iter_id}_{call_counter} = -1;")
+                    wrapped.append(f"{line_indent_str}long _cf_start{iter_id}_{call_counter} = 0;")
+                    wrapped.append(f"{line_indent_str}byte[] _cf_serializedResult{iter_id}_{call_counter} = null;")
+                    # Start marker
+                    wrapped.append(f'{line_indent_str}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + "." + _cf_test{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":{call_counter}" + "######$!");')
+                    # Try block (use assignment, not declaration, since variable is declared above)
+                    wrapped.append(f"{line_indent_str}try {{")
+                    wrapped.append(f"{line_indent_str}    {start_stmt}")
+                    wrapped.append(f"{line_indent_str}    {capture_stmt_assign}")
+                    wrapped.append(f"{line_indent_str}    {end_stmt}")
+                    wrapped.append(f"{line_indent_str}    {serialize_stmt}")
+                    # Finally block with SQLite write
+                    finally_lines = _generate_sqlite_write_code(
+                        iter_id, call_counter, line_indent_str, class_name, func_name, test_method_name
+                    )
+                    wrapped.extend(finally_lines)
+                else:
+                    capture_line = f"{line_indent_str}{capture_stmt_with_decl}"
+                    wrapped.append(capture_line)
+                    serialize_line = f"{line_indent_str}{serialize_stmt}"
+                    wrapped.append(serialize_line)
 
                 call_start_byte = call["start_byte"] - line_byte_start
                 call_end_byte = call["end_byte"] - line_byte_start
@@ -319,30 +431,38 @@ def _byte_to_line_index(byte_offset: int, line_byte_starts: list[int]) -> int:
 
 
 def _infer_array_cast_type(line: str) -> str | None:
-    """Infer the array cast type needed for assertion methods.
+    """Infer the cast type needed when replacing function calls with result variables.
 
-    When a line contains an assertion like assertArrayEquals with a primitive array
-    as the first argument, we need to cast the captured Object result back to
-    that primitive array type.
+    When a line contains a variable declaration or assertion, we need to cast the
+    captured Object result back to the original type.
+
+    Examples:
+        byte[] digest = Crypto.computeDigest(...) -> cast to (byte[])
+        assertArrayEquals(new int[] {...}, func()) -> cast to (int[])
 
     Args:
-        line: The source line containing the assertion.
+        line: The source line containing the function call.
 
     Returns:
-        The cast type (e.g., "int[]") if needed, None otherwise.
+        The cast type (e.g., "byte[]", "int[]") if needed, None otherwise.
 
     """
-    # Only apply to assertion methods that take arrays
-    if "assertArrayEquals" not in line and "assertArrayNotEquals" not in line:
-        return None
+    # Check for assertion methods that take arrays
+    if "assertArrayEquals" in line or "assertArrayNotEquals" in line:
+        match = _PRIMITIVE_ARRAY_PATTERN.search(line)
+        if match:
+            primitive_type = match.group(1)
+            return f"{primitive_type}[]"
 
-    # Look for primitive array type in the line (usually the first/expected argument)
-    match = _PRIMITIVE_ARRAY_PATTERN.search(line)
-    if not match:
-        return None
+    # Check for variable declaration: Type varName = func()
+    match = _VAR_DECL_TYPE_PATTERN.search(line)
+    if match:
+        type_str = match.group(1).strip()
+        # Only add cast if it's not 'var' (which uses type inference) and not 'Object' (no cast needed)
+        if type_str not in ("var", "Object"):
+            return type_str
 
-    primitive_type = match.group(1)
-    return f"{primitive_type}[]"
+    return None
 
 
 def _get_qualified_name(func: Any) -> str:
@@ -609,11 +729,17 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
 
             # Wrap function calls to capture return values using tree-sitter AST analysis.
             # This correctly handles lambdas, try-catch blocks, assignments, and nested calls.
+            # Each call gets its own try-finally block with immediate SQLite write.
             wrapped_body_lines, _call_counter = wrap_target_calls_with_treesitter(
-                body_lines=body_lines, func_name=func_name, iter_id=iter_id, precise_call_timing=True
+                body_lines=body_lines,
+                func_name=func_name,
+                iter_id=iter_id,
+                precise_call_timing=True,
+                class_name=class_name,
+                test_method_name=test_method_name,
             )
 
-            # Add behavior instrumentation code
+            # Add behavior instrumentation setup code (shared variables for all calls in the method)
             behavior_start_code = [
                 f"{indent}// Codeflash behavior instrumentation",
                 f'{indent}int _cf_loop{iter_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
@@ -625,61 +751,17 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 f'{indent}String _cf_testIteration{iter_id} = System.getenv("CODEFLASH_TEST_ITERATION");',
                 f'{indent}if (_cf_testIteration{iter_id} == null) _cf_testIteration{iter_id} = "0";',
                 f'{indent}String _cf_test{iter_id} = "{test_method_name}";',
-                f'{indent}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + "." + _cf_test{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + "######$!");',
-                f"{indent}byte[] _cf_serializedResult{iter_id} = null;",
-                f"{indent}long _cf_end{iter_id} = -1;",
-                f"{indent}long _cf_start{iter_id} = 0;",
-                f"{indent}try {{",
             ]
             result.extend(behavior_start_code)
 
-            # Add the wrapped body lines with extra indentation.
-            # Serialization of captured results is already done inline (immediately
-            # after each capture) so the _cf_serializedResult variable is always
-            # assigned while the captured variable is still in scope.
+            # Add the wrapped body lines without extra indentation.
+            # Each call already has its own try-finally block with SQLite write from wrap_target_calls_with_treesitter().
             for bl in wrapped_body_lines:
-                result.extend(f"    {line}" for line in bl.splitlines())
+                result.append(bl)
 
-            # Add finally block with SQLite write
+            # Add method closing brace
             method_close_indent = " " * base_indent
-            behavior_end_code = [
-                f"{indent}}} finally {{",
-                f"{indent}    long _cf_end{iter_id}_finally = System.nanoTime();",
-                f"{indent}    long _cf_dur{iter_id} = (_cf_end{iter_id} != -1 ? _cf_end{iter_id} : _cf_end{iter_id}_finally) - _cf_start{iter_id};",
-                f'{indent}    System.out.println("!######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + "." + _cf_test{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + ":" + _cf_dur{iter_id} + "######!");',
-                f"{indent}    // Write to SQLite if output file is set",
-                f"{indent}    if (_cf_outputFile{iter_id} != null && !_cf_outputFile{iter_id}.isEmpty()) {{",
-                f"{indent}        try {{",
-                f'{indent}            Class.forName("org.sqlite.JDBC");',
-                f'{indent}            try (Connection _cf_conn{iter_id} = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile{iter_id})) {{',
-                f"{indent}                try (java.sql.Statement _cf_stmt{iter_id} = _cf_conn{iter_id}.createStatement()) {{",
-                f'{indent}                    _cf_stmt{iter_id}.execute("CREATE TABLE IF NOT EXISTS test_results (" +',
-                f'{indent}                        "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +',
-                f'{indent}                        "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +',
-                f'{indent}                        "runtime INTEGER, return_value BLOB, verification_type TEXT)");',
-                f"{indent}                }}",
-                f'{indent}                String _cf_sql{iter_id} = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";',
-                f"{indent}                try (PreparedStatement _cf_pstmt{iter_id} = _cf_conn{iter_id}.prepareStatement(_cf_sql{iter_id})) {{",
-                f"{indent}                    _cf_pstmt{iter_id}.setString(1, _cf_mod{iter_id});",
-                f"{indent}                    _cf_pstmt{iter_id}.setString(2, _cf_cls{iter_id});",
-                f"{indent}                    _cf_pstmt{iter_id}.setString(3, _cf_test{iter_id});",
-                f"{indent}                    _cf_pstmt{iter_id}.setString(4, _cf_fn{iter_id});",
-                f"{indent}                    _cf_pstmt{iter_id}.setInt(5, _cf_loop{iter_id});",
-                f'{indent}                    _cf_pstmt{iter_id}.setString(6, _cf_iter{iter_id} + "_" + _cf_testIteration{iter_id});',
-                f"{indent}                    _cf_pstmt{iter_id}.setLong(7, _cf_dur{iter_id});",
-                f"{indent}                    _cf_pstmt{iter_id}.setBytes(8, _cf_serializedResult{iter_id});",  # Kryo-serialized return value
-                f'{indent}                    _cf_pstmt{iter_id}.setString(9, "function_call");',
-                f"{indent}                    _cf_pstmt{iter_id}.executeUpdate();",
-                f"{indent}                }}",
-                f"{indent}            }}",
-                f"{indent}        }} catch (Exception _cf_e{iter_id}) {{",
-                f'{indent}            System.err.println("CodeflashHelper: SQLite error: " + _cf_e{iter_id}.getMessage());',
-                f"{indent}        }}",
-                f"{indent}    }}",
-                f"{indent}}}",
-                f"{method_close_indent}}}",  # Method closing brace
-            ]
-            result.extend(behavior_end_code)
+            result.append(f"{method_close_indent}}}")
         else:
             result.append(line)
             i += 1

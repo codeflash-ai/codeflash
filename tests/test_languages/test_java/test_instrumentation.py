@@ -146,51 +146,52 @@ public class CalculatorTest__perfinstrumented {
         String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
         String _cf_test1 = "testAdd";
-        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        byte[] _cf_serializedResult1 = null;
-        long _cf_end1 = -1;
-        long _cf_start1 = 0;
+        Calculator calc = new Calculator();
+        Object _cf_result1_1 = null;
+        long _cf_end1_1 = -1;
+        long _cf_start1_1 = 0;
+        byte[] _cf_serializedResult1_1 = null;
+        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":1" + "######$!");
         try {
-            Calculator calc = new Calculator();
-            _cf_start1 = System.nanoTime();
-            var _cf_result1_1 = calc.add(2, 2);
-            _cf_end1 = System.nanoTime();
-            _cf_serializedResult1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);
-            assertEquals(4, _cf_result1_1);
+            _cf_start1_1 = System.nanoTime();
+            _cf_result1_1 = calc.add(2, 2);
+            _cf_end1_1 = System.nanoTime();
+            _cf_serializedResult1_1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);
         } finally {
-            long _cf_end1_finally = System.nanoTime();
-            long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
+            long _cf_end1_1_finally = System.nanoTime();
+            long _cf_dur1_1 = (_cf_end1_1 != -1 ? _cf_end1_1 : _cf_end1_1_finally) - _cf_start1_1;
+            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + "1" + "######!");
             // Write to SQLite if output file is set
             if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
                 try {
                     Class.forName("org.sqlite.JDBC");
-                    try (Connection _cf_conn1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {
-                        try (java.sql.Statement _cf_stmt1 = _cf_conn1.createStatement()) {
-                            _cf_stmt1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
+                    try (Connection _cf_conn1_1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {
+                        try (java.sql.Statement _cf_stmt1_1 = _cf_conn1_1.createStatement()) {
+                            _cf_stmt1_1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
                                 "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
                                 "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
                                 "runtime INTEGER, return_value BLOB, verification_type TEXT)");
                         }
-                        String _cf_sql1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                        try (PreparedStatement _cf_pstmt1 = _cf_conn1.prepareStatement(_cf_sql1)) {
-                            _cf_pstmt1.setString(1, _cf_mod1);
-                            _cf_pstmt1.setString(2, _cf_cls1);
-                            _cf_pstmt1.setString(3, _cf_test1);
-                            _cf_pstmt1.setString(4, _cf_fn1);
-                            _cf_pstmt1.setInt(5, _cf_loop1);
-                            _cf_pstmt1.setString(6, _cf_iter1 + "_" + _cf_testIteration1);
-                            _cf_pstmt1.setLong(7, _cf_dur1);
-                            _cf_pstmt1.setBytes(8, _cf_serializedResult1);
-                            _cf_pstmt1.setString(9, "function_call");
-                            _cf_pstmt1.executeUpdate();
+                        String _cf_sql1_1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        try (PreparedStatement _cf_pstmt1_1 = _cf_conn1_1.prepareStatement(_cf_sql1_1)) {
+                            _cf_pstmt1_1.setString(1, _cf_mod1);
+                            _cf_pstmt1_1.setString(2, _cf_cls1);
+                            _cf_pstmt1_1.setString(3, _cf_test1);
+                            _cf_pstmt1_1.setString(4, _cf_fn1);
+                            _cf_pstmt1_1.setInt(5, _cf_loop1);
+                            _cf_pstmt1_1.setString(6, "1_" + _cf_testIteration1);
+                            _cf_pstmt1_1.setLong(7, _cf_dur1_1);
+                            _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
+                            _cf_pstmt1_1.setString(9, "function_call");
+                            _cf_pstmt1_1.executeUpdate();
                         }
                     }
-                } catch (Exception _cf_e1) {
-                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e1.getMessage());
+                } catch (Exception _cf_e1_1) {
+                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e1_1.getMessage());
                 }
             }
         }
+        assertEquals(4, _cf_result1_1);
     }
 }
 """
@@ -258,46 +259,7 @@ public class FibonacciTest__perfinstrumented {
         String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
         String _cf_test1 = "testNegativeInput_ThrowsIllegalArgumentException";
-        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        byte[] _cf_serializedResult1 = null;
-        long _cf_end1 = -1;
-        long _cf_start1 = 0;
-        try {
-            assertThrows(IllegalArgumentException.class, () -> Fibonacci.fibonacci(-1));
-        } finally {
-            long _cf_end1_finally = System.nanoTime();
-            long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
-            // Write to SQLite if output file is set
-            if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
-                try {
-                    Class.forName("org.sqlite.JDBC");
-                    try (Connection _cf_conn1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {
-                        try (java.sql.Statement _cf_stmt1 = _cf_conn1.createStatement()) {
-                            _cf_stmt1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
-                                "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
-                                "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
-                                "runtime INTEGER, return_value BLOB, verification_type TEXT)");
-                        }
-                        String _cf_sql1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                        try (PreparedStatement _cf_pstmt1 = _cf_conn1.prepareStatement(_cf_sql1)) {
-                            _cf_pstmt1.setString(1, _cf_mod1);
-                            _cf_pstmt1.setString(2, _cf_cls1);
-                            _cf_pstmt1.setString(3, _cf_test1);
-                            _cf_pstmt1.setString(4, _cf_fn1);
-                            _cf_pstmt1.setInt(5, _cf_loop1);
-                            _cf_pstmt1.setString(6, _cf_iter1 + "_" + _cf_testIteration1);
-                            _cf_pstmt1.setLong(7, _cf_dur1);
-                            _cf_pstmt1.setBytes(8, _cf_serializedResult1);
-                            _cf_pstmt1.setString(9, "function_call");
-                            _cf_pstmt1.executeUpdate();
-                        }
-                    }
-                } catch (Exception _cf_e1) {
-                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e1.getMessage());
-                }
-            }
-        }
+        assertThrows(IllegalArgumentException.class, () -> Fibonacci.fibonacci(-1));
     }
 
     @Test
@@ -312,50 +274,51 @@ public class FibonacciTest__perfinstrumented {
         String _cf_testIteration2 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration2 == null) _cf_testIteration2 = "0";
         String _cf_test2 = "testZeroInput_ReturnsZero";
-        System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + "######$!");
-        byte[] _cf_serializedResult2 = null;
-        long _cf_end2 = -1;
-        long _cf_start2 = 0;
+        Object _cf_result2_1 = null;
+        long _cf_end2_1 = -1;
+        long _cf_start2_1 = 0;
+        byte[] _cf_serializedResult2_1 = null;
+        System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":1" + "######$!");
         try {
-            _cf_start2 = System.nanoTime();
-            var _cf_result2_1 = Fibonacci.fibonacci(0);
-            _cf_end2 = System.nanoTime();
-            _cf_serializedResult2 = com.codeflash.Serializer.serialize((Object) _cf_result2_1);
-            assertEquals(0L, _cf_result2_1);
+            _cf_start2_1 = System.nanoTime();
+            _cf_result2_1 = Fibonacci.fibonacci(0);
+            _cf_end2_1 = System.nanoTime();
+            _cf_serializedResult2_1 = com.codeflash.Serializer.serialize((Object) _cf_result2_1);
         } finally {
-            long _cf_end2_finally = System.nanoTime();
-            long _cf_dur2 = (_cf_end2 != -1 ? _cf_end2 : _cf_end2_finally) - _cf_start2;
-            System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + ":" + _cf_dur2 + "######!");
+            long _cf_end2_1_finally = System.nanoTime();
+            long _cf_dur2_1 = (_cf_end2_1 != -1 ? _cf_end2_1 : _cf_end2_1_finally) - _cf_start2_1;
+            System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + "1" + "######!");
             // Write to SQLite if output file is set
             if (_cf_outputFile2 != null && !_cf_outputFile2.isEmpty()) {
                 try {
                     Class.forName("org.sqlite.JDBC");
-                    try (Connection _cf_conn2 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile2)) {
-                        try (java.sql.Statement _cf_stmt2 = _cf_conn2.createStatement()) {
-                            _cf_stmt2.execute("CREATE TABLE IF NOT EXISTS test_results (" +
+                    try (Connection _cf_conn2_1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile2)) {
+                        try (java.sql.Statement _cf_stmt2_1 = _cf_conn2_1.createStatement()) {
+                            _cf_stmt2_1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
                                 "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
                                 "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
                                 "runtime INTEGER, return_value BLOB, verification_type TEXT)");
                         }
-                        String _cf_sql2 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                        try (PreparedStatement _cf_pstmt2 = _cf_conn2.prepareStatement(_cf_sql2)) {
-                            _cf_pstmt2.setString(1, _cf_mod2);
-                            _cf_pstmt2.setString(2, _cf_cls2);
-                            _cf_pstmt2.setString(3, _cf_test2);
-                            _cf_pstmt2.setString(4, _cf_fn2);
-                            _cf_pstmt2.setInt(5, _cf_loop2);
-                            _cf_pstmt2.setString(6, _cf_iter2 + "_" + _cf_testIteration2);
-                            _cf_pstmt2.setLong(7, _cf_dur2);
-                            _cf_pstmt2.setBytes(8, _cf_serializedResult2);
-                            _cf_pstmt2.setString(9, "function_call");
-                            _cf_pstmt2.executeUpdate();
+                        String _cf_sql2_1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        try (PreparedStatement _cf_pstmt2_1 = _cf_conn2_1.prepareStatement(_cf_sql2_1)) {
+                            _cf_pstmt2_1.setString(1, _cf_mod2);
+                            _cf_pstmt2_1.setString(2, _cf_cls2);
+                            _cf_pstmt2_1.setString(3, _cf_test2);
+                            _cf_pstmt2_1.setString(4, _cf_fn2);
+                            _cf_pstmt2_1.setInt(5, _cf_loop2);
+                            _cf_pstmt2_1.setString(6, "1_" + _cf_testIteration2);
+                            _cf_pstmt2_1.setLong(7, _cf_dur2_1);
+                            _cf_pstmt2_1.setBytes(8, _cf_serializedResult2_1);
+                            _cf_pstmt2_1.setString(9, "function_call");
+                            _cf_pstmt2_1.executeUpdate();
                         }
                     }
-                } catch (Exception _cf_e2) {
-                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e2.getMessage());
+                } catch (Exception _cf_e2_1) {
+                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e2_1.getMessage());
                 }
             }
         }
+        assertEquals(0L, _cf_result2_1);
     }
 }
 """
@@ -424,48 +387,9 @@ public class FibonacciTest__perfinstrumented {
         String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
         String _cf_test1 = "testNegativeInput_ThrowsIllegalArgumentException";
-        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        byte[] _cf_serializedResult1 = null;
-        long _cf_end1 = -1;
-        long _cf_start1 = 0;
-        try {
-            assertThrows(IllegalArgumentException.class, () -> {
-                Fibonacci.fibonacci(-1);
-            });
-        } finally {
-            long _cf_end1_finally = System.nanoTime();
-            long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
-            // Write to SQLite if output file is set
-            if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
-                try {
-                    Class.forName("org.sqlite.JDBC");
-                    try (Connection _cf_conn1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {
-                        try (java.sql.Statement _cf_stmt1 = _cf_conn1.createStatement()) {
-                            _cf_stmt1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
-                                "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
-                                "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
-                                "runtime INTEGER, return_value BLOB, verification_type TEXT)");
-                        }
-                        String _cf_sql1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                        try (PreparedStatement _cf_pstmt1 = _cf_conn1.prepareStatement(_cf_sql1)) {
-                            _cf_pstmt1.setString(1, _cf_mod1);
-                            _cf_pstmt1.setString(2, _cf_cls1);
-                            _cf_pstmt1.setString(3, _cf_test1);
-                            _cf_pstmt1.setString(4, _cf_fn1);
-                            _cf_pstmt1.setInt(5, _cf_loop1);
-                            _cf_pstmt1.setString(6, _cf_iter1 + "_" + _cf_testIteration1);
-                            _cf_pstmt1.setLong(7, _cf_dur1);
-                            _cf_pstmt1.setBytes(8, _cf_serializedResult1);
-                            _cf_pstmt1.setString(9, "function_call");
-                            _cf_pstmt1.executeUpdate();
-                        }
-                    }
-                } catch (Exception _cf_e1) {
-                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e1.getMessage());
-                }
-            }
-        }
+        assertThrows(IllegalArgumentException.class, () -> {
+            Fibonacci.fibonacci(-1);
+        });
     }
 
     @Test
@@ -480,50 +404,51 @@ public class FibonacciTest__perfinstrumented {
         String _cf_testIteration2 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration2 == null) _cf_testIteration2 = "0";
         String _cf_test2 = "testZeroInput_ReturnsZero";
-        System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + "######$!");
-        byte[] _cf_serializedResult2 = null;
-        long _cf_end2 = -1;
-        long _cf_start2 = 0;
+        Object _cf_result2_1 = null;
+        long _cf_end2_1 = -1;
+        long _cf_start2_1 = 0;
+        byte[] _cf_serializedResult2_1 = null;
+        System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":1" + "######$!");
         try {
-            _cf_start2 = System.nanoTime();
-            var _cf_result2_1 = Fibonacci.fibonacci(0);
-            _cf_end2 = System.nanoTime();
-            _cf_serializedResult2 = com.codeflash.Serializer.serialize((Object) _cf_result2_1);
-            assertEquals(0L, _cf_result2_1);
+            _cf_start2_1 = System.nanoTime();
+            _cf_result2_1 = Fibonacci.fibonacci(0);
+            _cf_end2_1 = System.nanoTime();
+            _cf_serializedResult2_1 = com.codeflash.Serializer.serialize((Object) _cf_result2_1);
         } finally {
-            long _cf_end2_finally = System.nanoTime();
-            long _cf_dur2 = (_cf_end2 != -1 ? _cf_end2 : _cf_end2_finally) - _cf_start2;
-            System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + ":" + _cf_dur2 + "######!");
+            long _cf_end2_1_finally = System.nanoTime();
+            long _cf_dur2_1 = (_cf_end2_1 != -1 ? _cf_end2_1 : _cf_end2_1_finally) - _cf_start2_1;
+            System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + "1" + "######!");
             // Write to SQLite if output file is set
             if (_cf_outputFile2 != null && !_cf_outputFile2.isEmpty()) {
                 try {
                     Class.forName("org.sqlite.JDBC");
-                    try (Connection _cf_conn2 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile2)) {
-                        try (java.sql.Statement _cf_stmt2 = _cf_conn2.createStatement()) {
-                            _cf_stmt2.execute("CREATE TABLE IF NOT EXISTS test_results (" +
+                    try (Connection _cf_conn2_1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile2)) {
+                        try (java.sql.Statement _cf_stmt2_1 = _cf_conn2_1.createStatement()) {
+                            _cf_stmt2_1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
                                 "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
                                 "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
                                 "runtime INTEGER, return_value BLOB, verification_type TEXT)");
                         }
-                        String _cf_sql2 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                        try (PreparedStatement _cf_pstmt2 = _cf_conn2.prepareStatement(_cf_sql2)) {
-                            _cf_pstmt2.setString(1, _cf_mod2);
-                            _cf_pstmt2.setString(2, _cf_cls2);
-                            _cf_pstmt2.setString(3, _cf_test2);
-                            _cf_pstmt2.setString(4, _cf_fn2);
-                            _cf_pstmt2.setInt(5, _cf_loop2);
-                            _cf_pstmt2.setString(6, _cf_iter2 + "_" + _cf_testIteration2);
-                            _cf_pstmt2.setLong(7, _cf_dur2);
-                            _cf_pstmt2.setBytes(8, _cf_serializedResult2);
-                            _cf_pstmt2.setString(9, "function_call");
-                            _cf_pstmt2.executeUpdate();
+                        String _cf_sql2_1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        try (PreparedStatement _cf_pstmt2_1 = _cf_conn2_1.prepareStatement(_cf_sql2_1)) {
+                            _cf_pstmt2_1.setString(1, _cf_mod2);
+                            _cf_pstmt2_1.setString(2, _cf_cls2);
+                            _cf_pstmt2_1.setString(3, _cf_test2);
+                            _cf_pstmt2_1.setString(4, _cf_fn2);
+                            _cf_pstmt2_1.setInt(5, _cf_loop2);
+                            _cf_pstmt2_1.setString(6, "1_" + _cf_testIteration2);
+                            _cf_pstmt2_1.setLong(7, _cf_dur2_1);
+                            _cf_pstmt2_1.setBytes(8, _cf_serializedResult2_1);
+                            _cf_pstmt2_1.setString(9, "function_call");
+                            _cf_pstmt2_1.executeUpdate();
                         }
                     }
-                } catch (Exception _cf_e2) {
-                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e2.getMessage());
+                } catch (Exception _cf_e2_1) {
+                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e2_1.getMessage());
                 }
             }
         }
+        assertEquals(0L, _cf_result2_1);
     }
 }
 """
@@ -826,46 +751,47 @@ public class MyTest {
         String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
         String _cf_test1 = "testFoo";
-        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        byte[] _cf_serializedResult1 = null;
-        long _cf_end1 = -1;
-        long _cf_start1 = 0;
+        Object _cf_result1_1 = null;
+        long _cf_end1_1 = -1;
+        long _cf_start1_1 = 0;
+        byte[] _cf_serializedResult1_1 = null;
+        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":1" + "######$!");
         try {
-            _cf_start1 = System.nanoTime();
-            var _cf_result1_1 = obj.foo();
-            _cf_end1 = System.nanoTime();
-            _cf_serializedResult1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);
+            _cf_start1_1 = System.nanoTime();
+            _cf_result1_1 = obj.foo();
+            _cf_end1_1 = System.nanoTime();
+            _cf_serializedResult1_1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);
         } finally {
-            long _cf_end1_finally = System.nanoTime();
-            long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
+            long _cf_end1_1_finally = System.nanoTime();
+            long _cf_dur1_1 = (_cf_end1_1 != -1 ? _cf_end1_1 : _cf_end1_1_finally) - _cf_start1_1;
+            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + "1" + "######!");
             // Write to SQLite if output file is set
             if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
                 try {
                     Class.forName("org.sqlite.JDBC");
-                    try (Connection _cf_conn1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {
-                        try (java.sql.Statement _cf_stmt1 = _cf_conn1.createStatement()) {
-                            _cf_stmt1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
+                    try (Connection _cf_conn1_1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {
+                        try (java.sql.Statement _cf_stmt1_1 = _cf_conn1_1.createStatement()) {
+                            _cf_stmt1_1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
                                 "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
                                 "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
                                 "runtime INTEGER, return_value BLOB, verification_type TEXT)");
                         }
-                        String _cf_sql1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                        try (PreparedStatement _cf_pstmt1 = _cf_conn1.prepareStatement(_cf_sql1)) {
-                            _cf_pstmt1.setString(1, _cf_mod1);
-                            _cf_pstmt1.setString(2, _cf_cls1);
-                            _cf_pstmt1.setString(3, _cf_test1);
-                            _cf_pstmt1.setString(4, _cf_fn1);
-                            _cf_pstmt1.setInt(5, _cf_loop1);
-                            _cf_pstmt1.setString(6, _cf_iter1 + "_" + _cf_testIteration1);
-                            _cf_pstmt1.setLong(7, _cf_dur1);
-                            _cf_pstmt1.setBytes(8, _cf_serializedResult1);
-                            _cf_pstmt1.setString(9, "function_call");
-                            _cf_pstmt1.executeUpdate();
+                        String _cf_sql1_1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        try (PreparedStatement _cf_pstmt1_1 = _cf_conn1_1.prepareStatement(_cf_sql1_1)) {
+                            _cf_pstmt1_1.setString(1, _cf_mod1);
+                            _cf_pstmt1_1.setString(2, _cf_cls1);
+                            _cf_pstmt1_1.setString(3, _cf_test1);
+                            _cf_pstmt1_1.setString(4, _cf_fn1);
+                            _cf_pstmt1_1.setInt(5, _cf_loop1);
+                            _cf_pstmt1_1.setString(6, "1_" + _cf_testIteration1);
+                            _cf_pstmt1_1.setLong(7, _cf_dur1_1);
+                            _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
+                            _cf_pstmt1_1.setString(9, "function_call");
+                            _cf_pstmt1_1.executeUpdate();
                         }
                     }
-                } catch (Exception _cf_e1) {
-                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e1.getMessage());
+                } catch (Exception _cf_e1_1) {
+                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e1_1.getMessage());
                 }
             }
         }
@@ -1334,50 +1260,51 @@ public class CalculatorTest__perfinstrumented {
         String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
         String _cf_test1 = "testAdd";
-        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        byte[] _cf_serializedResult1 = null;
-        long _cf_end1 = -1;
-        long _cf_start1 = 0;
+        Object _cf_result1_1 = null;
+        long _cf_end1_1 = -1;
+        long _cf_start1_1 = 0;
+        byte[] _cf_serializedResult1_1 = null;
+        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":1" + "######$!");
         try {
-            _cf_start1 = System.nanoTime();
-            var _cf_result1_1 = new Calculator().add(2, 2);
-            _cf_end1 = System.nanoTime();
-            _cf_serializedResult1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);
-            Object _cf_result1 = _cf_result1_1;
+            _cf_start1_1 = System.nanoTime();
+            _cf_result1_1 = new Calculator().add(2, 2);
+            _cf_end1_1 = System.nanoTime();
+            _cf_serializedResult1_1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);
         } finally {
-            long _cf_end1_finally = System.nanoTime();
-            long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
+            long _cf_end1_1_finally = System.nanoTime();
+            long _cf_dur1_1 = (_cf_end1_1 != -1 ? _cf_end1_1 : _cf_end1_1_finally) - _cf_start1_1;
+            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + "1" + "######!");
             // Write to SQLite if output file is set
             if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
                 try {
                     Class.forName("org.sqlite.JDBC");
-                    try (Connection _cf_conn1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {
-                        try (java.sql.Statement _cf_stmt1 = _cf_conn1.createStatement()) {
-                            _cf_stmt1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
+                    try (Connection _cf_conn1_1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {
+                        try (java.sql.Statement _cf_stmt1_1 = _cf_conn1_1.createStatement()) {
+                            _cf_stmt1_1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
                                 "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
                                 "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
                                 "runtime INTEGER, return_value BLOB, verification_type TEXT)");
                         }
-                        String _cf_sql1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                        try (PreparedStatement _cf_pstmt1 = _cf_conn1.prepareStatement(_cf_sql1)) {
-                            _cf_pstmt1.setString(1, _cf_mod1);
-                            _cf_pstmt1.setString(2, _cf_cls1);
-                            _cf_pstmt1.setString(3, _cf_test1);
-                            _cf_pstmt1.setString(4, _cf_fn1);
-                            _cf_pstmt1.setInt(5, _cf_loop1);
-                            _cf_pstmt1.setString(6, _cf_iter1 + "_" + _cf_testIteration1);
-                            _cf_pstmt1.setLong(7, _cf_dur1);
-                            _cf_pstmt1.setBytes(8, _cf_serializedResult1);
-                            _cf_pstmt1.setString(9, "function_call");
-                            _cf_pstmt1.executeUpdate();
+                        String _cf_sql1_1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        try (PreparedStatement _cf_pstmt1_1 = _cf_conn1_1.prepareStatement(_cf_sql1_1)) {
+                            _cf_pstmt1_1.setString(1, _cf_mod1);
+                            _cf_pstmt1_1.setString(2, _cf_cls1);
+                            _cf_pstmt1_1.setString(3, _cf_test1);
+                            _cf_pstmt1_1.setString(4, _cf_fn1);
+                            _cf_pstmt1_1.setInt(5, _cf_loop1);
+                            _cf_pstmt1_1.setString(6, "1_" + _cf_testIteration1);
+                            _cf_pstmt1_1.setLong(7, _cf_dur1_1);
+                            _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
+                            _cf_pstmt1_1.setString(9, "function_call");
+                            _cf_pstmt1_1.executeUpdate();
                         }
                     }
-                } catch (Exception _cf_e1) {
-                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e1.getMessage());
+                } catch (Exception _cf_e1_1) {
+                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e1_1.getMessage());
                 }
             }
         }
+        Object _cf_result1 = _cf_result1_1;
     }
 }
 """
@@ -2545,51 +2472,52 @@ public class CounterTest__perfinstrumented {
         String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
         if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
         String _cf_test1 = "testIncrement";
-        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        byte[] _cf_serializedResult1 = null;
-        long _cf_end1 = -1;
-        long _cf_start1 = 0;
+        Counter counter = new Counter();
+        Object _cf_result1_1 = null;
+        long _cf_end1_1 = -1;
+        long _cf_start1_1 = 0;
+        byte[] _cf_serializedResult1_1 = null;
+        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":1" + "######$!");
         try {
-            Counter counter = new Counter();
-            _cf_start1 = System.nanoTime();
-            var _cf_result1_1 = counter.increment();
-            _cf_end1 = System.nanoTime();
-            _cf_serializedResult1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);
-            assertEquals(1, _cf_result1_1);
+            _cf_start1_1 = System.nanoTime();
+            _cf_result1_1 = counter.increment();
+            _cf_end1_1 = System.nanoTime();
+            _cf_serializedResult1_1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);
         } finally {
-            long _cf_end1_finally = System.nanoTime();
-            long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
+            long _cf_end1_1_finally = System.nanoTime();
+            long _cf_dur1_1 = (_cf_end1_1 != -1 ? _cf_end1_1 : _cf_end1_1_finally) - _cf_start1_1;
+            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + "1" + "######!");
             // Write to SQLite if output file is set
             if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
                 try {
                     Class.forName("org.sqlite.JDBC");
-                    try (Connection _cf_conn1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {
-                        try (java.sql.Statement _cf_stmt1 = _cf_conn1.createStatement()) {
-                            _cf_stmt1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
+                    try (Connection _cf_conn1_1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {
+                        try (java.sql.Statement _cf_stmt1_1 = _cf_conn1_1.createStatement()) {
+                            _cf_stmt1_1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
                                 "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
                                 "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
                                 "runtime INTEGER, return_value BLOB, verification_type TEXT)");
                         }
-                        String _cf_sql1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                        try (PreparedStatement _cf_pstmt1 = _cf_conn1.prepareStatement(_cf_sql1)) {
-                            _cf_pstmt1.setString(1, _cf_mod1);
-                            _cf_pstmt1.setString(2, _cf_cls1);
-                            _cf_pstmt1.setString(3, _cf_test1);
-                            _cf_pstmt1.setString(4, _cf_fn1);
-                            _cf_pstmt1.setInt(5, _cf_loop1);
-                            _cf_pstmt1.setString(6, _cf_iter1 + "_" + _cf_testIteration1);
-                            _cf_pstmt1.setLong(7, _cf_dur1);
-                            _cf_pstmt1.setBytes(8, _cf_serializedResult1);
-                            _cf_pstmt1.setString(9, "function_call");
-                            _cf_pstmt1.executeUpdate();
+                        String _cf_sql1_1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        try (PreparedStatement _cf_pstmt1_1 = _cf_conn1_1.prepareStatement(_cf_sql1_1)) {
+                            _cf_pstmt1_1.setString(1, _cf_mod1);
+                            _cf_pstmt1_1.setString(2, _cf_cls1);
+                            _cf_pstmt1_1.setString(3, _cf_test1);
+                            _cf_pstmt1_1.setString(4, _cf_fn1);
+                            _cf_pstmt1_1.setInt(5, _cf_loop1);
+                            _cf_pstmt1_1.setString(6, "1_" + _cf_testIteration1);
+                            _cf_pstmt1_1.setLong(7, _cf_dur1_1);
+                            _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
+                            _cf_pstmt1_1.setString(9, "function_call");
+                            _cf_pstmt1_1.executeUpdate();
                         }
                     }
-                } catch (Exception _cf_e1) {
-                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e1.getMessage());
+                } catch (Exception _cf_e1_1) {
+                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e1_1.getMessage());
                 }
             }
         }
+        assertEquals(1, _cf_result1_1);
     }
 }
 """
