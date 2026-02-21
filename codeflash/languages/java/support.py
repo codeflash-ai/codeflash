@@ -260,12 +260,10 @@ class JavaSupport(LanguageSupport):
 
             key = test_qualified_name
             if inv_id.iteration_id:
-                parts = inv_id.iteration_id.split("_")
-                cur_invid = parts[0] if len(parts) < 3 else "_".join(parts[:-1])
+                cur_invid = inv_id.iteration_id.rsplit("_", 1)[0]
                 key = key + "#" + cur_invid
-            if key not in unique_inv_ids:
-                unique_inv_ids[key] = 0
-            unique_inv_ids[key] += min(runtimes)
+            min_runtime = min(runtimes)
+            unique_inv_ids[key] = unique_inv_ids.get(key, 0) + min_runtime
         return unique_inv_ids
 
     # === Test Result Comparison ===
