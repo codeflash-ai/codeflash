@@ -14,6 +14,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+_FORMATTER_CACHE: dict[str | None, JavaFormatter] = {}
+
 logger = logging.getLogger(__name__)
 
 
@@ -236,7 +238,7 @@ def format_java_code(source: str, project_root: Path | None = None) -> str:
         Formatted source code.
 
     """
-    formatter = JavaFormatter(project_root)
+    formatter = _get_cached_formatter(project_root)
     return formatter.format_code(source)
 
 
@@ -327,3 +329,12 @@ def normalize_java_code(source: str) -> str:
             normalized_lines.append(stripped)
 
     return "\n".join(normalized_lines)
+
+
+def _get_cached_formatter(project_root: Path | None) -> JavaFormatter:
+    key = str(project_root) if project_root is not None else None
+    fmt = _FORMATTER_CACHE.get(key)
+    if fmt is None:
+        fmt = JavaFormatter(project_root)
+        _FORMATTER_CACHE[key] = fmt
+    return fmt
