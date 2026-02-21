@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -73,11 +72,7 @@ class JavaLineProfiler:
     # === Agent-based profiling (bytecode instrumentation) ===
 
     def generate_agent_config(
-        self,
-        source: str,
-        file_path: Path,
-        functions: list[FunctionInfo],
-        config_output_path: Path,
+        self, source: str, file_path: Path, functions: list[FunctionInfo], config_output_path: Path
     ) -> Path:
         """Generate config JSON for the profiler agent.
 
@@ -104,7 +99,12 @@ class JavaLineProfiler:
             for line_num in range(func.starting_line, func.ending_line + 1):
                 if 1 <= line_num <= len(lines):
                     content = lines[line_num - 1].strip()
-                    if content and not content.startswith("//") and not content.startswith("/*") and not content.startswith("*"):
+                    if (
+                        content
+                        and not content.startswith("//")
+                        and not content.startswith("/*")
+                        and not content.startswith("*")
+                    ):
                         key = f"{file_path.as_posix()}:{line_num}"
                         line_contents[key] = content
 
@@ -120,12 +120,7 @@ class JavaLineProfiler:
         config = {
             "outputFile": str(self.output_file),
             "warmupIterations": self.warmup_iterations,
-            "targets": [
-                {
-                    "className": class_name,
-                    "methods": method_targets,
-                }
-            ],
+            "targets": [{"className": class_name, "methods": method_targets}],
             "lineContents": line_contents,
         }
 
@@ -520,7 +515,7 @@ class {self.profiler_class} {{
                 for fp, line_stats in lines_by_file.items():
                     sorted_stats = sorted(line_stats, key=lambda t: t[0])
                     if sorted_stats:
-                        grouped_timings[(fp, sorted_stats[0][0], os.path.basename(fp))] = sorted_stats
+                        grouped_timings[(fp, sorted_stats[0][0], Path(fp).name)] = sorted_stats
 
             result: dict = {"timings": grouped_timings, "unit": 1e-9, "line_contents": line_contents}
             result["str_out"] = format_line_profile_results(result, line_contents)
@@ -531,15 +526,14 @@ class {self.profiler_class} {{
             return {"timings": {}, "unit": 1e-9, "str_out": ""}
 
 
-def load_method_ranges(
-    profile_file: Path,
-) -> tuple[list[tuple[str, str, int, int]], dict[str, str]]:
+def load_method_ranges(profile_file: Path) -> tuple[list[tuple[str, str, int, int]], dict[str, str]]:
     """Load method ranges and line contents from the agent config file.
 
     Returns:
         (method_ranges, config_line_contents) where method_ranges is a list of
         (source_file, method_name, start_line, end_line) and config_line_contents
         is the lineContents dict from the config (key: "file:line", value: source text).
+
     """
     config_path = profile_file.with_suffix(".config.json")
     if not config_path.exists():
@@ -549,12 +543,7 @@ def load_method_ranges(
         ranges = []
         for target in config.get("targets", []):
             for method in target.get("methods", []):
-                ranges.append((
-                    method.get("sourceFile", ""),
-                    method["name"],
-                    method["startLine"],
-                    method["endLine"],
-                ))
+                ranges.append((method.get("sourceFile", ""), method["name"], method["startLine"], method["endLine"]))
         return ranges, config.get("lineContents", {})
     except Exception:
         return [], {}
@@ -571,7 +560,7 @@ def find_method_for_line(
     for source_file, method_name, start_line, end_line in method_ranges:
         if file_path == source_file and start_line <= line_num <= end_line:
             return method_name, start_line
-    return os.path.basename(file_path), line_num
+    return Path(file_path).name, line_num
 
 
 def find_agent_jar() -> Path | None:
@@ -580,16 +569,7 @@ def find_agent_jar() -> Path | None:
     Checks local Maven repo, package resources, and development build directory.
     """
     # Check local Maven repository first (fastest)
-    m2_jar = (
-        Path.home()
-        / ".m2"
-        / "repository"
-        / "com"
-        / "codeflash"
-        / "codeflash-runtime"
-        / "1.0.0"
-        / AGENT_JAR_NAME
-    )
+    m2_jar = Path.home() / ".m2" / "repository" / "com" / "codeflash" / "codeflash-runtime" / "1.0.0" / AGENT_JAR_NAME
     if m2_jar.exists():
         return m2_jar
 
@@ -599,9 +579,7 @@ def find_agent_jar() -> Path | None:
         return resources_jar
 
     # Check development build directory
-    dev_jar = (
-        Path(__file__).parent.parent.parent.parent / "codeflash-java-runtime" / "target" / AGENT_JAR_NAME
-    )
+    dev_jar = Path(__file__).parent.parent.parent.parent / "codeflash-java-runtime" / "target" / AGENT_JAR_NAME
     if dev_jar.exists():
         return dev_jar
 
@@ -623,9 +601,7 @@ def resolve_internal_class_name(file_path: Path, source: str) -> str:
     return file_path.stem
 
 
-def format_line_profile_results(
-    results: dict, line_contents: dict[tuple[str, int], str] | None = None
-) -> str:
+def format_line_profile_results(results: dict, line_contents: dict[tuple[str, int], str] | None = None) -> str:
     """Format line profiling results using the same tabulate pipe format as Python.
 
     Args:

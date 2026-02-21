@@ -410,10 +410,7 @@ class JavaSupport(LanguageSupport):
 
             config_path = line_profiler_output_file.with_suffix(".config.json")
             profiler.generate_agent_config(
-                source=source,
-                file_path=func_info.file_path,
-                functions=[func_info],
-                config_output_path=config_path,
+                source=source, file_path=func_info.file_path, functions=[func_info], config_output_path=config_path
             )
 
             self.line_profiler_agent_arg = profiler.build_javaagent_arg(config_path)
