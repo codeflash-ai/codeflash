@@ -523,9 +523,11 @@ def get_function_sources_from_jedi(
                     definition = definitions[0]
                     definition_path = definition.module_path
                     if definition_path is not None:
-                        rel = safe_relative_to(definition_path, project_root_path)
-                        if not rel.is_absolute():
+                        try:
+                            rel = definition_path.resolve().relative_to(project_root_path.resolve())
                             definition_path = project_root_path / rel
+                        except ValueError:
+                            pass
 
                     # The definition is part of this project and not defined within the original function
                     is_valid_definition = (
