@@ -50,13 +50,13 @@ def _ensure_languages_registered() -> None:
     import contextlib
 
     with contextlib.suppress(ImportError):
-        from codeflash.languages.python import support as _
+        pass
 
     with contextlib.suppress(ImportError):
-        from codeflash.languages.javascript import support as _
+        pass
 
     with contextlib.suppress(ImportError):
-        from codeflash.languages.java import support as _
+        pass
 
     _languages_registered = True
 
