@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 import libcst as cst
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_extractor import add_needed_imports_from_module, find_preexisting_objects
 from codeflash.code_utils.code_utils import encoded_tokens_len, get_qualified_name, path_belongs_to_site_packages
 from codeflash.code_utils.config_consts import OPTIMIZATION_CONTEXT_TOKEN_LIMIT, TESTGEN_CONTEXT_TOKEN_LIMIT
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize  # noqa: TC001
@@ -23,6 +22,10 @@ from codeflash.languages.python.context.unused_definition_remover import (
     is_assignment_used,
     recurse_sections,
     remove_unused_definitions_by_function_names,
+)
+from codeflash.languages.python.static_analysis.code_extractor import (
+    add_needed_imports_from_module,
+    find_preexisting_objects,
 )
 from codeflash.models.models import (
     CodeContextType,
@@ -38,7 +41,7 @@ if TYPE_CHECKING:
 
     from jedi.api.classes import Name
 
-    from codeflash.languages.base import HelperFunction
+    from codeflash.languages.base import DependencyResolver, HelperFunction
     from codeflash.languages.python.context.unused_definition_remover import UsageInfo
 
 # Error message constants
@@ -87,6 +90,7 @@ def get_code_optimization_context(
     project_root_path: Path,
     optim_token_limit: int = OPTIMIZATION_CONTEXT_TOKEN_LIMIT,
     testgen_token_limit: int = TESTGEN_CONTEXT_TOKEN_LIMIT,
+    call_graph: DependencyResolver | None = None,
 ) -> CodeOptimizationContext:
     # Route to language-specific implementation for non-Python languages
     if not is_python():
@@ -95,9 +99,11 @@ def get_code_optimization_context(
         )
 
     # Get FunctionSource representation of helpers of FTO
-    helpers_of_fto_dict, helpers_of_fto_list = get_function_sources_from_jedi(
-        {function_to_optimize.file_path: {function_to_optimize.qualified_name}}, project_root_path
-    )
+    fto_input = {function_to_optimize.file_path: {function_to_optimize.qualified_name}}
+    if call_graph is not None:
+        helpers_of_fto_dict, helpers_of_fto_list = call_graph.get_callees(fto_input)
+    else:
+        helpers_of_fto_dict, helpers_of_fto_list = get_function_sources_from_jedi(fto_input, project_root_path)
 
     # Add function to optimize into helpers of FTO dict, as they'll be processed together
     fto_as_function_source = get_function_to_optimize_as_function_source(function_to_optimize, project_root_path)
@@ -113,8 +119,7 @@ def get_code_optimization_context(
     for qualified_names in helpers_of_fto_qualified_names_dict.values():
         qualified_names.update({f"{qn.rsplit('.', 1)[0]}.__init__" for qn in qualified_names if "." in qn})
 
-    # Get FunctionSource representation of helpers of helpers of FTO
-    helpers_of_helpers_dict, _helpers_of_helpers_list = get_function_sources_from_jedi(
+    helpers_of_helpers_dict, helpers_of_helpers_list = get_function_sources_from_jedi(
         helpers_of_fto_qualified_names_dict, project_root_path
     )
 
@@ -198,6 +203,8 @@ def get_code_optimization_context(
     code_hash_context = hashing_code_context.markdown
     code_hash = hashlib.sha256(code_hash_context.encode("utf-8")).hexdigest()
 
+    all_helper_fqns = list({fs.fully_qualified_name for fs in helpers_of_fto_list + helpers_of_helpers_list})
+
     return CodeOptimizationContext(
         testgen_context=testgen_context,
         read_writable_code=final_read_writable_code,
@@ -205,6 +212,7 @@ def get_code_optimization_context(
         hashing_code_context=code_hash_context,
         hashing_code_context_hash=code_hash,
         helper_functions=helpers_of_fto_list,
+        testgen_helper_fqns=all_helper_fqns,
         preexisting_objects=preexisting_objects,
     )
 
@@ -266,7 +274,6 @@ def get_code_optimization_context_for_language(
                 fully_qualified_name=helper.qualified_name,
                 only_function_name=helper.name,
                 source_code=helper.source_code,
-                jedi_definition=None,
             )
         )
 
@@ -335,13 +342,12 @@ def get_code_optimization_context_for_language(
     return CodeOptimizationContext(
         testgen_context=testgen_context,
         read_writable_code=read_writable_code,
-        # Pass type definitions and globals as read-only context for the AI
-        # This way the AI sees them as context but doesn't include them in optimized output
         read_only_context_code=code_context.read_only_context,
         hashing_code_context=read_writable_code.flat,
         hashing_code_context_hash=code_hash,
         helper_functions=helper_function_sources,
-        preexisting_objects=set(),  # Not implemented for non-Python yet
+        testgen_helper_fqns=[fs.fully_qualified_name for fs in helper_function_sources],
+        preexisting_objects=set(),
     )
 
 
@@ -496,7 +502,6 @@ def get_function_to_optimize_as_function_source(
                     fully_qualified_name=name.full_name,
                     only_function_name=name.name,
                     source_code=name.get_line_code(),
-                    jedi_definition=name,
                 )
         except Exception as e:
             logger.exception(f"Error while getting function source: {e}")
@@ -533,6 +538,10 @@ def get_function_sources_from_jedi(
                     # TODO: there can be multiple definitions, see how to handle such cases
                     definition = definitions[0]
                     definition_path = definition.module_path
+                    if definition_path is not None:
+                        rel = safe_relative_to(definition_path, project_root_path)
+                        if not rel.is_absolute():
+                            definition_path = project_root_path / rel
 
                     # The definition is part of this project and not defined within the original function
                     is_valid_definition = (
@@ -543,15 +552,16 @@ def get_function_sources_from_jedi(
                         and not belongs_to_function_qualified(definition, qualified_function_name)
                         and definition.full_name.startswith(definition.module_name)
                     )
-                    if is_valid_definition and definition.type in ("function", "class"):
+                    if is_valid_definition and definition.type in ("function", "class", "statement"):
                         if definition.type == "function":
                             fqn = definition.full_name
                             func_name = definition.name
-                        else:
-                            # When a class is instantiated (e.g., MyClass()), track its __init__ as a helper
-                            # This ensures the class definition with constructor is included in testgen context
+                        elif definition.type == "class":
                             fqn = f"{definition.full_name}.__init__"
                             func_name = "__init__"
+                        else:
+                            fqn = definition.full_name
+                            func_name = definition.name
                         qualified_name = get_qualified_name(definition.module_name, fqn)
                         # Avoid nested functions or classes. Only class.function is allowed
                         if len(qualified_name.split(".")) <= 2:
@@ -561,7 +571,6 @@ def get_function_sources_from_jedi(
                                 fully_qualified_name=fqn,
                                 only_function_name=func_name,
                                 source_code=definition.get_line_code(),
-                                jedi_definition=definition,
                             )
                             file_path_to_function_source[definition_path].add(function_source)
                             function_source_list.append(function_source)
@@ -1004,6 +1013,255 @@ def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path:
             continue
 
     return CodeStringsMarkdown(code_strings=code_strings)
+
+
+def resolve_classes_from_modules(candidates: set[tuple[str, str]]) -> list[tuple[type, str]]:
+    """Import modules and resolve candidate (class_name, module_name) pairs to class objects."""
+    import importlib
+    import inspect
+
+    resolved: list[tuple[type, str]] = []
+    module_cache: dict[str, object] = {}
+
+    for class_name, module_name in candidates:
+        try:
+            module = module_cache.get(module_name)
+            if module is None:
+                module = importlib.import_module(module_name)
+                module_cache[module_name] = module
+
+            cls = getattr(module, class_name, None)
+            if cls is not None and inspect.isclass(cls):
+                resolved.append((cls, class_name))
+        except (ImportError, ModuleNotFoundError, AttributeError):
+            logger.debug(f"Failed to import {module_name}.{class_name}")
+
+    return resolved
+
+
+MAX_TRANSITIVE_DEPTH = 5
+
+
+def extract_classes_from_type_hint(hint: object) -> list[type]:
+    """Recursively extract concrete class objects from a type annotation.
+
+    Unwraps Optional, Union, List, Dict, Callable, Annotated, etc.
+    Filters out builtins and typing module types.
+    """
+    import typing
+
+    classes: list[type] = []
+    origin = getattr(hint, "__origin__", None)
+    args = getattr(hint, "__args__", None)
+
+    if origin is not None and args:
+        for arg in args:
+            classes.extend(extract_classes_from_type_hint(arg))
+    elif isinstance(hint, type):
+        module = getattr(hint, "__module__", "")
+        if module not in ("builtins", "typing", "typing_extensions", "types"):
+            classes.append(hint)
+    # Handle typing.Annotated on older Pythons where __origin__ may not be set
+    if hasattr(typing, "get_args") and origin is None and args is None:
+        try:
+            inner_args = typing.get_args(hint)
+            if inner_args:
+                for arg in inner_args:
+                    classes.extend(extract_classes_from_type_hint(arg))
+        except Exception:
+            pass
+
+    return classes
+
+
+def resolve_transitive_type_deps(cls: type) -> list[type]:
+    """Find external classes referenced in cls.__init__ type annotations.
+
+    Returns classes from site-packages that have a custom __init__.
+    """
+    import inspect
+    import typing
+
+    try:
+        init_method = getattr(cls, "__init__")
+        hints = typing.get_type_hints(init_method)
+    except Exception:
+        return []
+
+    deps: list[type] = []
+    for param_name, hint in hints.items():
+        if param_name == "return":
+            continue
+        for dep_cls in extract_classes_from_type_hint(hint):
+            if dep_cls is cls:
+                continue
+            init_method = getattr(dep_cls, "__init__", None)
+            if init_method is None or init_method is object.__init__:
+                continue
+            try:
+                class_file = Path(inspect.getfile(dep_cls))
+            except (OSError, TypeError):
+                continue
+            if not path_belongs_to_site_packages(class_file):
+                continue
+            deps.append(dep_cls)
+
+    return deps
+
+
+def extract_init_stub(cls: type, class_name: str, require_site_packages: bool = True) -> CodeString | None:
+    """Extract a stub containing the class definition with only its __init__ method.
+
+    Args:
+        cls: The class object to extract __init__ from
+        class_name: Name to use for the class in the stub
+        require_site_packages: If True, only extract from site-packages. If False, include stdlib too.
+
+    """
+    import inspect
+    import textwrap
+
+    init_method = getattr(cls, "__init__", None)
+    if init_method is None or init_method is object.__init__:
+        return None
+
+    try:
+        class_file = Path(inspect.getfile(cls))
+    except (OSError, TypeError):
+        return None
+
+    if require_site_packages and not path_belongs_to_site_packages(class_file):
+        return None
+
+    try:
+        init_source = inspect.getsource(init_method)
+        init_source = textwrap.dedent(init_source)
+    except (OSError, TypeError):
+        return None
+
+    parts = class_file.parts
+    if "site-packages" in parts:
+        idx = parts.index("site-packages")
+        class_file = Path(*parts[idx + 1 :])
+
+    class_source = f"class {class_name}:\n" + textwrap.indent(init_source, "    ")
+    return CodeString(code=class_source, file_path=class_file)
+
+
+def _is_project_module_cached(module_name: str, project_root_path: Path, cache: dict[str, bool]) -> bool:
+    cached = cache.get(module_name)
+    if cached is not None:
+        return cached
+    is_project = _is_project_module(module_name, project_root_path)
+    cache[module_name] = is_project
+    return is_project
+
+
+def is_project_path(module_path: Path | None, project_root_path: Path) -> bool:
+    if module_path is None:
+        return False
+    # site-packages must be checked first because .venv/site-packages is under project root
+    if path_belongs_to_site_packages(module_path):
+        return False
+    try:
+        module_path.resolve().relative_to(project_root_path.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _is_project_module(module_name: str, project_root_path: Path) -> bool:
+    """Check if a module is part of the project (not external/stdlib)."""
+    import importlib.util
+
+    try:
+        spec = importlib.util.find_spec(module_name)
+    except (ImportError, ModuleNotFoundError, ValueError):
+        return False
+    else:
+        if spec is None or spec.origin is None:
+            return False
+        return is_project_path(Path(spec.origin), project_root_path)
+
+
+def extract_imports_for_class(module_tree: ast.Module, class_node: ast.ClassDef, module_source: str) -> str:
+    """Extract import statements needed for a class definition.
+
+    This extracts imports for base classes, decorators, and type annotations.
+    """
+    needed_names: set[str] = set()
+
+    # Get base class names
+    for base in class_node.bases:
+        if isinstance(base, ast.Name):
+            needed_names.add(base.id)
+        elif isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name):
+            # For things like abc.ABC, we need the module name
+            needed_names.add(base.value.id)
+
+    # Get decorator names (e.g., dataclass, field)
+    for decorator in class_node.decorator_list:
+        if isinstance(decorator, ast.Name):
+            needed_names.add(decorator.id)
+        elif isinstance(decorator, ast.Call):
+            if isinstance(decorator.func, ast.Name):
+                needed_names.add(decorator.func.id)
+            elif isinstance(decorator.func, ast.Attribute) and isinstance(decorator.func.value, ast.Name):
+                needed_names.add(decorator.func.value.id)
+
+    # Get type annotation names from class body (for dataclass fields)
+    for item in class_node.body:
+        if isinstance(item, ast.AnnAssign) and item.annotation:
+            collect_names_from_annotation(item.annotation, needed_names)
+        # Also check for field() calls which are common in dataclasses
+        elif isinstance(item, ast.Assign) and isinstance(item.value, ast.Call):
+            if isinstance(item.value.func, ast.Name):
+                needed_names.add(item.value.func.id)
+
+    # Find imports that provide these names
+    import_lines: list[str] = []
+    source_lines = module_source.split("\n")
+    added_imports: set[int] = set()  # Track line numbers to avoid duplicates
+
+    for node in module_tree.body:
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                name = alias.asname if alias.asname else alias.name.split(".")[0]
+                if name in needed_names and node.lineno not in added_imports:
+                    import_lines.append(source_lines[node.lineno - 1])
+                    added_imports.add(node.lineno)
+                    break
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                name = alias.asname if alias.asname else alias.name
+                if name in needed_names and node.lineno not in added_imports:
+                    import_lines.append(source_lines[node.lineno - 1])
+                    added_imports.add(node.lineno)
+                    break
+
+    return "\n".join(import_lines)
+
+
+def collect_names_from_annotation(node: ast.expr, names: set[str]) -> None:
+    """Recursively collect type annotation names from an AST node."""
+    if isinstance(node, ast.Name):
+        names.add(node.id)
+    elif isinstance(node, ast.Subscript):
+        collect_names_from_annotation(node.value, names)
+        collect_names_from_annotation(node.slice, names)
+    elif isinstance(node, ast.Tuple):
+        for elt in node.elts:
+            collect_names_from_annotation(elt, names)
+    elif isinstance(node, ast.BinOp):  # For Union types with | syntax
+        collect_names_from_annotation(node.left, names)
+        collect_names_from_annotation(node.right, names)
+    elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+        names.add(node.value.id)
+
+
+def is_dunder_method(name: str) -> bool:
+    return len(name) > 4 and name.isascii() and name.startswith("__") and name.endswith("__")
+
 
 
 def remove_docstring_from_body(indented_block: cst.IndentedBlock) -> cst.CSTNode:

@@ -130,9 +130,18 @@ def parse_args() -> Namespace:
         "--reset-config", action="store_true", help="Remove codeflash configuration from project config file."
     )
     parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompts (useful for CI/scripts).")
+    parser.add_argument(
+        "--subagent",
+        action="store_true",
+        help="Subagent mode: skip all interactive prompts with sensible defaults. Designed for AI agent integrations.",
+    )
 
     args, unknown_args = parser.parse_known_args()
     sys.argv[:] = [sys.argv[0], *unknown_args]
+    if args.subagent:
+        args.yes = True
+        args.no_pr = True
+        args.worktree = True
     return process_and_validate_cmd_args(args)
 
 
@@ -352,32 +361,52 @@ def _handle_show_config() -> None:
     from codeflash.setup.detector import detect_project, has_existing_config
 
     project_root = Path.cwd()
-    detected = detect_project(project_root)
+    config_exists, _ = has_existing_config(project_root)
 
-    # Check if config exists or is auto-detected
-    config_exists, config_file = has_existing_config(project_root)
-    status = "Saved config" if config_exists else "Auto-detected (not saved)"
+    if config_exists:
+        from codeflash.code_utils.config_parser import parse_config_file
 
-    console.print()
-    console.print(f"[bold]Codeflash Configuration[/bold] ({status})")
-    if config_exists and config_file:
-        console.print(f"[dim]Config file: {project_root / config_file}[/dim]")
-    console.print()
+        config, config_file_path = parse_config_file()
+        status = "Saved config"
 
-    table = Table(show_header=True, header_style="bold cyan")
-    table.add_column("Setting", style="dim")
-    table.add_column("Value")
+        console.print()
+        console.print(f"[bold]Codeflash Configuration[/bold] ({status})")
+        console.print(f"[dim]Config file: {config_file_path}[/dim]")
+        console.print()
 
-    table.add_row("Language", detected.language)
-    table.add_row("Project root", str(detected.project_root))
-    table.add_row("Module root", str(detected.module_root))
-    table.add_row("Tests root", str(detected.tests_root) if detected.tests_root else "(not detected)")
-    table.add_row("Test runner", detected.test_runner or "(not detected)")
-    table.add_row("Formatter", ", ".join(detected.formatter_cmds) if detected.formatter_cmds else "(not detected)")
-    table.add_row(
-        "Ignore paths", ", ".join(str(p) for p in detected.ignore_paths) if detected.ignore_paths else "(none)"
-    )
-    table.add_row("Confidence", f"{detected.confidence:.0%}")
+        table = Table(show_header=True, header_style="bold cyan")
+        table.add_column("Setting", style="dim")
+        table.add_column("Value")
+
+        table.add_row("Project root", str(project_root))
+        table.add_row("Module root", config.get("module_root", "(not set)"))
+        table.add_row("Tests root", config.get("tests_root", "(not set)"))
+        table.add_row("Test runner", config.get("test_framework", config.get("pytest_cmd", "(not set)")))
+        table.add_row("Formatter", ", ".join(config["formatter_cmds"]) if config.get("formatter_cmds") else "(not set)")
+        ignore_paths = config.get("ignore_paths", [])
+        table.add_row("Ignore paths", ", ".join(str(p) for p in ignore_paths) if ignore_paths else "(none)")
+    else:
+        detected = detect_project(project_root)
+        status = "Auto-detected (not saved)"
+
+        console.print()
+        console.print(f"[bold]Codeflash Configuration[/bold] ({status})")
+        console.print()
+
+        table = Table(show_header=True, header_style="bold cyan")
+        table.add_column("Setting", style="dim")
+        table.add_column("Value")
+
+        table.add_row("Language", detected.language)
+        table.add_row("Project root", str(detected.project_root))
+        table.add_row("Module root", str(detected.module_root))
+        table.add_row("Tests root", str(detected.tests_root) if detected.tests_root else "(not detected)")
+        table.add_row("Test runner", detected.test_runner or "(not detected)")
+        table.add_row("Formatter", ", ".join(detected.formatter_cmds) if detected.formatter_cmds else "(not detected)")
+        table.add_row(
+            "Ignore paths", ", ".join(str(p) for p in detected.ignore_paths) if detected.ignore_paths else "(none)"
+        )
+        table.add_row("Confidence", f"{detected.confidence:.0%}")
 
     console.print(table)
     console.print()

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.code_utils.edit_generated_tests import remove_functions_from_generated_tests
+from codeflash.languages.python.static_analysis.edit_generated_tests import remove_functions_from_generated_tests
 from codeflash.models.models import GeneratedTests, GeneratedTestsList
 
 

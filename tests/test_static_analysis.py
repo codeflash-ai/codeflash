@@ -1,7 +1,7 @@
 import ast
 from pathlib import Path
 
-from codeflash.code_utils.static_analysis import (
+from codeflash.languages.python.static_analysis.static_analysis import (
     FunctionKind,
     ImportedInternalModuleAnalysis,
     analyze_imported_modules,
@@ -23,10 +23,10 @@ from pathlib import *
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from codeflash.code_utils.static_analysis import ImportedInternalModuleAnalysis
+    from codeflash.languages.python.static_analysis.static_analysis import ImportedInternalModuleAnalysis
 
 def a_function():
-    from codeflash.code_utils.static_analysis import analyze_imported_modules
+    from codeflash.languages.python.static_analysis.static_analysis import analyze_imported_modules
     from returns.result import Failure, Success
     pass
 """
@@ -37,8 +37,8 @@ def a_function():
     expected_imported_module_analysis = [
         ImportedInternalModuleAnalysis(
             name="static_analysis",
-            full_name="codeflash.code_utils.static_analysis",
-            file_path=project_root / Path("codeflash/code_utils/static_analysis.py"),
+            full_name="codeflash.languages.python.static_analysis.static_analysis",
+            file_path=project_root / Path("codeflash/languages/python/static_analysis/static_analysis.py"),
         ),
         ImportedInternalModuleAnalysis(
             name="mymodule", full_name="tests.mymodule", file_path=project_root / Path("tests/mymodule.py")
