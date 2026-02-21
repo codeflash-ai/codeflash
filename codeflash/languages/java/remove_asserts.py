@@ -649,12 +649,12 @@ class JavaAssertTransformer:
         """
         current = target_node
         passed_through_regular_call = False
-        
+
         while True:
             parent = current.parent
             if parent is None:
                 return None
-            
+
             parent_type = parent.type
             if parent_type == "argument_list":
                 grandparent = parent.parent

@@ -48,15 +48,16 @@ def _ensure_languages_registered() -> None:
     # Import support modules to trigger registration
     # These imports are deferred to avoid circular imports
     import contextlib
+    import importlib
 
     with contextlib.suppress(ImportError):
-        from codeflash.languages.python import support as _
+        importlib.import_module("codeflash.languages.python.support")
 
     with contextlib.suppress(ImportError):
-        from codeflash.languages.javascript import support as _
+        importlib.import_module("codeflash.languages.javascript.support")
 
     with contextlib.suppress(ImportError):
-        from codeflash.languages.java import support as _
+        importlib.import_module("codeflash.languages.java.support")
 
     _languages_registered = True
 
