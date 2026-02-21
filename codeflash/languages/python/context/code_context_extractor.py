@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import ast
 import hashlib
-from collections import defaultdict
+import os
+from collections import defaultdict, deque
 from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -47,13 +48,6 @@ READ_WRITABLE_LIMIT_ERROR = "Read-writable code has exceeded token limit, cannot
 TESTGEN_LIMIT_ERROR = "Testgen code context has exceeded token limit, cannot proceed"
 
 
-def safe_relative_to(path: Path, root: Path) -> Path:
-    try:
-        return path.resolve().relative_to(root.resolve())
-    except ValueError:
-        return path
-
-
 def build_testgen_context(
     helpers_of_fto_dict: dict[Path, set[FunctionSource]],
     helpers_of_helpers_dict: dict[Path, set[FunctionSource]],
@@ -61,6 +55,7 @@ def build_testgen_context(
     *,
     remove_docstrings: bool = False,
     include_enrichment: bool = True,
+    function_to_optimize: FunctionToOptimize | None = None,
 ) -> CodeStringsMarkdown:
     testgen_context = extract_code_markdown_context_from_files(
         helpers_of_fto_dict,
@@ -74,6 +69,17 @@ def build_testgen_context(
         enrichment = enrich_testgen_context(testgen_context, project_root_path)
         if enrichment.code_strings:
             testgen_context = CodeStringsMarkdown(code_strings=testgen_context.code_strings + enrichment.code_strings)
+
+        if function_to_optimize is not None:
+            result = _parse_and_collect_imports(testgen_context)
+            existing_classes = collect_existing_class_names(result[0]) if result else set()
+            constructor_stubs = extract_parameter_type_constructors(
+                function_to_optimize, project_root_path, existing_classes
+            )
+            if constructor_stubs.code_strings:
+                testgen_context = CodeStringsMarkdown(
+                    code_strings=testgen_context.code_strings + constructor_stubs.code_strings
+                )
 
     return testgen_context
 
@@ -167,12 +173,18 @@ def get_code_optimization_context(
             read_only_context_code = ""
 
     # Progressive fallback for testgen context token limits
-    testgen_context = build_testgen_context(helpers_of_fto_dict, helpers_of_helpers_dict, project_root_path)
+    testgen_context = build_testgen_context(
+        helpers_of_fto_dict, helpers_of_helpers_dict, project_root_path, function_to_optimize=function_to_optimize
+    )
 
     if encoded_tokens_len(testgen_context.markdown) > testgen_token_limit:
         logger.debug("Testgen context exceeded token limit, removing docstrings")
         testgen_context = build_testgen_context(
-            helpers_of_fto_dict, helpers_of_helpers_dict, project_root_path, remove_docstrings=True
+            helpers_of_fto_dict,
+            helpers_of_helpers_dict,
+            project_root_path,
+            remove_docstrings=True,
+            function_to_optimize=function_to_optimize,
         )
 
         if encoded_tokens_len(testgen_context.markdown) > testgen_token_limit:
@@ -241,7 +253,10 @@ def get_code_optimization_context_for_language(
     imports_code = "\n".join(code_context.imports) if code_context.imports else ""
 
     # Get relative path for target file
-    target_relative_path = safe_relative_to(function_to_optimize.file_path, project_root_path)
+    try:
+        target_relative_path = function_to_optimize.file_path.resolve().relative_to(project_root_path.resolve())
+    except ValueError:
+        target_relative_path = function_to_optimize.file_path
 
     # Group helpers by file path
     helpers_by_file: dict[Path, list[HelperFunction]] = defaultdict(list)
@@ -288,7 +303,10 @@ def get_code_optimization_context_for_language(
         if file_path == function_to_optimize.file_path:
             continue  # Already included in target file
 
-        helper_relative_path = safe_relative_to(file_path, project_root_path)
+        try:
+            helper_relative_path = file_path.resolve().relative_to(project_root_path.resolve())
+        except ValueError:
+            helper_relative_path = file_path
 
         # Combine all helpers from this file
         combined_helper_code = "\n\n".join(h.source_code for h in file_helpers)
@@ -371,7 +389,11 @@ def process_file_context(
                 project_root=project_root_path,
                 helper_functions=helper_functions,
             )
-        return CodeString(code=code_context, file_path=safe_relative_to(file_path, project_root_path))
+        try:
+            relative_path = file_path.resolve().relative_to(project_root_path.resolve())
+        except ValueError:
+            relative_path = file_path
+        return CodeString(code=code_context, file_path=relative_path)
     return None
 
 
@@ -516,13 +538,17 @@ def get_function_sources_from_jedi(
                     definition = definitions[0]
                     definition_path = definition.module_path
                     if definition_path is not None:
-                        rel = safe_relative_to(definition_path, project_root_path)
-                        if not rel.is_absolute():
+                        try:
+                            rel = definition_path.resolve().relative_to(project_root_path.resolve())
                             definition_path = project_root_path / rel
+                        except ValueError:
+                            pass
 
                     # The definition is part of this project and not defined within the original function
                     is_valid_definition = (
-                        is_project_path(definition_path, project_root_path)
+                        definition_path is not None
+                        and not path_belongs_to_site_packages(definition_path)
+                        and str(definition_path).startswith(str(project_root_path) + os.sep)
                         and definition.full_name
                         and not belongs_to_function_qualified(definition, qualified_function_name)
                         and definition.full_name.startswith(definition.module_name)
@@ -630,6 +656,253 @@ def collect_existing_class_names(tree: ast.Module) -> set[str]:
     return class_names
 
 
+BUILTIN_AND_TYPING_NAMES = frozenset(
+    {
+        "int",
+        "str",
+        "float",
+        "bool",
+        "bytes",
+        "bytearray",
+        "complex",
+        "list",
+        "dict",
+        "set",
+        "frozenset",
+        "tuple",
+        "type",
+        "object",
+        "None",
+        "NoneType",
+        "Ellipsis",
+        "NotImplemented",
+        "memoryview",
+        "range",
+        "slice",
+        "property",
+        "classmethod",
+        "staticmethod",
+        "super",
+        "Optional",
+        "Union",
+        "Any",
+        "List",
+        "Dict",
+        "Set",
+        "FrozenSet",
+        "Tuple",
+        "Type",
+        "Callable",
+        "Iterator",
+        "Generator",
+        "Coroutine",
+        "AsyncGenerator",
+        "AsyncIterator",
+        "Iterable",
+        "AsyncIterable",
+        "Sequence",
+        "MutableSequence",
+        "Mapping",
+        "MutableMapping",
+        "Collection",
+        "Awaitable",
+        "Literal",
+        "Final",
+        "ClassVar",
+        "TypeVar",
+        "TypeAlias",
+        "ParamSpec",
+        "Concatenate",
+        "Annotated",
+        "TypeGuard",
+        "Self",
+        "Unpack",
+        "TypeVarTuple",
+        "Never",
+        "NoReturn",
+        "SupportsInt",
+        "SupportsFloat",
+        "SupportsComplex",
+        "SupportsBytes",
+        "SupportsAbs",
+        "SupportsRound",
+        "IO",
+        "TextIO",
+        "BinaryIO",
+        "Pattern",
+        "Match",
+    }
+)
+
+
+def collect_type_names_from_annotation(node: ast.expr | None) -> set[str]:
+    if node is None:
+        return set()
+    if isinstance(node, ast.Name):
+        return {node.id}
+    if isinstance(node, ast.Subscript):
+        names = collect_type_names_from_annotation(node.value)
+        names |= collect_type_names_from_annotation(node.slice)
+        return names
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        return collect_type_names_from_annotation(node.left) | collect_type_names_from_annotation(node.right)
+    if isinstance(node, ast.Tuple):
+        names = set[str]()
+        for elt in node.elts:
+            names |= collect_type_names_from_annotation(elt)
+        return names
+    return set()
+
+
+def extract_init_stub_from_class(class_name: str, module_source: str, module_tree: ast.Module) -> str | None:
+    class_node = None
+    # Use a deque-based BFS to find the first matching ClassDef (preserves ast.walk order)
+    q: deque[ast.AST] = deque([module_tree])
+    while q:
+        candidate = q.popleft()
+        if isinstance(candidate, ast.ClassDef) and candidate.name == class_name:
+            class_node = candidate
+            break
+        q.extend(ast.iter_child_nodes(candidate))
+
+    if class_node is None:
+        return None
+
+    lines = module_source.splitlines()
+    relevant_nodes: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
+    for item in class_node.body:
+        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            is_relevant = False
+            if item.name in ("__init__", "__post_init__"):
+                is_relevant = True
+            else:
+                # Check decorators explicitly to avoid generator overhead
+                for d in item.decorator_list:
+                    if (isinstance(d, ast.Name) and d.id == "property") or (
+                        isinstance(d, ast.Attribute) and d.attr == "property"
+                    ):
+                        is_relevant = True
+                        break
+            if is_relevant:
+                relevant_nodes.append(item)
+
+    if not relevant_nodes:
+        return None
+
+    snippets: list[str] = []
+    for fn_node in relevant_nodes:
+        start = fn_node.lineno
+        if fn_node.decorator_list:
+            # Compute minimum decorator lineno with an explicit loop (avoids generator/min overhead)
+            m = start
+            for d in fn_node.decorator_list:
+                m = min(m, d.lineno)
+            start = m
+        snippets.append("\n".join(lines[start - 1 : fn_node.end_lineno]))
+
+    return f"class {class_name}:\n" + "\n".join(snippets)
+
+
+def extract_parameter_type_constructors(
+    function_to_optimize: FunctionToOptimize, project_root_path: Path, existing_class_names: set[str]
+) -> CodeStringsMarkdown:
+    import jedi
+
+    try:
+        source = function_to_optimize.file_path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+    except Exception:
+        return CodeStringsMarkdown(code_strings=[])
+
+    func_node = None
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == function_to_optimize.function_name
+        ):
+            if function_to_optimize.starting_line is not None and node.lineno != function_to_optimize.starting_line:
+                continue
+            func_node = node
+            break
+    if func_node is None:
+        return CodeStringsMarkdown(code_strings=[])
+
+    type_names: set[str] = set()
+    for arg in func_node.args.args + func_node.args.posonlyargs + func_node.args.kwonlyargs:
+        type_names |= collect_type_names_from_annotation(arg.annotation)
+    if func_node.args.vararg:
+        type_names |= collect_type_names_from_annotation(func_node.args.vararg.annotation)
+    if func_node.args.kwarg:
+        type_names |= collect_type_names_from_annotation(func_node.args.kwarg.annotation)
+
+    type_names -= BUILTIN_AND_TYPING_NAMES
+    type_names -= existing_class_names
+    if not type_names:
+        return CodeStringsMarkdown(code_strings=[])
+
+    import_map: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                name = alias.asname if alias.asname else alias.name
+                import_map[name] = node.module
+
+    code_strings: list[CodeString] = []
+    module_cache: dict[Path, tuple[str, ast.Module]] = {}
+
+    for type_name in sorted(type_names):
+        module_name = import_map.get(type_name)
+        if not module_name:
+            continue
+        try:
+            script_code = f"from {module_name} import {type_name}"
+            script = jedi.Script(script_code, project=jedi.Project(path=project_root_path))
+            definitions = script.goto(1, len(f"from {module_name} import ") + len(type_name), follow_imports=True)
+            if not definitions:
+                continue
+
+            module_path = definitions[0].module_path
+            if not module_path:
+                continue
+
+            if module_path in module_cache:
+                mod_source, mod_tree = module_cache[module_path]
+            else:
+                mod_source = module_path.read_text(encoding="utf-8")
+                mod_tree = ast.parse(mod_source)
+                module_cache[module_path] = (mod_source, mod_tree)
+
+            stub = extract_init_stub_from_class(type_name, mod_source, mod_tree)
+            if stub:
+                code_strings.append(CodeString(code=stub, file_path=module_path))
+        except Exception:
+            logger.debug(f"Error extracting constructor stub for {type_name} from {module_name}")
+            continue
+
+    return CodeStringsMarkdown(code_strings=code_strings)
+
+
+def resolve_instance_class_name(name: str, module_tree: ast.Module) -> str | None:
+    for node in module_tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == name:
+                    value = node.value
+                    if isinstance(value, ast.Call):
+                        func = value.func
+                        if isinstance(func, ast.Name):
+                            return func.id
+                        if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+                            return func.value.id
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id == name:
+            ann = node.annotation
+            if isinstance(ann, ast.Name):
+                return ann.id
+            if isinstance(ann, ast.Subscript) and isinstance(ann.value, ast.Name):
+                return ann.value.id
+    return None
+
+
 def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path: Path) -> CodeStringsMarkdown:
     import jedi
 
@@ -642,28 +915,6 @@ def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path:
         return CodeStringsMarkdown(code_strings=[])
 
     existing_classes = collect_existing_class_names(tree)
-
-    # Collect base class names from ClassDef nodes (single walk)
-    base_class_names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef):
-            for base in node.bases:
-                if isinstance(base, ast.Name):
-                    base_class_names.add(base.id)
-                elif isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name):
-                    base_class_names.add(base.attr)
-
-    # Classify external imports using importlib-based check
-    is_project_cache: dict[str, bool] = {}
-    external_base_classes: set[tuple[str, str]] = set()
-    external_direct_imports: set[tuple[str, str]] = set()
-
-    for name, module_name in imported_names.items():
-        if not _is_project_module_cached(module_name, project_root_path, is_project_cache):
-            if name in base_class_names:
-                external_base_classes.add((name, module_name))
-            if name not in existing_classes:
-                external_direct_imports.add((name, module_name))
 
     code_strings: list[CodeString] = []
     emitted_class_names: set[str] = set()
@@ -718,15 +969,14 @@ def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path:
             start_line = min(d.lineno for d in class_node.decorator_list)
         class_source = "\n".join(lines[start_line - 1 : class_node.end_lineno])
 
-        class_imports = extract_imports_for_class(module_tree, class_node, module_source)
-        full_source = class_imports + "\n\n" + class_source if class_imports else class_source
+        full_source = class_source
 
         code_strings.append(CodeString(code=full_source, file_path=module_path))
         extracted_classes.add((module_path, class_name))
         emitted_class_names.add(class_name)
 
     for name, module_name in imported_names.items():
-        if name in existing_classes:
+        if name in existing_classes or module_name == "__future__":
             continue
         try:
             test_code = f"import {module_name}"
@@ -740,7 +990,11 @@ def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path:
             if not module_path:
                 continue
 
-            if not is_project_path(module_path, project_root_path):
+            resolved_module = module_path.resolve()
+            module_str = str(resolved_module)
+            is_project = module_str.startswith(str(project_root_path.resolve()) + os.sep)
+            is_third_party = "site-packages" in module_str
+            if not is_project and not is_third_party:
                 continue
 
             mod_result = get_module_source_and_tree(module_path)
@@ -750,46 +1004,14 @@ def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path:
 
             extract_class_and_bases(name, module_path, module_source, module_tree)
 
+            if (module_path, name) not in extracted_classes:
+                resolved_class = resolve_instance_class_name(name, module_tree)
+                if resolved_class and resolved_class not in existing_classes:
+                    extract_class_and_bases(resolved_class, module_path, module_source, module_tree)
+
         except Exception:
             logger.debug(f"Error extracting class definition for {name} from {module_name}")
             continue
-
-    # --- Step 2: External base class __init__ stubs ---
-    if external_base_classes:
-        for cls, name in resolve_classes_from_modules(external_base_classes):
-            if name in emitted_class_names:
-                continue
-            stub = extract_init_stub(cls, name, require_site_packages=False)
-            if stub is not None:
-                code_strings.append(stub)
-                emitted_class_names.add(name)
-
-    # --- Step 3: External direct import __init__ stubs with BFS ---
-    if external_direct_imports:
-        processed_classes: set[type] = set()
-        worklist: list[tuple[type, str, int]] = [
-            (cls, name, 0) for cls, name in resolve_classes_from_modules(external_direct_imports)
-        ]
-
-        while worklist:
-            cls, class_name, depth = worklist.pop(0)
-
-            if cls in processed_classes:
-                continue
-            processed_classes.add(cls)
-
-            stub = extract_init_stub(cls, class_name)
-            if stub is None:
-                continue
-
-            if class_name not in emitted_class_names:
-                code_strings.append(stub)
-                emitted_class_names.add(class_name)
-
-            if depth < MAX_TRANSITIVE_DEPTH:
-                for dep_cls in resolve_transitive_type_deps(cls):
-                    if dep_cls not in processed_classes:
-                        worklist.append((dep_cls, dep_cls.__name__, depth + 1))
 
     return CodeStringsMarkdown(code_strings=code_strings)
 
@@ -1102,18 +1324,6 @@ def parse_code_and_prune_cst(
     return ""
 
 
-def _qualified_name(prefix: str, name: str) -> str:
-    return f"{prefix}.{name}" if prefix else name
-
-
-def _validate_classdef(node: cst.ClassDef, prefix: str) -> tuple[str, cst.IndentedBlock] | None:
-    if prefix:
-        return None
-    if not isinstance(node.body, cst.IndentedBlock):
-        raise ValueError("ClassDef body is not an IndentedBlock")  # noqa: TRY004
-    return _qualified_name(prefix, node.name.value), node.body
-
-
 def prune_cst(
     node: cst.CSTNode,
     target_functions: set[str],
@@ -1153,7 +1363,7 @@ def prune_cst(
         return None, False
 
     if isinstance(node, cst.FunctionDef):
-        qualified_name = _qualified_name(prefix, node.name.value)
+        qualified_name = f"{prefix}.{node.name.value}" if prefix else node.name.value
 
         # Check if it's a helper function (higher priority than target)
         if helpers and qualified_name in helpers:
@@ -1178,7 +1388,12 @@ def prune_cst(
             return node, False
 
         # Handle dunder methods for READ_ONLY/TESTGEN modes
-        if include_dunder_methods and is_dunder_method(node.name.value):
+        if (
+            include_dunder_methods
+            and len(node.name.value) > 4
+            and node.name.value.startswith("__")
+            and node.name.value.endswith("__")
+        ):
             if not include_init_dunder and node.name.value == "__init__":
                 return None, False
             if remove_docstrings and isinstance(node.body, cst.IndentedBlock):
@@ -1188,17 +1403,18 @@ def prune_cst(
         return None, False
 
     if isinstance(node, cst.ClassDef):
-        result = _validate_classdef(node, prefix)
-        if result is None:
+        if prefix:
             return None, False
-        class_prefix, _ = result
+        if not isinstance(node.body, cst.IndentedBlock):
+            raise ValueError("ClassDef body is not an IndentedBlock")  # noqa: TRY004
+        class_prefix = node.name.value
         class_name = node.name.value
 
         # Handle dependency classes for READ_WRITABLE mode
         if defs_with_usages:
             # Check if this class contains any target functions
             has_target_functions = any(
-                isinstance(stmt, cst.FunctionDef) and _qualified_name(class_prefix, stmt.name.value) in target_functions
+                isinstance(stmt, cst.FunctionDef) and f"{class_prefix}.{stmt.name.value}" in target_functions
                 for stmt in node.body.body
             )
 
