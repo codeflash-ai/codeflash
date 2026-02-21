@@ -331,7 +331,6 @@ def normalize_java_code(source: str) -> str:
     return "\n".join(normalized_lines)
 
 
-
 def _get_cached_formatter(project_root: Path | None) -> JavaFormatter:
     key = str(project_root) if project_root is not None else None
     fmt = _FORMATTER_CACHE.get(key)
