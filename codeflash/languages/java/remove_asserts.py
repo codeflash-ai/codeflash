@@ -649,11 +649,16 @@ class JavaAssertTransformer:
         """
         current = target_node
         passed_through_regular_call = False
-        while current.parent is not None:
+        
+        while True:
             parent = current.parent
-            if parent.type == "argument_list" and parent.parent is not None:
+            if parent is None:
+                return None
+            
+            parent_type = parent.type
+            if parent_type == "argument_list":
                 grandparent = parent.parent
-                if grandparent.type == "method_invocation":
+                if grandparent is not None and grandparent.type == "method_invocation":
                     gp_name = grandparent.child_by_field_name("name")
                     if gp_name:
                         name = self.analyzer.get_node_text(gp_name, wrapper_bytes)
@@ -663,8 +668,7 @@ class JavaAssertTransformer:
                             return None
                         if not name.startswith("assert"):
                             passed_through_regular_call = True
-            current = current.parent
-        return None
+            current = parent
 
     def _detect_variable_assignment(self, source: str, assertion_start: int) -> tuple[str | None, str | None]:
         """Check if assertion is assigned to a variable.
