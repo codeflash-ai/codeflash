@@ -15,7 +15,7 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from tree_sitter import Node
@@ -138,7 +138,9 @@ class JavaLineProfiler:
 
     # === Source-level instrumentation ===
 
-    def instrument_source(self, source: str, file_path: Path, functions: list[FunctionInfo], analyzer=None) -> str:
+    def instrument_source(
+        self, source: str, file_path: Path, functions: list[FunctionInfo], analyzer: Any = None
+    ) -> str:
         """Instrument Java source code with line profiling.
 
         Injects a profiler class and per-line hit() calls directly into the source.
@@ -154,7 +156,7 @@ class JavaLineProfiler:
 
         """
         # Initialize line contents map
-        self.line_contents = {}
+        self.line_contents: dict[str, str] = {}
 
         lines = source.splitlines(keepends=True)
 
@@ -322,7 +324,7 @@ class {self.profiler_class} {{
 }}
 """
 
-    def instrument_function(self, func: FunctionInfo, lines: list[str], file_path: Path, analyzer) -> list[str]:
+    def instrument_function(self, func: FunctionInfo, lines: list[str], file_path: Path, analyzer: Any) -> list[str]:
         """Instrument a single function with line profiling.
 
         Args:
@@ -441,7 +443,7 @@ class {self.profiler_class} {{
     # === Result parsing (shared by both approaches) ===
 
     @staticmethod
-    def parse_results(profile_file: Path) -> dict:
+    def parse_results(profile_file: Path) -> dict[str, Any]:
         """Parse line profiling results from the agent's JSON output.
 
         Returns the same format as parse_line_profile_test_output.parse_line_profile_results()
@@ -517,7 +519,7 @@ class {self.profiler_class} {{
                     if sorted_stats:
                         grouped_timings[(fp, sorted_stats[0][0], Path(fp).name)] = sorted_stats
 
-            result: dict = {"timings": grouped_timings, "unit": 1e-9, "line_contents": line_contents}
+            result: dict[str, Any] = {"timings": grouped_timings, "unit": 1e-9, "line_contents": line_contents}
             result["str_out"] = format_line_profile_results(result, line_contents)
             return result
 
@@ -601,7 +603,9 @@ def resolve_internal_class_name(file_path: Path, source: str) -> str:
     return file_path.stem
 
 
-def format_line_profile_results(results: dict, line_contents: dict[tuple[str, int], str] | None = None) -> str:
+def format_line_profile_results(
+    results: dict[str, Any], line_contents: dict[tuple[str, int], str] | None = None
+) -> str:
     """Format line profiling results using the same tabulate pipe format as Python.
 
     Args:
