@@ -316,6 +316,7 @@ def get_runtime_from_stdout(stdout: str) -> Optional[int]:
 
 
 _NODEID_BRACKET_PATTERN = re.compile(r"\s*\[\s*\d+\s*\]\s*$")
+_NODEID_LOOP_PATTERN = re.compile(r"\[ \d+ \]")
 
 
 def should_stop(
@@ -416,7 +417,7 @@ class PytestLoops:
 
             if self.enable_stability_check:
                 elapsed_ns += _ORIGINAL_PERF_COUNTER_NS() - loop_start
-                best_runtime_until_now = sum([min(data) for data in self.runtime_data_by_test_case.values()])
+                best_runtime_until_now = sum(min(data) for data in self.runtime_data_by_test_case.values())
                 if best_runtime_until_now > 0:
                     runtimes.append(best_runtime_until_now)
 
@@ -483,10 +484,10 @@ class PytestLoops:
         :param count: Current loop count.
         :return: Formatted string for test name.
         """
-        pattern = r"\[ \d+ \]"
         run_str = f"[ {count} ]"
         os.environ["CODEFLASH_LOOP_INDEX"] = str(count)
-        return re.sub(pattern, run_str, nodeid) if re.search(pattern, nodeid) else nodeid + run_str
+        result, n = _NODEID_LOOP_PATTERN.subn(run_str, nodeid)
+        return result if n else nodeid + run_str
 
     def _get_delay_time(self, session: Session) -> float:
         """Extract delay time from session.
