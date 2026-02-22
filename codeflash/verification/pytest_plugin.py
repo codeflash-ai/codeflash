@@ -367,6 +367,7 @@ class PytestLoops:
         self.enable_stability_check: bool = (
             str(getattr(config.option, "codeflash_stability_check", "false")).lower() == "true"
         )
+        self._module_clearables: dict[str, list[Callable]] = {}
 
     @pytest.hookimpl
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
@@ -438,44 +439,55 @@ class PytestLoops:
         return True
 
     def _clear_lru_caches(self, item: pytest.Item) -> None:
-        processed_functions: set[Callable] = set()
+        func = item.function  # type: ignore[attr-defined]
 
-        def _clear_cache_for_object(obj: obj) -> None:
-            if obj in processed_functions:
-                return
-            processed_functions.add(obj)
+        # Always clear the test function itself
+        if hasattr(func, "cache_clear") and callable(func.cache_clear):
+            with contextlib.suppress(Exception):
+                func.cache_clear()
+
+        module_name = getattr(func, "__module__", None)
+        if not module_name:
+            return
+
+        try:
+            clearables = self._module_clearables.get(module_name)
+            if clearables is None:
+                clearables = self._scan_module_clearables(module_name)
+                self._module_clearables[module_name] = clearables
+
+            for obj in clearables:
+                with contextlib.suppress(Exception):
+                    obj.cache_clear()
+        except Exception:
+            pass
+
+    def _scan_module_clearables(self, module_name: str) -> list[Callable]:
+        module = sys.modules.get(module_name)
+        if not module:
+            return []
+
+        clearables: list[Callable] = []
+        for _, obj in inspect.getmembers(module):
+            if not callable(obj):
+                continue
 
             if hasattr(obj, "__wrapped__"):
-                module_name = obj.__wrapped__.__module__
+                top_module = obj.__wrapped__.__module__
             else:
                 try:
                     obj_module = inspect.getmodule(obj)
-                    module_name = obj_module.__name__.split(".")[0] if obj_module is not None else None
+                    top_module = obj_module.__name__.split(".")[0] if obj_module is not None else None
                 except Exception:
-                    module_name = None
+                    top_module = None
 
-            if module_name in _PROTECTED_MODULES:
-                return
+            if top_module in _PROTECTED_MODULES:
+                continue
 
             if hasattr(obj, "cache_clear") and callable(obj.cache_clear):
-                with contextlib.suppress(Exception):
-                    obj.cache_clear()
+                clearables.append(obj)
 
-        _clear_cache_for_object(item.function)  # type: ignore[attr-defined]
-
-        try:
-            if hasattr(item.function, "__module__"):  # type: ignore[attr-defined]
-                module_name = item.function.__module__  # type: ignore[attr-defined]
-                try:
-                    module = sys.modules.get(module_name)
-                    if module:
-                        for _, obj in inspect.getmembers(module):
-                            if callable(obj):
-                                _clear_cache_for_object(obj)
-                except Exception:
-                    pass
-        except Exception:
-            pass
+        return clearables
 
     def _set_nodeid(self, nodeid: str, count: int) -> str:
         """Set loop count when using duration.
