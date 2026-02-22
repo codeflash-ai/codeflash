@@ -11,6 +11,7 @@ import re
 import sys
 import time as _time_module
 import warnings
+from importlib.util import find_spec
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
 from unittest import TestCase
@@ -29,6 +30,22 @@ if TYPE_CHECKING:
     from _pytest.config import Config, Parser
     from _pytest.main import Session
     from _pytest.python import Metafunc
+
+_HAS_NUMPY = find_spec("numpy") is not None
+
+_PROTECTED_MODULES = frozenset({
+    "gc",
+    "inspect",
+    "os",
+    "sys",
+    "time",
+    "functools",
+    "pathlib",
+    "typing",
+    "dill",
+    "pytest",
+    "importlib",
+})
 
 SECONDS_IN_HOUR: float = 3600
 SECONDS_IN_MINUTE: float = 60
@@ -172,14 +189,12 @@ def _apply_deterministic_patches() -> None:
     builtins._mock_datetime_utcnow = mock_datetime_utcnow  # noqa: SLF001
 
     # Patch numpy.random if available
-    try:
+    if _HAS_NUMPY:
         import numpy as np
 
         # Use modern numpy random generator approach
         np.random.default_rng(42)
         np.random.seed(42)  # Keep legacy seed for compatibility  # noqa: NPY002
-    except ImportError:
-        pass
 
     # Patch os.urandom if needed
     try:
@@ -423,19 +438,6 @@ class PytestLoops:
 
     def _clear_lru_caches(self, item: pytest.Item) -> None:
         processed_functions: set[Callable] = set()
-        protected_modules = {
-            "gc",
-            "inspect",
-            "os",
-            "sys",
-            "time",
-            "functools",
-            "pathlib",
-            "typing",
-            "dill",
-            "pytest",
-            "importlib",
-        }
 
         def _clear_cache_for_object(obj: obj) -> None:
             if obj in processed_functions:
@@ -451,7 +453,7 @@ class PytestLoops:
                 except Exception:
                     module_name = None
 
-            if module_name in protected_modules:
+            if module_name in _PROTECTED_MODULES:
                 return
 
             if hasattr(obj, "cache_clear") and callable(obj.cache_clear):

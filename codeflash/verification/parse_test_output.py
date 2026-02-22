@@ -735,6 +735,9 @@ def parse_test_xml(
 
             test_class_path = testcase.classname
             logger.debug(f"[PARSE-XML] Processing testcase: classname={test_class_path}, name={testcase.name}")
+            if test_class_path and test_class_path.split(".")[0] in ("pytest", "_pytest"):
+                logger.debug(f"Skipping pytest-internal test entry: {test_class_path}")
+                continue
             try:
                 if testcase.name is None:
                     logger.debug(
