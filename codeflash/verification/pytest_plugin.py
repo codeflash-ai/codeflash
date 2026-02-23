@@ -11,6 +11,7 @@ import re
 import sys
 import time as _time_module
 import warnings
+from importlib.util import find_spec
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
 from unittest import TestCase
@@ -29,6 +30,12 @@ if TYPE_CHECKING:
     from _pytest.config import Config, Parser
     from _pytest.main import Session
     from _pytest.python import Metafunc
+
+_HAS_NUMPY = find_spec("numpy") is not None
+
+_PROTECTED_MODULES = frozenset(
+    {"gc", "inspect", "os", "sys", "time", "functools", "pathlib", "typing", "dill", "pytest", "importlib"}
+)
 
 SECONDS_IN_HOUR: float = 3600
 SECONDS_IN_MINUTE: float = 60
@@ -172,14 +179,12 @@ def _apply_deterministic_patches() -> None:
     builtins._mock_datetime_utcnow = mock_datetime_utcnow  # noqa: SLF001
 
     # Patch numpy.random if available
-    try:
+    if _HAS_NUMPY:
         import numpy as np
 
         # Use modern numpy random generator approach
         np.random.default_rng(42)
         np.random.seed(42)  # Keep legacy seed for compatibility  # noqa: NPY002
-    except ImportError:
-        pass
 
     # Patch os.urandom if needed
     try:
@@ -301,6 +306,7 @@ def get_runtime_from_stdout(stdout: str) -> Optional[int]:
 
 
 _NODEID_BRACKET_PATTERN = re.compile(r"\s*\[\s*\d+\s*\]\s*$")
+_NODEID_LOOP_PATTERN = re.compile(r"\[ \d+ \]")
 
 
 def should_stop(
@@ -351,6 +357,7 @@ class PytestLoops:
         self.enable_stability_check: bool = (
             str(getattr(config.option, "codeflash_stability_check", "false")).lower() == "true"
         )
+        self._module_clearables: dict[str, list[Callable]] = {}
 
     @pytest.hookimpl
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
@@ -401,7 +408,7 @@ class PytestLoops:
 
             if self.enable_stability_check:
                 elapsed_ns += _ORIGINAL_PERF_COUNTER_NS() - loop_start
-                best_runtime_until_now = sum([min(data) for data in self.runtime_data_by_test_case.values()])
+                best_runtime_until_now = sum(min(data) for data in self.runtime_data_by_test_case.values())
                 if best_runtime_until_now > 0:
                     runtimes.append(best_runtime_until_now)
 
@@ -422,57 +429,55 @@ class PytestLoops:
         return True
 
     def _clear_lru_caches(self, item: pytest.Item) -> None:
-        processed_functions: set[Callable] = set()
-        protected_modules = {
-            "gc",
-            "inspect",
-            "os",
-            "sys",
-            "time",
-            "functools",
-            "pathlib",
-            "typing",
-            "dill",
-            "pytest",
-            "importlib",
-        }
+        func = item.function  # type: ignore[attr-defined]
 
-        def _clear_cache_for_object(obj: obj) -> None:
-            if obj in processed_functions:
-                return
-            processed_functions.add(obj)
+        # Always clear the test function itself
+        if hasattr(func, "cache_clear") and callable(func.cache_clear):
+            with contextlib.suppress(Exception):
+                func.cache_clear()
+
+        module_name = getattr(func, "__module__", None)
+        if not module_name:
+            return
+
+        try:
+            clearables = self._module_clearables.get(module_name)
+            if clearables is None:
+                clearables = self._scan_module_clearables(module_name)
+                self._module_clearables[module_name] = clearables
+
+            for obj in clearables:
+                with contextlib.suppress(Exception):
+                    obj.cache_clear()
+        except Exception:
+            pass
+
+    def _scan_module_clearables(self, module_name: str) -> list[Callable]:
+        module = sys.modules.get(module_name)
+        if not module:
+            return []
+
+        clearables: list[Callable] = []
+        for _, obj in inspect.getmembers(module):
+            if not callable(obj):
+                continue
 
             if hasattr(obj, "__wrapped__"):
-                module_name = obj.__wrapped__.__module__
+                top_module = obj.__wrapped__.__module__
             else:
                 try:
                     obj_module = inspect.getmodule(obj)
-                    module_name = obj_module.__name__.split(".")[0] if obj_module is not None else None
+                    top_module = obj_module.__name__.split(".")[0] if obj_module is not None else None
                 except Exception:
-                    module_name = None
+                    top_module = None
 
-            if module_name in protected_modules:
-                return
+            if top_module in _PROTECTED_MODULES:
+                continue
 
             if hasattr(obj, "cache_clear") and callable(obj.cache_clear):
-                with contextlib.suppress(Exception):
-                    obj.cache_clear()
+                clearables.append(obj)
 
-        _clear_cache_for_object(item.function)  # type: ignore[attr-defined]
-
-        try:
-            if hasattr(item.function, "__module__"):  # type: ignore[attr-defined]
-                module_name = item.function.__module__  # type: ignore[attr-defined]
-                try:
-                    module = sys.modules.get(module_name)
-                    if module:
-                        for _, obj in inspect.getmembers(module):
-                            if callable(obj):
-                                _clear_cache_for_object(obj)
-                except Exception:
-                    pass
-        except Exception:
-            pass
+        return clearables
 
     def _set_nodeid(self, nodeid: str, count: int) -> str:
         """Set loop count when using duration.
@@ -481,10 +486,10 @@ class PytestLoops:
         :param count: Current loop count.
         :return: Formatted string for test name.
         """
-        pattern = r"\[ \d+ \]"
         run_str = f"[ {count} ]"
         os.environ["CODEFLASH_LOOP_INDEX"] = str(count)
-        return re.sub(pattern, run_str, nodeid) if re.search(pattern, nodeid) else nodeid + run_str
+        result, n = _NODEID_LOOP_PATTERN.subn(run_str, nodeid)
+        return result if n else nodeid + run_str
 
     def _get_delay_time(self, session: Session) -> float:
         """Extract delay time from session.

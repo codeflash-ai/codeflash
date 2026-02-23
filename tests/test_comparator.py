@@ -5240,3 +5240,43 @@ class TestUnionType:
 
     def test_union_type_vs_none(self):
         assert not comparator(int | str, None)
+
+
+class SlotsOnly:
+    __slots__ = ("x", "y")
+
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+
+class SlotsInherited(SlotsOnly):
+    __slots__ = ("z",)
+
+    def __init__(self, x, y, z):
+        super().__init__(x, y)
+        self.z = z
+
+
+class TestSlotsObjects:
+    def test_slots_equal(self):
+        assert comparator(SlotsOnly(1, 2), SlotsOnly(1, 2))
+
+    def test_slots_not_equal(self):
+        assert not comparator(SlotsOnly(1, 2), SlotsOnly(1, 3))
+
+    def test_slots_inherited_equal(self):
+        assert comparator(SlotsInherited(1, 2, 3), SlotsInherited(1, 2, 3))
+
+    def test_slots_inherited_not_equal(self):
+        assert not comparator(SlotsInherited(1, 2, 3), SlotsInherited(1, 2, 4))
+
+    def test_slots_nested(self):
+        a = SlotsOnly(SlotsOnly(1, 2), [3, 4])
+        b = SlotsOnly(SlotsOnly(1, 2), [3, 4])
+        assert comparator(a, b)
+
+    def test_slots_nested_not_equal(self):
+        a = SlotsOnly(SlotsOnly(1, 2), [3, 4])
+        b = SlotsOnly(SlotsOnly(1, 9), [3, 4])
+        assert not comparator(a, b)

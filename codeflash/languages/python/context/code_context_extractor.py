@@ -368,7 +368,7 @@ def process_file_context(
     try:
         all_names = primary_qualified_names | secondary_qualified_names
         code_without_unused_defs = remove_unused_definitions_by_function_names(original_code, all_names)
-        code_context = parse_code_and_prune_cst(
+        pruned_module = parse_code_and_prune_cst(
             code_without_unused_defs,
             code_context_type,
             primary_qualified_names,
@@ -379,11 +379,13 @@ def process_file_context(
         logger.debug(f"Error while getting read-only code: {e}")
         return None
 
-    if code_context.strip():
-        if code_context_type != CodeContextType.HASHING:
+    if pruned_module.code.strip():
+        if code_context_type == CodeContextType.HASHING:
+            code_context = ast.unparse(ast.parse(pruned_module.code))
+        else:
             code_context = add_needed_imports_from_module(
                 src_module_code=original_code,
-                dst_module_code=code_context,
+                dst_module_code=pruned_module,
                 src_path=file_path,
                 dst_path=file_path,
                 project_root=project_root_path,
@@ -1280,8 +1282,8 @@ def parse_code_and_prune_cst(
     target_functions: set[str],
     helpers_of_helper_functions: set[str] = set(),  # noqa: B006
     remove_docstrings: bool = False,
-) -> str:
-    """Create a read-only version of the code by parsing and filtering the code to keep only class contextual information, and other module scoped variables."""
+) -> cst.Module:
+    """Parse and filter the code CST, returning the pruned Module."""
     module = cst.parse_module(code)
     defs_with_usages = collect_top_level_defs_with_usages(module, target_functions | helpers_of_helper_functions)
 
@@ -1317,11 +1319,8 @@ def parse_code_and_prune_cst(
     if not found_target:
         raise ValueError("No target functions found in the provided code")
     if filtered_node and isinstance(filtered_node, cst.Module):
-        code = str(filtered_node.code)
-        if code_context_type == CodeContextType.HASHING:
-            code = ast.unparse(ast.parse(code))  # Makes it standard
-        return code
-    return ""
+        return filtered_node
+    raise ValueError("Pruning produced no module")
 
 
 def prune_cst(
