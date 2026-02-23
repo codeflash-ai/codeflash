@@ -561,6 +561,18 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
                 new_keys = {k: v for k, v in new.__dict__.items() if k != "parent"}
             return comparator(orig_keys, new_keys, superset_obj)
 
+        # For objects with __slots__ but no __dict__, compare slot attributes
+        if hasattr(type(orig), "__slots__"):
+            all_slots = set()
+            for cls in type(orig).__mro__:
+                if hasattr(cls, "__slots__"):
+                    all_slots.update(cls.__slots__)
+            orig_vals = {s: getattr(orig, s, None) for s in all_slots}
+            new_vals = {s: getattr(new, s, None) for s in all_slots}
+            if superset_obj:
+                return all(k in new_vals and comparator(v, new_vals[k], superset_obj) for k, v in orig_vals.items())
+            return comparator(orig_vals, new_vals, superset_obj)
+
         if type(orig) in {types.BuiltinFunctionType, types.BuiltinMethodType}:
             return new == orig
         if str(type(orig)) == "<class 'object'>":
