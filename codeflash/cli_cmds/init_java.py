@@ -26,6 +26,14 @@ from codeflash.code_utils.git_utils import get_git_remotes
 from codeflash.code_utils.shell_utils import get_shell_rc_path, is_powershell
 from codeflash.telemetry.posthog_cf import ph
 
+_SPOTLESS_DEFAULT = ["spotless $file"]
+
+_GOOGLE_JAVA_FORMAT = ["google-java-format --replace $file"]
+
+_YOUR_FORMATTER = ["your-formatter $file"]
+
+_DISABLED = ["disabled"]
+
 
 class JavaBuildTool(Enum):
     """Java build tools."""
@@ -430,16 +438,19 @@ def _get_git_remote_for_setup() -> str:
 def get_java_formatter_cmd(formatter: str, build_tool: JavaBuildTool) -> list[str]:
     """Get formatter commands for Java."""
     if formatter == "google-java-format":
-        return ["google-java-format --replace $file"]
+        return _GOOGLE_JAVA_FORMAT
     if formatter == "spotless":
-        return _SPOTLESS_COMMANDS.get(build_tool, ["spotless $file"])
+        try:
+            return _SPOTLESS_COMMANDS[build_tool]
+        except KeyError:
+            return _SPOTLESS_DEFAULT
     if formatter == "other":
         global formatter_warning_shown
         if not formatter_warning_shown:
             click.echo("In codeflash.toml, please replace 'your-formatter' with your formatter command.")
             formatter_warning_shown = True
-        return ["your-formatter $file"]
-    return ["disabled"]
+        return _YOUR_FORMATTER
+    return _DISABLED
 
 
 def configure_java_project(setup_info: JavaSetupInfo) -> bool:
