@@ -179,7 +179,7 @@ public class CalculatorTest__perfinstrumented {
                             _cf_pstmt1_1.setString(3, _cf_test1);
                             _cf_pstmt1_1.setString(4, _cf_fn1);
                             _cf_pstmt1_1.setInt(5, _cf_loop1);
-                            _cf_pstmt1_1.setString(6, "1_" + _cf_testIteration1);
+                            _cf_pstmt1_1.setString(6, "1");
                             _cf_pstmt1_1.setLong(7, _cf_dur1_1);
                             _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
                             _cf_pstmt1_1.setString(9, "function_call");
@@ -306,7 +306,7 @@ public class FibonacciTest__perfinstrumented {
                             _cf_pstmt2_1.setString(3, _cf_test2);
                             _cf_pstmt2_1.setString(4, _cf_fn2);
                             _cf_pstmt2_1.setInt(5, _cf_loop2);
-                            _cf_pstmt2_1.setString(6, "1_" + _cf_testIteration2);
+                            _cf_pstmt2_1.setString(6, "1");
                             _cf_pstmt2_1.setLong(7, _cf_dur2_1);
                             _cf_pstmt2_1.setBytes(8, _cf_serializedResult2_1);
                             _cf_pstmt2_1.setString(9, "function_call");
@@ -436,7 +436,7 @@ public class FibonacciTest__perfinstrumented {
                             _cf_pstmt2_1.setString(3, _cf_test2);
                             _cf_pstmt2_1.setString(4, _cf_fn2);
                             _cf_pstmt2_1.setInt(5, _cf_loop2);
-                            _cf_pstmt2_1.setString(6, "1_" + _cf_testIteration2);
+                            _cf_pstmt2_1.setString(6, "1");
                             _cf_pstmt2_1.setLong(7, _cf_dur2_1);
                             _cf_pstmt2_1.setBytes(8, _cf_serializedResult2_1);
                             _cf_pstmt2_1.setString(9, "function_call");
@@ -493,8 +493,9 @@ public class CalculatorTest__perfonlyinstrumented {
     @Test
     public void testAdd() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
-        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         String _cf_mod1 = "CalculatorTest";
         String _cf_cls1 = "CalculatorTest";
         String _cf_test1 = "testAdd";
@@ -502,7 +503,8 @@ public class CalculatorTest__perfonlyinstrumented {
         
         Calculator calc = new Calculator();
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -512,7 +514,7 @@ public class CalculatorTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -563,15 +565,17 @@ public class MathTest__perfonlyinstrumented {
     @Test
     public void testAdd() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
-        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         String _cf_mod1 = "MathTest";
         String _cf_cls1 = "MathTest";
         String _cf_test1 = "testAdd";
         String _cf_fn1 = "add";
 
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -581,7 +585,7 @@ public class MathTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -589,15 +593,17 @@ public class MathTest__perfonlyinstrumented {
     @Test
     public void testSubtract() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
-        int _cf_loop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        int _cf_outerLoop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_maxInnerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         String _cf_mod2 = "MathTest";
         String _cf_cls2 = "MathTest";
         String _cf_test2 = "testSubtract";
         String _cf_fn2 = "add";
 
         for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
-            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + "######$!");
+            int _cf_loopId2 = _cf_outerLoop2 * _cf_maxInnerIterations2 + _cf_i2;
+            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + _cf_i2 + "######$!");
             long _cf_end2 = -1;
             long _cf_start2 = 0;
             try {
@@ -607,7 +613,7 @@ public class MathTest__perfonlyinstrumented {
             } finally {
                 long _cf_end2_finally = System.nanoTime();
                 long _cf_dur2 = (_cf_end2 != -1 ? _cf_end2 : _cf_end2_finally) - _cf_start2;
-                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + ":" + _cf_dur2 + "######!");
+                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + _cf_i2 + ":" + _cf_dur2 + "######!");
             }
         }
     }
@@ -665,15 +671,17 @@ public class ServiceTest__perfonlyinstrumented {
     @DisplayName("Test service call")
     public void testService() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
-        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         String _cf_mod1 = "ServiceTest";
         String _cf_cls1 = "ServiceTest";
         String _cf_test1 = "testService";
         String _cf_fn1 = "call";
 
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -683,7 +691,7 @@ public class ServiceTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -783,7 +791,7 @@ public class MyTest {
                             _cf_pstmt1_1.setString(3, _cf_test1);
                             _cf_pstmt1_1.setString(4, _cf_fn1);
                             _cf_pstmt1_1.setInt(5, _cf_loop1);
-                            _cf_pstmt1_1.setString(6, "1_" + _cf_testIteration1);
+                            _cf_pstmt1_1.setString(6, "1");
                             _cf_pstmt1_1.setLong(7, _cf_dur1_1);
                             _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
                             _cf_pstmt1_1.setString(9, "function_call");
@@ -805,15 +813,17 @@ public class MyTest {
     @Test
     public void testFoo() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
-        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         String _cf_mod1 = "MyTest";
         String _cf_cls1 = "MyTest";
         String _cf_test1 = "testFoo";
         String _cf_fn1 = "foo";
 
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -823,7 +833,7 @@ public class MyTest {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -879,15 +889,17 @@ class TestAddTimingInstrumentation:
     @Test
     public void testSomething() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
-        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         String _cf_mod1 = "SimpleTest";
         String _cf_cls1 = "SimpleTest";
         String _cf_test1 = "testSomething";
         String _cf_fn1 = "doSomething";
 
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -897,7 +909,7 @@ class TestAddTimingInstrumentation:
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -926,15 +938,17 @@ class TestAddTimingInstrumentation:
     @Test
     public void testFirst() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
-        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         String _cf_mod1 = "MultiTest";
         String _cf_cls1 = "MultiTest";
         String _cf_test1 = "testFirst";
         String _cf_fn1 = "func";
 
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -944,7 +958,7 @@ class TestAddTimingInstrumentation:
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -952,8 +966,9 @@ class TestAddTimingInstrumentation:
     @Test
     public void testSecond() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
-        int _cf_loop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        int _cf_outerLoop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_maxInnerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         String _cf_mod2 = "MultiTest";
         String _cf_cls2 = "MultiTest";
         String _cf_test2 = "testSecond";
@@ -961,7 +976,8 @@ class TestAddTimingInstrumentation:
         
         second();
         for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
-            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + "######$!");
+            int _cf_loopId2 = _cf_outerLoop2 * _cf_maxInnerIterations2 + _cf_i2;
+            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + _cf_i2 + "######$!");
             long _cf_end2 = -1;
             long _cf_start2 = 0;
             try {
@@ -971,7 +987,7 @@ class TestAddTimingInstrumentation:
             } finally {
                 long _cf_end2_finally = System.nanoTime();
                 long _cf_dur2 = (_cf_end2 != -1 ? _cf_end2 : _cf_end2_finally) - _cf_start2;
-                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + ":" + _cf_dur2 + "######!");
+                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + _cf_i2 + ":" + _cf_dur2 + "######!");
             }
         }
     }
@@ -1014,14 +1030,16 @@ class TestAddTimingInstrumentation:
         setup();
 
         // Codeflash timing instrumentation with inner loop for JIT warmup
-        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         String _cf_mod1 = "RepeatTest";
         String _cf_cls1 = "RepeatTest";
         String _cf_test1 = "testRepeat";
         String _cf_fn1 = "target";
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + "1_" + _cf_i1 + "######$!");
+            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1_" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -1031,20 +1049,22 @@ class TestAddTimingInstrumentation:
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + "1_" + _cf_i1 + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1_" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
         helper();
 
         // Codeflash timing instrumentation with inner loop for JIT warmup
-        int _cf_loop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        int _cf_outerLoop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_maxInnerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         String _cf_mod2 = "RepeatTest";
         String _cf_cls2 = "RepeatTest";
         String _cf_test2 = "testRepeat";
         String _cf_fn2 = "target";
         for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
-            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + "2_" + _cf_i2 + "######$!");
+            int _cf_loopId2 = _cf_outerLoop2 * _cf_maxInnerIterations2 + _cf_i2;
+            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":2_" + _cf_i2 + "######$!");
             long _cf_end2 = -1;
             long _cf_start2 = 0;
             try {
@@ -1054,7 +1074,7 @@ class TestAddTimingInstrumentation:
             } finally {
                 long _cf_end2_finally = System.nanoTime();
                 long _cf_dur2 = (_cf_end2 != -1 ? _cf_end2 : _cf_end2_finally) - _cf_start2;
-                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + "2_" + _cf_i2 + ":" + _cf_dur2 + "######!");
+                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":2_" + _cf_i2 + ":" + _cf_dur2 + "######!");
             }
         }
         teardown();
@@ -1292,7 +1312,7 @@ public class CalculatorTest__perfinstrumented {
                             _cf_pstmt1_1.setString(3, _cf_test1);
                             _cf_pstmt1_1.setString(4, _cf_fn1);
                             _cf_pstmt1_1.setInt(5, _cf_loop1);
-                            _cf_pstmt1_1.setString(6, "1_" + _cf_testIteration1);
+                            _cf_pstmt1_1.setString(6, "1");
                             _cf_pstmt1_1.setLong(7, _cf_dur1_1);
                             _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
                             _cf_pstmt1_1.setString(9, "function_call");
@@ -1344,15 +1364,17 @@ public class GeneratedTest__perfonlyinstrumented {
     @Test
     public void testMethod() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
-        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         String _cf_mod1 = "GeneratedTest";
         String _cf_cls1 = "GeneratedTest";
         String _cf_test1 = "testMethod";
         String _cf_fn1 = "method";
 
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -1362,7 +1384,7 @@ public class GeneratedTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -1529,15 +1551,17 @@ public class BraceTest__perfonlyinstrumented {
     @Test
     public void testTwo() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
-        int _cf_loop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        int _cf_outerLoop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_maxInnerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         String _cf_mod2 = "BraceTest";
         String _cf_cls2 = "BraceTest";
         String _cf_test2 = "testTwo";
         String _cf_fn2 = "process";
 
         for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
-            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + "######$!");
+            int _cf_loopId2 = _cf_outerLoop2 * _cf_maxInnerIterations2 + _cf_i2;
+            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + _cf_i2 + "######$!");
             long _cf_end2 = -1;
             long _cf_start2 = 0;
             try {
@@ -1549,7 +1573,7 @@ public class BraceTest__perfonlyinstrumented {
             } finally {
                 long _cf_end2_finally = System.nanoTime();
                 long _cf_dur2 = (_cf_end2 != -1 ? _cf_end2 : _cf_end2_finally) - _cf_start2;
-                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + ":" + _cf_dur2 + "######!");
+                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + _cf_i2 + ":" + _cf_dur2 + "######!");
             }
         }
     }
@@ -1606,8 +1630,9 @@ public class ImportTest__perfonlyinstrumented {
     @Test
     public void testCollections() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
-        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         String _cf_mod1 = "ImportTest";
         String _cf_cls1 = "ImportTest";
         String _cf_test1 = "testCollections";
@@ -1615,7 +1640,8 @@ public class ImportTest__perfonlyinstrumented {
         
         List<String> list = new ArrayList<>();
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -1625,7 +1651,7 @@ public class ImportTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -1722,15 +1748,17 @@ public class NestedTest__perfonlyinstrumented {
     @Test
     public void testNested() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
-        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         String _cf_mod1 = "NestedTest";
         String _cf_cls1 = "NestedTest";
         String _cf_test1 = "testNested";
         String _cf_fn1 = "process";
 
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -1746,7 +1774,7 @@ public class NestedTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -2084,8 +2112,9 @@ public class MathUtilsTest__perfonlyinstrumented {
     @Test
     public void testMultiply() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
-        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         String _cf_mod1 = "MathUtilsTest";
         String _cf_cls1 = "MathUtilsTest";
         String _cf_test1 = "testMultiply";
@@ -2093,7 +2122,8 @@ public class MathUtilsTest__perfonlyinstrumented {
         
         MathUtils math = new MathUtils();
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -2103,7 +2133,7 @@ public class MathUtilsTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -2505,7 +2535,7 @@ public class CounterTest__perfinstrumented {
                             _cf_pstmt1_1.setString(3, _cf_test1);
                             _cf_pstmt1_1.setString(4, _cf_fn1);
                             _cf_pstmt1_1.setInt(5, _cf_loop1);
-                            _cf_pstmt1_1.setString(6, "1_" + _cf_testIteration1);
+                            _cf_pstmt1_1.setString(6, "1");
                             _cf_pstmt1_1.setLong(7, _cf_dur1_1);
                             _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
                             _cf_pstmt1_1.setString(9, "function_call");
@@ -2684,8 +2714,9 @@ public class FibonacciTest__perfonlyinstrumented {
     @Test
     public void testFib() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
-        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         String _cf_mod1 = "FibonacciTest";
         String _cf_cls1 = "FibonacciTest";
         String _cf_test1 = "testFib";
@@ -2693,7 +2724,8 @@ public class FibonacciTest__perfonlyinstrumented {
         
         Fibonacci fib = new Fibonacci();
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -2703,7 +2735,7 @@ public class FibonacciTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -2756,14 +2788,13 @@ public class FibonacciTest__perfonlyinstrumented {
         assert len(start_matches) == 2, f"Expected 2 start markers, got {len(start_matches)}: {start_matches}"
         assert len(end_matches) == 2, f"Expected 2 end markers, got {len(end_matches)}: {end_matches}"
 
-        # Verify iteration IDs are 0 and 1
-        iteration_ids = [m[4] for m in start_matches]
-        assert "0" in iteration_ids, f"Expected iteration ID 0, got: {iteration_ids}"
-        assert "1" in iteration_ids, f"Expected iteration ID 1, got: {iteration_ids}"
+        # Verify invocation IDs are 0 and 1 (2 inner iterations, single call in test)
+        invocation_ids = [m[4] for m in start_matches]
+        assert set(invocation_ids) == {"0", "1"}, f"Expected invocation IDs 0 and 1, got: {invocation_ids}"
 
-        # Verify all markers have the same loop index (1)
-        loop_indices = [m[3] for m in start_matches]
-        assert all(idx == "1" for idx in loop_indices), f"Expected all loop indices to be 1, got: {loop_indices}"
+        # Verify loop IDs are 2 and 3 (outerLoop=1, maxInner=2, inner=0,1 → 1*2+0=2, 1*2+1=3)
+        loop_ids = [m[3] for m in start_matches]
+        assert set(loop_ids) == {"2", "3"}, f"Expected loop IDs 2 and 3, got: {loop_ids}"
 
         # Verify durations are positive
         durations = [int(m[5]) for m in end_matches]
@@ -2867,9 +2898,9 @@ public class MathOpsTest {
         # Should have 4 timing markers (2 test methods x 2 inner iterations)
         assert len(end_matches) == 4, f"Expected 4 end markers, got {len(end_matches)}: {end_matches}"
 
-        # Count markers per iteration ID
-        iter_0_count = sum(1 for m in end_matches if m[4] == "0")
-        iter_1_count = sum(1 for m in end_matches if m[4] == "1")
+        # Count markers per loopId (with outerLoop=1, maxInner=2, inner=0,1 → loopId=2,3)
+        loop_id_2_count = sum(1 for m in end_matches if m[3] == "2")
+        loop_id_3_count = sum(1 for m in end_matches if m[3] == "3")
 
-        assert iter_0_count == 2, f"Expected 2 markers for iteration 0, got {iter_0_count}"
-        assert iter_1_count == 2, f"Expected 2 markers for iteration 1, got {iter_1_count}"
+        assert loop_id_2_count == 2, f"Expected 2 markers for loopId 2, got {loop_id_2_count}"
+        assert loop_id_3_count == 2, f"Expected 2 markers for loopId 3, got {loop_id_3_count}"

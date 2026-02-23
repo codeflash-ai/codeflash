@@ -116,13 +116,13 @@ def _find_java_executable() -> str | None:
                 return homebrew_java
 
     # Check PATH (on macOS, /usr/bin/java may be a stub that fails)
-    java_path = shutil.which("java")
-    if java_path:
+    java_which = shutil.which("java")
+    if java_which:
         # Verify it's a real Java, not a macOS stub
         try:
-            result = subprocess.run([java_path, "--version"], capture_output=True, text=True, timeout=5, check=False)
+            result = subprocess.run([java_which, "--version"], capture_output=True, text=True, timeout=5, check=False)
             if result.returncode == 0:
-                return java_path
+                return java_which
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
 
