@@ -1,8 +1,6 @@
 """JavaScript/TypeScript code replacement helpers."""
 
 from __future__ import annotations
-
-import re
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
@@ -43,7 +41,8 @@ def _add_global_declarations_for_language(
         return original_source
 
     try:
-        from codeflash.languages.javascript.treesitter import get_analyzer_for_file
+        from codeflash.languages.javascript.treesitter import \
+            get_analyzer_for_file
 
         analyzer = get_analyzer_for_file(module_abspath)
 
@@ -66,16 +65,49 @@ def _add_global_declarations_for_language(
         existing_decl_end_lines = {decl.name: decl.end_line for decl in original_declarations}
 
         # Insert each new declaration after its dependencies
-        for decl in new_declarations:
-            result = _insert_declaration_after_dependencies(
-                result, decl, existing_decl_end_lines, analyzer, module_abspath
-            )
-            # Update the map with the newly inserted declaration for subsequent insertions
-            # Re-parse to get accurate line numbers after insertion
-            updated_declarations = analyzer.find_module_level_declarations(result)
-            existing_decl_end_lines = {d.name: d.end_line for d in updated_declarations}
 
-        return result
+        # Work with line list to avoid repeated full-string splits/joins and reparses.
+        result_lines = result.splitlines(keepends=True)
+
+        # Insert each new declaration after its dependencies
+        for decl in new_declarations:
+            # Find identifiers referenced in this declaration
+            referenced_names = analyzer.find_referenced_identifiers(decl.source_code)
+
+            # Find insertion line using the current result (join on demand)
+            insertion_line = _find_insertion_line_for_declaration("".join(result_lines), referenced_names, existing_decl_end_lines, analyzer)
+
+            # Ensure proper spacing and newline termination
+            decl_code = decl.source_code
+            if not decl_code.endswith("\n"):
+                decl_code += "\n"
+
+            # Add blank line before if inserting after content
+            if insertion_line > 0 and result_lines[insertion_line - 1].strip():
+                decl_code = "\n" + decl_code
+
+            # Split the declaration into actual lines matching result_lines structure
+            added_lines = decl_code.splitlines(keepends=True)
+            num_added = len(added_lines)
+
+            # Insert into result_lines
+            if insertion_line < 0:
+                insertion_line = 0
+            if insertion_line > len(result_lines):
+                insertion_line = len(result_lines)
+            result_lines[insertion_line:insertion_line] = added_lines
+
+            # Update existing declaration end lines: any declaration with end_line >= insertion_line+1 shifts down
+            # and add the newly inserted declaration with its end line.
+            threshold = insertion_line + 1  # end_line is 1-indexed
+            for name, end_line in list(existing_decl_end_lines.items()):
+                if end_line >= threshold:
+                    existing_decl_end_lines[name] = end_line + num_added
+            existing_decl_end_lines[decl.name] = insertion_line + num_added
+
+        # Return the updated source
+        return "".join(result_lines)
+
 
     except Exception as e:
         logger.debug(f"Error adding global declarations: {e}")
@@ -240,7 +272,9 @@ def _merge_imports(original_source: str, optimized_code: str, analyzer: TreeSitt
     for imp in original_imports:
         original_import_map.setdefault(imp.module_path, []).append(imp)
 
-    result = original_source
+    # Work on a line list to avoid repeated splitting/joining
+    result_lines = original_source.splitlines(keepends=True)
+
     for opt_imp in optimized_imports:
         if opt_imp.module_path not in original_import_map:
             continue
@@ -254,15 +288,13 @@ def _merge_imports(original_source: str, optimized_code: str, analyzer: TreeSitt
                 continue
 
             # Find the original import line and add new named imports
-            lines = result.splitlines(keepends=True)
-            if orig_imp.start_line <= len(lines):
+            if orig_imp.start_line <= len(result_lines):
                 # Reconstruct the import statement lines
-                import_text = "".join(lines[orig_imp.start_line - 1 : orig_imp.end_line])
+                import_text = "".join(result_lines[orig_imp.start_line - 1 : orig_imp.end_line])
 
                 # Find the closing brace of named imports and insert new names before it
-                brace_match = re.search(r"\}", import_text)
-                if brace_match:
-                    insert_pos = brace_match.start()
+                insert_pos = import_text.rfind("}")
+                if insert_pos != -1:
                     new_imports_str = ", ".join(
                         f"{name} as {alias}" if alias else name for name, alias in new_names
                     )
@@ -274,9 +306,10 @@ def _merge_imports(original_source: str, optimized_code: str, analyzer: TreeSitt
                         new_imports_str = " " + new_imports_str
 
                     updated_import = import_text[:insert_pos] + new_imports_str + " " + import_text[insert_pos:]
-                    lines[orig_imp.start_line - 1 : orig_imp.end_line] = [updated_import]
-                    result = "".join(lines)
+                    # Replace the original import lines with the updated import text (single element)
+                    result_lines[orig_imp.start_line - 1 : orig_imp.end_line] = [updated_import]
+
 
                     logger.debug(f"Merged imports for {opt_imp.module_path}: added {[n for n, _ in new_names]}")
 
-    return result
+    return "".join(result_lines)
