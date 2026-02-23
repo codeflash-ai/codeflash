@@ -213,38 +213,59 @@ def _generate_sqlite_write_code(
 
     """
     inner_indent = indent + "    "
+    
+    # Pre-compute commonly used variable names to avoid repeated f-string interpolation
+    iter_counter = f"{iter_id}_{call_counter}"
+    cf_end_var = f"_cf_end{iter_counter}"
+    cf_dur_var = f"_cf_dur{iter_counter}"
+    cf_start_var = f"_cf_start{iter_counter}"
+    cf_conn_var = f"_cf_conn{iter_counter}"
+    cf_stmt_var = f"_cf_stmt{iter_counter}"
+    cf_sql_var = f"_cf_sql{iter_counter}"
+    cf_pstmt_var = f"_cf_pstmt{iter_counter}"
+    cf_e_var = f"_cf_e{iter_counter}"
+    cf_serialized_var = f"_cf_serializedResult{iter_counter}"
+    
+    # Pre-compute variable references used in multiple places
+    cf_mod_ref = f"_cf_mod{iter_id}"
+    cf_cls_ref = f"_cf_cls{iter_id}"
+    cf_test_ref = f"_cf_test{iter_id}"
+    cf_fn_ref = f"_cf_fn{iter_id}"
+    cf_loop_ref = f"_cf_loop{iter_id}"
+    cf_outputFile_ref = f"_cf_outputFile{iter_id}"
+    
     return [
         f"{indent}}} finally {{",
-        f"{inner_indent}long _cf_end{iter_id}_{call_counter}_finally = System.nanoTime();",
-        f"{inner_indent}long _cf_dur{iter_id}_{call_counter} = (_cf_end{iter_id}_{call_counter} != -1 ? _cf_end{iter_id}_{call_counter} : _cf_end{iter_id}_{call_counter}_finally) - _cf_start{iter_id}_{call_counter};",
-        f'{inner_indent}System.out.println("!######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + "." + _cf_test{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + "{call_counter}" + "######!");',
+        f"{inner_indent}long {cf_end_var}_finally = System.nanoTime();",
+        f"{inner_indent}long {cf_dur_var} = ({cf_end_var} != -1 ? {cf_end_var} : {cf_end_var}_finally) - {cf_start_var};",
+        f'{inner_indent}System.out.println("!######" + {cf_mod_ref} + ":" + {cf_cls_ref} + "." + {cf_test_ref} + ":" + {cf_fn_ref} + ":" + {cf_loop_ref} + ":" + "{call_counter}" + "######!");',
         f"{inner_indent}// Write to SQLite if output file is set",
-        f"{inner_indent}if (_cf_outputFile{iter_id} != null && !_cf_outputFile{iter_id}.isEmpty()) {{",
+        f"{inner_indent}if ({cf_outputFile_ref} != null && !{cf_outputFile_ref}.isEmpty()) {{",
         f"{inner_indent}    try {{",
         f'{inner_indent}        Class.forName("org.sqlite.JDBC");',
-        f'{inner_indent}        try (Connection _cf_conn{iter_id}_{call_counter} = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile{iter_id})) {{',
-        f"{inner_indent}            try (java.sql.Statement _cf_stmt{iter_id}_{call_counter} = _cf_conn{iter_id}_{call_counter}.createStatement()) {{",
-        f'{inner_indent}                _cf_stmt{iter_id}_{call_counter}.execute("CREATE TABLE IF NOT EXISTS test_results (" +',
+        f'{inner_indent}        try (Connection {cf_conn_var} = DriverManager.getConnection("jdbc:sqlite:" + {cf_outputFile_ref})) {{',
+        f"{inner_indent}            try (java.sql.Statement {cf_stmt_var} = {cf_conn_var}.createStatement()) {{",
+        f'{inner_indent}                {cf_stmt_var}.execute("CREATE TABLE IF NOT EXISTS test_results (" +',
         f'{inner_indent}                    "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +',
         f'{inner_indent}                    "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +',
         f'{inner_indent}                    "runtime INTEGER, return_value BLOB, verification_type TEXT)");',
         f"{inner_indent}            }}",
-        f'{inner_indent}            String _cf_sql{iter_id}_{call_counter} = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";',
-        f"{inner_indent}            try (PreparedStatement _cf_pstmt{iter_id}_{call_counter} = _cf_conn{iter_id}_{call_counter}.prepareStatement(_cf_sql{iter_id}_{call_counter})) {{",
-        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(1, _cf_mod{iter_id});",
-        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(2, _cf_cls{iter_id});",
-        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(3, _cf_test{iter_id});",
-        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(4, _cf_fn{iter_id});",
-        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setInt(5, _cf_loop{iter_id});",
-        f'{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(6, "{call_counter}");',
-        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setLong(7, _cf_dur{iter_id}_{call_counter});",
-        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setBytes(8, _cf_serializedResult{iter_id}_{call_counter});",
-        f'{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(9, "function_call");',
-        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.executeUpdate();",
+        f'{inner_indent}            String {cf_sql_var} = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";',
+        f"{inner_indent}            try (PreparedStatement {cf_pstmt_var} = {cf_conn_var}.prepareStatement({cf_sql_var})) {{",
+        f"{inner_indent}                {cf_pstmt_var}.setString(1, {cf_mod_ref});",
+        f"{inner_indent}                {cf_pstmt_var}.setString(2, {cf_cls_ref});",
+        f"{inner_indent}                {cf_pstmt_var}.setString(3, {cf_test_ref});",
+        f"{inner_indent}                {cf_pstmt_var}.setString(4, {cf_fn_ref});",
+        f"{inner_indent}                {cf_pstmt_var}.setInt(5, {cf_loop_ref});",
+        f'{inner_indent}                {cf_pstmt_var}.setString(6, "{call_counter}");',
+        f"{inner_indent}                {cf_pstmt_var}.setLong(7, {cf_dur_var});",
+        f"{inner_indent}                {cf_pstmt_var}.setBytes(8, {cf_serialized_var});",
+        f'{inner_indent}                {cf_pstmt_var}.setString(9, "function_call");',
+        f"{inner_indent}                {cf_pstmt_var}.executeUpdate();",
         f"{inner_indent}            }}",
         f"{inner_indent}        }}",
-        f"{inner_indent}    }} catch (Exception _cf_e{iter_id}_{call_counter}) {{",
-        f'{inner_indent}        System.err.println("CodeflashHelper: SQLite error: " + _cf_e{iter_id}_{call_counter}.getMessage());',
+        f"{inner_indent}    }} catch (Exception {cf_e_var}) {{",
+        f'{inner_indent}        System.err.println("CodeflashHelper: SQLite error: " + {cf_e_var}.getMessage());',
         f"{inner_indent}    }}",
         f"{inner_indent}}}",
         f"{indent}}}",
