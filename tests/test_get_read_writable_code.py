@@ -268,3 +268,53 @@ def test_module_var() -> None:
 
     output = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"target_function"}).code
     assert dedent(expected).strip() == output.strip()
+
+
+def test_comment_between_imports_and_variable_preserves_position() -> None:
+    code = """
+    from __future__ import annotations
+
+    import re
+    from dataclasses import dataclass, field
+
+    # NOTE: This comment documents the constant below.
+    # It should stay right above SOME_RE, not jump to the top of the file.
+    SOME_RE = re.compile(r"^pattern", re.MULTILINE)
+
+
+    @dataclass(slots=True)
+    class Item:
+        name: str
+        value: int
+        children: list[Item] = field(default_factory=list)
+
+
+    def parse(text: str) -> list[Item]:
+        root = Item(name="root", value=0)
+        for m in SOME_RE.finditer(text):
+            root.children.append(Item(name=m.group(), value=1))
+        return root.children
+    """
+
+    expected = """
+    # NOTE: This comment documents the constant below.
+    # It should stay right above SOME_RE, not jump to the top of the file.
+    SOME_RE = re.compile(r"^pattern", re.MULTILINE)
+
+
+    @dataclass(slots=True)
+    class Item:
+        name: str
+        value: int
+        children: list[Item] = field(default_factory=list)
+
+
+    def parse(text: str) -> list[Item]:
+        root = Item(name="root", value=0)
+        for m in SOME_RE.finditer(text):
+            root.children.append(Item(name=m.group(), value=1))
+        return root.children
+    """
+
+    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"parse"}).code
+    assert result.strip() == dedent(expected).strip()
