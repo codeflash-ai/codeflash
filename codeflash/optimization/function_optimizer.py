@@ -2755,6 +2755,10 @@ class FunctionOptimizer:
             return Failure("Failed to establish a baseline for the original code.")
 
         loop_count = benchmarking_results.effective_loop_count()
+        # For Java performance mode, loop indices are 0-indexed (loopId = outerLoop * maxInner + inner)
+        # so we need to add 1 to get the correct count for display
+        if is_java():
+            loop_count += 1
         logger.info(
             f"h3|⌚ Original code summed runtime measured over '{loop_count}' loop{'s' if loop_count > 1 else ''}: "
             f"'{humanize_runtime(total_timing)}' per full loop"
@@ -3006,6 +3010,10 @@ class FunctionOptimizer:
             # across all test cases. This is more accurate for JavaScript tests where
             # capturePerf does internal looping with potentially different iteration counts per test.
             loop_count = candidate_benchmarking_results.effective_loop_count()
+            # For Java performance mode, loop indices are 0-indexed (loopId = outerLoop * maxInner + inner)
+            # so we need to add 1 to get the correct count for display
+            if is_java():
+                loop_count += 1
 
             if (total_candidate_timing := candidate_benchmarking_results.total_passed_runtime()) == 0:
                 logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
