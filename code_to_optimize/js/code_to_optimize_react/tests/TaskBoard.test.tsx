@@ -56,9 +56,9 @@ describe('TaskBoard', () => {
           currentUser="alice"
         />,
       );
-      expect(screen.getByText(/todo/i)).toBeTruthy();
-      expect(screen.getByText(/in-progress/i)).toBeTruthy();
-      expect(screen.getByText(/done/i)).toBeTruthy();
+      expect(screen.getByRole('heading', { name: /todo/i })).toBeTruthy();
+      expect(screen.getByRole('heading', { name: /in-progress/i })).toBeTruthy();
+      expect(screen.getByRole('heading', { name: /done/i })).toBeTruthy();
     });
 
     test('renders task titles', () => {

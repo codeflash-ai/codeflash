@@ -50,8 +50,8 @@ describe('SearchableList', () => {
           highlightedIds={[]}
         />,
       );
-      expect(screen.getByText(/Work/)).toBeTruthy();
-      expect(screen.getByText(/Personal/)).toBeTruthy();
+      expect(screen.getAllByText(/Work/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Personal/).length).toBeGreaterThan(0);
     });
 
     test('renders stats correctly', () => {

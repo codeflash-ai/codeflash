@@ -1795,6 +1795,7 @@ class FunctionOptimizer:
     ) -> Result[tuple[OptimizationSet, str], str]:
         """Generate optimization candidates for the function. Backend handles multi-model diversity."""
         n_candidates = get_effort_value(EffortKeys.N_OPTIMIZER_CANDIDATES, self.effort)
+        metadata = self.function_to_optimize.metadata or {}
         future_optimization_candidates = self.executor.submit(
             self.aiservice_client.optimize_code,
             read_writable_code.markdown,
@@ -1805,6 +1806,8 @@ class FunctionOptimizer:
             is_async=self.function_to_optimize.is_async,
             n_candidates=n_candidates,
             is_numerical_code=is_numerical_code,
+            is_react_component=metadata.get("is_react_component", False),
+            react_context=metadata.get("react_context"),
         )
 
         future_references = self.executor.submit(

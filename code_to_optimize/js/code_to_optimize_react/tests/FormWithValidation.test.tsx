@@ -103,17 +103,16 @@ describe('FormWithValidation', () => {
     });
 
     test('shows minLength error', () => {
-      render(
+      const { container } = render(
         <FormWithValidation
           fields={[passwordField]}
           onSubmit={noop}
         />,
       );
-      const input = screen.getByRole('textbox') || document.querySelector('input[type="password"]');
-      if (input) {
-        fireEvent.change(input, { target: { value: 'Aa1!' } });
-        fireEvent.blur(input);
-      }
+      const input = container.querySelector('input') as HTMLInputElement;
+      fireEvent.change(input, { target: { value: 'Aa1!' } });
+      fireEvent.blur(input);
+      expect(screen.getByText(/at least 8 characters/)).toBeTruthy();
     });
 
     test('validates password complexity', () => {

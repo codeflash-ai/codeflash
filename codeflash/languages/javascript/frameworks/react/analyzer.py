@@ -31,6 +31,10 @@ class OpportunityType(str, Enum):
     MISSING_USEMEMO = "missing_usememo"
     MISSING_REACT_MEMO = "missing_react_memo"
     UNSTABLE_REFERENCE = "unstable_reference"
+    EAGER_STATE_INIT = "eager_state_init"
+    EXPENSIVE_RENDER_CALL = "expensive_render_call"
+    COMBINABLE_LOOPS = "combinable_loops"
+    SEQUENTIAL_AWAITS = "sequential_awaits"
 
 
 @dataclass(frozen=True)
@@ -54,6 +58,28 @@ FUNCTION_DEF_RE = re.compile(
 USECALLBACK_RE = re.compile(r"\buseCallback\s*\(")
 USEMEMO_RE = re.compile(r"\buseMemo\s*\(")
 
+# Lazy state initialization: useState(expensiveCall()) should be useState(() => expensiveCall())
+# Matches useState(someFunc(...)) but not useState(() => ...) or useState(literal)
+EAGER_STATE_INIT_RE = re.compile(
+    r"\buseState\s*(?:<[^>]*>)?\s*\(\s*"
+    r"(?![\s)'\"`\d\[\{tfnu])"  # not a literal, true/false/null/undefined, arrow, or empty
+    r"(?!\(\s*\)\s*=>)"  # not () =>
+    r"(?![a-zA-Z_]\w*\s*=>)"  # not param =>
+    r"(\w+\s*\()"  # function call like computeX(
+)
+
+# Expensive object construction in render: new RegExp, new Date, new Map, new Set, JSON.parse
+EXPENSIVE_RENDER_CALL_RE = re.compile(
+    r"\bnew\s+(?:RegExp|Date|Map|Set|WeakMap|WeakSet|Int(?:8|16|32)Array|Float(?:32|64)Array)\s*\("
+    r"|\bJSON\.(?:parse|stringify)\s*\("
+)
+
+# Sequential awaits: consecutive lines with await that could be parallelized
+AWAIT_RE = re.compile(r"\bawait\s+(?!Promise\.all)")
+
+# Array method chains on same variable for combinable loop detection
+ARRAY_METHOD_RE = re.compile(r"(\w+)\.(?:filter|map|reduce|forEach|find|findIndex|every|some|flatMap)\s*\(")
+
 
 def detect_optimization_opportunities(source: str, component_info: ReactComponentInfo) -> list[OptimizationOpportunity]:
     """Detect optimization opportunities in a React component."""
@@ -74,6 +100,18 @@ def detect_optimization_opportunities(source: str, component_info: ReactComponen
 
     # Check for expensive computations without useMemo
     _detect_missing_usememo(component_source, component_lines, start, opportunities)
+
+    # Check for eager state initialization
+    _detect_eager_state_init(component_lines, start, opportunities)
+
+    # Check for expensive object construction in render
+    _detect_expensive_render_calls(component_source, component_lines, start, opportunities)
+
+    # Check for combinable array loops
+    _detect_combinable_loops(component_lines, start, opportunities)
+
+    # Check for sequential awaits
+    _detect_sequential_awaits(component_lines, start, opportunities)
 
     # Check if component should be wrapped in React.memo
     if not component_info.is_memoized:
@@ -157,3 +195,114 @@ def _detect_missing_usememo(
                     severity=OpportunitySeverity.HIGH,
                 )
             )
+
+
+def _detect_eager_state_init(lines: list[str], offset: int, opportunities: list[OptimizationOpportunity]) -> None:
+    """Detect useState with eager (non-lazy) expensive initializers.
+
+    useState(expensiveComputation()) runs the computation on every render,
+    but only uses the result on mount. useState(() => expensiveComputation())
+    only runs it once.
+    """
+    for i, line in enumerate(lines):
+        line_num = offset + i + 1
+        stripped = line.strip()
+        if EAGER_STATE_INIT_RE.search(stripped):
+            opportunities.append(
+                OptimizationOpportunity(
+                    type=OpportunityType.EAGER_STATE_INIT,
+                    line=line_num,
+                    description="useState() initializer calls a function eagerly on every render. "
+                    "Use lazy initialization: useState(() => expensiveCall()) to run it only on mount.",
+                    severity=OpportunitySeverity.HIGH,
+                )
+            )
+
+
+def _detect_expensive_render_calls(
+    component_source: str, lines: list[str], offset: int, opportunities: list[OptimizationOpportunity]
+) -> None:
+    """Detect expensive object constructions in render body (new RegExp, new Date, JSON.parse)."""
+    for i, line in enumerate(lines):
+        line_num = offset + i + 1
+        stripped = line.strip()
+        if EXPENSIVE_RENDER_CALL_RE.search(stripped) and "useMemo" not in stripped:
+            opportunities.append(
+                OptimizationOpportunity(
+                    type=OpportunityType.EXPENSIVE_RENDER_CALL,
+                    line=line_num,
+                    description="Expensive object construction (new RegExp/Date/Map/Set or JSON.parse/stringify) "
+                    "in render body runs on every render. Move to useMemo or module scope.",
+                    severity=OpportunitySeverity.HIGH,
+                )
+            )
+
+
+def _detect_combinable_loops(lines: list[str], offset: int, opportunities: list[OptimizationOpportunity]) -> None:
+    """Detect multiple array method calls on the same variable that could be combined.
+
+    E.g., items.filter(...) and items.map(...) and items.reduce(...) on the same source
+    could potentially be combined into a single pass.
+    """
+    # Collect variable -> lines mapping for array operations
+    var_operations: dict[str, list[int]] = {}
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if "useMemo" in stripped:
+            continue
+        for match in ARRAY_METHOD_RE.finditer(stripped):
+            var_name = match.group(1)
+            # Skip common false positives (single-char vars, 'this', 'console')
+            if len(var_name) <= 1 or var_name in ("this", "console", "Math", "Object", "Array", "Promise"):
+                continue
+            line_num = offset + i + 1
+            if var_name not in var_operations:
+                var_operations[var_name] = []
+            var_operations[var_name].append(line_num)
+
+    for var_name, line_nums in var_operations.items():
+        if len(line_nums) >= 3:
+            opportunities.append(
+                OptimizationOpportunity(
+                    type=OpportunityType.COMBINABLE_LOOPS,
+                    line=line_nums[0],
+                    description=f"Variable '{var_name}' is iterated {len(line_nums)} times with separate array methods. "
+                    "Consider combining into a single .reduce() pass to avoid scanning the data multiple times.",
+                    severity=OpportunitySeverity.MEDIUM,
+                )
+            )
+
+
+def _detect_sequential_awaits(lines: list[str], offset: int, opportunities: list[OptimizationOpportunity]) -> None:
+    """Detect consecutive await statements that could be parallelized with Promise.all."""
+    consecutive_awaits: list[int] = []
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if AWAIT_RE.search(stripped):
+            consecutive_awaits.append(offset + i + 1)
+        elif stripped and not stripped.startswith("//") and not stripped.startswith("*"):
+            # Non-await, non-empty, non-comment line breaks the sequence
+            if len(consecutive_awaits) >= 2:
+                opportunities.append(
+                    OptimizationOpportunity(
+                        type=OpportunityType.SEQUENTIAL_AWAITS,
+                        line=consecutive_awaits[0],
+                        description=f"{len(consecutive_awaits)} sequential await calls could be parallelized. "
+                        "Use Promise.all() or Promise.allSettled() if the operations are independent.",
+                        severity=OpportunitySeverity.MEDIUM,
+                    )
+                )
+            consecutive_awaits = []
+
+    # Check remaining at end
+    if len(consecutive_awaits) >= 2:
+        opportunities.append(
+            OptimizationOpportunity(
+                type=OpportunityType.SEQUENTIAL_AWAITS,
+                line=consecutive_awaits[0],
+                description=f"{len(consecutive_awaits)} sequential await calls could be parallelized. "
+                "Use Promise.all() or Promise.allSettled() if the operations are independent.",
+                severity=OpportunitySeverity.MEDIUM,
+            )
+        )

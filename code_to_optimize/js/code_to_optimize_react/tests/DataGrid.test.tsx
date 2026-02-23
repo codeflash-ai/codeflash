@@ -62,9 +62,9 @@ describe('DataGrid', () => {
           onBulkAction={noop}
         />,
       );
-      expect(screen.getByText('Name')).toBeTruthy();
-      expect(screen.getByText('Category')).toBeTruthy();
-      expect(screen.getByText('Value')).toBeTruthy();
+      expect(screen.getByText(/^Name/)).toBeTruthy();
+      expect(screen.getByText(/^Category/)).toBeTruthy();
+      expect(screen.getByText(/^Value/)).toBeTruthy();
     });
 
     test('renders correct row count', () => {
@@ -140,9 +140,9 @@ describe('DataGrid', () => {
           onBulkAction={noop}
         />,
       );
-      fireEvent.click(screen.getByText('Name'));
+      fireEvent.click(screen.getByText(/^Name/));
       // Should show sort indicator
-      expect(screen.getByText(/Name/)).toBeTruthy();
+      expect(screen.getByText(/^Name/)).toBeTruthy();
     });
   });
 
