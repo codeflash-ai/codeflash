@@ -194,10 +194,9 @@ class JavaAssertTransformer:
 
         # Precompile the assignment-detection regex to avoid recompiling on each call.
         self._assign_re = re.compile(r"(\w+(?:<[^>]+>)?)\s+(\w+)\s*=\s*$")
-        self._special_re = re.compile(r"""['"()]""")
 
-        # Precompile regex to find next special character (single-quote, double-quote, brace).
-        self._special_re = re.compile(r"[\"'{}]")
+        # Precompile regex to find next special character (quotes, parens, braces).
+        self._special_re = re.compile(r"[\"'{}()]")
 
     def transform(self, source: str) -> str:
         """Remove assertions from source code, preserving target function calls.

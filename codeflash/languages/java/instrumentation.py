@@ -6,8 +6,12 @@ This module provides functionality to instrument Java code for:
 
 Timing instrumentation adds System.nanoTime() calls around the function being tested
 and prints timing markers in a format compatible with Python/JS implementations:
-  Start: !$######testModule:testClass.testMethod:funcName:loopIndex:iterationId######$!
-  End:   !######testModule:testClass.testMethod:funcName:loopIndex:iterationId:durationNs######!
+  Start: !$######testModule:testClass.testMethod:funcName:loopId:invocationId######$!
+  End:   !######testModule:testClass.testMethod:funcName:loopId:invocationId:durationNs######!
+
+Where:
+  - loopId = outerLoopIndex * maxInnerIterations + innerIteration (CUDA-style composite)
+  - invocationId = call position in test method (1, 2, 3, ... for multiple calls)
 
 This allows codeflash to extract timing data from stdout for accurate benchmarking.
 """
@@ -231,7 +235,7 @@ def _generate_sqlite_write_code(
         f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(3, _cf_test{iter_id});",
         f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(4, _cf_fn{iter_id});",
         f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setInt(5, _cf_loop{iter_id});",
-        f'{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(6, "{call_counter}_" + _cf_testIteration{iter_id});',
+        f'{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(6, "{call_counter}");',
         f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setLong(7, _cf_dur{iter_id}_{call_counter});",
         f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setBytes(8, _cf_serializedResult{iter_id}_{call_counter});",
         f'{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(9, "function_call");',
@@ -823,10 +827,12 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
     expensive Maven restarts. Post-processing uses min runtime across all iterations.
 
     Timing markers format:
-      Start: !$######testModule:testClass:funcName:loopIndex:iterationId######$!
-      End:   !######testModule:testClass:funcName:loopIndex:iterationId:durationNs######!
+      Start: !$######testModule:testClass:funcName:loopId:invocationId######$!
+      End:   !######testModule:testClass:funcName:loopId:invocationId:durationNs######!
 
-    Where iterationId is the inner iteration number (0, 1, 2, ..., N-1).
+    Where:
+      - loopId = outerLoopIndex * maxInnerIterations + innerIteration (0, 1, 2, ..., N-1)
+      - invocationId = call position in test method (1, 2, 3, ... for multiple calls)
 
     Args:
         source: The test source code.
@@ -1031,8 +1037,9 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             current_id = next_wrapper_id + 1
             setup_lines = [
                 f"{indent}// Codeflash timing instrumentation with inner loop for JIT warmup",
-                f'{indent}int _cf_loop{current_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
-                f'{indent}int _cf_innerIterations{current_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));',
+                f'{indent}int _cf_outerLoop{current_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
+                f'{indent}int _cf_maxInnerIterations{current_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));',
+                f'{indent}int _cf_innerIterations{current_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));',
                 f'{indent}String _cf_mod{current_id} = "{class_name}";',
                 f'{indent}String _cf_cls{current_id} = "{class_name}";',
                 f'{indent}String _cf_test{current_id} = "{test_method_name}";',
@@ -1052,7 +1059,8 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 stmt_in_try = reindent_block(target_stmt, inner_body_indent)
             timing_lines = [
                 f"{indent}for (int _cf_i{current_id} = 0; _cf_i{current_id} < _cf_innerIterations{current_id}; _cf_i{current_id}++) {{",
-                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + _cf_i{current_id} + "######$!");',
+                f"{inner_indent}int _cf_loopId{current_id} = _cf_outerLoop{current_id} * _cf_maxInnerIterations{current_id} + _cf_i{current_id};",
+                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":1" + "######$!");',
                 f"{inner_indent}long _cf_end{current_id} = -1;",
                 f"{inner_indent}long _cf_start{current_id} = 0;",
                 f"{inner_indent}try {{",
@@ -1062,7 +1070,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 f"{inner_indent}}} finally {{",
                 f"{inner_body_indent}long _cf_end{current_id}_finally = System.nanoTime();",
                 f"{inner_body_indent}long _cf_dur{current_id} = (_cf_end{current_id} != -1 ? _cf_end{current_id} : _cf_end{current_id}_finally) - _cf_start{current_id};",
-                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + _cf_i{current_id} + ":" + _cf_dur{current_id} + "######!");',
+                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":1:" + _cf_dur{current_id} + "######!");',
                 f"{inner_indent}}}",
                 f"{indent}}}",
             ]
@@ -1097,8 +1105,9 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
 
             setup_lines = [
                 f"{indent}// Codeflash timing instrumentation with inner loop for JIT warmup",
-                f'{indent}int _cf_loop{current_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
-                f'{indent}int _cf_innerIterations{current_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));',
+                f'{indent}int _cf_outerLoop{current_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
+                f'{indent}int _cf_maxInnerIterations{current_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));',
+                f'{indent}int _cf_innerIterations{current_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));',
                 f'{indent}String _cf_mod{current_id} = "{class_name}";',
                 f'{indent}String _cf_cls{current_id} = "{class_name}";',
                 f'{indent}String _cf_test{current_id} = "{test_method_name}";',
@@ -1114,11 +1123,11 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 stmt_in_try = reindent_block(assignment_stmt, inner_body_indent)
             else:
                 stmt_in_try = reindent_block(target_stmt, inner_body_indent)
-            iteration_id_expr = f'"{current_id}_" + _cf_i{current_id}'
 
             timing_lines = [
                 f"{indent}for (int _cf_i{current_id} = 0; _cf_i{current_id} < _cf_innerIterations{current_id}; _cf_i{current_id}++) {{",
-                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + {iteration_id_expr} + "######$!");',
+                f"{inner_indent}int _cf_loopId{current_id} = _cf_outerLoop{current_id} * _cf_maxInnerIterations{current_id} + _cf_i{current_id};",
+                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":{current_id}" + "######$!");',
                 f"{inner_indent}long _cf_end{current_id} = -1;",
                 f"{inner_indent}long _cf_start{current_id} = 0;",
                 f"{inner_indent}try {{",
@@ -1128,7 +1137,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 f"{inner_indent}}} finally {{",
                 f"{inner_body_indent}long _cf_end{current_id}_finally = System.nanoTime();",
                 f"{inner_body_indent}long _cf_dur{current_id} = (_cf_end{current_id} != -1 ? _cf_end{current_id} : _cf_end{current_id}_finally) - _cf_start{current_id};",
-                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loop{current_id} + ":" + {iteration_id_expr} + ":" + _cf_dur{current_id} + "######!");',
+                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":{current_id}:" + _cf_dur{current_id} + "######!");',
                 f"{inner_indent}}}",
                 f"{indent}}}",
             ]
