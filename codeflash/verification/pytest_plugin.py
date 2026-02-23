@@ -33,19 +33,9 @@ if TYPE_CHECKING:
 
 _HAS_NUMPY = find_spec("numpy") is not None
 
-_PROTECTED_MODULES = frozenset({
-    "gc",
-    "inspect",
-    "os",
-    "sys",
-    "time",
-    "functools",
-    "pathlib",
-    "typing",
-    "dill",
-    "pytest",
-    "importlib",
-})
+_PROTECTED_MODULES = frozenset(
+    {"gc", "inspect", "os", "sys", "time", "functools", "pathlib", "typing", "dill", "pytest", "importlib"}
+)
 
 SECONDS_IN_HOUR: float = 3600
 SECONDS_IN_MINUTE: float = 60

@@ -1039,9 +1039,7 @@ class FunctionOptimizer:
         normalized_code = normalize_code(candidate.source_code.flat.strip())
 
         if normalized_code == normalized_original:
-            logger.info(
-                f"h3|Candidate {candidate_index}/{total_candidates}: Identical to original code, skipping."
-            )
+            logger.info(f"h3|Candidate {candidate_index}/{total_candidates}: Identical to original code, skipping.")
             console.rule()
             return None
 
