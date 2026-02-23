@@ -493,3 +493,37 @@ def my_function():
     return helper
 """
         assert result == expected_result
+
+
+def test_module_input_preserves_comment_position_after_imports() -> None:
+    from codeflash.languages.python.context.code_context_extractor import parse_code_and_prune_cst
+    from codeflash.models.models import CodeContextType
+
+    src_code = """from __future__ import annotations
+import re
+
+# Comment about PATTERN.
+PATTERN = re.compile(r"test")
+
+def parse():
+    return PATTERN.findall("")
+"""
+    pruned_module = parse_code_and_prune_cst(src_code, CodeContextType.READ_WRITABLE, {"parse"})
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        file_path = project_root / "mod.py"
+        file_path.write_text(src_code)
+
+        result = add_needed_imports_from_module(src_code, pruned_module, file_path, file_path, project_root)
+
+    expected = """from __future__ import annotations
+import re
+
+# Comment about PATTERN.
+PATTERN = re.compile(r"test")
+
+def parse():
+    return PATTERN.findall("")
+"""
+    assert result == expected
