@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
@@ -46,23 +47,25 @@ def _add_global_declarations_for_language(
 
         analyzer = get_analyzer_for_file(module_abspath)
 
-        original_declarations = analyzer.find_module_level_declarations(original_source)
+        # Merge imports from optimized code into original source
+        result = _merge_imports(original_source, optimized_code, analyzer)
+
+        original_declarations = analyzer.find_module_level_declarations(result)
         optimized_declarations = analyzer.find_module_level_declarations(optimized_code)
 
         if not optimized_declarations:
-            return original_source
+            return result
 
-        existing_names = _get_existing_names(original_declarations, analyzer, original_source)
+        existing_names = _get_existing_names(original_declarations, analyzer, result)
         new_declarations = _filter_new_declarations(optimized_declarations, existing_names)
 
         if not new_declarations:
-            return original_source
+            return result
 
         # Build a map of existing declaration names to their end lines (1-indexed)
         existing_decl_end_lines = {decl.name: decl.end_line for decl in original_declarations}
 
         # Insert each new declaration after its dependencies
-        result = original_source
         for decl in new_declarations:
             result = _insert_declaration_after_dependencies(
                 result, decl, existing_decl_end_lines, analyzer, module_abspath
@@ -215,3 +218,65 @@ def _find_line_after_imports(lines: list[str], analyzer: TreeSitterAnalyzer, sou
             return i
 
     return 0
+
+
+def _merge_imports(original_source: str, optimized_code: str, analyzer: TreeSitterAnalyzer) -> str:
+    """Merge imports from optimized code into original source.
+
+    For each import in the optimized code that shares a module path with an existing
+    import in the original source, adds any new named imports to the original import line.
+    """
+    try:
+        original_imports = analyzer.find_imports(original_source)
+        optimized_imports = analyzer.find_imports(optimized_code)
+    except Exception:
+        return original_source
+
+    if not optimized_imports:
+        return original_source
+
+    # Build a map of module_path -> ImportInfo for original imports
+    original_import_map: dict[str, list] = {}
+    for imp in original_imports:
+        original_import_map.setdefault(imp.module_path, []).append(imp)
+
+    result = original_source
+    for opt_imp in optimized_imports:
+        if opt_imp.module_path not in original_import_map:
+            continue
+
+        # Get new named imports that don't exist in the original
+        for orig_imp in original_import_map[opt_imp.module_path]:
+            existing_names = {name for name, _ in orig_imp.named_imports}
+            new_names = [(name, alias) for name, alias in opt_imp.named_imports if name not in existing_names]
+
+            if not new_names:
+                continue
+
+            # Find the original import line and add new named imports
+            lines = result.splitlines(keepends=True)
+            if orig_imp.start_line <= len(lines):
+                # Reconstruct the import statement lines
+                import_text = "".join(lines[orig_imp.start_line - 1 : orig_imp.end_line])
+
+                # Find the closing brace of named imports and insert new names before it
+                brace_match = re.search(r"\}", import_text)
+                if brace_match:
+                    insert_pos = brace_match.start()
+                    new_imports_str = ", ".join(
+                        f"{name} as {alias}" if alias else name for name, alias in new_names
+                    )
+                    # Check if there's already content before the brace
+                    before_brace = import_text[:insert_pos].rstrip()
+                    if before_brace and not before_brace.endswith(","):
+                        new_imports_str = ", " + new_imports_str
+                    else:
+                        new_imports_str = " " + new_imports_str
+
+                    updated_import = import_text[:insert_pos] + new_imports_str + " " + import_text[insert_pos:]
+                    lines[orig_imp.start_line - 1 : orig_imp.end_line] = [updated_import]
+                    result = "".join(lines)
+
+                    logger.debug(f"Merged imports for {opt_imp.module_path}: added {[n for n, _ in new_names]}")
+
+    return result

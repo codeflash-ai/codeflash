@@ -2561,6 +2561,7 @@ class TypeScriptSupport(JavaScriptSupport):
         """Check if TypeScript source code is syntactically valid.
 
         Uses tree-sitter TypeScript parser to parse and check for errors.
+        Falls back to TSX parser for files containing JSX syntax.
 
         Args:
             source: Source code to validate.
@@ -2572,7 +2573,11 @@ class TypeScriptSupport(JavaScriptSupport):
         try:
             analyzer = TreeSitterAnalyzer(TreeSitterLanguage.TYPESCRIPT)
             tree = analyzer.parse(source)
-            return not tree.root_node.has_error
+            if not tree.root_node.has_error:
+                return True
+            tsx_analyzer = TreeSitterAnalyzer(TreeSitterLanguage.TSX)
+            tsx_tree = tsx_analyzer.parse(source)
+            return not tsx_tree.root_node.has_error
         except Exception:
             return False
 
