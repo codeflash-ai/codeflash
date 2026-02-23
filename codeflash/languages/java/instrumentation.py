@@ -210,6 +210,7 @@ def _generate_sqlite_write_code(
 
     Returns:
         List of code lines for SQLite write in finally block.
+
     """
     inner_indent = indent + "    "
     return [
@@ -251,8 +252,12 @@ def _generate_sqlite_write_code(
 
 
 def wrap_target_calls_with_treesitter(
-    body_lines: list[str], func_name: str, iter_id: int, precise_call_timing: bool = False,
-    class_name: str = "", test_method_name: str = ""
+    body_lines: list[str],
+    func_name: str,
+    iter_id: int,
+    precise_call_timing: bool = False,
+    class_name: str = "",
+    test_method_name: str = "",
 ) -> tuple[list[str], int]:
     """Replace target method calls in body_lines with capture + serialize using tree-sitter.
 
@@ -336,7 +341,9 @@ def wrap_target_calls_with_treesitter(
                 end_stmt = f"_cf_end{iter_id}_{call_counter} = System.nanoTime();"
             else:
                 # Performance mode: shared variables without call_counter suffix
-                serialize_stmt = f"_cf_serializedResult{iter_id} = com.codeflash.Serializer.serialize((Object) {var_name});"
+                serialize_stmt = (
+                    f"_cf_serializedResult{iter_id} = com.codeflash.Serializer.serialize((Object) {var_name});"
+                )
                 start_stmt = f"_cf_start{iter_id} = System.nanoTime();"
                 end_stmt = f"_cf_end{iter_id} = System.nanoTime();"
 
@@ -373,10 +380,14 @@ def wrap_target_calls_with_treesitter(
                         iter_id, call_counter, "", class_name, func_name, test_method_name
                     )
 
-                    replacement_lines = var_decls + [start_marker] + try_block + finally_block
+                    replacement_lines = [*var_decls, start_marker, *try_block, *finally_block]
                     # Don't add indent to first line (it's placed after existing indent), but add to subsequent lines
                     if replacement_lines:
-                        replacement = replacement_lines[0] + "\n" + "\n".join(f"{line_indent_str}{line}" for line in replacement_lines[1:])
+                        replacement = (
+                            replacement_lines[0]
+                            + "\n"
+                            + "\n".join(f"{line_indent_str}{line}" for line in replacement_lines[1:])
+                        )
                     else:
                         replacement = ""
                 else:
@@ -396,7 +407,9 @@ def wrap_target_calls_with_treesitter(
                     wrapped.append(f"{line_indent_str}long _cf_start{iter_id}_{call_counter} = 0;")
                     wrapped.append(f"{line_indent_str}byte[] _cf_serializedResult{iter_id}_{call_counter} = null;")
                     # Start marker
-                    wrapped.append(f'{line_indent_str}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + "." + _cf_test{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":{call_counter}" + "######$!");')
+                    wrapped.append(
+                        f'{line_indent_str}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + "." + _cf_test{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":{call_counter}" + "######$!");'
+                    )
                     # Try block (use assignment, not declaration, since variable is declared above)
                     wrapped.append(f"{line_indent_str}try {{")
                     wrapped.append(f"{line_indent_str}    {start_stmt}")
