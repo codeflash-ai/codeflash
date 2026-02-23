@@ -1023,6 +1023,7 @@ class FunctionOptimizer:
         eval_ctx: CandidateEvaluationContext,
         exp_type: str,
         function_references: str,
+        normalized_original: str,
     ) -> BestOptimization | None:
         """Process a single optimization candidate.
 
@@ -1033,8 +1034,26 @@ class FunctionOptimizer:
         get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
         get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
 
-        logger.info(f"h3|Optimization candidate {candidate_index}/{total_candidates}:")
         candidate = candidate_node.candidate
+
+        normalized_code = normalize_code(candidate.source_code.flat.strip())
+
+        if normalized_code == normalized_original:
+            logger.info(
+                f"h3|Candidate {candidate_index}/{total_candidates}: Identical to original code, skipping."
+            )
+            console.rule()
+            return None
+
+        if normalized_code in eval_ctx.ast_code_to_id:
+            logger.info(
+                f"h3|Candidate {candidate_index}/{total_candidates}: Duplicate of a previous candidate, skipping."
+            )
+            eval_ctx.handle_duplicate_candidate(candidate, normalized_code, code_context)
+            console.rule()
+            return None
+
+        logger.info(f"h3|Optimization candidate {candidate_index}/{total_candidates}:")
         # Use correct extension based on language
         ext = self.language_support.file_extensions[0]
         code_print(
@@ -1060,13 +1079,6 @@ class FunctionOptimizer:
             self.write_code_and_helpers(
                 self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
             )
-            return None
-
-        # Check for duplicate candidates
-        normalized_code = normalize_code(candidate.source_code.flat.strip())
-        if normalized_code in eval_ctx.ast_code_to_id:
-            logger.info("Current candidate has been encountered before in testing, Skipping optimization candidate.")
-            eval_ctx.handle_duplicate_candidate(candidate, normalized_code, code_context)
             return None
 
         eval_ctx.register_new_candidate(normalized_code, candidate, code_context)
@@ -1238,6 +1250,7 @@ class FunctionOptimizer:
             self.future_adaptive_optimizations,
         )
         candidate_index = 0
+        normalized_original = normalize_code(code_context.read_writable_code.flat.strip())
 
         # Process candidates using queue-based approach
         while not processor.is_done():
@@ -1259,6 +1272,7 @@ class FunctionOptimizer:
                     eval_ctx=eval_ctx,
                     exp_type=exp_type,
                     function_references=function_references,
+                    normalized_original=normalized_original,
                 )
             except KeyboardInterrupt as e:
                 logger.exception(f"Optimization interrupted: {e}")
