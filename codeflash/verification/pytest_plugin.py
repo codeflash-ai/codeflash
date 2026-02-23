@@ -25,11 +25,24 @@ from codeflash.code_utils.config_consts import (
     STABILITY_SPREAD_TOLERANCE,
     STABILITY_WINDOW_SIZE,
 )
+import datetime
+import uuid
+import numpy as np
 
 if TYPE_CHECKING:
     from _pytest.config import Config, Parser
     from _pytest.main import Session
     from _pytest.python import Metafunc
+
+_FIXED_TIMESTAMP = 1761717605.108106
+
+_FIXED_DATETIME = datetime.datetime(2021, 1, 1, 2, 5, 10, tzinfo=datetime.timezone.utc)
+
+_FIXED_UUID = uuid.UUID("12345678-1234-5678-9abc-123456789012")
+
+_FIXED_RANDOM = 0.123456789
+
+_FIXED_BYTES_CACHE = {}
 
 _HAS_NUMPY = find_spec("numpy") is not None
 
@@ -97,67 +110,52 @@ _ORIGINAL_TIME_SLEEP = _time_module.sleep
 # Apply deterministic patches for reproducible test execution
 def _apply_deterministic_patches() -> None:
     """Apply patches to make all sources of randomness deterministic."""
-    import datetime
     import random
     import time
     import uuid
 
-    # Store original functions (these are already saved globally above)
-    _original_time = time.time
-    _original_perf_counter = time.perf_counter
-    _original_datetime_now = datetime.datetime.now
-    _original_datetime_utcnow = datetime.datetime.utcnow
-    _original_uuid4 = uuid.uuid4
-    _original_uuid1 = uuid.uuid1
-    _original_random = random.random
-
-    # Fixed deterministic values
-    fixed_timestamp = 1761717605.108106
-    fixed_datetime = datetime.datetime(2021, 1, 1, 2, 5, 10, tzinfo=datetime.timezone.utc)
-    fixed_uuid = uuid.UUID("12345678-1234-5678-9abc-123456789012")
-
     # Counter for perf_counter to maintain relative timing
-    _perf_counter_start = fixed_timestamp
+    _perf_counter_start = _FIXED_TIMESTAMP
     _perf_counter_calls = 0
 
     def mock_time_time() -> float:
         """Return fixed timestamp while preserving performance characteristics."""
-        _original_time()  # Maintain performance characteristics
-        return fixed_timestamp
+        return _FIXED_TIMESTAMP
+
 
     def mock_perf_counter() -> float:
         """Return incrementing counter for relative timing."""
         nonlocal _perf_counter_calls
-        _original_perf_counter()  # Maintain performance characteristics
         _perf_counter_calls += 1
         return _perf_counter_start + (_perf_counter_calls * 0.001)  # Increment by 1ms each call
 
     def mock_datetime_now(tz: datetime.timezone | None = None) -> datetime.datetime:
         """Return fixed datetime while preserving performance characteristics."""
-        _original_datetime_now(tz)  # Maintain performance characteristics
         if tz is None:
-            return fixed_datetime
-        return fixed_datetime.replace(tzinfo=tz)
+            return _FIXED_DATETIME
+        return _FIXED_DATETIME.replace(tzinfo=tz)
+
 
     def mock_datetime_utcnow() -> datetime.datetime:
         """Return fixed UTC datetime while preserving performance characteristics."""
-        _original_datetime_utcnow()  # Maintain performance characteristics
-        return fixed_datetime
+        return _FIXED_DATETIME
+
 
     def mock_uuid4() -> uuid.UUID:
         """Return fixed UUID4 while preserving performance characteristics."""
-        _original_uuid4()  # Maintain performance characteristics
-        return fixed_uuid
+        return _FIXED_UUID
+
 
     def mock_uuid1(node: int | None = None, clock_seq: int | None = None) -> uuid.UUID:
         """Return fixed UUID1 while preserving performance characteristics."""
-        _original_uuid1(node, clock_seq)  # Maintain performance characteristics
-        return fixed_uuid
+        return _FIXED_UUID
+
 
     def mock_random() -> float:
         """Return deterministic random value while preserving performance characteristics."""
-        _original_random()  # Maintain performance characteristics
-        return 0.123456789  # Fixed random value
+        return _FIXED_RANDOM
+
+    # Apply patches
 
     # Apply patches
     time.time = mock_time_time
@@ -173,28 +171,20 @@ def _apply_deterministic_patches() -> None:
     # Store original methods for potential later use
     import builtins
 
-    builtins._original_datetime_now = _original_datetime_now  # noqa: SLF001
-    builtins._original_datetime_utcnow = _original_datetime_utcnow  # noqa: SLF001
+    builtins._original_datetime_now = datetime.datetime.now  # noqa: SLF001
+    builtins._original_datetime_utcnow = datetime.datetime.utcnow  # noqa: SLF001
     builtins._mock_datetime_now = mock_datetime_now  # noqa: SLF001
     builtins._mock_datetime_utcnow = mock_datetime_utcnow  # noqa: SLF001
-
-    # Patch numpy.random if available
-    if _HAS_NUMPY:
-        import numpy as np
-
-        # Use modern numpy random generator approach
-        np.random.default_rng(42)
-        np.random.seed(42)  # Keep legacy seed for compatibility  # noqa: NPY002
 
     # Patch os.urandom if needed
     try:
         import os
 
-        _original_urandom = os.urandom
-
         def mock_urandom(n: int) -> bytes:
-            _original_urandom(n)  # Maintain performance characteristics
-            return b"\x42" * n  # Fixed bytes
+            if n not in _FIXED_BYTES_CACHE:
+                _FIXED_BYTES_CACHE[n] = b"\x42" * n
+            return _FIXED_BYTES_CACHE[n]
+
 
         os.urandom = mock_urandom
     except (ImportError, AttributeError):
@@ -590,3 +580,5 @@ class PytestLoops:
         """Clean up test context environment variables after each test."""
         for var in ["CODEFLASH_TEST_MODULE", "CODEFLASH_TEST_CLASS", "CODEFLASH_TEST_FUNCTION"]:
             os.environ.pop(var, None)
+
+np.random.seed(42)  # Keep legacy seed for compatibility  # noqa: NPY002
