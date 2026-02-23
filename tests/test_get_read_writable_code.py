@@ -13,7 +13,7 @@ def test_simple_function() -> None:
         y = 2
         return x + y
     """
-    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"target_function"})
+    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"target_function"}).code
 
     expected = dedent("""
     def target_function():
@@ -32,7 +32,7 @@ def test_class_method() -> None:
             y = 2
             return x + y
     """
-    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"MyClass.target_function"})
+    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"MyClass.target_function"}).code
 
     expected = dedent("""
     class MyClass:
@@ -56,7 +56,7 @@ def test_class_with_attributes() -> None:
         def other_method(self):
             print("this should be excluded")
     """
-    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"MyClass.target_method"})
+    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"MyClass.target_method"}).code
 
     expected = dedent("""
     class MyClass:
@@ -80,7 +80,7 @@ def test_basic_class_structure() -> None:
             def not_findable(self):
                 return 42
     """
-    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"Outer.target_method"})
+    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"Outer.target_method"}).code
 
     expected = dedent("""
     class Outer:
@@ -100,7 +100,7 @@ def test_top_level_targets() -> None:
     def target_function():
         return 42
     """
-    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"target_function"})
+    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"target_function"}).code
 
     expected = dedent("""
     def target_function():
@@ -123,7 +123,7 @@ def test_multiple_top_level_classes() -> None:
         def process(self):
             return "C"
     """
-    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"ClassA.process", "ClassC.process"})
+    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"ClassA.process", "ClassC.process"}).code
 
     expected = dedent("""
     class ClassA:
@@ -148,7 +148,7 @@ def test_try_except_structure() -> None:
             def handle_error(self):
                 print("error")
     """
-    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"TargetClass.target_method"})
+    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"TargetClass.target_method"}).code
 
     expected = dedent("""
     try:
@@ -175,7 +175,7 @@ def test_init_method() -> None:
         def target_method(self):
             return f"Value: {self.x}"
     """
-    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"MyClass.target_method"})
+    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"MyClass.target_method"}).code
 
     expected = dedent("""
     class MyClass:
@@ -200,7 +200,7 @@ def test_dunder_method() -> None:
         def target_method(self):
             return f"Value: {self.x}"
     """
-    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"MyClass.target_method"})
+    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"MyClass.target_method"}).code
 
     expected = dedent("""
     class MyClass:
@@ -221,7 +221,7 @@ def test_no_targets_found() -> None:
             def target(self):
                 pass
     """
-    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"MyClass.Inner.target"})
+    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"MyClass.Inner.target"}).code
     expected = dedent("""
     class MyClass:
         def method(self):
@@ -266,5 +266,5 @@ def test_module_var() -> None:
         var2 = "test"
     """
 
-    output = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"target_function"})
+    output = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"target_function"}).code
     assert dedent(expected).strip() == output.strip()
