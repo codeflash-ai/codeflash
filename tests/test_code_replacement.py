@@ -807,6 +807,7 @@ def test_code_replacement10() -> None:
     get_code_output = """# file: test_code_replacement.py
 from __future__ import annotations
 
+
 class HelperClass:
     def __init__(self, name):
         self.name = name
