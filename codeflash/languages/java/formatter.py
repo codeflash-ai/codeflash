@@ -46,9 +46,9 @@ class JavaFormatter:
                 return str(java_path)
 
         # Check PATH
-        java_path = shutil.which("java")
-        if java_path:
-            return java_path
+        java_which = shutil.which("java")
+        if java_which:
+            return java_which
 
         return None
 
