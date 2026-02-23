@@ -213,7 +213,7 @@ def _generate_sqlite_write_code(
 
     """
     inner_indent = indent + "    "
-    
+
     # Pre-compute commonly used variable names to avoid repeated f-string interpolation
     iter_counter = f"{iter_id}_{call_counter}"
     cf_end_var = f"_cf_end{iter_counter}"
@@ -225,7 +225,7 @@ def _generate_sqlite_write_code(
     cf_pstmt_var = f"_cf_pstmt{iter_counter}"
     cf_e_var = f"_cf_e{iter_counter}"
     cf_serialized_var = f"_cf_serializedResult{iter_counter}"
-    
+
     # Pre-compute variable references used in multiple places
     cf_mod_ref = f"_cf_mod{iter_id}"
     cf_cls_ref = f"_cf_cls{iter_id}"
@@ -233,7 +233,7 @@ def _generate_sqlite_write_code(
     cf_fn_ref = f"_cf_fn{iter_id}"
     cf_loop_ref = f"_cf_loop{iter_id}"
     cf_outputFile_ref = f"_cf_outputFile{iter_id}"
-    
+
     return [
         f"{indent}}} finally {{",
         f"{inner_indent}long {cf_end_var}_finally = System.nanoTime();",
