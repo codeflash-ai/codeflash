@@ -5,7 +5,6 @@ codeflash/
 ├── main.py                 # CLI entry point
 ├── cli_cmds/               # Command handling, console output (Rich)
 ├── discovery/              # Find optimizable functions
-├── context/                # Extract code dependencies and imports
 ├── optimization/           # Generate optimized code via AI
 │   ├── optimizer.py        # Main optimization orchestration
 │   └── function_optimizer.py  # Per-function optimization logic
@@ -35,7 +34,7 @@ codeflash/
 | Optimization orchestration | `optimization/optimizer.py` → `run()` |
 | Per-function optimization | `optimization/function_optimizer.py` |
 | Function discovery | `discovery/functions_to_optimize.py` |
-| Context extraction | `context/code_context_extractor.py` |
+| Context extraction | `languages/<lang>/context/code_context_extractor.py` |
 | Test execution | `verification/test_runner.py`, `verification/pytest_plugin.py` |
 | Performance ranking | `benchmarking/function_ranker.py` |
 | Domain types | `models/models.py`, `models/function_types.py` |
