@@ -504,7 +504,7 @@ public class CalculatorTest__perfonlyinstrumented {
         Calculator calc = new Calculator();
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1" + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -514,7 +514,7 @@ public class CalculatorTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1:" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -575,7 +575,7 @@ public class MathTest__perfonlyinstrumented {
 
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1" + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -585,7 +585,7 @@ public class MathTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1:" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -603,7 +603,7 @@ public class MathTest__perfonlyinstrumented {
 
         for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
             int _cf_loopId2 = _cf_outerLoop2 * _cf_maxInnerIterations2 + _cf_i2;
-            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":1" + "######$!");
+            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + _cf_i2 + "######$!");
             long _cf_end2 = -1;
             long _cf_start2 = 0;
             try {
@@ -613,7 +613,7 @@ public class MathTest__perfonlyinstrumented {
             } finally {
                 long _cf_end2_finally = System.nanoTime();
                 long _cf_dur2 = (_cf_end2 != -1 ? _cf_end2 : _cf_end2_finally) - _cf_start2;
-                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":1:" + _cf_dur2 + "######!");
+                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + _cf_i2 + ":" + _cf_dur2 + "######!");
             }
         }
     }
@@ -681,7 +681,7 @@ public class ServiceTest__perfonlyinstrumented {
 
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1" + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -691,7 +691,7 @@ public class ServiceTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1:" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -823,7 +823,7 @@ public class MyTest {
 
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1" + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -833,7 +833,7 @@ public class MyTest {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1:" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -899,7 +899,7 @@ class TestAddTimingInstrumentation:
 
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1" + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -909,7 +909,7 @@ class TestAddTimingInstrumentation:
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1:" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -948,7 +948,7 @@ class TestAddTimingInstrumentation:
 
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1" + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -958,7 +958,7 @@ class TestAddTimingInstrumentation:
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1:" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -977,7 +977,7 @@ class TestAddTimingInstrumentation:
         second();
         for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
             int _cf_loopId2 = _cf_outerLoop2 * _cf_maxInnerIterations2 + _cf_i2;
-            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":1" + "######$!");
+            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + _cf_i2 + "######$!");
             long _cf_end2 = -1;
             long _cf_start2 = 0;
             try {
@@ -987,7 +987,7 @@ class TestAddTimingInstrumentation:
             } finally {
                 long _cf_end2_finally = System.nanoTime();
                 long _cf_dur2 = (_cf_end2 != -1 ? _cf_end2 : _cf_end2_finally) - _cf_start2;
-                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":1:" + _cf_dur2 + "######!");
+                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + _cf_i2 + ":" + _cf_dur2 + "######!");
             }
         }
     }
@@ -1039,7 +1039,7 @@ class TestAddTimingInstrumentation:
         String _cf_fn1 = "target";
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1" + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1_" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -1049,7 +1049,7 @@ class TestAddTimingInstrumentation:
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1:" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1_" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
         helper();
@@ -1064,7 +1064,7 @@ class TestAddTimingInstrumentation:
         String _cf_fn2 = "target";
         for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
             int _cf_loopId2 = _cf_outerLoop2 * _cf_maxInnerIterations2 + _cf_i2;
-            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":2" + "######$!");
+            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":2_" + _cf_i2 + "######$!");
             long _cf_end2 = -1;
             long _cf_start2 = 0;
             try {
@@ -1074,7 +1074,7 @@ class TestAddTimingInstrumentation:
             } finally {
                 long _cf_end2_finally = System.nanoTime();
                 long _cf_dur2 = (_cf_end2 != -1 ? _cf_end2 : _cf_end2_finally) - _cf_start2;
-                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":2:" + _cf_dur2 + "######!");
+                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":2_" + _cf_i2 + ":" + _cf_dur2 + "######!");
             }
         }
         teardown();
@@ -1374,7 +1374,7 @@ public class GeneratedTest__perfonlyinstrumented {
 
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1" + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -1384,7 +1384,7 @@ public class GeneratedTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1:" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -1561,7 +1561,7 @@ public class BraceTest__perfonlyinstrumented {
 
         for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
             int _cf_loopId2 = _cf_outerLoop2 * _cf_maxInnerIterations2 + _cf_i2;
-            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":1" + "######$!");
+            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + _cf_i2 + "######$!");
             long _cf_end2 = -1;
             long _cf_start2 = 0;
             try {
@@ -1573,7 +1573,7 @@ public class BraceTest__perfonlyinstrumented {
             } finally {
                 long _cf_end2_finally = System.nanoTime();
                 long _cf_dur2 = (_cf_end2 != -1 ? _cf_end2 : _cf_end2_finally) - _cf_start2;
-                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":1:" + _cf_dur2 + "######!");
+                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + _cf_i2 + ":" + _cf_dur2 + "######!");
             }
         }
     }
@@ -1641,7 +1641,7 @@ public class ImportTest__perfonlyinstrumented {
         List<String> list = new ArrayList<>();
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1" + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -1651,7 +1651,7 @@ public class ImportTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1:" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -1758,7 +1758,7 @@ public class NestedTest__perfonlyinstrumented {
 
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1" + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -1774,7 +1774,7 @@ public class NestedTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1:" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -2123,7 +2123,7 @@ public class MathUtilsTest__perfonlyinstrumented {
         MathUtils math = new MathUtils();
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1" + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -2133,7 +2133,7 @@ public class MathUtilsTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1:" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -2725,7 +2725,7 @@ public class FibonacciTest__perfonlyinstrumented {
         Fibonacci fib = new Fibonacci();
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1" + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -2735,7 +2735,7 @@ public class FibonacciTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1:" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -2788,14 +2788,13 @@ public class FibonacciTest__perfonlyinstrumented {
         assert len(start_matches) == 2, f"Expected 2 start markers, got {len(start_matches)}: {start_matches}"
         assert len(end_matches) == 2, f"Expected 2 end markers, got {len(end_matches)}: {end_matches}"
 
-        # Verify invocation IDs are all 1 (single call in test)
+        # Verify invocation IDs are 0 and 1 (2 inner iterations, single call in test)
         invocation_ids = [m[4] for m in start_matches]
-        assert all(inv_id == "1" for inv_id in invocation_ids), f"Expected all invocation IDs to be 1, got: {invocation_ids}"
+        assert set(invocation_ids) == {"0", "1"}, f"Expected invocation IDs 0 and 1, got: {invocation_ids}"
 
         # Verify loop IDs are 2 and 3 (outerLoop=1, maxInner=2, inner=0,1 → 1*2+0=2, 1*2+1=3)
         loop_ids = [m[3] for m in start_matches]
-        assert "2" in loop_ids, f"Expected loop ID 2, got: {loop_ids}"
-        assert "3" in loop_ids, f"Expected loop ID 3, got: {loop_ids}"
+        assert set(loop_ids) == {"2", "3"}, f"Expected loop IDs 2 and 3, got: {loop_ids}"
 
         # Verify durations are positive
         durations = [int(m[5]) for m in end_matches]
