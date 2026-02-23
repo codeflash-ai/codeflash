@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import datetime
 import inspect
 
 # System Imports
@@ -10,11 +11,14 @@ import platform
 import re
 import sys
 import time as _time_module
+import uuid
 import warnings
 from importlib.util import find_spec
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
 from unittest import TestCase
+
+import numpy as np
 
 # PyTest Imports
 import pytest
@@ -25,9 +29,6 @@ from codeflash.code_utils.config_consts import (
     STABILITY_SPREAD_TOLERANCE,
     STABILITY_WINDOW_SIZE,
 )
-import datetime
-import uuid
-import numpy as np
 
 if TYPE_CHECKING:
     from _pytest.config import Config, Parser
@@ -122,7 +123,6 @@ def _apply_deterministic_patches() -> None:
         """Return fixed timestamp while preserving performance characteristics."""
         return _FIXED_TIMESTAMP
 
-
     def mock_perf_counter() -> float:
         """Return incrementing counter for relative timing."""
         nonlocal _perf_counter_calls
@@ -135,21 +135,17 @@ def _apply_deterministic_patches() -> None:
             return _FIXED_DATETIME
         return _FIXED_DATETIME.replace(tzinfo=tz)
 
-
     def mock_datetime_utcnow() -> datetime.datetime:
         """Return fixed UTC datetime while preserving performance characteristics."""
         return _FIXED_DATETIME
-
 
     def mock_uuid4() -> uuid.UUID:
         """Return fixed UUID4 while preserving performance characteristics."""
         return _FIXED_UUID
 
-
     def mock_uuid1(node: int | None = None, clock_seq: int | None = None) -> uuid.UUID:
         """Return fixed UUID1 while preserving performance characteristics."""
         return _FIXED_UUID
-
 
     def mock_random() -> float:
         """Return deterministic random value while preserving performance characteristics."""
@@ -184,7 +180,6 @@ def _apply_deterministic_patches() -> None:
             if n not in _FIXED_BYTES_CACHE:
                 _FIXED_BYTES_CACHE[n] = b"\x42" * n
             return _FIXED_BYTES_CACHE[n]
-
 
         os.urandom = mock_urandom
     except (ImportError, AttributeError):
@@ -580,5 +575,6 @@ class PytestLoops:
         """Clean up test context environment variables after each test."""
         for var in ["CODEFLASH_TEST_MODULE", "CODEFLASH_TEST_CLASS", "CODEFLASH_TEST_FUNCTION"]:
             os.environ.pop(var, None)
+
 
 np.random.seed(42)  # Keep legacy seed for compatibility  # noqa: NPY002
