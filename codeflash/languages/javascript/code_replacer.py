@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
@@ -65,7 +64,6 @@ def _add_global_declarations_for_language(
         # Build a map of existing declaration names to their end lines (1-indexed)
         existing_decl_end_lines = {decl.name: decl.end_line for decl in original_declarations}
 
-        # Insert each new declaration after its dependencies
         for decl in new_declarations:
             result = _insert_declaration_after_dependencies(
                 result, decl, existing_decl_end_lines, analyzer, module_abspath
@@ -220,63 +218,76 @@ def _find_line_after_imports(lines: list[str], analyzer: TreeSitterAnalyzer, sou
     return 0
 
 
-def _merge_imports(original_source: str, optimized_code: str, analyzer: TreeSitterAnalyzer) -> str:
-    """Merge imports from optimized code into original source.
+def _merge_imports(source: str, new_source: str, analyzer: TreeSitterAnalyzer) -> str:
+    """Merge imports from new_source into source.
 
-    For each import in the optimized code that shares a module path with an existing
-    import in the original source, adds any new named imports to the original import line.
+    For imports from the same module, merges named imports so that any new
+    named imports from new_source are added to the existing import in source.
+    Also merges default imports and namespace imports when the source import
+    is missing them.
     """
     try:
-        original_imports = analyzer.find_imports(original_source)
-        optimized_imports = analyzer.find_imports(optimized_code)
+        source_imports = analyzer.find_imports(source)
+        new_imports = analyzer.find_imports(new_source)
     except Exception:
-        return original_source
+        return source
 
-    if not optimized_imports:
-        return original_source
+    if not new_imports:
+        return source
 
-    # Build a map of module_path -> ImportInfo for original imports
-    original_import_map: dict[str, list] = {}
-    for imp in original_imports:
-        original_import_map.setdefault(imp.module_path, []).append(imp)
+    source_import_map: dict[str, list] = {}
+    for imp in source_imports:
+        source_import_map.setdefault(imp.module_path, []).append(imp)
 
-    result = original_source
-    for opt_imp in optimized_imports:
-        if opt_imp.module_path not in original_import_map:
+    lines = source.splitlines(keepends=True)
+
+    replacements: list[tuple[int, int, str]] = []
+    for new_imp in new_imports:
+        matching = source_import_map.get(new_imp.module_path)
+        if not matching:
             continue
 
-        # Get new named imports that don't exist in the original
-        for orig_imp in original_import_map[opt_imp.module_path]:
-            existing_names = {name for name, _ in orig_imp.named_imports}
-            new_names = [(name, alias) for name, alias in opt_imp.named_imports if name not in existing_names]
+        for src_imp in matching:
+            existing_names = {name for name, _ in src_imp.named_imports}
+            new_names = [(name, alias) for name, alias in new_imp.named_imports if name not in existing_names]
 
-            if not new_names:
+            new_default = new_imp.default_import if not src_imp.default_import and new_imp.default_import else None
+            new_namespace = (
+                new_imp.namespace_import if not src_imp.namespace_import and new_imp.namespace_import else None
+            )
+
+            if not new_names and not new_default and not new_namespace:
                 continue
 
-            # Find the original import line and add new named imports
-            lines = result.splitlines(keepends=True)
-            if orig_imp.start_line <= len(lines):
-                # Reconstruct the import statement lines
-                import_text = "".join(lines[orig_imp.start_line - 1 : orig_imp.end_line])
+            merged_named = list(src_imp.named_imports) + new_names
+            default_part = new_default or src_imp.default_import
+            namespace_part = new_namespace or src_imp.namespace_import
 
-                # Find the closing brace of named imports and insert new names before it
-                brace_match = re.search(r"\}", import_text)
-                if brace_match:
-                    insert_pos = brace_match.start()
-                    new_imports_str = ", ".join(
-                        f"{name} as {alias}" if alias else name for name, alias in new_names
-                    )
-                    # Check if there's already content before the brace
-                    before_brace = import_text[:insert_pos].rstrip()
-                    if before_brace and not before_brace.endswith(","):
-                        new_imports_str = ", " + new_imports_str
-                    else:
-                        new_imports_str = " " + new_imports_str
+            parts = []
+            if default_part:
+                parts.append(default_part)
+            if namespace_part:
+                parts.append(f"* as {namespace_part}")
+            if merged_named:
+                named_str = ", ".join(f"{name} as {alias}" if alias else name for name, alias in merged_named)
+                parts.append("{ " + named_str + " }")
 
-                    updated_import = import_text[:insert_pos] + new_imports_str + " " + import_text[insert_pos:]
-                    lines[orig_imp.start_line - 1 : orig_imp.end_line] = [updated_import]
-                    result = "".join(lines)
+            orig_line_idx = src_imp.start_line - 1
+            orig_line = lines[orig_line_idx] if orig_line_idx < len(lines) else ""
+            quote = "'" if "'" in orig_line else '"'
+            semicolon = ";" if orig_line.rstrip().endswith(";") else ""
+            type_prefix = "type " if src_imp.is_type_only else ""
 
-                    logger.debug(f"Merged imports for {opt_imp.module_path}: added {[n for n, _ in new_names]}")
+            merged_line = (
+                f"import {type_prefix}{', '.join(parts)} from {quote}{src_imp.module_path}{quote}{semicolon}\n"
+            )
+            replacements.append((src_imp.start_line, src_imp.end_line, merged_line))
 
-    return result
+    if not replacements:
+        return source
+
+    replacements.sort(key=lambda r: r[0], reverse=True)
+    for start_line, end_line, new_line in replacements:
+        lines[start_line - 1 : end_line] = [new_line]
+
+    return "".join(lines)

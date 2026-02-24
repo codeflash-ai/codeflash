@@ -18,8 +18,15 @@ def get_test_file_path(
 ) -> Path:
     assert test_type in {"unit", "inspired", "replay", "perf"}
     function_name = function_name.replace(".", "_")
-    # Use appropriate file extension based on language
-    extension = current_language_support().get_test_file_suffix() if is_javascript() else ".py"
+
+    extension = (
+        source_file_path.suffix
+        if source_file_path
+        else (current_language_support().get_test_file_suffix() if is_javascript() else ".py")
+    )
+    if is_javascript():
+        # follow the convention
+        extension = ".test" + extension
 
     # For JavaScript/TypeScript, place generated tests in a subdirectory that matches
     # Vitest/Jest include patterns (e.g., test/**/*.test.ts)

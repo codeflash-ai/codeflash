@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, TestInfo, TestResult
+from codeflash.languages.current import is_typescript
 from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
 from codeflash.languages.language_enum import Language
 from codeflash.languages.registry import register_language
@@ -1879,7 +1880,7 @@ class JavaScriptSupport:
         module_system = detect_module_system(project_root, source_file_path)
         if module_system == "esm":
             generated_tests = inject_test_globals(generated_tests, test_framework)
-        if self.language == Language.TYPESCRIPT:
+        if is_typescript():
             generated_tests = disable_ts_check(generated_tests)
         return normalize_generated_tests_imports(generated_tests)
 

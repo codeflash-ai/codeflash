@@ -33,6 +33,24 @@ const Database = require('better-sqlite3');
 // Load the codeflash serializer for robust value serialization
 const serializer = require('./serializer');
 
+// Lazy-cached React instance resolved from the user's project (not from codeflash's
+// own dependencies). We resolve from process.cwd() so Node finds the react package
+// in the project's node_modules rather than looking inside codeflash's package tree.
+let _cachedReact = null;
+function _getReact() {
+    if (_cachedReact) return _cachedReact;
+    try {
+        const reactPath = require.resolve('react', { paths: [process.cwd()] });
+        _cachedReact = require(reactPath);
+    } catch (e) {
+        throw new Error(
+            `codeflash: Could not resolve 'react' from project root (${process.cwd()}). ` +
+            `Ensure react is installed in your project: npm install react`
+        );
+    }
+    return _cachedReact;
+}
+
 // Try to load better-sqlite3, fall back to JSON if not available
 let useSqlite = false;
 
@@ -921,6 +939,252 @@ async function _capturePerfAsync(
 }
 
 /**
+ * Get the current test context for recording results and stdout tags.
+ * Extracted to reduce duplication across capture functions.
+ *
+ * @returns {{testModulePath: string, testClassName: null, testFunctionName: string, safeModulePath: string, safeTestFunctionName: string}}
+ * @private
+ */
+function _getTestContext() {
+    let testModulePath;
+    if (TEST_MODULE) {
+        testModulePath = TEST_MODULE;
+    } else if (currentTestPath) {
+        const path = require('path');
+        const relativePath = path.relative(process.cwd(), currentTestPath);
+        testModulePath = relativePath
+            .replace(/\\/g, '/')
+            .replace(/\.js$/, '')
+            .replace(/\.test$/, '.test')
+            .replace(/\//g, '.');
+    } else {
+        testModulePath = currentTestName || 'unknown';
+    }
+    const testClassName = null;
+    const testFunctionName = currentTestName || 'unknown';
+    const safeModulePath = sanitizeTestId(testModulePath);
+    const safeTestFunctionName = sanitizeTestId(testFunctionName);
+    return { testModulePath, testClassName, testFunctionName, safeModulePath, safeTestFunctionName };
+}
+
+/**
+ * Extract a serializable representation from a render result.
+ * The render() return value from @testing-library/react contains DOM nodes
+ * and functions which aren't serializable. We extract the rendered HTML
+ * (container.innerHTML) as a comparable string representation.
+ *
+ * @param {object} renderResult - The return value from render()
+ * @returns {string|null} - The rendered HTML string, or null if extraction fails
+ * @private
+ */
+function _extractRenderHTML(renderResult) {
+    if (!renderResult) return null;
+    try {
+        if (renderResult.container) {
+            return renderResult.container.innerHTML;
+        }
+        return String(renderResult);
+    } catch (e) {
+        return null;
+    }
+}
+
+/**
+ * Capture a React component render call with full behavior tracking.
+ *
+ * This is the render-specific counterpart to capture(). It instruments
+ * render(React.createElement(Component, props)) calls for BEHAVIOR verification.
+ * The rendered HTML (container.innerHTML) is recorded as the serializable return
+ * value, enabling comparison between original and optimized component code.
+ *
+ * @param {string} funcName - Name of the component being tested (static)
+ * @param {string} lineId - Line number identifier in test file (static)
+ * @param {Function} renderFn - The render function from @testing-library/react
+ * @param {Function|object} Component - The React component to render
+ * @param {...any} createElementArgs - Arguments for React.createElement (props, children)
+ * @returns {object} - The render result (container, rerender, unmount, etc.)
+ * @throws {Error} - Re-throws any error from rendering
+ */
+function captureRender(funcName, lineId, renderFn, Component, ...createElementArgs) {
+    if (typeof renderFn !== 'function') {
+        const fnType = renderFn === null ? 'null' : (renderFn === undefined ? 'undefined' : typeof renderFn);
+        throw new TypeError(
+            `codeflash.captureRender: Expected render function but got ${fnType}. ` +
+            `Check that 'render' is imported from '@testing-library/react'.`
+        );
+    }
+    if (typeof Component !== 'function' && typeof Component !== 'object') {
+        const compType = Component === null ? 'null' : (Component === undefined ? 'undefined' : typeof Component);
+        throw new TypeError(
+            `codeflash.captureRender: Expected component '${funcName}' but got ${compType}. ` +
+            `Check that the component is imported correctly.`
+        );
+    }
+
+    initDatabase();
+
+    const { testModulePath, testClassName, testFunctionName, safeModulePath, safeTestFunctionName } = _getTestContext();
+
+    const testId = `${safeModulePath}:${testClassName}:${safeTestFunctionName}:${lineId}:${LOOP_INDEX}`;
+    const invocationIndex = getInvocationIndex(testId);
+    const invocationId = `${lineId}_${invocationIndex}`;
+
+    const testStdoutTag = `${safeModulePath}:${testClassName ? testClassName + '.' : ''}${safeTestFunctionName}:${funcName}:${LOOP_INDEX}:${invocationId}`;
+
+    console.log(`!$######${testStdoutTag}######$!`);
+
+    // Create the React element outside timing (createElement is negligible)
+    const React = _getReact();
+    const element = React.createElement(Component, ...createElementArgs);
+
+    const startTime = getTimeNs();
+    let renderResult;
+    let error = null;
+
+    try {
+        renderResult = renderFn(element);
+    } catch (e) {
+        error = e;
+    }
+
+    const endTime = getTimeNs();
+    const durationNs = getDurationNs(startTime, endTime);
+
+    // Record with rendered HTML as the serializable return value
+    const serializableReturn = error ? null : _extractRenderHTML(renderResult);
+    recordResult(
+        testModulePath, testClassName, testFunctionName, funcName,
+        invocationId, createElementArgs, serializableReturn, error, durationNs
+    );
+
+    console.log(`!######${testStdoutTag}######!`);
+
+    if (error) throw error;
+    return renderResult;
+}
+
+/**
+ * Capture a React component render call for PERFORMANCE benchmarking only.
+ *
+ * This is the render-specific counterpart to capturePerf(). It measures the
+ * time spent in render() calls with the same batched looping, time budget,
+ * and stability checking as capturePerf.
+ *
+ * Between loop iterations the previous render result is unmounted to keep
+ * the DOM clean and ensure each iteration starts from the same state.
+ *
+ * @param {string} funcName - Name of the component being tested (static)
+ * @param {string} lineId - Line number identifier in test file (static)
+ * @param {Function} renderFn - The render function from @testing-library/react
+ * @param {Function|object} Component - The React component to render
+ * @param {...any} createElementArgs - Arguments for React.createElement (props, children)
+ * @returns {object} - The render result from the final iteration
+ * @throws {Error} - Re-throws any error from rendering
+ */
+function captureRenderPerf(funcName, lineId, renderFn, Component, ...createElementArgs) {
+    const shouldLoop = getPerfLoopCount() > 1 && !checkSharedTimeLimit();
+
+    const { testModulePath, testClassName, testFunctionName, safeModulePath, safeTestFunctionName } = _getTestContext();
+
+    const invocationKey = `${safeModulePath}:${testClassName}:${safeTestFunctionName}:${funcName}:${lineId}`;
+
+    // Check if we've already completed all loops for this invocation
+    const peekLoopIndex = (sharedPerfState.invocationLoopCounts[invocationKey] || 0);
+    const currentBatch = parseInt(process.env.CODEFLASH_PERF_CURRENT_BATCH || '1', 10);
+    const nextGlobalIndex = (currentBatch - 1) * getPerfBatchSize() + peekLoopIndex + 1;
+
+    const React = _getReact();
+
+    if (shouldLoop && nextGlobalIndex > getPerfLoopCount()) {
+        // All loops completed, just render once for test assertions
+        const element = React.createElement(Component, ...createElementArgs);
+        return renderFn(element);
+    }
+
+    let lastReturnValue;
+    let lastError = null;
+
+    const hasExternalLoopRunner = process.env.CODEFLASH_PERF_CURRENT_BATCH !== undefined;
+    const batchSize = hasExternalLoopRunner ? 1 : (shouldLoop ? getPerfLoopCount() : 1);
+
+    if (!sharedPerfState.invocationRuntimes[invocationKey]) {
+        sharedPerfState.invocationRuntimes[invocationKey] = [];
+    }
+    const runtimes = sharedPerfState.invocationRuntimes[invocationKey];
+    const getStabilityWindow = () => Math.max(getPerfMinLoops(), Math.ceil(runtimes.length * STABILITY_WINDOW_SIZE));
+
+    for (let batchIndex = 0; batchIndex < batchSize; batchIndex++) {
+        if (!hasExternalLoopRunner && shouldLoop && checkSharedTimeLimit()) {
+            break;
+        }
+        if (!hasExternalLoopRunner && getPerfStabilityCheck() && sharedPerfState.stableInvocations[invocationKey]) {
+            break;
+        }
+
+        const loopIndex = getInvocationLoopIndex(invocationKey);
+
+        const totalIterations = getTotalIterations(invocationKey);
+        if (!hasExternalLoopRunner && totalIterations > getPerfLoopCount()) {
+            break;
+        }
+
+        const testId = `${safeModulePath}:${testClassName}:${safeTestFunctionName}:${lineId}:${loopIndex}`;
+        const invocationIndex = getInvocationIndex(testId);
+        const invocationId = `${lineId}_${invocationIndex}`;
+        const testStdoutTag = `${safeModulePath}:${testClassName ? testClassName + '.' : ''}${safeTestFunctionName}:${funcName}:${loopIndex}:${invocationId}`;
+
+        let durationNs;
+        try {
+            // Unmount previous render to keep DOM clean between iterations
+            if (lastReturnValue && lastReturnValue.unmount) {
+                lastReturnValue.unmount();
+            }
+
+            const element = React.createElement(Component, ...createElementArgs);
+            const startTime = getTimeNs();
+            lastReturnValue = renderFn(element);
+            const endTime = getTimeNs();
+            durationNs = getDurationNs(startTime, endTime);
+
+            lastError = null;
+        } catch (e) {
+            durationNs = 0;
+            lastError = e;
+        }
+
+        console.log(`!######${testStdoutTag}:${durationNs}######!`);
+
+        sharedPerfState.totalLoopsCompleted++;
+
+        if (durationNs > 0) {
+            runtimes.push(durationNs / 1000);
+        }
+
+        if (!hasExternalLoopRunner && getPerfStabilityCheck() && runtimes.length >= getPerfMinLoops()) {
+            const window = getStabilityWindow();
+            if (shouldStopStability(runtimes, window, getPerfMinLoops())) {
+                sharedPerfState.stableInvocations[invocationKey] = true;
+                break;
+            }
+        }
+
+        if (!hasExternalLoopRunner && lastError) {
+            break;
+        }
+    }
+
+    if (lastError) throw lastError;
+
+    // If we never executed (e.g., hit loop limit on first iteration), render once for assertion
+    if (lastReturnValue === undefined && !lastError) {
+        const element = React.createElement(Component, ...createElementArgs);
+        return renderFn(element);
+    }
+
+    return lastReturnValue;
+}
+
+/**
  * Capture multiple invocations for benchmarking.
  *
  * @param {string} funcName - Name of the function being tested
@@ -1049,6 +1313,8 @@ if (typeof afterAll !== 'undefined') {
 module.exports = {
     capture,           // Behavior verification (writes to SQLite)
     capturePerf,       // Performance benchmarking (prints to stdout only)
+    captureRender,     // React render behavior verification (writes to SQLite)
+    captureRenderPerf, // React render performance benchmarking (prints to stdout only)
     captureMultiple,
     writeResults,
     clearResults,

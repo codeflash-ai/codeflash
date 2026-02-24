@@ -35,6 +35,10 @@ module.exports = {
     // === Main Instrumentation API ===
     capture: capture.capture,
     capturePerf: capture.capturePerf,
+
+    captureRender: capture.captureRender,
+    captureRenderPerf: capture.captureRenderPerf,
+
     captureMultiple: capture.captureMultiple,
 
     // === Test Lifecycle ===

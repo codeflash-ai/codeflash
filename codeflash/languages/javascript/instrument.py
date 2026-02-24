@@ -51,6 +51,17 @@ class StandaloneCallMatch:
     has_trailing_semicolon: bool
 
 
+@dataclass
+class RenderCallMatch:
+    """Represents a matched render(React.createElement(Component, ...)) call."""
+
+    start_pos: int
+    end_pos: int
+    leading_whitespace: str
+    create_element_args: str  # Args after ComponentName in createElement (e.g., "null" or "{ count: 5 }, child1")
+    has_trailing_semicolon: bool
+
+
 codeflash_import_pattern = re.compile(
     r"(import\s+codeflash\s+from\s+['\"]codeflash['\"])|(const\s+codeflash\s*=\s*require\(['\"]codeflash['\"]\))"
 )
@@ -731,7 +742,11 @@ class ExpectCallTransformer:
 
 
 def transform_expect_calls(
-    code: str, function_to_optimize: FunctionToOptimize, capture_func: str, remove_assertions: bool = False
+    code: str,
+    function_to_optimize: FunctionToOptimize,
+    capture_func: str,
+    remove_assertions: bool = False,
+    start_counter: int = 0,
 ) -> tuple[str, int]:
     """Transform expect(func(...)).assertion() calls in JavaScript test code.
 
@@ -742,6 +757,7 @@ def transform_expect_calls(
         function_to_optimize: The function being tested.
         capture_func: The capture function to use ('capture' or 'capturePerf').
         remove_assertions: If True, remove assertions entirely (for generated tests).
+        start_counter: Starting value for the invocation counter.
 
     Returns:
         Tuple of (transformed code, final invocation counter value).
@@ -750,6 +766,223 @@ def transform_expect_calls(
     transformer = ExpectCallTransformer(
         function_to_optimize=function_to_optimize, capture_func=capture_func, remove_assertions=remove_assertions
     )
+    transformer.invocation_counter = start_counter
+    result = transformer.transform(code)
+    return result, transformer.invocation_counter
+
+
+class RenderCallTransformer:
+    """Transforms render(React.createElement(Component, ...)) calls in React test code.
+
+    This class handles the transformation of React component render calls that use
+    React.createElement. These need to be replaced with codeflash.captureRender()
+    or codeflash.captureRenderPerf() for instrumentation.
+
+    Examples:
+    - render(React.createElement(Counter, null))
+      -> codeflash.captureRender('Counter', '1', render, Counter, null)
+    - const { container } = render(React.createElement(Counter, { initialCount: 5 }))
+      -> const { container } = codeflash.captureRender('Counter', '1', render, Counter, { initialCount: 5 })
+    - render(React.createElement(Counter, null, child1, child2))
+      -> codeflash.captureRender('Counter', '1', render, Counter, null, child1, child2)
+
+    """
+
+    def __init__(self, function_to_optimize: FunctionToOptimize, capture_func: str) -> None:
+        self.function_to_optimize = function_to_optimize
+        self.func_name = function_to_optimize.function_name
+        self.qualified_name = function_to_optimize.qualified_name
+        # Map capture/capturePerf to captureRender/captureRenderPerf
+        self.capture_func = "captureRender" if capture_func == "capture" else "captureRenderPerf"
+        self.invocation_counter = 0
+        # Pattern to match: render(React.createElement(ComponentName
+        # Also handles: render(\n  React.createElement(ComponentName  (with whitespace)
+        self._render_create_element_pattern = re.compile(
+            rf"(\s*)render\s*\(\s*React\.createElement\s*\(\s*{re.escape(self.func_name)}\b"
+        )
+        # Pattern to match JSX-compiled _jsx/_jsxs calls:
+        # render(_jsx(ComponentName, props)) or render(_jsxs(ComponentName, props))
+        self._render_jsx_pattern = re.compile(rf"(\s*)render\s*\(\s*_jsxs?\s*\(\s*{re.escape(self.func_name)}\b")
+
+    def transform(self, code: str) -> str:
+        """Transform all render(React.createElement(Component, ...)) calls in the code."""
+        result: list[str] = []
+        pos = 0
+
+        while pos < len(code):
+            # Try both React.createElement and _jsx/_jsxs patterns
+            ce_match = self._render_create_element_pattern.search(code, pos)
+            jsx_match = self._render_jsx_pattern.search(code, pos)
+
+            # Choose the first match (by position)
+            match = None
+            is_jsx = False
+            if ce_match and jsx_match:
+                if ce_match.start() <= jsx_match.start():
+                    match = ce_match
+                else:
+                    match = jsx_match
+                    is_jsx = True
+            elif ce_match:
+                match = ce_match
+            elif jsx_match:
+                match = jsx_match
+                is_jsx = True
+
+            if not match:
+                result.append(code[pos:])
+                break
+
+            # Skip if inside a string literal
+            if is_inside_string(code, match.start()):
+                result.append(code[pos : match.end()])
+                pos = match.end()
+                continue
+
+            # Skip if already transformed with codeflash.captureRender
+            lookback_start = max(0, match.start() - 60)
+            lookback = code[lookback_start : match.start()]
+            if f"codeflash.{self.capture_func}(" in lookback:
+                result.append(code[pos : match.end()])
+                pos = match.end()
+                continue
+
+            # Add everything before the match
+            result.append(code[pos : match.start()])
+
+            # Try to parse the full render call
+            render_match = self._parse_render_call(code, match)
+            if render_match is None:
+                # Couldn't parse, skip this match
+                result.append(code[match.start() : match.end()])
+                pos = match.end()
+                continue
+
+            # Generate the transformed code
+            self.invocation_counter += 1
+            transformed = self._generate_transformed_call(render_match)
+            result.append(transformed)
+            pos = render_match.end_pos
+
+        return "".join(result)
+
+    def _parse_render_call(self, code: str, match: re.Match) -> RenderCallMatch | None:
+        """Parse a complete render(React.createElement(Component, ...)) call."""
+        leading_ws = match.group(1)
+
+        # Position after ComponentName
+        pos = match.end()
+
+        # Skip whitespace
+        while pos < len(code) and code[pos] in " \t\n\r":
+            pos += 1
+
+        if pos >= len(code):
+            return None
+
+        create_element_args = ""
+
+        if code[pos] == ",":
+            # Has args after ComponentName
+            pos += 1  # skip comma
+            args_start = pos
+            depth = 1  # Inside createElement( or _jsx(
+            in_string = False
+            string_char = None
+
+            while pos < len(code) and depth > 0:
+                char = code[pos]
+                if char in "\"'`" and (pos == 0 or code[pos - 1] != "\\"):
+                    if not in_string:
+                        in_string = True
+                        string_char = char
+                    elif char == string_char:
+                        in_string = False
+                        string_char = None
+                elif not in_string:
+                    if char == "(":
+                        depth += 1
+                    elif char == ")":
+                        depth -= 1
+                pos += 1
+
+            if depth != 0:
+                return None
+
+            # pos-1 is the closing ) of createElement/_jsx
+            create_element_args = code[args_start : pos - 1].strip()
+
+        elif code[pos] == ")":
+            # No args: React.createElement(Counter) or _jsx(Counter)
+            pos += 1
+        else:
+            return None
+
+        # Skip whitespace between createElement closing ) and render closing )
+        while pos < len(code) and code[pos] in " \t\n\r":
+            pos += 1
+
+        # Expect closing ) of render(
+        # If we see a comma instead, render has additional options - skip this match
+        if pos >= len(code) or code[pos] != ")":
+            return None
+
+        pos += 1  # skip ) of render
+
+        # Check for trailing semicolon
+        end_pos = pos
+        while end_pos < len(code) and code[end_pos] in " \t":
+            end_pos += 1
+
+        has_trailing_semicolon = end_pos < len(code) and code[end_pos] == ";"
+        if has_trailing_semicolon:
+            end_pos += 1
+
+        return RenderCallMatch(
+            start_pos=match.start(),
+            end_pos=end_pos,
+            leading_whitespace=leading_ws,
+            create_element_args=create_element_args,
+            has_trailing_semicolon=has_trailing_semicolon,
+        )
+
+    def _generate_transformed_call(self, match: RenderCallMatch) -> str:
+        """Generate the transformed code for a render call."""
+        line_id = str(self.invocation_counter)
+        args_str = match.create_element_args
+        semicolon = ";" if match.has_trailing_semicolon else ""
+
+        if args_str:
+            return (
+                f"{match.leading_whitespace}codeflash.{self.capture_func}('{self.qualified_name}', "
+                f"'{line_id}', render, {self.func_name}, {args_str}){semicolon}"
+            )
+        return (
+            f"{match.leading_whitespace}codeflash.{self.capture_func}('{self.qualified_name}', "
+            f"'{line_id}', render, {self.func_name}){semicolon}"
+        )
+
+
+def transform_render_calls(
+    code: str, function_to_optimize: FunctionToOptimize, capture_func: str, start_counter: int = 0
+) -> tuple[str, int]:
+    """Transform render(React.createElement(Component, ...)) calls in React test code.
+
+    This transforms React component render calls that use React.createElement or
+    compiled JSX (_jsx/_jsxs) into codeflash.captureRender() calls for instrumentation.
+
+    Args:
+        code: The test code to transform.
+        function_to_optimize: The component function being tested.
+        capture_func: The capture function to use ('capture' or 'capturePerf').
+        start_counter: Starting value for the invocation counter.
+
+    Returns:
+        Tuple of (transformed code, final counter value).
+
+    """
+    transformer = RenderCallTransformer(function_to_optimize=function_to_optimize, capture_func=capture_func)
+    transformer.invocation_counter = start_counter
     result = transformer.transform(code)
     return result, transformer.invocation_counter
 
@@ -889,12 +1122,20 @@ def _instrument_js_test_code(
     # Choose capture function based on mode
     capture_func = "capturePerf" if mode == TestingMode.PERFORMANCE else "capture"
 
+    # Transform React render calls: render(React.createElement(Component, ...))
+    # Do this first so expect/standalone transforms don't interfere with render patterns
+    code, render_counter = transform_render_calls(
+        code=code, function_to_optimize=function_to_optimize, capture_func=capture_func
+    )
+
     # Transform expect calls using the refactored transformer
+    # Continue counter from render transformer to ensure unique IDs
     code, expect_counter = transform_expect_calls(
         code=code,
         function_to_optimize=function_to_optimize,
         capture_func=capture_func,
         remove_assertions=remove_assertions,
+        start_counter=render_counter,
     )
 
     # Transform standalone calls (not inside expect wrappers)
