@@ -21,96 +21,99 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.ref || github.ref }}
 
-      - name: Start Serena MCP server
-        run: |
-          docker pull ghcr.io/github/serena-mcp-server:latest
-          docker run -d --name serena \
-            --network host \
-            -v "${{ github.workspace }}:${{ github.workspace }}:rw" \
-            ghcr.io/github/serena-mcp-server:latest \
-            serena start-mcp-server --context codex --project "${{ github.workspace }}"
-
-          mkdir -p /tmp/mcp-config
-          cat > /tmp/mcp-config/mcp-servers.json << 'EOF'
-          {
-            "mcpServers": {
-              "serena": {
-                "command": "docker",
-                "args": ["exec", "-i", "serena", "serena", "start-mcp-server", "--context", "codex", "--project", "${{ github.workspace }}"]
-              }
-            }
-          }
-          EOF
-
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      - name: Get changed source files
+        id: changed-files
+        run: |
+          FILES=$(git diff --name-only origin/main...HEAD -- '*.py' '*.js' '*.ts' '*.java' \
+            | grep -v -E '(test_|_test\.(py|js|ts)|\.test\.(js|ts)|\.spec\.(js|ts)|conftest\.py|/tests/|/test/|/__tests__/)' \
+            | grep -v -E '^(\.github/|code_to_optimize/|\.tessl/|node_modules/)' \
+            || true)
+          if [ -z "$FILES" ]; then
+            echo "files=" >> "$GITHUB_OUTPUT"
+            echo "No changed source files to analyze."
+          else
+            echo "files<<EOF" >> "$GITHUB_OUTPUT"
+            echo "$FILES" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+            echo "Changed files:"
+            echo "$FILES"
+          fi
+
       - name: Run Claude Code
+        if: steps.changed-files.outputs.files != ''
         uses: anthropics/claude-code-action@v1
         with:
           use_bedrock: "true"
           use_sticky_comment: true
           allowed_bots: "claude[bot],codeflash-ai[bot]"
-          claude_args: '--mcp-config /tmp/mcp-config/mcp-servers.json --allowedTools "Read,Glob,Grep,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(wc *),Bash(find *),mcp__serena__*"'
+          claude_args: '--allowedTools "Read,Glob,Grep,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(wc *),Bash(gh pr comment:*)"'
           prompt: |
-            You are a duplicate code detector with access to Serena semantic code analysis.
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
 
-            ## Setup
+            You are a duplicate code detector for a multi-language codebase (Python, JavaScript, TypeScript, Java). Check whether this PR introduces code that duplicates logic already present elsewhere in the repository — including across languages. Focus on finding true duplicates, not just similar-looking code.
 
-            First activate the project in Serena:
-            - Use `mcp__serena__activate_project` with the workspace path `${{ github.workspace }}`
+            ## Changed files
+
+            ```
+            ${{ steps.changed-files.outputs.files }}
+            ```
 
             ## Steps
 
-            1. Get the list of changed .py files (excluding tests):
-               `git diff --name-only origin/main...HEAD -- '*.py' | grep -v -E '(test_|_test\.py|/tests/|/test/)'`
+            1. **Read changed files.** For each file above, read it and identify functions or methods that were added or substantially modified (longer than 5 lines).
 
-            2. Use Serena's semantic analysis on changed files:
-               - `mcp__serena__get_symbols_overview` to understand file structure
-               - `mcp__serena__find_symbol` to search for similarly named symbols across the codebase
-               - `mcp__serena__find_referencing_symbols` to understand usage patterns
-               - `mcp__serena__search_for_pattern` to find similar code patterns
+            2. **Search for duplicates.** For each function, use Grep to search the codebase for:
+               - The same function name defined elsewhere (`def function_name` for Python, `function function_name` / `const function_name` / `module.exports` for the JS files under `packages/`)
+               - 2-3 distinctive operations from the body (specific API calls, algorithm patterns, string literals, exception types) — this catches duplicates that have different names but implement the same logic
 
-            3. For each changed file, look for:
-               - **Exact Duplication**: Identical code blocks (>10 lines) in multiple locations
-               - **Structural Duplication**: Same logic with minor variations (different variable names)
-               - **Functional Duplication**: Different implementations of the same functionality
-               - **Copy-Paste Programming**: Similar blocks that could be extracted into shared utilities
+            3. **Cross-module check.** This codebase has parallel Python modules under `languages/python/`, `languages/javascript/`, and `languages/java/` that handle the same concerns (parsing, code replacement, test running, etc.) for different target languages. It also has a JS runtime under `packages/codeflash/runtime/` and a Java runtime under `codeflash-java-runtime/`. When a changed file is under one of these areas, also search the others for equivalent logic. For example:
+               - `languages/javascript/code_replacer.py` and `languages/python/static_analysis/code_replacer.py` both handle code replacement — shared logic should be extracted
+               - Shared concepts (AST traversal, scope analysis, import resolution, test running) are prime candidates for duplication across these modules
 
-            4. Cross-reference against the rest of the codebase using Serena:
-               - Search for similar function signatures and logic patterns
-               - Check if new code duplicates existing utilities or helpers
-               - Look for repeated patterns across modules
+            4. **Compare candidates.** When a Grep hit looks promising (not just a shared import or call site), read the full function and compare semantics. Flag it only if it matches one of these patterns:
+               - **Same function in two modules** — a function with the same or very similar body exists in another module. One should import from the other instead (within the same language).
+               - **Shared logic across sibling files** — the same helper logic repeated in files within the same package. Should be extracted to a common module.
+               - **Repeated pattern across classes** — multiple classes implement the same logic inline (e.g., identical traversal, identical validation). Should be a mixin or shared helper.
+               - **Cross-module reimplementation** — the same algorithm or utility implemented in both `languages/python/` and `languages/javascript/` (both are Python) or between Python orchestration code and JS runtime code in `packages/`. Note: some duplication is unavoidable (each target language needs its own parser, for example). Only flag cases where the logic is genuinely shared or where one module could import from the other.
 
-            ## What to Report
+            5. **Report findings.** Post a single PR comment. Report at most 5 findings.
 
-            - Identical or nearly identical functions in different files
-            - Repeated code blocks that could be extracted to utilities
-            - Similar classes or modules with overlapping functionality
-            - Copy-pasted code with minor modifications
-            - Duplicated business logic across components
+            **If duplicates found**, for each one:
+            - **Confidence**: HIGH (identical or near-identical logic) / MEDIUM (same intent, minor differences worth reviewing)
+            - **Locations**: `file_path:line_number` for both the new and existing code
+            - **What's duplicated**: One sentence describing the shared logic
+            - **Suggestion**: How to consolidate — import from canonical location, extract to shared module, create a mixin. For cross-module duplicates (between language directories or Python↔JS runtime), just flag it for a tech lead to review rather than prescribing a specific fix.
 
-            ## What to Skip
+            **If no duplicates found**, post a comment that just says "No duplicates detected." so the sticky comment gets updated.
 
-            - Standard boilerplate (imports, __init__, etc.)
-            - Test setup/teardown code
-            - Configuration with similar structure
-            - Language-specific patterns (constructors, getters/setters)
-            - Small snippets (<5 lines) unless highly repetitive
-            - Workflow files under .github/
+            ## Examples (illustrative — these are past cases, some already resolved)
 
-            ## Output
+            **IS a duplicate (HIGH):** A 12-line `is_build_output_dir()` function was defined identically in two modules (`setup/detector.py` and `code_utils/config_js.py`). Fix: delete one, import from the other.
 
-            Post a single PR comment with your findings. For each pattern found:
-            - Severity (High/Medium/Low)
-            - File locations with line numbers
-            - Code samples showing the duplication
-            - Concrete refactoring suggestion
+            **IS a duplicate (MEDIUM):** `is_assignment_used()` was implemented separately in two context files with the same logic. Fix: move to a shared module, import from both call sites.
 
-            If no significant duplication is found, say so briefly. Do not create issues — just comment on the PR.
-      - name: Stop Serena
-        if: always()
-        run: docker stop serena && docker rm serena || true
+            **IS a duplicate (MEDIUM, cross-module):** `normalize_path()` implemented in both `languages/python/support.py` and `languages/javascript/support.py` with identical logic. Flagging for tech lead review — should likely be extracted to `languages/base.py` or a shared utility.
+
+            **NOT a duplicate:** Two classes each define a `visit()` method that traverses an AST, but they handle different node types and produce different outputs. This is intentional polymorphism.
+
+            **NOT a duplicate (cross-module):** `languages/python/static_analysis/code_extractor.py` and `languages/javascript/parse.py` both extract functions from source code, but they use fundamentally different parsing strategies (Python AST vs tree-sitter). The logic is necessarily different.
+
+            ## DO NOT report
+
+            - Standard boilerplate (`__init__`, `__repr__`, `__str__`, `__eq__`, simple property accessors, constructors)
+            - Functions under 5 lines
+            - Config/setup code that naturally has similar structure
+            - Intentional polymorphism (same method name, genuinely different behavior)
+            - Test files, conftest files, spec files
+            - Import statements and logging setup
+            - Files under `.github/`, `code_to_optimize/`, `.tessl/`
+            - Code across language modules that must differ due to target-language semantics (parsers, AST node types, runtime-specific APIs)
+
+            Do NOT create issues or edit any files. Only post a PR comment.
