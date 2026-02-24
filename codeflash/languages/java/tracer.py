@@ -100,13 +100,7 @@ class JavaTracer:
 
         try:
             result = subprocess.run(
-                cmd,
-                check=False,
-                cwd=self.project_root,
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=self.timeout,
+                cmd, check=False, cwd=self.project_root, env=env, capture_output=True, text=True, timeout=self.timeout
             )
 
             if result.returncode != 0:
@@ -175,7 +169,12 @@ class JavaTracer:
                             depth = min(len(parts), 3)
                             packages.add(".".join(parts[:depth]))
                             break
-                        if line and not line.startswith("//") and not line.startswith("/*") and not line.startswith("*"):
+                        if (
+                            line
+                            and not line.startswith("//")
+                            and not line.startswith("/*")
+                            and not line.startswith("*")
+                        ):
                             break
                 except Exception:
                     continue
