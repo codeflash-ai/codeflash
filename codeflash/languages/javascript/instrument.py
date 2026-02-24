@@ -873,11 +873,14 @@ class RenderCallTransformer:
         # Position after ComponentName
         pos = match.end()
 
+        # Cache length to avoid repeated calls in hot loop
+        len_code = len(code)
+
         # Skip whitespace
-        while pos < len(code) and code[pos] in " \t\n\r":
+        while pos < len_code and code[pos] in " \t\n\r":
             pos += 1
 
-        if pos >= len(code):
+        if pos >= len_code:
             return None
 
         create_element_args = ""
@@ -890,7 +893,7 @@ class RenderCallTransformer:
             in_string = False
             string_char = None
 
-            while pos < len(code) and depth > 0:
+            while pos < len_code and depth > 0:
                 char = code[pos]
                 if char in "\"'`" and (pos == 0 or code[pos - 1] != "\\"):
                     if not in_string:
@@ -899,7 +902,10 @@ class RenderCallTransformer:
                     elif char == string_char:
                         in_string = False
                         string_char = None
-                elif not in_string:
+                    pos += 1
+                    continue
+
+                if not in_string:
                     if char == "(":
                         depth += 1
                     elif char == ")":
@@ -910,7 +916,8 @@ class RenderCallTransformer:
                 return None
 
             # pos-1 is the closing ) of createElement/_jsx
-            create_element_args = code[args_start : pos - 1].strip()
+            create_element_args = code[args_start: pos - 1].strip()
+
 
         elif code[pos] == ")":
             # No args: React.createElement(Counter) or _jsx(Counter)
@@ -919,22 +926,23 @@ class RenderCallTransformer:
             return None
 
         # Skip whitespace between createElement closing ) and render closing )
-        while pos < len(code) and code[pos] in " \t\n\r":
+        while pos < len_code and code[pos] in " \t\n\r":
             pos += 1
 
         # Expect closing ) of render(
         # If we see a comma instead, render has additional options - skip this match
-        if pos >= len(code) or code[pos] != ")":
+        if pos >= len_code or code[pos] != ")":
             return None
 
         pos += 1  # skip ) of render
 
         # Check for trailing semicolon
         end_pos = pos
-        while end_pos < len(code) and code[end_pos] in " \t":
+        # Only skip spaces and tabs per original behavior
+        while end_pos < len_code and code[end_pos] in " \t":
             end_pos += 1
 
-        has_trailing_semicolon = end_pos < len(code) and code[end_pos] == ";"
+        has_trailing_semicolon = end_pos < len_code and code[end_pos] == ";"
         if has_trailing_semicolon:
             end_pos += 1
 
