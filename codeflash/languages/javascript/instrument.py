@@ -117,6 +117,7 @@ class JsxRenderCallTransformer:
     Examples:
     - render(<Comp />) -> codeflash.capturePerf('Comp', '1', () => render(<Comp />))
     - render(<Comp>...</Comp>, opts) -> codeflash.capturePerf('Comp', '1', () => render(<Comp>...</Comp>, opts))
+
     """
 
     def __init__(self, function_to_optimize: FunctionToOptimize, capture_func: str) -> None:
@@ -127,9 +128,7 @@ class JsxRenderCallTransformer:
         self.invocation_counter = 0
         # Match render( followed by JSX containing the component name
         # Captures: (whitespace)(await )?render(
-        self._render_pattern = re.compile(
-            rf"(\s*)(await\s+)?render\s*\(\s*<\s*{re.escape(self.func_name)}[\s>/]"
-        )
+        self._render_pattern = re.compile(rf"(\s*)(await\s+)?render\s*\(\s*<\s*{re.escape(self.func_name)}[\s>/]")
 
     def transform(self, code: str) -> str:
         """Transform all render(<Component>) calls in the code."""
@@ -162,7 +161,7 @@ class JsxRenderCallTransformer:
             prefix = match.group(2) or ""  # "await " or ""
 
             # Find the render( opening paren
-            render_call_text = code[match.start():]
+            render_call_text = code[match.start() :]
             render_paren_offset = render_call_text.index("(")
             open_paren_pos = match.start() + render_paren_offset
 
@@ -1310,12 +1309,11 @@ def _instrument_js_test_code(
     # If no direct function calls were instrumented, check for JSX usage (React components).
     # React components are invoked via JSX (<Component />) in render() calls, not as
     # direct function calls. Detect this pattern and wrap render() calls instead.
-    if code == code_before_transforms and _is_jsx_component_usage(code_before_transforms, function_to_optimize.function_name):
+    if code == code_before_transforms and _is_jsx_component_usage(
+        code_before_transforms, function_to_optimize.function_name
+    ):
         code, _jsx_counter = transform_jsx_render_calls(
-            code=code,
-            function_to_optimize=function_to_optimize,
-            capture_func=capture_func,
-            start_counter=final_counter,
+            code=code, function_to_optimize=function_to_optimize, capture_func=capture_func, start_counter=final_counter
         )
 
     return code
