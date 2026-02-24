@@ -28,6 +28,76 @@ HAS_TENSORFLOW = find_spec("tensorflow") is not None
 HAS_NUMBA = find_spec("numba") is not None
 HAS_PYARROW = find_spec("pyarrow") is not None
 
+if HAS_JAX:
+    try:
+        import jax  # type: ignore  # noqa: PGH003
+        import jax.numpy as jnp  # type: ignore  # noqa: PGH003
+    except ImportError:
+        HAS_JAX = False
+
+if HAS_XARRAY:
+    try:
+        import xarray  # type: ignore  # noqa: PGH003
+    except ImportError:
+        HAS_XARRAY = False
+
+if HAS_TENSORFLOW:
+    try:
+        import tensorflow as tf  # type: ignore  # noqa: PGH003
+    except ImportError:
+        HAS_TENSORFLOW = False
+
+if HAS_SQLALCHEMY:
+    try:
+        import sqlalchemy  # type: ignore  # noqa: PGH003
+    except ImportError:
+        HAS_SQLALCHEMY = False
+
+if HAS_SCIPY:
+    try:
+        import scipy  # type: ignore  # noqa: PGH003
+    except ImportError:
+        HAS_SCIPY = False
+
+if HAS_NUMPY:
+    try:
+        import numpy as np  # type: ignore  # noqa: PGH003
+    except ImportError:
+        HAS_NUMPY = False
+
+if HAS_PYARROW:
+    try:
+        import pyarrow as pa  # type: ignore  # noqa: PGH003
+    except ImportError:
+        HAS_PYARROW = False
+
+if HAS_PANDAS:
+    try:
+        import pandas  # type: ignore  # noqa: ICN001, PGH003
+    except ImportError:
+        HAS_PANDAS = False
+
+if HAS_TORCH:
+    try:
+        import torch  # type: ignore  # noqa: PGH003
+    except ImportError:
+        HAS_TORCH = False
+
+if HAS_NUMBA:
+    try:
+        import numba  # type: ignore  # noqa: PGH003
+        from numba.core.dispatcher import Dispatcher  # type: ignore  # noqa: PGH003
+        from numba.typed import Dict as NumbaDict  # type: ignore  # noqa: PGH003
+        from numba.typed import List as NumbaList  # type: ignore  # noqa: PGH003
+    except ImportError:
+        HAS_NUMBA = False
+
+if HAS_PYRSISTENT:
+    try:
+        import pyrsistent  # type: ignore  # noqa: PGH003
+    except ImportError:
+        HAS_PYRSISTENT = False
+
 # Pattern to match pytest temp directories: /tmp/pytest-of-<user>/pytest-<N>/
 # These paths vary between test runs but are logically equivalent
 PYTEST_TEMP_PATH_PATTERN = re.compile(r"/tmp/pytest-of-[^/]+/pytest-\d+/")  # noqa: S108
@@ -185,9 +255,6 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
             return comparator(orig_referent, new_referent, superset_obj)
 
         if HAS_JAX:
-            import jax  # type: ignore  # noqa: PGH003
-            import jax.numpy as jnp  # type: ignore  # noqa: PGH003
-
             # Handle JAX arrays first to avoid boolean context errors in other conditions
             if isinstance(orig, jax.Array):
                 if orig.dtype != new.dtype:
@@ -198,15 +265,11 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
 
         # Handle xarray objects before numpy to avoid boolean context errors
         if HAS_XARRAY:
-            import xarray  # type: ignore  # noqa: PGH003
-
             if isinstance(orig, (xarray.Dataset, xarray.DataArray)):
                 return orig.identical(new)
 
         # Handle TensorFlow objects early to avoid boolean context errors
         if HAS_TENSORFLOW:
-            import tensorflow as tf  # type: ignore  # noqa: PGH003
-
             if isinstance(orig, tf.Tensor):
                 if orig.dtype != new.dtype:
                     return False
@@ -243,8 +306,6 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
                 return comparator(orig.to_list(), new.to_list(), superset_obj)
 
         if HAS_SQLALCHEMY:
-            import sqlalchemy  # type: ignore  # noqa: PGH003
-
             try:
                 insp = sqlalchemy.inspection.inspect(orig)
                 insp = sqlalchemy.inspection.inspect(new)
@@ -260,8 +321,6 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
             except sqlalchemy.exc.NoInspectionAvailable:
                 pass
 
-        if HAS_SCIPY:
-            import scipy  # type: ignore  # noqa: PGH003
         # scipy condition because dok_matrix type is also a instance of dict, but dict comparison doesn't work for it
         if isinstance(orig, dict) and not (HAS_SCIPY and isinstance(orig, scipy.sparse.spmatrix)):
             if superset_obj:
@@ -293,8 +352,6 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
             return comparator(dict(orig), dict(new), superset_obj)
 
         if HAS_NUMPY:
-            import numpy as np
-
             if isinstance(orig, (np.datetime64, np.timedelta64)):
                 # Handle NaT (Not a Time) - numpy's equivalent of NaN for datetime
                 if np.isnat(orig) and np.isnat(new):
@@ -356,8 +413,6 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
             return (orig != new).nnz == 0
 
         if HAS_PYARROW:
-            import pyarrow as pa  # type: ignore  # noqa: PGH003
-
             if isinstance(orig, pa.Table):
                 if orig.schema != new.schema:
                     return False
@@ -400,8 +455,6 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
                 return bool(orig.equals(new))
 
         if HAS_PANDAS:
-            import pandas  # noqa: ICN001
-
             if isinstance(
                 orig, (pandas.DataFrame, pandas.Series, pandas.Index, pandas.Categorical, pandas.arrays.SparseArray)
             ):
@@ -432,8 +485,6 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
             pass
 
         if HAS_TORCH:
-            import torch  # type: ignore  # noqa: PGH003
-
             if isinstance(orig, torch.Tensor):
                 if orig.dtype != new.dtype:
                     return False
@@ -452,11 +503,6 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
                 return orig == new
 
         if HAS_NUMBA:
-            import numba
-            from numba.core.dispatcher import Dispatcher
-            from numba.typed import Dict as NumbaDict
-            from numba.typed import List as NumbaList
-
             # Handle numba typed List
             if isinstance(orig, NumbaList):
                 if len(orig) != len(new):
@@ -488,8 +534,6 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
                 return orig.py_func is new.py_func
 
         if HAS_PYRSISTENT:
-            import pyrsistent  # type: ignore  # noqa: PGH003
-
             if isinstance(
                 orig,
                 (

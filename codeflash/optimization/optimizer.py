@@ -70,6 +70,7 @@ class Optimizer:
         self.current_worktree: Path | None = None
         self.original_args_and_test_cfg: tuple[Namespace, TestConfig] | None = None
         self.patch_files: list[Path] = []
+        self.normalized_imports_cache: dict[Path, ValidCode] = {}
 
     @staticmethod
     def _find_js_project_root(file_path: Path) -> Path | None:
@@ -328,6 +329,9 @@ class Optimizer:
 
         has_syntax_error = False
         for analysis in imported_module_analyses:
+            if analysis.file_path in self.normalized_imports_cache:
+                validated_original_code[analysis.file_path] = self.normalized_imports_cache[analysis.file_path]
+                continue
             callee_original_code = analysis.file_path.read_text(encoding="utf8")
             try:
                 normalized_callee_original_code = normalize_code(callee_original_code)
@@ -336,9 +340,9 @@ class Optimizer:
                 logger.info("Skipping optimization due to helper file error.")
                 has_syntax_error = True
                 break
-            validated_original_code[analysis.file_path] = ValidCode(
-                source_code=callee_original_code, normalized_code=normalized_callee_original_code
-            )
+            valid_code = ValidCode(source_code=callee_original_code, normalized_code=normalized_callee_original_code)
+            self.normalized_imports_cache[analysis.file_path] = valid_code
+            validated_original_code[analysis.file_path] = valid_code
 
         if has_syntax_error:
             return None
