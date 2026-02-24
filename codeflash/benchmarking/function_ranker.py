@@ -84,11 +84,14 @@ class FunctionRanker:
                     continue
 
                 # Parse function name to handle methods within classes
+                # Use rsplit to handle fully-qualified Java names like "com.example.Foo.bar"
+                # where we want class_name="Foo" and base_function_name="bar"
                 class_name, qualified_name, base_function_name = (None, func_name, func_name)
                 if "." in func_name and not func_name.startswith("<"):
-                    parts = func_name.split(".", 1)
+                    parts = func_name.rsplit(".", 1)
                     if len(parts) == 2:
-                        class_name, base_function_name = parts
+                        class_name = parts[0].rsplit(".", 1)[-1] if "." in parts[0] else parts[0]
+                        base_function_name = parts[1]
 
                 # Calculate own time (total time - time spent in subcalls)
                 own_time_ns = total_time_ns

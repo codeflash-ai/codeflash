@@ -550,6 +550,13 @@ class Optimizer:
         function_optimizer = None
         file_to_funcs_to_optimize, num_optimizable_functions, trace_file_path = self.get_optimizable_functions()
 
+        # If discovery didn't produce a trace file, check if one was provided via args (e.g., from Java tracer)
+        if trace_file_path is None and hasattr(self.args, "trace_file") and self.args.trace_file:
+            candidate = Path(self.args.trace_file)
+            if candidate.exists():
+                trace_file_path = candidate
+                logger.info("Using trace file from args: %s", trace_file_path)
+
         # Set language on TestConfig and global singleton based on discovered functions
         if file_to_funcs_to_optimize:
             for file_path, funcs in file_to_funcs_to_optimize.items():

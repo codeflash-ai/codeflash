@@ -35,6 +35,61 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _handle_java_tracing() -> ArgumentParser:
+    """Run Java tracing via the Java agent, then route to Optimizer with trace data."""
+    from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
+
+    full_args = parse_args()
+    full_args = process_pyproject_config(full_args)
+    full_args.previous_checkpoint_functions = None
+
+    project_root = Path(full_args.project_root)
+    module_root = Path(full_args.module_root)
+
+    # Parse tracer-specific args from sys.argv
+    max_function_count = 256
+    tracer_timeout = 300
+    trace_only = False
+    for i, arg in enumerate(sys.argv):
+        if arg == "--max-function-count" and i + 1 < len(sys.argv):
+            max_function_count = int(sys.argv[i + 1])
+        elif arg == "--tracer-timeout" and i + 1 < len(sys.argv):
+            tracer_timeout = int(float(sys.argv[i + 1]))
+        elif arg == "--trace-only":
+            trace_only = True
+
+    from codeflash.languages.java.tracer import JavaTracer
+
+    tracer = JavaTracer(
+        project_root=project_root,
+        module_root=module_root,
+        max_function_count=max_function_count,
+        timeout=tracer_timeout,
+    )
+
+    logger.info("Running Java tracer for project at %s", project_root)
+    trace_file = tracer.run()
+
+    if trace_file is None:
+        logger.error("Java tracing failed. Falling back to unranked optimization.")
+        # Fall through to optimizer without trace data
+        from codeflash.optimization import optimizer
+
+        optimizer.run_with_args(full_args)
+        return ArgumentParser()
+
+    logger.info("Java trace complete: %s", trace_file)
+
+    if not trace_only:
+        from codeflash.optimization import optimizer
+
+        # Pass the trace file path so FunctionRanker can use it
+        full_args.trace_file = str(trace_file)
+        optimizer.run_with_args(full_args)
+
+    return ArgumentParser()
+
+
 def main(args: Namespace | None = None) -> ArgumentParser:
     # For non-Python languages, detect early and route to Optimizer
     # Java, JavaScript, and TypeScript use their own test runners (Maven/JUnit, Jest)
@@ -50,13 +105,15 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                     lang_support = get_language_support(file_path)
                     detected_language = lang_support.language
 
-                    if detected_language in (Language.JAVA, Language.JAVASCRIPT, Language.TYPESCRIPT):
-                        # Parse and process args like main.py does
+                    if detected_language == Language.JAVA:
+                        return _handle_java_tracing()
+
+                    if detected_language in (Language.JAVASCRIPT, Language.TYPESCRIPT):
+                        # JS/TS don't have a tracer yet — route directly to Optimizer
                         from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
 
                         full_args = parse_args()
                         full_args = process_pyproject_config(full_args)
-                        # Set checkpoint functions to None (no checkpoint for single-file optimization)
                         full_args.previous_checkpoint_functions = None
 
                         from codeflash.optimization import optimizer
@@ -65,7 +122,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                             "Detected %s file, routing to Optimizer instead of Python tracer", detected_language.value
                         )
                         optimizer.run_with_args(full_args)
-                        return ArgumentParser()  # Return dummy parser since we're done
+                        return ArgumentParser()
         except (IndexError, OSError, Exception):
             pass  # Fall through to normal tracing if detection fails
 
