@@ -36,6 +36,11 @@ _M_MODULES_TAG = f"{{{_MAVEN_NS}}}modules"
 
 logger = logging.getLogger(__name__)
 
+# Cache for classpath strings — keyed on (maven_root, test_module).
+# Dependencies don't change between candidates (only source code under test changes),
+# so we avoid calling `mvn dependency:build-classpath` (~2-3s) repeatedly.
+_classpath_cache: dict[tuple[Path, str | None], str] = {}
+
 # Regex pattern for valid Java class names (package.ClassName format)
 # Allows: letters, digits, underscores, dots, and dollar signs (inner classes)
 _VALID_JAVA_CLASS_NAME = re.compile(r"^[a-zA-Z_$][a-zA-Z0-9_$.]*$")
@@ -411,25 +416,30 @@ def run_behavioral_tests(
                     add_jacoco_plugin_to_pom(pom_path)
                 coverage_xml_path = get_jacoco_xml_path(project_root)
 
-    # Run Maven tests from the appropriate root
     # Use a minimum timeout of 60s for Java builds (120s when coverage is enabled due to verify phase)
     min_timeout = 120 if enable_coverage else 60
     effective_timeout = max(timeout or 300, min_timeout)
-    result = _run_maven_tests(
-        maven_root,
-        test_paths,
-        run_env,
-        timeout=effective_timeout,
-        mode="behavior",
-        enable_coverage=enable_coverage,
-        test_module=test_module,
-    )
 
-    # Find or create the JUnit XML results file
-    # For multi-module projects, look in the test module's target directory
-    target_dir = _get_test_module_target_dir(maven_root, test_module)
-    surefire_dir = target_dir / "surefire-reports"
-    result_xml_path = _get_combined_junit_xml(surefire_dir, candidate_index)
+    if enable_coverage:
+        # Coverage MUST use Maven — JaCoCo runs as a Maven plugin during the verify phase
+        result = _run_maven_tests(
+            maven_root,
+            test_paths,
+            run_env,
+            timeout=effective_timeout,
+            mode="behavior",
+            enable_coverage=True,
+            test_module=test_module,
+        )
+        target_dir = _get_test_module_target_dir(maven_root, test_module)
+        surefire_dir = target_dir / "surefire-reports"
+        result_xml_path = _get_combined_junit_xml(surefire_dir, candidate_index)
+    else:
+        # Direct JVM execution (fast path — bypasses Maven overhead)
+        result, result_xml_path = _run_direct_or_fallback_maven(
+            maven_root, test_module, test_paths, run_env,
+            effective_timeout, mode="behavior", candidate_index=candidate_index,
+        )
 
     # Debug: Log Maven result and coverage file status
     if enable_coverage:
@@ -595,6 +605,20 @@ def _get_test_classpath(
         # Clean up temp file
         if cp_file.exists():
             cp_file.unlink()
+
+
+def _get_test_classpath_cached(
+    project_root: Path, env: dict[str, str], test_module: str | None = None, timeout: int = 60
+) -> str | None:
+    key = (project_root, test_module)
+    cached = _classpath_cache.get(key)
+    if cached is not None:
+        logger.debug("Using cached classpath for (%s, %s)", project_root, test_module)
+        return cached
+    result = _get_test_classpath(project_root, env, test_module, timeout)
+    if result is not None:
+        _classpath_cache[key] = result
+    return result
 
 
 def _find_junit_console_standalone() -> Path | None:
@@ -845,6 +869,77 @@ def _get_empty_result(maven_root: Path, test_module: str | None) -> tuple[Path, 
     return result_xml_path, empty_result
 
 
+def _run_direct_or_fallback_maven(
+    maven_root: Path,
+    test_module: str | None,
+    test_paths: Any,
+    run_env: dict[str, str],
+    timeout: int,
+    mode: str,
+    candidate_index: int = -1,
+) -> tuple[subprocess.CompletedProcess, Path]:
+    """Compile once, then run tests directly via JVM. Falls back to Maven on failure.
+
+    This mirrors the compile-once-run-many pattern from run_benchmarking_tests but
+    for single-run modes (behavioral without coverage, line-profile).
+    """
+    test_classes = _get_test_class_names(test_paths, mode=mode)
+    if not test_classes:
+        logger.warning("No test classes found for mode=%s, returning empty result", mode)
+        result_xml_path, empty_result = _get_empty_result(maven_root, test_module)
+        return empty_result, result_xml_path
+
+    # Step 1: Compile tests (still Maven — needed for dependency resolution)
+    logger.debug("Step 1: Compiling tests for %s mode", mode)
+    compile_result = _compile_tests(maven_root, run_env, test_module, timeout=120)
+    if compile_result.returncode != 0:
+        logger.warning("Compilation failed (rc=%d), falling back to Maven-based execution", compile_result.returncode)
+        result = _run_maven_tests(maven_root, test_paths, run_env, timeout=timeout, mode=mode, test_module=test_module)
+        target_dir = _get_test_module_target_dir(maven_root, test_module)
+        surefire_dir = target_dir / "surefire-reports"
+        result_xml_path = _get_combined_junit_xml(surefire_dir, candidate_index)
+        return result, result_xml_path
+
+    # Step 2: Get classpath (cached after first call)
+    logger.debug("Step 2: Getting classpath")
+    classpath = _get_test_classpath_cached(maven_root, run_env, test_module, timeout=60)
+    if not classpath:
+        logger.warning("Failed to get classpath, falling back to Maven-based execution")
+        result = _run_maven_tests(maven_root, test_paths, run_env, timeout=timeout, mode=mode, test_module=test_module)
+        target_dir = _get_test_module_target_dir(maven_root, test_module)
+        surefire_dir = target_dir / "surefire-reports"
+        result_xml_path = _get_combined_junit_xml(surefire_dir, candidate_index)
+        return result, result_xml_path
+
+    # Step 3: Run tests directly via JVM
+    working_dir = maven_root / test_module if test_module else maven_root
+    target_dir = _get_test_module_target_dir(maven_root, test_module)
+    reports_dir = target_dir / "surefire-reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    logger.debug("Step 3: Running %s tests directly (bypassing Maven)", mode)
+    result = _run_tests_direct(classpath, test_classes, run_env, working_dir, timeout=timeout, reports_dir=reports_dir)
+
+    # Check for fallback indicators on failure (same checks as benchmarking)
+    if result.returncode != 0:
+        combined_output = (result.stderr or "") + (result.stdout or "")
+        fallback_indicators = [
+            "ConsoleLauncher",
+            "ClassNotFoundException",
+            "No tests were executed",
+            "Unable to locate a Java Runtime",
+            "No tests found",
+        ]
+        if any(indicator in combined_output for indicator in fallback_indicators):
+            logger.debug("Direct JVM execution failed, falling back to Maven-based execution")
+            result = _run_maven_tests(
+                maven_root, test_paths, run_env, timeout=timeout, mode=mode, test_module=test_module
+            )
+
+    result_xml_path = _get_combined_junit_xml(reports_dir, candidate_index)
+    return result, result_xml_path
+
+
 def _run_benchmarking_tests_maven(
     test_paths: Any,
     test_env: dict[str, str],
@@ -1041,7 +1136,7 @@ def run_benchmarking_tests(
 
     # Step 2: Get classpath from Maven
     logger.debug("Step 2: Getting classpath")
-    classpath = _get_test_classpath(maven_root, compile_env, test_module, timeout=60)
+    classpath = _get_test_classpath_cached(maven_root, compile_env, test_module, timeout=60)
 
     if not classpath:
         logger.warning("Failed to get classpath, falling back to Maven-based execution")
@@ -1826,20 +1921,13 @@ def run_line_profile_tests(
     if line_profile_output_file:
         run_env["CODEFLASH_LINE_PROFILE_OUTPUT"] = str(line_profile_output_file)
 
-    # Run tests once with profiling
-    # Maven needs substantial timeout for JVM startup + test execution
-    # Use minimum of 120s to account for Maven overhead, or larger if specified
+    # Direct JVM execution (fast path — bypasses Maven overhead)
     min_timeout = 120
     effective_timeout = max(timeout or min_timeout, min_timeout)
     logger.debug("Running line profiling tests (single run) with timeout=%ds", effective_timeout)
-    result = _run_maven_tests(
-        maven_root, test_paths, run_env, timeout=effective_timeout, mode="line_profile", test_module=test_module
+    result, result_xml_path = _run_direct_or_fallback_maven(
+        maven_root, test_module, test_paths, run_env, effective_timeout, mode="line_profile",
     )
-
-    # Get result XML path
-    target_dir = _get_test_module_target_dir(maven_root, test_module)
-    surefire_dir = target_dir / "surefire-reports"
-    result_xml_path = _get_combined_junit_xml(surefire_dir, -1)
 
     return result_xml_path, result
 
