@@ -135,6 +135,35 @@ class JsxRenderCallTransformer:
         result: list[str] = []
         pos = 0
 
+
+        # Precompute a table of "is inside string" for every position 0..len(code)
+        # flags[p] == True means that a call to is_inside_string(code, p) would return True.
+        n = len(code)
+        inside_flags = [False] * (n + 1)
+        # We simulate the original is_inside_string scanning behavior incrementally:
+        j = 0
+        in_string = False
+        string_char = None
+        for p in range(n + 1):
+            # advance j up to p using the exact same rules as is_inside_string
+            while j < p:
+                ch = code[j]
+                if in_string:
+                    # Check for escape sequence
+                    if ch == "\\" and j + 1 < n:
+                        j += 2
+                        continue
+                    # Check for end of string
+                    if ch == string_char:
+                        in_string = False
+                        string_char = None
+                # Check for start of string
+                elif ch in "\"'`":
+                    in_string = True
+                    string_char = ch
+                j += 1
+            inside_flags[p] = in_string
+
         while pos < len(code):
             match = self._render_pattern.search(code, pos)
             if not match:
@@ -142,7 +171,7 @@ class JsxRenderCallTransformer:
                 break
 
             # Skip if inside a string literal
-            if is_inside_string(code, match.start()):
+            if inside_flags[match.start()]:
                 result.append(code[pos : match.end()])
                 pos = match.end()
                 continue
@@ -161,9 +190,14 @@ class JsxRenderCallTransformer:
             prefix = match.group(2) or ""  # "await " or ""
 
             # Find the render( opening paren
-            render_call_text = code[match.start() :]
-            render_paren_offset = render_call_text.index("(")
-            open_paren_pos = match.start() + render_paren_offset
+            open_paren_pos = code.find("(", match.start())
+            if open_paren_pos == -1:
+                # Fallback: shouldn't happen due to regex, but keep same skip behavior
+                result.append(code[match.start() : match.end()])
+                pos = match.end()
+                continue
+
+            # Find the matching closing paren of render(...)
 
             # Find the matching closing paren of render(...)
             close_pos = self._find_matching_paren(code, open_paren_pos)
