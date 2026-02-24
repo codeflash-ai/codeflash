@@ -98,8 +98,6 @@ jobs:
             2. Security vulnerabilities
             3. Breaking API changes
             4. Test failures (methods with typos that wont run)
-            5. Stale documentation — if files or directories were moved, renamed, or deleted, check that `.claude/rules/`, `CLAUDE.md`, and `AGENTS.md` don't reference paths that no longer exist
-            6. New language support — if new language modules are added under `languages/`, check that `.github/workflows/duplicate-code-detector.yml` includes the new language in its file filters, search patterns, and cross-module checks
 
             IMPORTANT:
             - First check existing review comments using `gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments`. For each existing comment, check if the issue still exists in the current code.

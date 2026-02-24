@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - 'codeflash/version.py'
-      - 'codeflash-benchmark/codeflash_benchmark/version.py'
+      - 'codeflash-benchmark/codeflash_benchmark/__init__.py'
 
 jobs:
   detect-changes:
@@ -28,7 +28,7 @@ jobs:
           else
             echo "codeflash=false" >> $GITHUB_OUTPUT
           fi
-          if git diff --name-only HEAD~1 HEAD | grep -q '^codeflash-benchmark/codeflash_benchmark/version.py$'; then
+          if git diff --name-only HEAD~1 HEAD | grep -q '^codeflash-benchmark/codeflash_benchmark/__init__.py$'; then
             echo "benchmark=true" >> $GITHUB_OUTPUT
           else
             echo "benchmark=false" >> $GITHUB_OUTPUT
@@ -121,13 +121,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Extract version from version.py
+      - name: Extract version from __init__.py
         id: extract_version
         run: |
-          VERSION=$(grep -oP '__version__ = "\K[^"]+' codeflash-benchmark/codeflash_benchmark/version.py)
+          VERSION=$(grep -oP '__version__ = "\K[^"]+' codeflash-benchmark/codeflash_benchmark/__init__.py)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=benchmark-v$VERSION" >> $GITHUB_OUTPUT
           echo "Extracted version: $VERSION"
+
+      - name: Verify version matches pyproject.toml
+        run: |
+          INIT_VERSION=${{ steps.extract_version.outputs.version }}
+          TOML_VERSION=$(grep -oP '^version = "\K[^"]+' codeflash-benchmark/pyproject.toml)
+          if [ "$INIT_VERSION" != "$TOML_VERSION" ]; then
+            echo "::error::Version mismatch: __init__.py=$INIT_VERSION, pyproject.toml=$TOML_VERSION"
+            exit 1
+          fi
 
       - name: Check if tag already exists
         id: check_tag
