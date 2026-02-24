@@ -10,7 +10,13 @@
  * This is a common pattern in codebases where developers wrap children in memo()
  * but forget to stabilize the parent's prop references, negating the benefit.
  */
-import React, { useState, memo } from 'react';
+import React, { useState, memo , useMemo } from 'react';
+
+const H3_STYLE = { margin: '8px 0 4px', fontSize: '14px' } as const;
+
+const STATS_STYLE = { padding: '4px 8px', fontSize: '12px', color: '#666' } as const;
+
+const CONTAINER_STYLE = { padding: '8px', display: 'flex', gap: '8px', alignItems: 'center' } as const;
 
 export interface ListItem {
   id: number;
@@ -75,53 +81,61 @@ export function SearchableList({
   const [sortBy, setSortBy] = useState<'label' | 'score' | 'timestamp'>('label');
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
 
-  // Inefficient: expensive pipeline recomputed every render
-  const processedItems = items
-    .filter(item => {
-      if (showFavoritesOnly && !item.isFavorite) return false;
-      if (query) {
-        return (
-          item.label.toLowerCase().includes(query.toLowerCase()) ||
-          item.category.toLowerCase().includes(query.toLowerCase())
-        );
+  // Optimized: memoize filtering, sorting, grouping and stats into a single useMemo to avoid repeated array scans
+  const { processedItems, categoryGroups, stats } = useMemo(() => {
+    const q = query ? query.toLowerCase() : '';
+    // Filter into a new array in one pass
+    const filtered: ListItem[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (showFavoritesOnly && !item.isFavorite) continue;
+      if (q) {
+        const label = item.label.toLowerCase();
+        const category = item.category.toLowerCase();
+        if (!label.includes(q) && !category.includes(q)) continue;
       }
-      return true;
-    })
-    .sort((a, b) => {
-      if (sortBy === 'label') return a.label.localeCompare(b.label);
-      if (sortBy === 'score') return b.score - a.score;
-      return b.timestamp - a.timestamp;
-    });
+      filtered.push(item);
+    }
 
-  // Inefficient: grouping computed every render
-  const categoryGroups = processedItems.reduce(
-    (groups, item) => {
-      const group = groups[item.category] || [];
-      group.push(item);
-      groups[item.category] = group;
-      return groups;
-    },
-    {} as Record<string, ListItem[]>,
-  );
+    // Sort the filtered array
+    if (sortBy === 'label') {
+      filtered.sort((a, b) => a.label.localeCompare(b.label));
+    } else if (sortBy === 'score') {
+      filtered.sort((a, b) => b.score - a.score);
+    } else {
+      filtered.sort((a, b) => b.timestamp - a.timestamp);
+    }
 
-  // Inefficient: stats computed every render
-  const stats = {
-    total: processedItems.length,
-    favorites: processedItems.filter(i => i.isFavorite).length,
-    avgScore:
-      processedItems.length > 0
-        ? processedItems.reduce((sum, i) => sum + i.score, 0) / processedItems.length
-        : 0,
-    categories: Object.keys(categoryGroups).length,
-  };
+    // Build groups and aggregate stats in a single pass over the sorted filtered array
+    const groups: Record<string, ListItem[]> = {};
+    let favorites = 0;
+    let sumScore = 0;
+    for (let i = 0; i < filtered.length; i++) {
+      const it = filtered[i];
+      const g = groups[it.category];
+      if (g) g.push(it);
+      else groups[it.category] = [it];
+      if (it.isFavorite) favorites++;
+      sumScore += it.score;
+    }
 
-  // Inefficient: creates Set on every render
-  const highlightedSet = new Set(highlightedIds);
+    const total = filtered.length;
+    const avgScore = total > 0 ? sumScore / total : 0;
+    const categories = Object.keys(groups).length;
+
+    return {
+      processedItems: filtered,
+      categoryGroups: groups,
+      stats: { total, favorites, avgScore, categories },
+    };
+  }, [items, showFavoritesOnly, query, sortBy]);
+
+  // Optimized: create Set once per highlightedIds change
+  const highlightedSet = useMemo(() => new Set(highlightedIds), [highlightedIds]);
 
   return (
     <div>
-      {/* Inefficient: inline style */}
-      <div style={{ padding: '8px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+      <div style={CONTAINER_STYLE}>
         <input
           type="text"
           placeholder="Search..."
@@ -143,26 +157,22 @@ export function SearchableList({
         </label>
       </div>
 
-      {/* Inefficient: inline style */}
-      <div style={{ padding: '4px 8px', fontSize: '12px', color: '#666' }}>
+      <div style={STATS_STYLE}>
         {stats.total} items | {stats.favorites} favorites |
         Avg score: {stats.avgScore.toFixed(1)} | {stats.categories} categories
       </div>
 
       {Object.entries(categoryGroups).map(([category, categoryItems]) => (
         <div key={category}>
-          <h3 style={{ margin: '8px 0 4px', fontSize: '14px' }}>
+          <h3 style={H3_STYLE}>
             {category} ({categoryItems.length})
           </h3>
           {categoryItems.map(item => (
             <ListItemCard
               key={item.id}
               item={item}
-              // Inefficient: inline function creates new reference every render
-              // This defeats the React.memo on ListItemCard
-              onToggleFavorite={(id) => onToggleFavorite(id)}
-              onDelete={(id) => onDelete(id)}
-              // Inefficient: inline object creates new reference every render
+              onToggleFavorite={onToggleFavorite}
+              onDelete={onDelete}
               style={{
                 padding: '4px 8px',
                 borderBottom: '1px solid #eee',

@@ -107,6 +107,127 @@ def is_inside_string(code: str, pos: int) -> bool:
     return in_string
 
 
+class JsxRenderCallTransformer:
+    """Transforms render(<ComponentName>...) calls in React test code.
+
+    React components are invoked via JSX in tests, not as direct function calls.
+    Tests use render(<Component />) from @testing-library/react. This transformer
+    wraps those render() calls with codeflash instrumentation.
+
+    Examples:
+    - render(<Comp />) -> codeflash.capturePerf('Comp', '1', () => render(<Comp />))
+    - render(<Comp>...</Comp>, opts) -> codeflash.capturePerf('Comp', '1', () => render(<Comp>...</Comp>, opts))
+    """
+
+    def __init__(self, function_to_optimize: FunctionToOptimize, capture_func: str) -> None:
+        self.function_to_optimize = function_to_optimize
+        self.func_name = function_to_optimize.function_name
+        self.qualified_name = function_to_optimize.qualified_name
+        self.capture_func = capture_func
+        self.invocation_counter = 0
+        # Match render( followed by JSX containing the component name
+        # Captures: (whitespace)(await )?render(
+        self._render_pattern = re.compile(
+            rf"(\s*)(await\s+)?render\s*\(\s*<\s*{re.escape(self.func_name)}[\s>/]"
+        )
+
+    def transform(self, code: str) -> str:
+        """Transform all render(<Component>) calls in the code."""
+        result: list[str] = []
+        pos = 0
+
+        while pos < len(code):
+            match = self._render_pattern.search(code, pos)
+            if not match:
+                result.append(code[pos:])
+                break
+
+            # Skip if inside a string literal
+            if is_inside_string(code, match.start()):
+                result.append(code[pos : match.end()])
+                pos = match.end()
+                continue
+
+            # Skip if already wrapped with codeflash
+            lookback = code[max(0, match.start() - 60) : match.start()]
+            if f"codeflash.{self.capture_func}(" in lookback:
+                result.append(code[pos : match.end()])
+                pos = match.end()
+                continue
+
+            # Add everything before the match
+            result.append(code[pos : match.start()])
+
+            leading_ws = match.group(1)
+            prefix = match.group(2) or ""  # "await " or ""
+
+            # Find the render( opening paren
+            render_call_text = code[match.start():]
+            render_paren_offset = render_call_text.index("(")
+            open_paren_pos = match.start() + render_paren_offset
+
+            # Find the matching closing paren of render(...)
+            close_pos = self._find_matching_paren(code, open_paren_pos)
+            if close_pos == -1:
+                # Can't find matching paren, skip
+                result.append(code[match.start() : match.end()])
+                pos = match.end()
+                continue
+
+            # Extract the full render(...) arguments
+            render_args = code[open_paren_pos + 1 : close_pos - 1]
+
+            # Check for trailing semicolon
+            end_pos = close_pos
+            while end_pos < len(code) and code[end_pos] in " \t":
+                end_pos += 1
+            has_semicolon = end_pos < len(code) and code[end_pos] == ";"
+            if has_semicolon:
+                end_pos += 1
+
+            self.invocation_counter += 1
+            line_id = str(self.invocation_counter)
+            semicolon = ";" if has_semicolon else ""
+
+            # Wrap render(...) in a lambda: codeflash.capturePerf('name', 'id', () => render(...))
+            transformed = (
+                f"{leading_ws}{prefix}codeflash.{self.capture_func}('{self.qualified_name}', "
+                f"'{line_id}', () => render({render_args})){semicolon}"
+            )
+            result.append(transformed)
+            pos = end_pos
+
+        return "".join(result)
+
+    def _find_matching_paren(self, code: str, open_paren_pos: int) -> int:
+        """Find the position after the closing paren for the given opening paren."""
+        if open_paren_pos >= len(code) or code[open_paren_pos] != "(":
+            return -1
+
+        depth = 1
+        pos = open_paren_pos + 1
+        in_string = False
+        string_char = None
+
+        while pos < len(code) and depth > 0:
+            char = code[pos]
+            if char in "\"'`" and (pos == 0 or code[pos - 1] != "\\"):
+                if not in_string:
+                    in_string = True
+                    string_char = char
+                elif char == string_char:
+                    in_string = False
+                    string_char = None
+            elif not in_string:
+                if char == "(":
+                    depth += 1
+                elif char == ")":
+                    depth -= 1
+            pos += 1
+
+        return pos if depth == 0 else -1
+
+
 class StandaloneCallTransformer:
     """Transforms standalone func(...) calls in JavaScript test code.
 
@@ -462,6 +583,31 @@ def transform_standalone_calls(
 
     """
     transformer = StandaloneCallTransformer(function_to_optimize=function_to_optimize, capture_func=capture_func)
+    transformer.invocation_counter = start_counter
+    result = transformer.transform(code)
+    return result, transformer.invocation_counter
+
+
+def transform_jsx_render_calls(
+    code: str, function_to_optimize: FunctionToOptimize, capture_func: str, start_counter: int = 0
+) -> tuple[str, int]:
+    """Transform render(<Component>...) calls in React test code.
+
+    This handles React components that are invoked via JSX rather than direct function
+    calls. When a component is used as <ComponentName> in a render() call, this wraps
+    the entire render() with codeflash instrumentation.
+
+    Args:
+        code: The test code to transform.
+        function_to_optimize: The React component being tested.
+        capture_func: The capture function to use ('capture' or 'capturePerf').
+        start_counter: Starting value for the invocation counter.
+
+    Returns:
+        Tuple of (transformed code, final counter value).
+
+    """
+    transformer = JsxRenderCallTransformer(function_to_optimize=function_to_optimize, capture_func=capture_func)
     transformer.invocation_counter = start_counter
     result = transformer.transform(code)
     return result, transformer.invocation_counter
@@ -1038,6 +1184,21 @@ def inject_profiling_into_existing_js_test(
     return True, instrumented_code
 
 
+def _is_jsx_component_usage(code: str, func_name: str) -> bool:
+    """Check if a function is used as a JSX component in render() calls.
+
+    Returns True if the code contains patterns like render(<FuncName ...) or
+    <FuncName> or <FuncName />, indicating the function is a React component
+    rendered via JSX rather than called directly.
+    """
+    # Check for JSX usage: <ComponentName or <ComponentName> or <ComponentName />
+    jsx_pattern = rf"<\s*{re.escape(func_name)}[\s>/]"
+    if not re.search(jsx_pattern, code):
+        return False
+    # Also verify there's a render() call (from @testing-library/react or similar)
+    return bool(re.search(r"\brender\s*\(", code))
+
+
 def _is_function_used_in_test(code: str, func_name: str) -> bool:
     """Check if a function is imported or used in the test code.
 
@@ -1122,6 +1283,8 @@ def _instrument_js_test_code(
     # Choose capture function based on mode
     capture_func = "capturePerf" if mode == TestingMode.PERFORMANCE else "capture"
 
+    # Save code state before transforms to detect if any calls were instrumented
+    code_before_transforms = code
     # Transform React render calls: render(React.createElement(Component, ...))
     # Do this first so expect/standalone transforms don't interfere with render patterns
     code, render_counter = transform_render_calls(
@@ -1140,9 +1303,20 @@ def _instrument_js_test_code(
 
     # Transform standalone calls (not inside expect wrappers)
     # Continue counter from expect transformer to ensure unique IDs
-    code, _final_counter = transform_standalone_calls(
+    code, final_counter = transform_standalone_calls(
         code=code, function_to_optimize=function_to_optimize, capture_func=capture_func, start_counter=expect_counter
     )
+
+    # If no direct function calls were instrumented, check for JSX usage (React components).
+    # React components are invoked via JSX (<Component />) in render() calls, not as
+    # direct function calls. Detect this pattern and wrap render() calls instead.
+    if code == code_before_transforms and _is_jsx_component_usage(code_before_transforms, function_to_optimize.function_name):
+        code, _jsx_counter = transform_jsx_render_calls(
+            code=code,
+            function_to_optimize=function_to_optimize,
+            capture_func=capture_func,
+            start_counter=final_counter,
+        )
 
     return code
 

@@ -590,6 +590,39 @@ def _uses_ts_jest(project_root: Path) -> bool:
     return False
 
 
+_ENV_VAR_RE = __import__("re").compile(r"""([A-Z_][A-Z0-9_]*)=(?:'([^']*)'|"([^"]*)"|(\S+))""")
+
+
+def _extract_env_vars_from_test_script(project_root: Path) -> dict[str, str]:
+    """Extract environment variables from the project's jest/test scripts in package.json.
+
+    Parses scripts like: TZ=UTC TS_NODE_COMPILER_OPTIONS='{"allowJs": false}' jest
+    """
+    pkg_json = project_root / "package.json"
+    if not pkg_json.exists():
+        return {}
+
+    try:
+        pkg = json.loads(pkg_json.read_text(encoding="utf-8"))
+        scripts = pkg.get("scripts", {})
+    except Exception:
+        return {}
+
+    # Look for jest-related scripts: test, testunit, .testunit:jest, etc.
+    script_keys = [k for k in scripts if "jest" in scripts[k].lower() or k in ("test", "testunit")]
+    env_vars: dict[str, str] = {}
+    for key in script_keys:
+        script = scripts[key]
+        for match in _ENV_VAR_RE.finditer(script):
+            name = match.group(1)
+            value = match.group(2) or match.group(3) or match.group(4) or ""
+            env_vars[name] = value
+
+    if env_vars:
+        logger.debug(f"Extracted env vars from package.json scripts: {list(env_vars.keys())}")
+    return env_vars
+
+
 def _configure_esm_environment(jest_env: dict[str, str], project_root: Path) -> None:
     """Configure environment variables for ES Module support in Jest.
 
@@ -750,6 +783,12 @@ def run_jest_behavioral_tests(
 
     # Configure ESM support if project uses ES Modules
     _configure_esm_environment(jest_env, effective_cwd)
+
+    # Extract env vars from project's test scripts (e.g. TZ, TS_NODE_COMPILER_OPTIONS)
+    script_env_vars = _extract_env_vars_from_test_script(effective_cwd)
+    for key, value in script_env_vars.items():
+        if key not in jest_env:
+            jest_env[key] = value
 
     # Increase Node.js heap size for large TypeScript projects
     # Default heap is often not enough for monorepos with many dependencies
@@ -1014,6 +1053,12 @@ def run_jest_benchmarking_tests(
     # Configure ESM support if project uses ES Modules
     _configure_esm_environment(jest_env, effective_cwd)
 
+    # Extract env vars from project's test scripts (e.g. TZ, TS_NODE_COMPILER_OPTIONS)
+    script_env_vars = _extract_env_vars_from_test_script(effective_cwd)
+    for key, value in script_env_vars.items():
+        if key not in jest_env:
+            jest_env[key] = value
+
     # Increase Node.js heap size for large TypeScript projects
     existing_node_options = jest_env.get("NODE_OPTIONS", "")
     if "--max-old-space-size" not in existing_node_options:
@@ -1159,6 +1204,12 @@ def run_jest_line_profile_tests(
 
     # Configure ESM support if project uses ES Modules
     _configure_esm_environment(jest_env, effective_cwd)
+
+    # Extract env vars from project's test scripts (e.g. TZ, TS_NODE_COMPILER_OPTIONS)
+    script_env_vars = _extract_env_vars_from_test_script(effective_cwd)
+    for key, value in script_env_vars.items():
+        if key not in jest_env:
+            jest_env[key] = value
 
     # Increase Node.js heap size for large TypeScript projects
     existing_node_options = jest_env.get("NODE_OPTIONS", "")
