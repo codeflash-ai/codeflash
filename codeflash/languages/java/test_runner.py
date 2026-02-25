@@ -427,8 +427,9 @@ def run_behavioral_tests(
                     add_jacoco_plugin_to_pom(pom_path)
                 coverage_xml_path = get_jacoco_xml_path(project_root)
 
-    # Use a minimum timeout of 60s for Java builds (120s when coverage is enabled due to verify phase)
-    min_timeout = 120 if enable_coverage else 60
+    # Use a minimum timeout of 60s for Java builds (300s when coverage is enabled due to verify phase
+    # which runs full compilation + instrumentation + test execution in multi-module projects)
+    min_timeout = 300 if enable_coverage else 60
     effective_timeout = max(timeout or 300, min_timeout)
 
     if enable_coverage:
