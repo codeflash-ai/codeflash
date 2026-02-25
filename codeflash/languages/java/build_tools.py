@@ -715,6 +715,76 @@ def is_jacoco_configured(pom_path: Path) -> bool:
         return False
 
 
+JACOCO_PROPERTY_NAME = "jacoco.agent.argLine"
+
+
+def ensure_jacoco_property_name(pom_path: Path) -> bool:
+    """Ensure the existing JaCoCo prepare-agent writes to a custom property.
+
+    If the project already has JaCoCo configured with the default ``argLine``
+    property, we must redirect it to ``jacoco.agent.argLine`` so that our
+    ``-DargLine=@{jacoco.agent.argLine} ...`` can compose both the agent arg
+    and the add-opens flags without one overriding the other.
+
+    Also adds an empty default ``<jacoco.agent.argLine/>`` property to
+    ``<properties>`` so the reference resolves even if prepare-agent didn't run.
+    """
+    if not pom_path.exists():
+        return False
+
+    try:
+        content = pom_path.read_text(encoding="utf-8")
+
+        # Already using our custom property — nothing to do
+        if f"<propertyName>{JACOCO_PROPERTY_NAME}</propertyName>" in content:
+            content = _ensure_pom_property(content, JACOCO_PROPERTY_NAME, "")
+            pom_path.write_text(content, encoding="utf-8")
+            return True
+
+        # Find the prepare-agent execution and inject <propertyName>
+        import re
+
+        # Match <id>prepare-agent</id> ... <goals>...<goal>prepare-agent</goal>...</goals>
+        # and check whether a <configuration> block already exists for it.
+        prepare_agent_pattern = re.compile(
+            r"(<execution>\s*<id>prepare-agent</id>.*?</goals>)(.*?)(</execution>)",
+            re.DOTALL,
+        )
+        match = prepare_agent_pattern.search(content)
+        if not match:
+            # No prepare-agent execution found — nothing to patch
+            logger.debug("No prepare-agent execution found in %s", pom_path)
+            content = _ensure_pom_property(content, JACOCO_PROPERTY_NAME, "")
+            pom_path.write_text(content, encoding="utf-8")
+            return True
+
+        between = match.group(2)  # text between </goals> and </execution>
+        if "<configuration>" in between:
+            # Configuration block exists — inject propertyName inside it
+            content = content[:match.start(2)] + between.replace(
+                "<configuration>",
+                f"<configuration>\n              <propertyName>{JACOCO_PROPERTY_NAME}</propertyName>",
+            ) + content[match.end(2):]
+        else:
+            # No configuration block — add one before </execution>
+            config_block = (
+                f"\n            <configuration>"
+                f"\n              <propertyName>{JACOCO_PROPERTY_NAME}</propertyName>"
+                f"\n            </configuration>\n          "
+            )
+            insert_pos = match.start(3)
+            content = content[:insert_pos] + config_block + content[insert_pos:]
+
+        content = _ensure_pom_property(content, JACOCO_PROPERTY_NAME, "")
+        pom_path.write_text(content, encoding="utf-8")
+        logger.info("Patched existing JaCoCo prepare-agent to use propertyName=%s", JACOCO_PROPERTY_NAME)
+        return True
+
+    except Exception:
+        logger.exception("Failed to patch JaCoCo propertyName in %s", pom_path)
+        return False
+
+
 def add_jacoco_plugin_to_pom(pom_path: Path) -> bool:
     """Add JaCoCo Maven plugin to pom.xml for coverage collection.
 
@@ -759,6 +829,9 @@ def add_jacoco_plugin_to_pom(pom_path: Path) -> bool:
             <goals>
               <goal>prepare-agent</goal>
             </goals>
+            <configuration>
+              <propertyName>jacoco.agent.argLine</propertyName>
+            </configuration>
           </execution>
           <execution>
             <id>report</id>
@@ -835,6 +908,10 @@ def add_jacoco_plugin_to_pom(pom_path: Path) -> bool:
 """
             content = content[:project_end] + build_section + content[project_end:]
 
+        # Add a default empty property so @{jacoco.agent.argLine} resolves to ""
+        # if prepare-agent doesn't run (avoids passing a literal to the JVM).
+        content = _ensure_pom_property(content, "jacoco.agent.argLine", "")
+
         pom_path.write_text(content, encoding="utf-8")
         logger.info("Added JaCoCo plugin to pom.xml")
         return True
@@ -842,6 +919,36 @@ def add_jacoco_plugin_to_pom(pom_path: Path) -> bool:
     except Exception as e:
         logger.exception("Failed to add JaCoCo plugin to pom.xml: %s", e)
         return False
+
+
+def _ensure_pom_property(content: str, prop_name: str, default_value: str) -> str:
+    """Ensure a Maven property exists in the pom.xml <properties> section.
+
+    If the property already exists, the content is returned unchanged.
+    If there is no <properties> section, one is created.
+    """
+    # Check if the property already exists
+    if f"<{prop_name}>" in content:
+        return content
+
+    prop_xml = f"    <{prop_name}>{default_value}</{prop_name}>\n  "
+
+    # Find main <properties> section (not inside <profiles>)
+    profiles_start = content.find("<profiles>")
+    search_region = content[:profiles_start] if profiles_start != -1 else content
+    props_end = search_region.find("</properties>")
+
+    if props_end != -1:
+        return content[:props_end] + prop_xml + content[props_end:]
+
+    # No <properties> section — insert one before <build> or <dependencies>
+    for anchor in ("<build>", "<dependencies>", "</project>"):
+        anchor_pos = search_region.find(anchor)
+        if anchor_pos != -1:
+            props_section = f"  <properties>\n  {prop_xml}</properties>\n\n"
+            return content[:anchor_pos] + props_section + content[anchor_pos:]
+
+    return content
 
 
 def _find_closing_tag(content: str, start_pos: int, tag_name: str) -> int:

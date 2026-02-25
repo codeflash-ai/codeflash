@@ -104,6 +104,7 @@ def discover_functions_from_source(
                     is_method=method.class_name is not None,
                     language="java",
                     doc_start_line=method.javadoc_start_line,
+                    return_type=method.return_type,
                 )
             )
 
@@ -145,14 +146,10 @@ def _should_include_method(
     if criteria.matches_exclude_patterns(method.name):
         return False
 
-    # Check require_return - void methods don't have return values
-
-    # Check require_return - void methods don't have return values
+    # Check require_return - void methods are allowed (verified via test pass/fail),
+    # but non-void methods must have an actual return statement
     if criteria.require_return:
-        if method.return_type == "void":
-            return False
-        # Also check if the method actually has a return statement
-        if not analyzer.has_return_statement(method, source):
+        if method.return_type != "void" and not analyzer.has_return_statement(method, source):
             return False
 
     # Check include_methods - in Java, all functions in classes are methods

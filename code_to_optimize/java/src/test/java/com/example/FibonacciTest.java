@@ -1,6 +1,7 @@
 package com.example;
 
 import org.junit.jupiter.api.Test;
+import java.util.ArrayList;
 import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -135,5 +136,106 @@ class FibonacciTest {
 
         // Non-Fibonacci number
         assertFalse(Fibonacci.areConsecutiveFibonacci(4, 5));  // 4 is not Fibonacci
+    }
+
+    @Test
+    void testSortArray() {
+        long[] arr = {5, 3, 8, 1, 2, 7, 4, 6};
+        Fibonacci.sortArray(arr);
+        assertArrayEquals(new long[]{1, 2, 3, 4, 5, 6, 7, 8}, arr);
+    }
+
+    @Test
+    void testSortArrayAlreadySorted() {
+        long[] arr = {1, 2, 3, 4, 5};
+        Fibonacci.sortArray(arr);
+        assertArrayEquals(new long[]{1, 2, 3, 4, 5}, arr);
+    }
+
+    @Test
+    void testSortArrayReversed() {
+        long[] arr = {10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
+        Fibonacci.sortArray(arr);
+        assertArrayEquals(new long[]{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, arr);
+    }
+
+    @Test
+    void testSortArrayDuplicates() {
+        long[] arr = {3, 1, 4, 1, 5, 9, 2, 6, 5, 3};
+        Fibonacci.sortArray(arr);
+        assertArrayEquals(new long[]{1, 1, 2, 3, 3, 4, 5, 5, 6, 9}, arr);
+    }
+
+    @Test
+    void testSortArrayEmpty() {
+        long[] arr = {};
+        Fibonacci.sortArray(arr);
+        assertArrayEquals(new long[]{}, arr);
+    }
+
+    @Test
+    void testSortArraySingle() {
+        long[] arr = {42};
+        Fibonacci.sortArray(arr);
+        assertArrayEquals(new long[]{42}, arr);
+    }
+
+    @Test
+    void testSortArrayNegatives() {
+        long[] arr = {-3, -1, -4, -1, -5};
+        Fibonacci.sortArray(arr);
+        assertArrayEquals(new long[]{-5, -4, -3, -1, -1}, arr);
+    }
+
+    @Test
+    void testSortArrayNull() {
+        assertThrows(IllegalArgumentException.class, () -> Fibonacci.sortArray(null));
+    }
+
+    @Test
+    void testCollectFibonacciInto() {
+        List<Long> output = new ArrayList<>();
+        Fibonacci.collectFibonacciInto(output, 10);
+        assertEquals(7, output.size());
+        assertEquals(List.of(0L, 1L, 1L, 2L, 3L, 5L, 8L), output);
+    }
+
+    @Test
+    void testCollectFibonacciIntoZeroLimit() {
+        List<Long> output = new ArrayList<>();
+        Fibonacci.collectFibonacciInto(output, 0);
+        assertTrue(output.isEmpty());
+    }
+
+    @Test
+    void testCollectFibonacciIntoClearsExisting() {
+        List<Long> output = new ArrayList<>(List.of(99L, 100L));
+        Fibonacci.collectFibonacciInto(output, 5);
+        assertEquals(List.of(0L, 1L, 1L, 2L, 3L), output);
+    }
+
+    @Test
+    void testCollectFibonacciIntoNull() {
+        assertThrows(IllegalArgumentException.class, () -> Fibonacci.collectFibonacciInto(null, 10));
+    }
+
+    @Test
+    void testFillFibonacciRunningSums() {
+        long[] result = new long[6];
+        Fibonacci.fillFibonacciRunningSums(result);
+        // sums: fib(0)=0, 0+1=1, 0+1+1=2, 0+1+1+2=4, 0+1+1+2+3=7, 0+1+1+2+3+5=12
+        assertArrayEquals(new long[]{0, 1, 2, 4, 7, 12}, result);
+    }
+
+    @Test
+    void testFillFibonacciRunningSumsEmpty() {
+        long[] result = new long[0];
+        Fibonacci.fillFibonacciRunningSums(result);
+        assertArrayEquals(new long[]{}, result);
+    }
+
+    @Test
+    void testFillFibonacciRunningSumsNull() {
+        assertThrows(IllegalArgumentException.class, () -> Fibonacci.fillFibonacciRunningSums(null));
     }
 }

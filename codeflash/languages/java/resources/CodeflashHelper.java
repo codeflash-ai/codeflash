@@ -3,7 +3,9 @@ package codeflash.runtime;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.ObjectOutputStream;
+import java.io.PrintStream;
 import java.io.Serializable;
+import java.io.UnsupportedEncodingException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -78,13 +80,22 @@ public class CodeflashHelper {
         String invocationKey = testModulePath + ":" + testClassName + ":" + testFunctionName + ":" + functionGettingTested;
         int iterationId = getNextIterationId(invocationKey);
 
+        // Capture stdout
+        PrintStream originalOut = System.out;
+        ByteArrayOutputStream capturedStdout = new ByteArrayOutputStream();
+
         long startTime = System.nanoTime();
         T result;
         try {
+            System.setOut(new PrintStream(capturedStdout));
             result = callable.call();
         } finally {
+            System.setOut(originalOut);
             long endTime = System.nanoTime();
             long durationNs = endTime - startTime;
+
+            String stdoutText = null;
+            try { stdoutText = capturedStdout.toString("UTF-8"); } catch (UnsupportedEncodingException ignored) {}
 
             // Write to SQLite for behavior verification
             writeResultToSqlite(
@@ -96,7 +107,8 @@ public class CodeflashHelper {
                     iterationId,
                     durationNs,
                     null, // return_value - TODO: serialize if needed
-                    "output"
+                    "output",
+                    stdoutText
             );
 
             // Print timing marker for stdout parsing (backup method)
@@ -118,12 +130,21 @@ public class CodeflashHelper {
         String invocationKey = testModulePath + ":" + testClassName + ":" + testFunctionName + ":" + functionGettingTested;
         int iterationId = getNextIterationId(invocationKey);
 
+        // Capture stdout
+        PrintStream originalOut = System.out;
+        ByteArrayOutputStream capturedStdout = new ByteArrayOutputStream();
+
         long startTime = System.nanoTime();
         try {
+            System.setOut(new PrintStream(capturedStdout));
             callable.call();
         } finally {
+            System.setOut(originalOut);
             long endTime = System.nanoTime();
             long durationNs = endTime - startTime;
+
+            String stdoutText = null;
+            try { stdoutText = capturedStdout.toString("UTF-8"); } catch (UnsupportedEncodingException ignored) {}
 
             // Write to SQLite
             writeResultToSqlite(
@@ -135,7 +156,8 @@ public class CodeflashHelper {
                     iterationId,
                     durationNs,
                     null,
-                    "output"
+                    "output",
+                    stdoutText
             );
 
             // Print timing marker
@@ -177,7 +199,8 @@ public class CodeflashHelper {
                     iterationId,
                     durationNs,
                     null,
-                    "output"
+                    "output",
+                    null
             );
 
             // Print end marker with timing
@@ -219,7 +242,8 @@ public class CodeflashHelper {
                     iterationId,
                     durationNs,
                     null,
-                    "output"
+                    "output",
+                    null
             );
 
             // Print end marker with timing
@@ -277,7 +301,8 @@ public class CodeflashHelper {
             int iterationId,
             long runtime,
             byte[] returnValue,
-            String verificationType
+            String verificationType,
+            String stdout
     ) {
         if (OUTPUT_FILE == null || OUTPUT_FILE.isEmpty()) {
             return;
@@ -291,8 +316,8 @@ public class CodeflashHelper {
 
             String sql = "INSERT INTO test_results " +
                     "(test_module_path, test_class_name, test_function_name, function_getting_tested, " +
-                    "loop_index, iteration_id, runtime, return_value, verification_type) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    "loop_index, iteration_id, runtime, return_value, verification_type, stdout) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
             try (PreparedStatement stmt = dbConnection.prepareStatement(sql)) {
                 stmt.setString(1, testModulePath);
@@ -304,6 +329,7 @@ public class CodeflashHelper {
                 stmt.setLong(7, runtime);
                 stmt.setBytes(8, returnValue);
                 stmt.setString(9, verificationType);
+                stmt.setString(10, stdout);
                 stmt.executeUpdate();
             }
         } catch (SQLException e) {
@@ -348,7 +374,8 @@ public class CodeflashHelper {
                     "iteration_id INTEGER, " +
                     "runtime INTEGER, " +
                     "return_value BLOB, " +
-                    "verification_type TEXT" +
+                    "verification_type TEXT, " +
+                    "stdout TEXT" +
                     ")";
 
             try (java.sql.Statement stmt = dbConnection.createStatement()) {

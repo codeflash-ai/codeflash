@@ -245,6 +245,8 @@ def compare_test_results(
             scope = TestDiffScope.RETURN_VALUE
             if scope_str in {"exception", "missing"}:
                 scope = TestDiffScope.DID_PASS
+            elif scope_str == "stdout":
+                scope = TestDiffScope.STDOUT
 
             # Build test identifier
             method_id = diff.get("methodId", "unknown")

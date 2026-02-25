@@ -184,13 +184,18 @@ class JavaAssertTransformer:
     """
 
     def __init__(
-        self, function_name: str, qualified_name: str | None = None, analyzer: JavaAnalyzer | None = None
+        self,
+        function_name: str,
+        qualified_name: str | None = None,
+        analyzer: JavaAnalyzer | None = None,
+        is_void: bool = False,
     ) -> None:
         self.analyzer = analyzer or get_java_analyzer()
         self.func_name = function_name
         self.qualified_name = qualified_name or function_name
         self.invocation_counter = 0
         self._detected_framework: str | None = None
+        self.is_void = is_void
 
         # Precompile the assignment-detection regex to avoid recompiling on each call.
         self._assign_re = re.compile(r"(\w+(?:<[^>]+>)?)\s+(\w+)\s*=\s*$")
@@ -919,11 +924,12 @@ class JavaAssertTransformer:
         base_indent = assertion.leading_whitespace.lstrip("\n\r")
         for i, call in enumerate(assertion.target_calls):
             self.invocation_counter += 1
-            var_name = f"_cf_result{self.invocation_counter}"
-            if i == 0:
-                replacements.append(f"{assertion.leading_whitespace}Object {var_name} = {call.full_call};")
+            ws = assertion.leading_whitespace if i == 0 else base_indent
+            if self.is_void:
+                replacements.append(f"{ws}{call.full_call};")
             else:
-                replacements.append(f"{base_indent}Object {var_name} = {call.full_call};")
+                var_name = f"_cf_result{self.invocation_counter}"
+                replacements.append(f"{ws}Object {var_name} = {call.full_call};")
 
         return "\n".join(replacements)
 
@@ -983,7 +989,9 @@ class JavaAssertTransformer:
         return f"{ws}// Removed assertThrows: could not extract callable"
 
 
-def transform_java_assertions(source: str, function_name: str, qualified_name: str | None = None) -> str:
+def transform_java_assertions(
+    source: str, function_name: str, qualified_name: str | None = None, is_void: bool = False
+) -> str:
     """Transform Java test code by removing assertions and capturing function calls.
 
     This is the main entry point for Java assertion transformation.
@@ -992,12 +1000,13 @@ def transform_java_assertions(source: str, function_name: str, qualified_name: s
         source: The Java test source code.
         function_name: Name of the function being tested.
         qualified_name: Optional fully qualified name of the function.
+        is_void: Whether the target function returns void.
 
     Returns:
         Transformed source code with assertions replaced by capture statements.
 
     """
-    transformer = JavaAssertTransformer(function_name=function_name, qualified_name=qualified_name)
+    transformer = JavaAssertTransformer(function_name=function_name, qualified_name=qualified_name, is_void=is_void)
     return transformer.transform(source)
 
 
@@ -1015,6 +1024,10 @@ def remove_assertions_from_test(source: str, target_function: FunctionToOptimize
         Transformed source code.
 
     """
+    is_void = getattr(target_function, "return_type", None) == "void"
     return transform_java_assertions(
-        source=source, function_name=target_function.function_name, qualified_name=target_function.qualified_name
+        source=source,
+        function_name=target_function.function_name,
+        qualified_name=target_function.qualified_name,
+        is_void=is_void,
     )

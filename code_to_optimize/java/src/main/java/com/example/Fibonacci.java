@@ -172,4 +172,77 @@ public class Fibonacci {
 
         return Math.abs(indexA - indexB) == 1;
     }
+
+    /**
+     * Sort an array in-place using bubble sort.
+     * Intentionally naive O(n^2) implementation for optimization testing.
+     *
+     * @param arr Array to sort (modified in-place)
+     */
+    public static void sortArray(long[] arr) {
+        if (arr == null) {
+            throw new IllegalArgumentException("Array must not be null");
+        }
+        for (int i = 0; i < arr.length; i++) {
+            for (int j = 0; j < arr.length - 1 - i; j++) {
+                if (arr[j] > arr[j + 1]) {
+                    long temp = arr[j];
+                    arr[j] = arr[j + 1];
+                    arr[j + 1] = temp;
+                }
+            }
+        }
+    }
+
+    /**
+     * Append Fibonacci numbers up to a limit into the provided list.
+     * Clears the list first, then fills it with Fibonacci numbers less than limit.
+     * Uses repeated naive recursion — intentionally slow for optimization testing.
+     *
+     * @param output List to populate (cleared first)
+     * @param limit  Upper bound (exclusive)
+     */
+    public static void collectFibonacciInto(List<Long> output, long limit) {
+        if (output == null) {
+            throw new IllegalArgumentException("Output list must not be null");
+        }
+        output.clear();
+
+        if (limit <= 0) {
+            return;
+        }
+
+        int index = 0;
+        while (true) {
+            long fib = fibonacci(index);
+            if (fib >= limit) {
+                break;
+            }
+            output.add(fib);
+            index++;
+            if (index > 50) {
+                break;
+            }
+        }
+    }
+
+    /**
+     * Compute running Fibonacci sums in-place.
+     * result[i] = sum of fibonacci(0) through fibonacci(i).
+     * Uses repeated naive recursion — intentionally O(n * 2^n).
+     *
+     * @param result Array to fill with running sums (must be pre-allocated)
+     */
+    public static void fillFibonacciRunningSums(long[] result) {
+        if (result == null) {
+            throw new IllegalArgumentException("Array must not be null");
+        }
+        for (int i = 0; i < result.length; i++) {
+            long sum = 0;
+            for (int j = 0; j <= i; j++) {
+                sum += fibonacci(j);
+            }
+            result[i] = sum;
+        }
+    }
 }
