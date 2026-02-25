@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import os
 import re
 import sqlite3
@@ -22,6 +21,9 @@ from codeflash.code_utils.code_utils import (
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.languages import is_javascript
+
+# Import Jest-specific parsing from the JavaScript language module
+from codeflash.languages.javascript.parse import parse_jest_test_xml as _parse_jest_test_xml
 from codeflash.models.models import (
     ConcurrencyMetrics,
     FunctionTestInvocation,
@@ -31,10 +33,6 @@ from codeflash.models.models import (
     VerificationType,
 )
 from codeflash.verification.coverage_utils import CoverageUtils, JestCoverageUtils
-
-# Import Jest-specific parsing from the JavaScript language module
-from codeflash.languages.javascript.parse import jest_end_pattern, jest_start_pattern
-from codeflash.languages.javascript.parse import parse_jest_test_xml as _parse_jest_test_xml
 
 if TYPE_CHECKING:
     import subprocess
@@ -49,8 +47,24 @@ def parse_func(file_path: Path) -> XMLParser:
     return parse(file_path, xml_parser)
 
 
-matches_re_start = re.compile(r"!\$######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######\$!\n")
-matches_re_end = re.compile(r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######!")
+matches_re_start = re.compile(
+    r"!\$######([^:]*)"  # group 1: module path
+    r":((?:[^:.]*\.)*)"  # group 2: class prefix with trailing dot, or empty
+    r"([^.:]*)"  # group 3: test function name
+    r":([^:]*)"  # group 4: function being tested
+    r":([^:]*)"  # group 5: loop index
+    r":([^#]*)"  # group 6: iteration id
+    r"######\$!\n"
+)
+matches_re_end = re.compile(
+    r"!######([^:]*)"  # group 1: module path
+    r":((?:[^:.]*\.)*)"  # group 2: class prefix with trailing dot, or empty
+    r"([^.:]*)"  # group 3: test function name
+    r":([^:]*)"  # group 4: function being tested
+    r":([^:]*)"  # group 5: loop index
+    r":([^#]*)"  # group 6: iteration_id or iteration_id:runtime
+    r"######!"
+)
 
 
 start_pattern = re.compile(r"!\$######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+)######\$!")
@@ -609,6 +623,9 @@ def parse_test_xml(
                 return test_results
 
             test_class_path = testcase.classname
+            if test_class_path and test_class_path.split(".")[0] in ("pytest", "_pytest"):
+                logger.debug(f"Skipping pytest-internal test entry: {test_class_path}")
+                continue
             try:
                 if testcase.name is None:
                     logger.debug(
@@ -895,7 +912,6 @@ def merge_test_results(
     return merged_test_results
 
 
-FAILURES_HEADER_RE = re.compile(r"=+ FAILURES =+")
 TEST_HEADER_RE = re.compile(r"_{3,}\s*(.*?)\s*_{3,}$")
 
 
@@ -905,7 +921,7 @@ def parse_test_failures_from_stdout(stdout: str) -> dict[str, str]:
     start = end = None
 
     for i, line in enumerate(lines):
-        if FAILURES_HEADER_RE.search(line.strip()):
+        if "= FAILURES =" in line:
             start = i
             break
 

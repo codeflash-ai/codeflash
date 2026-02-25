@@ -238,6 +238,18 @@ def save_api_key_to_rc(api_key: str) -> Result[str, str]:
         )
 
 
+def make_env_with_project_root(project_root: Path | str) -> dict[str, str]:
+    """Return a copy of os.environ with project_root prepended to PYTHONPATH."""
+    env = os.environ.copy()
+    project_root_str = str(project_root)
+    pythonpath = env.get("PYTHONPATH", "")
+    if pythonpath:
+        env["PYTHONPATH"] = f"{project_root_str}{os.pathsep}{pythonpath}"
+    else:
+        env["PYTHONPATH"] = project_root_str
+    return env
+
+
 def get_cross_platform_subprocess_run_args(
     cwd: Path | str | None = None,
     env: Mapping[str, str] | None = None,

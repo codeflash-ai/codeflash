@@ -42,13 +42,19 @@ jobs:
           uv venv --seed
           uv sync
 
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
         with:
-          use_foundry: "true"
+          use_bedrock: "true"
           use_sticky_comment: true
-          allowed_bots: "claude[bot]"
+          allowed_bots: "claude[bot],codeflash-ai[bot]"
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
@@ -62,6 +68,7 @@ jobs:
 
             If there are prek issues:
             - For SAFE auto-fixable issues (formatting, import sorting, trailing whitespace, etc.), run `uv run prek run --from-ref origin/main` again to auto-fix them
+            - For issues that prek cannot auto-fix, do NOT attempt to fix them manually — report them as remaining issues in your summary
 
             If there are mypy issues:
             - Fix type annotation issues (missing return types, Optional/None unions, import errors for type hints, incorrect types)
@@ -71,6 +78,11 @@ jobs:
             - Stage the fixed files with `git add`
             - Commit with message "style: auto-fix linting issues" or "fix: resolve mypy type errors" as appropriate
             - Push the changes with `git push`
+
+            IMPORTANT - Verification after fixing:
+            - After committing fixes, run `uv run prek run --from-ref origin/main` ONE MORE TIME to verify all issues are resolved
+            - If errors remain, either fix them or report them honestly as unfixed in your summary
+            - NEVER claim issues are fixed without verifying. If you cannot fix an issue, say so
 
             Do NOT attempt to fix:
             - Type errors that require logic changes or refactoring
@@ -86,6 +98,8 @@ jobs:
             2. Security vulnerabilities
             3. Breaking API changes
             4. Test failures (methods with typos that wont run)
+            5. Stale documentation — if files or directories were moved, renamed, or deleted, check that `.claude/rules/`, `CLAUDE.md`, and `AGENTS.md` don't reference paths that no longer exist
+            6. New language support — if new language modules are added under `languages/`, check that `.github/workflows/duplicate-code-detector.yml` includes the new language in its file filters, search patterns, and cross-module checks
 
             IMPORTANT:
             - First check existing review comments using `gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments`. For each existing comment, check if the issue still exists in the current code.
@@ -167,12 +181,9 @@ jobs:
             2. For each optimization PR:
                - Check if CI is passing: `gh pr checks <number>`
                - If all checks pass, merge it: `gh pr merge <number> --squash --delete-branch`
-          claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr checks:*),Bash(gh pr merge:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh api:*),Bash(uv run prek *),Bash(uv run mypy *),Bash(uv run coverage *),Bash(uv run pytest *),Bash(git status*),Bash(git add *),Bash(git commit *),Bash(git push*),Bash(git diff *),Bash(git checkout *),Read,Glob,Grep,Edit"'
+          claude_args: '--model us.anthropic.claude-opus-4-6-v1 --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr checks:*),Bash(gh pr merge:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh api:*),Bash(uv run prek *),Bash(uv run mypy *),Bash(uv run coverage *),Bash(uv run pytest *),Bash(git status*),Bash(git add *),Bash(git commit *),Bash(git push*),Bash(git diff *),Bash(git checkout *),Read,Glob,Grep,Edit"'
           additional_permissions: |
             actions: read
-        env:
-          ANTHROPIC_FOUNDRY_API_KEY: ${{ secrets.AZURE_ANTHROPIC_API_KEY }}
-          ANTHROPIC_FOUNDRY_BASE_URL: ${{ secrets.AZURE_ANTHROPIC_ENDPOINT }}
 
   # @claude mentions (can edit and push) - restricted to maintainers only
   claude-mention:
@@ -234,14 +245,17 @@ jobs:
           uv venv --seed
           uv sync
 
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
         with:
-          use_foundry: "true"
-          claude_args: '--allowedTools "Read,Edit,Write,Glob,Grep,Bash(git status*),Bash(git diff*),Bash(git add *),Bash(git commit *),Bash(git push*),Bash(git log*),Bash(git merge*),Bash(git fetch*),Bash(git checkout*),Bash(git branch*),Bash(uv run prek *),Bash(prek *),Bash(uv run ruff *),Bash(uv run pytest *),Bash(uv run mypy *),Bash(uv run coverage *),Bash(gh pr comment*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr merge*),Bash(gh pr close*)"'
+          use_bedrock: "true"
+          claude_args: '--model us.anthropic.claude-opus-4-6-v1 --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git status*),Bash(git diff*),Bash(git add *),Bash(git commit *),Bash(git push*),Bash(git log*),Bash(git merge*),Bash(git fetch*),Bash(git checkout*),Bash(git branch*),Bash(uv run prek *),Bash(prek *),Bash(uv run ruff *),Bash(uv run pytest *),Bash(uv run mypy *),Bash(uv run coverage *),Bash(gh pr comment*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr merge*),Bash(gh pr close*)"'
           additional_permissions: |
             actions: read
-        env:
-          ANTHROPIC_FOUNDRY_API_KEY: ${{ secrets.AZURE_ANTHROPIC_API_KEY }}
-          ANTHROPIC_FOUNDRY_BASE_URL: ${{ secrets.AZURE_ANTHROPIC_ENDPOINT }}

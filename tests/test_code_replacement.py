@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import dataclasses
 import os
 import re
 from collections import defaultdict
@@ -8,37 +7,21 @@ from pathlib import Path
 
 import libcst as cst
 
-from codeflash.code_utils.code_extractor import delete___future___aliased_imports, find_preexisting_objects
-from codeflash.code_utils.code_replacer import (
+from codeflash.languages.python.static_analysis.code_extractor import delete___future___aliased_imports, find_preexisting_objects
+from codeflash.languages.python.static_analysis.code_replacer import (
     AddRequestArgument,
     AutouseFixtureModifier,
-    OptimFunctionCollector,
     PytestMarkAdder,
     is_zero_diff,
     replace_functions_and_add_imports,
     replace_functions_in_file,
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, FunctionParent
+from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, FunctionParent, FunctionSource
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
 os.environ["CODEFLASH_API_KEY"] = "cf-test-key"
-
-
-@dataclasses.dataclass
-class JediDefinition:
-    type: str
-
-
-@dataclasses.dataclass
-class FakeFunctionSource:
-    file_path: Path
-    qualified_name: str
-    fully_qualified_name: str
-    only_function_name: str
-    source_code: str
-    jedi_definition: JediDefinition
 
 
 class Args:
@@ -824,6 +807,7 @@ def test_code_replacement10() -> None:
     get_code_output = """# file: test_code_replacement.py
 from __future__ import annotations
 
+
 class HelperClass:
     def __init__(self, name):
         self.name = name
@@ -1137,7 +1121,7 @@ class TestResults(BaseModel):
     preexisting_objects = find_preexisting_objects(original_code)
 
     helper_functions = [
-        FakeFunctionSource(
+        FunctionSource(
             file_path=Path(
                 "/Users/saurabh/Library/CloudStorage/Dropbox/codeflash/cli/codeflash/verification/test_results.py"
             ),
@@ -1145,7 +1129,7 @@ class TestResults(BaseModel):
             fully_qualified_name="codeflash.verification.test_results.TestType",
             only_function_name="TestType",
             source_code="",
-            jedi_definition=JediDefinition(type="class"),
+            definition_type="class",
         )
     ]
 
@@ -1160,7 +1144,7 @@ class TestResults(BaseModel):
 
     helper_functions_by_module_abspath = defaultdict(set)
     for helper_function in helper_functions:
-        if helper_function.jedi_definition.type != "class":
+        if helper_function.definition_type != "class":
             helper_functions_by_module_abspath[helper_function.file_path].add(helper_function.qualified_name)
     for module_abspath, qualified_names in helper_functions_by_module_abspath.items():
         new_code: str = replace_functions_and_add_imports(
@@ -1352,21 +1336,21 @@ def cosine_similarity_top_k(
     preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = find_preexisting_objects(original_code)
 
     helper_functions = [
-        FakeFunctionSource(
+        FunctionSource(
             file_path=(Path(__file__).parent / "code_to_optimize" / "math_utils.py").resolve(),
             qualified_name="Matrix",
             fully_qualified_name="code_to_optimize.math_utils.Matrix",
             only_function_name="Matrix",
             source_code="",
-            jedi_definition=JediDefinition(type="class"),
+            definition_type="class",
         ),
-        FakeFunctionSource(
+        FunctionSource(
             file_path=(Path(__file__).parent / "code_to_optimize" / "math_utils.py").resolve(),
             qualified_name="cosine_similarity",
             fully_qualified_name="code_to_optimize.math_utils.cosine_similarity",
             only_function_name="cosine_similarity",
             source_code="",
-            jedi_definition=JediDefinition(type="function"),
+            definition_type="function",
         ),
     ]
 
@@ -1425,7 +1409,7 @@ def cosine_similarity_top_k(
     )
     helper_functions_by_module_abspath = defaultdict(set)
     for helper_function in helper_functions:
-        if helper_function.jedi_definition.type != "class":
+        if helper_function.definition_type != "class":
             helper_functions_by_module_abspath[helper_function.file_path].add(helper_function.qualified_name)
     for module_abspath, qualified_names in helper_functions_by_module_abspath.items():
         new_helper_code: str = replace_functions_and_add_imports(
@@ -3490,142 +3474,6 @@ def hydrate_input_text_actions_with_field_names(
     main_file.unlink(missing_ok=True)
 
     assert new_code == expected
-
-
-# OptimFunctionCollector async function tests
-def test_optim_function_collector_with_async_functions():
-    """Test OptimFunctionCollector correctly collects async functions."""
-    import libcst as cst
-
-    source_code = """
-def sync_function():
-    return "sync"
-
-async def async_function():
-    return "async"
-
-class TestClass:
-    def sync_method(self):
-        return "sync_method"
-    
-    async def async_method(self):
-        return "async_method"
-"""
-
-    tree = cst.parse_module(source_code)
-    collector = OptimFunctionCollector(
-        function_names={
-            (None, "sync_function"),
-            (None, "async_function"),
-            ("TestClass", "sync_method"),
-            ("TestClass", "async_method"),
-        },
-        preexisting_objects=None,
-    )
-    tree.visit(collector)
-
-    # Should collect both sync and async functions
-    assert len(collector.modified_functions) == 4
-    assert (None, "sync_function") in collector.modified_functions
-    assert (None, "async_function") in collector.modified_functions
-    assert ("TestClass", "sync_method") in collector.modified_functions
-    assert ("TestClass", "async_method") in collector.modified_functions
-
-
-def test_optim_function_collector_new_async_functions():
-    """Test OptimFunctionCollector identifies new async functions not in preexisting objects."""
-    import libcst as cst
-
-    source_code = """
-def existing_function():
-    return "existing"
-
-async def new_async_function():
-    return "new_async"
-
-def new_sync_function():
-    return "new_sync"
-
-class ExistingClass:
-    async def new_class_async_method(self):
-        return "new_class_async"
-"""
-
-    # Only existing_function is in preexisting objects
-    preexisting_objects = {("existing_function", ())}
-
-    tree = cst.parse_module(source_code)
-    collector = OptimFunctionCollector(
-        function_names=set(),  # Not looking for specific functions
-        preexisting_objects=preexisting_objects,
-    )
-    tree.visit(collector)
-
-    # Should identify new functions (both sync and async)
-    assert len(collector.new_functions) == 2
-    function_names = [func.name.value for func in collector.new_functions]
-    assert "new_async_function" in function_names
-    assert "new_sync_function" in function_names
-
-    # Should identify new class methods
-    assert "ExistingClass" in collector.new_class_functions
-    assert len(collector.new_class_functions["ExistingClass"]) == 1
-    assert collector.new_class_functions["ExistingClass"][0].name.value == "new_class_async_method"
-
-
-def test_optim_function_collector_mixed_scenarios():
-    """Test OptimFunctionCollector with complex mix of sync/async functions and classes."""
-    import libcst as cst
-
-    source_code = """
-# Global functions
-def global_sync():
-    pass
-
-async def global_async():
-    pass
-
-class ParentClass:
-    def __init__(self):
-        pass
-    
-    def sync_method(self):
-        pass
-    
-    async def async_method(self):
-        pass
-
-class ChildClass:
-    async def child_async_method(self):
-        pass
-    
-    def child_sync_method(self):
-        pass
-"""
-
-    # Looking for specific functions
-    function_names = {
-        (None, "global_sync"),
-        (None, "global_async"),
-        ("ParentClass", "sync_method"),
-        ("ParentClass", "async_method"),
-        ("ChildClass", "child_async_method"),
-    }
-
-    tree = cst.parse_module(source_code)
-    collector = OptimFunctionCollector(function_names=function_names, preexisting_objects=None)
-    tree.visit(collector)
-
-    # Should collect all specified functions (mix of sync and async)
-    assert len(collector.modified_functions) == 5
-    assert (None, "global_sync") in collector.modified_functions
-    assert (None, "global_async") in collector.modified_functions
-    assert ("ParentClass", "sync_method") in collector.modified_functions
-    assert ("ParentClass", "async_method") in collector.modified_functions
-    assert ("ChildClass", "child_async_method") in collector.modified_functions
-
-    # Should collect __init__ method
-    assert "ParentClass" in collector.modified_init_functions
 
 
 def test_is_zero_diff_async_sleep():

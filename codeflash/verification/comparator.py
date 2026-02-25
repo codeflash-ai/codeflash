@@ -6,6 +6,7 @@ import enum
 import math
 import re
 import types
+import weakref
 from collections import ChainMap, OrderedDict, deque
 from importlib.util import find_spec
 from typing import Any, Optional
@@ -25,6 +26,34 @@ HAS_JAX = find_spec("jax") is not None
 HAS_XARRAY = find_spec("xarray") is not None
 HAS_TENSORFLOW = find_spec("tensorflow") is not None
 HAS_NUMBA = find_spec("numba") is not None
+HAS_PYARROW = find_spec("pyarrow") is not None
+
+if HAS_NUMPY:
+    import numpy as np
+if HAS_SCIPY:
+    import scipy  # type: ignore  # noqa: PGH003
+if HAS_JAX:
+    import jax  # type: ignore  # noqa: PGH003
+    import jax.numpy as jnp  # type: ignore  # noqa: PGH003
+if HAS_XARRAY:
+    import xarray  # type: ignore  # noqa: PGH003
+if HAS_TENSORFLOW:
+    import tensorflow as tf  # type: ignore  # noqa: PGH003
+if HAS_SQLALCHEMY:
+    import sqlalchemy  # type: ignore  # noqa: PGH003
+if HAS_PYARROW:
+    import pyarrow as pa  # type: ignore  # noqa: PGH003
+if HAS_PANDAS:
+    import pandas  # noqa: ICN001
+if HAS_TORCH:
+    import torch  # type: ignore  # noqa: PGH003
+if HAS_NUMBA:
+    import numba  # type: ignore  # noqa: PGH003
+    from numba.core.dispatcher import Dispatcher  # type: ignore  # noqa: PGH003
+    from numba.typed import Dict as NumbaDict  # type: ignore  # noqa: PGH003
+    from numba.typed import List as NumbaList  # type: ignore  # noqa: PGH003
+if HAS_PYRSISTENT:
+    import pyrsistent  # type: ignore  # noqa: PGH003
 
 # Pattern to match pytest temp directories: /tmp/pytest-of-<user>/pytest-<N>/
 # These paths vary between test runs but are logically equivalent
@@ -33,6 +62,31 @@ PYTEST_TEMP_PATH_PATTERN = re.compile(r"/tmp/pytest-of-[^/]+/pytest-\d+/")  # no
 # Pattern to match Python tempfile directories: /tmp/tmp<random>/
 # Created by tempfile.mkdtemp() or tempfile.TemporaryDirectory()
 PYTHON_TEMPFILE_PATTERN = re.compile(r"/tmp/tmp[a-zA-Z0-9_]+/")  # noqa: S108
+
+_DICT_KEYS_TYPE = type({}.keys())
+_DICT_VALUES_TYPE = type({}.values())
+_DICT_ITEMS_TYPE = type({}.items())
+
+_EQUALITY_TYPES = (
+    int,
+    bool,
+    complex,
+    type(None),
+    type(Ellipsis),
+    decimal.Decimal,
+    set,
+    bytes,
+    bytearray,
+    memoryview,
+    frozenset,
+    enum.Enum,
+    type,
+    range,
+    slice,
+    OrderedDict,
+    types.GenericAlias,
+    *((_union_type,) if (_union_type := getattr(types, "UnionType", None)) else ()),
+)
 
 
 def _normalize_temp_path(path: str) -> str:
@@ -93,7 +147,7 @@ def _get_wrapped_exception(exc: BaseException) -> Optional[BaseException]:  # no
     return _extract_exception_from_message(str(exc))
 
 
-def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
+def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
     """Compare two objects for equality recursively. If superset_obj is True, the new object is allowed to have more keys than the original object. However, the existing keys/values must be equivalent."""
     try:
         # Handle exceptions specially - before type check to allow wrapper comparison
@@ -143,38 +197,25 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
                 return _normalize_temp_path(orig) == _normalize_temp_path(new)
             return False
 
-        if isinstance(
-            orig,
-            (
-                int,
-                bool,
-                complex,
-                type(None),
-                type(Ellipsis),
-                decimal.Decimal,
-                set,
-                bytes,
-                bytearray,
-                memoryview,
-                frozenset,
-                enum.Enum,
-                type,
-                range,
-                slice,
-                OrderedDict,
-                types.GenericAlias,
-            ),
-        ):
+        if isinstance(orig, _EQUALITY_TYPES):
             return orig == new
         if isinstance(orig, float):
             if math.isnan(orig) and math.isnan(new):
                 return True
             return math.isclose(orig, new)
 
-        if HAS_JAX:
-            import jax  # type: ignore  # noqa: PGH003
-            import jax.numpy as jnp  # type: ignore  # noqa: PGH003
+        # Handle weak references (e.g., found in torch.nn.LSTM/GRU modules)
+        if isinstance(orig, weakref.ref):
+            orig_referent = orig()
+            new_referent = new()
+            # Both dead refs are equal, otherwise compare referents
+            if orig_referent is None and new_referent is None:
+                return True
+            if orig_referent is None or new_referent is None:
+                return False
+            return comparator(orig_referent, new_referent, superset_obj)
 
+        if HAS_JAX:
             # Handle JAX arrays first to avoid boolean context errors in other conditions
             if isinstance(orig, jax.Array):
                 if orig.dtype != new.dtype:
@@ -185,15 +226,11 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
 
         # Handle xarray objects before numpy to avoid boolean context errors
         if HAS_XARRAY:
-            import xarray  # type: ignore  # noqa: PGH003
-
             if isinstance(orig, (xarray.Dataset, xarray.DataArray)):
                 return orig.identical(new)
 
         # Handle TensorFlow objects early to avoid boolean context errors
         if HAS_TENSORFLOW:
-            import tensorflow as tf  # type: ignore  # noqa: PGH003
-
             if isinstance(orig, tf.Tensor):
                 if orig.dtype != new.dtype:
                     return False
@@ -219,7 +256,9 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
                 if not comparator(orig.dense_shape.numpy(), new.dense_shape.numpy(), superset_obj):
                     return False
                 return comparator(orig.indices.numpy(), new.indices.numpy(), superset_obj) and comparator(
-                    orig.values.numpy(), new.values.numpy(), superset_obj
+                    orig.values.numpy(),  # noqa: PD011
+                    new.values.numpy(),  # noqa: PD011
+                    superset_obj,
                 )
 
             if isinstance(orig, tf.RaggedTensor):
@@ -230,8 +269,6 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
                 return comparator(orig.to_list(), new.to_list(), superset_obj)
 
         if HAS_SQLALCHEMY:
-            import sqlalchemy  # type: ignore  # noqa: PGH003
-
             try:
                 insp = sqlalchemy.inspection.inspect(orig)
                 insp = sqlalchemy.inspection.inspect(new)
@@ -247,8 +284,6 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
             except sqlalchemy.exc.NoInspectionAvailable:
                 pass
 
-        if HAS_SCIPY:
-            import scipy  # type: ignore  # noqa: PGH003
         # scipy condition because dok_matrix type is also a instance of dict, but dict comparison doesn't work for it
         if isinstance(orig, dict) and not (HAS_SCIPY and isinstance(orig, scipy.sparse.spmatrix)):
             if superset_obj:
@@ -267,21 +302,14 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
             return comparator(dict(orig), dict(new), superset_obj)
 
         # Handle dict view types (dict_keys, dict_values, dict_items)
-        # Use type name checking since these are not directly importable types
-        type_name = type(orig).__name__
-        if type_name == "dict_keys":
-            # dict_keys can be compared as sets (order doesn't matter)
+        if isinstance(orig, _DICT_KEYS_TYPE):
             return comparator(set(orig), set(new))
-        if type_name == "dict_values":
-            # dict_values need element-wise comparison (order matters)
+        if isinstance(orig, _DICT_VALUES_TYPE):
             return comparator(list(orig), list(new))
-        if type_name == "dict_items":
-            # Convert to dict for order-insensitive comparison (handles unhashable values)
+        if isinstance(orig, _DICT_ITEMS_TYPE):
             return comparator(dict(orig), dict(new), superset_obj)
 
         if HAS_NUMPY:
-            import numpy as np
-
             if isinstance(orig, (np.datetime64, np.timedelta64)):
                 # Handle NaT (Not a Time) - numpy's equivalent of NaN for datetime
                 if np.isnat(orig) and np.isnat(new):
@@ -342,13 +370,53 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
                 return False
             return (orig != new).nnz == 0
 
-        if HAS_PANDAS:
-            import pandas  # noqa: ICN001
+        if HAS_PYARROW:
+            if isinstance(orig, pa.Table):
+                if orig.schema != new.schema:
+                    return False
+                if orig.num_rows != new.num_rows:
+                    return False
+                return bool(orig.equals(new))
 
+            if isinstance(orig, pa.RecordBatch):
+                if orig.schema != new.schema:
+                    return False
+                if orig.num_rows != new.num_rows:
+                    return False
+                return bool(orig.equals(new))
+
+            if isinstance(orig, pa.ChunkedArray):
+                if orig.type != new.type:
+                    return False
+                if len(orig) != len(new):
+                    return False
+                return bool(orig.equals(new))
+
+            if isinstance(orig, pa.Array):
+                if orig.type != new.type:
+                    return False
+                if len(orig) != len(new):
+                    return False
+                return bool(orig.equals(new))
+
+            if isinstance(orig, pa.Scalar):
+                if orig.type != new.type:
+                    return False
+                # Handle null scalars
+                if not orig.is_valid and not new.is_valid:
+                    return True
+                if not orig.is_valid or not new.is_valid:
+                    return False
+                return bool(orig.equals(new))
+
+            if isinstance(orig, (pa.Schema, pa.Field, pa.DataType)):
+                return bool(orig.equals(new))
+
+        if HAS_PANDAS:
             if isinstance(
                 orig, (pandas.DataFrame, pandas.Series, pandas.Index, pandas.Categorical, pandas.arrays.SparseArray)
             ):
-                return orig.equals(new)
+                return bool(orig.equals(new))
 
             if isinstance(orig, (pandas.CategoricalDtype, pandas.Interval, pandas.Period)):
                 return orig == new
@@ -375,8 +443,6 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
             pass
 
         if HAS_TORCH:
-            import torch  # type: ignore  # noqa: PGH003
-
             if isinstance(orig, torch.Tensor):
                 if orig.dtype != new.dtype:
                     return False
@@ -395,11 +461,6 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
                 return orig == new
 
         if HAS_NUMBA:
-            import numba  # type: ignore  # noqa: PGH003
-            from numba.core.dispatcher import Dispatcher  # type: ignore  # noqa: PGH003
-            from numba.typed import Dict as NumbaDict  # type: ignore  # noqa: PGH003
-            from numba.typed import List as NumbaList  # type: ignore  # noqa: PGH003
-
             # Handle numba typed List
             if isinstance(orig, NumbaList):
                 if len(orig) != len(new):
@@ -431,8 +492,6 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
                 return orig.py_func is new.py_func
 
         if HAS_PYRSISTENT:
-            import pyrsistent  # type: ignore  # noqa: PGH003
-
             if isinstance(
                 orig,
                 (
@@ -478,7 +537,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
         # If the object passed has a user defined __eq__ method, use that
         # This could fail if the user defined __eq__ is defined with C-extensions
         try:
-            if hasattr(orig, "__eq__") and str(type(orig.__eq__)) == "<class 'method'>":
+            if hasattr(orig, "__eq__") and isinstance(orig.__eq__, types.MethodType):
                 return orig == new
         except Exception:
             pass
@@ -504,6 +563,18 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
                 orig_keys = {k: v for k, v in orig.__dict__.items() if k != "parent"}
                 new_keys = {k: v for k, v in new.__dict__.items() if k != "parent"}
             return comparator(orig_keys, new_keys, superset_obj)
+
+        # For objects with __slots__ but no __dict__, compare slot attributes
+        if hasattr(type(orig), "__slots__"):
+            all_slots = set()
+            for cls in type(orig).__mro__:
+                if hasattr(cls, "__slots__"):
+                    all_slots.update(cls.__slots__)
+            orig_vals = {s: getattr(orig, s, None) for s in all_slots}
+            new_vals = {s: getattr(new, s, None) for s in all_slots}
+            if superset_obj:
+                return all(k in new_vals and comparator(v, new_vals[k], superset_obj) for k, v in orig_vals.items())
+            return comparator(orig_vals, new_vals, superset_obj)
 
         if type(orig) in {types.BuiltinFunctionType, types.BuiltinMethodType}:
             return new == orig

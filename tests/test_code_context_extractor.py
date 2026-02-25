@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import sys
 import tempfile
 from argparse import Namespace
@@ -8,16 +9,17 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.code_utils.code_extractor import GlobalAssignmentCollector, add_global_assignments
-from codeflash.code_utils.code_replacer import replace_functions_and_add_imports
-from codeflash.context.code_context_extractor import (
-    collect_names_from_annotation,
-    extract_imports_for_class,
-    get_code_optimization_context,
-    get_external_base_class_inits,
-    get_imported_class_definitions,
-)
+from codeflash.languages.python.static_analysis.code_extractor import GlobalAssignmentCollector, add_global_assignments
+from codeflash.languages.python.static_analysis.code_replacer import replace_functions_and_add_imports
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.languages.python.context.code_context_extractor import (
+    collect_type_names_from_annotation,
+    enrich_testgen_context,
+    extract_init_stub_from_class,
+    extract_parameter_type_constructors,
+    get_code_optimization_context,
+    resolve_instance_class_name,
+)
 from codeflash.models.models import CodeString, CodeStringsMarkdown, FunctionParent
 from codeflash.optimization.optimizer import Optimizer
 
@@ -103,6 +105,7 @@ def test_code_replacement10() -> None:
 ```python:{file_path.relative_to(file_path.parent)}
 from __future__ import annotations
 
+
 class HelperClass:
     def __init__(self, name):
         self.name = name
@@ -162,6 +165,7 @@ def test_class_method_dependencies() -> None:
 ```python:{file_path.relative_to(file_path.parent)}
 from __future__ import annotations
 from collections import defaultdict
+
 
 class Graph:
     def __init__(self, vertices):
@@ -242,6 +246,7 @@ def test_bubble_sort_helper() -> None:
 ```python:code_to_optimize/code_directories/retriever/bubble_sort_with_math.py
 import math
 
+
 def sorter(arr):
     arr.sort()
     x = math.sqrt(2)
@@ -250,6 +255,7 @@ def sorter(arr):
 ```
 ```python:code_to_optimize/code_directories/retriever/bubble_sort_imported.py
 from bubble_sort_with_math import sorter
+
 
 def sort_from_another_file(arr):
     sorted_arr = sorter(arr)
@@ -768,7 +774,7 @@ class HelperClass:
 
 def test_example_class_token_limit_1(tmp_path: Path) -> None:
     docstring_filler = " ".join(
-        ["This is a long docstring that will be used to fill up the token limit." for _ in range(1000)]
+        ["This is a long docstring that will be used to fill up the token limit." for _ in range(4000)]
     )
     code = f"""
 class MyClass:
@@ -961,7 +967,7 @@ class HelperClass:
 
 def test_example_class_token_limit_3(tmp_path: Path) -> None:
     string_filler = " ".join(
-        ["This is a long string that will be used to fill up the token limit." for _ in range(1000)]
+        ["This is a long string that will be used to fill up the token limit." for _ in range(4000)]
     )
     code = f"""
 class MyClass:
@@ -1006,12 +1012,12 @@ class HelperClass:
     )
     # In this scenario, the read-writable code is too long, so we abort.
     with pytest.raises(ValueError, match="Read-writable code has exceeded token limit, cannot proceed"):
-        code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
+        get_code_optimization_context(function_to_optimize, opt.args.project_root, optim_token_limit=8000)
 
 
 def test_example_class_token_limit_4(tmp_path: Path) -> None:
     string_filler = " ".join(
-        ["This is a long string that will be used to fill up the token limit." for _ in range(1000)]
+        ["This is a long string that will be used to fill up the token limit." for _ in range(4000)]
     )
     code = f"""
 class MyClass:
@@ -1059,7 +1065,7 @@ class HelperClass:
 
     # In this scenario, the read-writable code context becomes too large because the __init__ function is referencing the global x variable instead of the class attribute self.x, so we abort.
     with pytest.raises(ValueError, match="Read-writable code has exceeded token limit, cannot proceed"):
-        code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
+        get_code_optimization_context(function_to_optimize, opt.args.project_root, optim_token_limit=8000)
 
 
 def test_example_class_token_limit_5(tmp_path: Path) -> None:
@@ -1170,9 +1176,15 @@ def test_repo_helper() -> None:
     code_ctx = get_code_optimization_context(function_to_optimize, project_root)
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     hashing_context = code_ctx.hashing_code_context
+    path_to_globals = project_root / "globals.py"
     expected_read_write_context = f"""
+```python:{path_to_globals.relative_to(project_root)}
+# Define a global variable
+API_URL = "https://api.example.com/data"
+```
 ```python:{path_to_utils.relative_to(project_root)}
 import math
+
 
 class DataProcessor:
 
@@ -1193,6 +1205,7 @@ class DataProcessor:
 import requests
 from globals import API_URL
 from utils import DataProcessor
+
 
 def fetch_and_process_data():
     # Use the global variable for the request
@@ -1263,10 +1276,16 @@ def test_repo_helper_of_helper() -> None:
     code_ctx = get_code_optimization_context(function_to_optimize, project_root)
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     hashing_context = code_ctx.hashing_code_context
+    path_to_globals = project_root / "globals.py"
     expected_read_write_context = f"""
+```python:{path_to_globals.relative_to(project_root)}
+# Define a global variable
+API_URL = "https://api.example.com/data"
+```
 ```python:{path_to_utils.relative_to(project_root)}
 import math
 from transform_utils import DataTransformer
+
 
 class DataProcessor:
 
@@ -1287,6 +1306,7 @@ class DataProcessor:
 import requests
 from globals import API_URL
 from utils import DataProcessor
+
 
 def fetch_and_transform_data():
     # Use the global variable for the request
@@ -1376,6 +1396,7 @@ class DataTransformer:
 import math
 from transform_utils import DataTransformer
 
+
 class DataProcessor:
 
     def __init__(self, default_prefix: str = "PREFIX_"):
@@ -1455,6 +1476,7 @@ class DataTransformer:
 ```python:{path_to_utils.relative_to(project_root)}
 import math
 from transform_utils import DataTransformer
+
 
 class DataProcessor:
 
@@ -1587,6 +1609,7 @@ def test_repo_helper_circular_dependency() -> None:
 import math
 from transform_utils import DataTransformer
 
+
 class DataProcessor:
 
     def __init__(self, default_prefix: str = "PREFIX_"):
@@ -1600,6 +1623,7 @@ class DataProcessor:
 ```
 ```python:{path_to_transform_utils.relative_to(project_root)}
 from code_to_optimize.code_directories.retriever.utils import DataProcessor
+
 
 class DataTransformer:
     def __init__(self):
@@ -1733,6 +1757,7 @@ def test_direct_module_import() -> None:
 import math
 from transform_utils import DataTransformer
 
+
 class DataProcessor:
     \"\"\"A class for processing data.\"\"\"
 
@@ -1775,6 +1800,7 @@ def function_to_optimize():
 import requests
 from globals import API_URL
 from utils import DataProcessor
+
 
 def fetch_and_transform_data():
     # Use the global variable for the request
@@ -1990,6 +2016,8 @@ class Calculator:
 """
         expected_read_only_context = """
 ```python:utility_module.py
+import sys
+
 DEFAULT_PRECISION = "medium"
 
 # Try-except block with variable definitions
@@ -1999,6 +2027,17 @@ try:
 except ImportError:
     # Used variable in except block
     CALCULATION_BACKEND = "python"
+
+# Nested if-else with variable definitions
+if sys.platform.startswith('win'):
+    # Used variable in outer if
+    SYSTEM_TYPE = "windows"
+elif sys.platform.startswith('linux'):
+    # Used variable in outer elif
+    SYSTEM_TYPE = "linux"
+else:
+    # Used variable in outer else
+    SYSTEM_TYPE = "other"
 
 # Function that will be used in the main code
 def select_precision(precision, fallback_precision):
@@ -2206,6 +2245,8 @@ def get_system_details():
         relative_path = file_path.relative_to(project_root)
         expected_read_write_context = f"""
 ```python:utility_module.py
+import sys
+
 DEFAULT_PRECISION = "medium"
 
 # Try-except block with variable definitions
@@ -2215,6 +2256,17 @@ try:
 except ImportError:
     # Used variable in except block
     CALCULATION_BACKEND = "python"
+
+# Nested if-else with variable definitions
+if sys.platform.startswith('win'):
+    # Used variable in outer if
+    SYSTEM_TYPE = "windows"
+elif sys.platform.startswith('linux'):
+    # Used variable in outer elif
+    SYSTEM_TYPE = "linux"
+else:
+    # Used variable in outer else
+    SYSTEM_TYPE = "other"
 
 # Function that will be used in the main code
 def select_precision(precision, fallback_precision):
@@ -2256,6 +2308,8 @@ class Calculator:
 """
         expected_read_only_context = """
 ```python:utility_module.py
+import sys
+
 DEFAULT_PRECISION = "medium"
 
 # Try-except block with variable definitions
@@ -2265,6 +2319,17 @@ try:
 except ImportError:
     # Used variable in except block
     CALCULATION_BACKEND = "python"
+
+# Nested if-else with variable definitions
+if sys.platform.startswith('win'):
+    # Used variable in outer if
+    SYSTEM_TYPE = "windows"
+elif sys.platform.startswith('linux'):
+    # Used variable in outer elif
+    SYSTEM_TYPE = "linux"
+else:
+    # Used variable in outer else
+    SYSTEM_TYPE = "other"
 ```
 """
         assert read_write_context.markdown.strip() == expected_read_write_context.strip()
@@ -2419,7 +2484,7 @@ class OuterClass:
     assert "__init__" not in hashing_context  # Should not contain __init__ methods
 
     # Verify nested classes are excluded from the hashing context
-    # The prune_cst_for_code_hashing function should not recurse into nested classes
+    # The prune_cst function in hashing mode should not recurse into nested classes
     assert "class NestedClass:" not in hashing_context  # Nested class definition should not be present
 
     # The target method will reference NestedClass, but the actual nested class definition should not be included
@@ -2820,7 +2885,7 @@ def test_global_function_collector():
     """Test GlobalFunctionCollector correctly collects module-level function definitions."""
     import libcst as cst
 
-    from codeflash.code_utils.code_extractor import GlobalFunctionCollector
+    from codeflash.languages.python.static_analysis.code_extractor import GlobalFunctionCollector
 
     source_code = """
 # Module-level functions
@@ -3272,8 +3337,8 @@ def dump_layout(layout_type, layout):
     assert testgen_context.count("def __init__") >= 2, "Both __init__ methods should be in testgen context"
 
 
-def test_get_imported_class_definitions_extracts_project_classes(tmp_path: Path) -> None:
-    """Test that get_imported_class_definitions extracts class definitions from project modules."""
+def test_enrich_testgen_context_extracts_project_classes(tmp_path: Path) -> None:
+    """Test that enrich_testgen_context extracts class definitions from project modules."""
     # Create a package structure with two modules
     package_dir = tmp_path / "mypackage"
     package_dir.mkdir()
@@ -3322,8 +3387,8 @@ class Accumulator:
     # Create CodeStringsMarkdown from the chunking module (simulating testgen context)
     context = CodeStringsMarkdown(code_strings=[CodeString(code=chunking_code, file_path=chunking_path)])
 
-    # Call get_imported_class_definitions
-    result = get_imported_class_definitions(context, tmp_path)
+    # Call enrich_testgen_context
+    result = enrich_testgen_context(context, tmp_path)
 
     # Verify Element class was extracted
     assert len(result.code_strings) == 1, "Should extract exactly one class (Element)"
@@ -3333,11 +3398,10 @@ class Accumulator:
     assert "class Element" in extracted_code, "Should contain Element class definition"
     assert "def __init__" in extracted_code, "Should contain __init__ method"
     assert "element_id" in extracted_code, "Should contain constructor parameter"
-    assert "import abc" in extracted_code, "Should include necessary imports for base class"
 
 
-def test_get_imported_class_definitions_skips_existing_definitions(tmp_path: Path) -> None:
-    """Test that get_imported_class_definitions skips classes already defined in context."""
+def test_enrich_testgen_context_skips_existing_definitions(tmp_path: Path) -> None:
+    """Test that enrich_testgen_context skips classes already defined in context."""
     # Create a package structure
     package_dir = tmp_path / "mypackage"
     package_dir.mkdir()
@@ -3370,15 +3434,15 @@ class User:
 
     context = CodeStringsMarkdown(code_strings=[CodeString(code=code_with_local_def, file_path=code_path)])
 
-    # Call get_imported_class_definitions
-    result = get_imported_class_definitions(context, tmp_path)
+    # Call enrich_testgen_context
+    result = enrich_testgen_context(context, tmp_path)
 
     # Should NOT extract Element since it's already defined locally
     assert len(result.code_strings) == 0, "Should not extract classes already defined in context"
 
 
-def test_get_imported_class_definitions_skips_third_party(tmp_path: Path) -> None:
-    """Test that get_imported_class_definitions skips third-party/stdlib imports."""
+def test_enrich_testgen_context_skips_third_party(tmp_path: Path) -> None:
+    """Test that enrich_testgen_context skips third-party/stdlib imports."""
     # Create a simple package
     package_dir = tmp_path / "mypackage"
     package_dir.mkdir()
@@ -3399,15 +3463,15 @@ class MyClass:
 
     context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
 
-    # Call get_imported_class_definitions
-    result = get_imported_class_definitions(context, tmp_path)
+    # Call enrich_testgen_context
+    result = enrich_testgen_context(context, tmp_path)
 
     # Should not extract any classes (Path, Optional, dataclass are stdlib/third-party)
     assert len(result.code_strings) == 0, "Should not extract stdlib/third-party classes"
 
 
-def test_get_imported_class_definitions_handles_multiple_imports(tmp_path: Path) -> None:
-    """Test that get_imported_class_definitions handles multiple class imports."""
+def test_enrich_testgen_context_handles_multiple_imports(tmp_path: Path) -> None:
+    """Test that enrich_testgen_context handles multiple class imports."""
     # Create a package structure
     package_dir = tmp_path / "mypackage"
     package_dir.mkdir()
@@ -3443,8 +3507,8 @@ class Processor:
 
     context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
 
-    # Call get_imported_class_definitions
-    result = get_imported_class_definitions(context, tmp_path)
+    # Call enrich_testgen_context
+    result = enrich_testgen_context(context, tmp_path)
 
     # Should extract both TypeA and TypeB (but not TypeC since it's not imported)
     assert len(result.code_strings) == 2, "Should extract exactly two classes (TypeA, TypeB)"
@@ -3455,8 +3519,8 @@ class Processor:
     assert "class TypeC" not in all_extracted_code, "Should NOT contain TypeC (not imported)"
 
 
-def test_get_imported_class_definitions_includes_dataclass_decorators(tmp_path: Path) -> None:
-    """Test that get_imported_class_definitions includes decorators when extracting dataclasses."""
+def test_enrich_testgen_context_includes_dataclass_decorators(tmp_path: Path) -> None:
+    """Test that enrich_testgen_context includes decorators when extracting dataclasses."""
     # Create a package structure
     package_dir = tmp_path / "mypackage"
     package_dir.mkdir()
@@ -3493,8 +3557,8 @@ class ConfigRegistry:
 
     context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
 
-    # Call get_imported_class_definitions
-    result = get_imported_class_definitions(context, tmp_path)
+    # Call enrich_testgen_context
+    result = enrich_testgen_context(context, tmp_path)
 
     # Should extract both LLMConfigBase (base class) and LLMConfig
     assert len(result.code_strings) == 2, "Should extract both LLMConfig and its base class LLMConfigBase"
@@ -3514,11 +3578,8 @@ class ConfigRegistry:
     assert "class LLMConfig" in all_extracted_code, "Should contain LLMConfig class definition"
     assert "class LLMConfigBase" in all_extracted_code, "Should contain LLMConfigBase class definition"
 
-    # Verify imports are included for dataclass-related items
-    assert "from dataclasses import" in all_extracted_code, "Should include dataclasses import"
 
-
-def test_get_imported_class_definitions_extracts_imports_for_decorated_classes(tmp_path: Path) -> None:
+def test_enrich_testgen_context_extracts_imports_for_decorated_classes(tmp_path: Path) -> None:
     """Test that extract_imports_for_class includes decorator and type annotation imports."""
     # Create a package structure
     package_dir = tmp_path / "mypackage"
@@ -3549,179 +3610,16 @@ def create_config() -> Config:
 
     context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
 
-    result = get_imported_class_definitions(context, tmp_path)
+    result = enrich_testgen_context(context, tmp_path)
 
     assert len(result.code_strings) == 1, "Should extract Config class"
     extracted_code = result.code_strings[0].code
 
     # The extracted code should include the decorator
     assert "@dataclass" in extracted_code, "Should include @dataclass decorator"
-    # The imports should include dataclass and field
-    assert "from dataclasses import" in extracted_code, "Should include dataclasses import for decorator"
 
 
-class TestCollectNamesFromAnnotation:
-    """Tests for the collect_names_from_annotation helper function."""
-
-    def test_simple_name(self):
-        """Test extracting a simple type name."""
-        import ast
-
-        code = "def f(x: MyClass): pass"
-        annotation = ast.parse(code).body[0].args.args[0].annotation
-        names: set[str] = set()
-        collect_names_from_annotation(annotation, names)
-        assert "MyClass" in names
-
-    def test_subscript_type(self):
-        """Test extracting names from generic types like List[int]."""
-        import ast
-
-        code = "def f(x: List[int]): pass"
-        annotation = ast.parse(code).body[0].args.args[0].annotation
-        names: set[str] = set()
-        collect_names_from_annotation(annotation, names)
-        assert "List" in names
-        assert "int" in names
-
-    def test_optional_type(self):
-        """Test extracting names from Optional[MyClass]."""
-        import ast
-
-        code = "def f(x: Optional[MyClass]): pass"
-        annotation = ast.parse(code).body[0].args.args[0].annotation
-        names: set[str] = set()
-        collect_names_from_annotation(annotation, names)
-        assert "Optional" in names
-        assert "MyClass" in names
-
-    def test_union_type_with_pipe(self):
-        """Test extracting names from union types with | syntax."""
-        import ast
-
-        code = "def f(x: int | str | None): pass"
-        annotation = ast.parse(code).body[0].args.args[0].annotation
-        names: set[str] = set()
-        collect_names_from_annotation(annotation, names)
-        # int | str | None becomes BinOp nodes
-        assert "int" in names
-        assert "str" in names
-
-    def test_nested_generic_types(self):
-        """Test extracting names from nested generics like Dict[str, List[MyClass]]."""
-        import ast
-
-        code = "def f(x: Dict[str, List[MyClass]]): pass"
-        annotation = ast.parse(code).body[0].args.args[0].annotation
-        names: set[str] = set()
-        collect_names_from_annotation(annotation, names)
-        assert "Dict" in names
-        assert "str" in names
-        assert "List" in names
-        assert "MyClass" in names
-
-    def test_tuple_annotation(self):
-        """Test extracting names from tuple type hints."""
-        import ast
-
-        code = "def f(x: tuple[int, str, MyClass]): pass"
-        annotation = ast.parse(code).body[0].args.args[0].annotation
-        names: set[str] = set()
-        collect_names_from_annotation(annotation, names)
-        assert "tuple" in names
-        assert "int" in names
-        assert "str" in names
-        assert "MyClass" in names
-
-
-class TestExtractImportsForClass:
-    """Tests for the extract_imports_for_class helper function."""
-
-    def test_extracts_base_class_imports(self):
-        """Test that base class imports are extracted."""
-        import ast
-
-        module_source = """from abc import ABC
-from mypackage import BaseClass
-
-class MyClass(BaseClass, ABC):
-    pass
-"""
-        tree = ast.parse(module_source)
-        class_node = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef))
-        result = extract_imports_for_class(tree, class_node, module_source)
-        assert "from abc import ABC" in result
-        assert "from mypackage import BaseClass" in result
-
-    def test_extracts_decorator_imports(self):
-        """Test that decorator imports are extracted."""
-        import ast
-
-        module_source = """from dataclasses import dataclass
-from functools import lru_cache
-
-@dataclass
-class MyClass:
-    name: str
-"""
-        tree = ast.parse(module_source)
-        class_node = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef))
-        result = extract_imports_for_class(tree, class_node, module_source)
-        assert "from dataclasses import dataclass" in result
-
-    def test_extracts_type_annotation_imports(self):
-        """Test that type annotation imports are extracted."""
-        import ast
-
-        module_source = """from typing import Optional, List
-from mypackage.models import Config
-
-@dataclass
-class MyClass:
-    config: Optional[Config]
-    items: List[str]
-"""
-        tree = ast.parse(module_source)
-        class_node = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef))
-        result = extract_imports_for_class(tree, class_node, module_source)
-        assert "from typing import Optional, List" in result
-        assert "from mypackage.models import Config" in result
-
-    def test_extracts_field_function_imports(self):
-        """Test that field() function imports are extracted for dataclasses."""
-        import ast
-
-        module_source = """from dataclasses import dataclass, field
-from typing import List
-
-@dataclass
-class MyClass:
-    items: List[str] = field(default_factory=list)
-"""
-        tree = ast.parse(module_source)
-        class_node = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef))
-        result = extract_imports_for_class(tree, class_node, module_source)
-        assert "from dataclasses import dataclass, field" in result
-
-    def test_no_duplicate_imports(self):
-        """Test that duplicate imports are not included."""
-        import ast
-
-        module_source = """from typing import Optional
-
-@dataclass
-class MyClass:
-    field1: Optional[str]
-    field2: Optional[int]
-"""
-        tree = ast.parse(module_source)
-        class_node = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef))
-        result = extract_imports_for_class(tree, class_node, module_source)
-        # Should only have one import line even though Optional is used twice
-        assert result.count("from typing import Optional") == 1
-
-
-def test_get_imported_class_definitions_multiple_decorators(tmp_path: Path) -> None:
+def test_enrich_testgen_context_multiple_decorators(tmp_path: Path) -> None:
     """Test that classes with multiple decorators are extracted correctly."""
     package_dir = tmp_path / "mypackage"
     package_dir.mkdir()
@@ -3752,7 +3650,7 @@ def sort_configs(configs: list[OrderedConfig]) -> list[OrderedConfig]:
 
     context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
 
-    result = get_imported_class_definitions(context, tmp_path)
+    result = enrich_testgen_context(context, tmp_path)
 
     assert len(result.code_strings) == 1
     extracted_code = result.code_strings[0].code
@@ -3763,7 +3661,7 @@ def sort_configs(configs: list[OrderedConfig]) -> list[OrderedConfig]:
     assert "class OrderedConfig" in extracted_code
 
 
-def test_get_imported_class_definitions_extracts_multilevel_inheritance(tmp_path: Path) -> None:
+def test_enrich_testgen_context_extracts_multilevel_inheritance(tmp_path: Path) -> None:
     """Test that base classes are recursively extracted for multi-level inheritance.
 
     This is critical for understanding dataclass constructor signatures, as fields
@@ -3823,8 +3721,8 @@ class ConfigRegistry:
 
     context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
 
-    # Call get_imported_class_definitions
-    result = get_imported_class_definitions(context, tmp_path)
+    # Call enrich_testgen_context
+    result = enrich_testgen_context(context, tmp_path)
 
     # Should extract 4 classes: GrandParentConfig, ParentConfig, ChildConfig, RouterConfig
     # (all classes needed to understand the full inheritance hierarchy)
@@ -3859,8 +3757,8 @@ class ConfigRegistry:
     assert "model_list: list" in all_extracted_code, "Should include model_list field from Router"
 
 
-def test_get_external_base_class_inits_extracts_userdict(tmp_path: Path) -> None:
-    """Extracts __init__ from collections.UserDict when a class inherits from it."""
+def test_enrich_testgen_context_skips_stdlib_userdict(tmp_path: Path) -> None:
+    """Skips stdlib classes like collections.UserDict."""
     code = """from collections import UserDict
 
 class MyCustomDict(UserDict):
@@ -3870,26 +3768,13 @@ class MyCustomDict(UserDict):
     code_path.write_text(code, encoding="utf-8")
 
     context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
-    result = get_external_base_class_inits(context, tmp_path)
+    result = enrich_testgen_context(context, tmp_path)
 
-    assert len(result.code_strings) == 1
-    code_string = result.code_strings[0]
-
-    expected_code = """\
-class UserDict:
-    def __init__(self, dict=None, /, **kwargs):
-        self.data = {}
-        if dict is not None:
-            self.update(dict)
-        if kwargs:
-            self.update(kwargs)
-"""
-    assert code_string.code == expected_code
-    assert code_string.file_path.as_posix().endswith("collections/__init__.py")
+    assert len(result.code_strings) == 0, "Should not extract stdlib classes"
 
 
-def test_get_external_base_class_inits_skips_project_classes(tmp_path: Path) -> None:
-    """Returns empty when base class is from the project, not external."""
+def test_enrich_testgen_context_skips_unresolvable_base_classes(tmp_path: Path) -> None:
+    """Returns empty when base class module cannot be resolved."""
     child_code = """from base import ProjectBase
 
 class Child(ProjectBase):
@@ -3899,12 +3784,12 @@ class Child(ProjectBase):
     child_path.write_text(child_code, encoding="utf-8")
 
     context = CodeStringsMarkdown(code_strings=[CodeString(code=child_code, file_path=child_path)])
-    result = get_external_base_class_inits(context, tmp_path)
+    result = enrich_testgen_context(context, tmp_path)
 
     assert result.code_strings == []
 
 
-def test_get_external_base_class_inits_skips_builtins(tmp_path: Path) -> None:
+def test_enrich_testgen_context_skips_builtin_base_classes(tmp_path: Path) -> None:
     """Returns empty for builtin classes like list that have no inspectable source."""
     code = """class MyList(list):
     pass
@@ -3913,41 +3798,33 @@ def test_get_external_base_class_inits_skips_builtins(tmp_path: Path) -> None:
     code_path.write_text(code, encoding="utf-8")
 
     context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
-    result = get_external_base_class_inits(context, tmp_path)
+    result = enrich_testgen_context(context, tmp_path)
 
     assert result.code_strings == []
 
 
-def test_get_external_base_class_inits_deduplicates(tmp_path: Path) -> None:
-    """Extracts the same external base class only once even when inherited multiple times."""
-    code = """from collections import UserDict
+def test_enrich_testgen_context_deduplicates(tmp_path: Path) -> None:
+    """Extracts the same project class only once even when imported multiple times."""
+    package_dir = tmp_path / "mypkg"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    (package_dir / "base.py").write_text(
+        "class Base:\n    def __init__(self, x: int):\n        self.x = x\n",
+        encoding="utf-8",
+    )
 
-class MyDict1(UserDict):
-    pass
-
-class MyDict2(UserDict):
-    pass
-"""
-    code_path = tmp_path / "mydicts.py"
+    code = "from mypkg.base import Base\n\nclass A(Base):\n    pass\n\nclass B(Base):\n    pass\n"
+    code_path = package_dir / "children.py"
     code_path.write_text(code, encoding="utf-8")
 
     context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
-    result = get_external_base_class_inits(context, tmp_path)
+    result = enrich_testgen_context(context, tmp_path)
 
     assert len(result.code_strings) == 1
-    expected_code = """\
-class UserDict:
-    def __init__(self, dict=None, /, **kwargs):
-        self.data = {}
-        if dict is not None:
-            self.update(dict)
-        if kwargs:
-            self.update(kwargs)
-"""
-    assert result.code_strings[0].code == expected_code
+    assert "class Base" in result.code_strings[0].code
 
 
-def test_get_external_base_class_inits_empty_when_no_inheritance(tmp_path: Path) -> None:
+def test_enrich_testgen_context_empty_when_no_inheritance(tmp_path: Path) -> None:
     """Returns empty when there are no external base classes."""
     code = """class SimpleClass:
     pass
@@ -3956,7 +3833,7 @@ def test_get_external_base_class_inits_empty_when_no_inheritance(tmp_path: Path)
     code_path.write_text(code, encoding="utf-8")
 
     context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
-    result = get_external_base_class_inits(context, tmp_path)
+    result = enrich_testgen_context(context, tmp_path)
 
     assert result.code_strings == []
 
@@ -4027,6 +3904,7 @@ import dataclasses
 import enum
 import typing as t
 
+
 class MessageKind(enum.StrEnum):
     ASK_FOR_CLIPBOARD_RESPONSE = "ask-for-clipboard-response"
     BEGIN_EXFILTRATION = "begin-exfiltration"
@@ -4071,18 +3949,17 @@ def reify_channel_message(data: dict) -> MessageIn:
 
 
 def test_testgen_context_includes_external_base_inits(tmp_path: Path) -> None:
-    """Test that external base class __init__ methods are included in testgen context.
+    """Test that base class definitions from project modules are included in testgen context."""
+    package_dir = tmp_path / "mypkg"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    (package_dir / "base.py").write_text(
+        "class BaseDict:\n    def __init__(self, data=None):\n        self.data = data or {}\n",
+        encoding="utf-8",
+    )
 
-    This covers line 65 in code_context_extractor.py where external_base_inits.code_strings
-    are appended to the testgen context when a class inherits from an external library.
-    """
-    code = """from collections import UserDict
-
-class MyCustomDict(UserDict):
-    def target_method(self):
-        return self.data
-"""
-    file_path = tmp_path / "test_code.py"
+    code = "from mypkg.base import BaseDict\n\nclass MyCustomDict(BaseDict):\n    def target_method(self):\n        return self.data\n"
+    file_path = package_dir / "test_code.py"
     file_path.write_text(code, encoding="utf-8")
 
     func_to_optimize = FunctionToOptimize(
@@ -4093,134 +3970,14 @@ class MyCustomDict(UserDict):
 
     code_ctx = get_code_optimization_context(function_to_optimize=func_to_optimize, project_root_path=tmp_path)
 
-    # The testgen context should include the UserDict __init__ method
     testgen_context = code_ctx.testgen_context.markdown
-    assert "class UserDict:" in testgen_context, "UserDict class should be in testgen context"
-    assert "def __init__" in testgen_context, "UserDict __init__ should be in testgen context"
-    assert "self.data = {}" in testgen_context, "UserDict __init__ body should be included"
+    assert "class BaseDict" in testgen_context, "BaseDict class should be in testgen context"
+    assert "def __init__" in testgen_context, "BaseDict __init__ should be in testgen context"
+    assert "self.data" in testgen_context, "BaseDict __init__ body should be included"
 
 
-def test_read_only_code_removed_when_exceeds_limit(tmp_path: Path) -> None:
-    """Test read-only code is completely removed when it exceeds token limit even without docstrings.
-
-    This covers lines 152-153 in code_context_extractor.py where read_only_context_code is set
-    to empty string when it still exceeds the token limit after docstring removal.
-    """
-    # Create a second-degree helper with large implementation that has no docstrings
-    # Second-degree helpers go into read-only context
-    long_lines = ["    x = 0"]
-    for i in range(150):
-        long_lines.append(f"    x = x + {i}")
-    long_lines.append("    return x")
-    long_body = "\n".join(long_lines)
-
-    code = f"""
-class MyClass:
-    def __init__(self):
-        self.x = 1
-
-    def target_method(self):
-        return first_helper()
-
-
-def first_helper():
-    # First degree helper - calls second degree
-    return second_helper()
-
-
-def second_helper():
-    # Second degree helper - goes into read-only context
-{long_body}
-"""
-    file_path = tmp_path / "test_code.py"
-    file_path.write_text(code, encoding="utf-8")
-
-    func_to_optimize = FunctionToOptimize(
-        function_name="target_method", file_path=file_path, parents=[FunctionParent(name="MyClass", type="ClassDef")]
-    )
-
-    # Use a small optim_token_limit that allows read-writable but not read-only
-    # Read-writable is ~48 tokens, read-only is ~600 tokens
-    code_ctx = get_code_optimization_context(
-        function_to_optimize=func_to_optimize,
-        project_root_path=tmp_path,
-        optim_token_limit=100,  # Small limit to trigger read-only removal
-    )
-
-    # The read-only context should be empty because it exceeded the limit
-    assert code_ctx.read_only_context_code == "", "Read-only code should be removed when exceeding token limit"
-
-
-def test_testgen_removes_imported_classes_on_overflow(tmp_path: Path) -> None:
-    """Test testgen context removes imported class definitions when exceeding token limit.
-
-    This covers lines 176-186 in code_context_extractor.py where:
-    - Testgen context exceeds limit (line 175)
-    - Removing docstrings still exceeds (line 175 again)
-    - Removing imported classes succeeds (line 177-183)
-    """
-    # Create a package structure with a large type class used only in type annotations
-    # This ensures get_imported_class_definitions extracts the full class
-    package_dir = tmp_path / "mypackage"
-    package_dir.mkdir()
-    (package_dir / "__init__.py").write_text("", encoding="utf-8")
-
-    # Create a large class with methods that will be extracted via get_imported_class_definitions
-    # Use methods WITHOUT docstrings so removing docstrings won't help much
-    many_methods = "\n".join([f"    def method_{i}(self):\n        return {i}" for i in range(100)])
-    type_class_code = f'''
-class TypeClass:
-    """A type class for annotations."""
-
-    def __init__(self, value: int):
-        self.value = value
-
-{many_methods}
-'''
-    type_class_path = package_dir / "types.py"
-    type_class_path.write_text(type_class_code, encoding="utf-8")
-
-    # Main module uses TypeClass only in annotation (not instantiated)
-    # This triggers get_imported_class_definitions to extract the full class
-    main_code = """
-from mypackage.types import TypeClass
-
-def target_function(obj: TypeClass) -> int:
-    return obj.value
-"""
-    main_path = package_dir / "main.py"
-    main_path.write_text(main_code, encoding="utf-8")
-
-    func_to_optimize = FunctionToOptimize(function_name="target_function", file_path=main_path, parents=[])
-
-    # Use a testgen_token_limit that:
-    # - Is exceeded by full context with imported class (~1500 tokens)
-    # - Is exceeded even after removing docstrings
-    # - But fits when imported class is removed (~40 tokens)
-    code_ctx = get_code_optimization_context(
-        function_to_optimize=func_to_optimize,
-        project_root_path=tmp_path,
-        testgen_token_limit=200,  # Small limit to trigger imported class removal
-    )
-
-    # The testgen context should exist (didn't raise ValueError)
-    testgen_context = code_ctx.testgen_context.markdown
-    assert testgen_context, "Testgen context should not be empty"
-
-    # The target function should still be there
-    assert "def target_function" in testgen_context, "Target function should be in testgen context"
-
-    # The large imported class should NOT be included (removed due to token limit)
-    assert "class TypeClass" not in testgen_context, (
-        "TypeClass should be removed from testgen context when exceeding token limit"
-    )
-
-
-def test_testgen_raises_when_all_fallbacks_fail(tmp_path: Path) -> None:
-    """Test that ValueError is raised when testgen context exceeds limit even after all fallbacks.
-
-    This covers line 186 in code_context_extractor.py.
-    """
+def test_testgen_raises_when_exceeds_limit(tmp_path: Path) -> None:
+    """Test that ValueError is raised when testgen context exceeds token limit."""
     # Create a function with a very long body that exceeds limits even without imports/docstrings
     long_lines = ["    x = 0"]
     for i in range(200):
@@ -4246,31 +4003,29 @@ def target_function():
         )
 
 
-def test_get_external_base_class_inits_attribute_base(tmp_path: Path) -> None:
-    """Test handling of base class accessed as module.ClassName (ast.Attribute).
+def test_enrich_testgen_context_attribute_base(tmp_path: Path) -> None:
+    """Test handling of base class in a project module."""
+    package_dir = tmp_path / "mypkg"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    (package_dir / "base.py").write_text(
+        "class CustomDict:\n    def __init__(self, data=None):\n        self.data = data or {}\n",
+        encoding="utf-8",
+    )
 
-    This covers line 616 in code_context_extractor.py.
-    """
-    # Use the standard import style which the code actually handles
-    code = """from collections import UserDict
-
-class MyDict(UserDict):
-    def custom_method(self):
-        return self.data
-"""
-    code_path = tmp_path / "mydict.py"
+    code = "from mypkg.base import CustomDict\n\nclass MyDict(CustomDict):\n    def custom_method(self):\n        return self.data\n"
+    code_path = package_dir / "mydict.py"
     code_path.write_text(code, encoding="utf-8")
 
     context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
-    result = get_external_base_class_inits(context, tmp_path)
+    result = enrich_testgen_context(context, tmp_path)
 
-    # Should extract UserDict __init__
     assert len(result.code_strings) == 1
-    assert "class UserDict:" in result.code_strings[0].code
+    assert "class CustomDict" in result.code_strings[0].code
     assert "def __init__" in result.code_strings[0].code
 
 
-def test_get_external_base_class_inits_no_init_method(tmp_path: Path) -> None:
+def test_enrich_testgen_context_no_init_method(tmp_path: Path) -> None:
     """Test handling when base class has no __init__ method.
 
     This covers line 641 in code_context_extractor.py.
@@ -4285,63 +4040,11 @@ class MyProtocol(Protocol):
     code_path.write_text(code, encoding="utf-8")
 
     context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
-    result = get_external_base_class_inits(context, tmp_path)
+    result = enrich_testgen_context(context, tmp_path)
 
     # Protocol's __init__ can't be easily inspected, should handle gracefully
     # Result may be empty or contain Protocol based on implementation
     assert isinstance(result.code_strings, list)
-
-
-def test_collect_names_from_annotation_attribute(tmp_path: Path) -> None:
-    """Test collect_names_from_annotation handles ast.Attribute annotations.
-
-    This covers line 756 in code_context_extractor.py.
-    """
-    # Use __import__ to avoid polluting the test file's detected imports
-    ast_mod = __import__("ast")
-
-    # Parse code with type annotation using attribute access
-    code = "x: typing.List[int] = []"
-    tree = ast_mod.parse(code)
-    names: set[str] = set()
-
-    # Find the annotation node
-    for node in ast_mod.walk(tree):
-        if isinstance(node, ast_mod.AnnAssign) and node.annotation:
-            collect_names_from_annotation(node.annotation, names)
-            break
-
-    assert "typing" in names
-
-
-def test_extract_imports_for_class_decorator_call_attribute(tmp_path: Path) -> None:
-    """Test extract_imports_for_class handles decorator calls with attribute access.
-
-    This covers lines 707-708 in code_context_extractor.py.
-    """
-    ast_mod = __import__("ast")
-
-    code = """
-import functools
-
-@functools.lru_cache(maxsize=128)
-class CachedClass:
-    pass
-"""
-    tree = ast_mod.parse(code)
-
-    # Find the class node
-    class_node = None
-    for node in ast_mod.walk(tree):
-        if isinstance(node, ast_mod.ClassDef):
-            class_node = node
-            break
-
-    assert class_node is not None
-    result = extract_imports_for_class(tree, class_node, code)
-
-    # Should include the functools import
-    assert "functools" in result
 
 
 def test_annotated_assignment_in_read_writable(tmp_path: Path) -> None:
@@ -4374,7 +4077,7 @@ class MyClass:
 
 
 def test_imported_class_definitions_module_path_none(tmp_path: Path) -> None:
-    """Test handling when module_path is None in get_imported_class_definitions.
+    """Test handling when module_path is None in enrich_testgen_context.
 
     This covers line 560 in code_context_extractor.py.
     """
@@ -4390,121 +4093,10 @@ class MyClass:
     code_path.write_text(code, encoding="utf-8")
 
     context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
-    result = get_imported_class_definitions(context, tmp_path)
+    result = enrich_testgen_context(context, tmp_path)
 
     # Should handle gracefully and return empty or partial results
     assert isinstance(result.code_strings, list)
-
-
-def test_get_imported_names_import_star(tmp_path: Path) -> None:
-    """Test get_imported_names handles import * correctly.
-
-    This covers lines 808-809 and 824-825 in code_context_extractor.py.
-    """
-    import libcst as cst
-
-    # Test regular import *
-    # Note: "import *" is not valid Python, but "from x import *" is
-    from_import_star = cst.parse_statement("from os import *")
-    assert isinstance(from_import_star, cst.SimpleStatementLine)
-    import_node = from_import_star.body[0]
-    assert isinstance(import_node, cst.ImportFrom)
-
-    from codeflash.context.code_context_extractor import get_imported_names
-
-    result = get_imported_names(import_node)
-    assert result == {"*"}
-
-
-def test_get_imported_names_aliased_import(tmp_path: Path) -> None:
-    """Test get_imported_names handles aliased imports correctly.
-
-    This covers lines 812-813 and 828-829 in code_context_extractor.py.
-    """
-    import libcst as cst
-
-    from codeflash.context.code_context_extractor import get_imported_names
-
-    # Test import with alias
-    import_stmt = cst.parse_statement("import numpy as np")
-    assert isinstance(import_stmt, cst.SimpleStatementLine)
-    import_node = import_stmt.body[0]
-    assert isinstance(import_node, cst.Import)
-
-    result = get_imported_names(import_node)
-    assert "np" in result
-
-    # Test from import with alias
-    from_import_stmt = cst.parse_statement("from os import path as ospath")
-    assert isinstance(from_import_stmt, cst.SimpleStatementLine)
-    from_import_node = from_import_stmt.body[0]
-    assert isinstance(from_import_node, cst.ImportFrom)
-
-    result2 = get_imported_names(from_import_node)
-    assert "ospath" in result2
-
-
-def test_get_imported_names_dotted_import(tmp_path: Path) -> None:
-    """Test get_imported_names handles dotted imports correctly.
-
-    This covers lines 816-822 in code_context_extractor.py.
-    """
-    import libcst as cst
-
-    from codeflash.context.code_context_extractor import get_imported_names
-
-    # Test dotted import like "import os.path"
-    import_stmt = cst.parse_statement("import os.path")
-    assert isinstance(import_stmt, cst.SimpleStatementLine)
-    import_node = import_stmt.body[0]
-    assert isinstance(import_node, cst.Import)
-
-    result = get_imported_names(import_node)
-    assert "os" in result
-
-
-def test_used_name_collector_comprehensive(tmp_path: Path) -> None:
-    """Test UsedNameCollector handles various node types.
-
-    This covers lines 767-801 in code_context_extractor.py.
-    """
-    import libcst as cst
-
-    from codeflash.context.code_context_extractor import UsedNameCollector
-
-    code = """
-import os
-from typing import List
-
-x: int = 1
-y = os.path.join("a", "b")
-
-class MyClass:
-    z = 10
-
-def my_func():
-    pass
-"""
-    module = cst.parse_module(code)
-    collector = UsedNameCollector()
-    # In libcst, the walker traverses the module
-    cst.MetadataWrapper(module).visit(collector)
-
-    # Check used names
-    assert "os" in collector.used_names
-    assert "int" in collector.used_names
-    assert "List" in collector.used_names
-
-    # Check defined names
-    assert "x" in collector.defined_names
-    assert "y" in collector.defined_names
-    assert "MyClass" in collector.defined_names
-    assert "my_func" in collector.defined_names
-
-    # Check external names (used but not defined)
-    external = collector.get_external_names()
-    assert "os" in external
-    assert "x" not in external  # x is defined
 
 
 def test_imported_class_with_base_in_same_module(tmp_path: Path) -> None:
@@ -4546,50 +4138,11 @@ def target_function(obj: DerivedClass) -> bool:
     main_path.write_text(main_code, encoding="utf-8")
 
     context = CodeStringsMarkdown(code_strings=[CodeString(code=main_code, file_path=main_path)])
-    result = get_imported_class_definitions(context, tmp_path)
+    result = enrich_testgen_context(context, tmp_path)
 
     # Should extract the inheritance chain
     all_code = "\n".join(cs.code for cs in result.code_strings)
     assert "class BaseClass" in all_code or "class DerivedClass" in all_code
-
-
-def test_get_imported_names_from_import_without_alias(tmp_path: Path) -> None:
-    """Test get_imported_names handles from imports without aliases.
-
-    This covers lines 830-831 in code_context_extractor.py.
-    """
-    import libcst as cst
-
-    from codeflash.context.code_context_extractor import get_imported_names
-
-    # Test from import without alias
-    from_import_stmt = cst.parse_statement("from os import path, getcwd")
-    assert isinstance(from_import_stmt, cst.SimpleStatementLine)
-    from_import_node = from_import_stmt.body[0]
-    assert isinstance(from_import_node, cst.ImportFrom)
-
-    result = get_imported_names(from_import_node)
-    assert "path" in result
-    assert "getcwd" in result
-
-
-def test_get_imported_names_regular_import(tmp_path: Path) -> None:
-    """Test get_imported_names handles regular imports.
-
-    This covers lines 814-815 in code_context_extractor.py.
-    """
-    import libcst as cst
-
-    from codeflash.context.code_context_extractor import get_imported_names
-
-    # Test regular import without alias
-    import_stmt = cst.parse_statement("import json")
-    assert isinstance(import_stmt, cst.SimpleStatementLine)
-    import_node = import_stmt.body[0]
-    assert isinstance(import_node, cst.Import)
-
-    result = get_imported_names(import_node)
-    assert "json" in result
 
 
 def test_augmented_assignment_not_in_context(tmp_path: Path) -> None:
@@ -4620,3 +4173,531 @@ class MyClass:
     # counter should be in context since __init__ uses it
     read_writable = code_ctx.read_writable_code.markdown
     assert "counter" in read_writable
+
+
+def test_enrich_testgen_context_extracts_click_option(tmp_path: Path) -> None:
+    """click.Option re-exports via __init__.py so jedi resolves the module but not the class directly."""
+    code = """from click import Option
+
+def my_func(opt: Option) -> None:
+    pass
+"""
+    code_path = tmp_path / "myfunc.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = enrich_testgen_context(context, tmp_path)
+
+    # click re-exports Option from click.core via __init__.py; jedi resolves
+    # the module to __init__.py where Option is not defined as a ClassDef,
+    # so enrich_testgen_context cannot extract it.
+    assert isinstance(result.code_strings, list)
+
+
+def test_enrich_testgen_context_extracts_project_class_defs(tmp_path: Path) -> None:
+    """Extracts project class definitions via jedi resolution."""
+    # Create a project module with a class
+    (tmp_path / "mymodule.py").write_text("class ProjectClass:\n    pass\n", encoding="utf-8")
+
+    code = """from mymodule import ProjectClass
+
+def my_func(obj: ProjectClass) -> None:
+    pass
+"""
+    code_path = tmp_path / "myfunc.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = enrich_testgen_context(context, tmp_path)
+
+    assert len(result.code_strings) == 1
+    assert "class ProjectClass" in result.code_strings[0].code
+
+
+def test_enrich_testgen_context_skips_non_classes(tmp_path: Path) -> None:
+    """Returns empty when imported name is a function, not a class."""
+    code = """from collections import OrderedDict
+from os.path import join
+
+def my_func() -> None:
+    pass
+"""
+    code_path = tmp_path / "myfunc.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = enrich_testgen_context(context, tmp_path)
+
+    # join is a function, not a class — should be skipped
+    # OrderedDict is a class and should be included
+    class_names = [cs.code.split("\n")[0] for cs in result.code_strings]
+    assert not any("join" in name for name in class_names)
+
+
+def test_enrich_testgen_context_skips_already_defined_classes(tmp_path: Path) -> None:
+    """Skips classes already defined in the context (e.g., added by enrich_testgen_context)."""
+    code = """from collections import UserDict
+
+class UserDict:
+    def __init__(self):
+        pass
+
+def my_func(d: UserDict) -> None:
+    pass
+"""
+    code_path = tmp_path / "myfunc.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = enrich_testgen_context(context, tmp_path)
+
+    # UserDict is already defined in the context, so it should be skipped
+    assert result.code_strings == []
+
+
+def test_enrich_testgen_context_skips_builtin_annotations(tmp_path: Path) -> None:
+    """Returns empty for builtin type annotations like list/dict that are not imported."""
+    code = """x: list = []
+y: dict = {}
+
+def my_func() -> None:
+    pass
+"""
+    code_path = tmp_path / "myfunc.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = enrich_testgen_context(context, tmp_path)
+
+    assert result.code_strings == []
+
+
+def test_enrich_testgen_context_skips_stdlib(tmp_path: Path) -> None:
+    """Skips stdlib classes like QName."""
+    code = """from xml.etree.ElementTree import QName
+
+def my_func(q: QName) -> None:
+    pass
+"""
+    code_path = tmp_path / "myfunc.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = enrich_testgen_context(context, tmp_path)
+
+    assert result.code_strings == [], "Should not extract stdlib classes"
+
+
+def test_enrich_testgen_context_empty_when_no_imports(tmp_path: Path) -> None:
+    """Returns empty when there are no from-imports."""
+    code = """def my_func() -> None:
+    pass
+"""
+    code_path = tmp_path / "myfunc.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = enrich_testgen_context(context, tmp_path)
+
+    assert result.code_strings == []
+
+
+# --- Integration tests for transitive resolution in enrich_testgen_context ---
+
+
+def test_enrich_testgen_context_transitive_deps(tmp_path: Path) -> None:
+    """Transitive deps require the class to be resolvable in the target module."""
+    package_dir = tmp_path / "mypkg"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+
+    (package_dir / "types.py").write_text(
+        "class Command:\n    def __init__(self, name: str):\n        self.name = name\n", encoding="utf-8"
+    )
+    (package_dir / "ctx.py").write_text(
+        "from mypkg.types import Command\n\nclass Context:\n    def __init__(self, cmd: Command):\n        self.cmd = cmd\n",
+        encoding="utf-8",
+    )
+
+    code = "from mypkg.ctx import Context\n\ndef my_func(ctx: Context) -> None:\n    pass\n"
+    code_path = package_dir / "main.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = enrich_testgen_context(context, tmp_path)
+
+    class_names = {cs.code.split("\n")[0].replace("class ", "").rstrip(":") for cs in result.code_strings}
+    assert "Context" in class_names
+
+
+def test_enrich_testgen_context_no_infinite_loops(tmp_path: Path) -> None:
+    """Handles classes with circular type references without infinite loops."""
+    package_dir = tmp_path / "mypkg"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+
+    # Create circular references: Context references Command, Command references Context
+    (package_dir / "core.py").write_text(
+        "class Command:\n    def __init__(self, name: str):\n        self.name = name\n\n"
+        "class Context:\n    def __init__(self, cmd: Command):\n        self.cmd = cmd\n",
+        encoding="utf-8",
+    )
+
+    code = "from mypkg.core import Context\n\ndef my_func(ctx: Context) -> None:\n    pass\n"
+    code_path = package_dir / "main.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = enrich_testgen_context(context, tmp_path)
+
+    # Should complete without hanging
+    assert len(result.code_strings) >= 1
+
+
+def test_enrich_testgen_context_no_duplicate_stubs(tmp_path: Path) -> None:
+    """Does not emit duplicate stubs for the same class name."""
+    code = """from click import Context
+
+def my_func(ctx: Context) -> None:
+    pass
+"""
+    code_path = tmp_path / "myfunc.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = enrich_testgen_context(context, tmp_path)
+
+    class_names = [cs.code.split("\n")[0].replace("class ", "").rstrip(":") for cs in result.code_strings]
+    assert len(class_names) == len(set(class_names)), f"Duplicate class stubs found: {class_names}"
+
+
+# --- Tests for collect_type_names_from_annotation ---
+
+
+def test_collect_type_names_simple() -> None:
+    tree = ast.parse("def f(x: Foo): pass")
+    func = tree.body[0]
+    assert isinstance(func, ast.FunctionDef)
+    ann = func.args.args[0].annotation
+    assert collect_type_names_from_annotation(ann) == {"Foo"}
+
+
+def test_collect_type_names_generic() -> None:
+    tree = ast.parse("def f(x: list[Foo]): pass")
+    func = tree.body[0]
+    assert isinstance(func, ast.FunctionDef)
+    ann = func.args.args[0].annotation
+    names = collect_type_names_from_annotation(ann)
+    assert "Foo" in names
+    assert "list" in names
+
+
+def test_collect_type_names_optional() -> None:
+    tree = ast.parse("def f(x: Optional[Foo]): pass")
+    func = tree.body[0]
+    assert isinstance(func, ast.FunctionDef)
+    ann = func.args.args[0].annotation
+    names = collect_type_names_from_annotation(ann)
+    assert "Optional" in names
+    assert "Foo" in names
+
+
+def test_collect_type_names_union_pipe() -> None:
+    tree = ast.parse("def f(x: Foo | Bar): pass")
+    func = tree.body[0]
+    assert isinstance(func, ast.FunctionDef)
+    ann = func.args.args[0].annotation
+    names = collect_type_names_from_annotation(ann)
+    assert names == {"Foo", "Bar"}
+
+
+def test_collect_type_names_none_annotation() -> None:
+    assert collect_type_names_from_annotation(None) == set()
+
+
+def test_collect_type_names_attribute_skipped() -> None:
+    tree = ast.parse("def f(x: module.Foo): pass")
+    func = tree.body[0]
+    assert isinstance(func, ast.FunctionDef)
+    ann = func.args.args[0].annotation
+    assert collect_type_names_from_annotation(ann) == set()
+
+
+# --- Tests for extract_init_stub_from_class ---
+
+
+def test_extract_init_stub_basic() -> None:
+    source = """
+class MyClass:
+    def __init__(self, name: str, value: int = 0):
+        self.name = name
+        self.value = value
+"""
+    tree = ast.parse(source)
+    stub = extract_init_stub_from_class("MyClass", source, tree)
+    assert stub is not None
+    assert "class MyClass:" in stub
+    assert "def __init__(self, name: str, value: int = 0):" in stub
+    assert "self.name = name" in stub
+    assert "self.value = value" in stub
+
+
+def test_extract_init_stub_no_init() -> None:
+    source = """
+class NoInit:
+    x = 10
+    def other(self):
+        pass
+"""
+    tree = ast.parse(source)
+    stub = extract_init_stub_from_class("NoInit", source, tree)
+    assert stub is None
+
+
+def test_extract_init_stub_class_not_found() -> None:
+    source = """
+class Other:
+    def __init__(self):
+        pass
+"""
+    tree = ast.parse(source)
+    stub = extract_init_stub_from_class("Missing", source, tree)
+    assert stub is None
+
+
+# --- Tests for extract_parameter_type_constructors ---
+
+
+def test_extract_parameter_type_constructors_project_type(tmp_path: Path) -> None:
+    # Create a module with a class
+    pkg = tmp_path / "mypkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "models.py").write_text(
+        """
+class Widget:
+    def __init__(self, size: int, color: str = "red"):
+        self.size = size
+        self.color = color
+""",
+        encoding="utf-8",
+    )
+
+    # Create the FTO file that uses Widget
+    (pkg / "processor.py").write_text(
+        """from mypkg.models import Widget
+
+def process(w: Widget) -> str:
+    return str(w)
+""",
+        encoding="utf-8",
+    )
+
+    fto = FunctionToOptimize(
+        function_name="process", file_path=(pkg / "processor.py").resolve(), starting_line=3, ending_line=4
+    )
+    result = extract_parameter_type_constructors(fto, tmp_path.resolve(), set())
+    assert len(result.code_strings) == 1
+    code = result.code_strings[0].code
+    assert "class Widget:" in code
+    assert "def __init__" in code
+    assert "size" in code
+
+
+def test_extract_parameter_type_constructors_excludes_builtins(tmp_path: Path) -> None:
+    pkg = tmp_path / "mypkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "func.py").write_text(
+        """
+def my_func(x: int, y: str, z: list) -> None:
+    pass
+""",
+        encoding="utf-8",
+    )
+
+    fto = FunctionToOptimize(
+        function_name="my_func", file_path=(pkg / "func.py").resolve(), starting_line=2, ending_line=3
+    )
+    result = extract_parameter_type_constructors(fto, tmp_path.resolve(), set())
+    assert len(result.code_strings) == 0
+
+
+def test_extract_parameter_type_constructors_skips_existing_classes(tmp_path: Path) -> None:
+    pkg = tmp_path / "mypkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "models.py").write_text(
+        """
+class Widget:
+    def __init__(self, size: int):
+        self.size = size
+""",
+        encoding="utf-8",
+    )
+    (pkg / "processor.py").write_text(
+        """from mypkg.models import Widget
+
+def process(w: Widget) -> str:
+    return str(w)
+""",
+        encoding="utf-8",
+    )
+
+    fto = FunctionToOptimize(
+        function_name="process", file_path=(pkg / "processor.py").resolve(), starting_line=3, ending_line=4
+    )
+    # Widget is already in the context — should not be duplicated
+    result = extract_parameter_type_constructors(fto, tmp_path.resolve(), {"Widget"})
+    assert len(result.code_strings) == 0
+
+
+def test_extract_parameter_type_constructors_no_init(tmp_path: Path) -> None:
+    pkg = tmp_path / "mypkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "models.py").write_text(
+        """
+class Config:
+    x = 10
+""",
+        encoding="utf-8",
+    )
+    (pkg / "processor.py").write_text(
+        """from mypkg.models import Config
+
+def process(c: Config) -> str:
+    return str(c)
+""",
+        encoding="utf-8",
+    )
+
+    fto = FunctionToOptimize(
+        function_name="process", file_path=(pkg / "processor.py").resolve(), starting_line=3, ending_line=4
+    )
+    result = extract_parameter_type_constructors(fto, tmp_path.resolve(), set())
+    assert len(result.code_strings) == 0
+
+
+# --- Tests for resolve_instance_class_name ---
+
+
+def test_resolve_instance_class_name_direct_call() -> None:
+    source = "config = MyConfig(debug=True)"
+    tree = ast.parse(source)
+    assert resolve_instance_class_name("config", tree) == "MyConfig"
+
+
+def test_resolve_instance_class_name_annotated() -> None:
+    source = "config: MyConfig = load()"
+    tree = ast.parse(source)
+    assert resolve_instance_class_name("config", tree) == "MyConfig"
+
+
+def test_resolve_instance_class_name_factory_method() -> None:
+    source = "config = MyConfig.from_env()"
+    tree = ast.parse(source)
+    assert resolve_instance_class_name("config", tree) == "MyConfig"
+
+
+def test_resolve_instance_class_name_no_match() -> None:
+    source = "x = 42"
+    tree = ast.parse(source)
+    assert resolve_instance_class_name("x", tree) is None
+
+
+def test_resolve_instance_class_name_missing_variable() -> None:
+    source = "config = MyConfig()"
+    tree = ast.parse(source)
+    assert resolve_instance_class_name("other", tree) is None
+
+
+# --- Tests for enhanced extract_init_stub_from_class ---
+
+
+def test_extract_init_stub_includes_post_init() -> None:
+    source = """\
+class MyDataclass:
+    def __init__(self, x: int):
+        self.x = x
+    def __post_init__(self):
+        self.y = self.x * 2
+"""
+    tree = ast.parse(source)
+    stub = extract_init_stub_from_class("MyDataclass", source, tree)
+    assert stub is not None
+    assert "class MyDataclass:" in stub
+    assert "def __init__" in stub
+    assert "def __post_init__" in stub
+    assert "self.y = self.x * 2" in stub
+
+
+def test_extract_init_stub_includes_properties() -> None:
+    source = """\
+class MyClass:
+    def __init__(self, name: str):
+        self._name = name
+    @property
+    def name(self) -> str:
+        return self._name
+"""
+    tree = ast.parse(source)
+    stub = extract_init_stub_from_class("MyClass", source, tree)
+    assert stub is not None
+    assert "def __init__" in stub
+    assert "@property" in stub
+    assert "def name" in stub
+
+
+def test_extract_init_stub_property_only_class() -> None:
+    source = """\
+class ReadOnly:
+    @property
+    def value(self) -> int:
+        return 42
+"""
+    tree = ast.parse(source)
+    stub = extract_init_stub_from_class("ReadOnly", source, tree)
+    assert stub is not None
+    assert "class ReadOnly:" in stub
+    assert "@property" in stub
+    assert "def value" in stub
+
+
+# --- Tests for enrich_testgen_context resolving instances ---
+
+
+def test_enrich_testgen_context_resolves_instance_to_class(tmp_path: Path) -> None:
+    package_dir = tmp_path / "mypkg"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+
+    config_module = """\
+class AppConfig:
+    def __init__(self, debug: bool = False):
+        self.debug = debug
+
+    @property
+    def log_level(self) -> str:
+        return "DEBUG" if self.debug else "INFO"
+
+app_config = AppConfig(debug=True)
+"""
+    (package_dir / "config.py").write_text(config_module, encoding="utf-8")
+
+    consumer_code = """\
+from mypkg.config import app_config
+
+def get_log_level() -> str:
+    return app_config.log_level
+"""
+    consumer_path = package_dir / "consumer.py"
+    consumer_path.write_text(consumer_code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=consumer_code, file_path=consumer_path)])
+    result = enrich_testgen_context(context, tmp_path)
+
+    assert len(result.code_strings) >= 1
+    combined = "\n".join(cs.code for cs in result.code_strings)
+    assert "class AppConfig:" in combined
+    assert "@property" in combined

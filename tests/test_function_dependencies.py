@@ -151,10 +151,9 @@ def test_class_method_dependencies() -> None:
     # The code_context above should have the topologicalSortUtil function in it
     assert len(code_context.helper_functions) == 1
     assert (
-        code_context.helper_functions[0].jedi_definition.full_name
-        == "test_function_dependencies.Graph.topologicalSortUtil"
+        code_context.helper_functions[0].fully_qualified_name == "test_function_dependencies.Graph.topologicalSortUtil"
     )
-    assert code_context.helper_functions[0].jedi_definition.name == "topologicalSortUtil"
+    assert code_context.helper_functions[0].only_function_name == "topologicalSortUtil"
     assert (
         code_context.helper_functions[0].fully_qualified_name == "test_function_dependencies.Graph.topologicalSortUtil"
     )
@@ -163,6 +162,7 @@ def test_class_method_dependencies() -> None:
         code_context.testgen_context.flat
         == """# file: test_function_dependencies.py
 from collections import defaultdict
+
 
 class Graph:
     def __init__(self, vertices):

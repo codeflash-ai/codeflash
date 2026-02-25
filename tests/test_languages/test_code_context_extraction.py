@@ -20,14 +20,12 @@ All assertions use strict string equality to verify exact extraction output.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
-from codeflash.context.code_context_extractor import get_code_optimization_context_for_language
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import Language
 from codeflash.languages.javascript.support import JavaScriptSupport, TypeScriptSupport
+from codeflash.languages.python.context.code_context_extractor import get_code_optimization_context_for_language
 
 
 @pytest.fixture
@@ -56,7 +54,7 @@ class TestSimpleFunctionContext:
     def test_simple_function_no_dependencies(self, js_support, temp_project):
         """Test extracting context for a simple standalone function without any dependencies."""
         code = """\
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }
 """
@@ -70,7 +68,7 @@ function add(a, b) {
         context = js_support.extract_code_context(func, temp_project, temp_project)
 
         expected_target_code = """\
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }
 """
@@ -84,7 +82,7 @@ function add(a, b) {
     def test_arrow_function_with_implicit_return(self, js_support, temp_project):
         """Test extracting an arrow function with implicit return."""
         code = """\
-const multiply = (a, b) => a * b;
+export const multiply = (a, b) => a * b;
 """
         file_path = temp_project / "math.js"
         file_path.write_text(code, encoding="utf-8")
@@ -97,7 +95,7 @@ const multiply = (a, b) => a * b;
         context = js_support.extract_code_context(func, temp_project, temp_project)
 
         expected_target_code = """\
-const multiply = (a, b) => a * b;
+export const multiply = (a, b) => a * b;
 """
         assert context.target_code == expected_target_code
         assert context.helper_functions == []
@@ -116,7 +114,7 @@ class TestJSDocExtraction:
  * @param {number} b - Second number
  * @returns {number} The sum
  */
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }
 """
@@ -129,13 +127,7 @@ function add(a, b) {
         context = js_support.extract_code_context(func, temp_project, temp_project)
 
         expected_target_code = """\
-/**
- * Adds two numbers together.
- * @param {number} a - First number
- * @param {number} b - Second number
- * @returns {number} The sum
- */
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }
 """
@@ -163,7 +155,7 @@ function add(a, b) {
  * const doubled = await processItems([1, 2, 3], x => x * 2);
  * // returns [2, 4, 6]
  */
-async function processItems(items, callback, options = {}) {
+export async function processItems(items, callback, options = {}) {
     const { parallel = false, chunkSize = 100 } = options;
 
     if (!Array.isArray(items)) {
@@ -187,25 +179,7 @@ async function processItems(items, callback, options = {}) {
         context = js_support.extract_code_context(func, temp_project, temp_project)
 
         expected_target_code = """\
-/**
- * Processes an array of items with a callback function.
- *
- * This function iterates over each item and applies the transformation.
- *
- * @template T - The type of items in the input array
- * @template U - The type of items in the output array
- * @param {Array<T>} items - The input array to process
- * @param {function(T, number): U} callback - Transformation function
- * @param {Object} [options] - Optional configuration
- * @param {boolean} [options.parallel=false] - Whether to process in parallel
- * @param {number} [options.chunkSize=100] - Size of processing chunks
- * @returns {Promise<Array<U>>} The transformed array
- * @throws {TypeError} If items is not an array
- * @example
- * const doubled = await processItems([1, 2, 3], x => x * 2);
- * // returns [2, 4, 6]
- */
-async function processItems(items, callback, options = {}) {
+export async function processItems(items, callback, options = {}) {
     const { parallel = false, chunkSize = 100 } = options;
 
     if (!Array.isArray(items)) {
@@ -231,7 +205,7 @@ async function processItems(items, callback, options = {}) {
  * @class CacheManager
  * @description Provides in-memory caching with automatic expiration.
  */
-class CacheManager {
+export class CacheManager {
     /**
      * Creates a new cache manager.
      * @param {number} defaultTTL - Default time-to-live in milliseconds
@@ -275,12 +249,6 @@ class CacheManager {
         context = js_support.extract_code_context(get_or_compute, temp_project, temp_project)
 
         expected_target_code = """\
-/**
- * A cache implementation with TTL support.
- *
- * @class CacheManager
- * @description Provides in-memory caching with automatic expiration.
- */
 class CacheManager {
     /**
      * Creates a new cache manager.
@@ -344,7 +312,7 @@ const EMAIL_REGEX = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
  * @param {ValidatorFunction[]} validators - Array of validator functions
  * @returns {ValidationResult} Combined validation result
  */
-function validateUserData(data, validators) {
+export function validateUserData(data, validators) {
     const errors = [];
     const fieldErrors = {};
 
@@ -377,13 +345,7 @@ function validateUserData(data, validators) {
         context = js_support.extract_code_context(func, temp_project, temp_project)
 
         expected_target_code = """\
-/**
- * Validates user input data.
- * @param {Object} data - The data to validate
- * @param {ValidatorFunction[]} validators - Array of validator functions
- * @returns {ValidationResult} Combined validation result
- */
-function validateUserData(data, validators) {
+export function validateUserData(data, validators) {
     const errors = [];
     const fieldErrors = {};
 
@@ -433,7 +395,7 @@ const HTTP_STATUS = {
 };
 const UNUSED_CONFIG = { debug: false };
 
-async function fetchWithRetry(endpoint, options = {}) {
+export async function fetchWithRetry(endpoint, options = {}) {
     const url = API_BASE_URL + endpoint;
     let lastError;
 
@@ -473,7 +435,7 @@ async function fetchWithRetry(endpoint, options = {}) {
         context = js_support.extract_code_context(func, temp_project, temp_project)
 
         expected_target_code = """\
-async function fetchWithRetry(endpoint, options = {}) {
+export async function fetchWithRetry(endpoint, options = {}) {
     const url = API_BASE_URL + endpoint;
     let lastError;
 
@@ -537,7 +499,7 @@ const ERROR_MESSAGES = {
     url: 'Please enter a valid URL'
 };
 
-function validateField(value, fieldType) {
+export function validateField(value, fieldType) {
     const pattern = PATTERNS[fieldType];
     if (!pattern) {
         return { valid: true, error: null };
@@ -559,7 +521,7 @@ function validateField(value, fieldType) {
         context = js_support.extract_code_context(func, temp_project, temp_project)
 
         expected_target_code = """\
-function validateField(value, fieldType) {
+export function validateField(value, fieldType) {
     const pattern = PATTERNS[fieldType];
     if (!pattern) {
         return { valid: true, error: null };
@@ -595,16 +557,16 @@ class TestSameFileHelperFunctions:
     def test_function_with_chain_of_helpers(self, js_support, temp_project):
         """Test function calling helper that calls another helper (transitive dependencies)."""
         code = """\
-function sanitizeString(str) {
+export function sanitizeString(str) {
     return str.trim().toLowerCase();
 }
 
-function normalizeInput(input) {
+export function normalizeInput(input) {
     const sanitized = sanitizeString(input);
     return sanitized.replace(/\\s+/g, '-');
 }
 
-function processUserInput(rawInput) {
+export function processUserInput(rawInput) {
     const normalized = normalizeInput(rawInput);
     return {
         original: rawInput,
@@ -622,7 +584,7 @@ function processUserInput(rawInput) {
         context = js_support.extract_code_context(process_func, temp_project, temp_project)
 
         expected_target_code = """\
-function processUserInput(rawInput) {
+export function processUserInput(rawInput) {
     const normalized = normalizeInput(rawInput);
     return {
         original: rawInput,
@@ -640,23 +602,23 @@ function processUserInput(rawInput) {
     def test_function_with_multiple_unrelated_helpers(self, js_support, temp_project):
         """Test function calling multiple independent helper functions."""
         code = """\
-function formatDate(date) {
+export function formatDate(date) {
     return date.toISOString().split('T')[0];
 }
 
-function formatCurrency(amount) {
+export function formatCurrency(amount) {
     return '$' + amount.toFixed(2);
 }
 
-function formatPercentage(value) {
+export function formatPercentage(value) {
     return (value * 100).toFixed(1) + '%';
 }
 
-function unusedFormatter() {
+export function unusedFormatter() {
     return 'not used';
 }
 
-function generateReport(data) {
+export function generateReport(data) {
     const date = formatDate(new Date(data.timestamp));
     const revenue = formatCurrency(data.revenue);
     const growth = formatPercentage(data.growth);
@@ -677,7 +639,7 @@ function generateReport(data) {
         context = js_support.extract_code_context(report_func, temp_project, temp_project)
 
         expected_target_code = """\
-function generateReport(data) {
+export function generateReport(data) {
     const date = formatDate(new Date(data.timestamp));
     const revenue = formatCurrency(data.revenue);
     const growth = formatPercentage(data.growth);
@@ -699,21 +661,21 @@ function generateReport(data) {
         for helper in context.helper_functions:
             if helper.name == "formatDate":
                 expected = """\
-function formatDate(date) {
+export function formatDate(date) {
     return date.toISOString().split('T')[0];
 }
 """
                 assert helper.source_code == expected
             elif helper.name == "formatCurrency":
                 expected = """\
-function formatCurrency(amount) {
+export function formatCurrency(amount) {
     return '$' + amount.toFixed(2);
 }
 """
                 assert helper.source_code == expected
             elif helper.name == "formatPercentage":
                 expected = """\
-function formatPercentage(value) {
+export function formatPercentage(value) {
     return (value * 100).toFixed(1) + '%';
 }
 """
@@ -726,7 +688,7 @@ class TestClassMethodWithSiblingMethods:
     def test_graph_topological_sort(self, js_support, temp_project):
         """Test graph class with topological sort - similar to Python test_class_method_dependencies."""
         code = """\
-class Graph {
+export class Graph {
     constructor(vertices) {
         this.graph = new Map();
         this.V = vertices;
@@ -774,7 +736,7 @@ class Graph {
 
         context = js_support.extract_code_context(topo_sort, temp_project, temp_project)
 
-        # The extracted code should include class wrapper with constructor
+        # The extracted code should include class wrapper with constructor and sibling methods used
         expected_target_code = """\
 class Graph {
     constructor(vertices) {
@@ -794,6 +756,19 @@ class Graph {
 
         return stack;
     }
+
+    topologicalSortUtil(v, visited, stack) {
+        visited[v] = true;
+
+        const neighbors = this.graph.get(v) || [];
+        for (const i of neighbors) {
+            if (visited[i] === false) {
+                this.topologicalSortUtil(i, visited, stack);
+            }
+        }
+
+        stack.unshift(v);
+    }
 }
 """
         assert context.target_code == expected_target_code
@@ -802,7 +777,7 @@ class Graph {
     def test_class_method_using_nested_helper_class(self, js_support, temp_project):
         """Test class method that uses another class as a helper - mirrors Python HelperClass test."""
         code = """\
-class HelperClass {
+export class HelperClass {
     constructor(name) {
         this.name = name;
     }
@@ -816,7 +791,7 @@ class HelperClass {
     }
 }
 
-class NestedHelper {
+export class NestedHelper {
     constructor(name) {
         this.name = name;
     }
@@ -826,11 +801,11 @@ class NestedHelper {
     }
 }
 
-function mainMethod() {
+export function mainMethod() {
     return 'hello';
 }
 
-class MainClass {
+export class MainClass {
     constructor(name) {
         this.name = name;
     }
@@ -890,7 +865,7 @@ module.exports = { sorter };
         main_code = """\
 const { sorter } = require('./bubble_sort_with_math');
 
-function sortFromAnotherFile(arr) {
+export function sortFromAnotherFile(arr) {
     const sortedArr = sorter(arr);
     return sortedArr;
 }
@@ -906,7 +881,7 @@ module.exports = { sortFromAnotherFile };
         context = js_support.extract_code_context(main_func, temp_project, temp_project)
 
         expected_target_code = """\
-function sortFromAnotherFile(arr) {
+export function sortFromAnotherFile(arr) {
     const sortedArr = sorter(arr);
     return sortedArr;
 }
@@ -943,12 +918,10 @@ export default function identity(x) {
         main_code = """\
 import identity, { double, triple } from './utils';
 
-function processNumber(n) {
+export function processNumber(n) {
     const base = identity(n);
     return double(base) + triple(base);
 }
-
-export { processNumber };
 """
         main_path = temp_project / "main.js"
         main_path.write_text(main_code, encoding="utf-8")
@@ -959,7 +932,7 @@ export { processNumber };
         context = js_support.extract_code_context(process_func, temp_project, temp_project)
 
         expected_target_code = """\
-function processNumber(n) {
+export function processNumber(n) {
     const base = identity(n);
     return double(base) + triple(base);
 }
@@ -1007,7 +980,7 @@ export function transformInput(input) {
         main_code = """\
 import { transformInput } from './middleware';
 
-function handleUserInput(rawInput) {
+export function handleUserInput(rawInput) {
     try {
         const result = transformInput(rawInput);
         return { success: true, data: result };
@@ -1015,8 +988,6 @@ function handleUserInput(rawInput) {
         return { success: false, error: error.message };
     }
 }
-
-export { handleUserInput };
 """
         main_path = temp_project / "main.js"
         main_path.write_text(main_code, encoding="utf-8")
@@ -1027,7 +998,7 @@ export { handleUserInput };
         context = js_support.extract_code_context(handle_func, temp_project, temp_project)
 
         expected_target_code = """\
-function handleUserInput(rawInput) {
+export function handleUserInput(rawInput) {
     try {
         const result = transformInput(rawInput);
         return { success: true, data: result };
@@ -1059,7 +1030,7 @@ interface Timestamped {
 
 type Entity<T> = T & Identifiable & Timestamped;
 
-function createEntity<T extends object>(data: T): Entity<T> {
+export function createEntity<T extends object>(data: T): Entity<T> {
     const now = new Date();
     return {
         ...data,
@@ -1078,7 +1049,7 @@ function createEntity<T extends object>(data: T): Entity<T> {
         context = ts_support.extract_code_context(func, temp_project, temp_project)
 
         expected_target_code = """\
-function createEntity<T extends object>(data: T): Entity<T> {
+export function createEntity<T extends object>(data: T): Entity<T> {
     const now = new Date();
     return {
         ...data,
@@ -1117,7 +1088,7 @@ interface CacheConfig {
     maxSize: number;
 }
 
-class TypedCache<T> {
+export class TypedCache<T> {
     private readonly cache: Map<string, CacheEntry<T>>;
     private readonly config: CacheConfig;
 
@@ -1235,15 +1206,13 @@ import type { User, CreateUserInput, UserRole } from './types';
 
 const DEFAULT_ROLE: UserRole = 'user';
 
-function createUser(input: CreateUserInput, role: UserRole = DEFAULT_ROLE): User {
+export function createUser(input: CreateUserInput, role: UserRole = DEFAULT_ROLE): User {
     return {
         id: Math.random().toString(36).substring(2),
         name: input.name,
         email: input.email
     };
 }
-
-export { createUser };
 """
         service_path = temp_project / "service.ts"
         service_path.write_text(service_code, encoding="utf-8")
@@ -1254,7 +1223,7 @@ export { createUser };
         context = ts_support.extract_code_context(func, temp_project, temp_project)
 
         expected_target_code = """\
-function createUser(input: CreateUserInput, role: UserRole = DEFAULT_ROLE): User {
+export function createUser(input: CreateUserInput, role: UserRole = DEFAULT_ROLE): User {
     return {
         id: Math.random().toString(36).substring(2),
         name: input.name,
@@ -1294,7 +1263,7 @@ class TestRecursionAndCircularDependencies:
     def test_self_recursive_factorial(self, js_support, temp_project):
         """Test self-recursive function does not list itself as helper."""
         code = """\
-function factorial(n) {
+export function factorial(n) {
     if (n <= 1) return 1;
     return n * factorial(n - 1);
 }
@@ -1308,7 +1277,7 @@ function factorial(n) {
         context = js_support.extract_code_context(func, temp_project, temp_project)
 
         expected_target_code = """\
-function factorial(n) {
+export function factorial(n) {
     if (n <= 1) return 1;
     return n * factorial(n - 1);
 }
@@ -1319,12 +1288,12 @@ function factorial(n) {
     def test_mutually_recursive_even_odd(self, js_support, temp_project):
         """Test mutually recursive functions."""
         code = """\
-function isEven(n) {
+export function isEven(n) {
     if (n === 0) return true;
     return isOdd(n - 1);
 }
 
-function isOdd(n) {
+export function isOdd(n) {
     if (n === 0) return false;
     return isEven(n - 1);
 }
@@ -1338,7 +1307,7 @@ function isOdd(n) {
         context = js_support.extract_code_context(is_even, temp_project, temp_project)
 
         expected_target_code = """\
-function isEven(n) {
+export function isEven(n) {
     if (n === 0) return true;
     return isOdd(n - 1);
 }
@@ -1351,7 +1320,7 @@ function isEven(n) {
 
         # Verify helper source
         assert context.helper_functions[0].source_code == """\
-function isOdd(n) {
+export function isOdd(n) {
     if (n === 0) return false;
     return isEven(n - 1);
 }
@@ -1360,28 +1329,28 @@ function isOdd(n) {
     def test_complex_recursive_tree_traversal(self, js_support, temp_project):
         """Test complex recursive tree traversal with multiple recursive calls."""
         code = """\
-function traversePreOrder(node, visit) {
+export function traversePreOrder(node, visit) {
     if (!node) return;
     visit(node.value);
     traversePreOrder(node.left, visit);
     traversePreOrder(node.right, visit);
 }
 
-function traverseInOrder(node, visit) {
+export function traverseInOrder(node, visit) {
     if (!node) return;
     traverseInOrder(node.left, visit);
     visit(node.value);
     traverseInOrder(node.right, visit);
 }
 
-function traversePostOrder(node, visit) {
+export function traversePostOrder(node, visit) {
     if (!node) return;
     traversePostOrder(node.left, visit);
     traversePostOrder(node.right, visit);
     visit(node.value);
 }
 
-function collectAllValues(root) {
+export function collectAllValues(root) {
     const values = { pre: [], in: [], post: [] };
 
     traversePreOrder(root, v => values.pre.push(v));
@@ -1400,7 +1369,7 @@ function collectAllValues(root) {
         context = js_support.extract_code_context(collect_func, temp_project, temp_project)
 
         expected_target_code = """\
-function collectAllValues(root) {
+export function collectAllValues(root) {
     const values = { pre: [], in: [], post: [] };
 
     traversePreOrder(root, v => values.pre.push(v));
@@ -1423,7 +1392,7 @@ class TestAsyncPatternsAndPromises:
     def test_async_function_chain(self, js_support, temp_project):
         """Test async function that calls other async functions."""
         code = """\
-async function fetchUserById(id) {
+export async function fetchUserById(id) {
     const response = await fetch(`/api/users/${id}`);
     if (!response.ok) {
         throw new Error(`User ${id} not found`);
@@ -1431,17 +1400,17 @@ async function fetchUserById(id) {
     return response.json();
 }
 
-async function fetchUserPosts(userId) {
+export async function fetchUserPosts(userId) {
     const response = await fetch(`/api/users/${userId}/posts`);
     return response.json();
 }
 
-async function fetchUserComments(userId) {
+export async function fetchUserComments(userId) {
     const response = await fetch(`/api/users/${userId}/comments`);
     return response.json();
 }
 
-async function fetchUserProfile(userId) {
+export async function fetchUserProfile(userId) {
     const user = await fetchUserById(userId);
     const [posts, comments] = await Promise.all([
         fetchUserPosts(userId),
@@ -1465,7 +1434,7 @@ async function fetchUserProfile(userId) {
         context = js_support.extract_code_context(profile_func, temp_project, temp_project)
 
         expected_target_code = """\
-async function fetchUserProfile(userId) {
+export async function fetchUserProfile(userId) {
     const user = await fetchUserById(userId);
     const [posts, comments] = await Promise.all([
         fetchUserPosts(userId),
@@ -1493,7 +1462,7 @@ class TestExtractionReplacementRoundTrip:
     def test_extract_and_replace_class_method(self, js_support, temp_project):
         """Test extracting code context and then replacing the method."""
         original_source = """\
-class Counter {
+export class Counter {
     constructor(initial = 0) {
         this.count = initial;
     }
@@ -1536,7 +1505,7 @@ class Counter {
 
         # Step 2: Simulate AI returning optimized code
         optimized_code_from_ai = """\
-class Counter {
+export class Counter {
     constructor(initial = 0) {
         this.count = initial;
     }
@@ -1551,7 +1520,7 @@ class Counter {
         result = js_support.replace_function(original_source, increment_func, optimized_code_from_ai)
 
         expected_result = """\
-class Counter {
+export class Counter {
     constructor(initial = 0) {
         this.count = initial;
     }
@@ -1578,7 +1547,7 @@ class TestEdgeCases:
     def test_function_with_complex_destructuring(self, js_support, temp_project):
         """Test function with complex nested destructuring parameters."""
         code = """\
-function processApiResponse({
+export function processApiResponse({
     data: { users = [], meta: { total, page } = {} } = {},
     status,
     headers: { 'content-type': contentType } = {}
@@ -1600,7 +1569,7 @@ function processApiResponse({
         context = js_support.extract_code_context(func, temp_project, temp_project)
 
         expected_target_code = """\
-function processApiResponse({
+export function processApiResponse({
     data: { users = [], meta: { total, page } = {} } = {},
     status,
     headers: { 'content-type': contentType } = {}
@@ -1619,13 +1588,13 @@ function processApiResponse({
     def test_generator_function(self, js_support, temp_project):
         """Test generator function extraction."""
         code = """\
-function* range(start, end, step = 1) {
+export function* range(start, end, step = 1) {
     for (let i = start; i < end; i += step) {
         yield i;
     }
 }
 
-function* fibonacci(limit) {
+export function* fibonacci(limit) {
     let [a, b] = [0, 1];
     while (a < limit) {
         yield a;
@@ -1642,7 +1611,7 @@ function* fibonacci(limit) {
         context = js_support.extract_code_context(range_func, temp_project, temp_project)
 
         expected_target_code = """\
-function* range(start, end, step = 1) {
+export function* range(start, end, step = 1) {
     for (let i = start; i < end; i += step) {
         yield i;
     }
@@ -1660,7 +1629,7 @@ const FIELD_KEYS = {
     AGE: 'user_age'
 };
 
-function createUserObject(name, email, age) {
+export function createUserObject(name, email, age) {
     return {
         [FIELD_KEYS.NAME]: name,
         [FIELD_KEYS.EMAIL]: email,
@@ -1677,7 +1646,7 @@ function createUserObject(name, email, age) {
         context = js_support.extract_code_context(func, temp_project, temp_project)
 
         expected_target_code = """\
-function createUserObject(name, email, age) {
+export function createUserObject(name, email, age) {
     return {
         [FIELD_KEYS.NAME]: name,
         [FIELD_KEYS.EMAIL]: email,
@@ -1937,7 +1906,7 @@ class TestContextProperties:
     def test_javascript_context_has_correct_language(self, js_support, temp_project):
         """Test that JavaScript context has correct language property."""
         code = """\
-function test() {
+export function test() {
     return 1;
 }
 """
@@ -1956,7 +1925,7 @@ function test() {
     def test_typescript_context_has_javascript_language(self, ts_support, temp_project):
         """Test that TypeScript context uses JavaScript language enum."""
         code = """\
-function test(): number {
+export function test(): number {
     return 1;
 }
 """
@@ -1977,7 +1946,7 @@ class TestContextValidation:
     def test_all_class_methods_produce_valid_syntax(self, js_support, temp_project):
         """Test that all extracted class methods are syntactically valid JavaScript."""
         code = """\
-class Calculator {
+export class Calculator {
     constructor(precision = 2) {
         this.precision = precision;
     }

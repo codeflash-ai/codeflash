@@ -1,0 +1,119 @@
+name: Duplicate Code Detector
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  detect-duplicates:
+    if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Get changed source files
+        id: changed-files
+        run: |
+          FILES=$(git diff --name-only origin/main...HEAD -- '*.py' '*.js' '*.ts' '*.java' \
+            | grep -v -E '(test_|_test\.(py|js|ts)|\.test\.(js|ts)|\.spec\.(js|ts)|conftest\.py|/tests/|/test/|/__tests__/)' \
+            | grep -v -E '^(\.github/|code_to_optimize/|\.tessl/|node_modules/)' \
+            || true)
+          if [ -z "$FILES" ]; then
+            echo "files=" >> "$GITHUB_OUTPUT"
+            echo "No changed source files to analyze."
+          else
+            echo "files<<EOF" >> "$GITHUB_OUTPUT"
+            echo "$FILES" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+            echo "Changed files:"
+            echo "$FILES"
+          fi
+
+      - name: Run Claude Code
+        if: steps.changed-files.outputs.files != ''
+        uses: anthropics/claude-code-action@v1
+        with:
+          use_bedrock: "true"
+          use_sticky_comment: true
+          allowed_bots: "claude[bot],codeflash-ai[bot]"
+          claude_args: '--allowedTools "Read,Glob,Grep,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(wc *),Bash(gh pr comment:*)"'
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            You are a duplicate code detector for a multi-language codebase (Python, JavaScript, TypeScript, Java). Check whether this PR introduces code that duplicates logic already present elsewhere in the repository — including across languages. Focus on finding true duplicates, not just similar-looking code.
+
+            ## Changed files
+
+            ```
+            ${{ steps.changed-files.outputs.files }}
+            ```
+
+            ## Steps
+
+            1. **Read changed files.** For each file above, read it and identify functions or methods that were added or substantially modified (longer than 5 lines).
+
+            2. **Search for duplicates.** For each function, use Grep to search the codebase for:
+               - The same function name defined elsewhere (`def function_name` for Python, `function function_name` / `const function_name` / `module.exports` for the JS files under `packages/`)
+               - 2-3 distinctive operations from the body (specific API calls, algorithm patterns, string literals, exception types) — this catches duplicates that have different names but implement the same logic
+
+            3. **Cross-module check.** This codebase has parallel Python modules under `languages/python/`, `languages/javascript/`, and `languages/java/` that handle the same concerns (parsing, code replacement, test running, etc.) for different target languages. It also has a JS runtime under `packages/codeflash/runtime/` and a Java runtime under `codeflash-java-runtime/`. When a changed file is under one of these areas, also search the others for equivalent logic. For example:
+               - `languages/javascript/code_replacer.py` and `languages/python/static_analysis/code_replacer.py` both handle code replacement — shared logic should be extracted
+               - Shared concepts (AST traversal, scope analysis, import resolution, test running) are prime candidates for duplication across these modules
+
+            4. **Compare candidates.** When a Grep hit looks promising (not just a shared import or call site), read the full function and compare semantics. Flag it only if it matches one of these patterns:
+               - **Same function in two modules** — a function with the same or very similar body exists in another module. One should import from the other instead (within the same language).
+               - **Shared logic across sibling files** — the same helper logic repeated in files within the same package. Should be extracted to a common module.
+               - **Repeated pattern across classes** — multiple classes implement the same logic inline (e.g., identical traversal, identical validation). Should be a mixin or shared helper.
+               - **Cross-module reimplementation** — the same algorithm or utility implemented in both `languages/python/` and `languages/javascript/` (both are Python) or between Python orchestration code and JS runtime code in `packages/`. Note: some duplication is unavoidable (each target language needs its own parser, for example). Only flag cases where the logic is genuinely shared or where one module could import from the other.
+
+            5. **Report findings.** Post a single PR comment. Report at most 5 findings.
+
+            **If duplicates found**, for each one:
+            - **Confidence**: HIGH (identical or near-identical logic) / MEDIUM (same intent, minor differences worth reviewing)
+            - **Locations**: `file_path:line_number` for both the new and existing code
+            - **What's duplicated**: One sentence describing the shared logic
+            - **Suggestion**: How to consolidate — import from canonical location, extract to shared module, create a mixin. For cross-module duplicates (between language directories or Python↔JS runtime), just flag it for a tech lead to review rather than prescribing a specific fix.
+
+            **If no duplicates found**, post a comment that just says "No duplicates detected." so the sticky comment gets updated.
+
+            ## Examples (illustrative — these are past cases, some already resolved)
+
+            **IS a duplicate (HIGH):** A 12-line `is_build_output_dir()` function was defined identically in two modules (`setup/detector.py` and `code_utils/config_js.py`). Fix: delete one, import from the other.
+
+            **IS a duplicate (MEDIUM):** `is_assignment_used()` was implemented separately in two context files with the same logic. Fix: move to a shared module, import from both call sites.
+
+            **IS a duplicate (MEDIUM, cross-module):** `normalize_path()` implemented in both `languages/python/support.py` and `languages/javascript/support.py` with identical logic. Flagging for tech lead review — should likely be extracted to `languages/base.py` or a shared utility.
+
+            **NOT a duplicate:** Two classes each define a `visit()` method that traverses an AST, but they handle different node types and produce different outputs. This is intentional polymorphism.
+
+            **NOT a duplicate (cross-module):** `languages/python/static_analysis/code_extractor.py` and `languages/javascript/parse.py` both extract functions from source code, but they use fundamentally different parsing strategies (Python AST vs tree-sitter). The logic is necessarily different.
+
+            ## DO NOT report
+
+            - Standard boilerplate (`__init__`, `__repr__`, `__str__`, `__eq__`, simple property accessors, constructors)
+            - Functions under 5 lines
+            - Config/setup code that naturally has similar structure
+            - Intentional polymorphism (same method name, genuinely different behavior)
+            - Test files, conftest files, spec files
+            - Import statements and logging setup
+            - Files under `.github/`, `code_to_optimize/`, `.tessl/`
+            - Code across language modules that must differ due to target-language semantics (parsers, AST node types, runtime-specific APIs)
+
+            Do NOT create issues or edit any files. Only post a PR comment.

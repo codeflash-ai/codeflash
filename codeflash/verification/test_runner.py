@@ -13,9 +13,9 @@ from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import custom_addopts, get_run_tmp_file
 from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
-from codeflash.code_utils.coverage_utils import prepare_coverage_files
 from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
 from codeflash.languages import is_python
+from codeflash.languages.python.static_analysis.coverage_utils import prepare_coverage_files
 from codeflash.languages.registry import get_language_support, get_language_support_by_framework
 from codeflash.models.models import TestFiles, TestType
 
@@ -325,6 +325,7 @@ def run_benchmarking_tests(
     pytest_max_loops: int = 100_000,
     js_project_root: Path | None = None,
 ) -> tuple[Path, subprocess.CompletedProcess]:
+    logger.debug(f"run_benchmarking_tests called: framework={test_framework}, num_files={len(test_paths.test_files)}")
     # Check if there's a language support for this test framework that implements run_benchmarking_tests
     language_support = get_language_support_by_framework(test_framework)
     if language_support is not None and hasattr(language_support, "run_benchmarking_tests"):

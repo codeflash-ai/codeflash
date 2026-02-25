@@ -1,86 +1,36 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
-CodeFlash is an AI-powered Python code optimizer that automatically improves code performance while maintaining correctness. It uses LLMs to generate optimization candidates, verifies correctness through test execution, and benchmarks performance improvements.
+CodeFlash is an AI-powered code optimizer that automatically improves performance while maintaining correctness. It supports Python, JavaScript, and TypeScript, with more languages planned. It uses LLMs to generate optimization candidates, verifies correctness through test execution, and benchmarks performance improvements.
 
-## Common Commands
-
-```bash
-# Package management (NEVER use pip)
-uv sync                          # Install dependencies
-uv sync --group dev              # Install dev dependencies
-uv add <package>                 # Add a package
-
-# Running tests
-uv run pytest tests/             # Run all tests
-uv run pytest tests/test_foo.py  # Run specific test file
-uv run pytest tests/test_foo.py::test_bar -v  # Run single test
-
-# Type checking and linting
-uv run mypy codeflash/           # Type check
-uv run ruff check codeflash/     # Lint
-uv run ruff format codeflash/    # Format
-
-# Linting (run before committing)
-uv run prek run --from-ref origin/main
-
-# Running the CLI
-uv run codeflash --help
-uv run codeflash init            # Initialize in a project
-uv run codeflash --all           # Optimize entire codebase
-```
-
-## Architecture
+## Optimization Pipeline
 
 ```
-codeflash/
-├── main.py                 # CLI entry point
-├── cli_cmds/               # Command handling, console output (Rich)
-├── discovery/              # Find optimizable functions
-├── context/                # Extract code dependencies and imports
-├── optimization/           # Generate optimized code via AI
-│   ├── optimizer.py        # Main optimization orchestration
-│   └── function_optimizer.py  # Per-function optimization logic
-├── verification/           # Run deterministic tests (pytest plugin)
-├── benchmarking/           # Performance measurement
-├── github/                 # PR creation
-├── api/                    # AI service communication
-├── code_utils/             # Code parsing, git utilities
-├── models/                 # Pydantic models and types
-├── tracing/                # Function call tracing
-├── lsp/                    # IDE integration (Language Server Protocol)
-├── telemetry/              # Sentry, PostHog
-├── either.py               # Functional Result type for error handling
-└── result/                 # Result types and handling
+Discovery → Ranking → Context Extraction → Test Gen + Optimization → Baseline → Candidate Evaluation → PR
 ```
 
-### Key Rules to follow
+1. **Discovery** (`discovery/`): Find optimizable functions across the codebase
+2. **Ranking** (`benchmarking/function_ranker.py`): Rank functions by addressable time using trace data
+3. **Context** (`languages/<lang>/context/`): Extract code dependencies (read-writable code + read-only imports)
+4. **Optimization** (`optimization/`, `api/`): Generate candidates via AI service, run in parallel with test generation
+5. **Verification** (`verification/`): Run candidates against tests, compare outputs via custom pytest plugin
+6. **Benchmarking** (`benchmarking/`): Measure performance, select best candidate by speedup
+7. **Result** (`result/`, `github/`): Create PR with winning optimization
 
-- Use libcst, not ast - For Python, always use `libcst` for code parsing/modification to preserve formatting.
-- Code context extraction and replacement tests must always assert for full string equality, no substring matching.
-- Any new feature or bug fix that can be tested automatically must have test cases.
-- If changes affect existing test expectations, update the tests accordingly. Tests must always pass after changes.
-- NEVER use leading underscores for function names (e.g., `_helper`). Python has no true private functions. Always use public names.
+## Domain Glossary
 
-## Code Style
+- **Optimization candidate**: A generated code variant that might be faster (`OptimizedCandidate`)
+- **Function context**: All code needed for optimization — split into read-writable (modifiable) and read-only (reference)
+- **Addressable time**: Time a function spends that could be optimized (own time + callee time / call count)
+- **Candidate forest**: DAG of candidates where refinements/repairs build on previous candidates
+- **Replay test**: Test generated from recorded benchmark data to reproduce real workloads
+- **Tracer**: Profiling system that records function call trees and timings (`tracing/`, `tracer.py`)
+- **Worktree mode**: Git worktree-based parallel optimization (`--worktree` flag)
 
-- **Line length**: 120 characters
-- **Python**: 3.9+ syntax
-- **Tooling**: Ruff for linting/formatting, mypy strict mode, prek for pre-commit checks
-- **Comments**: Minimal - only explain "why", not "what"
-- **Docstrings**: Do not add unless explicitly requested
-- **Naming**: NEVER use leading underscores (`_function_name`) - Python has no true private functions, use public names
-- **Paths**: Always use absolute paths, handle encoding explicitly (UTF-8)
+## PR Reviews
 
-## Git Commits & Pull Requests
-
-- Use conventional commit format: `fix:`, `feat:`, `refactor:`, `docs:`, `test:`, `chore:`
-- Keep commits atomic - one logical change per commit
-- Commit message body should be concise (1-2 sentences max)
-- PR titles should also use conventional format
+- GitHub PR comments and review feedback can be stale — they may reference issues already fixed by a later commit. Before acting on review feedback, verify it still applies to the current code. If the issue no longer exists, resolve the conversation in the GitHub UI.
 
 <!-- Section below is auto-generated by `tessl install` - do not edit manually -->
 

@@ -11,6 +11,12 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+if "--subagent" in sys.argv:
+    os.environ["CODEFLASH_SUBAGENT_MODE"] = "true"
+    import warnings
+
+    warnings.filterwarnings("ignore")
+
 from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO, ask_run_end_to_end_test
 from codeflash.cli_cmds.console import paneled_text
