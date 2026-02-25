@@ -1198,3 +1198,267 @@ class TestComparatorJavaEdgeCases(TestTestResultsTableSchema):
 
         assert equivalent is True
         assert len(diffs) == 0
+
+
+class TestVoidFunctionComparison:
+    """Tests for void function comparison using compare_invocations_directly."""
+
+    def test_void_both_null_result_equivalent(self):
+        """Both original and candidate have None result_json (void success)."""
+        original = {
+            "1": {"result_json": None, "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": None, "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+
+        assert equivalent is True
+        assert len(diffs) == 0
+
+    def test_void_null_vs_non_null_result(self):
+        """Original void (None) vs candidate with return value should differ."""
+        original = {
+            "1": {"result_json": None, "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": "42", "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+
+        assert equivalent is False
+        assert len(diffs) == 1
+        assert diffs[0].scope == TestDiffScope.RETURN_VALUE
+
+    def test_void_non_null_vs_null_result(self):
+        """Original with return value vs candidate void (None) should differ."""
+        original = {
+            "1": {"result_json": "42", "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": None, "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+
+        assert equivalent is False
+        assert len(diffs) == 1
+        assert diffs[0].scope == TestDiffScope.RETURN_VALUE
+
+    def test_void_same_serialized_side_effects(self):
+        """Identical side-effect serializations (Object[] arrays) should be equivalent."""
+        original = {
+            "1": {"result_json": "[1, 2, 3]", "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": "[1, 2, 3]", "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+
+        assert equivalent is True
+        assert len(diffs) == 0
+
+    def test_void_different_serialized_side_effects(self):
+        """Different side-effect serializations should be detected."""
+        original = {
+            "1": {"result_json": "[1, 2, 3]", "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": "[1, 2, 99]", "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+
+        assert equivalent is False
+        assert len(diffs) == 1
+        assert diffs[0].scope == TestDiffScope.RETURN_VALUE
+        assert diffs[0].original_value == "[1, 2, 3]"
+        assert diffs[0].candidate_value == "[1, 2, 99]"
+
+    def test_void_exception_in_candidate(self):
+        """Void success in original vs exception in candidate should differ."""
+        original = {
+            "1": {"result_json": None, "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": None, "error_json": '{"type": "NullPointerException"}'},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+
+        assert equivalent is False
+        assert len(diffs) == 1
+        assert diffs[0].scope == TestDiffScope.DID_PASS
+
+    def test_void_multiple_invocations_mixed(self):
+        """Multiple void invocations: some matching, some differing."""
+        original = {
+            "1": {"result_json": None, "error_json": None},
+            "2": {"result_json": "[10, 20]", "error_json": None},
+            "3": {"result_json": None, "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": None, "error_json": None},
+            "2": {"result_json": "[10, 99]", "error_json": None},
+            "3": {"result_json": None, "error_json": '{"type": "RuntimeException"}'},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+
+        assert equivalent is False
+        assert len(diffs) == 2
+        assert diffs[0].scope == TestDiffScope.RETURN_VALUE
+        assert diffs[0].original_value == "[10, 20]"
+        assert diffs[0].candidate_value == "[10, 99]"
+        assert diffs[1].scope == TestDiffScope.DID_PASS
+
+
+@requires_java
+class TestVoidSqliteComparison:
+    """Tests for void function comparison via Java Comparator with 10-column SQLite schema."""
+
+    @pytest.fixture
+    def create_void_test_results_db(self):
+        """Create a test SQLite database with 10-column schema (including stdout)."""
+
+        def _create(path: Path, results: list[dict]):
+            conn = sqlite3.connect(path)
+            cursor = conn.cursor()
+
+            cursor.execute(
+                """
+                CREATE TABLE test_results (
+                    test_module_path TEXT,
+                    test_class_name TEXT,
+                    test_function_name TEXT,
+                    function_getting_tested TEXT,
+                    loop_index INTEGER,
+                    iteration_id TEXT,
+                    runtime INTEGER,
+                    return_value BLOB,
+                    verification_type TEXT,
+                    stdout TEXT
+                )
+            """
+            )
+
+            for result in results:
+                cursor.execute(
+                    """
+                    INSERT INTO test_results
+                    (test_module_path, test_class_name, test_function_name,
+                     function_getting_tested, loop_index, iteration_id,
+                     runtime, return_value, verification_type, stdout)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        result.get("test_module_path", "TestModule"),
+                        result.get("test_class_name", "TestClass"),
+                        result.get("test_function_name", "testMethod"),
+                        result.get("function_getting_tested", "targetMethod"),
+                        result.get("loop_index", 1),
+                        result.get("iteration_id", "1_0"),
+                        result.get("runtime", 1000000),
+                        result.get("return_value"),
+                        result.get("verification_type", "function_call"),
+                        result.get("stdout"),
+                    ),
+                )
+
+            conn.commit()
+            conn.close()
+            return path
+
+        return _create
+
+    def test_void_sqlite_both_null_return_same_stdout(
+        self, tmp_path: Path, create_void_test_results_db
+    ):
+        """Both DBs have NULL return_value and same stdout — equivalent."""
+        original_path = tmp_path / "original.db"
+        candidate_path = tmp_path / "candidate.db"
+
+        results = [
+            {
+                "test_class_name": "PrinterTest",
+                "function_getting_tested": "printMessage",
+                "loop_index": 1,
+                "iteration_id": "1_0",
+                "return_value": None,
+                "stdout": "Hello World\n",
+            },
+        ]
+
+        create_void_test_results_db(original_path, results)
+        create_void_test_results_db(candidate_path, results)
+
+        equivalent, diffs = compare_test_results(original_path, candidate_path)
+
+        assert equivalent is True
+        assert len(diffs) == 0
+
+    def test_void_sqlite_different_stdout(
+        self, tmp_path: Path, create_void_test_results_db
+    ):
+        """Both DBs have NULL return_value but different stdout — not equivalent."""
+        original_path = tmp_path / "original.db"
+        candidate_path = tmp_path / "candidate.db"
+
+        original_results = [
+            {
+                "test_class_name": "LoggerTest",
+                "function_getting_tested": "log",
+                "loop_index": 1,
+                "iteration_id": "1_0",
+                "return_value": None,
+                "stdout": "INFO: Starting\n",
+            },
+        ]
+
+        candidate_results = [
+            {
+                "test_class_name": "LoggerTest",
+                "function_getting_tested": "log",
+                "loop_index": 1,
+                "iteration_id": "1_0",
+                "return_value": None,
+                "stdout": "DEBUG: Starting\n",
+            },
+        ]
+
+        create_void_test_results_db(original_path, original_results)
+        create_void_test_results_db(candidate_path, candidate_results)
+
+        equivalent, diffs = compare_test_results(original_path, candidate_path)
+
+        assert equivalent is False
+        assert len(diffs) == 1
+
+    def test_void_sqlite_null_stdout_both(
+        self, tmp_path: Path, create_void_test_results_db
+    ):
+        """Both DBs have NULL return_value and NULL stdout — equivalent."""
+        original_path = tmp_path / "original.db"
+        candidate_path = tmp_path / "candidate.db"
+
+        results = [
+            {
+                "test_class_name": "WorkerTest",
+                "function_getting_tested": "doWork",
+                "loop_index": 1,
+                "iteration_id": "1_0",
+                "return_value": None,
+                "stdout": None,
+            },
+        ]
+
+        create_void_test_results_db(original_path, results)
+        create_void_test_results_db(candidate_path, results)
+
+        equivalent, diffs = compare_test_results(original_path, candidate_path)
+
+        assert equivalent is True
+        assert len(diffs) == 0
