@@ -28,8 +28,7 @@ const config: Config = {
     ]
   ],
   transform: {
-    '^.+\\.tsx?$': ['ts-jest', {
-      useESM: false,
+    "^.+\\\\.(ts | tsx)$": ['ts-jest', {
       tsconfig: 'tsconfig.json'
     }]
   }

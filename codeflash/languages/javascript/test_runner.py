@@ -842,6 +842,7 @@ def run_jest_behavioral_tests(
         wall_clock_ns = time.perf_counter_ns() - start_time_ns
         logger.debug(f"Jest behavioral tests completed in {wall_clock_ns / 1e9:.2f}s")
 
+    print(result.stdout)
     return result_file_path, result, coverage_json_path, None
 
 

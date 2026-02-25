@@ -29,26 +29,21 @@
 const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
+const { requireFromRoot } = require("./utils") 
 
 // Load the codeflash serializer for robust value serialization
 const serializer = require('./serializer');
 
-// Lazy-cached React instance resolved from the user's project (not from codeflash's
-// own dependencies). We resolve from process.cwd() so Node finds the react package
-// in the project's node_modules rather than looking inside codeflash's package tree.
-let _cachedReact = null;
+
 function _getReact() {
-    if (_cachedReact) return _cachedReact;
     try {
-        const reactPath = require.resolve('react', { paths: [process.cwd()] });
-        _cachedReact = require(reactPath);
+        return requireFromRoot("react");
     } catch (e) {
         throw new Error(
             `codeflash: Could not resolve 'react' from project root (${process.cwd()}). ` +
             `Ensure react is installed in your project: npm install react`
         );
     }
-    return _cachedReact;
 }
 
 // Try to load better-sqlite3, fall back to JSON if not available
@@ -1082,106 +1077,50 @@ function captureRender(funcName, lineId, renderFn, Component, ...createElementAr
  * @throws {Error} - Re-throws any error from rendering
  */
 function captureRenderPerf(funcName, lineId, renderFn, Component, ...createElementArgs) {
-    const shouldLoop = getPerfLoopCount() > 1 && !checkSharedTimeLimit();
+    const runBenchmark = require('./react-benchmark/run');
 
-    const { testModulePath, testClassName, testFunctionName, safeModulePath, safeTestFunctionName } = _getTestContext();
+    const { testClassName, safeModulePath, safeTestFunctionName } = _getTestContext();
 
     const invocationKey = `${safeModulePath}:${testClassName}:${safeTestFunctionName}:${funcName}:${lineId}`;
 
-    // Check if we've already completed all loops for this invocation
-    const peekLoopIndex = (sharedPerfState.invocationLoopCounts[invocationKey] || 0);
-    const currentBatch = parseInt(process.env.CODEFLASH_PERF_CURRENT_BATCH || '1', 10);
-    const nextGlobalIndex = (currentBatch - 1) * getPerfBatchSize() + peekLoopIndex + 1;
+    const numSamples = getPerfLoopCount() > 1 ? getPerfLoopCount() : 50;
 
-    const React = _getReact();
+    // createElementArgs matches React.createElement signature: (props, ...children)
+    const props = createElementArgs[0] || {};
 
-    if (shouldLoop && nextGlobalIndex > getPerfLoopCount()) {
-        // All loops completed, just render once for test assertions
+    const MS_TO_NS = 1e6;
+
+    return runBenchmark({
+        component: Component,
+        props,
+        samples: numSamples,
+        type: 'mount',
+    }).then((results) => {
+        // Emit perf markers for each sample so the Python parser can collect timings
+        for (let i = 0; i < results.samples.length; i++) {
+            const sample = results.samples[i];
+            const durationNs = Math.round(sample.elapsed * MS_TO_NS);
+
+            const loopIndex = getInvocationLoopIndex(invocationKey);
+            const testId = `${safeModulePath}:${testClassName}:${safeTestFunctionName}:${lineId}:${loopIndex}`;
+            const invocationIndex = getInvocationIndex(testId);
+            const invocationId = `${lineId}_${invocationIndex}`;
+            const testStdoutTag = `${safeModulePath}:${testClassName ? testClassName + '.' : ''}${safeTestFunctionName}:${funcName}:${loopIndex}:${invocationId}`;
+
+            console.log(`!######${testStdoutTag}:${durationNs}######!`);
+            sharedPerfState.totalLoopsCompleted++;
+        }
+
+        // Render once more so the test's own assertions (e.g. screen.getByText) still pass
+        const React = _getReact();
         const element = React.createElement(Component, ...createElementArgs);
         return renderFn(element);
-    }
-
-    let lastReturnValue;
-    let lastError = null;
-
-    const hasExternalLoopRunner = process.env.CODEFLASH_PERF_CURRENT_BATCH !== undefined;
-    const batchSize = hasExternalLoopRunner ? 1 : (shouldLoop ? getPerfLoopCount() : 1);
-
-    if (!sharedPerfState.invocationRuntimes[invocationKey]) {
-        sharedPerfState.invocationRuntimes[invocationKey] = [];
-    }
-    const runtimes = sharedPerfState.invocationRuntimes[invocationKey];
-    const getStabilityWindow = () => Math.max(getPerfMinLoops(), Math.ceil(runtimes.length * STABILITY_WINDOW_SIZE));
-
-    for (let batchIndex = 0; batchIndex < batchSize; batchIndex++) {
-        if (!hasExternalLoopRunner && shouldLoop && checkSharedTimeLimit()) {
-            break;
-        }
-        if (!hasExternalLoopRunner && getPerfStabilityCheck() && sharedPerfState.stableInvocations[invocationKey]) {
-            break;
-        }
-
-        const loopIndex = getInvocationLoopIndex(invocationKey);
-
-        const totalIterations = getTotalIterations(invocationKey);
-        if (!hasExternalLoopRunner && totalIterations > getPerfLoopCount()) {
-            break;
-        }
-
-        const testId = `${safeModulePath}:${testClassName}:${safeTestFunctionName}:${lineId}:${loopIndex}`;
-        const invocationIndex = getInvocationIndex(testId);
-        const invocationId = `${lineId}_${invocationIndex}`;
-        const testStdoutTag = `${safeModulePath}:${testClassName ? testClassName + '.' : ''}${safeTestFunctionName}:${funcName}:${loopIndex}:${invocationId}`;
-
-        let durationNs;
-        try {
-            // Unmount previous render to keep DOM clean between iterations
-            if (lastReturnValue && lastReturnValue.unmount) {
-                lastReturnValue.unmount();
-            }
-
-            const element = React.createElement(Component, ...createElementArgs);
-            const startTime = getTimeNs();
-            lastReturnValue = renderFn(element);
-            const endTime = getTimeNs();
-            durationNs = getDurationNs(startTime, endTime);
-
-            lastError = null;
-        } catch (e) {
-            durationNs = 0;
-            lastError = e;
-        }
-
-        console.log(`!######${testStdoutTag}:${durationNs}######!`);
-
-        sharedPerfState.totalLoopsCompleted++;
-
-        if (durationNs > 0) {
-            runtimes.push(durationNs / 1000);
-        }
-
-        if (!hasExternalLoopRunner && getPerfStabilityCheck() && runtimes.length >= getPerfMinLoops()) {
-            const window = getStabilityWindow();
-            if (shouldStopStability(runtimes, window, getPerfMinLoops())) {
-                sharedPerfState.stableInvocations[invocationKey] = true;
-                break;
-            }
-        }
-
-        if (!hasExternalLoopRunner && lastError) {
-            break;
-        }
-    }
-
-    if (lastError) throw lastError;
-
-    // If we never executed (e.g., hit loop limit on first iteration), render once for assertion
-    if (lastReturnValue === undefined && !lastError) {
+    }).catch(() => {
+        // If benchmark fails, render once so test assertions can still run
+        const React = _getReact();
         const element = React.createElement(Component, ...createElementArgs);
         return renderFn(element);
-    }
-
-    return lastReturnValue;
+    });
 }
 
 /**
