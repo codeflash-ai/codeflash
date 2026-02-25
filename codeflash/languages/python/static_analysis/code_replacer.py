@@ -566,11 +566,21 @@ def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStrin
             module_optimized_code = file_to_code_context["None"]
             logger.debug(f"Using code block with None file_path for {relative_path}")
         else:
-            logger.warning(
-                f"Optimized code not found for {relative_path} In the context\n-------\n{optimized_code}\n-------\n"
-                "re-check your 'markdown code structure'"
-                f"existing files are {file_to_code_context.keys()}"
-            )
+            available_files = list(file_to_code_context.keys())
+            # Check if this looks like a path mismatch (same filename exists under a different path)
+            # vs the AI simply not returning code for this module
+            requested_name = relative_path.name
+            similar = [f for f in available_files if Path(f).name == requested_name]
+            if similar:
+                logger.warning(
+                    f"Optimized code not found for '{relative_path}' but found similar path(s): {similar}. "
+                    f"Re-check your markdown code structure. Available files: {available_files}"
+                )
+            else:
+                logger.debug(
+                    f"AI service did not return optimized code for '{relative_path}'. "
+                    f"Available files in response: {available_files}"
+                )
             module_optimized_code = ""
     return module_optimized_code
 
