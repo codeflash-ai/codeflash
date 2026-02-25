@@ -1921,13 +1921,20 @@ def run_line_profile_tests(
     if line_profile_output_file:
         run_env["CODEFLASH_LINE_PROFILE_OUTPUT"] = str(line_profile_output_file)
 
-    # Direct JVM execution (fast path — bypasses Maven overhead)
+    # Run tests once with profiling
+    # Maven needs substantial timeout for JVM startup + test execution
+    # Use minimum of 120s to account for Maven overhead, or larger if specified
     min_timeout = 120
     effective_timeout = max(timeout or min_timeout, min_timeout)
     logger.debug("Running line profiling tests (single run) with timeout=%ds", effective_timeout)
-    result, result_xml_path = _run_direct_or_fallback_maven(
-        maven_root, test_module, test_paths, run_env, effective_timeout, mode="line_profile",
+    result = _run_maven_tests(
+        maven_root, test_paths, run_env, timeout=effective_timeout, mode="line_profile", test_module=test_module
     )
+
+    # Get result XML path
+    target_dir = _get_test_module_target_dir(maven_root, test_module)
+    surefire_dir = target_dir / "surefire-reports"
+    result_xml_path = _get_combined_junit_xml(surefire_dir, -1)
 
     return result_xml_path, result
 
