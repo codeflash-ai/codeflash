@@ -122,7 +122,6 @@ def print_codeflash_banner() -> None:
     Renders the Codeflash ASCII logo inside a non-expanding panel titled with
     https://codeflash.ai, using bold gold text for visual emphasis.
     """
-
     paneled_text(
         CODEFLASH_LOGO, panel_args={"title": "https://codeflash.ai", "expand": False}, text_args={"style": "bold gold3"}
     )
