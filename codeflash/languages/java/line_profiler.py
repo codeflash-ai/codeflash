@@ -353,6 +353,8 @@ class {self.profiler_class} {{
         # Add profiling to each executable line
         function_entry_added = False
 
+        file_posix = file_path.as_posix()
+
         for local_idx, line in enumerate(func_lines):
             local_line_num = local_idx + 1  # 1-indexed within function
             global_line_num = func.starting_line + local_idx  # Global line number
@@ -377,9 +379,7 @@ class {self.profiler_class} {{
             if (
                 local_line_num in executable_lines
                 and stripped
-                and not stripped.startswith("//")
-                and not stripped.startswith("/*")
-                and not stripped.startswith("*")
+                and not stripped.startswith(("//", "/*", "*"))
                 and stripped not in ("}", "};")
             ):
                 # Get indentation
@@ -387,13 +387,11 @@ class {self.profiler_class} {{
                 indent_str = " " * indent
 
                 # Store line content for profiler output
-                content_key = f"{file_path.as_posix()}:{global_line_num}"
+                content_key = f"{file_posix}:{global_line_num}"
                 self.line_contents[content_key] = stripped
 
                 # Add hit() call before the line
-                profiled_line = (
-                    f'{indent_str}{self.profiler_class}.hit("{file_path.as_posix()}", {global_line_num});\n{line}'
-                )
+                profiled_line = f'{indent_str}{self.profiler_class}.hit("{file_posix}", {global_line_num});\n{line}'
                 instrumented_lines.append(profiled_line)
             else:
                 instrumented_lines.append(line)
