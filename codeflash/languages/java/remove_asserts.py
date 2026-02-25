@@ -198,6 +198,15 @@ class JavaAssertTransformer:
         # Precompile regex to find next special character (quotes, parens, braces).
         self._special_re = re.compile(r"[\"'{}()]")
 
+
+        # Precompile literal/cast regexes to avoid recompilation on each literal check.
+        self._LONG_LITERAL_RE = re.compile(r"^-?\d+[lL]$")
+        self._INT_LITERAL_RE = re.compile(r"^-?\d+$")
+        self._DOUBLE_LITERAL_RE = re.compile(r"^-?\d+\.\d*[dD]?$|^-?\d+[dD]$")
+        self._FLOAT_LITERAL_RE = re.compile(r"^-?\d+\.?\d*[fF]$")
+        self._CHAR_LITERAL_RE = re.compile(r"^'.'$|^'\\.'$")
+        self._cast_re = re.compile(r"^\((\w+)\)")
+
     def transform(self, source: str) -> str:
         """Remove assertions from source code, preserving target function calls.
 
@@ -972,13 +981,22 @@ class JavaAssertTransformer:
         if value.startswith('"'):
             return "String"
         # Cast expression like (byte)0, (short)1
-        cast_match = re.match(r"^\((\w+)\)", value)
+        cast_match = self._cast_re.match(value)
         if cast_match:
             return cast_match.group(1)
         return "Object"
 
     def _split_top_level_args(self, args_str: str) -> list[str]:
         """Split assertion arguments at top-level commas, respecting parens/strings/generics."""
+        # Fast-path: if there are no special delimiters that require parsing,
+        # we can use a simple split which is much faster for common simple cases.
+        if not self._special_re.search(args_str):
+            # Preserve original behavior of returning a list with the single unstripped string
+            # when there are no commas, otherwise split on commas.
+            if "," in args_str:
+                return args_str.split(",")
+            return [args_str]
+
         args: list[str] = []
         depth = 0
         current: list[str] = []
