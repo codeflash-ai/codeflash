@@ -8,8 +8,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * Zero-allocation, zero-contention per-line profiling data storage.
  *
  * <p>Each thread gets its own primitive {@code long[]} arrays for hit counts and self-time.
- * The hot path ({@link #hit(int)}) performs only an array-index increment and a single
- * {@link System#nanoTime()} call — no object allocations, no locks, no shared-state contention.
+ * The hot path ({@link #hit(int)}) uses two {@link System#nanoTime()} calls — one at entry
+ * to stop the previous line's clock, one at exit to start the current line's clock — so that
+ * profiler overhead is excluded from line timings.
  *
  * <p>A per-thread call stack tracks method entry/exit to:
  * <ul>
@@ -134,13 +135,7 @@ public final class ProfilerData {
     public static void hit(int globalId) {
         long now = System.nanoTime();
 
-        long[] hits = hitCounts.get();
-        if (globalId >= hits.length) {
-            hits = ensureCapacity(hitCounts, allHitArrays, globalId);
-        }
-        hits[globalId]++;
-
-        // Attribute elapsed time to the PREVIOUS line (the one that was executing)
+        // Attribute elapsed time to the PREVIOUS line (stop its clock ASAP)
         int[] lastId = lastLineId.get();
         long[] lastTime = lastLineTime.get();
         if (lastId[0] >= 0) {
@@ -151,8 +146,14 @@ public final class ProfilerData {
             times[lastId[0]] += now - lastTime[0];
         }
 
+        long[] hits = hitCounts.get();
+        if (globalId >= hits.length) {
+            hits = ensureCapacity(hitCounts, allHitArrays, globalId);
+        }
+        hits[globalId]++;
+
         lastId[0] = globalId;
-        lastTime[0] = now;
+        lastTime[0] = System.nanoTime();
     }
 
     /**
@@ -168,7 +169,7 @@ public final class ProfilerData {
     public static void enterMethod(int entryLineId) {
         long now = System.nanoTime();
 
-        // Flush pending time to the line that made the call
+        // Flush pending time to the caller's line (stop its clock ASAP)
         int[] lastId = lastLineId.get();
         long[] lastTime = lastLineTime.get();
         if (lastId[0] >= 0) {
@@ -187,9 +188,9 @@ public final class ProfilerData {
         }
         depth[0]++;
 
-        // Reset for the new method scope
+        // Start fresh for the callee — timestamp taken after all overhead
         lastId[0] = -1;
-        lastTime[0] = now;
+        lastTime[0] = System.nanoTime();
     }
 
     /**
@@ -201,7 +202,7 @@ public final class ProfilerData {
     public static void exitMethod() {
         long now = System.nanoTime();
 
-        // Attribute remaining time to the last line of the exiting method
+        // Attribute remaining time to the last line of the exiting method (stop its clock ASAP)
         int[] lastId = lastLineId.get();
         long[] lastTime = lastLineTime.get();
         if (lastId[0] >= 0) {
@@ -212,7 +213,7 @@ public final class ProfilerData {
             times[lastId[0]] += now - lastTime[0];
         }
 
-        // Pop the call stack and restore parent's timing state
+        // Pop the call stack and restore parent's timing state — timestamp taken after all overhead
         int[] depth = callStackDepth.get();
         if (depth[0] > 0) {
             depth[0]--;
@@ -220,7 +221,7 @@ public final class ProfilerData {
             int parentLineId = stack[depth[0]];
 
             lastId[0] = parentLineId;
-            lastTime[0] = now; // Self-time: exclude callee duration
+            lastTime[0] = System.nanoTime();
         } else {
             lastId[0] = -1;
             lastTime[0] = 0L;

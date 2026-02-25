@@ -1897,8 +1897,9 @@ public class Utf8Test {
             '    @Test\n'
             '    public void testWithCjk() {\n'
             '        // Codeflash timing instrumentation with inner loop for JIT warmup\n'
-            '        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));\n'
-            '        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));\n'
+            '        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));\n'
+            '        int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));\n'
+            '        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));\n'
             '        String _cf_mod1 = "Utf8Test";\n'
             '        String _cf_cls1 = "Utf8Test";\n'
             '        String _cf_test1 = "testWithCjk";\n'
@@ -1906,7 +1907,8 @@ public class Utf8Test {
             '        \n'
             '        String label = "\u30c6\u30b9\u30c8\u540d\u524d";\n'
             '        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {\n'
-            '            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");\n'
+            '            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;\n'
+            '            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");\n'
             '            long _cf_end1 = -1;\n'
             '            long _cf_start1 = 0;\n'
             '            try {\n'
@@ -1916,7 +1918,7 @@ public class Utf8Test {
             '            } finally {\n'
             '                long _cf_end1_finally = System.nanoTime();\n'
             '                long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;\n'
-            '                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");\n'
+            '                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");\n'
             '            }\n'
             '        }\n'
             '    }\n'
@@ -1969,8 +1971,9 @@ public class AccentTest {
             '    @Test\n'
             '    public void testWithAccent() {\n'
             '        // Codeflash timing instrumentation with inner loop for JIT warmup\n'
-            '        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));\n'
-            '        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));\n'
+            '        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));\n'
+            '        int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));\n'
+            '        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));\n'
             '        String _cf_mod1 = "AccentTest";\n'
             '        String _cf_cls1 = "AccentTest";\n'
             '        String _cf_test1 = "testWithAccent";\n'
@@ -1979,7 +1982,8 @@ public class AccentTest {
             '        // R\u00e9sum\u00e9 processing test with accented chars\n'
             '        String name = "caf\u00e9";\n'
             '        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {\n'
-            '            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");\n'
+            '            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;\n'
+            '            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");\n'
             '            long _cf_end1 = -1;\n'
             '            long _cf_start1 = 0;\n'
             '            try {\n'
@@ -1989,7 +1993,7 @@ public class AccentTest {
             '            } finally {\n'
             '                long _cf_end1_finally = System.nanoTime();\n'
             '                long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;\n'
-            '                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");\n'
+            '                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");\n'
             '            }\n'
             '        }\n'
             '    }\n'
@@ -3139,15 +3143,17 @@ public class SpinWaitTest__perfonlyinstrumented {
     @Test
     public void testSpinShort() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
-        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         String _cf_mod1 = "SpinWaitTest";
         String _cf_cls1 = "SpinWaitTest";
         String _cf_test1 = "testSpinShort";
         String _cf_fn1 = "spinWait";
 
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -3157,7 +3163,7 @@ public class SpinWaitTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -3165,15 +3171,17 @@ public class SpinWaitTest__perfonlyinstrumented {
     @Test
     public void testSpinLong() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
-        int _cf_loop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
+        int _cf_outerLoop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_maxInnerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         String _cf_mod2 = "SpinWaitTest";
         String _cf_cls2 = "SpinWaitTest";
         String _cf_test2 = "testSpinLong";
         String _cf_fn2 = "spinWait";
 
         for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
-            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + "######$!");
+            int _cf_loopId2 = _cf_outerLoop2 * _cf_maxInnerIterations2 + _cf_i2;
+            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + _cf_i2 + "######$!");
             long _cf_end2 = -1;
             long _cf_start2 = 0;
             try {
@@ -3183,7 +3191,7 @@ public class SpinWaitTest__perfonlyinstrumented {
             } finally {
                 long _cf_end2_finally = System.nanoTime();
                 long _cf_dur2 = (_cf_end2 != -1 ? _cf_end2 : _cf_end2_finally) - _cf_start2;
-                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + ":" + _cf_dur2 + "######!");
+                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + _cf_i2 + ":" + _cf_dur2 + "######!");
             }
         }
     }
