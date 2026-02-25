@@ -894,6 +894,129 @@ class JavaAssertTransformer:
 
         return code[open_brace_pos + 1 : pos - 1], pos
 
+    def _infer_return_type(self, assertion: AssertionMatch) -> str:
+        """Infer the Java return type from the assertion context.
+
+        For assertEquals(expected, actual) patterns, the expected literal determines the type.
+        For assertTrue/assertFalse, the result is boolean.
+        Falls back to Object when the type cannot be determined.
+        """
+        method = assertion.assertion_method
+
+        # assertTrue/assertFalse always deal with boolean values
+        if method in ("assertTrue", "assertFalse"):
+            return "boolean"
+
+        # assertNull/assertNotNull — keep Object (reference type)
+        if method in ("assertNull", "assertNotNull"):
+            return "Object"
+
+        # For assertEquals/assertNotEquals/assertSame, try to infer from the expected literal
+        if method in JUNIT5_VALUE_ASSERTIONS:
+            return self._infer_type_from_assertion_args(assertion.original_text, method)
+
+        # For fluent assertions (assertThat), type inference is harder — keep Object
+        return "Object"
+
+    # Regex patterns for Java literal type inference
+    _LONG_LITERAL_RE = re.compile(r"^-?\d+[lL]$")
+    _INT_LITERAL_RE = re.compile(r"^-?\d+$")
+    _DOUBLE_LITERAL_RE = re.compile(r"^-?\d+\.\d*[dD]?$|^-?\d+[dD]$")
+    _FLOAT_LITERAL_RE = re.compile(r"^-?\d+\.?\d*[fF]$")
+    _CHAR_LITERAL_RE = re.compile(r"^'.'$|^'\\.'$")
+
+    def _infer_type_from_assertion_args(self, original_text: str, method: str) -> str:
+        """Infer the return type from assertEquals/assertNotEquals expected value."""
+        # Extract the args portion from the assertion text
+        # Pattern: assertXxx( args... )
+        paren_idx = original_text.find("(")
+        if paren_idx < 0:
+            return "Object"
+
+        args_str = original_text[paren_idx + 1 :]
+        # Remove trailing ");", whitespace
+        args_str = args_str.rstrip()
+        if args_str.endswith(");"):
+            args_str = args_str[:-2]
+        elif args_str.endswith(")"):
+            args_str = args_str[:-1]
+
+        # Split top-level args (respecting parens, strings, generics)
+        args = self._split_top_level_args(args_str)
+        if not args:
+            return "Object"
+
+        # assertEquals has (expected, actual) or (expected, actual, message/delta)
+        # Some overloads have (message, expected, actual) in JUnit 4 but JUnit 5 uses (expected, actual[, message])
+        # Try the first argument as the expected value
+        expected = args[0].strip()
+
+        return self._type_from_literal(expected)
+
+    def _type_from_literal(self, value: str) -> str:
+        """Determine the Java type of a literal value."""
+        if value in ("true", "false"):
+            return "boolean"
+        if value == "null":
+            return "Object"
+        if self._FLOAT_LITERAL_RE.match(value):
+            return "float"
+        if self._DOUBLE_LITERAL_RE.match(value):
+            return "double"
+        if self._LONG_LITERAL_RE.match(value):
+            return "long"
+        if self._INT_LITERAL_RE.match(value):
+            return "int"
+        if self._CHAR_LITERAL_RE.match(value):
+            return "char"
+        if value.startswith('"'):
+            return "String"
+        # Cast expression like (byte)0, (short)1
+        cast_match = re.match(r"^\((\w+)\)", value)
+        if cast_match:
+            return cast_match.group(1)
+        return "Object"
+
+    def _split_top_level_args(self, args_str: str) -> list[str]:
+        """Split assertion arguments at top-level commas, respecting parens/strings/generics."""
+        args: list[str] = []
+        depth = 0
+        current: list[str] = []
+        i = 0
+        in_string = False
+        string_char = ""
+
+        while i < len(args_str):
+            ch = args_str[i]
+
+            if in_string:
+                current.append(ch)
+                if ch == "\\" and i + 1 < len(args_str):
+                    i += 1
+                    current.append(args_str[i])
+                elif ch == string_char:
+                    in_string = False
+            elif ch in ('"', "'"):
+                in_string = True
+                string_char = ch
+                current.append(ch)
+            elif ch in ("(", "<", "[", "{"):
+                depth += 1
+                current.append(ch)
+            elif ch in (")", ">", "]", "}"):
+                depth -= 1
+                current.append(ch)
+            elif ch == "," and depth == 0:
+                args.append("".join(current))
+                current = []
+            else:
+                current.append(ch)
+            i += 1
+
+        if current:
+            args.append("".join(current))
+        return args
+
     def _generate_replacement(self, assertion: AssertionMatch) -> str:
         """Generate replacement code for an assertion.
 
@@ -912,6 +1035,9 @@ class JavaAssertTransformer:
         if not assertion.target_calls:
             return ""
 
+        # Infer the return type from assertion context to avoid Object→primitive cast errors
+        return_type = self._infer_return_type(assertion)
+
         # Generate capture statements for each target call
         replacements = []
         # For the first replacement, use the full leading whitespace
@@ -921,9 +1047,9 @@ class JavaAssertTransformer:
             self.invocation_counter += 1
             var_name = f"_cf_result{self.invocation_counter}"
             if i == 0:
-                replacements.append(f"{assertion.leading_whitespace}Object {var_name} = {call.full_call};")
+                replacements.append(f"{assertion.leading_whitespace}{return_type} {var_name} = {call.full_call};")
             else:
-                replacements.append(f"{base_indent}Object {var_name} = {call.full_call};")
+                replacements.append(f"{base_indent}{return_type} {var_name} = {call.full_call};")
 
         return "\n".join(replacements)
 
