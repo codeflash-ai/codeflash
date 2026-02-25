@@ -100,7 +100,6 @@ class JavaSupport(LanguageSupport):
         return generated_tests
 
     def add_global_declarations(self, optimized_code: str, original_source: str, module_abspath: Path) -> str:
-        _ = optimized_code, module_abspath
         return original_source
 
     # === Discovery ===

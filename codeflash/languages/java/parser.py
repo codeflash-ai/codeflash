@@ -717,9 +717,9 @@ class JavaAnalyzer:
         """
         self._ensure_decoded(source)
         # cum is a non-decreasing list: find largest k where cum[k] <= byte_offset
-        cum = self._cached_cum_bytes  # type: ignore[assignment]
+        assert self._cached_cum_bytes is not None
         # bisect_right returns insertion point; subtract 1 to get character count
-        return bisect_right(cum, byte_offset) - 1
+        return bisect_right(self._cached_cum_bytes, byte_offset) - 1
 
 
 def get_java_analyzer() -> JavaAnalyzer:

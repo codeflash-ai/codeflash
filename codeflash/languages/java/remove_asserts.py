@@ -28,6 +28,8 @@ if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.java.parser import JavaAnalyzer
 
+_ASSIGN_RE = re.compile(r"(\w+(?:<[^>]+>)?)\s+(\w+)\s*=\s*$")
+
 logger = logging.getLogger(__name__)
 
 
@@ -193,6 +195,9 @@ class JavaAssertTransformer:
         # Precompile the assignment-detection regex to avoid recompiling on each call.
         self._assign_re = re.compile(r"(\w+(?:<[^>]+>)?)\s+(\w+)\s*=\s*$")
 
+        # Precompile regex to find next special character (quotes, parens, braces).
+        self._special_re = re.compile(r"[\"'{}()]")
+
     def transform(self, source: str) -> str:
         """Remove assertions from source code, preserving target function calls.
 
@@ -220,15 +225,15 @@ class JavaAssertTransformer:
 
         # Filter out nested assertions (e.g., assertEquals inside assertAll)
         non_nested: list[AssertionMatch] = []
-        for i, assertion in enumerate(assertions):
-            is_nested = False
-            for j, other in enumerate(assertions):
-                if i != j:
-                    if other.start_pos <= assertion.start_pos and assertion.end_pos <= other.end_pos:
-                        is_nested = True
-                        break
-            if not is_nested:
-                non_nested.append(assertion)
+        max_end = -1
+        for assertion in assertions:
+            # If any previous assertion ends at or after this one's end, this is nested.
+            if max_end >= assertion.end_pos:
+                continue
+            non_nested.append(assertion)
+            max_end = max(max_end, assertion.end_pos)
+
+        # Pre-compute all replacements with correct counter values
 
         # Pre-compute all replacements with correct counter values
         replacements: list[tuple[int, int, str]] = []
@@ -236,12 +241,19 @@ class JavaAssertTransformer:
             replacement = self._generate_replacement(assertion)
             replacements.append((assertion.start_pos, assertion.end_pos, replacement))
 
-        # Apply replacements in reverse order to preserve positions
-        result = source
-        for start_pos, end_pos, replacement in reversed(replacements):
-            result = result[:start_pos] + replacement + result[end_pos:]
+        # Apply replacements in ascending order by assembling parts to avoid repeated slicing.
+        if not replacements:
+            return source
 
-        return result
+        parts: list[str] = []
+        prev = 0
+        for start_pos, end_pos, replacement in replacements:
+            parts.append(source[prev:start_pos])
+            parts.append(replacement)
+            prev = end_pos
+        parts.append(source[prev:])
+
+        return "".join(parts)
 
     def _detect_framework(self, source: str) -> str:
         """Detect which testing framework is being used from imports.
@@ -804,17 +816,20 @@ class JavaAssertTransformer:
         string_char = None
         in_char = False
 
-        # Track previous character locally to avoid repeated indexing (code[pos-1]).
-        prev_char = code[open_paren_pos]
+        while depth > 0:
+            m = self._special_re.search(code, pos)
+            if m is None:
+                return None, -1
 
-        while pos < end and depth > 0:
-            char = code[pos]
+            i = m.start()
+            char = m.group()
+            escaped = i > 0 and code[i - 1] == "\\"
 
             # Handle character literals
-            if char == "'" and not in_string and prev_char != "\\":
+            if char == "'" and not in_string and not escaped:
                 in_char = not in_char
             # Handle string literals (double quotes)
-            elif char == '"' and not in_char and prev_char != "\\":
+            elif char == '"' and not in_char and not escaped:
                 if not in_string:
                     in_string = True
                     string_char = char
@@ -827,13 +842,7 @@ class JavaAssertTransformer:
                 elif char == ")":
                     depth -= 1
 
-            pos += 1
-
-            prev_char = char
-
-        if depth != 0:
-            return None, -1
-
+            pos = i + 1
         return code[open_paren_pos + 1 : pos - 1], pos
 
     def _find_balanced_braces(self, code: str, open_brace_pos: int) -> tuple[str | None, int]:
@@ -843,30 +852,42 @@ class JavaAssertTransformer:
 
         depth = 1
         pos = open_brace_pos + 1
-        in_string = False
-        string_char = None
-        in_char = False
+        code_len = len(code)
+        special_re = self._special_re
 
-        while pos < len(code) and depth > 0:
-            char = code[pos]
-            prev_char = code[pos - 1] if pos > 0 else ""
+        while pos < code_len and depth > 0:
+            m = special_re.search(code, pos)
+            if m is None:
+                return None, -1
 
-            if char == "'" and not in_string and prev_char != "\\":
-                in_char = not in_char
-            elif char == '"' and not in_char and prev_char != "\\":
-                if not in_string:
-                    in_string = True
-                    string_char = char
-                elif char == string_char:
-                    in_string = False
-                    string_char = None
-            elif not in_string and not in_char:
-                if char == "{":
-                    depth += 1
-                elif char == "}":
-                    depth -= 1
+            idx = m.start()
+            char = m.group()
+            prev_char = code[idx - 1] if idx > 0 else ""
 
-            pos += 1
+            if char == "'" and prev_char != "\\":
+                j = code.find("'", idx + 1)
+                while j != -1 and j > 0 and code[j - 1] == "\\":
+                    j = code.find("'", j + 1)
+                if j == -1:
+                    return None, -1
+                pos = j + 1
+                continue
+
+            if char == '"' and prev_char != "\\":
+                j = code.find('"', idx + 1)
+                while j != -1 and j > 0 and code[j - 1] == "\\":
+                    j = code.find('"', j + 1)
+                if j == -1:
+                    return None, -1
+                pos = j + 1
+                continue
+
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+
+            pos = idx + 1
 
         if depth != 0:
             return None, -1
