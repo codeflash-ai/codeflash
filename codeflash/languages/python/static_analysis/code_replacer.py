@@ -4,6 +4,7 @@ import ast
 from collections import defaultdict
 from functools import lru_cache
 from itertools import chain
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional, TypeVar
 
 import libcst as cst
@@ -22,8 +23,6 @@ from codeflash.languages.python.static_analysis.line_profile_utils import Import
 from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import LanguageSupport
     from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, OptimizedCandidate, ValidCode
