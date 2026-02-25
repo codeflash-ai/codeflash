@@ -1,8 +1,12 @@
-"""Line profiler instrumentation for Java.
+"""Line profiler for Java via bytecode instrumentation agent.
 
-This module provides functionality to instrument Java code with line-level
-profiling similar to Python's line_profiler and JavaScript's profiler.
-It tracks execution counts and timing for each line in instrumented functions.
+This module generates configuration for the CodeFlash profiler Java agent, which
+instruments bytecode at class-load time using ASM. The agent uses zero-allocation
+thread-local arrays for hit counting and a per-thread call stack for accurate
+self-time attribution.
+
+No source code modification is needed — the agent intercepts class loading via
+-javaagent and injects probes at each LineNumber table entry.
 """
 
 from __future__ import annotations
@@ -10,49 +14,38 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from tree_sitter import Node
 
     from codeflash.languages.base import FunctionInfo
 
 logger = logging.getLogger(__name__)
 
+AGENT_JAR_NAME = "codeflash-runtime-1.0.0.jar"
+DEFAULT_WARMUP_ITERATIONS = 100
+
 
 class JavaLineProfiler:
-    """Instruments Java code for line-level profiling.
-
-    This class adds profiling code to Java functions to track:
-    - How many times each line executes
-    - How much time is spent on each line (in nanoseconds)
-    - Total execution time per function
+    """Configures the Java profiler agent for line-level profiling.
 
     Example:
         profiler = JavaLineProfiler(output_file=Path("profile.json"))
-        instrumented = profiler.instrument_source(source, file_path, functions)
-        # Run instrumented code
+        config_path = profiler.generate_agent_config(source, file_path, functions, config_path)
+        jvm_arg = profiler.build_javaagent_arg(config_path)
+        # Run Java with: java <jvm_arg> -cp ... ClassName
         results = JavaLineProfiler.parse_results(Path("profile.json"))
 
     """
 
-    def __init__(self, output_file: Path) -> None:
-        """Initialize the line profiler.
-
-        Args:
-            output_file: Path where profiling results will be written (JSON format).
-
-        """
+    def __init__(self, output_file: Path, warmup_iterations: int = DEFAULT_WARMUP_ITERATIONS) -> None:
         self.output_file = output_file
+        self.warmup_iterations = warmup_iterations
         self.profiler_class = "CodeflashLineProfiler"
-        self.profiler_var = "__codeflashProfiler__"
-        self.line_contents: dict[str, str] = {}
 
-        # Java executable statement types
-        # Moved to an instance-level frozenset to avoid rebuilding this set on every call.
-        self._executable_types = frozenset(
+        self.executable_types = frozenset(
             {
                 "expression_statement",
                 "return_statement",
@@ -76,44 +69,106 @@ class JavaLineProfiler:
             }
         )
 
-    def instrument_source(self, source: str, file_path: Path, functions: list[FunctionInfo], analyzer=None) -> str:
-        """Instrument Java source code with line profiling.
+    # === Agent-based profiling (bytecode instrumentation) ===
 
-        Adds profiling instrumentation to track line-level execution for the
-        specified functions.
+    def generate_agent_config(
+        self, source: str, file_path: Path, functions: list[FunctionInfo], config_output_path: Path
+    ) -> Path:
+        """Generate config JSON for the profiler agent.
+
+        Reads the source to extract line contents and resolves the JVM internal
+        class name, then writes a config JSON that the agent uses to know which
+        classes/methods to instrument at class-load time.
 
         Args:
-            source: Original Java source code.
-            file_path: Path to the source file.
-            functions: List of functions to instrument.
-            analyzer: Optional JavaAnalyzer instance.
+            source: Java source code of the file.
+            file_path: Absolute path to the source file.
+            functions: Functions to profile.
+            config_output_path: Where to write the config JSON.
 
         Returns:
-            Instrumented source code with profiling.
+            Path to the written config file.
 
         """
-        if not functions:
-            return source
+        class_name = resolve_internal_class_name(file_path, source)
+        lines = source.splitlines()
+        line_contents: dict[str, str] = {}
+        method_targets = []
 
-        if analyzer is None:
-            from codeflash.languages.java.parser import get_java_analyzer
+        for func in functions:
+            for line_num in range(func.starting_line, func.ending_line + 1):
+                if 1 <= line_num <= len(lines):
+                    content = lines[line_num - 1].strip()
+                    if (
+                        content
+                        and not content.startswith("//")
+                        and not content.startswith("/*")
+                        and not content.startswith("*")
+                    ):
+                        key = f"{file_path.as_posix()}:{line_num}"
+                        line_contents[key] = content
 
-            analyzer = get_java_analyzer()
+            method_targets.append(
+                {
+                    "name": func.function_name,
+                    "startLine": func.starting_line,
+                    "endLine": func.ending_line,
+                    "sourceFile": file_path.as_posix(),
+                }
+            )
 
+        config = {
+            "outputFile": str(self.output_file),
+            "warmupIterations": self.warmup_iterations,
+            "targets": [{"className": class_name, "methods": method_targets}],
+            "lineContents": line_contents,
+        }
+
+        config_output_path.parent.mkdir(parents=True, exist_ok=True)
+        config_output_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
+        return config_output_path
+
+    def build_javaagent_arg(self, config_path: Path) -> str:
+        """Return the -javaagent JVM argument string."""
+        agent_jar = find_agent_jar()
+        if agent_jar is None:
+            msg = f"{AGENT_JAR_NAME} not found in resources or dev build directory"
+            raise FileNotFoundError(msg)
+        return f"-javaagent:{agent_jar}=config={config_path}"
+
+    # === Source-level instrumentation ===
+
+    def instrument_source(
+        self, source: str, file_path: Path, functions: list[FunctionInfo], analyzer: Any = None
+    ) -> str:
+        """Instrument Java source code with line profiling.
+
+        Injects a profiler class and per-line hit() calls directly into the source.
+
+        Args:
+            source: Java source code of the file.
+            file_path: Absolute path to the source file.
+            functions: Functions to instrument.
+            analyzer: JavaAnalyzer instance for parsing/validation.
+
+        Returns:
+            Instrumented source code, or original source if instrumentation fails.
+
+        """
         # Initialize line contents map
-        self.line_contents = {}
+        self.line_contents: dict[str, str] = {}
 
         lines = source.splitlines(keepends=True)
 
         # Process functions in reverse order to preserve line numbers
         for func in sorted(functions, key=lambda f: f.starting_line, reverse=True):
-            func_lines = self._instrument_function(func, lines, file_path, analyzer)
+            func_lines = self.instrument_function(func, lines, file_path, analyzer)
             start_idx = func.starting_line - 1
             end_idx = func.ending_line
             lines = lines[:start_idx] + func_lines + lines[end_idx:]
 
         # Add profiler class and initialization
-        profiler_class_code = self._generate_profiler_class()
+        profiler_class_code = self.generate_profiler_class()
 
         # Insert profiler class before the package's first class
         # Find the first class/interface/enum/record declaration
@@ -136,10 +191,10 @@ class JavaLineProfiler:
             return source
         return result
 
-    def _generate_profiler_class(self) -> str:
+    def generate_profiler_class(self) -> str:
         """Generate Java code for profiler class."""
         # Store line contents as a simple map (embedded directly in code)
-        line_contents_code = self._generate_line_contents_map()
+        line_contents_code = self.generate_line_contents_map()
 
         return f"""
 /**
@@ -269,7 +324,7 @@ class {self.profiler_class} {{
 }}
 """
 
-    def _instrument_function(self, func: FunctionInfo, lines: list[str], file_path: Path, analyzer) -> list[str]:
+    def instrument_function(self, func: FunctionInfo, lines: list[str], file_path: Path, analyzer: Any) -> list[str]:
         """Instrument a single function with line profiling.
 
         Args:
@@ -290,13 +345,15 @@ class {self.profiler_class} {{
 
         try:
             tree = analyzer.parse(source.encode("utf8"))
-            executable_lines = self._find_executable_lines(tree.root_node)
+            executable_lines = self.find_executable_lines(tree.root_node)
         except Exception as e:
             logger.warning("Failed to parse function %s: %s", func.function_name, e)
             return func_lines
 
         # Add profiling to each executable line
         function_entry_added = False
+
+        file_posix = file_path.as_posix()
 
         for local_idx, line in enumerate(func_lines):
             local_line_num = local_idx + 1  # 1-indexed within function
@@ -322,9 +379,7 @@ class {self.profiler_class} {{
             if (
                 local_line_num in executable_lines
                 and stripped
-                and not stripped.startswith("//")
-                and not stripped.startswith("/*")
-                and not stripped.startswith("*")
+                and not stripped.startswith(("//", "/*", "*"))
                 and stripped not in ("}", "};")
             ):
                 # Get indentation
@@ -332,20 +387,18 @@ class {self.profiler_class} {{
                 indent_str = " " * indent
 
                 # Store line content for profiler output
-                content_key = f"{file_path.as_posix()}:{global_line_num}"
+                content_key = f"{file_posix}:{global_line_num}"
                 self.line_contents[content_key] = stripped
 
                 # Add hit() call before the line
-                profiled_line = (
-                    f'{indent_str}{self.profiler_class}.hit("{file_path.as_posix()}", {global_line_num});\n{line}'
-                )
+                profiled_line = f'{indent_str}{self.profiler_class}.hit("{file_posix}", {global_line_num});\n{line}'
                 instrumented_lines.append(profiled_line)
             else:
                 instrumented_lines.append(line)
 
         return instrumented_lines
 
-    def _generate_line_contents_map(self) -> str:
+    def generate_line_contents_map(self) -> str:
         """Generate Java code to initialize line contents map."""
         lines = []
         for key, content in self.line_contents.items():
@@ -354,7 +407,7 @@ class {self.profiler_class} {{
             lines.append(f'        map.put("{key}", "{escaped}");')
         return "\n".join(lines)
 
-    def _find_executable_lines(self, node: Node) -> set[int]:
+    def find_executable_lines(self, node: Node) -> set[int]:
         """Find lines that contain executable statements.
 
         Args:
@@ -368,7 +421,7 @@ class {self.profiler_class} {{
 
         # Use an explicit stack to avoid recursion overhead on deep ASTs.
         stack = [node]
-        types = self._executable_types
+        types = self.executable_types
         add_line = executable_lines.add
 
         while stack:
@@ -385,113 +438,189 @@ class {self.profiler_class} {{
 
         return executable_lines
 
+    # === Result parsing (shared by both approaches) ===
+
     @staticmethod
-    def parse_results(profile_file: Path) -> dict:
-        """Parse line profiling results from output file.
+    def parse_results(profile_file: Path) -> dict[str, Any]:
+        """Parse line profiling results from the agent's JSON output.
 
-        Args:
-            profile_file: Path to profiling results JSON file.
-
-        Returns:
-            Dictionary with profiling statistics:
-                {
-                    "timings": {
-                        "file_path": {
-                            line_num: {
-                                "hits": int,
-                                "time_ns": int,
-                                "time_ms": float,
-                                "content": str
-                            }
-                        }
-                    },
-                    "unit": 1e-9,
-                    "raw_data": {...}
-                }
+        Returns the same format as parse_line_profile_test_output.parse_line_profile_results()
+        for non-Python languages:
+            {
+                "timings": {(filename, start_lineno, func_name): [(lineno, hits, time_ns), ...]},
+                "unit": 1e-9,
+                "str_out": "<tabulate pipe formatted output>"
+            }
 
         """
         if not profile_file.exists():
-            return {"timings": {}, "unit": 1e-9, "raw_data": {}, "str_out": ""}
+            return {"timings": {}, "unit": 1e-9, "str_out": ""}
 
         try:
             with profile_file.open("r") as f:
                 data = json.load(f)
 
-            # Group by file
-            timings = {}
-            for key, stats in data.items():
-                file_path, line_num_str = key.rsplit(":", 1)
-                line_num = int(line_num_str)
-                time_ns = int(stats["time"])  # nanoseconds
-                time_ms = time_ns / 1e6  # convert to milliseconds
-                hits = stats["hits"]
-                content = stats.get("content", "")
+            # Load method ranges and line contents from config file
+            method_ranges, config_line_contents = load_method_ranges(profile_file)
 
-                if file_path not in timings:
-                    timings[file_path] = {}
+            line_contents: dict[tuple[str, int], str] = {}
 
-                timings[file_path][line_num] = {
-                    "hits": hits,
-                    "time_ns": time_ns,
-                    "time_ms": time_ms,
-                    "content": content,
-                }
+            if method_ranges:
+                # Group lines by method using config ranges
+                grouped_timings: dict[tuple[str, int, str], list[tuple[int, int, int]]] = {}
+                for key, stats in data.items():
+                    fp = stats.get("file")
+                    line_num = stats.get("line")
+                    if fp is None or line_num is None:
+                        fp, line_str = key.rsplit(":", 1)
+                        line_num = int(line_str)
+                    line_num = int(line_num)
 
-            result = {
-                "timings": timings,
-                "unit": 1e-9,  # nanoseconds
-                "raw_data": data,
-            }
-            result["str_out"] = format_line_profile_results(result)
+                    line_contents[(fp, line_num)] = stats.get("content", "")
+                    entry = (line_num, int(stats.get("hits", 0)), int(stats.get("time", 0)))
+
+                    method_name, method_start = find_method_for_line(fp, line_num, method_ranges)
+                    group_key = (fp, method_start, method_name)
+                    grouped_timings.setdefault(group_key, []).append(entry)
+
+                # Fill in missing lines from config (closing braces, etc.)
+                for config_key, content in config_line_contents.items():
+                    fp, line_str = config_key.rsplit(":", 1)
+                    line_num = int(line_str)
+                    if (fp, line_num) not in line_contents:
+                        line_contents[(fp, line_num)] = content
+                        method_name, method_start = find_method_for_line(fp, line_num, method_ranges)
+                        group_key = (fp, method_start, method_name)
+                        grouped_timings.setdefault(group_key, []).append((line_num, 0, 0))
+
+                for group_key in grouped_timings:
+                    grouped_timings[group_key].sort(key=lambda t: t[0])
+            else:
+                # No config — fall back to grouping all lines by file
+                lines_by_file: dict[str, list[tuple[int, int, int]]] = {}
+                for key, stats in data.items():
+                    fp = stats.get("file")
+                    line_num = stats.get("line")
+                    if fp is None or line_num is None:
+                        fp, line_str = key.rsplit(":", 1)
+                        line_num = int(line_str)
+                    line_num = int(line_num)
+
+                    lines_by_file.setdefault(fp, []).append(
+                        (line_num, int(stats.get("hits", 0)), int(stats.get("time", 0)))
+                    )
+                    line_contents[(fp, line_num)] = stats.get("content", "")
+
+                grouped_timings = {}
+                for fp, line_stats in lines_by_file.items():
+                    sorted_stats = sorted(line_stats, key=lambda t: t[0])
+                    if sorted_stats:
+                        grouped_timings[(fp, sorted_stats[0][0], Path(fp).name)] = sorted_stats
+
+            result: dict[str, Any] = {"timings": grouped_timings, "unit": 1e-9, "line_contents": line_contents}
+            result["str_out"] = format_line_profile_results(result, line_contents)
             return result
 
         except Exception:
             logger.exception("Failed to parse line profile results")
-            return {"timings": {}, "unit": 1e-9, "raw_data": {}, "str_out": ""}
+            return {"timings": {}, "unit": 1e-9, "str_out": ""}
 
 
-def format_line_profile_results(results: dict, file_path: Path | None = None) -> str:
-    """Format line profiling results for display.
-
-    Args:
-        results: Results from parse_results().
-        file_path: Optional file path to filter results.
+def load_method_ranges(profile_file: Path) -> tuple[list[tuple[str, str, int, int]], dict[str, str]]:
+    """Load method ranges and line contents from the agent config file.
 
     Returns:
-        Formatted string showing per-line statistics.
+        (method_ranges, config_line_contents) where method_ranges is a list of
+        (source_file, method_name, start_line, end_line) and config_line_contents
+        is the lineContents dict from the config (key: "file:line", value: source text).
+
+    """
+    config_path = profile_file.with_suffix(".config.json")
+    if not config_path.exists():
+        return [], {}
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        ranges = []
+        for target in config.get("targets", []):
+            for method in target.get("methods", []):
+                ranges.append((method.get("sourceFile", ""), method["name"], method["startLine"], method["endLine"]))
+        return ranges, config.get("lineContents", {})
+    except Exception:
+        return [], {}
+
+
+def find_method_for_line(
+    file_path: str, line_num: int, method_ranges: list[tuple[str, str, int, int]]
+) -> tuple[str, int]:
+    """Find which method a line belongs to based on config ranges.
+
+    Returns (method_name, method_start_line). Falls back to (basename, line_num)
+    if no matching method range is found.
+    """
+    for source_file, method_name, start_line, end_line in method_ranges:
+        if file_path == source_file and start_line <= line_num <= end_line:
+            return method_name, start_line
+    return Path(file_path).name, line_num
+
+
+def find_agent_jar() -> Path | None:
+    """Locate the profiler agent JAR file (now bundled in codeflash-runtime).
+
+    Checks local Maven repo, package resources, and development build directory.
+    """
+    # Check local Maven repository first (fastest)
+    m2_jar = Path.home() / ".m2" / "repository" / "com" / "codeflash" / "codeflash-runtime" / "1.0.0" / AGENT_JAR_NAME
+    if m2_jar.exists():
+        return m2_jar
+
+    # Check bundled JAR in package resources
+    resources_jar = Path(__file__).parent / "resources" / AGENT_JAR_NAME
+    if resources_jar.exists():
+        return resources_jar
+
+    # Check development build directory
+    dev_jar = Path(__file__).parent.parent.parent.parent / "codeflash-java-runtime" / "target" / AGENT_JAR_NAME
+    if dev_jar.exists():
+        return dev_jar
+
+    return None
+
+
+def resolve_internal_class_name(file_path: Path, source: str) -> str:
+    """Resolve the JVM internal class name (slash-separated) from source.
+
+    Parses the package statement and combines with the filename stem.
+    e.g. "package com.example;" + "Calculator.java" → "com/example/Calculator"
+    """
+    for line in source.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("package "):
+            package = stripped[8:].rstrip(";").strip()
+            return f"{package.replace('.', '/')}/{file_path.stem}"
+    # No package — default package
+    return file_path.stem
+
+
+def format_line_profile_results(
+    results: dict[str, Any], line_contents: dict[tuple[str, int], str] | None = None
+) -> str:
+    """Format line profiling results using the same tabulate pipe format as Python.
+
+    Args:
+        results: Parsed results with timings in grouped format:
+            {(filename, start_lineno, func_name): [(lineno, hits, time_ns), ...]}
+        line_contents: Mapping of (filename, lineno) to source line content.
+
+    Returns:
+        Formatted string matching the Python line_profiler output format.
 
     """
     if not results or not results.get("timings"):
-        return "No profiling data available"
+        return ""
 
-    output = []
-    output.append("Line Profiling Results")
-    output.append("=" * 80)
+    if line_contents is None:
+        line_contents = results.get("line_contents", {})
 
-    timings = results["timings"]
+    from codeflash.verification.parse_line_profile_test_output import show_text_non_python
 
-    # Filter to specific file if requested
-    if file_path:
-        file_key = str(file_path)
-        timings = {file_key: timings.get(file_key, {})}
-
-    for file, lines in sorted(timings.items()):
-        if not lines:
-            continue
-
-        output.append(f"\nFile: {file}")
-        output.append("-" * 80)
-        output.append(f"{'Line':>6} | {'Hits':>10} | {'Time (ms)':>12} | {'Avg (ms)':>12} | Code")
-        output.append("-" * 80)
-
-        # Sort by line number
-        for line_num in sorted(lines.keys()):
-            stats = lines[line_num]
-            hits = stats["hits"]
-            time_ms = stats["time_ms"]
-            avg_ms = time_ms / hits if hits > 0 else 0
-            content = stats.get("content", "")[:50]  # Truncate long lines
-
-            output.append(f"{line_num:6d} | {hits:10d} | {time_ms:12.3f} | {avg_ms:12.6f} | {content}")
-
-    return "\n".join(output)
+    return show_text_non_python(results, line_contents)

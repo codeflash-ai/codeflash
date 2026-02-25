@@ -1311,6 +1311,7 @@ def _run_maven_tests(
     mode: str = "behavior",
     enable_coverage: bool = False,
     test_module: str | None = None,
+    javaagent_arg: str | None = None,
 ) -> subprocess.CompletedProcess:
     """Run Maven tests with Surefire.
 
@@ -1367,7 +1368,10 @@ def _run_maven_tests(
         " --add-opens java.base/java.net=ALL-UNNAMED"
         " --add-opens java.base/java.util.zip=ALL-UNNAMED"
     )
-    cmd.append(f"-DargLine={add_opens_flags}")
+    if javaagent_arg:
+        cmd.append(f"-DargLine={javaagent_arg} {add_opens_flags}")
+    else:
+        cmd.append(f"-DargLine={add_opens_flags}")
 
     # For performance mode, disable Surefire's file-based output redirection.
     # By default, Surefire captures System.out.println() to .txt report files,
@@ -1793,11 +1797,12 @@ def run_line_profile_tests(
     timeout: int | None = None,
     project_root: Path | None = None,
     line_profile_output_file: Path | None = None,
+    javaagent_arg: str | None = None,
 ) -> tuple[Path, Any]:
-    """Run tests with line profiling enabled.
+    """Run tests with the profiler agent attached.
 
-    Runs the instrumented tests once to collect line profiling data.
-    The profiler will save results to line_profile_output_file on JVM exit.
+    The agent instruments bytecode at class-load time — no source modification needed.
+    Profiling results are written to line_profile_output_file on JVM exit.
 
     Args:
         test_paths: TestFiles object or list of test file paths.
@@ -1806,6 +1811,7 @@ def run_line_profile_tests(
         timeout: Optional timeout in seconds.
         project_root: Project root directory.
         line_profile_output_file: Path where profiling results will be written.
+        javaagent_arg: Optional -javaagent:... JVM argument for the profiler agent.
 
     Returns:
         Tuple of (result_file_path, subprocess_result).
@@ -1833,7 +1839,13 @@ def run_line_profile_tests(
     effective_timeout = max(timeout or min_timeout, min_timeout)
     logger.debug("Running line profiling tests (single run) with timeout=%ds", effective_timeout)
     result = _run_maven_tests(
-        maven_root, test_paths, run_env, timeout=effective_timeout, mode="line_profile", test_module=test_module
+        maven_root,
+        test_paths,
+        run_env,
+        timeout=effective_timeout,
+        mode="line_profile",
+        test_module=test_module,
+        javaagent_arg=javaagent_arg,
     )
 
     # Get result XML path
