@@ -464,7 +464,7 @@ class Optimizer:
 
         try:
             from codeflash.benchmarking.function_ranker import FunctionRanker
-            from codeflash.discovery.discover_unit_tests import has_existing_unit_tests
+            from codeflash.discovery.discover_unit_tests import existing_unit_test_count
 
             console.rule()
             logger.info("loading|Ranking functions globally by performance impact...")
@@ -493,10 +493,10 @@ class Optimizer:
                 if file_path:
                     globally_ranked.append((file_path, func))
 
-            # Boost functions with existing unit tests to the top of their tier
+            # Boost functions with existing unit tests — more tests ranks higher
             if function_to_tests:
                 globally_ranked.sort(
-                    key=lambda x: 0 if has_existing_unit_tests(x[1], self.args.project_root, function_to_tests) else 1
+                    key=lambda x: -existing_unit_test_count(x[1], self.args.project_root, function_to_tests)
                 )
 
             console.rule()
@@ -522,7 +522,7 @@ class Optimizer:
         call_graph: DependencyResolver,
         function_to_tests: dict[str, set[FunctionCalledInTest]] | None = None,
     ) -> list[tuple[Path, FunctionToOptimize]]:
-        from codeflash.discovery.discover_unit_tests import has_existing_unit_tests
+        from codeflash.discovery.discover_unit_tests import existing_unit_test_count
 
         file_to_qns: dict[Path, set[str]] = defaultdict(set)
         for file_path, func in all_functions:
@@ -532,7 +532,7 @@ class Optimizer:
         ranked = sorted(
             enumerate(all_functions),
             key=lambda x: (
-                0 if has_existing_unit_tests(x[1][1], self.args.project_root, tests) else 1,
+                -existing_unit_test_count(x[1][1], self.args.project_root, tests),
                 -callee_counts.get((x[1][0], x[1][1].qualified_name), 0),
                 x[0],
             ),
