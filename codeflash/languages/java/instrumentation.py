@@ -1260,35 +1260,6 @@ def remove_instrumentation(source: str) -> str:
     return source
 
 
-_COMMON_JAVA_IMPORTS = {
-    "Arrays": "import java.util.Arrays;",
-    "List": "import java.util.List;",
-    "ArrayList": "import java.util.ArrayList;",
-    "Map": "import java.util.Map;",
-    "HashMap": "import java.util.HashMap;",
-    "Set": "import java.util.Set;",
-    "HashSet": "import java.util.HashSet;",
-    "Collections": "import java.util.Collections;",
-    "Collectors": "import java.util.stream.Collectors;",
-    "Random": "import java.util.Random;",
-    "BigDecimal": "import java.math.BigDecimal;",
-    "BigInteger": "import java.math.BigInteger;",
-}
-
-
-def ensure_common_java_imports(test_code: str) -> str:
-    for class_name, import_stmt in _COMMON_JAVA_IMPORTS.items():
-        if not re.search(rf"\b{class_name}\b", test_code):
-            continue
-        if import_stmt in test_code:
-            continue
-        package = import_stmt.split()[1].rsplit(".", 1)[0]
-        if f"import {package}.*;" in test_code:
-            continue
-        test_code = _add_import(test_code, import_stmt)
-    return test_code
-
-
 def instrument_generated_java_test(
     test_code: str,
     function_name: str,
@@ -1319,7 +1290,6 @@ def instrument_generated_java_test(
     from codeflash.languages.java.remove_asserts import transform_java_assertions
 
     test_code = transform_java_assertions(test_code, function_name, qualified_name)
-    test_code = ensure_common_java_imports(test_code)
 
     # Extract class name from the test code
     # Use pattern that starts at beginning of line to avoid matching words in comments
@@ -1355,32 +1325,3 @@ def instrument_generated_java_test(
 
     logger.debug("Instrumented generated Java test for %s (mode=%s)", function_name, mode)
     return modified_code
-
-
-def _add_import(source: str, import_statement: str) -> str:
-    """Add an import statement to the source.
-
-    Args:
-        source: The source code.
-        import_statement: The import to add.
-
-    Returns:
-        Source with import added.
-
-    """
-    lines = source.splitlines(keepends=True)
-    insert_idx = 0
-
-    # Find the last import or package statement
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped.startswith(("import ", "package ")):
-            insert_idx = i + 1
-        elif stripped and not stripped.startswith("//") and not stripped.startswith("/*"):
-            # First non-import, non-comment line
-            if insert_idx == 0:
-                insert_idx = i
-            break
-
-    lines.insert(insert_idx, import_statement + "\n")
-    return "".join(lines)
