@@ -1277,16 +1277,25 @@ _COMMON_JAVA_IMPORTS = {
 
 
 def ensure_common_java_imports(test_code: str) -> str:
+    imports_to_add: list[str] = []
+    code = test_code
+    # Fast path: avoid compiling regexes when class name substring isn't present
     for class_name, import_stmt in _COMMON_JAVA_IMPORTS.items():
-        if not re.search(rf"\b{class_name}\b", test_code):
+        if class_name not in code:
             continue
-        if import_stmt in test_code:
+        if import_stmt in code:
             continue
         package = import_stmt.split()[1].rsplit(".", 1)[0]
-        if f"import {package}.*;" in test_code:
+        if f"import {package}.*;" in code:
             continue
-        test_code = _add_import(test_code, import_stmt)
-    return test_code
+        # Only now do the (relatively expensive) regex check to ensure whole-word match
+        if not re.search(rf"\b{class_name}\b", code):
+            continue
+        imports_to_add.append(import_stmt)
+
+    if imports_to_add:
+        code = _add_imports(code, imports_to_add)
+    return code
 
 
 def instrument_generated_java_test(
@@ -1383,4 +1392,55 @@ def _add_import(source: str, import_statement: str) -> str:
             break
 
     lines.insert(insert_idx, import_statement + "\n")
+    return "".join(lines)
+
+
+
+def _add_imports(source: str, import_statements: list[str]) -> str:
+    """Add multiple import statements to the source.
+
+    This helper batches insertion of multiple imports at once to avoid repeated
+    split/join operations that would be performed by inserting each import individually.
+    """
+    lines = source.splitlines(keepends=True)
+    insert_idx = 0
+
+    # Find the last import or package statement
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith(("import ", "package ")):
+            insert_idx = i + 1
+        elif stripped and not stripped.startswith("//") and not stripped.startswith("/*"):
+            # First non-import, non-comment line
+            if insert_idx == 0:
+                insert_idx = i
+            break
+
+    block = "".join(stmt + "\n" for stmt in import_statements)
+    lines.insert(insert_idx, block)
+    return "".join(lines)
+
+
+def _add_imports(source: str, import_statements: list[str]) -> str:
+    """Add multiple import statements to the source.
+
+    This helper batches insertion of multiple imports at once to avoid repeated
+    split/join operations that would be performed by inserting each import individually.
+    """
+    lines = source.splitlines(keepends=True)
+    insert_idx = 0
+
+    # Find the last import or package statement
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith(("import ", "package ")):
+            insert_idx = i + 1
+        elif stripped and not stripped.startswith("//") and not stripped.startswith("/*"):
+            # First non-import, non-comment line
+            if insert_idx == 0:
+                insert_idx = i
+            break
+
+    block = "".join(stmt + "\n" for stmt in import_statements)
+    lines.insert(insert_idx, block)
     return "".join(lines)
