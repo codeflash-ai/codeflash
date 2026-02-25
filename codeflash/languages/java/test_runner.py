@@ -1496,7 +1496,7 @@ def _run_maven_tests(
         # -am = also make dependencies
         # -DfailIfNoTests=false allows dependency modules without tests to pass
         # -DskipTests=false overrides any skipTests=true in pom.xml
-        cmd.extend(["-pl", test_module, "-am", "-DfailIfNoTests=false", "-DskipTests=false"])
+        cmd.extend(["-pl", test_module, "-am", "-DfailIfNoTests=false", "-Dsurefire.failIfNoSpecifiedTests=false", "-DskipTests=false"])
 
     if test_filter:
         # Validate test filter to prevent command injection
