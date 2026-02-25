@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import os
 from collections import defaultdict
 from functools import lru_cache
 from itertools import chain
@@ -21,7 +22,6 @@ from codeflash.languages.python.static_analysis.code_extractor import (
 )
 from codeflash.languages.python.static_analysis.line_profile_utils import ImportAdder
 from codeflash.models.models import FunctionParent
-import os
 
 if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
