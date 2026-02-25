@@ -8,9 +8,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * Zero-allocation, zero-contention per-line profiling data storage.
  *
  * <p>Each thread gets its own primitive {@code long[]} arrays for hit counts and self-time.
- * The hot path ({@link #hit(int)}) uses two {@link System#nanoTime()} calls — one at entry
- * to stop the previous line's clock, one at exit to start the current line's clock — so that
- * profiler overhead is excluded from line timings.
+ * The hot path ({@link #hit(int)}) performs only an array-index increment and a single
+ * {@link System#nanoTime()} call — no object allocations, no locks, no shared-state contention.
+ * Method entry/exit use a fresh {@code nanoTime()} after bookkeeping to exclude overhead.
  *
  * <p>A per-thread call stack tracks method entry/exit to:
  * <ul>
@@ -135,7 +135,13 @@ public final class ProfilerData {
     public static void hit(int globalId) {
         long now = System.nanoTime();
 
-        // Attribute elapsed time to the PREVIOUS line (stop its clock ASAP)
+        long[] hits = hitCounts.get();
+        if (globalId >= hits.length) {
+            hits = ensureCapacity(hitCounts, allHitArrays, globalId);
+        }
+        hits[globalId]++;
+
+        // Attribute elapsed time to the PREVIOUS line
         int[] lastId = lastLineId.get();
         long[] lastTime = lastLineTime.get();
         if (lastId[0] >= 0) {
@@ -146,14 +152,8 @@ public final class ProfilerData {
             times[lastId[0]] += now - lastTime[0];
         }
 
-        long[] hits = hitCounts.get();
-        if (globalId >= hits.length) {
-            hits = ensureCapacity(hitCounts, allHitArrays, globalId);
-        }
-        hits[globalId]++;
-
         lastId[0] = globalId;
-        lastTime[0] = System.nanoTime();
+        lastTime[0] = now;
     }
 
     /**
