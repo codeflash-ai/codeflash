@@ -1324,7 +1324,7 @@ public class CalculatorTest__perfinstrumented {
                 }
             }
         }
-        Object _cf_result1 = _cf_result1_1;
+        int _cf_result1 = (int)_cf_result1_1;
     }
 }
 """
