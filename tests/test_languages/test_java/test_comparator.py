@@ -1310,10 +1310,11 @@ class TestVoidFunctionComparison:
 
         assert equivalent is False
         assert len(diffs) == 2
-        assert diffs[0].scope == TestDiffScope.RETURN_VALUE
-        assert diffs[0].original_value == "[10, 20]"
-        assert diffs[0].candidate_value == "[10, 99]"
-        assert diffs[1].scope == TestDiffScope.DID_PASS
+        sorted_diffs = sorted(diffs, key=lambda d: d.scope.value)
+        assert sorted_diffs[0].scope == TestDiffScope.DID_PASS
+        assert sorted_diffs[1].scope == TestDiffScope.RETURN_VALUE
+        assert sorted_diffs[1].original_value == "[10, 20]"
+        assert sorted_diffs[1].candidate_value == "[10, 99]"
 
 
 @requires_java

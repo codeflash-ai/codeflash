@@ -62,6 +62,8 @@ class JavaSupport(LanguageSupport):
     def __init__(self) -> None:
         """Initialize Java support."""
         self._analyzer = get_java_analyzer()
+        self.line_profiler_agent_arg: str | None = None
+        self.line_profiler_warmup_iterations: int = 0
 
     @property
     def language(self) -> Language:
@@ -271,7 +273,7 @@ class JavaSupport(LanguageSupport):
 
     def compare_test_results(
         self, original_results_path: Path, candidate_results_path: Path, project_root: Path | None = None
-    ) -> tuple[bool, list]:
+    ) -> tuple[bool, list[Any]]:
         """Compare test results between original and candidate code."""
         return _compare_test_results(original_results_path, candidate_results_path, project_root=project_root)
 
@@ -383,35 +385,41 @@ class JavaSupport(LanguageSupport):
     def instrument_source_for_line_profiler(
         self, func_info: FunctionToOptimize, line_profiler_output_file: Path
     ) -> bool:
-        """Instrument source code for line profiling.
+        """Prepare line profiling via the bytecode-instrumentation agent.
+
+        Generates a config JSON that the Java agent uses at class-load time to
+        know which methods to instrument. The agent is loaded via -javaagent
+        when the JVM starts. The config includes warmup iterations so the agent
+        discards JIT warmup data before measurement.
 
         Args:
-            func_info: Function to instrument.
-            line_profiler_output_file: Path where profiling results will be written.
+            func_info: Function to profile.
+            line_profiler_output_file: Path where profiling results will be written by the agent.
 
         Returns:
-            True if instrumentation succeeded, False otherwise.
+            True if preparation succeeded, False otherwise.
 
         """
         from codeflash.languages.java.line_profiler import JavaLineProfiler
 
         try:
-            # Read source file
             source = func_info.file_path.read_text(encoding="utf-8")
 
-            # Instrument with line profiler
             profiler = JavaLineProfiler(output_file=line_profiler_output_file)
-            instrumented = profiler.instrument_source(source, func_info.file_path, [func_info], self._analyzer)
 
-            # Write instrumented source back
-            func_info.file_path.write_text(instrumented, encoding="utf-8")
+            config_path = line_profiler_output_file.with_suffix(".config.json")
+            profiler.generate_agent_config(
+                source=source, file_path=func_info.file_path, functions=[func_info], config_output_path=config_path
+            )
 
+            self.line_profiler_agent_arg = profiler.build_javaagent_arg(config_path)
+            self.line_profiler_warmup_iterations = profiler.warmup_iterations
             return True
         except Exception:
-            logger.exception("Failed to instrument %s for line profiling", func_info.function_name)
+            logger.exception("Failed to prepare line profiling for %s", func_info.function_name)
             return False
 
-    def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict:
+    def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict[str, Any]:
         """Parse line profiler output for Java.
 
         Args:
@@ -472,7 +480,7 @@ class JavaSupport(LanguageSupport):
         project_root: Path | None = None,
         line_profile_output_file: Path | None = None,
     ) -> tuple[Path, Any]:
-        """Run tests with line profiling enabled.
+        """Run tests with the profiler agent attached.
 
         Args:
             test_paths: TestFiles object containing test file information.
@@ -495,6 +503,7 @@ class JavaSupport(LanguageSupport):
             timeout=timeout,
             project_root=project_root,
             line_profile_output_file=line_profile_output_file,
+            javaagent_arg=self.line_profiler_agent_arg,
         )
 
 

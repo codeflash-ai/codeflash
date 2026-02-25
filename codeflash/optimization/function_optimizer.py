@@ -3245,9 +3245,6 @@ class FunctionOptimizer:
         if self.language_support is not None and hasattr(self.language_support, "instrument_source_for_line_profiler"):
             try:
                 line_profiler_output_path = get_run_tmp_file(Path("line_profiler_output.json"))
-                # NOTE: currently this handles single file only, add support to multi file instrumentation (or should it be kept for the main file only)
-                original_source = Path(self.function_to_optimize.file_path).read_text()
-                # Instrument source code
                 success = self.language_support.instrument_source_for_line_profiler(
                     func_info=self.function_to_optimize, line_profiler_output_file=line_profiler_output_path
                 )
@@ -3276,9 +3273,6 @@ class FunctionOptimizer:
             except Exception as e:
                 logger.warning(f"Failed to run line profiling: {e}")
                 return {"timings": {}, "unit": 0, "str_out": ""}
-            finally:
-                # restore original source
-                Path(self.function_to_optimize.file_path).write_text(original_source)
 
         logger.warning(f"Language support for {self.language_support.language} doesn't support line profiling")
         return {"timings": {}, "unit": 0, "str_out": ""}
