@@ -18,6 +18,10 @@ if TYPE_CHECKING:
 
     from tree_sitter import Node, Tree
 
+_FUNC_LIKE_NODE_TYPES: frozenset[str] = frozenset(
+    ("function_declaration", "function_expression", "arrow_function", "method_definition")
+)
+
 _FUNCTION_BODY_TYPES = frozenset(
     {
         "function_declaration",
@@ -1249,7 +1253,7 @@ class TreeSitterAnalyzer:
     def _node_has_return(self, node: Node) -> bool:
         """Recursively check if a node contains a return statement."""
         # Use an explicit stack to avoid recursion overhead while preserving traversal order.
-        func_types = ("function_declaration", "function_expression", "arrow_function", "method_definition")
+        func_types = _FUNC_LIKE_NODE_TYPES
         stack = [node]
         while stack:
             current = stack.pop()
@@ -1262,16 +1266,17 @@ class TreeSitterAnalyzer:
                 body_node = current.child_by_field_name("body")
                 if body_node:
                     # Push children in reverse so they are processed in original order
-                    children = body_node.children
-                    if children:
-                        stack.extend(reversed(children))
+                    body_children = body_node.children
+                    if body_children:
+                        stack.extend(reversed(body_children))
+                # Do not traverse other parts of the function node
                 # Do not traverse other parts of the function node
                 continue
 
             # General case: traverse all children
-            children = current.children
-            if children:
-                stack.extend(reversed(children))
+            child_nodes = current.children
+            if child_nodes:
+                stack.extend(reversed(child_nodes))
 
         return False
 
