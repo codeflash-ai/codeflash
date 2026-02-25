@@ -112,6 +112,11 @@ def java_project(tmp_path: Path):
 
     yield tmp_path, src_dir, test_dir
 
+    # Clean up any SQLite files left in the shared temp dir to prevent cross-test contamination
+    from codeflash.code_utils.code_utils import get_run_tmp_file
+    for i in range(10):
+        get_run_tmp_file(Path(f"test_return_values_{i}.sqlite")).unlink(missing_ok=True)
+
     current_module._current_language = None
     set_current_language(Language.PYTHON)
 

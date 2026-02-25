@@ -151,13 +151,19 @@ public class CalculatorTest__perfinstrumented {
         long _cf_end1_1 = -1;
         long _cf_start1_1 = 0;
         byte[] _cf_serializedResult1_1 = null;
+        java.io.ByteArrayOutputStream _cf_stdoutCapture1_1 = new java.io.ByteArrayOutputStream();
+        java.io.PrintStream _cf_origOut1_1 = System.out;
+        String _cf_stdout1_1 = null;
         System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":1" + "######$!");
         try {
+            System.setOut(new java.io.PrintStream(_cf_stdoutCapture1_1));
             _cf_start1_1 = System.nanoTime();
             _cf_result1_1 = calc.add(2, 2);
             _cf_end1_1 = System.nanoTime();
             _cf_serializedResult1_1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);
         } finally {
+            System.setOut(_cf_origOut1_1);
+            try { _cf_stdout1_1 = _cf_stdoutCapture1_1.toString("UTF-8"); } catch (Exception _cf_encEx1_1) {}
             long _cf_end1_1_finally = System.nanoTime();
             long _cf_dur1_1 = (_cf_end1_1 != -1 ? _cf_end1_1 : _cf_end1_1_finally) - _cf_start1_1;
             System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + "1" + "######!");
@@ -170,9 +176,9 @@ public class CalculatorTest__perfinstrumented {
                             _cf_stmt1_1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
                                 "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
                                 "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
-                                "runtime INTEGER, return_value BLOB, verification_type TEXT)");
+                                "runtime INTEGER, return_value BLOB, verification_type TEXT, stdout TEXT)");
                         }
-                        String _cf_sql1_1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        String _cf_sql1_1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                         try (PreparedStatement _cf_pstmt1_1 = _cf_conn1_1.prepareStatement(_cf_sql1_1)) {
                             _cf_pstmt1_1.setString(1, _cf_mod1);
                             _cf_pstmt1_1.setString(2, _cf_cls1);
@@ -183,6 +189,7 @@ public class CalculatorTest__perfinstrumented {
                             _cf_pstmt1_1.setLong(7, _cf_dur1_1);
                             _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
                             _cf_pstmt1_1.setString(9, "function_call");
+                            _cf_pstmt1_1.setString(10, _cf_stdout1_1);
                             _cf_pstmt1_1.executeUpdate();
                         }
                     }
@@ -278,13 +285,19 @@ public class FibonacciTest__perfinstrumented {
         long _cf_end2_1 = -1;
         long _cf_start2_1 = 0;
         byte[] _cf_serializedResult2_1 = null;
+        java.io.ByteArrayOutputStream _cf_stdoutCapture2_1 = new java.io.ByteArrayOutputStream();
+        java.io.PrintStream _cf_origOut2_1 = System.out;
+        String _cf_stdout2_1 = null;
         System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":1" + "######$!");
         try {
+            System.setOut(new java.io.PrintStream(_cf_stdoutCapture2_1));
             _cf_start2_1 = System.nanoTime();
             _cf_result2_1 = Fibonacci.fibonacci(0);
             _cf_end2_1 = System.nanoTime();
             _cf_serializedResult2_1 = com.codeflash.Serializer.serialize((Object) _cf_result2_1);
         } finally {
+            System.setOut(_cf_origOut2_1);
+            try { _cf_stdout2_1 = _cf_stdoutCapture2_1.toString("UTF-8"); } catch (Exception _cf_encEx2_1) {}
             long _cf_end2_1_finally = System.nanoTime();
             long _cf_dur2_1 = (_cf_end2_1 != -1 ? _cf_end2_1 : _cf_end2_1_finally) - _cf_start2_1;
             System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + "1" + "######!");
@@ -297,9 +310,9 @@ public class FibonacciTest__perfinstrumented {
                             _cf_stmt2_1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
                                 "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
                                 "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
-                                "runtime INTEGER, return_value BLOB, verification_type TEXT)");
+                                "runtime INTEGER, return_value BLOB, verification_type TEXT, stdout TEXT)");
                         }
-                        String _cf_sql2_1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        String _cf_sql2_1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                         try (PreparedStatement _cf_pstmt2_1 = _cf_conn2_1.prepareStatement(_cf_sql2_1)) {
                             _cf_pstmt2_1.setString(1, _cf_mod2);
                             _cf_pstmt2_1.setString(2, _cf_cls2);
@@ -310,6 +323,7 @@ public class FibonacciTest__perfinstrumented {
                             _cf_pstmt2_1.setLong(7, _cf_dur2_1);
                             _cf_pstmt2_1.setBytes(8, _cf_serializedResult2_1);
                             _cf_pstmt2_1.setString(9, "function_call");
+                            _cf_pstmt2_1.setString(10, _cf_stdout2_1);
                             _cf_pstmt2_1.executeUpdate();
                         }
                     }
@@ -408,13 +422,19 @@ public class FibonacciTest__perfinstrumented {
         long _cf_end2_1 = -1;
         long _cf_start2_1 = 0;
         byte[] _cf_serializedResult2_1 = null;
+        java.io.ByteArrayOutputStream _cf_stdoutCapture2_1 = new java.io.ByteArrayOutputStream();
+        java.io.PrintStream _cf_origOut2_1 = System.out;
+        String _cf_stdout2_1 = null;
         System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":1" + "######$!");
         try {
+            System.setOut(new java.io.PrintStream(_cf_stdoutCapture2_1));
             _cf_start2_1 = System.nanoTime();
             _cf_result2_1 = Fibonacci.fibonacci(0);
             _cf_end2_1 = System.nanoTime();
             _cf_serializedResult2_1 = com.codeflash.Serializer.serialize((Object) _cf_result2_1);
         } finally {
+            System.setOut(_cf_origOut2_1);
+            try { _cf_stdout2_1 = _cf_stdoutCapture2_1.toString("UTF-8"); } catch (Exception _cf_encEx2_1) {}
             long _cf_end2_1_finally = System.nanoTime();
             long _cf_dur2_1 = (_cf_end2_1 != -1 ? _cf_end2_1 : _cf_end2_1_finally) - _cf_start2_1;
             System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + "1" + "######!");
@@ -427,9 +447,9 @@ public class FibonacciTest__perfinstrumented {
                             _cf_stmt2_1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
                                 "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
                                 "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
-                                "runtime INTEGER, return_value BLOB, verification_type TEXT)");
+                                "runtime INTEGER, return_value BLOB, verification_type TEXT, stdout TEXT)");
                         }
-                        String _cf_sql2_1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        String _cf_sql2_1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                         try (PreparedStatement _cf_pstmt2_1 = _cf_conn2_1.prepareStatement(_cf_sql2_1)) {
                             _cf_pstmt2_1.setString(1, _cf_mod2);
                             _cf_pstmt2_1.setString(2, _cf_cls2);
@@ -440,6 +460,7 @@ public class FibonacciTest__perfinstrumented {
                             _cf_pstmt2_1.setLong(7, _cf_dur2_1);
                             _cf_pstmt2_1.setBytes(8, _cf_serializedResult2_1);
                             _cf_pstmt2_1.setString(9, "function_call");
+                            _cf_pstmt2_1.setString(10, _cf_stdout2_1);
                             _cf_pstmt2_1.executeUpdate();
                         }
                     }
@@ -763,13 +784,19 @@ public class MyTest {
         long _cf_end1_1 = -1;
         long _cf_start1_1 = 0;
         byte[] _cf_serializedResult1_1 = null;
+        java.io.ByteArrayOutputStream _cf_stdoutCapture1_1 = new java.io.ByteArrayOutputStream();
+        java.io.PrintStream _cf_origOut1_1 = System.out;
+        String _cf_stdout1_1 = null;
         System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":1" + "######$!");
         try {
+            System.setOut(new java.io.PrintStream(_cf_stdoutCapture1_1));
             _cf_start1_1 = System.nanoTime();
             _cf_result1_1 = obj.foo();
             _cf_end1_1 = System.nanoTime();
             _cf_serializedResult1_1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);
         } finally {
+            System.setOut(_cf_origOut1_1);
+            try { _cf_stdout1_1 = _cf_stdoutCapture1_1.toString("UTF-8"); } catch (Exception _cf_encEx1_1) {}
             long _cf_end1_1_finally = System.nanoTime();
             long _cf_dur1_1 = (_cf_end1_1 != -1 ? _cf_end1_1 : _cf_end1_1_finally) - _cf_start1_1;
             System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + "1" + "######!");
@@ -782,9 +809,9 @@ public class MyTest {
                             _cf_stmt1_1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
                                 "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
                                 "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
-                                "runtime INTEGER, return_value BLOB, verification_type TEXT)");
+                                "runtime INTEGER, return_value BLOB, verification_type TEXT, stdout TEXT)");
                         }
-                        String _cf_sql1_1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        String _cf_sql1_1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                         try (PreparedStatement _cf_pstmt1_1 = _cf_conn1_1.prepareStatement(_cf_sql1_1)) {
                             _cf_pstmt1_1.setString(1, _cf_mod1);
                             _cf_pstmt1_1.setString(2, _cf_cls1);
@@ -795,6 +822,7 @@ public class MyTest {
                             _cf_pstmt1_1.setLong(7, _cf_dur1_1);
                             _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
                             _cf_pstmt1_1.setString(9, "function_call");
+                            _cf_pstmt1_1.setString(10, _cf_stdout1_1);
                             _cf_pstmt1_1.executeUpdate();
                         }
                     }
@@ -1284,13 +1312,19 @@ public class CalculatorTest__perfinstrumented {
         long _cf_end1_1 = -1;
         long _cf_start1_1 = 0;
         byte[] _cf_serializedResult1_1 = null;
+        java.io.ByteArrayOutputStream _cf_stdoutCapture1_1 = new java.io.ByteArrayOutputStream();
+        java.io.PrintStream _cf_origOut1_1 = System.out;
+        String _cf_stdout1_1 = null;
         System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":1" + "######$!");
         try {
+            System.setOut(new java.io.PrintStream(_cf_stdoutCapture1_1));
             _cf_start1_1 = System.nanoTime();
             _cf_result1_1 = new Calculator().add(2, 2);
             _cf_end1_1 = System.nanoTime();
             _cf_serializedResult1_1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);
         } finally {
+            System.setOut(_cf_origOut1_1);
+            try { _cf_stdout1_1 = _cf_stdoutCapture1_1.toString("UTF-8"); } catch (Exception _cf_encEx1_1) {}
             long _cf_end1_1_finally = System.nanoTime();
             long _cf_dur1_1 = (_cf_end1_1 != -1 ? _cf_end1_1 : _cf_end1_1_finally) - _cf_start1_1;
             System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + "1" + "######!");
@@ -1303,9 +1337,9 @@ public class CalculatorTest__perfinstrumented {
                             _cf_stmt1_1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
                                 "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
                                 "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
-                                "runtime INTEGER, return_value BLOB, verification_type TEXT)");
+                                "runtime INTEGER, return_value BLOB, verification_type TEXT, stdout TEXT)");
                         }
-                        String _cf_sql1_1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        String _cf_sql1_1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                         try (PreparedStatement _cf_pstmt1_1 = _cf_conn1_1.prepareStatement(_cf_sql1_1)) {
                             _cf_pstmt1_1.setString(1, _cf_mod1);
                             _cf_pstmt1_1.setString(2, _cf_cls1);
@@ -1316,6 +1350,7 @@ public class CalculatorTest__perfinstrumented {
                             _cf_pstmt1_1.setLong(7, _cf_dur1_1);
                             _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
                             _cf_pstmt1_1.setString(9, "function_call");
+                            _cf_pstmt1_1.setString(10, _cf_stdout1_1);
                             _cf_pstmt1_1.executeUpdate();
                         }
                     }
@@ -1935,6 +1970,11 @@ class TestRunAndParseTests:
 
         yield tmp_path, src_dir, test_dir
 
+        # Clean up any SQLite files left in the shared temp dir to prevent cross-test contamination
+        from codeflash.code_utils.code_utils import get_run_tmp_file
+        for i in range(10):
+            get_run_tmp_file(Path(f"test_return_values_{i}.sqlite")).unlink(missing_ok=True)
+
         # Reset language back to Python
         current_module._current_language = None
         set_current_language(Language.PYTHON)
@@ -2507,13 +2547,19 @@ public class CounterTest__perfinstrumented {
         long _cf_end1_1 = -1;
         long _cf_start1_1 = 0;
         byte[] _cf_serializedResult1_1 = null;
+        java.io.ByteArrayOutputStream _cf_stdoutCapture1_1 = new java.io.ByteArrayOutputStream();
+        java.io.PrintStream _cf_origOut1_1 = System.out;
+        String _cf_stdout1_1 = null;
         System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":1" + "######$!");
         try {
+            System.setOut(new java.io.PrintStream(_cf_stdoutCapture1_1));
             _cf_start1_1 = System.nanoTime();
             _cf_result1_1 = counter.increment();
             _cf_end1_1 = System.nanoTime();
             _cf_serializedResult1_1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);
         } finally {
+            System.setOut(_cf_origOut1_1);
+            try { _cf_stdout1_1 = _cf_stdoutCapture1_1.toString("UTF-8"); } catch (Exception _cf_encEx1_1) {}
             long _cf_end1_1_finally = System.nanoTime();
             long _cf_dur1_1 = (_cf_end1_1 != -1 ? _cf_end1_1 : _cf_end1_1_finally) - _cf_start1_1;
             System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + "1" + "######!");
@@ -2526,9 +2572,9 @@ public class CounterTest__perfinstrumented {
                             _cf_stmt1_1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
                                 "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
                                 "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
-                                "runtime INTEGER, return_value BLOB, verification_type TEXT)");
+                                "runtime INTEGER, return_value BLOB, verification_type TEXT, stdout TEXT)");
                         }
-                        String _cf_sql1_1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        String _cf_sql1_1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                         try (PreparedStatement _cf_pstmt1_1 = _cf_conn1_1.prepareStatement(_cf_sql1_1)) {
                             _cf_pstmt1_1.setString(1, _cf_mod1);
                             _cf_pstmt1_1.setString(2, _cf_cls1);
@@ -2539,6 +2585,7 @@ public class CounterTest__perfinstrumented {
                             _cf_pstmt1_1.setLong(7, _cf_dur1_1);
                             _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
                             _cf_pstmt1_1.setString(9, "function_call");
+                            _cf_pstmt1_1.setString(10, _cf_stdout1_1);
                             _cf_pstmt1_1.executeUpdate();
                         }
                     }
@@ -2633,7 +2680,7 @@ public class CounterTest__perfinstrumented {
 
         for row in rows:
             test_module_path, test_class_name, test_function_name, function_getting_tested, \
-                loop_index, iteration_id, runtime, return_value, verification_type = row
+                loop_index, iteration_id, runtime, return_value, verification_type, stdout = row
 
             # Verify fields
             assert test_module_path == "CounterTest"
