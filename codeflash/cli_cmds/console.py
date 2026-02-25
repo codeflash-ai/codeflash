@@ -468,13 +468,14 @@ def subagent_log_optimization_result(
         if new_code[path] != original_code.get(path, ""):
             xml.append(f'  <optimized-code file="{escape(str(path))}">{escape(new_code[path])}</optimized-code>')
     xml.append("  <action>")
-    xml.append("    Present this optimization to the user using AskUserQuestion.")
-    xml.append("    Show the function name, performance improvement, and explanation as the question text.")
-    xml.append("    Provide two options: 'Apply' (write the optimized code to the file) and 'Reject' (do nothing).")
+    xml.append("    First, present a short summary: function name, performance improvement, and explanation.")
     xml.append(
-        "    Put the full diff in the 'Apply' option's markdown preview so the user can review the exact changes."
+        "    Then, for each optimized-code element, use the Write tool to write the optimized code to the file."
     )
-    xml.append("    If the user chooses 'Apply', write the content from optimized-code to the corresponding file.")
+    xml.append(
+        "    This will surface the diff in the user's IDE (VS Code, Cursor, Windsurf, etc.) for review."
+    )
+    xml.append("    The user can accept or reject the changes through the IDE's native diff view.")
     xml.append("  </action>")
     xml.append("</codeflash-optimization>")
 
