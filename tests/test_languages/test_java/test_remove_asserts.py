@@ -41,7 +41,7 @@ import static org.junit.Assert.*;
 public class BitSetTest {
     @Test
     public void testGet_IndexZero_ReturnsFalse() {
-        Object _cf_result1 = instance.get(0);
+        boolean _cf_result1 = instance.get(0);
     }
 }
 """
@@ -67,7 +67,7 @@ import static org.junit.Assert.*;
 public class BitSetTest {
     @Test
     public void testGet_SetBit_DetectedTrue() {
-        Object _cf_result1 = bs.get(67);
+        boolean _cf_result1 = bs.get(67);
     }
 }
 """
@@ -93,7 +93,7 @@ import static org.junit.Assert.*;
 public class FibonacciTest {
     @Test
     public void testFibonacci() {
-        Object _cf_result1 = Fibonacci.fibonacci(10);
+        int _cf_result1 = Fibonacci.fibonacci(10);
     }
 }
 """
@@ -121,7 +121,7 @@ public class CalculatorTest {
     @Test
     public void testAdd() {
         Calculator calc = new Calculator();
-        Object _cf_result1 = calc.add(2, 2);
+        int _cf_result1 = calc.add(2, 2);
     }
 }
 """
@@ -199,7 +199,7 @@ import static org.junit.Assert.*;
 public class CalculatorTest {
     @Test
     public void testSubtract() {
-        Object _cf_result1 = calc.subtract(5, 3);
+        int _cf_result1 = calc.subtract(5, 3);
     }
 }
 """
@@ -251,7 +251,7 @@ import org.junit.Assert;
 public class CalculatorTest {
     @Test
     public void testAdd() {
-        Object _cf_result1 = calc.add(2, 2);
+        int _cf_result1 = calc.add(2, 2);
     }
 }
 """
@@ -298,9 +298,9 @@ import static org.junit.jupiter.api.Assertions.*;
 public class FibonacciTest {
     @Test
     void testFibonacci() {
-        Object _cf_result1 = Fibonacci.fibonacci(0);
-        Object _cf_result2 = Fibonacci.fibonacci(1);
-        Object _cf_result3 = Fibonacci.fibonacci(10);
+        int _cf_result1 = Fibonacci.fibonacci(0);
+        int _cf_result2 = Fibonacci.fibonacci(1);
+        int _cf_result3 = Fibonacci.fibonacci(10);
     }
 }
 """
@@ -326,7 +326,7 @@ import org.junit.jupiter.api.Assertions;
 public class FibonacciTest {
     @Test
     void testFibonacci() {
-        Object _cf_result1 = Fibonacci.fibonacci(10);
+        int _cf_result1 = Fibonacci.fibonacci(10);
     }
 }
 """
@@ -485,7 +485,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class FibonacciTest {
     @Test
     void testIsFibonacci() {
-        Object _cf_result1 = Fibonacci.isFibonacci(5);
+        boolean _cf_result1 = Fibonacci.isFibonacci(5);
     }
 }
 """
@@ -511,7 +511,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class FibonacciTest {
     @Test
     void testIsNotFibonacci() {
-        Object _cf_result1 = Fibonacci.isFibonacci(4);
+        boolean _cf_result1 = Fibonacci.isFibonacci(4);
     }
 }
 """
@@ -709,7 +709,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class FibonacciTest {
     @Test
     void testConsecutive() {
-        Object _cf_result1 = Fibonacci.areConsecutiveFibonacci(Fibonacci.fibonacci(5), Fibonacci.fibonacci(6));
+        boolean _cf_result1 = Fibonacci.areConsecutiveFibonacci(Fibonacci.fibonacci(5), Fibonacci.fibonacci(6));
     }
 }
 """
@@ -739,11 +739,11 @@ import static org.junit.jupiter.api.Assertions.*;
 public class FibonacciTest {
     @Test
     void testMultiple() {
-        Object _cf_result1 = Fibonacci.fibonacci(0);
-        Object _cf_result2 = Fibonacci.fibonacci(1);
-        Object _cf_result3 = Fibonacci.fibonacci(2);
-        Object _cf_result4 = Fibonacci.fibonacci(3);
-        Object _cf_result5 = Fibonacci.fibonacci(5);
+        int _cf_result1 = Fibonacci.fibonacci(0);
+        int _cf_result2 = Fibonacci.fibonacci(1);
+        int _cf_result3 = Fibonacci.fibonacci(2);
+        int _cf_result4 = Fibonacci.fibonacci(3);
+        int _cf_result5 = Fibonacci.fibonacci(5);
     }
 }
 """
@@ -774,7 +774,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class SetupTest {
     @Test
     void testSetup() {
-        Object _cf_result1 = Fibonacci.fibonacci(10);
+        int _cf_result1 = Fibonacci.fibonacci(10);
     }
 }
 """
@@ -829,7 +829,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class FibonacciTest {
     @Test
     void testFibonacci() {
-        Object _cf_result1 = Fibonacci.fibonacci(10);
+        int _cf_result1 = Fibonacci.fibonacci(10);
     }
 }
 """
@@ -855,7 +855,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class ParserTest {
     @Test
     void testParse() {
-        Object _cf_result1 = parser.parse("input(1)");
+        String _cf_result1 = parser.parse("input(1)");
     }
 }
 """
@@ -911,7 +911,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class FibonacciTest {
     @Test
     void testIndex() {
-        Object _cf_result1 = Fibonacci.fibonacciIndex(Fibonacci.fibonacci(10));
+        int _cf_result1 = Fibonacci.fibonacciIndex(Fibonacci.fibonacci(10));
     }
 }
 """
@@ -937,7 +937,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class FibonacciTest {
     @Test
     void testUpTo() {
-        Object _cf_result1 = Fibonacci.fibonacciUpTo(20);
+        int _cf_result1 = Fibonacci.fibonacciUpTo(20);
     }
 }
 """
@@ -1053,24 +1053,24 @@ public class BitSetTest {
 
     @Test
     public void testGet_IndexZero_ReturnsFalse() {
-        Object _cf_result1 = instance.get(0);
+        boolean _cf_result1 = instance.get(0);
     }
 
     @Test
     public void testGet_SpecificIndexWithinRange_ReturnsFalse() {
-        Object _cf_result2 = instance.get(100);
+        boolean _cf_result2 = instance.get(100);
     }
 
     @Test
     public void testGet_LastIndexOfInitialRange_ReturnsFalse() {
         int lastIndex = 16 * BitSet.BITS_PER_WORD - 1;
-        Object _cf_result3 = instance.get(lastIndex);
+        boolean _cf_result3 = instance.get(lastIndex);
     }
 
     @Test
     public void testGet_IndexBeyondAllocated_ReturnsFalse() {
         int beyond = 16 * BitSet.BITS_PER_WORD;
-        Object _cf_result4 = instance.get(beyond);
+        boolean _cf_result4 = instance.get(beyond);
     }
 
     @Test(expected = ArrayIndexOutOfBoundsException.class)
@@ -1086,22 +1086,22 @@ public class BitSetTest {
         long[] words = new long[2];
         words[1] = 1L << 3;
         wordsField.set(bs, words);
-        Object _cf_result5 = bs.get(64 + 3);
+        boolean _cf_result5 = bs.get(64 + 3);
     }
 
     @Test
     public void testGet_LargeIndexDoesNotThrow_ReturnsFalse() {
-        Object _cf_result6 = instance.get(Integer.MAX_VALUE);
+        boolean _cf_result6 = instance.get(Integer.MAX_VALUE);
     }
 
     @Test
     public void testGet_BitBoundaryWordEdge63_ReturnsFalse() {
-        Object _cf_result7 = instance.get(63);
+        boolean _cf_result7 = instance.get(63);
     }
 
     @Test
     public void testGet_BitBoundaryWordEdge64_ReturnsFalse() {
-        Object _cf_result8 = instance.get(64);
+        boolean _cf_result8 = instance.get(64);
     }
 
     @Test
@@ -1109,7 +1109,7 @@ public class BitSetTest {
         int nBits = 1_000_000;
         BitSet big = new BitSet(nBits);
         int last = nBits - 1;
-        Object _cf_result9 = big.get(last);
+        boolean _cf_result9 = big.get(last);
     }
 }
 """
@@ -1240,15 +1240,15 @@ import static org.junit.jupiter.api.Assertions.*;
 public class FibTest {
     @Test
     void testA() {
-        Object _cf_result1 = Fibonacci.fibonacci(0);
+        int _cf_result1 = Fibonacci.fibonacci(0);
     }
     @Test
     void testB() {
-        Object _cf_result2 = Fibonacci.fibonacci(10);
+        int _cf_result2 = Fibonacci.fibonacci(10);
     }
     @Test
     void testC() {
-        Object _cf_result3 = Fibonacci.fibonacci(1);
+        int _cf_result3 = Fibonacci.fibonacci(1);
     }
 }
 """
@@ -1329,7 +1329,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class FibTest {
     @Test
     void test() {
-        Object _cf_result1 = Fibonacci.fibonacci(0);
+        int _cf_result1 = Fibonacci.fibonacci(0);
     }
 }
 """
@@ -1362,11 +1362,11 @@ import static org.junit.jupiter.api.Assertions.*;
 public class CalcTest {
     @Test
     void test() {
-        Object _cf_result1 = engine.compute(1);
-        Object _cf_result2 = engine.compute(2);
-        Object _cf_result3 = engine.compute(3);
-        Object _cf_result4 = engine.compute(4);
-        Object _cf_result5 = engine.compute(5);
+        int _cf_result1 = engine.compute(1);
+        int _cf_result2 = engine.compute(2);
+        int _cf_result3 = engine.compute(3);
+        int _cf_result4 = engine.compute(4);
+        int _cf_result5 = engine.compute(5);
     }
 }
 """
@@ -1400,8 +1400,8 @@ import static org.junit.jupiter.api.Assertions.*;
 public class FibTest {
     @Test
     void test() {
-        Object _cf_result1 = Fibonacci.fibonacci(0);
-        Object _cf_result2 = Fibonacci.fibonacci(1);
+        int _cf_result1 = Fibonacci.fibonacci(0);
+        int _cf_result2 = Fibonacci.fibonacci(1);
     }
 }
 """
@@ -1461,7 +1461,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class FibTest {
     @Test
     void test() {
-        Object _cf_result1 = Fibonacci.fibonacci(10);
+        int _cf_result1 = Fibonacci.fibonacci(10);
     }
 }
 """
@@ -1489,8 +1489,8 @@ import static org.junit.jupiter.api.Assertions.*;
 public class CalcTest {
     @Test
     void test() {
-        Object _cf_result1 = calc.add(1, 2);
-        Object _cf_result2 = calc.add(3, 4);
+        int _cf_result1 = calc.add(1, 2);
+        int _cf_result2 = calc.add(3, 4);
     }
 }
 """
@@ -1546,12 +1546,12 @@ import static org.junit.jupiter.api.Assertions.*;
 public class FibTest {
     @Test
     void test1() {
-        Object _cf_result1 = Fibonacci.fibonacci(0);
+        int _cf_result1 = Fibonacci.fibonacci(0);
     }
 
     @Test
     void test2() {
-        Object _cf_result2 = Fibonacci.fibonacci(10);
+        int _cf_result2 = Fibonacci.fibonacci(10);
     }
 }
 """
@@ -1784,9 +1784,9 @@ public class FibonacciTest {
 
     @Test
     void testFibonacci() {
-        Object _cf_result1 = Fibonacci.fibonacci(0);
-        Object _cf_result2 = Fibonacci.fibonacci(1);
-        Object _cf_result3 = Fibonacci.fibonacci(5);
+        int _cf_result1 = Fibonacci.fibonacci(0);
+        int _cf_result2 = Fibonacci.fibonacci(1);
+        int _cf_result3 = Fibonacci.fibonacci(5);
     }
 
     @Test
@@ -1846,7 +1846,7 @@ public class CalcTest {
     void testAdd() {
         Calculator calc = new Calculator();
         int result = calc.setup();
-        Object _cf_result1 = calc.add(2, 3);
+        int _cf_result1 = calc.add(2, 3);
     }
 }
 """
@@ -1902,7 +1902,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class MixedTest {
     @Test
     void test() {
-        Object _cf_result1 = obj.target(1);
+        int _cf_result1 = obj.target(1);
     }
 }
 """
