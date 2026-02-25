@@ -904,11 +904,11 @@ class JavaAssertTransformer:
         method = assertion.assertion_method
 
         # assertTrue/assertFalse always deal with boolean values
-        if method in ("assertTrue", "assertFalse"):
+        if method == "assertTrue" or method == "assertFalse":
             return "boolean"
 
         # assertNull/assertNotNull — keep Object (reference type)
-        if method in ("assertNull", "assertNotNull"):
+        if method == "assertNull" or method == "assertNotNull":
             return "Object"
 
         # For assertEquals/assertNotEquals/assertSame, try to infer from the expected literal
@@ -1039,17 +1039,31 @@ class JavaAssertTransformer:
         return_type = self._infer_return_type(assertion)
 
         # Generate capture statements for each target call
-        replacements = []
+        replacements: list[str] = []
         # For the first replacement, use the full leading whitespace
         # For subsequent ones, strip leading newlines to avoid extra blank lines
-        base_indent = assertion.leading_whitespace.lstrip("\n\r")
-        for i, call in enumerate(assertion.target_calls):
-            self.invocation_counter += 1
-            var_name = f"_cf_result{self.invocation_counter}"
-            if i == 0:
-                replacements.append(f"{assertion.leading_whitespace}{return_type} {var_name} = {call.full_call};")
-            else:
+        leading_ws = assertion.leading_whitespace
+        base_indent = leading_ws.lstrip("\n\r")
+
+        # Use a local counter to minimize attribute write overhead in the loop.
+        inv = self.invocation_counter
+
+        calls = assertion.target_calls
+        # Handle first call explicitly to avoid a per-iteration branch
+        if calls:
+            inv += 1
+            var_name = "_cf_result" + str(inv)
+            replacements.append(f"{leading_ws}{return_type} {var_name} = {calls[0].full_call};")
+
+            # Handle remaining calls
+            for call in calls[1:]:
+                inv += 1
+                var_name = "_cf_result" + str(inv)
                 replacements.append(f"{base_indent}{return_type} {var_name} = {call.full_call};")
+
+
+        # Write back the counter
+        self.invocation_counter = inv
 
         return "\n".join(replacements)
 
@@ -1068,8 +1082,10 @@ class JavaAssertTransformer:
             try { code(); } catch (IllegalArgumentException _cf_caught1) { ex = _cf_caught1; } catch (Exception _cf_ignored1) {}
 
         """
-        self.invocation_counter += 1
-        counter = self.invocation_counter
+        # Increment invocation counter once for this exception handling
+        inv = self.invocation_counter + 1
+        self.invocation_counter = inv
+        counter = inv
         ws = assertion.leading_whitespace
         base_indent = ws.lstrip("\n\r")
 
