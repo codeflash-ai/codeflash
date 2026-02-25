@@ -616,6 +616,15 @@ class Optimizer:
             globally_ranked_functions = self.rank_all_functions_globally(
                 file_to_funcs_to_optimize, trace_file_path, call_graph=resolver
             )
+
+            # compute callee counts for all functions to optimize
+            callee_counts: dict[tuple[Path, str], int] = {}
+            if resolver is not None:
+                file_to_qns: dict[Path, set[str]] = defaultdict(set)
+                for fp, func in globally_ranked_functions:
+                    file_to_qns[fp].add(func.qualified_name)
+                callee_counts = resolver.count_callees_per_function(dict(file_to_qns))
+
             # Cache for module preparation (avoid re-parsing same files)
             prepared_modules: dict[Path, tuple[dict[Path, ValidCode], ast.Module | None]] = {}
 
@@ -632,9 +641,13 @@ class Optimizer:
                 validated_original_code, original_module_ast = prepared_modules[original_module_path]
 
                 function_iterator_count = i + 1
+                ref_suffix = ""
+                if resolver is not None:
+                    ref_count = callee_counts.get((original_module_path, function_to_optimize.qualified_name), 0)
+                    ref_suffix = f" [{ref_count} references]"
                 logger.info(
                     f"Optimizing function {function_iterator_count} of {len(globally_ranked_functions)}: "
-                    f"{function_to_optimize.qualified_name} (in {original_module_path.name})"
+                    f"{function_to_optimize.qualified_name} (in {original_module_path.name}){ref_suffix}"
                 )
                 console.rule()
                 function_optimizer = None
