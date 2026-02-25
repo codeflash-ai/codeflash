@@ -941,15 +941,15 @@ class JavaAssertTransformer:
         elif args_str.endswith(")"):
             args_str = args_str[:-1]
 
-        # Split top-level args (respecting parens, strings, generics)
-        args = self._split_top_level_args(args_str)
-        if not args:
+        # Fast-path: only extract the first top-level argument instead of splitting all arguments.
+        first_arg = self._extract_first_arg(args_str)
+        if not first_arg:
             return "Object"
 
         # assertEquals has (expected, actual) or (expected, actual, message/delta)
         # Some overloads have (message, expected, actual) in JUnit 4 but JUnit 5 uses (expected, actual[, message])
         # Try the first argument as the expected value
-        expected = args[0].strip()
+        expected = first_arg.strip()
 
         return self._type_from_literal(expected)
 
@@ -1123,6 +1123,58 @@ class JavaAssertTransformer:
 
         # Fallback: comment out the assertion
         return f"{ws}// Removed assertThrows: could not extract callable"
+
+    def _extract_first_arg(self, args_str: str) -> str | None:
+        """Extract the first top-level argument from args_str.
+
+        This is a lightweight alternative to splitting all top-level arguments;
+        it stops at the first top-level comma, respects nested delimiters and strings,
+        and avoids constructing the full argument list for better performance.
+        """
+        n = len(args_str)
+        i = 0
+
+        # skip leading whitespace
+        while i < n and args_str[i].isspace():
+            i += 1
+        if i >= n:
+            return None
+
+        depth = 0
+        in_string = False
+        string_char = ""
+        cur: list[str] = []
+
+        while i < n:
+            ch = args_str[i]
+
+            if in_string:
+                cur.append(ch)
+                if ch == "\\" and i + 1 < n:
+                    i += 1
+                    cur.append(args_str[i])
+                elif ch == string_char:
+                    in_string = False
+            elif ch in ('"', "'"):
+                in_string = True
+                string_char = ch
+                cur.append(ch)
+            elif ch in ("(", "<", "[", "{"):
+                depth += 1
+                cur.append(ch)
+            elif ch in (")", ">", "]", "}"):
+                depth -= 1
+                cur.append(ch)
+            elif ch == "," and depth == 0:
+                break
+            else:
+                cur.append(ch)
+            i += 1
+
+        # Trim trailing whitespace from the extracted argument
+        if not cur:
+            return None
+        return "".join(cur).rstrip()
 
 
 def transform_java_assertions(source: str, function_name: str, qualified_name: str | None = None) -> str:
