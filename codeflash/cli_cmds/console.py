@@ -469,12 +469,8 @@ def subagent_log_optimization_result(
             xml.append(f'  <optimized-code file="{escape(str(path))}">{escape(new_code[path])}</optimized-code>')
     xml.append("  <action>")
     xml.append("    First, present a short summary: function name, performance improvement, and explanation.")
-    xml.append(
-        "    Then, for each optimized-code element, use the Write tool to write the optimized code to the file."
-    )
-    xml.append(
-        "    This will surface the diff in the user's IDE (VS Code, Cursor, Windsurf, etc.) for review."
-    )
+    xml.append("    Then, for each optimized-code element, use the Write tool to write the optimized code to the file.")
+    xml.append("    This will surface the diff in the user's IDE (VS Code, Cursor, Windsurf, etc.) for review.")
     xml.append("    The user can accept or reject the changes through the IDE's native diff view.")
     xml.append("  </action>")
     xml.append("</codeflash-optimization>")
