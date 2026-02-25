@@ -26,12 +26,12 @@ class PrComment:
 
     def to_json(self) -> dict[str, Union[str, int, dict[str, dict[str, int]], list[BenchmarkDetail], None]]:
         report_table: dict[str, dict[str, int]] = {}
-        for test_type, result in self.winning_behavior_test_results.get_test_pass_fail_report_by_type().items():
+        for test_type, counts in self.winning_behavior_test_results.get_test_pass_fail_report_by_type().items():
             name = test_type.to_name()
             if name:
-                report_table[name] = result
+                report_table[name] = counts
 
-        result: dict[str, Union[str, int, dict[str, dict[str, int]], list[BenchmarkDetail], None]] = {  # type: ignore[no-redef]
+        result: dict[str, Union[str, int, dict[str, dict[str, int]], list[BenchmarkDetail], None]] = {
             "optimization_explanation": self.optimization_explanation,
             "best_runtime": humanize_runtime(self.best_runtime),
             "original_runtime": humanize_runtime(self.original_runtime),
@@ -45,10 +45,10 @@ class PrComment:
         }
 
         if self.original_async_throughput is not None and self.best_async_throughput is not None:
-            result["original_async_throughput"] = str(self.original_async_throughput)  # type: ignore[assignment]
-            result["best_async_throughput"] = str(self.best_async_throughput)  # type: ignore[assignment]
+            result["original_async_throughput"] = self.original_async_throughput
+            result["best_async_throughput"] = self.best_async_throughput
 
-        return result  # type: ignore[return-value]
+        return result
 
 
 class FileDiffContent(BaseModel):

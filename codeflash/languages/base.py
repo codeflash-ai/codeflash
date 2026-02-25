@@ -11,10 +11,11 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Iterable, Sequence
     from pathlib import Path
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.models.models import FunctionSource, GeneratedTestsList, InvocationId
 
 from codeflash.languages.language_enum import Language
 from codeflash.models.function_types import FunctionParent
@@ -32,6 +33,16 @@ def __getattr__(name: str) -> Any:
         return FunctionToOptimize
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)
+
+
+@dataclass(frozen=True)
+class IndexResult:
+    file_path: Path
+    cached: bool
+    num_edges: int
+    edges: tuple[tuple[str, str, bool], ...]  # (caller_qn, callee_name, is_cross_file)
+    cross_file_edges: int
+    error: bool
 
 
 @dataclass
@@ -193,6 +204,35 @@ class ReferenceInfo:
 
 
 @runtime_checkable
+class DependencyResolver(Protocol):
+    """Protocol for language-specific dependency resolution.
+
+    Implementations analyze source files to discover call-graph edges
+    between functions so the optimizer can extract richer context.
+    """
+
+    def build_index(self, file_paths: Iterable[Path], on_progress: Callable[[IndexResult], None] | None = None) -> None:
+        """Pre-index a batch of files."""
+        ...
+
+    def get_callees(
+        self, file_path_to_qualified_names: dict[Path, set[str]]
+    ) -> tuple[dict[Path, set[FunctionSource]], list[FunctionSource]]:
+        """Return callees for the given functions."""
+        ...
+
+    def count_callees_per_function(
+        self, file_path_to_qualified_names: dict[Path, set[str]]
+    ) -> dict[tuple[Path, str], int]:
+        """Return the number of callees for each (file_path, qualified_name) pair."""
+        ...
+
+    def close(self) -> None:
+        """Release resources (e.g. database connections)."""
+        ...
+
+
+@runtime_checkable
 class LanguageSupport(Protocol):
     """Protocol defining what a language implementation must provide.
 
@@ -252,6 +292,14 @@ class LanguageSupport(Protocol):
     @property
     def comment_prefix(self) -> str:
         """Like # or //."""
+        ...
+
+    @property
+    def dir_excludes(self) -> frozenset[str]:
+        """Directory name patterns to skip during file discovery.
+
+        Supports glob wildcards: "name" for exact, "prefix*" for startswith, "*suffix" for endswith.
+        """
         ...
 
     # === Discovery ===
@@ -490,6 +538,87 @@ class LanguageSupport(Protocol):
         """
         ...
 
+    def postprocess_generated_tests(
+        self, generated_tests: GeneratedTestsList, test_framework: str, project_root: Path, source_file_path: Path
+    ) -> GeneratedTestsList:
+        """Apply language-specific postprocessing to generated tests.
+
+        Args:
+            generated_tests: Generated tests to update.
+            test_framework: Test framework used for the project.
+            project_root: Project root directory.
+            source_file_path: Path to the source file under optimization.
+
+        Returns:
+            Updated generated tests.
+
+        """
+        ...
+
+    def remove_test_functions_from_generated_tests(
+        self, generated_tests: GeneratedTestsList, functions_to_remove: list[str]
+    ) -> GeneratedTestsList:
+        """Remove specific test functions from generated tests.
+
+        Args:
+            generated_tests: Generated tests to update.
+            functions_to_remove: List of function names to remove.
+
+        Returns:
+            Updated generated tests.
+
+        """
+        ...
+
+    def add_runtime_comments_to_generated_tests(
+        self,
+        generated_tests: GeneratedTestsList,
+        original_runtimes: dict[InvocationId, list[int]],
+        optimized_runtimes: dict[InvocationId, list[int]],
+        tests_project_rootdir: Path | None = None,
+    ) -> GeneratedTestsList:
+        """Add runtime comments to generated tests.
+
+        Args:
+            generated_tests: Generated tests to update.
+            original_runtimes: Mapping of invocation IDs to original runtimes.
+            optimized_runtimes: Mapping of invocation IDs to optimized runtimes.
+            tests_project_rootdir: Root directory for tests (if applicable).
+
+        Returns:
+            Updated generated tests.
+
+        """
+        ...
+
+    def add_global_declarations(self, optimized_code: str, original_source: str, module_abspath: Path) -> str:
+        """Add new global declarations from optimized code to original source.
+
+        Args:
+            optimized_code: The optimized code that may contain new declarations.
+            original_source: The original source code.
+            module_abspath: Path to the module file (for parser selection).
+
+        Returns:
+            Original source with new declarations added.
+
+        """
+        ...
+
+    def extract_calling_function_source(self, source_code: str, function_name: str, ref_line: int) -> str | None:
+        """Extract the source code of a calling function.
+
+        Args:
+            source_code: Full source code of the file.
+            function_name: Name of the function to extract.
+            ref_line: Line number where the reference is.
+
+        Returns:
+            Source code of the function, or None if not found.
+
+        """
+        ...
+
     # === Test Result Comparison ===
 
     def compare_test_results(
@@ -515,15 +644,6 @@ class LanguageSupport(Protocol):
 
         Returns:
             Test file suffix (e.g., ".test.js", "_test.py").
-
-        """
-        ...
-
-    def get_comment_prefix(self) -> str:
-        """Get the comment prefix for this language.
-
-        Returns:
-            Comment prefix (e.g., "//" for JS, "#" for Python).
 
         """
         ...
@@ -564,6 +684,15 @@ class LanguageSupport(Protocol):
         """
         # Default implementation: just copy runtime files
         return False
+
+    def create_dependency_resolver(self, project_root: Path) -> DependencyResolver | None:
+        """Create a language-specific dependency resolver, if available.
+
+        Returns:
+            A DependencyResolver instance, or None if not supported.
+
+        """
+        return None
 
     def instrument_existing_test(
         self,

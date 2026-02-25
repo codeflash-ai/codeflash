@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from tree_sitter import Node
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-    from codeflash.languages.treesitter_utils import ImportInfo, TreeSitterAnalyzer
+    from codeflash.languages.javascript.treesitter import ImportInfo, TreeSitterAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +112,7 @@ class ReferenceFinder:
             List of Reference objects describing each call site.
 
         """
-        from codeflash.languages.treesitter_utils import get_analyzer_for_file
+        from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
         function_name = function_to_optimize.function_name
         source_file = function_to_optimize.file_path
@@ -168,7 +168,7 @@ class ReferenceFinder:
             if import_info:
                 # Found an import - mark as visited and search for calls
                 context.visited_files.add(file_path)
-                import_name, original_import = import_info
+                import_name, _original_import = import_info
                 file_refs = self._find_references_in_file(
                     file_path, file_code, function_name, import_name, file_analyzer, include_self=True
                 )
@@ -213,7 +213,7 @@ class ReferenceFinder:
                 trigger_check = True
                 if import_info:
                     context.visited_files.add(file_path)
-                    import_name, original_import = import_info  # noqa: RUF059
+                    import_name, _original_import = import_info
                     file_refs = self._find_references_in_file(
                         file_path, file_code, reexport_name, import_name, file_analyzer, include_self=True
                     )
@@ -404,7 +404,7 @@ class ReferenceFinder:
             name_node = node.child_by_field_name("name")
             if name_node:
                 new_current_function = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf8")
-        elif node.type in ("variable_declarator",):  # noqa: FURB171
+        elif node.type == "variable_declarator":
             # Arrow function or function expression assigned to variable
             name_node = node.child_by_field_name("name")
             value_node = node.child_by_field_name("value")
@@ -719,7 +719,7 @@ class ReferenceFinder:
                 continue
 
             # Create a fake ImportInfo to resolve the re-export source
-            from codeflash.languages.treesitter_utils import ImportInfo
+            from codeflash.languages.javascript.treesitter import ImportInfo
 
             fake_import = ImportInfo(
                 module_path=exp.reexport_source,
