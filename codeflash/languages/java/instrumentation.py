@@ -236,7 +236,7 @@ def _generate_sqlite_write_code(
         f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(3, _cf_test{iter_id});",
         f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(4, _cf_fn{iter_id});",
         f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setInt(5, _cf_loop{iter_id});",
-        f'{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(6, "{call_counter}");',
+        f'{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(6, _cf_cls{iter_id} + "." + _cf_test{iter_id} + ".{call_counter}_" + _cf_testIteration{iter_id});',
         f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setLong(7, _cf_dur{iter_id}_{call_counter});",
         f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setBytes(8, _cf_serializedResult{iter_id}_{call_counter});",
         f'{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(9, "function_call");',

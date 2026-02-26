@@ -185,7 +185,7 @@ public class CalculatorTest__perfinstrumented {
                             _cf_pstmt1_1.setString(3, _cf_test1);
                             _cf_pstmt1_1.setString(4, _cf_fn1);
                             _cf_pstmt1_1.setInt(5, _cf_loop1);
-                            _cf_pstmt1_1.setString(6, "1");
+                            _cf_pstmt1_1.setString(6, _cf_cls1 + "." + _cf_test1 + ".1_" + _cf_testIteration1);
                             _cf_pstmt1_1.setLong(7, _cf_dur1_1);
                             _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
                             _cf_pstmt1_1.setString(9, "function_call");
@@ -319,7 +319,7 @@ public class FibonacciTest__perfinstrumented {
                             _cf_pstmt2_1.setString(3, _cf_test2);
                             _cf_pstmt2_1.setString(4, _cf_fn2);
                             _cf_pstmt2_1.setInt(5, _cf_loop2);
-                            _cf_pstmt2_1.setString(6, "1");
+                            _cf_pstmt2_1.setString(6, _cf_cls2 + "." + _cf_test2 + ".1_" + _cf_testIteration2);
                             _cf_pstmt2_1.setLong(7, _cf_dur2_1);
                             _cf_pstmt2_1.setBytes(8, _cf_serializedResult2_1);
                             _cf_pstmt2_1.setString(9, "function_call");
@@ -456,7 +456,7 @@ public class FibonacciTest__perfinstrumented {
                             _cf_pstmt2_1.setString(3, _cf_test2);
                             _cf_pstmt2_1.setString(4, _cf_fn2);
                             _cf_pstmt2_1.setInt(5, _cf_loop2);
-                            _cf_pstmt2_1.setString(6, "1");
+                            _cf_pstmt2_1.setString(6, _cf_cls2 + "." + _cf_test2 + ".1_" + _cf_testIteration2);
                             _cf_pstmt2_1.setLong(7, _cf_dur2_1);
                             _cf_pstmt2_1.setBytes(8, _cf_serializedResult2_1);
                             _cf_pstmt2_1.setString(9, "function_call");
@@ -818,7 +818,7 @@ public class MyTest {
                             _cf_pstmt1_1.setString(3, _cf_test1);
                             _cf_pstmt1_1.setString(4, _cf_fn1);
                             _cf_pstmt1_1.setInt(5, _cf_loop1);
-                            _cf_pstmt1_1.setString(6, "1");
+                            _cf_pstmt1_1.setString(6, _cf_cls1 + "." + _cf_test1 + ".1_" + _cf_testIteration1);
                             _cf_pstmt1_1.setLong(7, _cf_dur1_1);
                             _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
                             _cf_pstmt1_1.setString(9, "function_call");
@@ -1346,7 +1346,7 @@ public class CalculatorTest__perfinstrumented {
                             _cf_pstmt1_1.setString(3, _cf_test1);
                             _cf_pstmt1_1.setString(4, _cf_fn1);
                             _cf_pstmt1_1.setInt(5, _cf_loop1);
-                            _cf_pstmt1_1.setString(6, "1");
+                            _cf_pstmt1_1.setString(6, _cf_cls1 + "." + _cf_test1 + ".1_" + _cf_testIteration1);
                             _cf_pstmt1_1.setLong(7, _cf_dur1_1);
                             _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
                             _cf_pstmt1_1.setString(9, "function_call");
@@ -2738,7 +2738,7 @@ public class CounterTest__perfinstrumented {
                             _cf_pstmt1_1.setString(3, _cf_test1);
                             _cf_pstmt1_1.setString(4, _cf_fn1);
                             _cf_pstmt1_1.setInt(5, _cf_loop1);
-                            _cf_pstmt1_1.setString(6, "1");
+                            _cf_pstmt1_1.setString(6, _cf_cls1 + "." + _cf_test1 + ".1_" + _cf_testIteration1);
                             _cf_pstmt1_1.setLong(7, _cf_dur1_1);
                             _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
                             _cf_pstmt1_1.setString(9, "function_call");
@@ -3412,7 +3412,7 @@ public class WorkerTest__perfinstrumented {
                             _cf_pstmt1_1.setString(3, _cf_test1);
                             _cf_pstmt1_1.setString(4, _cf_fn1);
                             _cf_pstmt1_1.setInt(5, _cf_loop1);
-                            _cf_pstmt1_1.setString(6, "1");
+                            _cf_pstmt1_1.setString(6, _cf_cls1 + "." + _cf_test1 + ".1_" + _cf_testIteration1);
                             _cf_pstmt1_1.setLong(7, _cf_dur1_1);
                             _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
                             _cf_pstmt1_1.setString(9, "function_call");
@@ -3518,7 +3518,7 @@ public class UtilsTest__perfinstrumented {
                             _cf_pstmt1_1.setString(3, _cf_test1);
                             _cf_pstmt1_1.setString(4, _cf_fn1);
                             _cf_pstmt1_1.setInt(5, _cf_loop1);
-                            _cf_pstmt1_1.setString(6, "1");
+                            _cf_pstmt1_1.setString(6, _cf_cls1 + "." + _cf_test1 + ".1_" + _cf_testIteration1);
                             _cf_pstmt1_1.setLong(7, _cf_dur1_1);
                             _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
                             _cf_pstmt1_1.setString(9, "function_call");
@@ -3626,7 +3626,7 @@ public class CacheTest__perfinstrumented {
                             _cf_pstmt1_1.setString(3, _cf_test1);
                             _cf_pstmt1_1.setString(4, _cf_fn1);
                             _cf_pstmt1_1.setInt(5, _cf_loop1);
-                            _cf_pstmt1_1.setString(6, "1");
+                            _cf_pstmt1_1.setString(6, _cf_cls1 + "." + _cf_test1 + ".1_" + _cf_testIteration1);
                             _cf_pstmt1_1.setLong(7, _cf_dur1_1);
                             _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
                             _cf_pstmt1_1.setString(9, "function_call");
@@ -3732,7 +3732,7 @@ public class ConfigTest__perfinstrumented {
                             _cf_pstmt1_1.setString(3, _cf_test1);
                             _cf_pstmt1_1.setString(4, _cf_fn1);
                             _cf_pstmt1_1.setInt(5, _cf_loop1);
-                            _cf_pstmt1_1.setString(6, "1");
+                            _cf_pstmt1_1.setString(6, _cf_cls1 + "." + _cf_test1 + ".1_" + _cf_testIteration1);
                             _cf_pstmt1_1.setLong(7, _cf_dur1_1);
                             _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
                             _cf_pstmt1_1.setString(9, "function_call");
@@ -3842,7 +3842,7 @@ public class SwapperTest__perfinstrumented {
                             _cf_pstmt1_1.setString(3, _cf_test1);
                             _cf_pstmt1_1.setString(4, _cf_fn1);
                             _cf_pstmt1_1.setInt(5, _cf_loop1);
-                            _cf_pstmt1_1.setString(6, "1");
+                            _cf_pstmt1_1.setString(6, _cf_cls1 + "." + _cf_test1 + ".1_" + _cf_testIteration1);
                             _cf_pstmt1_1.setLong(7, _cf_dur1_1);
                             _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
                             _cf_pstmt1_1.setString(9, "function_call");
