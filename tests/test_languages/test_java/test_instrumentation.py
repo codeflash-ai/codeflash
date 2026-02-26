@@ -496,7 +496,7 @@ public class CalculatorTest__perfonlyinstrumented {
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
-        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "50"));
         String _cf_mod1 = "CalculatorTest";
         String _cf_cls1 = "CalculatorTest";
         String _cf_test1 = "testAdd";
@@ -575,7 +575,7 @@ public class MathTest__perfonlyinstrumented {
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
-        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "50"));
         String _cf_mod1 = "MathTest";
         String _cf_cls1 = "MathTest";
         String _cf_test1 = "testAdd";
@@ -610,7 +610,7 @@ public class MathTest__perfonlyinstrumented {
         int _cf_outerLoop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
-        int _cf_warmupIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
+        int _cf_warmupIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "50"));
         String _cf_mod2 = "MathTest";
         String _cf_cls2 = "MathTest";
         String _cf_test2 = "testSubtract";
@@ -695,7 +695,7 @@ public class ServiceTest__perfonlyinstrumented {
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
-        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "50"));
         String _cf_mod1 = "ServiceTest";
         String _cf_cls1 = "ServiceTest";
         String _cf_test1 = "testService";
@@ -844,7 +844,7 @@ public class MyTest {
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
-        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "50"));
         String _cf_mod1 = "MyTest";
         String _cf_cls1 = "MyTest";
         String _cf_test1 = "testFoo";
@@ -927,7 +927,7 @@ class TestAddTimingInstrumentation:
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
-        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "50"));
         String _cf_mod1 = "SimpleTest";
         String _cf_cls1 = "SimpleTest";
         String _cf_test1 = "testSomething";
@@ -983,7 +983,7 @@ class TestAddTimingInstrumentation:
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
-        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "50"));
         String _cf_mod1 = "MultiTest";
         String _cf_cls1 = "MultiTest";
         String _cf_test1 = "testFirst";
@@ -1018,7 +1018,7 @@ class TestAddTimingInstrumentation:
         int _cf_outerLoop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
-        int _cf_warmupIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
+        int _cf_warmupIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "50"));
         String _cf_mod2 = "MultiTest";
         String _cf_cls2 = "MultiTest";
         String _cf_test2 = "testSecond";
@@ -1089,7 +1089,7 @@ class TestAddTimingInstrumentation:
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
-        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "50"));
         String _cf_mod1 = "RepeatTest";
         String _cf_cls1 = "RepeatTest";
         String _cf_test1 = "testRepeat";
@@ -1121,7 +1121,7 @@ class TestAddTimingInstrumentation:
         int _cf_outerLoop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
-        int _cf_warmupIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
+        int _cf_warmupIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "50"));
         String _cf_mod2 = "RepeatTest";
         String _cf_cls2 = "RepeatTest";
         String _cf_test2 = "testRepeat";
@@ -1437,7 +1437,7 @@ public class GeneratedTest__perfonlyinstrumented {
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
-        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "50"));
         String _cf_mod1 = "GeneratedTest";
         String _cf_cls1 = "GeneratedTest";
         String _cf_test1 = "testMethod";
@@ -1631,7 +1631,7 @@ public class BraceTest__perfonlyinstrumented {
         int _cf_outerLoop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
-        int _cf_warmupIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
+        int _cf_warmupIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "50"));
         String _cf_mod2 = "BraceTest";
         String _cf_cls2 = "BraceTest";
         String _cf_test2 = "testTwo";
@@ -1719,7 +1719,7 @@ public class ImportTest__perfonlyinstrumented {
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
-        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "50"));
         String _cf_mod1 = "ImportTest";
         String _cf_cls1 = "ImportTest";
         String _cf_test1 = "testCollections";
@@ -1844,7 +1844,7 @@ public class NestedTest__perfonlyinstrumented {
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
-        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "50"));
         String _cf_mod1 = "NestedTest";
         String _cf_cls1 = "NestedTest";
         String _cf_test1 = "testNested";
@@ -2006,7 +2006,7 @@ public class Utf8Test {
             '        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));\n'
             '        int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));\n'
             '        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));\n'
-            '        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));\n'
+            '        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "50"));\n'
             '        String _cf_mod1 = "Utf8Test";\n'
             '        String _cf_cls1 = "Utf8Test";\n'
             '        String _cf_test1 = "testWithCjk";\n'
@@ -2087,7 +2087,7 @@ public class AccentTest {
             '        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));\n'
             '        int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));\n'
             '        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));\n'
-            '        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));\n'
+            '        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "50"));\n'
             '        String _cf_mod1 = "AccentTest";\n'
             '        String _cf_cls1 = "AccentTest";\n'
             '        String _cf_test1 = "testWithAccent";\n'
@@ -2392,7 +2392,7 @@ public class MathUtilsTest__perfonlyinstrumented {
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
-        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "50"));
         String _cf_mod1 = "MathUtilsTest";
         String _cf_cls1 = "MathUtilsTest";
         String _cf_test1 = "testMultiply";
@@ -3001,7 +3001,7 @@ public class FibonacciTest__perfonlyinstrumented {
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
-        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "50"));
         String _cf_mod1 = "FibonacciTest";
         String _cf_cls1 = "FibonacciTest";
         String _cf_test1 = "testFib";
@@ -3280,7 +3280,7 @@ public class SpinWaitTest__perfonlyinstrumented {
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
-        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "50"));
         String _cf_mod1 = "SpinWaitTest";
         String _cf_cls1 = "SpinWaitTest";
         String _cf_test1 = "testSpinShort";
@@ -3315,7 +3315,7 @@ public class SpinWaitTest__perfonlyinstrumented {
         int _cf_outerLoop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
-        int _cf_warmupIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
+        int _cf_warmupIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "50"));
         String _cf_mod2 = "SpinWaitTest";
         String _cf_cls2 = "SpinWaitTest";
         String _cf_test2 = "testSpinLong";
