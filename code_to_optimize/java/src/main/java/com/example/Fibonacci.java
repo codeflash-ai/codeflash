@@ -21,7 +21,27 @@ public class Fibonacci {
         if (n <= 1) {
             return n;
         }
-        return fibonacci(n - 1) + fibonacci(n - 2);
+        // Iterative fast-doubling method (O(log n) time, O(1) space).
+        long a = 0; // F(0)
+        long b = 1; // F(1)
+        // Process bits of n from highest to lowest
+        int highestBit = 31 - Integer.numberOfLeadingZeros(n);
+        for (int i = highestBit; i >= 0; --i) {
+            // Compute:
+            // c = F(2k)   = F(k) * (2*F(k+1) - F(k))
+            // d = F(2k+1) = F(k)^2 + F(k+1)^2
+            long twoBminusA = (b << 1) - a;
+            long c = a * twoBminusA;
+            long d = a * a + b * b;
+            if (((n >> i) & 1) == 0) {
+                a = c;
+                b = d;
+            } else {
+                a = d;
+                b = c + d;
+            }
+        }
+        return a;
     }
 
     /**
