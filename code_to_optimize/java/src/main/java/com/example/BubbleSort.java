@@ -16,22 +16,9 @@ public class BubbleSort {
             return arr;
         }
 
-        int[] result = new int[arr.length];
-        for (int i = 0; i < arr.length; i++) {
-            result[i] = arr[i];
-        }
+        int[] result = arr.clone();
 
-        int n = result.length;
-
-        for (int i = 0; i < n; i++) {
-            for (int j = 0; j < n - 1; j++) {
-                if (result[j] > result[j + 1]) {
-                    int temp = result[j];
-                    result[j] = result[j + 1];
-                    result[j + 1] = temp;
-                }
-            }
-        }
+        java.util.Arrays.sort(result);
 
         return result;
     }
