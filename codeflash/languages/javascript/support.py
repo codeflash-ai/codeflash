@@ -271,7 +271,20 @@ class JavaScriptSupport:
             List of glob patterns for test files.
 
         """
-        return ["*.test.js", "*.test.jsx", "*.spec.js", "*.spec.jsx", "__tests__/**/*.js", "__tests__/**/*.jsx"]
+        return [
+            "*.test.js",
+            "*.test.jsx",
+            "*.spec.js",
+            "*.spec.jsx",
+            "*.test.ts",
+            "*.test.tsx",
+            "*.spec.ts",
+            "*.spec.tsx",
+            "__tests__/**/*.js",
+            "__tests__/**/*.jsx",
+            "__tests__/**/*.ts",
+            "__tests__/**/*.tsx",
+        ]
 
     def discover_tests(
         self, test_root: Path, source_functions: Sequence[FunctionToOptimize]
@@ -280,6 +293,8 @@ class JavaScriptSupport:
 
         For JavaScript, this uses static analysis to find test files
         and match them to source functions based on imports and function calls.
+        Also searches for co-located test files next to source files (a common
+        JS/TS convention where spec/test files sit alongside source files).
 
         Args:
             test_root: Root directory containing tests.
@@ -297,6 +312,21 @@ class JavaScriptSupport:
         test_files: list[Path] = []
         for pattern in test_patterns:
             test_files.extend(test_root.rglob(pattern))
+
+        # Also search for co-located test files next to source files
+        # This is a common JS/TS convention (e.g., utils.ts + utils.spec.ts in same directory)
+        seen_paths: set[Path] = {f.resolve() for f in test_files}
+        source_dirs: set[Path] = set()
+        for func in source_functions:
+            if func.file_path and func.file_path.parent not in source_dirs:
+                source_dirs.add(func.file_path.parent)
+        for source_dir in source_dirs:
+            for pattern in test_patterns:
+                for test_file in source_dir.glob(pattern):
+                    resolved = test_file.resolve()
+                    if resolved not in seen_paths:
+                        test_files.append(test_file)
+                        seen_paths.add(resolved)
 
         for test_file in test_files:
             try:
@@ -2529,25 +2559,6 @@ class TypeScriptSupport(JavaScriptSupport):
     def file_extensions(self) -> tuple[str, ...]:
         """File extensions for TypeScript files."""
         return (".ts", ".tsx", ".mts")
-
-    def _get_test_patterns(self) -> list[str]:
-        """Get test file patterns for TypeScript.
-
-        Includes TypeScript patterns plus JavaScript patterns for mixed projects.
-
-        Returns:
-            List of glob patterns for test files.
-
-        """
-        return [
-            "*.test.ts",
-            "*.test.tsx",
-            "*.spec.ts",
-            "*.spec.tsx",
-            "__tests__/**/*.ts",
-            "__tests__/**/*.tsx",
-            *super()._get_test_patterns(),
-        ]
 
     def get_test_file_suffix(self) -> str:
         """Get the test file suffix for TypeScript.
