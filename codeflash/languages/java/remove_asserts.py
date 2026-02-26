@@ -236,26 +236,22 @@ class JavaAssertTransformer:
             if max_end >= assertion.end_pos:
                 continue
             non_nested.append(assertion)
-            max_end = max(max_end, assertion.end_pos)
-
-        # Pre-compute all replacements with correct counter values
-
-        # Pre-compute all replacements with correct counter values
-        replacements: list[tuple[int, int, str]] = []
-        for assertion in non_nested:
-            replacement = self._generate_replacement(assertion)
-            replacements.append((assertion.start_pos, assertion.end_pos, replacement))
+            # avoid calling max() — update directly for a tiny speed win
+            if assertion.end_pos > max_end:
+                max_end = assertion.end_pos
 
         # Apply replacements in ascending order by assembling parts to avoid repeated slicing.
-        if not replacements:
+        if not non_nested:
             return source
 
         parts: list[str] = []
         prev = 0
-        for start_pos, end_pos, replacement in replacements:
-            parts.append(source[prev:start_pos])
+        # Generate and apply replacements on the fly to avoid storing an intermediate list.
+        for assertion in non_nested:
+            replacement = self._generate_replacement(assertion)
+            parts.append(source[prev:assertion.start_pos])
             parts.append(replacement)
-            prev = end_pos
+            prev = assertion.end_pos
         parts.append(source[prev:])
 
         return "".join(parts)
