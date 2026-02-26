@@ -322,6 +322,11 @@ class LanguageSupport(Protocol):
         """
         ...
 
+    @property
+    def language_version(self) -> str | None:
+        """The detected language version (e.g., "17" for Java, "ES2022" for JS)."""
+        ...
+
     # === Discovery ===
 
     def discover_functions(

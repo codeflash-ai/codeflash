@@ -107,6 +107,10 @@ class PythonSupport:
             }
         )
 
+    @property
+    def language_version(self) -> str | None:
+        return None
+
     # === Discovery ===
 
     def discover_functions(

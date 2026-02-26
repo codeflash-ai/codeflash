@@ -129,8 +129,7 @@ class AiServiceClient:
         experiment_metadata: ExperimentMetadata | None = None,
         *,
         language: str = "python",
-        language_version: str
-        | None = None,  # TODO:{claude} add language version to the language support and it should be cached
+        language_version: str | None = None,
         module_system: str | None = None,
         is_async: bool = False,
         n_candidates: int = 5,
