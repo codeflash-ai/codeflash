@@ -1325,32 +1325,3 @@ def instrument_generated_java_test(
 
     logger.debug("Instrumented generated Java test for %s (mode=%s)", function_name, mode)
     return modified_code
-
-
-def _add_import(source: str, import_statement: str) -> str:
-    """Add an import statement to the source.
-
-    Args:
-        source: The source code.
-        import_statement: The import to add.
-
-    Returns:
-        Source with import added.
-
-    """
-    lines = source.splitlines(keepends=True)
-    insert_idx = 0
-
-    # Find the last import or package statement
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped.startswith(("import ", "package ")):
-            insert_idx = i + 1
-        elif stripped and not stripped.startswith("//") and not stripped.startswith("/*"):
-            # First non-import, non-comment line
-            if insert_idx == 0:
-                insert_idx = i
-            break
-
-    lines.insert(insert_idx, import_statement + "\n")
-    return "".join(lines)

@@ -45,6 +45,17 @@ _classpath_cache: dict[tuple[Path, str | None], str] = {}
 # Allows: letters, digits, underscores, dots, and dollar signs (inner classes)
 _VALID_JAVA_CLASS_NAME = re.compile(r"^[a-zA-Z_$][a-zA-Z0-9_$.]*$")
 
+# Skip validation/analysis plugins that reject generated instrumented files
+# (e.g. Apache Rat rejects missing license headers, Checkstyle rejects naming, etc.)
+_MAVEN_VALIDATION_SKIP_FLAGS = [
+    "-Drat.skip=true",
+    "-Dcheckstyle.skip=true",
+    "-Dspotbugs.skip=true",
+    "-Dpmd.skip=true",
+    "-Denforcer.skip=true",
+    "-Djapicmp.skip=true",
+]
+
 
 def _validate_java_class_name(class_name: str) -> bool:
     """Validate that a string is a valid Java class name.
@@ -416,8 +427,9 @@ def run_behavioral_tests(
                     add_jacoco_plugin_to_pom(pom_path)
                 coverage_xml_path = get_jacoco_xml_path(project_root)
 
-    # Use a minimum timeout of 60s for Java builds (120s when coverage is enabled due to verify phase)
-    min_timeout = 120 if enable_coverage else 60
+    # Use a minimum timeout of 60s for Java builds (300s when coverage is enabled due to verify phase
+    # which runs full compilation + instrumentation + test execution in multi-module projects)
+    min_timeout = 300 if enable_coverage else 60
     effective_timeout = max(timeout or 300, min_timeout)
 
     if enable_coverage:
@@ -493,6 +505,7 @@ def _compile_tests(
         return subprocess.CompletedProcess(args=["mvn"], returncode=-1, stdout="", stderr="Maven not found")
 
     cmd = [mvn, "test-compile", "-e", "-B"]  # Show errors but not verbose output; -B for batch mode (no ANSI colors)
+    cmd.extend(_MAVEN_VALIDATION_SKIP_FLAGS)
 
     if test_module:
         cmd.extend(["-pl", test_module, "-am"])
@@ -1447,6 +1460,7 @@ def _run_maven_tests(
     # JaCoCo's report goal is bound to the verify phase to get post-test execution data
     maven_goal = "verify" if enable_coverage else "test"
     cmd = [mvn, maven_goal, "-fae", "-B"]  # Fail at end to run all tests; -B for batch mode (no ANSI colors)
+    cmd.extend(_MAVEN_VALIDATION_SKIP_FLAGS)
 
     # Add --add-opens flags for Java 16+ module system compatibility.
     # The codeflash-runtime Serializer uses Kryo which needs reflective access to
@@ -1483,7 +1497,7 @@ def _run_maven_tests(
         # -am = also make dependencies
         # -DfailIfNoTests=false allows dependency modules without tests to pass
         # -DskipTests=false overrides any skipTests=true in pom.xml
-        cmd.extend(["-pl", test_module, "-am", "-DfailIfNoTests=false", "-DskipTests=false"])
+        cmd.extend(["-pl", test_module, "-am", "-DfailIfNoTests=false", "-Dsurefire.failIfNoSpecifiedTests=false", "-DskipTests=false"])
 
     if test_filter:
         # Validate test filter to prevent command injection
