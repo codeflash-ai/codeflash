@@ -79,6 +79,10 @@ def discover_functions_from_source(
             include_static=True,
         )
 
+
+        # Cache the resolved file_path to avoid creating Path("unknown.java") repeatedly
+        resolved_file_path = file_path or Path("unknown.java")
+
         functions: list[FunctionToOptimize] = []
 
         for method in methods:
@@ -87,21 +91,22 @@ def discover_functions_from_source(
                 continue
 
             # Build parents list
-            parents: list[FunctionParent] = []
-            if method.class_name:
-                parents.append(FunctionParent(name=method.class_name, type="ClassDef"))
+            parents: list[FunctionParent] = (
+                [FunctionParent(name=method.class_name, type="ClassDef")] if method.class_name else []
+            )
+
 
             functions.append(
                 FunctionToOptimize(
                     function_name=method.name,
-                    file_path=file_path or Path("unknown.java"),
+                    file_path=resolved_file_path,
                     starting_line=method.start_line,
                     ending_line=method.end_line,
                     starting_col=method.start_col,
                     ending_col=method.end_col,
                     parents=parents,
                     is_async=False,  # Java doesn't have async keyword
-                    is_method=method.class_name is not None,
+                    is_method=(method.class_name is not None),
                     language="java",
                     doc_start_line=method.javadoc_start_line,
                     return_type=method.return_type,
@@ -131,29 +136,35 @@ def _should_include_method(
 
     """
     # Skip abstract methods (no implementation to optimize)
+    # Localize frequently used attributes to reduce attribute lookups in the hot path
+    name = method.name
+    class_name = method.class_name
+    return_type = method.return_type
+
+    # Skip abstract methods (no implementation to optimize)
     if method.is_abstract:
         return False
 
     # Skip constructors (special case - could be optimized but usually not)
-    if method.name == method.class_name:
+    if name == class_name:
         return False
 
     # Check include patterns
-    if not criteria.matches_include_patterns(method.name):
+    if not criteria.matches_include_patterns(name):
         return False
 
     # Check exclude patterns
-    if criteria.matches_exclude_patterns(method.name):
+    if criteria.matches_exclude_patterns(name):
         return False
 
     # Check require_return - void methods are allowed (verified via test pass/fail),
     # but non-void methods must have an actual return statement
     if criteria.require_return:
-        if method.return_type != "void" and not analyzer.has_return_statement(method, source):
+        if return_type != "void" and not analyzer.has_return_statement(method, source):
             return False
 
     # Check include_methods - in Java, all functions in classes are methods
-    if not criteria.include_methods and method.class_name is not None:
+    if not criteria.include_methods and class_name is not None:
         return False
 
     # Check line count
