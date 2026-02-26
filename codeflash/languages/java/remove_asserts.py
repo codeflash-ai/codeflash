@@ -922,14 +922,20 @@ class JavaAssertTransformer:
         # For the first replacement, use the full leading whitespace
         # For subsequent ones, strip leading newlines to avoid extra blank lines
         base_indent = assertion.leading_whitespace.lstrip("\n\r")
+        # Use a local counter to avoid repeated attribute writes inside the loop
+        local_counter = self.invocation_counter
+
         for i, call in enumerate(assertion.target_calls):
-            self.invocation_counter += 1
+            local_counter += 1
             ws = assertion.leading_whitespace if i == 0 else base_indent
             if self.is_void:
                 replacements.append(f"{ws}{call.full_call};")
             else:
-                var_name = f"_cf_result{self.invocation_counter}"
+                var_name = f"_cf_result{local_counter}"
                 replacements.append(f"{ws}Object {var_name} = {call.full_call};")
+
+        # Update the instance counter once to reflect all increments
+        self.invocation_counter = local_counter
 
         return "\n".join(replacements)
 
