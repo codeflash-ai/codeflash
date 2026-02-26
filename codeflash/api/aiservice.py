@@ -176,16 +176,12 @@ class AiServiceClient:
             "is_numerical_code": is_numerical_code,
         }
 
-        # Add language-specific version fields
-        # Always include python_version for backward compatibility with older backend
-        payload["python_version"] = platform.python_version()
-        if is_python():
-            pass  # python_version already set
-        elif is_java():
-            payload["language_version"] = language_version or "17"  # Default Java version
-        else:
-            payload["language_version"] = language_version or "ES2022"
-            # Add module system for JavaScript/TypeScript (esm or commonjs)
+        # Add language version (canonical for all languages)
+        payload["language_version"] = language_version
+        # Backward compat: backend still expects python_version
+        payload["python_version"] = language_version if is_python() else platform.python_version()
+
+        if not is_python():
             if module_system:
                 payload["module_system"] = module_system
 
@@ -261,7 +257,8 @@ class AiServiceClient:
             "source_code": source_code,
             "trace_id": trace_id,
             "dependency_code": "",  # dummy value to please the api endpoint
-            "python_version": "3.12.1",  # dummy value to please the api endpoint
+            "language_version": platform.python_version(),
+            "python_version": platform.python_version(),  # backward compat
             "current_username": get_last_commit_author_if_pr_exists(None),
             "repo_owner": git_repo_owner,
             "repo_name": git_repo_name,
@@ -328,18 +325,15 @@ class AiServiceClient:
         logger.info("Generating optimized candidates with line profiler…")
         console.rule()
 
-        # Set python_version for backward compatibility with Python, or use language_version
-        python_version = language_version if language_version else platform.python_version()
-
         payload = {
             "source_code": source_code,
             "dependency_code": dependency_code,
             "n_candidates": n_candidates,
             "line_profiler_results": line_profiler_results,
             "trace_id": trace_id,
-            "python_version": python_version,
             "language": language,
             "language_version": language_version,
+            "python_version": language_version if is_python() else platform.python_version(),  # backward compat
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
             "call_sequence": self.get_next_sequence(),
@@ -433,14 +427,10 @@ class AiServiceClient:
                 "language": opt.language,
             }
 
-            # Add language version - always include python_version for backward compatibility
-            item["python_version"] = platform.python_version()
-            if is_python():
-                pass  # python_version already set
-            elif opt.language_version:
-                item["language_version"] = opt.language_version
-            else:
-                item["language_version"] = "ES2022"  # Default for JS/TS
+            # Add language version (canonical for all languages)
+            item["language_version"] = opt.language_version
+            # Backward compat: backend still expects python_version
+            item["python_version"] = opt.language_version if is_python() else platform.python_version()
 
             # Add multi-file context if provided
             if opt.additional_context_files:
@@ -648,7 +638,8 @@ class AiServiceClient:
             "diffs": diffs,
             "speedups": speedups,
             "optimization_ids": optimization_ids,
-            "python_version": platform.python_version(),
+            "language_version": platform.python_version(),
+            "python_version": platform.python_version(),  # backward compat
             "function_references": function_references,
         }
         logger.info("loading|Generating ranking")
@@ -786,16 +777,12 @@ class AiServiceClient:
             "is_numerical_code": is_numerical_code,
         }
 
-        # Add language-specific version fields
-        # Always include python_version for backward compatibility with older backend
-        payload["python_version"] = platform.python_version()
-        if is_python():
-            pass  # python_version already set
-        elif is_java():
-            payload["language_version"] = language_version or "17"  # Default Java version
-        else:
-            payload["language_version"] = language_version or "ES2022"
-            # Add module system for JavaScript/TypeScript (esm or commonjs)
+        # Add language version (canonical for all languages)
+        payload["language_version"] = language_version
+        # Backward compat: backend still expects python_version
+        payload["python_version"] = language_version if is_python() else platform.python_version()
+
+        if not is_python():
             if module_system:
                 payload["module_system"] = module_system
 
@@ -883,7 +870,8 @@ class AiServiceClient:
             "codeflash_version": codeflash_version,
             "calling_fn_details": calling_fn_details,
             "language": language,
-            "python_version": platform.python_version() if is_python() else None,
+            "language_version": platform.python_version() if is_python() else None,
+            "python_version": platform.python_version() if is_python() else None,  # backward compat
             "call_sequence": self.get_next_sequence(),
         }
         console.rule()

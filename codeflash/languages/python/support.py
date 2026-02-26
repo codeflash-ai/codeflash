@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import platform
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -109,7 +110,7 @@ class PythonSupport:
 
     @property
     def language_version(self) -> str | None:
-        return None
+        return platform.python_version()
 
     # === Discovery ===
 
