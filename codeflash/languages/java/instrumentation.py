@@ -65,36 +65,14 @@ def _extract_test_method_name(method_lines: list[str]) -> str:
     # confidently produce a result.
     s = method_sig
     if s:
-        # Look for common modifiers first; modifiers are strong signals of a method declaration
-        for mod in ("public ", "private ", "protected "):
-            idx = s.find(mod)
-            if idx != -1:
-                sub = s[idx:]
-                paren = sub.find("(")
-                if paren != -1:
-                    left = sub[:paren].strip()
-                    parts = left.split()
-                    if parts:
-                        candidate = parts[-1]
-                        if _WORD_RE.match(candidate):
-                            return candidate
-                break  # if modifier was found but fast-path failed, avoid trying other modifiers
-
-        # If no modifier found or modifier path didn't return, check common primitive/reference return types.
-        # This helps with package-private methods declared like "void foo(", "int bar(", "String baz(", etc.
-        for typ in ("void ", "String ", "int ", "long ", "boolean ", "double ", "float ", "char ", "byte ", "short "):
-            idx = s.find(typ)
-            if idx != -1:
-                sub = s[idx + len(typ) :]  # start after the type token
-                paren = sub.find("(")
-                if paren != -1:
-                    left = sub[:paren].strip()
-                    parts = left.split()
-                    if parts:
-                        candidate = parts[-1]
-                        if _WORD_RE.match(candidate):
-                            return candidate
-                break  # stop after first matching type token
+        paren_idx = s.find("(")
+        if paren_idx != -1:
+            left = s[:paren_idx].strip()
+            parts = left.split()
+            if parts:
+                candidate = parts[-1]
+                if _WORD_RE.match(candidate):
+                    return candidate
 
     # Original behavior: fall back to the precompiled regex patterns.
     match = _METHOD_SIG_PATTERN.search(method_sig)
@@ -132,7 +110,7 @@ def _is_test_annotation(stripped_line: str) -> bool:
     if len(stripped_line) == 5:
         return True
     next_char = stripped_line[5]
-    return next_char in {" ", "("}
+    return next_char == " " or next_char == "("
 
 
 def _is_inside_lambda(node: Any) -> bool:
@@ -291,11 +269,19 @@ def wrap_target_calls_with_treesitter(
 
     Returns (wrapped_body_lines, call_counter).
     """
+    # Cheap per-line check to avoid joining and importing/parsing when not needed.
+    found = False
+    for ln in body_lines:
+        if func_name in ln:
+            found = True
+            break
+    if not found:
+        return list(body_lines), 0
+
+    # Now do the heavier operations only when necessary.
     from codeflash.languages.java.parser import get_java_analyzer
 
     body_text = "\n".join(body_lines)
-    if func_name not in body_text:
-        return list(body_lines), 0
 
     analyzer = get_java_analyzer()
     body_bytes = body_text.encode("utf8")
@@ -311,12 +297,15 @@ def wrap_target_calls_with_treesitter(
     if not calls:
         return list(body_lines), 0
 
+    # Pre-encode lines once to avoid repeated encoding and reuse for byte-length calculations.
+    line_bytes_list = [ln.encode("utf8") for ln in body_lines]
+
     # Build line byte-start offsets for mapping calls to body_lines indices
-    line_byte_starts = []
+    line_byte_starts: list[int] = []
     offset = 0
-    for line in body_lines:
+    for b in line_bytes_list:
         line_byte_starts.append(offset)
-        offset += len(line.encode("utf8")) + 1  # +1 for \n from join
+        offset += len(b) + 1  # +1 for \n from join
 
     # Group non-lambda and non-complex-expression calls by their line index
     calls_by_line: dict[int, list[dict[str, Any]]] = {}
@@ -338,7 +327,8 @@ def wrap_target_calls_with_treesitter(
         line_calls = sorted(calls_by_line[line_idx], key=lambda c: c["start_byte"], reverse=True)
         line_indent_str = " " * (len(body_line) - len(body_line.lstrip()))
         line_byte_start = line_byte_starts[line_idx]
-        line_bytes = body_line.encode("utf8")
+        line_bytes = line_bytes_list[line_idx]
+
 
         new_line = body_line
         # Track cumulative char shift from earlier edits on this line
