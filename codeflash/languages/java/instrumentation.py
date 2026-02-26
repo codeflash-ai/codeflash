@@ -279,6 +279,7 @@ def wrap_target_calls_with_treesitter(
     class_name: str = "",
     test_method_name: str = "",
     is_void: bool = False,
+    return_type: str | None = None,
 ) -> tuple[list[str], int]:
     """Replace target method calls in body_lines with capture + serialize using tree-sitter.
 
@@ -348,6 +349,8 @@ def wrap_target_calls_with_treesitter(
             call_counter += 1
             var_name = f"_cf_result{iter_id}_{call_counter}"
             cast_type = _infer_array_cast_type(body_line)
+            if not cast_type and return_type and return_type not in ("void", "Object"):
+                cast_type = return_type
             var_with_cast = f"({cast_type}){var_name}" if cast_type else var_name
 
             # For void functions, we can't assign the return value to a variable
@@ -704,7 +707,8 @@ def instrument_existing_test(
     # replacing substrings of other identifiers.
     modified_source = re.sub(rf"\b{re.escape(original_class_name)}\b", new_class_name, source)
 
-    is_void = getattr(function_to_optimize, "return_type", None) == "void"
+    return_type = getattr(function_to_optimize, "return_type", None)
+    is_void = return_type == "void"
 
     # Add timing instrumentation to test methods
     # Use original class name (without suffix) in timing markers for consistency with Python
@@ -716,14 +720,14 @@ def instrument_existing_test(
         )
     else:
         # Behavior mode: add timing instrumentation that also writes to SQLite
-        modified_source = _add_behavior_instrumentation(modified_source, original_class_name, func_name, is_void=is_void)
+        modified_source = _add_behavior_instrumentation(modified_source, original_class_name, func_name, is_void=is_void, return_type=return_type)
 
     logger.debug("Java %s testing for %s: renamed class %s -> %s", mode, func_name, original_class_name, new_class_name)
     # Why return True here?
     return True, modified_source
 
 
-def _add_behavior_instrumentation(source: str, class_name: str, func_name: str, is_void: bool = False) -> str:
+def _add_behavior_instrumentation(source: str, class_name: str, func_name: str, is_void: bool = False, return_type: str | None = None) -> str:
     """Add behavior instrumentation to test methods.
 
     For behavior mode, this adds:
@@ -865,6 +869,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str, 
                 class_name=class_name,
                 test_method_name=test_method_name,
                 is_void=is_void,
+                return_type=return_type,
             )
 
             # Add behavior instrumentation setup code (shared variables for all calls in the method)
