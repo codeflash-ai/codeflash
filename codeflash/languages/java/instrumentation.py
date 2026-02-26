@@ -424,7 +424,10 @@ def wrap_target_calls_with_treesitter(
                     )
                     # Insert stdout restore at the beginning of finally (after "} finally {" line)
                     finally_block.insert(1, f"    System.setOut(_cf_origOut{iter_id}_{call_counter});")
-                    finally_block.insert(2, f'    try {{ _cf_stdout{iter_id}_{call_counter} = _cf_stdoutCapture{iter_id}_{call_counter}.toString("UTF-8"); }} catch (Exception _cf_encEx{iter_id}_{call_counter}) {{}}')
+                    finally_block.insert(
+                        2,
+                        f'    try {{ _cf_stdout{iter_id}_{call_counter} = _cf_stdoutCapture{iter_id}_{call_counter}.toString("UTF-8"); }} catch (Exception _cf_encEx{iter_id}_{call_counter}) {{}}',
+                    )
 
                     replacement_lines = [*var_decls, start_marker, *try_block, *finally_block]
                     # Don't add indent to first line (it's placed after existing indent), but add to subsequent lines
@@ -453,8 +456,12 @@ def wrap_target_calls_with_treesitter(
                     wrapped.append(f"{line_indent_str}long _cf_end{iter_id}_{call_counter} = -1;")
                     wrapped.append(f"{line_indent_str}long _cf_start{iter_id}_{call_counter} = 0;")
                     wrapped.append(f"{line_indent_str}byte[] _cf_serializedResult{iter_id}_{call_counter} = null;")
-                    wrapped.append(f"{line_indent_str}java.io.ByteArrayOutputStream _cf_stdoutCapture{iter_id}_{call_counter} = new java.io.ByteArrayOutputStream();")
-                    wrapped.append(f"{line_indent_str}java.io.PrintStream _cf_origOut{iter_id}_{call_counter} = System.out;")
+                    wrapped.append(
+                        f"{line_indent_str}java.io.ByteArrayOutputStream _cf_stdoutCapture{iter_id}_{call_counter} = new java.io.ByteArrayOutputStream();"
+                    )
+                    wrapped.append(
+                        f"{line_indent_str}java.io.PrintStream _cf_origOut{iter_id}_{call_counter} = System.out;"
+                    )
                     wrapped.append(f"{line_indent_str}String _cf_stdout{iter_id}_{call_counter} = null;")
                     # Start marker
                     wrapped.append(
@@ -462,7 +469,9 @@ def wrap_target_calls_with_treesitter(
                     )
                     # Try block with stdout redirection
                     wrapped.append(f"{line_indent_str}try {{")
-                    wrapped.append(f"{line_indent_str}    System.setOut(new java.io.PrintStream(_cf_stdoutCapture{iter_id}_{call_counter}));")
+                    wrapped.append(
+                        f"{line_indent_str}    System.setOut(new java.io.PrintStream(_cf_stdoutCapture{iter_id}_{call_counter}));"
+                    )
                     wrapped.append(f"{line_indent_str}    {start_stmt}")
                     wrapped.append(f"{line_indent_str}    {capture_stmt_assign}")
                     wrapped.append(f"{line_indent_str}    {end_stmt}")
@@ -473,7 +482,10 @@ def wrap_target_calls_with_treesitter(
                     )
                     # Insert stdout restore at beginning of finally (after "} finally {" line)
                     finally_lines.insert(1, f"{line_indent_str}    System.setOut(_cf_origOut{iter_id}_{call_counter});")
-                    finally_lines.insert(2, f'{line_indent_str}    try {{ _cf_stdout{iter_id}_{call_counter} = _cf_stdoutCapture{iter_id}_{call_counter}.toString("UTF-8"); }} catch (Exception _cf_encEx{iter_id}_{call_counter}) {{}}')
+                    finally_lines.insert(
+                        2,
+                        f'{line_indent_str}    try {{ _cf_stdout{iter_id}_{call_counter} = _cf_stdoutCapture{iter_id}_{call_counter}.toString("UTF-8"); }} catch (Exception _cf_encEx{iter_id}_{call_counter}) {{}}',
+                    )
                     wrapped.extend(finally_lines)
                 else:
                     capture_line = f"{line_indent_str}{capture_stmt_with_decl}"
@@ -720,14 +732,18 @@ def instrument_existing_test(
         )
     else:
         # Behavior mode: add timing instrumentation that also writes to SQLite
-        modified_source = _add_behavior_instrumentation(modified_source, original_class_name, func_name, is_void=is_void, return_type=return_type)
+        modified_source = _add_behavior_instrumentation(
+            modified_source, original_class_name, func_name, is_void=is_void, return_type=return_type
+        )
 
     logger.debug("Java %s testing for %s: renamed class %s -> %s", mode, func_name, original_class_name, new_class_name)
     # Why return True here?
     return True, modified_source
 
 
-def _add_behavior_instrumentation(source: str, class_name: str, func_name: str, is_void: bool = False, return_type: str | None = None) -> str:
+def _add_behavior_instrumentation(
+    source: str, class_name: str, func_name: str, is_void: bool = False, return_type: str | None = None
+) -> str:
     """Add behavior instrumentation to test methods.
 
     For behavior mode, this adds:
