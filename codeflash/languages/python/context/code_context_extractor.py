@@ -837,6 +837,41 @@ def extract_parameter_type_constructors(
     if func_node.args.kwarg:
         type_names |= collect_type_names_from_annotation(func_node.args.kwarg.annotation)
 
+    # Scan function body for isinstance(x, SomeType) and type(x) is/== SomeType patterns
+    for body_node in ast.walk(func_node):
+        if (
+            isinstance(body_node, ast.Call)
+            and isinstance(body_node.func, ast.Name)
+            and body_node.func.id == "isinstance"
+        ):
+            if len(body_node.args) >= 2:
+                second_arg = body_node.args[1]
+                if isinstance(second_arg, ast.Name):
+                    type_names.add(second_arg.id)
+                elif isinstance(second_arg, ast.Tuple):
+                    for elt in second_arg.elts:
+                        if isinstance(elt, ast.Name):
+                            type_names.add(elt.id)
+        elif isinstance(body_node, ast.Compare):
+            # type(x) is/== SomeType
+            if (
+                isinstance(body_node.left, ast.Call)
+                and isinstance(body_node.left.func, ast.Name)
+                and body_node.left.func.id == "type"
+            ):
+                for comparator in body_node.comparators:
+                    if isinstance(comparator, ast.Name):
+                        type_names.add(comparator.id)
+
+    # Collect base class names from enclosing class (if this is a method)
+    if function_to_optimize.class_name is not None:
+        for top_node in ast.walk(tree):
+            if isinstance(top_node, ast.ClassDef) and top_node.name == function_to_optimize.class_name:
+                for base in top_node.bases:
+                    if isinstance(base, ast.Name):
+                        type_names.add(base.id)
+                break
+
     type_names -= BUILTIN_AND_TYPING_NAMES
     type_names -= existing_class_names
     if not type_names:
@@ -879,6 +914,58 @@ def extract_parameter_type_constructors(
                 code_strings.append(CodeString(code=stub, file_path=module_path))
         except Exception:
             logger.debug(f"Error extracting constructor stub for {type_name} from {module_name}")
+            continue
+
+    # Transitive extraction (one level): for each extracted stub, find __init__ param types and extract their stubs
+    # Build an extended import map that includes imports from source modules of already-extracted stubs
+    transitive_import_map = dict(import_map)
+    for _, cached_tree in module_cache.values():
+        for cache_node in ast.walk(cached_tree):
+            if isinstance(cache_node, ast.ImportFrom) and cache_node.module:
+                for alias in cache_node.names:
+                    name = alias.asname if alias.asname else alias.name
+                    if name not in transitive_import_map:
+                        transitive_import_map[name] = cache_node.module
+
+    emitted_names = type_names | existing_class_names | BUILTIN_AND_TYPING_NAMES
+    transitive_type_names: set[str] = set()
+    for cs in code_strings:
+        try:
+            stub_tree = ast.parse(cs.code)
+        except SyntaxError:
+            continue
+        for stub_node in ast.walk(stub_tree):
+            if isinstance(stub_node, (ast.FunctionDef, ast.AsyncFunctionDef)) and stub_node.name in (
+                "__init__",
+                "__post_init__",
+            ):
+                for arg in stub_node.args.args + stub_node.args.posonlyargs + stub_node.args.kwonlyargs:
+                    transitive_type_names |= collect_type_names_from_annotation(arg.annotation)
+    transitive_type_names -= emitted_names
+    for type_name in sorted(transitive_type_names):
+        module_name = transitive_import_map.get(type_name)
+        if not module_name:
+            continue
+        try:
+            script_code = f"from {module_name} import {type_name}"
+            script = jedi.Script(script_code, project=jedi.Project(path=project_root_path))
+            definitions = script.goto(1, len(f"from {module_name} import ") + len(type_name), follow_imports=True)
+            if not definitions:
+                continue
+            module_path = definitions[0].module_path
+            if not module_path:
+                continue
+            if module_path in module_cache:
+                mod_source, mod_tree = module_cache[module_path]
+            else:
+                mod_source = module_path.read_text(encoding="utf-8")
+                mod_tree = ast.parse(mod_source)
+                module_cache[module_path] = (mod_source, mod_tree)
+            stub = extract_init_stub_from_class(type_name, mod_source, mod_tree)
+            if stub:
+                code_strings.append(CodeString(code=stub, file_path=module_path))
+        except Exception:
+            logger.debug(f"Error extracting transitive constructor stub for {type_name} from {module_name}")
             continue
 
     return CodeStringsMarkdown(code_strings=code_strings)
@@ -1004,12 +1091,23 @@ def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path:
                 continue
             module_source, module_tree = mod_result
 
-            extract_class_and_bases(name, module_path, module_source, module_tree)
-
-            if (module_path, name) not in extracted_classes:
-                resolved_class = resolve_instance_class_name(name, module_tree)
-                if resolved_class and resolved_class not in existing_classes:
-                    extract_class_and_bases(resolved_class, module_path, module_source, module_tree)
+            if is_project:
+                extract_class_and_bases(name, module_path, module_source, module_tree)
+                if (module_path, name) not in extracted_classes:
+                    resolved_class = resolve_instance_class_name(name, module_tree)
+                    if resolved_class and resolved_class not in existing_classes:
+                        extract_class_and_bases(resolved_class, module_path, module_source, module_tree)
+            elif is_third_party:
+                target_name = name
+                if not any(isinstance(n, ast.ClassDef) and n.name == name for n in ast.walk(module_tree)):
+                    resolved_class = resolve_instance_class_name(name, module_tree)
+                    if resolved_class:
+                        target_name = resolved_class
+                if target_name not in emitted_class_names:
+                    stub = extract_init_stub_from_class(target_name, module_source, module_tree)
+                    if stub:
+                        code_strings.append(CodeString(code=stub, file_path=module_path))
+                        emitted_class_names.add(target_name)
 
         except Exception:
             logger.debug(f"Error extracting class definition for {name} from {module_name}")
