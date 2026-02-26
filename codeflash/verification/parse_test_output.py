@@ -487,13 +487,26 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
         console.rule()
         return test_results
     db = None
+    has_stdout_column = False
     try:
         db = sqlite3.connect(sqlite_file_path)
         cur = db.cursor()
-        data = cur.execute(
-            "SELECT test_module_path, test_class_name, test_function_name, "
-            "function_getting_tested, loop_index, iteration_id, runtime, return_value,verification_type FROM test_results"
-        ).fetchall()
+        # Check if stdout column exists (backward compatibility with older schemas)
+        columns_info = cur.execute("PRAGMA table_info(test_results)").fetchall()
+        column_names = {col[1] for col in columns_info}
+        has_stdout_column = "stdout" in column_names
+        if has_stdout_column:
+            data = cur.execute(
+                "SELECT test_module_path, test_class_name, test_function_name, "
+                "function_getting_tested, loop_index, iteration_id, runtime, return_value, "
+                "verification_type, stdout FROM test_results"
+            ).fetchall()
+        else:
+            data = cur.execute(
+                "SELECT test_module_path, test_class_name, test_function_name, "
+                "function_getting_tested, loop_index, iteration_id, runtime, return_value, "
+                "verification_type FROM test_results"
+            ).fetchall()
     except Exception as e:
         logger.warning(f"Failed to parse test results from {sqlite_file_path}. Exception: {e}")
         if db is not None:
@@ -642,6 +655,11 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                     logger.debug(f"Failed to deserialize return value for {test_function_name}: {e}")
                     continue
 
+            # Extract stdout from SQLite (Java/JS behavior capture)
+            captured_stdout = None
+            if has_stdout_column and len(val) > 9 and val[9]:
+                captured_stdout = val[9]
+
             test_results.add(
                 function_test_invocation=FunctionTestInvocation(
                     loop_index=loop_index,
@@ -660,6 +678,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                     return_value=ret_val,
                     timed_out=False,
                     verification_type=VerificationType(verification_type) if verification_type else None,
+                    stdout=captured_stdout,
                 )
             )
         except Exception:

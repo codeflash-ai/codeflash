@@ -61,8 +61,8 @@ public final class Comparator {
             return;
         }
 
-        Map<String, byte[]> originalResults;
-        Map<String, byte[]> candidateResults;
+        Map<String, TestResult> originalResults;
+        Map<String, TestResult> candidateResults;
 
         try {
             originalResults = readTestResults(originalDbPath);
@@ -88,36 +88,41 @@ public final class Comparator {
         int totalInvocations = allKeys.size();
 
         for (String key : allKeys) {
-            byte[] origBytes = originalResults.get(key);
-            byte[] candBytes = candidateResults.get(key);
+            TestResult origResult = originalResults.get(key);
+            TestResult candResult = candidateResults.get(key);
+
+            byte[] origBytes = origResult != null ? origResult.returnValue : null;
+            byte[] candBytes = candResult != null ? candResult.returnValue : null;
 
             if (origBytes == null && candBytes == null) {
-                // Both null (void methods) — equivalent
-                continue;
-            }
-
-            if (origBytes == null) {
+                // Both null (void methods) — check stdout still
+            } else if (origBytes == null) {
                 Object candObj = safeDeserialize(candBytes);
                 diffs.add(formatDiff("missing", key, 0, null, safeToString(candObj)));
                 continue;
-            }
-
-            if (candBytes == null) {
+            } else if (candBytes == null) {
                 Object origObj = safeDeserialize(origBytes);
                 diffs.add(formatDiff("missing", key, 0, safeToString(origObj), null));
                 continue;
+            } else {
+                Object origObj = safeDeserialize(origBytes);
+                Object candObj = safeDeserialize(candBytes);
+
+                try {
+                    if (!compare(origObj, candObj)) {
+                        diffs.add(formatDiff("return_value", key, 0, safeToString(origObj), safeToString(candObj)));
+                    }
+                } catch (KryoPlaceholderAccessException e) {
+                    // Placeholder detected — skip comparison for this invocation
+                    continue;
+                }
             }
 
-            Object origObj = safeDeserialize(origBytes);
-            Object candObj = safeDeserialize(candBytes);
-
-            try {
-                if (!compare(origObj, candObj)) {
-                    diffs.add(formatDiff("return_value", key, 0, safeToString(origObj), safeToString(candObj)));
-                }
-            } catch (KryoPlaceholderAccessException e) {
-                // Placeholder detected — skip comparison for this invocation
-                continue;
+            // Compare stdout
+            String origStdout = origResult != null ? origResult.stdout : null;
+            String candStdout = candResult != null ? candResult.stdout : null;
+            if (origStdout != null && candStdout != null && !origStdout.equals(candStdout)) {
+                diffs.add(formatDiff("stdout", key, 0, truncate(origStdout, 200), truncate(candStdout, 200)));
             }
         }
 
@@ -137,25 +142,47 @@ public final class Comparator {
         System.exit(equivalent ? 0 : 1);
     }
 
-    private static Map<String, byte[]> readTestResults(String dbPath) throws Exception {
-        Map<String, byte[]> results = new LinkedHashMap<>();
+    private static class TestResult {
+        final byte[] returnValue;
+        final String stdout;
+
+        TestResult(byte[] returnValue, String stdout) {
+            this.returnValue = returnValue;
+            this.stdout = stdout;
+        }
+    }
+
+    private static Map<String, TestResult> readTestResults(String dbPath) throws Exception {
+        Map<String, TestResult> results = new LinkedHashMap<>();
         String url = "jdbc:sqlite:" + dbPath;
 
         try (Connection conn = DriverManager.getConnection(url);
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(
-                 "SELECT iteration_id, return_value FROM test_results WHERE loop_index = 1")) {
-            while (rs.next()) {
-                String iterationId = rs.getString("iteration_id");
-                byte[] returnValue = rs.getBytes("return_value");
-                // Strip the CODEFLASH_TEST_ITERATION suffix (e.g. "7_0" -> "7")
-                // Original runs with _0, candidate with _1, but the test iteration
-                // counter before the underscore is what identifies the invocation.
-                int lastUnderscore = iterationId.lastIndexOf('_');
-                if (lastUnderscore > 0) {
-                    iterationId = iterationId.substring(0, lastUnderscore);
+             Statement stmt = conn.createStatement()) {
+
+            // Check if stdout column exists (backward compatibility)
+            boolean hasStdout = false;
+            try (ResultSet columns = conn.getMetaData().getColumns(null, null, "test_results", "stdout")) {
+                hasStdout = columns.next();
+            }
+
+            String query = hasStdout
+                ? "SELECT iteration_id, return_value, stdout FROM test_results WHERE loop_index = 1"
+                : "SELECT iteration_id, return_value FROM test_results WHERE loop_index = 1";
+
+            try (ResultSet rs = stmt.executeQuery(query)) {
+                while (rs.next()) {
+                    String iterationId = rs.getString("iteration_id");
+                    byte[] returnValue = rs.getBytes("return_value");
+                    String stdout = hasStdout ? rs.getString("stdout") : null;
+                    // Strip the CODEFLASH_TEST_ITERATION suffix (e.g. "7_0" -> "7")
+                    // Original runs with _0, candidate with _1, but the test iteration
+                    // counter before the underscore is what identifies the invocation.
+                    int lastUnderscore = iterationId.lastIndexOf('_');
+                    if (lastUnderscore > 0) {
+                        iterationId = iterationId.substring(0, lastUnderscore);
+                    }
+                    results.put(iterationId, new TestResult(returnValue, stdout));
                 }
-                results.put(iterationId, returnValue);
             }
         }
         return results;
@@ -184,6 +211,11 @@ public final class Comparator {
         } catch (Exception e) {
             return "<toString failed: " + e.getMessage() + ">";
         }
+    }
+
+    private static String truncate(String s, int maxLen) {
+        if (s == null || s.length() <= maxLen) return s;
+        return s.substring(0, maxLen) + "...";
     }
 
     private static String formatDiff(String scope, String methodId, int callId,

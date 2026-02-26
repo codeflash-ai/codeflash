@@ -845,7 +845,10 @@ def _get_test_class_names(test_paths: Any, mode: str = "performance") -> list[st
             elif isinstance(path, str):
                 class_names.append(path)
 
-    return class_names
+    # Sort to match Maven Surefire's alphabetical execution order.
+    # Without sorting, iteration_id collisions across test classes resolve
+    # differently between Maven (original) and direct JVM (candidate) runs.
+    return sorted(class_names)
 
 
 def _get_empty_result(maven_root: Path, test_module: str | None) -> tuple[Path, Any]:
