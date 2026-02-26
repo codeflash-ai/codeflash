@@ -9,7 +9,9 @@ class TestType(Enum):
     CONCOLIC_COVERAGE_TEST = 5
     INIT_STATE_TEST = 6
 
-    def to_name(self) -> str:
+    def to_name(self, language: str = "python") -> str:
+        if language in ("javascript", "typescript"):
+            return _JS_TS_NAME_MAP.get(self, "")
         return _TO_NAME_MAP.get(self, "")
 
 
@@ -19,4 +21,9 @@ _TO_NAME_MAP: dict[TestType, str] = {
     TestType.GENERATED_REGRESSION: "🌀 Generated Regression Tests",
     TestType.REPLAY_TEST: "⏪ Replay Tests",
     TestType.CONCOLIC_COVERAGE_TEST: "🔎 Concolic Coverage Tests",
+}
+
+_JS_TS_NAME_MAP: dict[TestType, str] = {
+    TestType.EXISTING_UNIT_TEST: "⚙️ Existing Tests",
+    TestType.GENERATED_REGRESSION: "🌀 Generated Tests",
 }
