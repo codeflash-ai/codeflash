@@ -805,7 +805,13 @@ def parse_test_xml(
             if class_name is not None and class_name.startswith(test_module_path):
                 test_class = class_name[len(test_module_path) + 1 :]  # +1 for the dot, gets Unittest class name
 
-            loop_index = int(testcase.name.split("[ ")[-1][:-2]) if testcase.name and "[" in testcase.name else 1
+            loop_index = 1
+            if testcase.name and "[" in testcase.name:
+                bracket_content = testcase.name.rsplit("[", 1)[-1].rstrip("]").strip()
+                try:
+                    loop_index = int(bracket_content)
+                except ValueError:
+                    loop_index = 1
 
             timed_out = False
             if len(testcase.result) > 1:
