@@ -7,6 +7,7 @@ test files, similar to Python's inject_profiling_into_existing_test.
 from __future__ import annotations
 
 import re
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -16,6 +17,10 @@ from codeflash.cli_cmds.console import logger
 if TYPE_CHECKING:
     from codeflash.code_utils.code_position import CodePosition
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+
+_CACHE_SIZE = 8
+
+_string_state_cache: "OrderedDict[str, list[bool]]" = OrderedDict()
 
 
 class TestingMode:
@@ -81,30 +86,18 @@ def is_inside_string(code: str, pos: int) -> bool:
         True if the position is inside a string literal.
 
     """
-    in_string = False
-    string_char = None
-    i = 0
-
-    while i < pos:
-        char = code[i]
-
-        if in_string:
-            # Check for escape sequence
-            if char == "\\" and i + 1 < len(code):
-                i += 2  # Skip escaped character
-                continue
-            # Check for end of string
-            if char == string_char:
-                in_string = False
-                string_char = None
-        # Check for start of string
-        elif char in "\"'`":
-            in_string = True
-            string_char = char
-
-        i += 1
-
-    return in_string
+    # Use a small LRU cache keyed by the code string to avoid recomputing the state
+    # for the same code many times. This preserves exact behavior while making
+    # repeated checks O(1) after the first computation.
+    state = _string_state_cache.get(code)
+    if state is None:
+        state = _compute_string_state(code)
+        # Maintain LRU semantics and bounded size
+        _string_state_cache[code] = state
+        if len(_string_state_cache) > _CACHE_SIZE:
+            _string_state_cache.popitem(last=False)
+    # pos is allowed to be up to len(code); state has length len(code)+1
+    return state[pos]
 
 
 class JsxRenderCallTransformer:
@@ -949,34 +942,32 @@ class RenderCallTransformer:
         # render(_jsx(ComponentName, props)) or render(_jsxs(ComponentName, props))
         self._render_jsx_pattern = re.compile(rf"(\s*)render\s*\(\s*_jsxs?\s*\(\s*{re.escape(self.func_name)}\b")
 
+
+        # Combine both patterns into a single compiled regex to avoid performing
+        # two separate searches per loop iteration. The second group tells us
+        # whether the matched callee was React.createElement or _jsx/_jsxs.
+        self._render_pattern = re.compile(
+            rf"(\s*)render\s*\(\s*(React\.createElement|_jsxs?)\s*\(\s*{re.escape(self.func_name)}\b"
+        )
+
     def transform(self, code: str) -> str:
         """Transform all render(React.createElement(Component, ...)) calls in the code."""
         result: list[str] = []
         pos = 0
 
         while pos < len(code):
-            # Try both React.createElement and _jsx/_jsxs patterns
-            ce_match = self._render_create_element_pattern.search(code, pos)
-            jsx_match = self._render_jsx_pattern.search(code, pos)
+            # Use the combined pattern to find the next match (either createElement or _jsx/_jsxs)
+            match = self._render_pattern.search(code, pos)
 
-            # Choose the first match (by position)
-            match = None
-            is_jsx = False
-            if ce_match and jsx_match:
-                if ce_match.start() <= jsx_match.start():
-                    match = ce_match
-                else:
-                    match = jsx_match
-                    is_jsx = True
-            elif ce_match:
-                match = ce_match
-            elif jsx_match:
-                match = jsx_match
-                is_jsx = True
 
             if not match:
                 result.append(code[pos:])
                 break
+
+            # Skip if inside a string literal
+
+            # Determine whether it's a JSX-compiled call based on the second capture group
+            is_jsx = bool(match.group(2) and match.group(2).startswith("_jsx"))
 
             # Skip if inside a string literal
             if is_inside_string(code, match.start()):
@@ -1781,3 +1772,90 @@ def fix_jest_mock_paths(test_code: str, test_file_path: Path, source_file_path: 
         return original  # Keep original if we can't fix it
 
     return mock_pattern.sub(fix_mock_path, test_code)
+
+
+
+def _compute_string_state(code: str) -> list[bool]:
+    """Compute prefix 'in_string' state for each position in the code.
+
+    Returns a list `state` of length len(code) + 1 where state[pos] is True if,
+    after processing characters code[0:pos], we are inside a string literal.
+    Mirrors the behavior of the original is_inside_string scanning logic.
+    """
+    n = len(code)
+    state: list[bool] = [False] * (n + 1)
+    in_string = False
+    string_char = None
+    i = 0
+
+    while i < n:
+        char = code[i]
+
+        if in_string:
+            # Check for escape sequence
+            if char == "\\" and i + 1 < n:
+                # After the backslash and its escaped char, we remain inside the string.
+                # Set state for positions after consuming each of the two characters.
+                state[i + 1] = True
+                state[i + 2] = True
+                i += 2
+                continue
+            # Check for end of string
+            if char == string_char:
+                in_string = False
+                string_char = None
+            # State after processing this character
+            state[i + 1] = in_string
+            i += 1
+        else:
+            # Not currently in a string, check for start
+            if char in "\"'`":
+                in_string = True
+                string_char = char
+            state[i + 1] = in_string
+            i += 1
+
+    return state
+
+
+def _compute_string_state(code: str) -> list[bool]:
+    """Compute prefix 'in_string' state for each position in the code.
+
+    Returns a list `state` of length len(code) + 1 where state[pos] is True if,
+    after processing characters code[0:pos], we are inside a string literal.
+    Mirrors the behavior of the original is_inside_string scanning logic.
+    """
+    n = len(code)
+    state: list[bool] = [False] * (n + 1)
+    in_string = False
+    string_char = None
+    i = 0
+
+    while i < n:
+        char = code[i]
+
+        if in_string:
+            # Check for escape sequence
+            if char == "\\" and i + 1 < n:
+                # After the backslash and its escaped char, we remain inside the string.
+                # Set state for positions after consuming each of the two characters.
+                state[i + 1] = True
+                state[i + 2] = True
+                i += 2
+                continue
+            # Check for end of string
+            if char == string_char:
+                in_string = False
+                string_char = None
+            # State after processing this character
+            state[i + 1] = in_string
+            i += 1
+        else:
+            # Not currently in a string, check for start
+            if char in "\"'`":
+                in_string = True
+                string_char = char
+            state[i + 1] = in_string
+            i += 1
+
+    return state
