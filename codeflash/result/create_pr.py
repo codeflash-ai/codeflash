@@ -14,6 +14,7 @@ from codeflash.code_utils.github_utils import github_pr_url
 from codeflash.code_utils.tabulate import tabulate
 from codeflash.code_utils.time_utils import format_perf, format_time
 from codeflash.github.PrComment import FileDiffContent, PrComment
+from codeflash.languages import is_java
 from codeflash.languages.python.static_analysis.code_replacer import is_zero_diff
 from codeflash.result.critic import performance_gain
 
@@ -138,6 +139,14 @@ def existing_tests_source_for(
                 logger.debug(f"[PR-DEBUG] Mapped {instrumented_abs_path.name} -> {abs_path.name}")
             else:
                 logger.debug(f"[PR-DEBUG] No mapping found for {instrumented_abs_path.name}")
+        elif is_java():
+            # Java: test_module_path is the class name (e.g., "BubbleSortTest")
+            # Search non_generated_tests for a matching .java file
+            abs_path = (test_cfg.tests_project_rootdir / f"{test_module_path}.java").resolve()
+            for candidate in non_generated_tests:
+                if candidate.stem == test_module_path:
+                    abs_path = candidate
+                    break
         else:
             # Python: convert module name to path
             abs_path = Path(test_module_path.replace(".", os.sep)).with_suffix(".py").resolve()
