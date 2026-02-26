@@ -331,11 +331,12 @@ class CodeStringsMarkdown(BaseModel):
             dict[str, str]: Mapping from file path (as string) to code.
 
         """
-        if "file_to_path" in self._cache:
+        try:
             return self._cache["file_to_path"]
-        result = {str(code_string.file_path): code_string.code for code_string in self.code_strings}
-        self._cache["file_to_path"] = result
-        return result
+        except KeyError:
+            result = {str(code_string.file_path): code_string.code for code_string in self.code_strings}
+            self._cache["file_to_path"] = result
+            return result
 
     @staticmethod
     def parse_markdown_code(markdown_code: str, expected_language: str = "python") -> CodeStringsMarkdown:
