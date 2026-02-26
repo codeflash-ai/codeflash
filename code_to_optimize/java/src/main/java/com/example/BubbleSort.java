@@ -17,20 +17,23 @@ public class BubbleSort {
         }
 
         int[] result = new int[arr.length];
-        for (int i = 0; i < arr.length; i++) {
-            result[i] = arr[i];
-        }
+        // Use System.arraycopy for faster bulk copy
+        System.arraycopy(arr, 0, result, 0, arr.length);
 
         int n = result.length;
 
-        for (int i = 0; i < n; i++) {
-            for (int j = 0; j < n - 1; j++) {
-                if (result[j] > result[j + 1]) {
-                    int temp = result[j];
-                    result[j] = result[j + 1];
-                    result[j + 1] = temp;
+        // Optimized bubble sort: track last swap to reduce the inner loop boundary
+        while (n > 1) {
+            int newN = 0;
+            for (int j = 1; j < n; j++) {
+                if (result[j - 1] > result[j]) {
+                    int temp = result[j - 1];
+                    result[j - 1] = result[j];
+                    result[j] = temp;
+                    newN = j;
                 }
             }
+            n = newN;
         }
 
         return result;
