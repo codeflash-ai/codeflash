@@ -35,6 +35,10 @@ _WORD_RE = re.compile(r"^\w+$")
 
 _ASSERTION_METHODS = ("assertArrayEquals", "assertArrayNotEquals")
 
+# Per-test timeout (seconds) added to instrumented tests to prevent individual
+# tests from hanging (e.g. naive recursive fibonacci with large inputs).
+_PER_TEST_TIMEOUT_SECONDS = 30
+
 logger = logging.getLogger(__name__)
 
 
@@ -588,6 +592,57 @@ def instrument_for_benchmarking(
     return test_source
 
 
+def _add_per_test_timeout(source: str, timeout_seconds: int = _PER_TEST_TIMEOUT_SECONDS) -> str:
+    """Add @Timeout annotation to each @Test method to prevent individual tests from hanging.
+
+    This inserts `import org.junit.jupiter.api.Timeout;` and adds
+    `@Timeout(N)` after every `@Test` annotation in the source.
+    """
+    timeout_import = "import org.junit.jupiter.api.Timeout;"
+
+    # Add import if not already present
+    if timeout_import not in source:
+        lines = source.split("\n")
+        result_lines: list[str] = []
+        import_added = False
+        for line in lines:
+            result_lines.append(line)
+            # Insert after the last JUnit import line
+            if not import_added and line.strip().startswith("import org.junit.jupiter.api."):
+                # Peek ahead: if the next non-empty line is NOT another import, insert here
+                result_lines.append(timeout_import)
+                import_added = True
+        if not import_added:
+            # Fallback: insert before the first import
+            result_lines2: list[str] = []
+            for line in result_lines:
+                if not import_added and line.strip().startswith("import "):
+                    result_lines2.append(timeout_import)
+                    import_added = True
+                result_lines2.append(line)
+            result_lines = result_lines2
+        source = "\n".join(result_lines)
+        # Deduplicate: the import may appear twice if multiple junit imports existed
+        source = source.replace(f"{timeout_import}\n{timeout_import}", timeout_import)
+
+    # Add @Timeout after each @Test annotation (only if not already present)
+    lines = source.split("\n")
+    result_lines = []
+    for i, line in enumerate(lines):
+        result_lines.append(line)
+        stripped = line.strip()
+        if _is_test_annotation(stripped):
+            # Check if the next non-blank line is already @Timeout
+            next_idx = i + 1
+            while next_idx < len(lines) and not lines[next_idx].strip():
+                next_idx += 1
+            if next_idx >= len(lines) or not lines[next_idx].strip().startswith("@Timeout"):
+                indent = line[: len(line) - len(line.lstrip())]
+                result_lines.append(f"{indent}@Timeout({timeout_seconds})")
+
+    return "\n".join(result_lines)
+
+
 def instrument_existing_test(
     test_string: str,
     function_to_optimize: Any,  # FunctionToOptimize or FunctionToOptimize
@@ -637,6 +692,9 @@ def instrument_existing_test(
     # variable declarations, etc. We use word-boundary matching to avoid
     # replacing substrings of other identifiers.
     modified_source = re.sub(rf"\b{re.escape(original_class_name)}\b", new_class_name, source)
+
+    # Add per-test timeout to prevent individual tests from hanging the entire Maven run
+    modified_source = _add_per_test_timeout(modified_source)
 
     # Add timing instrumentation to test methods
     # Use original class name (without suffix) in timing markers for consistency with Python
