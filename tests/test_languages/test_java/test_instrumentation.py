@@ -492,16 +492,23 @@ public class CalculatorTest {
 public class CalculatorTest__perfonlyinstrumented {
     @Test
     public void testAdd() {
-        // Codeflash timing instrumentation with inner loop for JIT warmup
+        // Codeflash timing instrumentation with JIT warmup + measurement
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
         String _cf_mod1 = "CalculatorTest";
         String _cf_cls1 = "CalculatorTest";
         String _cf_test1 = "testAdd";
         String _cf_fn1 = "add";
-        
+
         Calculator calc = new Calculator();
+        // JIT warmup phase (not timed)
+        for (int _cf_w1 = 0; _cf_w1 < _cf_warmupIterations1; _cf_w1++) {
+            try {
+                assertEquals(4, calc.add(2, 2));
+            } catch (Exception _cf_we1) { }
+        }
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
             System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
@@ -564,15 +571,22 @@ public class MathTest {
 public class MathTest__perfonlyinstrumented {
     @Test
     public void testAdd() {
-        // Codeflash timing instrumentation with inner loop for JIT warmup
+        // Codeflash timing instrumentation with JIT warmup + measurement
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
         String _cf_mod1 = "MathTest";
         String _cf_cls1 = "MathTest";
         String _cf_test1 = "testAdd";
         String _cf_fn1 = "add";
 
+        // JIT warmup phase (not timed)
+        for (int _cf_w1 = 0; _cf_w1 < _cf_warmupIterations1; _cf_w1++) {
+            try {
+                add(2, 2);
+            } catch (Exception _cf_we1) { }
+        }
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
             System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
@@ -592,15 +606,22 @@ public class MathTest__perfonlyinstrumented {
 
     @Test
     public void testSubtract() {
-        // Codeflash timing instrumentation with inner loop for JIT warmup
+        // Codeflash timing instrumentation with JIT warmup + measurement
         int _cf_outerLoop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_warmupIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
         String _cf_mod2 = "MathTest";
         String _cf_cls2 = "MathTest";
         String _cf_test2 = "testSubtract";
         String _cf_fn2 = "add";
 
+        // JIT warmup phase (not timed)
+        for (int _cf_w2 = 0; _cf_w2 < _cf_warmupIterations2; _cf_w2++) {
+            try {
+                add(2, 2);
+            } catch (Exception _cf_we2) { }
+        }
         for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
             int _cf_loopId2 = _cf_outerLoop2 * _cf_maxInnerIterations2 + _cf_i2;
             System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + _cf_i2 + "######$!");
@@ -670,15 +691,22 @@ public class ServiceTest__perfonlyinstrumented {
     @Test
     @DisplayName("Test service call")
     public void testService() {
-        // Codeflash timing instrumentation with inner loop for JIT warmup
+        // Codeflash timing instrumentation with JIT warmup + measurement
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
         String _cf_mod1 = "ServiceTest";
         String _cf_cls1 = "ServiceTest";
         String _cf_test1 = "testService";
         String _cf_fn1 = "call";
 
+        // JIT warmup phase (not timed)
+        for (int _cf_w1 = 0; _cf_w1 < _cf_warmupIterations1; _cf_w1++) {
+            try {
+                service.call();
+            } catch (Exception _cf_we1) { }
+        }
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
             System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
@@ -812,15 +840,22 @@ public class MyTest {
 public class MyTest {
     @Test
     public void testFoo() {
-        // Codeflash timing instrumentation with inner loop for JIT warmup
+        // Codeflash timing instrumentation with JIT warmup + measurement
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
         String _cf_mod1 = "MyTest";
         String _cf_cls1 = "MyTest";
         String _cf_test1 = "testFoo";
         String _cf_fn1 = "foo";
 
+        // JIT warmup phase (not timed)
+        for (int _cf_w1 = 0; _cf_w1 < _cf_warmupIterations1; _cf_w1++) {
+            try {
+                obj.foo();
+            } catch (Exception _cf_we1) { }
+        }
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
             System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
@@ -888,15 +923,22 @@ class TestAddTimingInstrumentation:
         expected = """public class SimpleTest {
     @Test
     public void testSomething() {
-        // Codeflash timing instrumentation with inner loop for JIT warmup
+        // Codeflash timing instrumentation with JIT warmup + measurement
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
         String _cf_mod1 = "SimpleTest";
         String _cf_cls1 = "SimpleTest";
         String _cf_test1 = "testSomething";
         String _cf_fn1 = "doSomething";
 
+        // JIT warmup phase (not timed)
+        for (int _cf_w1 = 0; _cf_w1 < _cf_warmupIterations1; _cf_w1++) {
+            try {
+                doSomething();
+            } catch (Exception _cf_we1) { }
+        }
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
             System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
@@ -937,15 +979,22 @@ class TestAddTimingInstrumentation:
         expected = """public class MultiTest {
     @Test
     public void testFirst() {
-        // Codeflash timing instrumentation with inner loop for JIT warmup
+        // Codeflash timing instrumentation with JIT warmup + measurement
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
         String _cf_mod1 = "MultiTest";
         String _cf_cls1 = "MultiTest";
         String _cf_test1 = "testFirst";
         String _cf_fn1 = "func";
 
+        // JIT warmup phase (not timed)
+        for (int _cf_w1 = 0; _cf_w1 < _cf_warmupIterations1; _cf_w1++) {
+            try {
+                func();
+            } catch (Exception _cf_we1) { }
+        }
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
             System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
@@ -965,16 +1014,23 @@ class TestAddTimingInstrumentation:
 
     @Test
     public void testSecond() {
-        // Codeflash timing instrumentation with inner loop for JIT warmup
+        // Codeflash timing instrumentation with JIT warmup + measurement
         int _cf_outerLoop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_warmupIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
         String _cf_mod2 = "MultiTest";
         String _cf_cls2 = "MultiTest";
         String _cf_test2 = "testSecond";
         String _cf_fn2 = "func";
-        
+
         second();
+        // JIT warmup phase (not timed)
+        for (int _cf_w2 = 0; _cf_w2 < _cf_warmupIterations2; _cf_w2++) {
+            try {
+                func();
+            } catch (Exception _cf_we2) { }
+        }
         for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
             int _cf_loopId2 = _cf_outerLoop2 * _cf_maxInnerIterations2 + _cf_i2;
             System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + _cf_i2 + "######$!");
@@ -1029,14 +1085,21 @@ class TestAddTimingInstrumentation:
     public void testRepeat() {
         setup();
 
-        // Codeflash timing instrumentation with inner loop for JIT warmup
+        // Codeflash timing instrumentation with JIT warmup + measurement
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
         String _cf_mod1 = "RepeatTest";
         String _cf_cls1 = "RepeatTest";
         String _cf_test1 = "testRepeat";
         String _cf_fn1 = "target";
+        // JIT warmup phase (not timed)
+        for (int _cf_w1 = 0; _cf_w1 < _cf_warmupIterations1; _cf_w1++) {
+            try {
+                target();
+            } catch (Exception _cf_we1) { }
+        }
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
             System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":1_" + _cf_i1 + "######$!");
@@ -1054,14 +1117,21 @@ class TestAddTimingInstrumentation:
         }
         helper();
 
-        // Codeflash timing instrumentation with inner loop for JIT warmup
+        // Codeflash timing instrumentation with JIT warmup + measurement
         int _cf_outerLoop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_warmupIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
         String _cf_mod2 = "RepeatTest";
         String _cf_cls2 = "RepeatTest";
         String _cf_test2 = "testRepeat";
         String _cf_fn2 = "target";
+        // JIT warmup phase (not timed)
+        for (int _cf_w2 = 0; _cf_w2 < _cf_warmupIterations2; _cf_w2++) {
+            try {
+                target();
+            } catch (Exception _cf_we2) { }
+        }
         for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
             int _cf_loopId2 = _cf_outerLoop2 * _cf_maxInnerIterations2 + _cf_i2;
             System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":2_" + _cf_i2 + "######$!");
@@ -1363,15 +1433,22 @@ public class GeneratedTest {
 public class GeneratedTest__perfonlyinstrumented {
     @Test
     public void testMethod() {
-        // Codeflash timing instrumentation with inner loop for JIT warmup
+        // Codeflash timing instrumentation with JIT warmup + measurement
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
         String _cf_mod1 = "GeneratedTest";
         String _cf_cls1 = "GeneratedTest";
         String _cf_test1 = "testMethod";
         String _cf_fn1 = "method";
 
+        // JIT warmup phase (not timed)
+        for (int _cf_w1 = 0; _cf_w1 < _cf_warmupIterations1; _cf_w1++) {
+            try {
+                target.method();
+            } catch (Exception _cf_we1) { }
+        }
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
             System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
@@ -1550,15 +1627,24 @@ public class BraceTest__perfonlyinstrumented {
 
     @Test
     public void testTwo() {
-        // Codeflash timing instrumentation with inner loop for JIT warmup
+        // Codeflash timing instrumentation with JIT warmup + measurement
         int _cf_outerLoop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_warmupIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
         String _cf_mod2 = "BraceTest";
         String _cf_cls2 = "BraceTest";
         String _cf_test2 = "testTwo";
         String _cf_fn2 = "process";
 
+        // JIT warmup phase (not timed)
+        for (int _cf_w2 = 0; _cf_w2 < _cf_warmupIterations2; _cf_w2++) {
+            try {
+                for (int i = 0; i < 10; i++) {
+                            process(i);
+                        }
+            } catch (Exception _cf_we2) { }
+        }
         for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
             int _cf_loopId2 = _cf_outerLoop2 * _cf_maxInnerIterations2 + _cf_i2;
             System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + _cf_i2 + "######$!");
@@ -1629,16 +1715,23 @@ import java.util.ArrayList;
 public class ImportTest__perfonlyinstrumented {
     @Test
     public void testCollections() {
-        // Codeflash timing instrumentation with inner loop for JIT warmup
+        // Codeflash timing instrumentation with JIT warmup + measurement
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
         String _cf_mod1 = "ImportTest";
         String _cf_cls1 = "ImportTest";
         String _cf_test1 = "testCollections";
         String _cf_fn1 = "size";
-        
+
         List<String> list = new ArrayList<>();
+        // JIT warmup phase (not timed)
+        for (int _cf_w1 = 0; _cf_w1 < _cf_warmupIterations1; _cf_w1++) {
+            try {
+                assertEquals(0, list.size());
+            } catch (Exception _cf_we1) { }
+        }
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
             System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
@@ -1747,15 +1840,28 @@ public class NestedTest {
 public class NestedTest__perfonlyinstrumented {
     @Test
     public void testNested() {
-        // Codeflash timing instrumentation with inner loop for JIT warmup
+        // Codeflash timing instrumentation with JIT warmup + measurement
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
         String _cf_mod1 = "NestedTest";
         String _cf_cls1 = "NestedTest";
         String _cf_test1 = "testNested";
         String _cf_fn1 = "process";
 
+        // JIT warmup phase (not timed)
+        for (int _cf_w1 = 0; _cf_w1 < _cf_warmupIterations1; _cf_w1++) {
+            try {
+                if (condition) {
+                            for (int i = 0; i < 10; i++) {
+                                if (i > 5) {
+                                    process(i);
+                                }
+                            }
+                        }
+            } catch (Exception _cf_we1) { }
+        }
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
             System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
@@ -1896,16 +2002,23 @@ public class Utf8Test {
             'public class Utf8Test__perfonlyinstrumented {\n'
             '    @Test\n'
             '    public void testWithCjk() {\n'
-            '        // Codeflash timing instrumentation with inner loop for JIT warmup\n'
+            '        // Codeflash timing instrumentation with JIT warmup + measurement\n'
             '        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));\n'
             '        int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));\n'
             '        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));\n'
+            '        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));\n'
             '        String _cf_mod1 = "Utf8Test";\n'
             '        String _cf_cls1 = "Utf8Test";\n'
             '        String _cf_test1 = "testWithCjk";\n'
             '        String _cf_fn1 = "compute";\n'
-            '        \n'
+            '\n'
             '        String label = "\u30c6\u30b9\u30c8\u540d\u524d";\n'
+            '        // JIT warmup phase (not timed)\n'
+            '        for (int _cf_w1 = 0; _cf_w1 < _cf_warmupIterations1; _cf_w1++) {\n'
+            '            try {\n'
+            '                assertEquals(42, compute(21));\n'
+            '            } catch (Exception _cf_we1) { }\n'
+            '        }\n'
             '        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {\n'
             '            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;\n'
             '            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");\n'
@@ -1970,17 +2083,24 @@ public class AccentTest {
             'public class AccentTest__perfonlyinstrumented {\n'
             '    @Test\n'
             '    public void testWithAccent() {\n'
-            '        // Codeflash timing instrumentation with inner loop for JIT warmup\n'
+            '        // Codeflash timing instrumentation with JIT warmup + measurement\n'
             '        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));\n'
             '        int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));\n'
             '        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));\n'
+            '        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));\n'
             '        String _cf_mod1 = "AccentTest";\n'
             '        String _cf_cls1 = "AccentTest";\n'
             '        String _cf_test1 = "testWithAccent";\n'
             '        String _cf_fn1 = "calculate";\n'
-            '        \n'
+            '\n'
             '        // R\u00e9sum\u00e9 processing test with accented chars\n'
             '        String name = "caf\u00e9";\n'
+            '        // JIT warmup phase (not timed)\n'
+            '        for (int _cf_w1 = 0; _cf_w1 < _cf_warmupIterations1; _cf_w1++) {\n'
+            '            try {\n'
+            '                assertEquals(10, calculate(5));\n'
+            '            } catch (Exception _cf_we1) { }\n'
+            '        }\n'
             '        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {\n'
             '            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;\n'
             '            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");\n'
@@ -2205,7 +2325,7 @@ public class CalculatorTest {
         """Test run_and_parse_tests in PERFORMANCE mode with inner loop timing.
 
         This test verifies the complete performance benchmarking flow:
-        1. Instruments test with inner loop for JIT warmup
+        1. Instruments test with JIT warmup + measurement
         2. Runs with inner_iterations=2 (fast test)
         3. Validates multiple timing markers are produced (one per inner iteration)
         4. Validates parsed results contain timing data
@@ -2268,16 +2388,23 @@ import static org.junit.jupiter.api.Assertions.*;
 public class MathUtilsTest__perfonlyinstrumented {
     @Test
     public void testMultiply() {
-        // Codeflash timing instrumentation with inner loop for JIT warmup
+        // Codeflash timing instrumentation with JIT warmup + measurement
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
         String _cf_mod1 = "MathUtilsTest";
         String _cf_cls1 = "MathUtilsTest";
         String _cf_test1 = "testMultiply";
         String _cf_fn1 = "multiply";
-        
+
         MathUtils math = new MathUtils();
+        // JIT warmup phase (not timed)
+        for (int _cf_w1 = 0; _cf_w1 < _cf_warmupIterations1; _cf_w1++) {
+            try {
+                assertEquals(6, math.multiply(2, 3));
+            } catch (Exception _cf_we1) { }
+        }
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
             System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
@@ -2870,16 +2997,23 @@ import static org.junit.jupiter.api.Assertions.*;
 public class FibonacciTest__perfonlyinstrumented {
     @Test
     public void testFib() {
-        // Codeflash timing instrumentation with inner loop for JIT warmup
+        // Codeflash timing instrumentation with JIT warmup + measurement
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
         String _cf_mod1 = "FibonacciTest";
         String _cf_cls1 = "FibonacciTest";
         String _cf_test1 = "testFib";
         String _cf_fn1 = "fib";
-        
+
         Fibonacci fib = new Fibonacci();
+        // JIT warmup phase (not timed)
+        for (int _cf_w1 = 0; _cf_w1 < _cf_warmupIterations1; _cf_w1++) {
+            try {
+                assertEquals(5, fib.fib(5));
+            } catch (Exception _cf_we1) { }
+        }
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
             System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
@@ -3142,15 +3276,22 @@ import static org.junit.jupiter.api.Assertions.*;
 public class SpinWaitTest__perfonlyinstrumented {
     @Test
     public void testSpinShort() {
-        // Codeflash timing instrumentation with inner loop for JIT warmup
+        // Codeflash timing instrumentation with JIT warmup + measurement
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_warmupIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
         String _cf_mod1 = "SpinWaitTest";
         String _cf_cls1 = "SpinWaitTest";
         String _cf_test1 = "testSpinShort";
         String _cf_fn1 = "spinWait";
 
+        // JIT warmup phase (not timed)
+        for (int _cf_w1 = 0; _cf_w1 < _cf_warmupIterations1; _cf_w1++) {
+            try {
+                assertEquals(50_000_000L, SpinWait.spinWait(50_000_000L));
+            } catch (Exception _cf_we1) { }
+        }
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
             System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + _cf_i1 + "######$!");
@@ -3170,15 +3311,22 @@ public class SpinWaitTest__perfonlyinstrumented {
 
     @Test
     public void testSpinLong() {
-        // Codeflash timing instrumentation with inner loop for JIT warmup
+        // Codeflash timing instrumentation with JIT warmup + measurement
         int _cf_outerLoop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
         int _cf_maxInnerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
         int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));
+        int _cf_warmupIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "3"));
         String _cf_mod2 = "SpinWaitTest";
         String _cf_cls2 = "SpinWaitTest";
         String _cf_test2 = "testSpinLong";
         String _cf_fn2 = "spinWait";
 
+        // JIT warmup phase (not timed)
+        for (int _cf_w2 = 0; _cf_w2 < _cf_warmupIterations2; _cf_w2++) {
+            try {
+                assertEquals(100_000_000L, SpinWait.spinWait(100_000_000L));
+            } catch (Exception _cf_we2) { }
+        }
         for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
             int _cf_loopId2 = _cf_outerLoop2 * _cf_maxInnerIterations2 + _cf_i2;
             System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + _cf_i2 + "######$!");

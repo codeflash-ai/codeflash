@@ -1049,10 +1049,11 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
 
             current_id = next_wrapper_id + 1
             setup_lines = [
-                f"{indent}// Codeflash timing instrumentation with inner loop for JIT warmup",
+                f"{indent}// Codeflash timing instrumentation with JIT warmup + measurement",
                 f'{indent}int _cf_outerLoop{current_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
                 f'{indent}int _cf_maxInnerIterations{current_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));',
                 f'{indent}int _cf_innerIterations{current_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));',
+                f'{indent}int _cf_warmupIterations{current_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "50"));',
                 f'{indent}String _cf_mod{current_id} = "{class_name}";',
                 f'{indent}String _cf_cls{current_id} = "{class_name}";',
                 f'{indent}String _cf_test{current_id} = "{test_method_name}";',
@@ -1068,9 +1069,20 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 hoisted_decl, assignment_stmt = var_split
                 setup_lines.append(f"{indent}{hoisted_decl}")
                 stmt_in_try = reindent_block(assignment_stmt, inner_body_indent)
+                warmup_stmt = reindent_block(assignment_stmt, indent + "        ")
             else:
                 stmt_in_try = reindent_block(target_stmt, inner_body_indent)
+                warmup_stmt = reindent_block(target_stmt, indent + "        ")
+            warmup_lines = [
+                f"{indent}// JIT warmup phase (not timed)",
+                f"{indent}for (int _cf_w{current_id} = 0; _cf_w{current_id} < _cf_warmupIterations{current_id}; _cf_w{current_id}++) {{",
+                f"{indent}    try {{",
+                warmup_stmt,
+                f"{indent}    }} catch (Exception _cf_we{current_id}) {{ }}",
+                f"{indent}}}",
+            ]
             timing_lines = [
+                *warmup_lines,
                 f"{indent}for (int _cf_i{current_id} = 0; _cf_i{current_id} < _cf_innerIterations{current_id}; _cf_i{current_id}++) {{",
                 f"{inner_indent}int _cf_loopId{current_id} = _cf_outerLoop{current_id} * _cf_maxInnerIterations{current_id} + _cf_i{current_id};",
                 f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":" + _cf_i{current_id} + "######$!");',
@@ -1092,7 +1104,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             result_parts = ["\n" + "\n".join(setup_lines)]
             if normalized_prefix.strip():
                 prefix_body = normalized_prefix.lstrip("\n")
-                result_parts.append(f"{indent}\n")
+                result_parts.append("\n")
                 result_parts.append(prefix_body)
                 if not prefix_body.endswith("\n"):
                     result_parts.append("\n")
@@ -1117,10 +1129,11 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             current_id = wrapper_id
 
             setup_lines = [
-                f"{indent}// Codeflash timing instrumentation with inner loop for JIT warmup",
+                f"{indent}// Codeflash timing instrumentation with JIT warmup + measurement",
                 f'{indent}int _cf_outerLoop{current_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
                 f'{indent}int _cf_maxInnerIterations{current_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));',
                 f'{indent}int _cf_innerIterations{current_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));',
+                f'{indent}int _cf_warmupIterations{current_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_WARMUP_ITERATIONS", "50"));',
                 f'{indent}String _cf_mod{current_id} = "{class_name}";',
                 f'{indent}String _cf_cls{current_id} = "{class_name}";',
                 f'{indent}String _cf_test{current_id} = "{test_method_name}";',
@@ -1134,10 +1147,21 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 hoisted_decl, assignment_stmt = var_split
                 setup_lines.append(f"{indent}{hoisted_decl}")
                 stmt_in_try = reindent_block(assignment_stmt, inner_body_indent)
+                warmup_stmt = reindent_block(assignment_stmt, indent + "        ")
             else:
                 stmt_in_try = reindent_block(target_stmt, inner_body_indent)
+                warmup_stmt = reindent_block(target_stmt, indent + "        ")
+            warmup_lines = [
+                f"{indent}// JIT warmup phase (not timed)",
+                f"{indent}for (int _cf_w{current_id} = 0; _cf_w{current_id} < _cf_warmupIterations{current_id}; _cf_w{current_id}++) {{",
+                f"{indent}    try {{",
+                warmup_stmt,
+                f"{indent}    }} catch (Exception _cf_we{current_id}) {{ }}",
+                f"{indent}}}",
+            ]
 
             timing_lines = [
+                *warmup_lines,
                 f"{indent}for (int _cf_i{current_id} = 0; _cf_i{current_id} < _cf_innerIterations{current_id}; _cf_i{current_id}++) {{",
                 f"{inner_indent}int _cf_loopId{current_id} = _cf_outerLoop{current_id} * _cf_maxInnerIterations{current_id} + _cf_i{current_id};",
                 f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":{current_id}_" + _cf_i{current_id} + "######$!");',
