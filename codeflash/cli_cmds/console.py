@@ -408,6 +408,7 @@ def subagent_log_optimization_result(
     new_code: dict[Path, str],
     review: str,
     test_results: TestResults,
+    project_root: Path | None = None,
 ) -> None:
     import sys
     from xml.sax.saxutils import escape
@@ -421,7 +422,13 @@ def subagent_log_optimization_result(
         old = original_code.get(path, "")
         new = new_code.get(path, "")
         if old != new:
-            diff = unified_diff_strings(old, new, fromfile=str(path), tofile=str(path))
+            display_path = str(path)
+            if project_root is not None:
+                try:
+                    display_path = str(path.relative_to(project_root))
+                except ValueError:
+                    pass
+            diff = unified_diff_strings(old, new, fromfile=display_path, tofile=display_path)
             if diff:
                 diff_parts.append(diff)
 

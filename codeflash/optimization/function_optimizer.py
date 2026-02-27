@@ -2098,6 +2098,7 @@ class FunctionOptimizer:
                 new_code=new_code_combined,
                 review="",
                 test_results=explanation.winning_behavior_test_results,
+                project_root=self.project_root,
             )
             mark_optimization_success(
                 trace_id=self.function_trace_id, is_optimization_found=best_optimization is not None
