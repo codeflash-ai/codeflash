@@ -10,13 +10,15 @@ from __future__ import annotations
 import contextlib
 import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from junitparser.xunit2 import JUnitXml
 
 from codeflash.cli_cmds.console import logger
-from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults, TestType
+from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults
+from codeflash.models.test_type import TestType
 
 if TYPE_CHECKING:
     import subprocess
@@ -31,8 +33,45 @@ if TYPE_CHECKING:
 jest_start_pattern = re.compile(r"!\$######([^:]+):([^:]+):([^:]+):([^:]+):([^#]+)######\$!")
 jest_end_pattern = re.compile(r"!######([^:]+):([^:]+):([^:]+):([^:]+):([^:]+):(\d+)######!")
 
+# React Profiler render marker pattern
+# Format: !######REACT_RENDER:{component}:{phase}:{actualDuration}:{baseDuration}:{renderCount}######!
+REACT_RENDER_MARKER_PATTERN = re.compile(r"!######REACT_RENDER:([^:]+):([^:]+):([^:]+):([^:]+):(\d+)######!")
 
-def _extract_jest_console_output(suite_elem) -> str:
+
+@dataclass(frozen=True)
+class RenderProfile:
+    """Parsed React Profiler render data from a single marker."""
+
+    component_name: str
+    phase: str  # "mount" or "update"
+    actual_duration_ms: float
+    base_duration_ms: float
+    render_count: int
+
+
+def parse_react_render_markers(stdout: str) -> list[RenderProfile]:
+    """Parse React Profiler render markers from test output.
+
+    Returns a list of RenderProfile instances, one per marker found.
+    """
+    profiles: list[RenderProfile] = []
+    for match in REACT_RENDER_MARKER_PATTERN.finditer(stdout):
+        try:
+            profiles.append(
+                RenderProfile(
+                    component_name=match.group(1),
+                    phase=match.group(2),
+                    actual_duration_ms=float(match.group(3)),
+                    base_duration_ms=float(match.group(4)),
+                    render_count=int(match.group(5)),
+                )
+            )
+        except (ValueError, IndexError) as e:
+            logger.debug("Failed to parse React render marker: %s", e)
+    return profiles
+
+
+def _extract_jest_console_output(suite_elem: Any) -> str:
     """Extract console output from Jest's JUnit XML system-out element.
 
     Jest-junit writes console.log output as a JSON array in the testsuite's system-out.
@@ -68,16 +107,16 @@ def _extract_jest_console_output(suite_elem) -> str:
         # Not JSON - return as plain text (fallback for pytest-style output)
         pass
 
-    return raw_content
+    return str(raw_content)
 
 
 def parse_jest_test_xml(
     test_xml_file_path: Path,
     test_files: TestFiles,
     test_config: TestConfig,
-    run_result: subprocess.CompletedProcess | None = None,
-    parse_func=None,
-    resolve_test_file_from_class_path=None,
+    run_result: subprocess.CompletedProcess[Any] | None = None,
+    parse_func: Any = None,
+    resolve_test_file_from_class_path: Any = None,
 ) -> TestResults:
     """Parse Jest JUnit XML test results.
 
@@ -478,7 +517,7 @@ def parse_jest_test_xml(
 
                     # Find matching end marker
                     end_key = groups[:5]
-                    end_match = end_matches_dict.get(end_key)
+                    end_match: re.Match[str] | None = end_matches_dict.get(end_key)
 
                     runtime = None
                     if end_match:
@@ -512,7 +551,8 @@ def parse_jest_test_xml(
             f"(found {suite_count} suites, {testcase_count} testcases)"
         )
         if run_result is not None:
-            logger.debug(f"Jest stdout: {run_result.stdout[:1000] if run_result.stdout else 'empty'}")
+            stdout_preview = run_result.stdout[:1000] if run_result.stdout else "empty"
+            logger.debug(f"Jest stdout: {stdout_preview!r}")
     else:
         logger.debug(
             f"Jest XML parsing complete: {len(test_results.test_results)} results "

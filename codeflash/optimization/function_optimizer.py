@@ -1415,10 +1415,13 @@ class FunctionOptimizer:
             )
 
             if self.args.no_pr:
+                syntax_lang = (
+                    "typescript" if self.function_to_optimize.language in ("javascript", "typescript") else "python"
+                )
                 tests_panel = Panel(
                     Syntax(
                         "\n".join([test.generated_original_test_source for test in generated_tests.generated_tests]),
-                        "python",
+                        syntax_lang,
                         line_numbers=True,
                     ),
                     title="Validated Tests",
@@ -1829,6 +1832,7 @@ class FunctionOptimizer:
     ) -> Result[tuple[OptimizationSet, str], str]:
         """Generate optimization candidates for the function. Backend handles multi-model diversity."""
         n_candidates = get_effort_value(EffortKeys.N_OPTIMIZER_CANDIDATES, self.effort)
+        metadata = self.function_to_optimize.metadata or {}
         future_optimization_candidates = self.executor.submit(
             self.aiservice_client.optimize_code,
             read_writable_code.markdown,
@@ -1839,6 +1843,8 @@ class FunctionOptimizer:
             is_async=self.function_to_optimize.is_async,
             n_candidates=n_candidates,
             is_numerical_code=is_numerical_code,
+            is_react_component=metadata.get("is_react_component", False),
+            react_context=metadata.get("react_context"),
         )
 
         future_references = self.executor.submit(
@@ -2271,9 +2277,7 @@ class FunctionOptimizer:
             if "root_dir" not in data:
                 data["root_dir"] = git_root_dir(GitRepo(str(self.args.module_root), search_parent_directories=True))
             data["git_remote"] = self.args.git_remote
-            # Remove language from data dict as check_create_pr doesn't accept it
-            pr_data = {k: v for k, v in data.items() if k != "language"}
-            check_create_pr(**pr_data)
+            check_create_pr(**data)
         elif staging_review:
             response = create_staging(**data)
             if response.status_code == 200:

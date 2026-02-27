@@ -7,7 +7,7 @@ It is intentionally kept dependency-free to avoid circular imports.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import Field
 from pydantic.dataclasses import dataclass
@@ -61,6 +61,7 @@ class FunctionToOptimize:
     is_method: bool = False
     language: str = "python"
     doc_start_line: Optional[int] = None
+    metadata: Optional[dict[str, Any]] = Field(default=None)
 
     @property
     def top_level_parent_name(self) -> str:

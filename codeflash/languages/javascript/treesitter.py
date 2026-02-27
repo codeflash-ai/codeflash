@@ -162,8 +162,10 @@ class TreeSitterAnalyzer:
 
         """
         if isinstance(source, str):
-            source = source.encode("utf8")
-        return self.parser.parse(source)
+            source_bytes = source.encode("utf8")
+        else:
+            source_bytes = source
+        return self.parser.parse(source_bytes)
 
     def get_node_text(self, node: Node, source: bytes) -> str:
         """Extract the source text for a tree-sitter node.
@@ -424,6 +426,9 @@ class TreeSitterAnalyzer:
             func_name = self._get_function_name_for_export_check(node, source_bytes)
             if func_name and self._is_name_in_commonjs_exports(node, func_name, source_bytes):
                 return True
+            # Check wrapped default exports: export default memo(FuncName), export default connect(...)(FuncName)
+            if func_name and self._is_name_in_wrapped_default_export(node, func_name, source_bytes):
+                return True
 
         return False
 
@@ -512,6 +517,48 @@ class TreeSitterAnalyzer:
         if left_text in {f"module.exports.{name}", f"exports.{name}"}:
             return True
 
+        return False
+
+    def _is_name_in_wrapped_default_export(self, node: Node, name: str, source_bytes: bytes) -> bool:
+        """Check if a function name appears as an argument in a wrapped default export.
+
+        Handles patterns like:
+        - export default memo(FuncName)
+        - export default React.memo(FuncName)
+        - export default connect(mapState)(FuncName)
+        - export default withRouter(FuncName)
+        """
+        root = node
+        while root.parent:
+            root = root.parent
+
+        for child in root.children:
+            if child.type != "export_statement":
+                continue
+            # Look for default export with a call expression
+            for sub in child.children:
+                if sub.type == "call_expression":
+                    if self._call_expression_has_argument(sub, name, source_bytes):
+                        return True
+
+        return False
+
+    def _call_expression_has_argument(self, call_node: Node, name: str, source_bytes: bytes) -> bool:
+        """Check if a call expression (possibly nested) has the given name as an argument."""
+        args_node = call_node.child_by_field_name("arguments")
+        if args_node:
+            for arg in args_node.children:
+                if arg.type == "identifier" and self.get_node_text(arg, source_bytes) == name:
+                    return True
+                # Handle nested calls: connect(mapState)(FuncName)
+                if arg.type == "call_expression":
+                    if self._call_expression_has_argument(arg, name, source_bytes):
+                        return True
+        # Also check if the call_expression itself is called: memo(FuncName) where the function node is the callee
+        func_node = call_node.child_by_field_name("function")
+        if func_node and func_node.type == "call_expression":
+            if self._call_expression_has_argument(func_node, name, source_bytes):
+                return True
         return False
 
     def _find_preceding_jsdoc(self, node: Node, source_bytes: bytes) -> int | None:

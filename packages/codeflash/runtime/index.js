@@ -16,76 +16,80 @@
  *   import { capture, capturePerf } from 'codeflash';
  */
 
-'use strict';
+"use strict";
 
 // Main capture functions (instrumentation)
-const capture = require('./capture');
+const capture = require("./capture");
 
 // Serialization utilities
-const serializer = require('./serializer');
+const serializer = require("./serializer");
 
 // Comparison utilities
-const comparator = require('./comparator');
+const comparator = require("./comparator");
 
 // Result comparison (used by CLI)
-const compareResults = require('./compare-results');
+const compareResults = require("./compare-results");
 
 // Re-export all public APIs
 module.exports = {
-    // === Main Instrumentation API ===
-    capture: capture.capture,
-    capturePerf: capture.capturePerf,
-    captureMultiple: capture.captureMultiple,
+  // === Main Instrumentation API ===
+  capture: capture.capture,
+  capturePerf: capture.capturePerf,
 
-    // === Test Lifecycle ===
-    writeResults: capture.writeResults,
-    clearResults: capture.clearResults,
-    getResults: capture.getResults,
-    setTestName: capture.setTestName,
-    initDatabase: capture.initDatabase,
-    resetInvocationCounters: capture.resetInvocationCounters,
+  captureRender: capture.captureRender,
+  captureRenderPerf: capture.captureRenderPerf,
 
-    // === Serialization ===
-    serialize: serializer.serialize,
-    deserialize: serializer.deserialize,
-    getSerializerType: serializer.getSerializerType,
-    safeSerialize: capture.safeSerialize,
-    safeDeserialize: capture.safeDeserialize,
+  captureMultiple: capture.captureMultiple,
 
-    // === Comparison ===
-    comparator: comparator.comparator,
-    createComparator: comparator.createComparator,
-    strictComparator: comparator.strictComparator,
-    looseComparator: comparator.looseComparator,
-    isClose: comparator.isClose,
+  // === Test Lifecycle ===
+  writeResults: capture.writeResults,
+  clearResults: capture.clearResults,
+  getResults: capture.getResults,
+  setTestName: capture.setTestName,
+  initDatabase: capture.initDatabase,
+  resetInvocationCounters: capture.resetInvocationCounters,
 
-    // === Result Comparison (CLI helpers) ===
-    readTestResults: compareResults.readTestResults,
-    compareResults: compareResults.compareResults,
-    compareBuffers: compareResults.compareBuffers,
+  // === Serialization ===
+  serialize: serializer.serialize,
+  deserialize: serializer.deserialize,
+  getSerializerType: serializer.getSerializerType,
+  safeSerialize: capture.safeSerialize,
+  safeDeserialize: capture.safeDeserialize,
 
-    // === Utilities ===
-    getInvocationIndex: capture.getInvocationIndex,
-    sanitizeTestId: capture.sanitizeTestId,
+  // === Comparison ===
+  comparator: comparator.comparator,
+  createComparator: comparator.createComparator,
+  strictComparator: comparator.strictComparator,
+  looseComparator: comparator.looseComparator,
+  isClose: comparator.isClose,
 
-    // === Constants ===
-    LOOP_INDEX: capture.LOOP_INDEX,
-    OUTPUT_FILE: capture.OUTPUT_FILE,
-    TEST_ITERATION: capture.TEST_ITERATION,
+  // === Result Comparison (CLI helpers) ===
+  readTestResults: compareResults.readTestResults,
+  compareResults: compareResults.compareResults,
+  compareBuffers: compareResults.compareBuffers,
 
-    // === Batch Looping Control (used by loop-runner) ===
-    incrementBatch: capture.incrementBatch,
-    getCurrentBatch: capture.getCurrentBatch,
-    checkSharedTimeLimit: capture.checkSharedTimeLimit,
-    // Getter functions for dynamic env var reading (not constants)
-    getPerfBatchSize: capture.getPerfBatchSize,
-    getPerfLoopCount: capture.getPerfLoopCount,
-    getPerfMinLoops: capture.getPerfMinLoops,
-    getPerfTargetDurationMs: capture.getPerfTargetDurationMs,
-    getPerfStabilityCheck: capture.getPerfStabilityCheck,
-    getPerfCurrentBatch: capture.getPerfCurrentBatch,
+  // === Utilities ===
+  getInvocationIndex: capture.getInvocationIndex,
+  sanitizeTestId: capture.sanitizeTestId,
 
-    // === Feature Detection ===
-    hasV8: serializer.hasV8,
-    hasMsgpack: serializer.hasMsgpack,
+  // === Constants ===
+  LOOP_INDEX: capture.LOOP_INDEX,
+  OUTPUT_FILE: capture.OUTPUT_FILE,
+  TEST_ITERATION: capture.TEST_ITERATION,
+
+  // === Batch Looping Control (used by loop-runner) ===
+  incrementBatch: capture.incrementBatch,
+  getCurrentBatch: capture.getCurrentBatch,
+  checkSharedTimeLimit: capture.checkSharedTimeLimit,
+  // Getter functions for dynamic env var reading (not constants)
+  getPerfBatchSize: capture.getPerfBatchSize,
+  getPerfLoopCount: capture.getPerfLoopCount,
+  getPerfMinLoops: capture.getPerfMinLoops,
+  getPerfTargetDurationMs: capture.getPerfTargetDurationMs,
+  getPerfStabilityCheck: capture.getPerfStabilityCheck,
+  getPerfCurrentBatch: capture.getPerfCurrentBatch,
+
+  // === Feature Detection ===
+  hasV8: serializer.hasV8,
+  hasMsgpack: serializer.hasMsgpack,
 };
