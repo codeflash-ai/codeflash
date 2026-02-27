@@ -949,58 +949,53 @@ class RenderCallTransformer:
         # render(_jsx(ComponentName, props)) or render(_jsxs(ComponentName, props))
         self._render_jsx_pattern = re.compile(rf"(\s*)render\s*\(\s*_jsxs?\s*\(\s*{re.escape(self.func_name)}\b")
 
+        # Combined pattern to find either occurrence in a single search
+        self._combined_pattern = re.compile(
+            rf"(\s*)render\s*\(\s*(?:React\.createElement\s*\(\s*{re.escape(self.func_name)}\b|_jsxs?\s*\(\s*{re.escape(self.func_name)}\b)"
+        )
+
     def transform(self, code: str) -> str:
         """Transform all render(React.createElement(Component, ...)) calls in the code."""
         result: list[str] = []
         pos = 0
 
-        while pos < len(code):
-            # Try both React.createElement and _jsx/_jsxs patterns
-            ce_match = self._render_create_element_pattern.search(code, pos)
-            jsx_match = self._render_jsx_pattern.search(code, pos)
+        # Precompute in-string map once to avoid repeated scans
+        in_string_map = self._compute_in_string_map(code)
 
-            # Choose the first match (by position)
-            match = None
-            is_jsx = False
-            if ce_match and jsx_match:
-                if ce_match.start() <= jsx_match.start():
-                    match = ce_match
-                else:
-                    match = jsx_match
-                    is_jsx = True
-            elif ce_match:
-                match = ce_match
-            elif jsx_match:
-                match = jsx_match
-                is_jsx = True
+        while pos < len(code):
+            # Use combined pattern to find the next relevant render(...) occurrence
+            match = self._combined_pattern.search(code, pos)
 
             if not match:
                 result.append(code[pos:])
                 break
 
+            start = match.start()
+            end = match.end()
+
             # Skip if inside a string literal
-            if is_inside_string(code, match.start()):
-                result.append(code[pos : match.end()])
-                pos = match.end()
+            if in_string_map[start]:
+                result.append(code[pos:end])
+                pos = end
                 continue
 
             # Skip if already transformed with codeflash.captureRender
-            lookback_start = max(0, match.start() - 60)
-            lookback = code[lookback_start : match.start()]
+            lookback_start = max(0, start - 60)
+            lookback = code[lookback_start:start]
             if f"codeflash.{self.capture_func}(" in lookback:
-                result.append(code[pos : match.end()])
-                pos = match.end()
+                result.append(code[pos:end])
+                pos = end
                 continue
 
             # Add everything before the match
-            result.append(code[pos : match.start()])
+            result.append(code[pos:start])
 
             # Try to parse the full render call
             render_match = self._parse_render_call(code, match)
             if render_match is None:
                 # Couldn't parse, skip this match
-                result.append(code[match.start() : match.end()])
-                pos = match.end()
+                result.append(code[start:end])
+                pos = end
                 continue
 
             # Generate the transformed code
@@ -1106,6 +1101,42 @@ class RenderCallTransformer:
             f"{match.leading_whitespace}codeflash.{self.capture_func}('{self.qualified_name}', "
             f"'{line_id}', render, {self.func_name}){semicolon}"
         )
+
+    def _compute_in_string_map(self, code: str) -> bytearray:
+        """Compute a bytearray of length len(code)+1 where map[pos] is 1 if
+        the parser would be inside a string after processing code[:pos], else 0.
+
+        This mirrors the logic of is_inside_string but does a single linear pass.
+        """
+        n = len(code)
+        arr = bytearray(n + 1)
+        in_string = False
+        string_char = None
+        i = 0
+        # arr[0] is already 0
+        while i < n:
+            c = code[i]
+            if in_string:
+                # Check for escape sequence
+                if c == "\\" and i + 1 < n:
+                    # After processing the backslash and escaped char, still inside string
+                    arr[i + 1] = 1
+                    if i + 2 <= n:
+                        arr[i + 2] = 1
+                    i += 2
+                    continue
+                # Check for end of string
+                if c == string_char:
+                    in_string = False
+                    string_char = None
+            else:
+                # Check for start of string
+                if c in "\"'`":
+                    in_string = True
+                    string_char = c
+            arr[i + 1] = 1 if in_string else 0
+            i += 1
+        return arr
 
 
 def transform_render_calls(
