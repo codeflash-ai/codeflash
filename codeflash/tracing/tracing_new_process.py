@@ -125,6 +125,7 @@ class Tracer:
         self.max_function_count = max_function_count
         self.config = config
         self.project_root = project_root
+        self.project_root_str = str(project_root) + os.sep if project_root else ""
         console.rule(f"Project Root: {self.project_root}", style="bold blue")
         self.ignored_functions = {"<listcomp>", "<genexpr>", "<dictcomp>", "<setcomp>", "<lambda>", "<module>"}
 
@@ -327,19 +328,20 @@ class Tracer:
         if code.co_name in self.ignored_functions:
             return
 
-        # Now resolve file path only if we need it
+        # Resolve file path and check validity (cached)
         co_filename = code.co_filename
         if co_filename in self.path_cache:
-            file_name = self.path_cache[co_filename]
+            file_name, is_valid = self.path_cache[co_filename]
+            if not is_valid:
+                return
         else:
-            file_name = Path(co_filename).resolve()
-            self.path_cache[co_filename] = file_name
-        # TODO : It currently doesn't log the last return call from the first function
-
-        if not file_name.is_relative_to(self.project_root):
-            return
-        if not file_name.exists():
-            return
+            resolved = os.path.realpath(co_filename)
+            # startswith is cheaper than Path.is_relative_to, os.path.exists avoids Path construction
+            is_valid = resolved.startswith(self.project_root_str) and os.path.exists(resolved)
+            file_name = Path(resolved) if is_valid else None
+            self.path_cache[co_filename] = (file_name, is_valid)
+            if not is_valid:
+                return
         if self.functions and code.co_name not in self.functions:
             return
         class_name = None
