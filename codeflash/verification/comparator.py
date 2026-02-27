@@ -7,6 +7,7 @@ import itertools
 import math
 import re
 import types
+import warnings
 import weakref
 from collections import ChainMap, OrderedDict, deque
 from importlib.util import find_spec
@@ -529,10 +530,34 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
                 )
             return comparator(orig_dict, new_dict, superset_obj)
 
-        # Handle itertools.count (infinite iterator) by comparing repr which reflects current state
-        # repr produces e.g. "count(5)" or "count(5, 2)" — deterministic for the same internal state
+        # Handle itertools infinite iterators
         if isinstance(orig, itertools.count):
+            # repr reliably reflects internal state, e.g. "count(5)" or "count(5, 2)"
             return repr(orig) == repr(new)
+
+        if isinstance(orig, itertools.repeat):
+            # repr reliably reflects internal state, e.g. "repeat(5)" or "repeat(5, 3)"
+            return repr(orig) == repr(new)
+
+        if isinstance(orig, itertools.cycle):
+            # cycle has no useful repr and no public attributes; use __reduce__ to extract state.
+            # __reduce__ returns (cls, (remaining_iter,), (saved_items, first_pass_done)).
+            # NOTE: consuming the remaining_iter is destructive to the cycle object, but this is
+            # acceptable since the comparator is the final consumer of captured return values.
+            # NOTE: __reduce__ on itertools is deprecated and will be removed in Python 3.14.
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", DeprecationWarning)
+                orig_reduce = orig.__reduce__()
+                new_reduce = new.__reduce__()
+            orig_remaining = list(orig_reduce[1][0])
+            new_remaining = list(new_reduce[1][0])
+            orig_saved, orig_started = orig_reduce[2]
+            new_saved, new_started = new_reduce[2]
+            if orig_started != new_started:
+                return False
+            return comparator(orig_remaining, new_remaining, superset_obj) and comparator(
+                orig_saved, new_saved, superset_obj
+            )
 
         # re.Pattern can be made better by DFA Minimization and then comparing
         if isinstance(
