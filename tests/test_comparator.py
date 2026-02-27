@@ -463,6 +463,99 @@ def test_itertools_count() -> None:
     assert not comparator([itertools.count(0)], [itertools.count(1)])
 
 
+def test_itertools_repeat() -> None:
+    import itertools
+
+    # Equal: infinite repeat
+    assert comparator(itertools.repeat(5), itertools.repeat(5))
+    assert comparator(itertools.repeat("hello"), itertools.repeat("hello"))
+
+    # Equal: bounded repeat
+    assert comparator(itertools.repeat(5, 3), itertools.repeat(5, 3))
+    assert comparator(itertools.repeat(None, 10), itertools.repeat(None, 10))
+
+    # Not equal: different value
+    assert not comparator(itertools.repeat(5), itertools.repeat(6))
+    assert not comparator(itertools.repeat(5, 3), itertools.repeat(6, 3))
+
+    # Not equal: different count
+    assert not comparator(itertools.repeat(5, 3), itertools.repeat(5, 4))
+
+    # Not equal: bounded vs infinite
+    assert not comparator(itertools.repeat(5), itertools.repeat(5, 3))
+
+    # Not equal: different type
+    assert not comparator(itertools.repeat(5), 5)
+    assert not comparator(itertools.repeat(5), [5])
+
+    # Equal after partial consumption
+    a = itertools.repeat(5, 5)
+    b = itertools.repeat(5, 5)
+    next(a)
+    next(b)
+    assert comparator(a, b)
+
+    # Not equal after different consumption
+    a = itertools.repeat(5, 5)
+    b = itertools.repeat(5, 5)
+    next(a)
+    assert not comparator(a, b)
+
+    # Works inside containers
+    assert comparator([itertools.repeat(5, 3)], [itertools.repeat(5, 3)])
+    assert not comparator([itertools.repeat(5, 3)], [itertools.repeat(5, 4)])
+
+
+def test_itertools_cycle() -> None:
+    import itertools
+
+    # Equal: same sequence
+    assert comparator(itertools.cycle([1, 2, 3]), itertools.cycle([1, 2, 3]))
+    assert comparator(itertools.cycle("abc"), itertools.cycle("abc"))
+
+    # Not equal: different sequence
+    assert not comparator(itertools.cycle([1, 2, 3]), itertools.cycle([1, 2, 4]))
+    assert not comparator(itertools.cycle([1, 2, 3]), itertools.cycle([1, 2]))
+
+    # Not equal: different type
+    assert not comparator(itertools.cycle([1, 2, 3]), [1, 2, 3])
+
+    # Equal after same partial consumption
+    a = itertools.cycle([1, 2, 3])
+    b = itertools.cycle([1, 2, 3])
+    next(a)
+    next(b)
+    assert comparator(a, b)
+
+    # Not equal after different consumption
+    a = itertools.cycle([1, 2, 3])
+    b = itertools.cycle([1, 2, 3])
+    next(a)
+    assert not comparator(a, b)
+
+    # Equal after consuming a full cycle
+    a = itertools.cycle([1, 2, 3])
+    b = itertools.cycle([1, 2, 3])
+    for _ in range(3):
+        next(a)
+        next(b)
+    assert comparator(a, b)
+
+    # Equal at same position across different full-cycle counts
+    a = itertools.cycle([1, 2, 3])
+    b = itertools.cycle([1, 2, 3])
+    for _ in range(4):
+        next(a)
+    for _ in range(7):
+        next(b)
+    # Both at position 1 within the cycle (4%3 == 7%3 == 1)
+    assert comparator(a, b)
+
+    # Works inside containers
+    assert comparator([itertools.cycle([1, 2])], [itertools.cycle([1, 2])])
+    assert not comparator([itertools.cycle([1, 2])], [itertools.cycle([1, 3])])
+
+
 def test_numpy():
     try:
         import numpy as np
