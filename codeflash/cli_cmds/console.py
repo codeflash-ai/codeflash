@@ -468,13 +468,17 @@ def subagent_log_optimization_result(
         if new_code[path] != original_code.get(path, ""):
             xml.append(f'  <optimized-code file="{escape(str(path))}">{escape(new_code[path])}</optimized-code>')
     xml.append("  <action>")
-    xml.append("    Present this optimization to the user using AskUserQuestion.")
-    xml.append("    Show the function name, performance improvement, and explanation as the question text.")
-    xml.append("    Provide two options: 'Apply' (write the optimized code to the file) and 'Reject' (do nothing).")
+    xml.append("    1. Review the diff and optimized code yourself. Write a brief assessment (2-3 sentences) covering:")
+    xml.append("       - Whether the optimization is correct and preserves behavior")
+    xml.append("       - What technique was used (e.g. algorithmic improvement, caching, vectorization)")
+    xml.append("       - Any risks or trade-offs (e.g. increased memory usage, reduced readability)")
+    xml.append("    2. Present this optimization to the user using AskUserQuestion.")
+    xml.append("       Show the function name, performance improvement, and your review as the question text.")
+    xml.append("       Provide two options: 'Apply' (write the optimized code to the file) and 'Reject' (do nothing).")
     xml.append(
-        "    Put the full diff in the 'Apply' option's markdown preview so the user can review the exact changes."
+        "       Put the full diff in the 'Apply' option's markdown preview so the user can review the exact changes."
     )
-    xml.append("    If the user chooses 'Apply', write the content from optimized-code to the corresponding file.")
+    xml.append("    3. If the user chooses 'Apply', write the content from optimized-code to the corresponding file.")
     xml.append("  </action>")
     xml.append("</codeflash-optimization>")
 
