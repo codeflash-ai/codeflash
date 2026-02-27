@@ -968,9 +968,10 @@ def _bounded_levenshtein(s1: str, s2: str, max_distance: int) -> int:
     if m - n > max_distance:
         return max_distance + 1
 
+    max_dist = max_distance + 1
+
     # Initialize previous row: distances from empty s2 prefix to s1 prefixes
     previous = list(range(n + 1))
-    current = [0] * (n + 1)
 
     # We will only compute values within a "band" [start..end] for each row
     for i in range(1, m + 1):
@@ -982,19 +983,20 @@ def _bounded_levenshtein(s1: str, s2: str, max_distance: int) -> int:
 
         # If start > end the band is empty -> distance exceeds max_distance
         if start > end:
-            return max_distance + 1
+            return max_dist
+
+        # Prepare a new current row pre-filled with sentinel for outside-band positions
+        current = [max_dist] * (n + 1)
 
         # Set current[0] for the empty prefix of s1
         current[0] = i
 
-        # Fill left part outside band with large values
-        for k in range(1, start):
-            current[k] = max_distance + 1
+        # Compute values inside the band, tracking the minimum in the band for early exit
+        min_in_band = max_dist
 
-        # Compute values inside the band
         for j in range(start, end + 1):
             if s1[j - 1] == char2:
-                current[j] = previous[j - 1]
+                val = previous[j - 1]
             else:
                 # deletion = previous[j] + 1
                 # insertion = current[j - 1] + 1
@@ -1002,22 +1004,20 @@ def _bounded_levenshtein(s1: str, s2: str, max_distance: int) -> int:
                 a = previous[j] + 1
                 b = current[j - 1] + 1
                 c = previous[j - 1] + 1
-                # Fast min of three
+                # revert to readable min-of-three using built-in min
                 t = min(b, a)
-                current[j] = min(t, c)
+                val = min(t, c)
+            current[j] = val
+            if val < min_in_band:
+                min_in_band = val
 
-        # Fill right part outside band with large values
-        for k in range(end + 1, n + 1):
-            current[k] = max_distance + 1
-
-        # Swap rows
-        previous, current = current, previous
+        # Move current to previous for next iteration
+        previous = current
 
         # Early exit: if the minimum value in the active band is greater than max_distance
         # then the final distance must exceed max_distance
         # (band width is small: at most 2*max_distance+1).
-        row_min = min(previous[start : end + 1])
-        if row_min > max_distance:
-            return max_distance + 1
+        if min_in_band > max_distance:
+            return max_dist
 
     return previous[n]
