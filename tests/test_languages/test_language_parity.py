@@ -440,32 +440,23 @@ class TestDiscoverFunctionsParity:
         assert js_sync.is_async is False, "JavaScript sync function should have is_async=False"
 
     def test_nested_functions_discovery(self, python_support, js_support):
-        """Both should discover nested functions with parent info."""
+        """Python skips nested functions; JavaScript discovers them with parent info."""
         py_file = write_temp_file(NESTED_FUNCTIONS.python, ".py")
         js_file = write_temp_file(NESTED_FUNCTIONS.javascript, ".js")
 
         py_funcs = python_support.discover_functions(py_file)
         js_funcs = js_support.discover_functions(js_file)
 
-        # Both should find 2 functions (outer and inner)
-        assert len(py_funcs) == 2, f"Python found {len(py_funcs)}, expected 2"
+        # Python skips nested functions — only outer is discovered
+        assert len(py_funcs) == 1, f"Python found {len(py_funcs)}, expected 1"
+        assert py_funcs[0].function_name == "outer"
+
+        # JavaScript discovers both
         assert len(js_funcs) == 2, f"JavaScript found {len(js_funcs)}, expected 2"
-
-        # Check names
-        py_names = {f.function_name for f in py_funcs}
         js_names = {f.function_name for f in js_funcs}
-
-        assert py_names == {"outer", "inner"}, f"Python found {py_names}"
         assert js_names == {"outer", "inner"}, f"JavaScript found {js_names}"
 
-        # Check parent info for inner function
-        py_inner = next(f for f in py_funcs if f.function_name == "inner")
         js_inner = next(f for f in js_funcs if f.function_name == "inner")
-
-        assert len(py_inner.parents) >= 1, "Python inner should have parent info"
-        assert py_inner.parents[0].name == "outer", "Python inner's parent should be outer"
-
-        # JavaScript nested function parent check
         assert len(js_inner.parents) >= 1, "JavaScript inner should have parent info"
         assert js_inner.parents[0].name == "outer", "JavaScript inner's parent should be outer"
 
@@ -554,11 +545,11 @@ class TestDiscoverFunctionsParity:
         assert js_funcs[0].function_name == "standalone"
 
     def test_nonexistent_file_returns_empty(self, python_support, js_support):
-        """Both should return empty list for nonexistent files."""
-        py_funcs = python_support.discover_functions(Path("/nonexistent/file.py"))
-        js_funcs = js_support.discover_functions(Path("/nonexistent/file.js"))
+        """Python raises on nonexistent files; JavaScript returns empty list."""
+        with pytest.raises(FileNotFoundError):
+            python_support.discover_functions(Path("/nonexistent/file.py"))
 
-        assert py_funcs == []
+        js_funcs = js_support.discover_functions(Path("/nonexistent/file.js"))
         assert js_funcs == []
 
     def test_line_numbers_captured(self, python_support, js_support):
