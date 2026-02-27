@@ -967,16 +967,18 @@ class FunctionOptimizer:
             runtimes_list.append(new_best_opt.runtime)
 
         if len(optimization_ids) > 1:
-            future_ranking = self.executor.submit(
-                ai_service_client.generate_ranking,
-                diffs=diff_strs,
-                optimization_ids=optimization_ids,
-                speedups=speedups_list,
-                trace_id=self.get_trace_id(exp_type),
-                function_references=function_references,
-            )
-            concurrent.futures.wait([future_ranking])
-            ranking = future_ranking.result()
+            ranking = None
+            if not is_subagent_mode():
+                future_ranking = self.executor.submit(
+                    ai_service_client.generate_ranking,
+                    diffs=diff_strs,
+                    optimization_ids=optimization_ids,
+                    speedups=speedups_list,
+                    trace_id=self.get_trace_id(exp_type),
+                    function_references=function_references,
+                )
+                concurrent.futures.wait([future_ranking])
+                ranking = future_ranking.result()
             if ranking:
                 min_key = ranking[0]
             else:
