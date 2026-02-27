@@ -3,6 +3,7 @@ import ast
 import datetime
 import decimal
 import enum
+import itertools
 import math
 import re
 import types
@@ -527,6 +528,11 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
                     k in new_attrs_dict and comparator(v, new_attrs_dict[k], superset_obj) for k, v in orig_dict.items()
                 )
             return comparator(orig_dict, new_dict, superset_obj)
+
+        # Handle itertools.count (infinite iterator) by comparing repr which reflects current state
+        # repr produces e.g. "count(5)" or "count(5, 2)" — deterministic for the same internal state
+        if isinstance(orig, itertools.count):
+            return repr(orig) == repr(new)
 
         # re.Pattern can be made better by DFA Minimization and then comparing
         if isinstance(

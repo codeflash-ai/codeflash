@@ -417,6 +417,52 @@ def test_standard_python_library_objects() -> None:
     assert not comparator(id1, id3)
 
 
+def test_itertools_count() -> None:
+    import itertools
+
+    # Equal: same start and step (default step=1)
+    assert comparator(itertools.count(0), itertools.count(0))
+    assert comparator(itertools.count(5), itertools.count(5))
+    assert comparator(itertools.count(0, 1), itertools.count(0, 1))
+    assert comparator(itertools.count(10, 3), itertools.count(10, 3))
+
+    # Equal: negative start and step
+    assert comparator(itertools.count(-5, -2), itertools.count(-5, -2))
+
+    # Equal: float start and step
+    assert comparator(itertools.count(0.5, 0.1), itertools.count(0.5, 0.1))
+
+    # Not equal: different start
+    assert not comparator(itertools.count(0), itertools.count(1))
+    assert not comparator(itertools.count(5), itertools.count(10))
+
+    # Not equal: different step
+    assert not comparator(itertools.count(0, 1), itertools.count(0, 2))
+    assert not comparator(itertools.count(0, 1), itertools.count(0, -1))
+
+    # Not equal: different type
+    assert not comparator(itertools.count(0), 0)
+    assert not comparator(itertools.count(0), [0, 1, 2])
+
+    # Equal after partial consumption (both advanced to the same state)
+    a = itertools.count(0)
+    b = itertools.count(0)
+    next(a)
+    next(b)
+    assert comparator(a, b)
+
+    # Not equal after different consumption
+    a = itertools.count(0)
+    b = itertools.count(0)
+    next(a)
+    assert not comparator(a, b)
+
+    # Works inside containers
+    assert comparator([itertools.count(0)], [itertools.count(0)])
+    assert comparator({"key": itertools.count(5, 2)}, {"key": itertools.count(5, 2)})
+    assert not comparator([itertools.count(0)], [itertools.count(1)])
+
+
 def test_numpy():
     try:
         import numpy as np
