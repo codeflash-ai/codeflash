@@ -556,6 +556,167 @@ def test_itertools_cycle() -> None:
     assert not comparator([itertools.cycle([1, 2])], [itertools.cycle([1, 3])])
 
 
+def test_itertools_chain() -> None:
+    import itertools
+
+    assert comparator(itertools.chain([1, 2], [3, 4]), itertools.chain([1, 2], [3, 4]))
+    assert not comparator(itertools.chain([1, 2], [3, 4]), itertools.chain([1, 2], [3, 5]))
+    assert comparator(itertools.chain.from_iterable([[1, 2], [3]]), itertools.chain.from_iterable([[1, 2], [3]]))
+    assert comparator(itertools.chain(), itertools.chain())
+    assert not comparator(itertools.chain([1]), itertools.chain([1, 2]))
+
+
+def test_itertools_islice() -> None:
+    import itertools
+
+    assert comparator(itertools.islice(range(10), 5), itertools.islice(range(10), 5))
+    assert not comparator(itertools.islice(range(10), 5), itertools.islice(range(10), 6))
+    assert comparator(itertools.islice(range(10), 2, 5), itertools.islice(range(10), 2, 5))
+    assert not comparator(itertools.islice(range(10), 2, 5), itertools.islice(range(10), 2, 6))
+
+
+def test_itertools_product() -> None:
+    import itertools
+
+    assert comparator(itertools.product("AB", repeat=2), itertools.product("AB", repeat=2))
+    assert not comparator(itertools.product("AB", repeat=2), itertools.product("AC", repeat=2))
+    assert comparator(itertools.product([1, 2], [3, 4]), itertools.product([1, 2], [3, 4]))
+    assert not comparator(itertools.product([1, 2], [3, 4]), itertools.product([1, 2], [3, 5]))
+
+
+def test_itertools_permutations_combinations() -> None:
+    import itertools
+
+    assert comparator(itertools.permutations("ABC", 2), itertools.permutations("ABC", 2))
+    assert not comparator(itertools.permutations("ABC", 2), itertools.permutations("ABD", 2))
+    assert comparator(itertools.combinations("ABCD", 2), itertools.combinations("ABCD", 2))
+    assert not comparator(itertools.combinations("ABCD", 2), itertools.combinations("ABCD", 3))
+    assert comparator(
+        itertools.combinations_with_replacement("ABC", 2),
+        itertools.combinations_with_replacement("ABC", 2),
+    )
+    assert not comparator(
+        itertools.combinations_with_replacement("ABC", 2),
+        itertools.combinations_with_replacement("ABD", 2),
+    )
+
+
+def test_itertools_accumulate() -> None:
+    import itertools
+
+    assert comparator(itertools.accumulate([1, 2, 3, 4]), itertools.accumulate([1, 2, 3, 4]))
+    assert not comparator(itertools.accumulate([1, 2, 3, 4]), itertools.accumulate([1, 2, 3, 5]))
+    assert comparator(itertools.accumulate([1, 2, 3], initial=10), itertools.accumulate([1, 2, 3], initial=10))
+    assert not comparator(itertools.accumulate([1, 2, 3], initial=10), itertools.accumulate([1, 2, 3], initial=0))
+
+
+def test_itertools_filtering() -> None:
+    import itertools
+
+    # compress
+    assert comparator(
+        itertools.compress("ABCDEF", [1, 0, 1, 0, 1, 1]),
+        itertools.compress("ABCDEF", [1, 0, 1, 0, 1, 1]),
+    )
+    assert not comparator(
+        itertools.compress("ABCDEF", [1, 0, 1, 0, 1, 1]),
+        itertools.compress("ABCDEF", [1, 1, 1, 0, 1, 1]),
+    )
+
+    # dropwhile
+    assert comparator(
+        itertools.dropwhile(lambda x: x < 5, [1, 4, 6, 4, 1]),
+        itertools.dropwhile(lambda x: x < 5, [1, 4, 6, 4, 1]),
+    )
+    assert not comparator(
+        itertools.dropwhile(lambda x: x < 5, [1, 4, 6, 4, 1]),
+        itertools.dropwhile(lambda x: x < 5, [1, 4, 7, 4, 1]),
+    )
+
+    # takewhile
+    assert comparator(
+        itertools.takewhile(lambda x: x < 5, [1, 4, 6, 4, 1]),
+        itertools.takewhile(lambda x: x < 5, [1, 4, 6, 4, 1]),
+    )
+    assert not comparator(
+        itertools.takewhile(lambda x: x < 5, [1, 4, 6, 4, 1]),
+        itertools.takewhile(lambda x: x < 5, [1, 3, 6, 4, 1]),
+    )
+
+    # filterfalse
+    assert comparator(
+        itertools.filterfalse(lambda x: x % 2, range(10)),
+        itertools.filterfalse(lambda x: x % 2, range(10)),
+    )
+
+
+def test_itertools_starmap() -> None:
+    import itertools
+
+    assert comparator(
+        itertools.starmap(pow, [(2, 3), (3, 2), (10, 0)]),
+        itertools.starmap(pow, [(2, 3), (3, 2), (10, 0)]),
+    )
+    assert not comparator(
+        itertools.starmap(pow, [(2, 3), (3, 2)]),
+        itertools.starmap(pow, [(2, 3), (3, 3)]),
+    )
+
+
+def test_itertools_zip_longest() -> None:
+    import itertools
+
+    assert comparator(
+        itertools.zip_longest("AB", "xyz", fillvalue="-"),
+        itertools.zip_longest("AB", "xyz", fillvalue="-"),
+    )
+    assert not comparator(
+        itertools.zip_longest("AB", "xyz", fillvalue="-"),
+        itertools.zip_longest("AB", "xyz", fillvalue="*"),
+    )
+
+
+def test_itertools_groupby() -> None:
+    import itertools
+
+    assert comparator(itertools.groupby("AAABBBCC"), itertools.groupby("AAABBBCC"))
+    assert not comparator(itertools.groupby("AAABBBCC"), itertools.groupby("AAABBCC"))
+    assert comparator(itertools.groupby([]), itertools.groupby([]))
+
+    # With key function
+    assert comparator(
+        itertools.groupby([1, 1, 2, 2, 3], key=lambda x: x),
+        itertools.groupby([1, 1, 2, 2, 3], key=lambda x: x),
+    )
+
+
+def test_itertools_pairwise_batched() -> None:
+    import itertools
+
+    assert comparator(itertools.pairwise([1, 2, 3, 4]), itertools.pairwise([1, 2, 3, 4]))
+    assert not comparator(itertools.pairwise([1, 2, 3, 4]), itertools.pairwise([1, 2, 3, 5]))
+
+    assert comparator(itertools.batched("ABCDEFG", 3), itertools.batched("ABCDEFG", 3))
+    assert not comparator(itertools.batched("ABCDEFG", 3), itertools.batched("ABCDEFG", 2))
+
+
+def test_itertools_in_containers() -> None:
+    import itertools
+
+    # Itertools objects nested in dicts/lists
+    assert comparator(
+        {"a": itertools.chain([1], [2]), "b": itertools.islice(range(5), 3)},
+        {"a": itertools.chain([1], [2]), "b": itertools.islice(range(5), 3)},
+    )
+    assert not comparator(
+        [itertools.product("AB", repeat=2)],
+        [itertools.product("AC", repeat=2)],
+    )
+
+    # Different itertools types should not match
+    assert not comparator(itertools.chain([1, 2]), itertools.islice([1, 2], 2))
+
+
 def test_numpy():
     try:
         import numpy as np
