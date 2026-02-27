@@ -559,6 +559,18 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
                 orig_saved, new_saved, superset_obj
             )
 
+        # Handle remaining itertools types (chain, islice, starmap, product, permutations, etc.)
+        # by materializing into lists. count/repeat/cycle are already handled above.
+        # NOTE: materializing is destructive (consumes the iterator) and will hang on infinite input,
+        # but the three infinite itertools types are already handled above.
+        if type(orig).__module__ == "itertools":
+            if isinstance(orig, itertools.groupby):
+                # groupby yields (key, group_iterator) — materialize groups too
+                orig_groups = [(k, list(g)) for k, g in orig]
+                new_groups = [(k, list(g)) for k, g in new]
+                return comparator(orig_groups, new_groups, superset_obj)
+            return comparator(list(orig), list(new), superset_obj)
+
         # re.Pattern can be made better by DFA Minimization and then comparing
         if isinstance(
             orig, (datetime.datetime, datetime.date, datetime.timedelta, datetime.time, datetime.timezone, re.Pattern)
