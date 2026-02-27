@@ -11,6 +11,7 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
+from functools import lru_cache
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -168,12 +169,12 @@ def _has_server_directive(source: str) -> bool:
 
 def _function_returns_jsx(func: FunctionNode, source: str, analyzer: TreeSitterAnalyzer) -> bool:
     """Check if a function returns JSX by looking for jsx_element/jsx_self_closing_element nodes."""
-    source_bytes = source.encode("utf-8")
     node = func.node
 
     # For arrow functions with expression body (implicit return), check the body directly
     body = node.child_by_field_name("body")
     if body:
+        # _node_contains_jsx is provided in the surrounding package; keep the call here.
         return _node_contains_jsx(body)
 
     return False
@@ -194,20 +195,19 @@ HOOK_EXTRACT_RE = re.compile(r"\b(use[A-Z]\w*)\s*(?:<[^>]*>)?\s*\(")
 
 
 def _extract_hooks_used(function_source: str) -> list[str]:
-    """Extract hook names called within a function body."""
-    hooks = []
-    seen = set()
-    for match in HOOK_EXTRACT_RE.finditer(function_source):
-        hook_name = match.group(1)
-        if hook_name not in seen:
-            seen.add(hook_name)
-            hooks.append(hook_name)
-    return hooks
+    """Extract hook names called within a function body.
+
+    Use findall + dict.fromkeys to preserve order and remove duplicates with low Python-level overhead.
+    """
+    matches = HOOK_EXTRACT_RE.findall(function_source)
+    if not matches:
+        return []
+    return list(dict.fromkeys(matches))
 
 
 def _extract_props_type(func: FunctionNode, source: str, analyzer: TreeSitterAnalyzer) -> str | None:
     """Extract the TypeScript props type annotation from a component's parameters."""
-    source_bytes = source.encode("utf-8")
+    source_bytes = _encode_source(source)
     node = func.node
 
     # Look for formal_parameters -> type_annotation
@@ -238,18 +238,28 @@ def _extract_props_type(func: FunctionNode, source: str, analyzer: TreeSitterAna
 
 def _is_wrapped_in_memo(func: FunctionNode, source: str) -> bool:
     """Check if the component is already wrapped in React.memo or memo()."""
-    # Check if the variable declaration wrapping this function uses memo()
-    # e.g., const MyComp = React.memo(function MyComp(...) {...})
-    # or    const MyComp = memo((...) => {...})
+    # Quick substring check for the common case where memo is not present at all.
+    if ("memo(" not in source) and ("React.memo" not in source):
+        node = func.node
+        parent = node.parent
+        while parent:
+            if parent.type == "call_expression":
+                func_node = parent.child_by_field_name("function")
+                if func_node:
+                    func_text = _encode_source(source)[func_node.start_byte : func_node.end_byte].decode("utf-8")
+                    if func_text in ("React.memo", "memo"):
+                        return True
+            parent = parent.parent
+        return False
+
+    # Check AST parents (covers cases like React.memo(function ...))
     node = func.node
     parent = node.parent
-
     while parent:
         if parent.type == "call_expression":
             func_node = parent.child_by_field_name("function")
             if func_node:
-                source_bytes = source.encode("utf-8")
-                func_text = source_bytes[func_node.start_byte : func_node.end_byte].decode("utf-8")
+                func_text = _encode_source(source)[func_node.start_byte : func_node.end_byte].decode("utf-8")
                 if func_text in ("React.memo", "memo"):
                     return True
         parent = parent.parent
@@ -257,5 +267,18 @@ def _is_wrapped_in_memo(func: FunctionNode, source: str) -> bool:
     # Also check for memo wrapping at the export level:
     # export default memo(MyComponent)
     name = func.name
-    memo_patterns = [f"React.memo({name})", f"memo({name})", f"React.memo({name},", f"memo({name},"]
+    memo_patterns = (f"React.memo({name})", f"memo({name})", f"React.memo({name},", f"memo({name},")
     return any(pattern in source for pattern in memo_patterns)
+
+
+
+@lru_cache(maxsize=32)
+def _encode_source(source: str) -> bytes:
+    """Cache the common source.encode(...) usage to avoid repeated allocations."""
+    return source.encode("utf-8")
+
+
+@lru_cache(maxsize=32)
+def _encode_source(source: str) -> bytes:
+    """Cache the common source.encode(...) usage to avoid repeated allocations."""
+    return source.encode("utf-8")
