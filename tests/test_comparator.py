@@ -690,11 +690,17 @@ def test_itertools_groupby() -> None:
     )
 
 
-def test_itertools_pairwise_batched() -> None:
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="itertools.pairwise requires Python 3.10+")
+def test_itertools_pairwise() -> None:
     import itertools
 
     assert comparator(itertools.pairwise([1, 2, 3, 4]), itertools.pairwise([1, 2, 3, 4]))
     assert not comparator(itertools.pairwise([1, 2, 3, 4]), itertools.pairwise([1, 2, 3, 5]))
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="itertools.batched requires Python 3.12+")
+def test_itertools_batched() -> None:
+    import itertools
 
     assert comparator(itertools.batched("ABCDEFG", 3), itertools.batched("ABCDEFG", 3))
     assert not comparator(itertools.batched("ABCDEFG", 3), itertools.batched("ABCDEFG", 2))
