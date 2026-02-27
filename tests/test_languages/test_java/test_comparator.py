@@ -1153,7 +1153,7 @@ class TestComparatorJavaEdgeCases(TestTestResultsTableSchema):
     def test_comparator_empty_table(
         self, tmp_path: Path, create_test_results_db
     ):
-        """Empty test_results tables should result in equivalent=True."""
+        """Empty test_results tables should result in equivalent=False (vacuous equivalence guard)."""
         original_path = tmp_path / "original.db"
         candidate_path = tmp_path / "candidate.db"
 
@@ -1163,8 +1163,8 @@ class TestComparatorJavaEdgeCases(TestTestResultsTableSchema):
 
         equivalent, diffs = compare_test_results(original_path, candidate_path)
 
-        # No rows to compare, so they should be equivalent
-        assert equivalent is True
+        # No rows means no actual comparisons were performed — reject as not equivalent
+        assert equivalent is False
         assert len(diffs) == 0
 
     def test_comparator_infinity_handling(
