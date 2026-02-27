@@ -770,7 +770,7 @@ def run_jest_behavioral_tests(
     project_root: Path | None = None,
     enable_coverage: bool = False,
     candidate_index: int = 0,
-) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
+) -> tuple[Path, subprocess.CompletedProcess[str], Path | None, Path | None]:
     """Run Jest tests and return results in a format compatible with pytest output.
 
     Args:
@@ -1017,7 +1017,7 @@ def run_jest_benchmarking_tests(
     max_loops: int = 100,
     target_duration_ms: int = 10_000,  # 10 seconds for benchmarking tests
     stability_check: bool = True,
-) -> tuple[Path, subprocess.CompletedProcess]:
+) -> tuple[Path, subprocess.CompletedProcess[str]]:
     """Run Jest benchmarking tests with in-process session-level looping.
 
     Uses a custom Jest runner (codeflash/loop-runner) to loop all tests
@@ -1195,7 +1195,7 @@ def run_jest_line_profile_tests(
     timeout: int | None = None,
     project_root: Path | None = None,
     line_profile_output_file: Path | None = None,
-) -> tuple[Path, subprocess.CompletedProcess]:
+) -> tuple[Path, subprocess.CompletedProcess[str]]:
     """Run Jest tests for line profiling.
 
     This runs tests against source code that has been instrumented with line profiler.

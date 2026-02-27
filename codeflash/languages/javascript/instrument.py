@@ -319,7 +319,7 @@ class StandaloneCallTransformer:
 
         return "".join(result)
 
-    def _should_skip_match(self, code: str, start: int, match: re.Match) -> bool:
+    def _should_skip_match(self, code: str, start: int, match: re.Match[str]) -> bool:
         """Check if the match should be skipped (inside expect, already transformed, etc.)."""
         # Skip if inside a string literal (e.g., test description)
         if is_inside_string(code, start):
@@ -403,7 +403,7 @@ class StandaloneCallTransformer:
 
         return pos if depth == 0 else -1
 
-    def _parse_standalone_call(self, code: str, match: re.Match) -> StandaloneCallMatch | None:
+    def _parse_standalone_call(self, code: str, match: re.Match[str]) -> StandaloneCallMatch | None:
         """Parse a complete standalone func(...) call."""
         leading_ws = match.group(1)
         prefix = match.group(2) or ""  # "await " or ""
@@ -1103,9 +1103,9 @@ class RenderCallTransformer:
         )
 
     def _compute_in_string_map(self, code: str) -> bytearray:
-        """Compute a bytearray of length len(code)+1 where map[pos] is 1 if
-        the parser would be inside a string after processing code[:pos], else 0.
+        """Compute a bytearray of length len(code)+1 where map[pos] is 1 if pos is inside a string.
 
+        map[pos] is 1 if the parser would be inside a string after processing code[:pos], else 0.
         This mirrors the logic of is_inside_string but does a single linear pass.
         """
         n = len(code)
@@ -1129,11 +1129,10 @@ class RenderCallTransformer:
                 if c == string_char:
                     in_string = False
                     string_char = None
-            else:
-                # Check for start of string
-                if c in "\"'`":
-                    in_string = True
-                    string_char = c
+            # Check for start of string
+            elif c in "\"'`":
+                in_string = True
+                string_char = c
             arr[i + 1] = 1 if in_string else 0
             i += 1
         return arr
