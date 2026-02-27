@@ -338,10 +338,10 @@ class Tracer:
             resolved = os.path.realpath(co_filename)
             # startswith is cheaper than Path.is_relative_to, os.path.exists avoids Path construction
             is_valid = resolved.startswith(self.project_root_str) and os.path.exists(resolved)
-            file_name = Path(resolved) if is_valid else None
-            self.path_cache[co_filename] = (file_name, is_valid)
+            self.path_cache[co_filename] = (resolved, is_valid)
             if not is_valid:
                 return
+            file_name = resolved
         if self.functions and code.co_name not in self.functions:
             return
         class_name = None
@@ -378,10 +378,11 @@ class Tracer:
         if function_qualified_name in self.ignored_qualified_functions:
             return
         if function_qualified_name not in self.function_count:
-            # seeing this function for the first time
+            # seeing this function for the first time — Path construction only happens here
             self.function_count[function_qualified_name] = 1
+            file_path = Path(file_name)
             file_valid = filter_files_optimized(
-                file_path=file_name,
+                file_path=file_path,
                 tests_root=Path(self.config["tests_root"]),
                 ignore_paths=[Path(p) for p in self.config["ignore_paths"]],
                 module_root=Path(self.config["module_root"]),
@@ -393,8 +394,8 @@ class Tracer:
             self.function_modules.append(
                 FunctionModules(
                     function_name=code.co_name,
-                    file_name=file_name,
-                    module_name=module_name_from_file_path(file_name, project_root_path=self.project_root),
+                    file_name=file_path,
+                    module_name=module_name_from_file_path(file_path, project_root_path=self.project_root),
                     class_name=class_name,
                     line_no=code.co_firstlineno,
                 )
@@ -438,7 +439,7 @@ class Tracer:
                     event,
                     code.co_name,
                     class_name,
-                    str(file_name),
+                    file_name,
                     frame.f_lineno,
                     frame.f_back.__hash__(),
                     t_ns,
