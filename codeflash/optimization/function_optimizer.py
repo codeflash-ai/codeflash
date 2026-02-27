@@ -2371,7 +2371,9 @@ class FunctionOptimizer:
                         self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
                     )
 
-                total_looping_time = TOTAL_LOOPING_TIME_EFFECTIVE / 2 if is_subagent_mode() else TOTAL_LOOPING_TIME_EFFECTIVE
+                total_looping_time = (
+                    TOTAL_LOOPING_TIME_EFFECTIVE / 2 if is_subagent_mode() else TOTAL_LOOPING_TIME_EFFECTIVE
+                )
                 logger.debug(f"[PIPELINE] Establishing baseline with {len(self.test_files)} test files")
                 for idx, tf in enumerate(self.test_files):
                     logger.debug(
@@ -2616,7 +2618,9 @@ class FunctionOptimizer:
                         self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
                     )
 
-                total_looping_time = TOTAL_LOOPING_TIME_EFFECTIVE / 2 if is_subagent_mode() else TOTAL_LOOPING_TIME_EFFECTIVE
+                total_looping_time = (
+                    TOTAL_LOOPING_TIME_EFFECTIVE / 2 if is_subagent_mode() else TOTAL_LOOPING_TIME_EFFECTIVE
+                )
                 candidate_behavior_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.BEHAVIOR,
                     test_env=test_env,
