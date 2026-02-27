@@ -1451,6 +1451,7 @@ class FunctionOptimizer:
                             optimized_line_profiler_results=best_optimization.line_profiler_test_results["str_out"],
                             function_references=function_references,
                             language=self.function_to_optimize.language,
+                            language_version=self.language_support.language_version,
                         )
                     ],
                 )
@@ -1512,6 +1513,7 @@ class FunctionOptimizer:
             else None,
             is_numerical_code=self.is_numerical_code and not self.args.no_jit_opts,
             language=self.function_to_optimize.language,
+            language_version=self.language_support.language_version,
         )
 
         processor = CandidateProcessor(
@@ -2139,6 +2141,7 @@ class FunctionOptimizer:
             self.function_trace_id[:-4] + "EXP0" if run_experiment else self.function_trace_id,
             ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
             language=self.function_to_optimize.language,
+            language_version=self.language_support.language_version,
             is_async=self.function_to_optimize.is_async,
             n_candidates=n_candidates,
             is_numerical_code=is_numerical_code,
@@ -2165,6 +2168,7 @@ class FunctionOptimizer:
                 self.function_trace_id[:-4] + "EXP1",
                 ExperimentMetadata(id=self.experiment_id, group="experiment"),
                 language=self.function_to_optimize.language,
+                language_version=self.language_support.language_version,
                 is_async=self.function_to_optimize.is_async,
                 n_candidates=n_candidates,
             )

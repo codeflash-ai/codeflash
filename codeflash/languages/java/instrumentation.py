@@ -35,6 +35,10 @@ _WORD_RE = re.compile(r"^\w+$")
 
 _ASSERTION_METHODS = ("assertArrayEquals", "assertArrayNotEquals")
 
+# Per-test timeout (seconds) added to instrumented tests to prevent individual
+# tests from hanging (e.g. naive recursive fibonacci with large inputs).
+_PER_TEST_TIMEOUT_SECONDS = 30
+
 logger = logging.getLogger(__name__)
 
 
@@ -258,6 +262,7 @@ def wrap_target_calls_with_treesitter(
     precise_call_timing: bool = False,
     class_name: str = "",
     test_method_name: str = "",
+    target_return_type: str = "",
 ) -> tuple[list[str], int]:
     """Replace target method calls in body_lines with capture + serialize using tree-sitter.
 
@@ -327,6 +332,8 @@ def wrap_target_calls_with_treesitter(
             call_counter += 1
             var_name = f"_cf_result{iter_id}_{call_counter}"
             cast_type = _infer_array_cast_type(body_line)
+            if not cast_type and target_return_type and target_return_type != "void":
+                cast_type = target_return_type
             var_with_cast = f"({cast_type}){var_name}" if cast_type else var_name
 
             # Use per-call unique variables (with call_counter suffix) for behavior mode
@@ -524,6 +531,26 @@ def _infer_array_cast_type(line: str) -> str | None:
     return None
 
 
+def _extract_return_type(function_to_optimize: Any) -> str:
+    """Extract the return type of a Java function from its source file using tree-sitter."""
+    file_path = getattr(function_to_optimize, "file_path", None)
+    func_name = _get_function_name(function_to_optimize)
+    if not file_path or not file_path.exists():
+        return ""
+    try:
+        from codeflash.languages.java.parser import get_java_analyzer
+
+        analyzer = get_java_analyzer()
+        source_text = file_path.read_text(encoding="utf-8")
+        methods = analyzer.find_methods(source_text)
+        for method in methods:
+            if method.name == func_name and method.return_type:
+                return method.return_type
+    except Exception:
+        logger.debug("Could not extract return type for %s", func_name)
+    return ""
+
+
 def _get_qualified_name(func: Any) -> str:
     """Get the qualified name from FunctionToOptimize."""
     if hasattr(func, "qualified_name"):
@@ -588,6 +615,64 @@ def instrument_for_benchmarking(
     return test_source
 
 
+def _add_per_test_timeout(source: str, timeout_seconds: int = _PER_TEST_TIMEOUT_SECONDS) -> str:
+    """Add @Timeout annotation to each @Test method to prevent individual tests from hanging.
+
+    This inserts `import org.junit.jupiter.api.Timeout;` and adds
+    `@Timeout(value = N, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)`
+    after every `@Test` annotation in the source.
+
+    SEPARATE_THREAD is required because the default SAME_THREAD mode uses
+    Thread.interrupt(), which is ignored by CPU-bound code (e.g. naive
+    recursive fibonacci). SEPARATE_THREAD runs the test in a new thread
+    and fails it with TimeoutException when the deadline passes.
+    """
+    timeout_import = "import org.junit.jupiter.api.Timeout;"
+    timeout_annotation = f"@Timeout(value = {timeout_seconds}, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)"
+
+    # Add import if not already present
+    if timeout_import not in source:
+        lines = source.split("\n")
+        result_lines: list[str] = []
+        import_added = False
+        for line in lines:
+            result_lines.append(line)
+            # Insert after the last JUnit import line
+            if not import_added and line.strip().startswith("import org.junit.jupiter.api."):
+                # Peek ahead: if the next non-empty line is NOT another import, insert here
+                result_lines.append(timeout_import)
+                import_added = True
+        if not import_added:
+            # Fallback: insert before the first import
+            result_lines2: list[str] = []
+            for line in result_lines:
+                if not import_added and line.strip().startswith("import "):
+                    result_lines2.append(timeout_import)
+                    import_added = True
+                result_lines2.append(line)
+            result_lines = result_lines2
+        source = "\n".join(result_lines)
+        # Deduplicate: the import may appear twice if multiple junit imports existed
+        source = source.replace(f"{timeout_import}\n{timeout_import}", timeout_import)
+
+    # Add @Timeout after each @Test annotation (only if not already present)
+    lines = source.split("\n")
+    result_lines = []
+    for i, line in enumerate(lines):
+        result_lines.append(line)
+        stripped = line.strip()
+        if _is_test_annotation(stripped):
+            # Check if the next non-blank line is already @Timeout
+            next_idx = i + 1
+            while next_idx < len(lines) and not lines[next_idx].strip():
+                next_idx += 1
+            if next_idx >= len(lines) or not lines[next_idx].strip().startswith("@Timeout"):
+                indent = line[: len(line) - len(line.lstrip())]
+                result_lines.append(f"{indent}{timeout_annotation}")
+
+    return "\n".join(result_lines)
+
+
 def instrument_existing_test(
     test_string: str,
     function_to_optimize: Any,  # FunctionToOptimize or FunctionToOptimize
@@ -617,6 +702,7 @@ def instrument_existing_test(
     """
     source = test_string
     func_name = _get_function_name(function_to_optimize)
+    target_return_type = _extract_return_type(function_to_optimize)
 
     # Get the original class name from the file name
     if test_path:
@@ -638,6 +724,9 @@ def instrument_existing_test(
     # replacing substrings of other identifiers.
     modified_source = re.sub(rf"\b{re.escape(original_class_name)}\b", new_class_name, source)
 
+    # Add per-test timeout to prevent individual tests from hanging the entire Maven run
+    modified_source = _add_per_test_timeout(modified_source)
+
     # Add timing instrumentation to test methods
     # Use original class name (without suffix) in timing markers for consistency with Python
     if mode == "performance":
@@ -648,14 +737,16 @@ def instrument_existing_test(
         )
     else:
         # Behavior mode: add timing instrumentation that also writes to SQLite
-        modified_source = _add_behavior_instrumentation(modified_source, original_class_name, func_name)
+        modified_source = _add_behavior_instrumentation(
+            modified_source, original_class_name, func_name, target_return_type
+        )
 
     logger.debug("Java %s testing for %s: renamed class %s -> %s", mode, func_name, original_class_name, new_class_name)
     # Why return True here?
     return True, modified_source
 
 
-def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) -> str:
+def _add_behavior_instrumentation(source: str, class_name: str, func_name: str, target_return_type: str = "") -> str:
     """Add behavior instrumentation to test methods.
 
     For behavior mode, this adds:
@@ -796,6 +887,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 precise_call_timing=True,
                 class_name=class_name,
                 test_method_name=test_method_name,
+                target_return_type=target_return_type,
             )
 
             # Add behavior instrumentation setup code (shared variables for all calls in the method)

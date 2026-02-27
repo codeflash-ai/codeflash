@@ -64,6 +64,7 @@ class JavaSupport(LanguageSupport):
         self._analyzer = get_java_analyzer()
         self.line_profiler_agent_arg: str | None = None
         self.line_profiler_warmup_iterations: int = 0
+        self._language_version: str | None = None
 
     @property
     def language(self) -> Language:
@@ -92,6 +93,10 @@ class JavaSupport(LanguageSupport):
     @property
     def dir_excludes(self) -> frozenset[str]:
         return frozenset({"target", "build", ".gradle", ".mvn", ".idea"})
+
+    @property
+    def language_version(self) -> str | None:
+        return self._language_version
 
     def postprocess_generated_tests(
         self, generated_tests: GeneratedTestsList, test_framework: str, project_root: Path, source_file_path: Path
@@ -363,6 +368,8 @@ class JavaSupport(LanguageSupport):
         config = detect_java_project(project_root)
         if config is None:
             return False
+
+        self._language_version = config.java_version
 
         # For now, assume the runtime is available
         # A full implementation would check/install the JAR

@@ -68,6 +68,10 @@ class JavaScriptSupport:
     def dir_excludes(self) -> frozenset[str]:
         return frozenset({"node_modules", "dist", "build", ".next", ".nuxt", "coverage", ".cache", ".turbo", ".vercel"})
 
+    @property
+    def language_version(self) -> str | None:
+        return None
+
     # === Discovery ===
 
     def discover_functions(

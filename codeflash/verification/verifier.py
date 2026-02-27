@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
-from codeflash.languages import is_java, is_javascript
+from codeflash.languages import current_language_support, is_java, is_javascript
 from codeflash.verification.verification_utils import ModifyInspiredTests, delete_multiple_if_name_main
 
 if TYPE_CHECKING:
@@ -68,6 +68,7 @@ def generate_tests(
         trace_id=function_trace_id,
         test_index=test_index,
         language=function_to_optimize.language,
+        language_version=current_language_support().language_version,
         module_system=project_module_system,
         is_numerical_code=is_numerical_code,
     )

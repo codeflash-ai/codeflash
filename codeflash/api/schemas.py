@@ -137,14 +137,15 @@ class OptimizeRequest:
             "is_numerical_code": self.is_numerical_code,
         }
 
-        # Add language-specific fields
-        if self.language_info.version:
-            payload["language_version"] = self.language_info.version
+        # Add language version (canonical for all languages)
+        payload["language_version"] = self.language_info.version
 
-        # Backward compat: always include python_version
+        # Backward compat: backend still expects python_version
         import platform
 
-        payload["python_version"] = platform.python_version()
+        payload["python_version"] = (
+            self.language_info.version if self.language_info.name == "python" else platform.python_version()
+        )
 
         # Module system for JS/TS
         if self.language_info.module_system != ModuleSystem.UNKNOWN:
@@ -205,14 +206,15 @@ class TestGenRequest:
             "is_numerical_code": self.is_numerical_code,
         }
 
-        # Add language version
-        if self.language_info.version:
-            payload["language_version"] = self.language_info.version
+        # Add language version (canonical for all languages)
+        payload["language_version"] = self.language_info.version
 
-        # Backward compat: always include python_version
+        # Backward compat: backend still expects python_version
         import platform
 
-        payload["python_version"] = platform.python_version()
+        payload["python_version"] = (
+            self.language_info.version if self.language_info.name == "python" else platform.python_version()
+        )
 
         # Module system for JS/TS
         if self.language_info.module_system != ModuleSystem.UNKNOWN:
