@@ -4,7 +4,6 @@ import ast
 import os
 import random
 import warnings
-from _ast import AsyncFunctionDef, ClassDef, FunctionDef
 from collections import defaultdict
 from functools import cache
 from pathlib import Path
@@ -16,7 +15,7 @@ from pydantic.dataclasses import dataclass
 from rich.tree import Tree
 
 from codeflash.api.cfapi import get_blocklisted_functions, is_function_being_optimized_again
-from codeflash.cli_cmds.console import DEBUG_MODE, console, logger
+from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.code_utils import (
     exit_with_message,
     is_class_defined_in_file,
@@ -46,10 +45,6 @@ if TYPE_CHECKING:
 import contextlib
 
 from rich.text import Text
-
-_property_id = "property"
-
-_ast_name = ast.Name
 
 
 @dataclass(frozen=True)
@@ -91,15 +86,26 @@ class FunctionVisitor(cst.CSTVisitor):
                 return True
         return False
 
+    @staticmethod
+    def is_property(node: cst.FunctionDef) -> bool:
+        for decorator in node.decorators:
+            dec = decorator.decorator
+            if isinstance(dec, cst.Name) and dec.value in ("property", "cached_property"):
+                return True
+        return False
+
     def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
         return_visitor: ReturnStatementVisitor = ReturnStatementVisitor()
         node.visit(return_visitor)
-        if return_visitor.has_return_statement and not self.is_pytest_fixture(node):
+        if return_visitor.has_return_statement and not self.is_pytest_fixture(node) and not self.is_property(node):
             pos: CodeRange = self.get_metadata(cst.metadata.PositionProvider, node)
             parents: CSTNode | None = self.get_metadata(cst.metadata.ParentNodeProvider, node)
             ast_parents: list[FunctionParent] = []
             while parents is not None:
-                if isinstance(parents, (cst.FunctionDef, cst.ClassDef)):
+                if isinstance(parents, cst.FunctionDef):
+                    # Skip nested functions — only discover top-level and class-level functions
+                    return
+                if isinstance(parents, cst.ClassDef):
                     ast_parents.append(FunctionParent(parents.name.value, parents.__class__.__name__))
                 parents = self.get_metadata(cst.metadata.ParentNodeProvider, parents, default=None)
             self.functions.append(
@@ -112,32 +118,6 @@ class FunctionVisitor(cst.CSTVisitor):
                     is_async=bool(node.asynchronous),
                 )
             )
-
-
-def find_functions_with_return_statement(ast_module: ast.Module, file_path: Path) -> list[FunctionToOptimize]:
-    results: list[FunctionToOptimize] = []
-    # (node, parent_path) — iterative DFS avoids RecursionError on deeply nested ASTs
-    stack: list[tuple[ast.AST, list[FunctionParent]]] = [(ast_module, [])]
-    while stack:
-        node, ast_path = stack.pop()
-        if isinstance(node, (FunctionDef, AsyncFunctionDef)):
-            if function_has_return_statement(node) and not function_is_a_property(node):
-                results.append(
-                    FunctionToOptimize(
-                        function_name=node.name,
-                        file_path=file_path,
-                        parents=ast_path[:],
-                        is_async=isinstance(node, AsyncFunctionDef),
-                    )
-                )
-            # Don't recurse into function bodies (matches original visitor behaviour)
-            continue
-        child_path = (
-            [*ast_path, FunctionParent(node.name, node.__class__.__name__)] if isinstance(node, ClassDef) else ast_path
-        )
-        for child in reversed(list(ast.iter_child_nodes(node))):
-            stack.append((child, child_path))
-    return results
 
 
 # =============================================================================
@@ -248,23 +228,6 @@ def _is_js_ts_function_exported(file_path: Path, function_name: str) -> tuple[bo
         logger.debug(f"Failed to check export status for {function_name}: {e}")
         # Return True to avoid blocking in case of errors
         return True, None
-
-
-def _find_all_functions_in_python_file(file_path: Path) -> dict[Path, list[FunctionToOptimize]]:
-    """Find all optimizable functions in a Python file using AST parsing.
-
-    This is the original Python implementation preserved for backward compatibility.
-    """
-    functions: dict[Path, list[FunctionToOptimize]] = {}
-    with file_path.open(encoding="utf8") as f:
-        try:
-            ast_module = ast.parse(f.read())
-        except Exception as e:
-            if DEBUG_MODE:
-                logger.exception(e)
-            return functions
-        functions[file_path] = find_functions_with_return_statement(ast_module, file_path)
-    return functions
 
 
 def _find_all_functions_via_language_support(file_path: Path) -> dict[Path, list[FunctionToOptimize]]:
@@ -545,16 +508,6 @@ def find_all_functions_in_file(file_path: Path) -> dict[Path, list[FunctionToOpt
     if not is_language_supported(file_path):
         return {}
 
-    try:
-        lang_support = get_language_support(file_path)
-    except Exception:
-        return {}
-
-    # Route to Python-specific implementation for backward compatibility
-    if lang_support.language == Language.PYTHON:
-        return _find_all_functions_in_python_file(file_path)
-
-    # Use language support abstraction for other languages
     return _find_all_functions_via_language_support(file_path)
 
 
@@ -984,31 +937,3 @@ def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list
         file_path in submodule_paths
         or any(file_path.is_relative_to(submodule_path) for submodule_path in submodule_paths)
     )
-
-
-def function_has_return_statement(function_node: FunctionDef | AsyncFunctionDef) -> bool:
-    # Custom DFS, return True as soon as a Return node is found
-    stack: list[ast.AST] = list(function_node.body)
-    while stack:
-        node = stack.pop()
-        if isinstance(node, ast.Return):
-            return True
-        # Only push child nodes that are statements; Return nodes are statements,
-        # so this preserves correctness while avoiding unnecessary traversal into expr/Name/etc.
-        for field in getattr(node, "_fields", ()):
-            child = getattr(node, field, None)
-            if isinstance(child, list):
-                for item in child:
-                    if isinstance(item, ast.stmt):
-                        stack.append(item)
-            elif isinstance(child, ast.stmt):
-                stack.append(child)
-    return False
-
-
-def function_is_a_property(function_node: FunctionDef | AsyncFunctionDef) -> bool:
-    for node in function_node.decorator_list:  # noqa: SIM110
-        # Use isinstance rather than type(...) is ... for better performance with single inheritance trees like ast
-        if isinstance(node, _ast_name) and node.id == _property_id:
-            return True
-    return False
