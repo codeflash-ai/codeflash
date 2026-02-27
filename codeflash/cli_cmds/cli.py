@@ -142,6 +142,7 @@ def parse_args() -> Namespace:
         args.yes = True
         args.no_pr = True
         args.worktree = True
+        args.effort = "low"
     return process_and_validate_cmd_args(args)
 
 
