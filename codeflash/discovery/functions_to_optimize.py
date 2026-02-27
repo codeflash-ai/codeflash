@@ -411,7 +411,6 @@ def closest_matching_file_function_name(
             closest_match = function
             closest_file = file_path
 
-
     if closest_match is not None and closest_file is not None:
         return closest_file, closest_match
     return None
@@ -949,12 +948,11 @@ def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list
     )
 
 
-
-
-
 def _bounded_levenshtein(s1: str, s2: str, max_distance: int) -> int:
     """Compute Levenshtein distance but stop when distance exceeds max_distance.
-    Returns a value > max_distance when the true distance is > max_distance."""
+
+    Returns a value > max_distance when the true distance is > max_distance.
+    """
     # Fast path equal
     if s1 == s2:
         return 0
@@ -1005,83 +1003,8 @@ def _bounded_levenshtein(s1: str, s2: str, max_distance: int) -> int:
                 b = current[j - 1] + 1
                 c = previous[j - 1] + 1
                 # Fast min of three
-                t = a if a < b else b
-                current[j] = c if c < t else t
-
-        # Fill right part outside band with large values
-        for k in range(end + 1, n + 1):
-            current[k] = max_distance + 1
-
-        # Swap rows
-        previous, current = current, previous
-
-        # Early exit: if the minimum value in the active band is greater than max_distance
-        # then the final distance must exceed max_distance
-        # (band width is small: at most 2*max_distance+1).
-        row_min = min(previous[start : end + 1])
-        if row_min > max_distance:
-            return max_distance + 1
-
-    return previous[n]
-
-
-
-
-def _bounded_levenshtein(s1: str, s2: str, max_distance: int) -> int:
-    """Compute Levenshtein distance but stop when distance exceeds max_distance.
-    Returns a value > max_distance when the true distance is > max_distance."""
-    # Fast path equal
-    if s1 == s2:
-        return 0
-
-    # Ensure s1 is the shorter
-    if len(s1) > len(s2):
-        s1, s2 = s2, s1
-
-    n = len(s1)
-    m = len(s2)
-
-    # If length difference already exceeds max allowed distance, we can exit
-    if m - n > max_distance:
-        return max_distance + 1
-
-    # Initialize previous row: distances from empty s2 prefix to s1 prefixes
-    previous = list(range(n + 1))
-    current = [0] * (n + 1)
-
-    # We will only compute values within a "band" [start..end] for each row
-    for i in range(1, m + 1):
-        # Position in s2 is i (1-based for DP), character is s2[i-1]
-        char2 = s2[i - 1]
-        # Compute band boundaries (1-based indices for s1 positions)
-        start = max(1, i - max_distance)
-        end = min(n, i + max_distance)
-
-        # If start > end the band is empty -> distance exceeds max_distance
-        if start > end:
-            return max_distance + 1
-
-        # Set current[0] for the empty prefix of s1
-        current[0] = i
-
-        # Fill left part outside band with large values
-        for k in range(1, start):
-            current[k] = max_distance + 1
-
-        # Compute values inside the band
-        for j in range(start, end + 1):
-            if s1[j - 1] == char2:
-                current[j] = previous[j - 1]
-            else:
-                # deletion = previous[j] + 1
-                # insertion = current[j - 1] + 1
-                # substitution = previous[j - 1] + 1
-                a = previous[j] + 1
-                b = current[j - 1] + 1
-                c = previous[j - 1] + 1
-                # Fast min of three
-                t = a if a < b else b
-                current[j] = c if c < t else t
+                t = min(b, a)
+                current[j] = min(t, c)
 
         # Fill right part outside band with large values
         for k in range(end + 1, n + 1):
