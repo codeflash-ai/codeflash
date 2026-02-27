@@ -2084,6 +2084,24 @@ class FunctionOptimizer:
         code_context: CodeOptimizationContext,
         function_references: str,
     ) -> None:
+        if is_subagent_mode():
+            subagent_log_optimization_result(
+                function_name=explanation.function_name,
+                file_path=explanation.file_path,
+                perf_improvement_line=explanation.perf_improvement_line,
+                original_runtime_ns=explanation.original_runtime_ns,
+                best_runtime_ns=explanation.best_runtime_ns,
+                raw_explanation=explanation.raw_explanation_message,
+                original_code=original_code_combined,
+                new_code=new_code_combined,
+                review="",
+                test_results=explanation.winning_behavior_test_results,
+            )
+            mark_optimization_success(
+                trace_id=self.function_trace_id, is_optimization_found=best_optimization is not None
+            )
+            return
+
         coverage_message = (
             original_code_baseline.coverage_results.build_message()
             if original_code_baseline.coverage_results
@@ -2160,31 +2178,28 @@ class FunctionOptimizer:
             )
             concurrency_improvement_str = f"{conc_improvement_value * 100:.1f}%"
 
-        if is_subagent_mode():
-            new_explanation_raw_str = None
-        else:
-            new_explanation_raw_str = self.aiservice_client.get_new_explanation(
-                source_code=code_context.read_writable_code.flat,
-                dependency_code=code_context.read_only_context_code,
-                trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
-                optimized_code=best_optimization.candidate.source_code.flat,
-                original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
-                optimized_line_profiler_results=best_optimization.line_profiler_test_results["str_out"],
-                original_code_runtime=humanize_runtime(original_code_baseline.runtime),
-                optimized_code_runtime=humanize_runtime(best_optimization.runtime),
-                speedup=f"{int(performance_gain(original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=best_optimization.runtime) * 100)}%",
-                annotated_tests=generated_tests_str,
-                optimization_id=best_optimization.candidate.optimization_id,
-                original_explanation=best_optimization.candidate.explanation,
-                original_throughput=original_throughput_str,
-                optimized_throughput=optimized_throughput_str,
-                throughput_improvement=throughput_improvement_str,
-                function_references=function_references,
-                acceptance_reason=explanation.acceptance_reason.value,
-                original_concurrency_ratio=original_concurrency_ratio_str,
-                optimized_concurrency_ratio=optimized_concurrency_ratio_str,
-                concurrency_improvement=concurrency_improvement_str,
-            )
+        new_explanation_raw_str = self.aiservice_client.get_new_explanation(
+            source_code=code_context.read_writable_code.flat,
+            dependency_code=code_context.read_only_context_code,
+            trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
+            optimized_code=best_optimization.candidate.source_code.flat,
+            original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
+            optimized_line_profiler_results=best_optimization.line_profiler_test_results["str_out"],
+            original_code_runtime=humanize_runtime(original_code_baseline.runtime),
+            optimized_code_runtime=humanize_runtime(best_optimization.runtime),
+            speedup=f"{int(performance_gain(original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=best_optimization.runtime) * 100)}%",
+            annotated_tests=generated_tests_str,
+            optimization_id=best_optimization.candidate.optimization_id,
+            original_explanation=best_optimization.candidate.explanation,
+            original_throughput=original_throughput_str,
+            optimized_throughput=optimized_throughput_str,
+            throughput_improvement=throughput_improvement_str,
+            function_references=function_references,
+            acceptance_reason=explanation.acceptance_reason.value,
+            original_concurrency_ratio=original_concurrency_ratio_str,
+            optimized_concurrency_ratio=optimized_concurrency_ratio_str,
+            concurrency_improvement=concurrency_improvement_str,
+        )
         new_explanation = Explanation(
             raw_explanation_message=new_explanation_raw_str or explanation.raw_explanation_message,
             winning_behavior_test_results=explanation.winning_behavior_test_results,
@@ -2224,31 +2239,17 @@ class FunctionOptimizer:
         raise_pr = not self.args.no_pr
         staging_review = self.args.staging_review
         opt_review_result = OptimizationReviewResult(review="", explanation="")
-        if not is_subagent_mode():
-            try:
-                opt_review_result = self.aiservice_client.get_optimization_review(
-                    **data, calling_fn_details=function_references
-                )
-            except Exception as e:
-                logger.debug(f"optimization review response failed, investigate {e}")
+        try:
+            opt_review_result = self.aiservice_client.get_optimization_review(
+                **data, calling_fn_details=function_references
+            )
+        except Exception as e:
+            logger.debug(f"optimization review response failed, investigate {e}")
         data["optimization_review"] = opt_review_result.review
         self.optimization_review = opt_review_result.review
 
         # Display the reviewer result to the user
-        if is_subagent_mode():
-            subagent_log_optimization_result(
-                function_name=new_explanation.function_name,
-                file_path=new_explanation.file_path,
-                perf_improvement_line=new_explanation.perf_improvement_line,
-                original_runtime_ns=new_explanation.original_runtime_ns,
-                best_runtime_ns=new_explanation.best_runtime_ns,
-                raw_explanation=new_explanation.raw_explanation_message,
-                original_code=original_code_combined,
-                new_code=new_code_combined,
-                review=opt_review_result.review,
-                test_results=new_explanation.winning_behavior_test_results,
-            )
-        elif opt_review_result.review:
+        if opt_review_result.review:
             review_display = {
                 "high": ("[bold green]High[/bold green]", "green", "Recommended to merge"),
                 "medium": ("[bold yellow]Medium[/bold yellow]", "yellow", "Review recommended before merging"),
