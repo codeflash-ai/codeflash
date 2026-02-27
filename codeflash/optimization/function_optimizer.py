@@ -2371,7 +2371,7 @@ class FunctionOptimizer:
                         self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
                     )
 
-                total_looping_time = TOTAL_LOOPING_TIME_EFFECTIVE
+                total_looping_time = TOTAL_LOOPING_TIME_EFFECTIVE / 2 if is_subagent_mode() else TOTAL_LOOPING_TIME_EFFECTIVE
                 logger.debug(f"[PIPELINE] Establishing baseline with {len(self.test_files)} test files")
                 for idx, tf in enumerate(self.test_files):
                     logger.debug(
@@ -2430,6 +2430,7 @@ class FunctionOptimizer:
                 )
 
             try:
+                subagent = is_subagent_mode()
                 benchmarking_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.PERFORMANCE,
                     test_env=test_env,
@@ -2438,6 +2439,8 @@ class FunctionOptimizer:
                     testing_time=total_looping_time,
                     enable_coverage=False,
                     code_context=code_context,
+                    pytest_min_loops=3 if subagent else 5,
+                    pytest_max_loops=100 if subagent else 250,
                 )
                 logger.debug(f"[BENCHMARK-DONE] Got {len(benchmarking_results.test_results)} benchmark results")
             finally:
@@ -2613,7 +2616,7 @@ class FunctionOptimizer:
                         self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
                     )
 
-                total_looping_time = TOTAL_LOOPING_TIME_EFFECTIVE
+                total_looping_time = TOTAL_LOOPING_TIME_EFFECTIVE / 2 if is_subagent_mode() else TOTAL_LOOPING_TIME_EFFECTIVE
                 candidate_behavior_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.BEHAVIOR,
                     test_env=test_env,
@@ -2686,6 +2689,7 @@ class FunctionOptimizer:
                 )
 
             try:
+                subagent = is_subagent_mode()
                 candidate_benchmarking_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.PERFORMANCE,
                     test_env=test_env,
@@ -2693,6 +2697,8 @@ class FunctionOptimizer:
                     optimization_iteration=optimization_candidate_index,
                     testing_time=total_looping_time,
                     enable_coverage=False,
+                    pytest_min_loops=3 if subagent else 5,
+                    pytest_max_loops=100 if subagent else 250,
                 )
             finally:
                 # Restore original source if we instrumented it
