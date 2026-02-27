@@ -136,7 +136,7 @@ import java.sql.PreparedStatement;
 
 public class CalculatorTest__perfinstrumented {
     @Test
-    @Timeout(30)
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     public void testAdd() {
         // Codeflash behavior instrumentation
         int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
@@ -252,7 +252,7 @@ import java.sql.PreparedStatement;
 
 public class FibonacciTest__perfinstrumented {
     @Test
-    @Timeout(30)
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     void testNegativeInput_ThrowsIllegalArgumentException() {
         // Codeflash behavior instrumentation
         int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
@@ -268,7 +268,7 @@ public class FibonacciTest__perfinstrumented {
     }
 
     @Test
-    @Timeout(30)
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     void testZeroInput_ReturnsZero() {
         // Codeflash behavior instrumentation
         int _cf_loop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
@@ -383,7 +383,7 @@ import java.sql.PreparedStatement;
 
 public class FibonacciTest__perfinstrumented {
     @Test
-    @Timeout(30)
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     void testNegativeInput_ThrowsIllegalArgumentException() {
         // Codeflash behavior instrumentation
         int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
@@ -401,7 +401,7 @@ public class FibonacciTest__perfinstrumented {
     }
 
     @Test
-    @Timeout(30)
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     void testZeroInput_ReturnsZero() {
         // Codeflash behavior instrumentation
         int _cf_loop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
@@ -501,7 +501,7 @@ import org.junit.jupiter.api.Timeout;
 
 public class CalculatorTest__perfonlyinstrumented {
     @Test
-    @Timeout(30)
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     public void testAdd() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
@@ -575,7 +575,7 @@ import org.junit.jupiter.api.Timeout;
 
 public class MathTest__perfonlyinstrumented {
     @Test
-    @Timeout(30)
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     public void testAdd() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
@@ -604,7 +604,7 @@ public class MathTest__perfonlyinstrumented {
     }
 
     @Test
-    @Timeout(30)
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     public void testSubtract() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_outerLoop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
@@ -683,7 +683,7 @@ import org.junit.jupiter.api.Disabled;
 
 public class ServiceTest__perfonlyinstrumented {
     @Test
-    @Timeout(30)
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     @DisplayName("Test service call")
     public void testService() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
@@ -714,7 +714,7 @@ public class ServiceTest__perfonlyinstrumented {
 
     @Disabled
     @Test
-    @Timeout(30)
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     public void testDisabled() {
         service.other();
     }
@@ -1287,7 +1287,7 @@ import java.sql.PreparedStatement;
 
 public class CalculatorTest__perfinstrumented {
     @Test
-    @Timeout(30)
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     public void testAdd() {
         // Codeflash behavior instrumentation
         int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
@@ -1562,7 +1562,7 @@ import org.junit.jupiter.api.Timeout;
 
 public class BraceTest__perfonlyinstrumented {
     @Test
-    @Timeout(30)
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     public void testOne() {
         if (true) {
             doSomething();
@@ -1570,7 +1570,7 @@ public class BraceTest__perfonlyinstrumented {
     }
 
     @Test
-    @Timeout(30)
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     public void testTwo() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_outerLoop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
@@ -1651,7 +1651,7 @@ import java.util.ArrayList;
 
 public class ImportTest__perfonlyinstrumented {
     @Test
-    @Timeout(30)
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     public void testCollections() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
@@ -1723,7 +1723,7 @@ import org.junit.jupiter.api.Timeout;
 
 public class EmptyTest__perfonlyinstrumented {
     @Test
-    @Timeout(30)
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     public void testEmpty() {
     }
 }
@@ -1773,7 +1773,7 @@ import org.junit.jupiter.api.Timeout;
 
 public class NestedTest__perfonlyinstrumented {
     @Test
-    @Timeout(30)
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     public void testNested() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
@@ -1857,7 +1857,7 @@ import org.junit.jupiter.api.Nested;
 
 public class InnerClassTest__perfonlyinstrumented {
     @Test
-    @Timeout(30)
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     public void testOuter() {
         outerMethod();
     }
@@ -1865,7 +1865,7 @@ public class InnerClassTest__perfonlyinstrumented {
     @Nested
     class InnerTests {
         @Test
-        @Timeout(30)
+        @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
         public void testInner() {
             innerMethod();
         }
@@ -1927,7 +1927,7 @@ public class Utf8Test {
             '\n'
             'public class Utf8Test__perfonlyinstrumented {\n'
             '    @Test\n'
-            '    @Timeout(30)\n'
+            '    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)\n'
             '    public void testWithCjk() {\n'
             '        // Codeflash timing instrumentation with inner loop for JIT warmup\n'
             '        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));\n'
@@ -2003,7 +2003,7 @@ public class AccentTest {
             '\n'
             'public class AccentTest__perfonlyinstrumented {\n'
             '    @Test\n'
-            '    @Timeout(30)\n'
+            '    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)\n'
             '    public void testWithAccent() {\n'
             '        // Codeflash timing instrumentation with inner loop for JIT warmup\n'
             '        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));\n'
@@ -2303,7 +2303,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class MathUtilsTest__perfonlyinstrumented {
     @Test
-    @Timeout(30)
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     public void testMultiply() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
@@ -2686,7 +2686,7 @@ import java.sql.PreparedStatement;
 
 public class CounterTest__perfinstrumented {
     @Test
-    @Timeout(30)
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     public void testIncrement() {
         // Codeflash behavior instrumentation
         int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
@@ -2909,7 +2909,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class FibonacciTest__perfonlyinstrumented {
     @Test
-    @Timeout(30)
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     public void testFib() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
@@ -3183,7 +3183,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class SpinWaitTest__perfonlyinstrumented {
     @Test
-    @Timeout(30)
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     public void testSpinShort() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
@@ -3212,7 +3212,7 @@ public class SpinWaitTest__perfonlyinstrumented {
     }
 
     @Test
-    @Timeout(30)
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     public void testSpinLong() {
         // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_outerLoop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));

@@ -596,9 +596,18 @@ def _add_per_test_timeout(source: str, timeout_seconds: int = _PER_TEST_TIMEOUT_
     """Add @Timeout annotation to each @Test method to prevent individual tests from hanging.
 
     This inserts `import org.junit.jupiter.api.Timeout;` and adds
-    `@Timeout(N)` after every `@Test` annotation in the source.
+    `@Timeout(value = N, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)`
+    after every `@Test` annotation in the source.
+
+    SEPARATE_THREAD is required because the default SAME_THREAD mode uses
+    Thread.interrupt(), which is ignored by CPU-bound code (e.g. naive
+    recursive fibonacci). SEPARATE_THREAD runs the test in a new thread
+    and fails it with TimeoutException when the deadline passes.
     """
     timeout_import = "import org.junit.jupiter.api.Timeout;"
+    timeout_annotation = (
+        f"@Timeout(value = {timeout_seconds}, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)"
+    )
 
     # Add import if not already present
     if timeout_import not in source:
@@ -638,7 +647,7 @@ def _add_per_test_timeout(source: str, timeout_seconds: int = _PER_TEST_TIMEOUT_
                 next_idx += 1
             if next_idx >= len(lines) or not lines[next_idx].strip().startswith("@Timeout"):
                 indent = line[: len(line) - len(line.lstrip())]
-                result_lines.append(f"{indent}@Timeout({timeout_seconds})")
+                result_lines.append(f"{indent}{timeout_annotation}")
 
     return "\n".join(result_lines)
 
