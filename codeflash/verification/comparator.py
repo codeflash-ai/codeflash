@@ -544,20 +544,28 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
             # __reduce__ returns (cls, (remaining_iter,), (saved_items, first_pass_done)).
             # NOTE: consuming the remaining_iter is destructive to the cycle object, but this is
             # acceptable since the comparator is the final consumer of captured return values.
-            # NOTE: __reduce__ on itertools is deprecated and will be removed in Python 3.14.
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", DeprecationWarning)
-                orig_reduce = orig.__reduce__()
-                new_reduce = new.__reduce__()
-            orig_remaining = list(orig_reduce[1][0])
-            new_remaining = list(new_reduce[1][0])
-            orig_saved, orig_started = orig_reduce[2]
-            new_saved, new_started = new_reduce[2]
-            if orig_started != new_started:
-                return False
-            return comparator(orig_remaining, new_remaining, superset_obj) and comparator(
-                orig_saved, new_saved, superset_obj
-            )
+            # NOTE: __reduce__ on itertools.cycle was removed in Python 3.14.
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", DeprecationWarning)
+                    orig_reduce = orig.__reduce__()
+                    new_reduce = new.__reduce__()
+                orig_remaining = list(orig_reduce[1][0])
+                new_remaining = list(new_reduce[1][0])
+                orig_saved, orig_started = orig_reduce[2]
+                new_saved, new_started = new_reduce[2]
+                if orig_started != new_started:
+                    return False
+                return comparator(orig_remaining, new_remaining, superset_obj) and comparator(
+                    orig_saved, new_saved, superset_obj
+                )
+            except TypeError:
+                # Python 3.14+: __reduce__ removed. Fall back to consuming elements from both
+                # cycles and comparing. Since the comparator is the final consumer, this is safe.
+                sample_size = 200
+                orig_sample = [next(orig) for _ in range(sample_size)]
+                new_sample = [next(new) for _ in range(sample_size)]
+                return comparator(orig_sample, new_sample, superset_obj)
 
         # Handle remaining itertools types (chain, islice, starmap, product, permutations, etc.)
         # by materializing into lists. count/repeat/cycle are already handled above.
