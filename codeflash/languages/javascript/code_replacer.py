@@ -5,12 +5,17 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
+import weakref
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from codeflash.languages.base import Language
     from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer
+
+_imports_cache: "weakref.WeakKeyDictionary[TreeSitterAnalyzer, dict[str, list]]" = weakref.WeakKeyDictionary()
+
+_decls_cache: "weakref.WeakKeyDictionary[TreeSitterAnalyzer, dict[str, list]]" = weakref.WeakKeyDictionary()
 
 
 # Author: ali <mohammed18200118@gmail.com>
@@ -49,8 +54,10 @@ def _add_global_declarations_for_language(
         # Merge imports from optimized code into original source
         result = _merge_imports(original_source, optimized_code, analyzer)
 
-        original_declarations = analyzer.find_module_level_declarations(result)
-        optimized_declarations = analyzer.find_module_level_declarations(optimized_code)
+        # Use cached declaration retrieval to reduce parse overhead
+        original_declarations = _cached_find_module_level_declarations(analyzer, result)
+        optimized_declarations = _cached_find_module_level_declarations(analyzer, optimized_code)
+
 
         if not optimized_declarations:
             return result
@@ -70,7 +77,7 @@ def _add_global_declarations_for_language(
             )
             # Update the map with the newly inserted declaration for subsequent insertions
             # Re-parse to get accurate line numbers after insertion
-            updated_declarations = analyzer.find_module_level_declarations(result)
+            updated_declarations = _cached_find_module_level_declarations(analyzer, result)
             existing_decl_end_lines = {d.name: d.end_line for d in updated_declarations}
 
         return result
@@ -85,7 +92,8 @@ def _get_existing_names(original_declarations: list, analyzer: TreeSitterAnalyze
     """Get all names that already exist in the original source (declarations + imports)."""
     existing_names = {decl.name for decl in original_declarations}
 
-    original_imports = analyzer.find_imports(original_source)
+    # Use cached find_imports to avoid re-parsing the same source
+    original_imports = _cached_find_imports(analyzer, original_source)
     for imp in original_imports:
         if imp.default_import:
             existing_names.add(imp.default_import)
@@ -227,8 +235,12 @@ def _merge_imports(source: str, new_source: str, analyzer: TreeSitterAnalyzer) -
     is missing them.
     """
     try:
-        source_imports = analyzer.find_imports(source)
-        new_imports = analyzer.find_imports(new_source)
+        # Fast path: if there are no import tokens in new_source, avoid parsing
+        if "import" not in new_source:
+            return source
+
+        source_imports = _cached_find_imports(analyzer, source)
+        new_imports = _cached_find_imports(analyzer, new_source)
     except Exception:
         return source
 
@@ -291,3 +303,57 @@ def _merge_imports(source: str, new_source: str, analyzer: TreeSitterAnalyzer) -
         lines[start_line - 1 : end_line] = [new_line]
 
     return "".join(lines)
+
+
+
+def _cached_find_imports(analyzer: TreeSitterAnalyzer, source: str):
+    """Cached wrapper for analyzer.find_imports to avoid repeated parses."""
+    a_cache = _imports_cache.get(analyzer)
+    if a_cache is None:
+        a_cache = {}
+        _imports_cache[analyzer] = a_cache
+    res = a_cache.get(source)
+    if res is None:
+        res = analyzer.find_imports(source)
+        a_cache[source] = res
+    return res
+
+
+
+def _cached_find_module_level_declarations(analyzer: TreeSitterAnalyzer, source: str):
+    """Cached wrapper for analyzer.find_module_level_declarations to avoid repeated parses."""
+    a_cache = _decls_cache.get(analyzer)
+    if a_cache is None:
+        a_cache = {}
+        _decls_cache[analyzer] = a_cache
+    res = a_cache.get(source)
+    if res is None:
+        res = analyzer.find_module_level_declarations(source)
+        a_cache[source] = res
+    return res
+
+
+def _cached_find_imports(analyzer: TreeSitterAnalyzer, source: str):
+    """Cached wrapper for analyzer.find_imports to avoid repeated parses."""
+    a_cache = _imports_cache.get(analyzer)
+    if a_cache is None:
+        a_cache = {}
+        _imports_cache[analyzer] = a_cache
+    res = a_cache.get(source)
+    if res is None:
+        res = analyzer.find_imports(source)
+        a_cache[source] = res
+    return res
+
+
+def _cached_find_module_level_declarations(analyzer: TreeSitterAnalyzer, source: str):
+    """Cached wrapper for analyzer.find_module_level_declarations to avoid repeated parses."""
+    a_cache = _decls_cache.get(analyzer)
+    if a_cache is None:
+        a_cache = {}
+        _decls_cache[analyzer] = a_cache
+    res = a_cache.get(source)
+    if res is None:
+        res = analyzer.find_module_level_declarations(source)
+        a_cache[source] = res
+    return res
