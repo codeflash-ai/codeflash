@@ -1008,8 +1008,7 @@ def _bounded_levenshtein(s1: str, s2: str, max_distance: int) -> int:
                 t = min(b, a)
                 val = min(t, c)
             current[j] = val
-            if val < min_in_band:
-                min_in_band = val
+            min_in_band = min(min_in_band, val)
 
         # Move current to previous for next iteration
         previous = current
