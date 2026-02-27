@@ -2743,7 +2743,7 @@ public class CounterTest__perfinstrumented {
                 }
             }
         }
-        assertEquals(1, _cf_result1_1);
+        assertEquals(1, (int)_cf_result1_1);
     }
 }
 """
