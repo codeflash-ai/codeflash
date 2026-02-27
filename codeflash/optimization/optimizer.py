@@ -493,10 +493,10 @@ class Optimizer:
                 if file_path:
                     globally_ranked.append((file_path, func))
 
-            # Boost functions with existing unit tests — more tests ranks higher
+            # Boost functions with existing unit tests above untested ones, preserving addressable-time order within each tier
             if function_to_tests:
                 globally_ranked.sort(
-                    key=lambda x: -existing_unit_test_count(x[1], self.args.project_root, function_to_tests)
+                    key=lambda x: -(1 if existing_unit_test_count(x[1], self.args.project_root, function_to_tests) > 0 else 0)
                 )
 
             console.rule()
