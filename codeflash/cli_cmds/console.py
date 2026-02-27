@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 from collections import deque
 from contextlib import contextmanager
@@ -424,10 +425,8 @@ def subagent_log_optimization_result(
         if old != new:
             display_path = str(path)
             if project_root is not None:
-                try:
+                with contextlib.suppress(ValueError):
                     display_path = str(path.relative_to(project_root))
-                except ValueError:
-                    pass
             diff = unified_diff_strings(old, new, fromfile=display_path, tofile=display_path)
             if diff:
                 diff_parts.append(diff)
