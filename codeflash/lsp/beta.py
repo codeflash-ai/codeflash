@@ -114,7 +114,7 @@ def get_functions_in_commit(params: OptimizableFunctionsInCommitParams) -> dict[
     return {"functions": file_to_qualified_names, "status": "success"}
 
 
-def _group_functions_by_file(functions: dict[str, list[FunctionToOptimize]]) -> dict[str, list[str]]:
+def _group_functions_by_file(functions: dict[Path, list[FunctionToOptimize]]) -> dict[str, list[str]]:
     file_to_funcs_to_optimize, _ = filter_functions(
         modified_functions=functions,
         tests_root=server.optimizer.test_cfg.tests_root,

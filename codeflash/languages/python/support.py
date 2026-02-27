@@ -134,14 +134,11 @@ class PythonSupport:
         tree = cst.parse_module(source)
 
         wrapper = cst.metadata.MetadataWrapper(tree)
-        function_visitor = FunctionVisitor(file_path=str(file_path))
+        function_visitor = FunctionVisitor(file_path=file_path)
         wrapper.visit(function_visitor)
 
         functions: list[FunctionToOptimize] = []
         for func in function_visitor.functions:
-            if not isinstance(func, FunctionToOptimize):
-                continue
-
             if not criteria.include_async and func.is_async:
                 continue
 
