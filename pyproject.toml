@@ -344,7 +344,7 @@ __version__ = "{version}"
 [tool.codeflash]
 # All paths are relative to this pyproject.toml's directory.
 module-root = "codeflash"
-tests-root = "codeflash"
+tests-root = "tests"
 benchmarks-root = "tests/benchmarks"
 ignore-paths = []
 formatter-cmds = ["disabled"]
