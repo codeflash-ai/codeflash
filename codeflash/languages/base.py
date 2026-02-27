@@ -800,4 +800,17 @@ def convert_parents_to_tuple(parents: list[Any] | tuple[Any, ...]) -> tuple[Func
         Tuple of FunctionParent objects.
 
     """
+    # Fast path: if all items are already FunctionParent, avoid reconstructing them.
+    if isinstance(parents, tuple):
+        if parents and all(isinstance(p, FunctionParent) for p in parents):
+            return parents  # type: ignore[return-value]
+        if not parents:
+            return tuple()
+    elif isinstance(parents, list):
+        if parents and all(isinstance(p, FunctionParent) for p in parents):
+            return tuple(parents)
+        if not parents:
+            return tuple()
+
+    # Fallback: build a new tuple of FunctionParent instances from provided objects.
     return tuple(FunctionParent(name=p.name, type=p.type) for p in parents)
