@@ -1235,9 +1235,14 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         wrapper_id = method_ordinal if new_wrapper_id == next_wrapper_id else new_wrapper_id
         replacements.append((body_start, body_end, new_body.encode("utf8")))
 
-    updated = source_bytes
-    for start, end, new_bytes in sorted(replacements, key=lambda item: item[0], reverse=True):
-        updated = updated[:start] + new_bytes + updated[end:]
+    segments: list[bytes] = []
+    prev_end = 0
+    for start, end, new_bytes in sorted(replacements, key=lambda item: item[0]):
+        segments.append(source_bytes[prev_end:start])
+        segments.append(new_bytes)
+        prev_end = end
+    segments.append(source_bytes[prev_end:])
+    updated = b"".join(segments)
     return updated.decode("utf8")
 
 
