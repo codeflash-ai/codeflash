@@ -31,6 +31,22 @@ if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.java.parser import JavaAnalyzer
 
+_A = ord("A")
+
+_Z = ord("Z")
+
+_a = ord("a")
+
+_z = ord("z")
+
+_0 = ord("0")
+
+_9 = ord("9")
+
+_UNDERSCORE = ord("_")
+
+_DOLLAR = ord("$")
+
 _WORD_RE = re.compile(r"^\w+$")
 
 _ASSERTION_METHODS = ("assertArrayEquals", "assertArrayNotEquals")
@@ -229,11 +245,11 @@ def _collect_test_methods(
 def _is_java_ident_byte(b: int) -> bool:
     """Check if a byte represents a Java identifier character (ASCII subset)."""
     return (
-        (ord("a") <= b <= ord("z"))
-        or (ord("A") <= b <= ord("Z"))
-        or (ord("0") <= b <= ord("9"))
-        or b == ord("_")
-        or b == ord("$")
+        (_a <= b <= _z)
+        or (_A <= b <= _Z)
+        or (_0 <= b <= _9)
+        or b == _UNDERSCORE
+        or b == _DOLLAR
     )
 
 
