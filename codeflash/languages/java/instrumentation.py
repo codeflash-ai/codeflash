@@ -31,6 +31,10 @@ if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.java.parser import JavaAnalyzer
 
+_PROTECTED_RENAME_TYPES = frozenset(
+    ("string_literal", "character_literal", "line_comment", "block_comment", "import_declaration")
+)
+
 _WORD_RE = re.compile(r"^\w+$")
 
 _ASSERTION_METHODS = ("assertArrayEquals", "assertArrayNotEquals")
@@ -243,15 +247,18 @@ def _collect_protected_ranges_for_rename(node: Any, out: list[tuple[int, int]]) 
     Protects string literals, character literals, comments, and import declarations
     so that renaming only affects actual Java identifiers in code.
     """
-    node_type = node.type
-    if node_type in ("string_literal", "character_literal", "line_comment", "block_comment"):
-        out.append((node.start_byte, node.end_byte))
-        return
-    if node_type == "import_declaration":
-        out.append((node.start_byte, node.end_byte))
-        return
-    for child in node.children:
-        _collect_protected_ranges_for_rename(child, out)
+    # Use an explicit stack to avoid recursion overhead on deep trees.
+    stack = [node]
+    while stack:
+        current = stack.pop()
+        node_type = current.type
+        if node_type in _PROTECTED_RENAME_TYPES:
+            out.append((current.start_byte, current.end_byte))
+            continue
+        # Push children in reverse so they are processed in original left-to-right order
+        children = current.children
+        if children:
+            stack.extend(reversed(children))
 
 
 def _overlaps_protected(start: int, end: int, protected: list[tuple[int, int]]) -> bool:
