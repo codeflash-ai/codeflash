@@ -190,6 +190,128 @@ def _is_inside_complex_expression(node: Any) -> bool:
     return False
 
 
+def _has_test_annotation(method_node: Any, analyzer: JavaAnalyzer, source_bytes: bytes) -> bool:
+    """Check if a method_declaration node has a @Test annotation."""
+    modifiers = None
+    for child in method_node.children:
+        if child.type == "modifiers":
+            modifiers = child
+            break
+    if not modifiers:
+        return False
+    for child in modifiers.children:
+        if child.type not in {"annotation", "marker_annotation"}:
+            continue
+        annotation_text = analyzer.get_node_text(child, source_bytes).strip()
+        if annotation_text.startswith("@"):
+            name = annotation_text[1:].split("(", 1)[0].strip()
+            if name == "Test" or name.endswith(".Test"):
+                return True
+    return False
+
+
+def _collect_test_methods(
+    node: Any, analyzer: JavaAnalyzer, source_bytes: bytes, out: list[tuple[Any, Any]]
+) -> None:
+    """Collect @Test methods as (method_node, body_node) pairs."""
+    stack = [node]
+    while stack:
+        current = stack.pop()
+        if current.type == "method_declaration" and _has_test_annotation(current, analyzer, source_bytes):
+            body_node = current.child_by_field_name("body")
+            if body_node is not None:
+                out.append((current, body_node))
+            continue
+        if current.children:
+            stack.extend(reversed(current.children))
+
+
+def _is_java_ident_byte(b: int) -> bool:
+    """Check if a byte represents a Java identifier character (ASCII subset)."""
+    return (
+        (ord("a") <= b <= ord("z"))
+        or (ord("A") <= b <= ord("Z"))
+        or (ord("0") <= b <= ord("9"))
+        or b == ord("_")
+        or b == ord("$")
+    )
+
+
+def _collect_protected_ranges_for_rename(node: Any, out: list[tuple[int, int]]) -> None:
+    """Collect byte ranges of AST nodes that should be excluded from class renaming.
+
+    Protects string literals, character literals, comments, and import declarations
+    so that renaming only affects actual Java identifiers in code.
+    """
+    node_type = node.type
+    if node_type in ("string_literal", "character_literal", "line_comment", "block_comment"):
+        out.append((node.start_byte, node.end_byte))
+        return
+    if node_type == "import_declaration":
+        out.append((node.start_byte, node.end_byte))
+        return
+    for child in node.children:
+        _collect_protected_ranges_for_rename(child, out)
+
+
+def _overlaps_protected(start: int, end: int, protected: list[tuple[int, int]]) -> bool:
+    """Check if [start, end) overlaps with any sorted protected range using binary search."""
+    lo, hi = 0, len(protected)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if protected[mid][1] <= start:
+            lo = mid + 1
+        else:
+            hi = mid
+    return lo < len(protected) and protected[lo][0] < end
+
+
+def _rename_class_treesitter(source: str, old_name: str, new_name: str) -> str:
+    """Rename a class using tree-sitter to skip strings, comments, and import declarations.
+
+    Unlike re.sub(r"\\bOldName\\b", new_name, source), this avoids renaming occurrences
+    inside string literals, character literals, comments, and import paths, which would
+    produce invalid Java (broken imports, corrupted strings).
+    """
+    from codeflash.languages.java.parser import get_java_analyzer
+
+    analyzer = get_java_analyzer()
+    source_bytes = source.encode("utf8")
+    tree = analyzer.parse(source_bytes)
+
+    protected_ranges: list[tuple[int, int]] = []
+    _collect_protected_ranges_for_rename(tree.root_node, protected_ranges)
+    protected_ranges.sort()
+
+    old_bytes = old_name.encode("utf8")
+    new_bytes = new_name.encode("utf8")
+    old_len = len(old_bytes)
+    src_len = len(source_bytes)
+
+    replace_positions: list[int] = []
+    search_start = 0
+    while True:
+        pos = source_bytes.find(old_bytes, search_start)
+        if pos == -1:
+            break
+        end_pos = pos + old_len
+        if (pos == 0 or not _is_java_ident_byte(source_bytes[pos - 1])) and (
+            end_pos >= src_len or not _is_java_ident_byte(source_bytes[end_pos])
+        ):
+            if not _overlaps_protected(pos, end_pos, protected_ranges):
+                replace_positions.append(pos)
+        search_start = pos + 1
+
+    if not replace_positions:
+        return source
+
+    result = bytearray(source_bytes)
+    for pos in reversed(replace_positions):
+        result[pos : pos + old_len] = new_bytes
+
+    return bytes(result).decode("utf8")
+
+
 _TS_BODY_PREFIX = "class _D { void _m() {\n"
 _TS_BODY_SUFFIX = "\n}}"
 _TS_BODY_PREFIX_BYTES = _TS_BODY_PREFIX.encode("utf8")
@@ -222,7 +344,7 @@ def _generate_sqlite_write_code(
         f"{inner_indent}if (_cf_outputFile{iter_id} != null && !_cf_outputFile{iter_id}.isEmpty()) {{",
         f"{inner_indent}    try {{",
         f'{inner_indent}        Class.forName("org.sqlite.JDBC");',
-        f'{inner_indent}        try (Connection _cf_conn{iter_id}_{call_counter} = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile{iter_id})) {{',
+        f'{inner_indent}        try (java.sql.Connection _cf_conn{iter_id}_{call_counter} = java.sql.DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile{iter_id})) {{',
         f"{inner_indent}            try (java.sql.Statement _cf_stmt{iter_id}_{call_counter} = _cf_conn{iter_id}_{call_counter}.createStatement()) {{",
         f'{inner_indent}                _cf_stmt{iter_id}_{call_counter}.execute("CREATE TABLE IF NOT EXISTS test_results (" +',
         f'{inner_indent}                    "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +',
@@ -230,7 +352,7 @@ def _generate_sqlite_write_code(
         f'{inner_indent}                    "runtime INTEGER, return_value BLOB, verification_type TEXT)");',
         f"{inner_indent}            }}",
         f'{inner_indent}            String _cf_sql{iter_id}_{call_counter} = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";',
-        f"{inner_indent}            try (PreparedStatement _cf_pstmt{iter_id}_{call_counter} = _cf_conn{iter_id}_{call_counter}.prepareStatement(_cf_sql{iter_id}_{call_counter})) {{",
+        f"{inner_indent}            try (java.sql.PreparedStatement _cf_pstmt{iter_id}_{call_counter} = _cf_conn{iter_id}_{call_counter}.prepareStatement(_cf_sql{iter_id}_{call_counter})) {{",
         f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(1, _cf_mod{iter_id});",
         f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(2, _cf_cls{iter_id});",
         f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(3, _cf_test{iter_id});",
@@ -258,6 +380,7 @@ def wrap_target_calls_with_treesitter(
     precise_call_timing: bool = False,
     class_name: str = "",
     test_method_name: str = "",
+    return_type: str | None = None,
 ) -> tuple[list[str], int]:
     """Replace target method calls in body_lines with capture + serialize using tree-sitter.
 
@@ -327,12 +450,14 @@ def wrap_target_calls_with_treesitter(
             call_counter += 1
             var_name = f"_cf_result{iter_id}_{call_counter}"
             cast_type = _infer_array_cast_type(body_line)
+            if not cast_type and return_type and return_type not in ("void", "Object"):
+                cast_type = return_type
             var_with_cast = f"({cast_type}){var_name}" if cast_type else var_name
 
             # Use per-call unique variables (with call_counter suffix) for behavior mode
             # For behavior mode, we declare the variable outside try block, so use assignment not declaration here
             # For performance mode, use shared variables without call_counter suffix
-            capture_stmt_with_decl = f"var {var_name} = {call['full_call']};"
+            capture_stmt_with_decl = f"Object {var_name} = {call['full_call']};"
             capture_stmt_assign = f"{var_name} = {call['full_call']};"
             if precise_call_timing:
                 # Behavior mode: per-call unique variables
@@ -400,8 +525,12 @@ def wrap_target_calls_with_treesitter(
                 # The call is embedded in a larger expression (assignment, assertion, etc.)
                 # Emit capture+serialize before the line, then replace the call with the variable.
                 if precise_call_timing:
-                    # For behavior mode: wrap in try-finally with SQLite write
-                    # Declare per-call variables
+                    # For behavior mode: wrap in try-finally with SQLite write.
+                    # For calls inside assertions (assertEquals, etc.), the assertion line is
+                    # dropped after capture — behavior comparison uses serialized return values
+                    # instead. This avoids Object auto-boxing type mismatches (e.g., Long vs
+                    # Integer) that break JUnit assertEquals for primitive types.
+                    in_assertion = call.get("in_assertion", False)
                     wrapped.append(f"{line_indent_str}Object {var_name} = null;")
                     wrapped.append(f"{line_indent_str}long _cf_end{iter_id}_{call_counter} = -1;")
                     wrapped.append(f"{line_indent_str}long _cf_start{iter_id}_{call_counter} = 0;")
@@ -421,26 +550,61 @@ def wrap_target_calls_with_treesitter(
                         iter_id, call_counter, line_indent_str, class_name, func_name, test_method_name
                     )
                     wrapped.extend(finally_lines)
+                    if in_assertion:
+                        # Drop the assertion line — behavior capture handles correctness
+                        # via serialized return value comparison. This avoids Object boxing
+                        # type mismatches (Long vs Integer) that break assertEquals.
+                        new_line = ""
+                    else:
+                        # Non-assertion embedded expression: replace call with captured variable
+                        call_start_byte = call["start_byte"] - line_byte_start
+                        call_end_byte = call["end_byte"] - line_byte_start
+                        call_start_char = len(line_bytes[:call_start_byte].decode("utf8"))
+                        call_end_char = len(line_bytes[:call_end_byte].decode("utf8"))
+                        adj_start = call_start_char + char_shift
+                        adj_end = call_end_char + char_shift
+                        new_line = new_line[:adj_start] + var_with_cast + new_line[adj_end:]
+                        char_shift += len(var_with_cast) - (call_end_char - call_start_char)
                 else:
                     capture_line = f"{line_indent_str}{capture_stmt_with_decl}"
                     wrapped.append(capture_line)
                     serialize_line = f"{line_indent_str}{serialize_stmt}"
                     wrapped.append(serialize_line)
 
-                call_start_byte = call["start_byte"] - line_byte_start
-                call_end_byte = call["end_byte"] - line_byte_start
-                call_start_char = len(line_bytes[:call_start_byte].decode("utf8"))
-                call_end_char = len(line_bytes[:call_end_byte].decode("utf8"))
-                adj_start = call_start_char + char_shift
-                adj_end = call_end_char + char_shift
-                new_line = new_line[:adj_start] + var_with_cast + new_line[adj_end:]
-                char_shift += len(var_with_cast) - (call_end_char - call_start_char)
+                    call_start_byte = call["start_byte"] - line_byte_start
+                    call_end_byte = call["end_byte"] - line_byte_start
+                    call_start_char = len(line_bytes[:call_start_byte].decode("utf8"))
+                    call_end_char = len(line_bytes[:call_end_byte].decode("utf8"))
+                    adj_start = call_start_char + char_shift
+                    adj_end = call_end_char + char_shift
+                    new_line = new_line[:adj_start] + var_with_cast + new_line[adj_end:]
+                    char_shift += len(var_with_cast) - (call_end_char - call_start_char)
 
         # Keep the modified line only if it has meaningful content left
         if new_line.strip():
             wrapped.append(new_line)
 
     return wrapped, call_counter
+
+
+def _is_inside_assertion(node: Any, wrapper_bytes: bytes, analyzer: JavaAnalyzer) -> bool:
+    """Check if a tree-sitter node is inside an assertion method call.
+
+    Walks up the AST to find a parent method_invocation whose name starts with "assert"
+    (e.g., assertEquals, assertNotNull, assertThrows). Stops at statement boundaries.
+    """
+    current = node.parent
+    while current is not None:
+        if current.type in {"method_declaration", "block", "expression_statement"}:
+            return False
+        if current.type == "method_invocation":
+            name_child = current.child_by_field_name("name")
+            if name_child:
+                name_text = analyzer.get_node_text(name_child, wrapper_bytes)
+                if name_text.startswith("assert"):
+                    return True
+        current = current.parent
+    return False
 
 
 def _collect_calls(
@@ -475,6 +639,7 @@ def _collect_calls(
                         "parent_type": parent_type,
                         "in_lambda": _is_inside_lambda(node),
                         "in_complex": _is_inside_complex_expression(node),
+                        "in_assertion": _is_inside_assertion(node, wrapper_bytes, analyzer),
                         "es_start_byte": es_start,
                         "es_end_byte": es_end,
                     }
@@ -626,17 +791,15 @@ def instrument_existing_test(
     else:
         raise ValueError("test_path or test_class_name must be provided")
 
-    # Determine the new class name based on mode
     if mode == "behavior":
         new_class_name = f"{original_class_name}__perfinstrumented"
     else:
         new_class_name = f"{original_class_name}__perfonlyinstrumented"
 
-    # Rename all references to the original class name in the source.
-    # This includes the class declaration, return types, constructor calls,
-    # variable declarations, etc. We use word-boundary matching to avoid
-    # replacing substrings of other identifiers.
-    modified_source = re.sub(rf"\b{re.escape(original_class_name)}\b", new_class_name, source)
+    # Rename class using tree-sitter-aware renaming that skips strings, comments, and imports.
+    modified_source = _rename_class_treesitter(source, original_class_name, new_class_name)
+
+    return_type = getattr(function_to_optimize, "return_type", None)
 
     # Add timing instrumentation to test methods
     # Use original class name (without suffix) in timing markers for consistency with Python
@@ -648,14 +811,14 @@ def instrument_existing_test(
         )
     else:
         # Behavior mode: add timing instrumentation that also writes to SQLite
-        modified_source = _add_behavior_instrumentation(modified_source, original_class_name, func_name)
+        modified_source = _add_behavior_instrumentation(modified_source, original_class_name, func_name, return_type=return_type)
 
     logger.debug("Java %s testing for %s: renamed class %s -> %s", mode, func_name, original_class_name, new_class_name)
-    # Why return True here?
+
     return True, modified_source
 
 
-def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) -> str:
+def _add_behavior_instrumentation(source: str, class_name: str, func_name: str, return_type: str | None = None) -> str:
     """Add behavior instrumentation to test methods.
 
     For behavior mode, this adds:
@@ -673,159 +836,75 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
         Instrumented source code.
 
     """
-    # Add necessary imports at the top of the file
-    # Note: We don't import java.sql.Statement because it can conflict with
-    # other Statement classes (e.g., com.aerospike.client.query.Statement).
-    # Instead, we use the fully qualified name java.sql.Statement in the code.
-    # Note: We don't use Gson because it may not be available as a dependency.
-    # Instead, we use String.valueOf() for serialization.
-    import_statements = [
-        "import java.sql.Connection;",
-        "import java.sql.DriverManager;",
-        "import java.sql.PreparedStatement;",
-    ]
+    from codeflash.languages.java.parser import get_java_analyzer
 
-    # Find position to insert imports (after package, before class)
-    lines = source.split("\n")
-    result = []
-    imports_added = False
-    i = 0
+    analyzer = get_java_analyzer()
+    source_bytes = source.encode("utf8")
+    tree = analyzer.parse(source_bytes)
 
-    while i < len(lines):
-        line = lines[i]
-        stripped = line.strip()
+    test_methods: list[tuple[Any, Any]] = []
+    _collect_test_methods(tree.root_node, analyzer, source_bytes, test_methods)
+    if not test_methods:
+        return source
 
-        # Add imports after the last existing import or before the class declaration
-        if not imports_added:
-            if stripped.startswith("import "):
-                result.append(line)
-                i += 1
-                # Find end of imports
-                while i < len(lines) and lines[i].strip().startswith("import "):
-                    result.append(lines[i])
-                    i += 1
-                # Add our imports
-                for imp in import_statements:
-                    if imp not in source:
-                        result.append(imp)
-                imports_added = True
-                continue
-            if stripped.startswith(("public class", "class")):
-                # No imports found, add before class
-                result.extend(import_statements)
-                result.append("")
-                imports_added = True
-
-        result.append(line)
-        i += 1
-
-    # Now add timing and SQLite instrumentation to test methods
-    lines = result.copy()
-    result = []
-    i = 0
+    replacements: list[tuple[int, int, bytes]] = []
     iteration_counter = 0
-    helper_added = False
 
-    while i < len(lines):
-        line = lines[i]
-        stripped = line.strip()
+    for method_node, body_node in test_methods:
+        iteration_counter += 1
+        iter_id = iteration_counter
 
-        # Look for @Test annotation (not @TestOnly, @TestFactory, etc.)
-        if _is_test_annotation(stripped):
-            if not helper_added:
-                helper_added = True
-            result.append(line)
-            i += 1
+        body_start = body_node.start_byte + 1  # skip '{'
+        body_end = body_node.end_byte - 1  # skip '}'
+        raw_body = source_bytes[body_start:body_end].decode("utf8")
 
-            # Collect any additional annotations
-            while i < len(lines) and lines[i].strip().startswith("@"):
-                result.append(lines[i])
-                i += 1
+        # Split body into lines, removing leading empty line (after '{') and trailing
+        # whitespace-only line (indent before '}') to match the format expected by
+        # wrap_target_calls_with_treesitter.
+        all_lines = raw_body.split("\n")
+        body_lines = all_lines[1:]  # Remove leading empty from '\n' after '{'
+        if body_lines and not body_lines[-1].strip():
+            body_lines = body_lines[:-1]
 
-            # Now find the method signature and opening brace
-            method_lines = []
-            while i < len(lines):
-                method_lines.append(lines[i])
-                if "{" in lines[i]:
-                    break
-                i += 1
+        # Get test method name from AST
+        name_node = method_node.child_by_field_name("name")
+        test_method_name = analyzer.get_node_text(name_node, source_bytes) if name_node else "unknown"
 
-            # Add the method signature lines
-            for ml in method_lines:
-                result.append(ml)
-            i += 1
+        base_indent = method_node.start_point[1]
+        indent = " " * (base_indent + 4)
 
-            # Extract the test method name from the method signature
-            test_method_name = _extract_test_method_name(method_lines)
+        wrapped_body_lines, _call_counter = wrap_target_calls_with_treesitter(
+            body_lines=body_lines,
+            func_name=func_name,
+            iter_id=iter_id,
+            precise_call_timing=True,
+            class_name=class_name,
+            test_method_name=test_method_name,
+            return_type=return_type,
+        )
 
-            # We're now inside the method body
-            iteration_counter += 1
-            iter_id = iteration_counter
+        behavior_start_code = [
+            f"{indent}// Codeflash behavior instrumentation",
+            f'{indent}int _cf_loop{iter_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
+            f"{indent}int _cf_iter{iter_id} = {iter_id};",
+            f'{indent}String _cf_mod{iter_id} = "{class_name}";',
+            f'{indent}String _cf_cls{iter_id} = "{class_name}";',
+            f'{indent}String _cf_fn{iter_id} = "{func_name}";',
+            f'{indent}String _cf_outputFile{iter_id} = System.getenv("CODEFLASH_OUTPUT_FILE");',
+            f'{indent}String _cf_testIteration{iter_id} = System.getenv("CODEFLASH_TEST_ITERATION");',
+            f'{indent}if (_cf_testIteration{iter_id} == null) _cf_testIteration{iter_id} = "0";',
+            f'{indent}String _cf_test{iter_id} = "{test_method_name}";',
+        ]
 
-            # Detect indentation
-            method_sig_line = method_lines[-1] if method_lines else ""
-            base_indent = len(method_sig_line) - len(method_sig_line.lstrip())
-            indent = " " * (base_indent + 4)
+        body_content_lines = behavior_start_code + wrapped_body_lines
+        new_body = "\n" + "\n".join(body_content_lines) + "\n" + " " * base_indent
 
-            # Collect method body until we find matching closing brace
-            brace_depth = 1
-            body_lines = []
+        replacements.append((body_start, body_end, new_body.encode("utf8")))
 
-            while i < len(lines) and brace_depth > 0:
-                body_line = lines[i]
-                # Count braces more efficiently using string methods
-                open_count = body_line.count("{")
-                close_count = body_line.count("}")
-                brace_depth += open_count - close_count
-
-                if brace_depth > 0:
-                    body_lines.append(body_line)
-                    i += 1
-                else:
-                    # We've hit the closing brace
-                    i += 1
-                    break
-
-            # Wrap function calls to capture return values using tree-sitter AST analysis.
-            # This correctly handles lambdas, try-catch blocks, assignments, and nested calls.
-            # Each call gets its own try-finally block with immediate SQLite write.
-            wrapped_body_lines, _call_counter = wrap_target_calls_with_treesitter(
-                body_lines=body_lines,
-                func_name=func_name,
-                iter_id=iter_id,
-                precise_call_timing=True,
-                class_name=class_name,
-                test_method_name=test_method_name,
-            )
-
-            # Add behavior instrumentation setup code (shared variables for all calls in the method)
-            behavior_start_code = [
-                f"{indent}// Codeflash behavior instrumentation",
-                f'{indent}int _cf_loop{iter_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
-                f"{indent}int _cf_iter{iter_id} = {iter_id};",
-                f'{indent}String _cf_mod{iter_id} = "{class_name}";',
-                f'{indent}String _cf_cls{iter_id} = "{class_name}";',
-                f'{indent}String _cf_fn{iter_id} = "{func_name}";',
-                f'{indent}String _cf_outputFile{iter_id} = System.getenv("CODEFLASH_OUTPUT_FILE");',
-                f'{indent}String _cf_testIteration{iter_id} = System.getenv("CODEFLASH_TEST_ITERATION");',
-                f'{indent}if (_cf_testIteration{iter_id} == null) _cf_testIteration{iter_id} = "0";',
-                f'{indent}String _cf_test{iter_id} = "{test_method_name}";',
-            ]
-            result.extend(behavior_start_code)
-
-            # Add the wrapped body lines without extra indentation.
-            # Each call already has its own try-finally block with SQLite write from wrap_target_calls_with_treesitter().
-            for bl in wrapped_body_lines:
-                result.append(bl)
-
-            # Add method closing brace
-            method_close_indent = " " * base_indent
-            result.append(f"{method_close_indent}}}")
-        else:
-            result.append(line)
-            i += 1
-
-    return "\n".join(result)
+    updated = source_bytes
+    for start, end, new_bytes in sorted(replacements, key=lambda item: item[0], reverse=True):
+        updated = updated[:start] + new_bytes + updated[end:]
+    return updated.decode("utf8")
 
 
 def _add_timing_instrumentation(source: str, class_name: str, func_name: str) -> str:
@@ -862,37 +941,6 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
     analyzer = get_java_analyzer()
     tree = analyzer.parse(source_bytes)
 
-    def has_test_annotation(method_node: Any) -> bool:
-        modifiers = None
-        for child in method_node.children:
-            if child.type == "modifiers":
-                modifiers = child
-                break
-        if not modifiers:
-            return False
-        for child in modifiers.children:
-            if child.type not in {"annotation", "marker_annotation"}:
-                continue
-            # annotation text includes '@'
-            annotation_text = analyzer.get_node_text(child, source_bytes).strip()
-            if annotation_text.startswith("@"):
-                name = annotation_text[1:].split("(", 1)[0].strip()
-                if name == "Test" or name.endswith(".Test"):
-                    return True
-        return False
-
-    def collect_test_methods(node: Any, out: list[tuple[Any, Any]]) -> None:
-        stack = [node]
-        while stack:
-            current = stack.pop()
-            if current.type == "method_declaration" and has_test_annotation(current):
-                body_node = current.child_by_field_name("body")
-                if body_node is not None:
-                    out.append((current, body_node))
-                continue
-            if current.children:
-                stack.extend(reversed(current.children))
-
     def collect_target_calls(node: Any, wrapper_bytes: bytes, func: str, out: list[Any]) -> None:
         stack = [node]
         while stack:
@@ -928,7 +976,9 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             current = current.parent
         return current if current is not None and current.parent == body_node else None
 
-    def split_var_declaration(stmt_node: Any, source_bytes_ref: bytes) -> tuple[str, str] | None:
+    def split_var_declaration(
+        stmt_node: Any, source_bytes_ref: bytes
+    ) -> tuple[str, str] | None:
         """Split a local_variable_declaration into a hoisted declaration and an assignment.
 
         When a target call is inside a variable declaration like:
@@ -960,8 +1010,9 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         if name_node is None or value_node is None:
             return None
 
-        type_text = analyzer.get_node_text(type_node, source_bytes_ref)
         name_text = analyzer.get_node_text(name_node, source_bytes_ref)
+
+        type_text = analyzer.get_node_text(type_node, source_bytes_ref)
         value_text = analyzer.get_node_text(value_node, source_bytes_ref)
 
         # Initialize with a default value to satisfy Java's definite assignment rules.
@@ -1163,7 +1214,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         return "".join(multi_result_parts), wrapper_id
 
     test_methods: list[tuple[Any, Any]] = []
-    collect_test_methods(tree.root_node, test_methods)
+    _collect_test_methods(tree.root_node, analyzer, source_bytes, test_methods)
     if not test_methods:
         return source
 
@@ -1303,9 +1354,8 @@ def instrument_generated_java_test(
     if mode == "performance":
         new_class_name = f"{original_class_name}__perfonlyinstrumented"
 
-        # Rename all references to the original class name in the source.
-        # This includes the class declaration, return types, constructor calls, etc.
-        modified_code = re.sub(rf"\b{re.escape(original_class_name)}\b", new_class_name, test_code)
+        # Rename class using tree-sitter-aware renaming that skips strings, comments, and imports.
+        modified_code = _rename_class_treesitter(test_code, original_class_name, new_class_name)
 
         modified_code = _add_timing_instrumentation(
             modified_code,
