@@ -335,42 +335,46 @@ def _generate_sqlite_write_code(
 
     """
     inner_indent = indent + "    "
-    return [
-        f"{indent}}} finally {{",
-        f"{inner_indent}long _cf_end{iter_id}_{call_counter}_finally = System.nanoTime();",
-        f"{inner_indent}long _cf_dur{iter_id}_{call_counter} = (_cf_end{iter_id}_{call_counter} != -1 ? _cf_end{iter_id}_{call_counter} : _cf_end{iter_id}_{call_counter}_finally) - _cf_start{iter_id}_{call_counter};",
-        f'{inner_indent}System.out.println("!######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + "." + _cf_test{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + "{call_counter}" + "######!");',
-        f"{inner_indent}// Write to SQLite if output file is set",
-        f"{inner_indent}if (_cf_outputFile{iter_id} != null && !_cf_outputFile{iter_id}.isEmpty()) {{",
-        f"{inner_indent}    try {{",
-        f'{inner_indent}        Class.forName("org.sqlite.JDBC");',
-        f'{inner_indent}        try (java.sql.Connection _cf_conn{iter_id}_{call_counter} = java.sql.DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile{iter_id})) {{',
-        f"{inner_indent}            try (java.sql.Statement _cf_stmt{iter_id}_{call_counter} = _cf_conn{iter_id}_{call_counter}.createStatement()) {{",
-        f'{inner_indent}                _cf_stmt{iter_id}_{call_counter}.execute("CREATE TABLE IF NOT EXISTS test_results (" +',
-        f'{inner_indent}                    "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +',
-        f'{inner_indent}                    "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +',
-        f'{inner_indent}                    "runtime INTEGER, return_value BLOB, verification_type TEXT)");',
-        f"{inner_indent}            }}",
-        f'{inner_indent}            String _cf_sql{iter_id}_{call_counter} = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";',
-        f"{inner_indent}            try (java.sql.PreparedStatement _cf_pstmt{iter_id}_{call_counter} = _cf_conn{iter_id}_{call_counter}.prepareStatement(_cf_sql{iter_id}_{call_counter})) {{",
-        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(1, _cf_mod{iter_id});",
-        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(2, _cf_cls{iter_id});",
-        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(3, _cf_test{iter_id});",
-        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(4, _cf_fn{iter_id});",
-        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setInt(5, _cf_loop{iter_id});",
-        f'{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(6, "{call_counter}");',
-        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setLong(7, _cf_dur{iter_id}_{call_counter});",
-        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setBytes(8, _cf_serializedResult{iter_id}_{call_counter});",
-        f'{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(9, "function_call");',
-        f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.executeUpdate();",
-        f"{inner_indent}            }}",
-        f"{inner_indent}        }}",
-        f"{inner_indent}    }} catch (Exception _cf_e{iter_id}_{call_counter}) {{",
-        f'{inner_indent}        System.err.println("CodeflashHelper: SQLite error: " + _cf_e{iter_id}_{call_counter}.getMessage());',
-        f"{inner_indent}    }}",
-        f"{inner_indent}}}",
-        f"{indent}}}",
-    ]
+    iter_id_str = str(iter_id)
+    call_counter_str = str(call_counter)
+    iter_call_id = f"{iter_id_str}_{call_counter_str}"
+
+    lines = []
+    lines.append(f"{indent}}} finally {{")
+    lines.append(f"{inner_indent}long _cf_end{iter_call_id}_finally = System.nanoTime();")
+    lines.append(f"{inner_indent}long _cf_dur{iter_call_id} = (_cf_end{iter_call_id} != -1 ? _cf_end{iter_call_id} : _cf_end{iter_call_id}_finally) - _cf_start{iter_call_id};")
+    lines.append(f'{inner_indent}System.out.println("!######" + _cf_mod{iter_id_str} + ":" + _cf_cls{iter_id_str} + "." + _cf_test{iter_id_str} + ":" + _cf_fn{iter_id_str} + ":" + _cf_loop{iter_id_str} + ":" + "{call_counter}" + "######!");')
+    lines.append(f"{inner_indent}// Write to SQLite if output file is set")
+    lines.append(f"{inner_indent}if (_cf_outputFile{iter_id_str} != null && !_cf_outputFile{iter_id_str}.isEmpty()) {{")
+    lines.append(f"{inner_indent}    try {{")
+    lines.append(f'{inner_indent}        Class.forName("org.sqlite.JDBC");')
+    lines.append(f'{inner_indent}        try (java.sql.Connection _cf_conn{iter_call_id} = java.sql.DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile{iter_id_str})) {{')
+    lines.append(f"{inner_indent}            try (java.sql.Statement _cf_stmt{iter_call_id} = _cf_conn{iter_call_id}.createStatement()) {{")
+    lines.append(f'{inner_indent}                _cf_stmt{iter_call_id}.execute("CREATE TABLE IF NOT EXISTS test_results (" +')
+    lines.append(f'{inner_indent}                    "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +')
+    lines.append(f'{inner_indent}                    "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +')
+    lines.append(f'{inner_indent}                    "runtime INTEGER, return_value BLOB, verification_type TEXT)");')
+    lines.append(f"{inner_indent}            }}")
+    lines.append(f'{inner_indent}            String _cf_sql{iter_call_id} = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";')
+    lines.append(f"{inner_indent}            try (java.sql.PreparedStatement _cf_pstmt{iter_call_id} = _cf_conn{iter_call_id}.prepareStatement(_cf_sql{iter_call_id})) {{")
+    lines.append(f"{inner_indent}                _cf_pstmt{iter_call_id}.setString(1, _cf_mod{iter_id_str});")
+    lines.append(f"{inner_indent}                _cf_pstmt{iter_call_id}.setString(2, _cf_cls{iter_id_str});")
+    lines.append(f"{inner_indent}                _cf_pstmt{iter_call_id}.setString(3, _cf_test{iter_id_str});")
+    lines.append(f"{inner_indent}                _cf_pstmt{iter_call_id}.setString(4, _cf_fn{iter_id_str});")
+    lines.append(f"{inner_indent}                _cf_pstmt{iter_call_id}.setInt(5, _cf_loop{iter_id_str});")
+    lines.append(f'{inner_indent}                _cf_pstmt{iter_call_id}.setString(6, "{call_counter}");')
+    lines.append(f"{inner_indent}                _cf_pstmt{iter_call_id}.setLong(7, _cf_dur{iter_call_id});")
+    lines.append(f"{inner_indent}                _cf_pstmt{iter_call_id}.setBytes(8, _cf_serializedResult{iter_call_id});")
+    lines.append(f'{inner_indent}                _cf_pstmt{iter_call_id}.setString(9, "function_call");')
+    lines.append(f"{inner_indent}                _cf_pstmt{iter_call_id}.executeUpdate();")
+    lines.append(f"{inner_indent}            }}")
+    lines.append(f"{inner_indent}        }}")
+    lines.append(f"{inner_indent}    }} catch (Exception _cf_e{iter_call_id}) {{")
+    lines.append(f'{inner_indent}        System.err.println("CodeflashHelper: SQLite error: " + _cf_e{iter_call_id}.getMessage());')
+    lines.append(f"{inner_indent}    }}")
+    lines.append(f"{inner_indent}}}")
+    lines.append(f"{indent}}}")
+    return lines
 
 
 def wrap_target_calls_with_treesitter(
