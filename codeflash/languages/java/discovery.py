@@ -104,6 +104,7 @@ def discover_functions_from_source(
                     is_method=method.class_name is not None,
                     language="java",
                     doc_start_line=method.javadoc_start_line,
+                    return_type=method.return_type,
                 )
             )
 
