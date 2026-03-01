@@ -17,6 +17,8 @@ if TYPE_CHECKING:
     from codeflash.code_utils.code_position import CodePosition
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
+_RENDER_CALL_RE = re.compile(r"\brender\s*\(")
+
 
 class TestingMode:
     """Testing mode constants."""
@@ -1222,10 +1224,13 @@ def _is_jsx_component_usage(code: str, func_name: str) -> bool:
     """
     # Check for JSX usage: <ComponentName or <ComponentName> or <ComponentName />
     jsx_pattern = rf"<\s*{re.escape(func_name)}[\s>/]"
+    # Fast-fail cheap substring checks to avoid regex work when possible.
+    if "render" not in code or "<" not in code or func_name not in code:
+        return False
+    # Use the precompiled render regex for correctness and efficiency.
     if not re.search(jsx_pattern, code):
         return False
-    # Also verify there's a render() call (from @testing-library/react or similar)
-    return bool(re.search(r"\brender\s*\(", code))
+    return bool(_RENDER_CALL_RE.search(code))
 
 
 def _is_function_used_in_test(code: str, func_name: str) -> bool:
