@@ -1933,8 +1933,7 @@ class FunctionOptimizer:
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
         # Check test quantity for all languages
         quantity_ok = quantity_of_tests_critic(original_code_baseline)
-        # TODO: {Self} Only check coverage for Python - coverage infrastructure not yet reliable for JS/TS
-        coverage_ok = coverage_critic(original_code_baseline.coverage_results) if is_python() else True
+        coverage_ok = coverage_critic(original_code_baseline.coverage_results)
         if isinstance(original_code_baseline, OriginalCodeBaseline) and (not coverage_ok or not quantity_ok):
             if self.args.override_fixtures:
                 restore_conftest(original_conftest_content)
@@ -2390,8 +2389,7 @@ class FunctionOptimizer:
             )
             console.rule()
             return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
-        # Skip coverage check for non-Python languages (coverage not yet supported)
-        if is_python() and not coverage_critic(coverage_results):
+        if not coverage_critic(coverage_results):
             did_pass_all_tests = all(result.did_pass for result in behavioral_results)
             if not did_pass_all_tests:
                 return Failure("Tests failed to pass for the original code.")
