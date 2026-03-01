@@ -17,7 +17,11 @@ jobs:
   optimize:
     name: Optimize new Python code
     # Don't run codeflash on codeflash-ai[bot] commits, prevent duplicate optimizations
-    if: ${{ github.actor != 'codeflash-ai[bot]' }}
+    # Also skip if 'codeflash:skip' label is present
+    if: ${{
+      github.actor != 'codeflash-ai[bot]' &&
+      !contains(github.event.pull_request.labels.*.name, 'codeflash:skip')
+    }}
     runs-on: ubuntu-latest
     env:
       CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
