@@ -1335,7 +1335,7 @@ class FunctionOptimizer:
                 optimized_code=candidate.source_code,
                 original_helper_code=original_helper_code,
             )
-            if not did_update and candidate.optimization_id != "original-code-aa-test":
+            if not did_update:
                 logger.info("No functions were replaced in the optimized code. Skipping optimization candidate.")
                 console.rule()
                 return None
@@ -1370,18 +1370,6 @@ class FunctionOptimizer:
             exp_type=exp_type,
         )
         console.rule()
-
-        # Handle A/A test: original code run through the candidate pipeline
-        if candidate.optimization_id == "original-code-aa-test":
-            if not is_successful(run_results):
-                logger.warning(
-                    "A/A test FAILED! Original code did not pass its own correctness check. "
-                    "This indicates a bug in the verification pipeline."
-                )
-                eval_ctx.record_failed_candidate(candidate.optimization_id)
-                return None
-            logger.info("A/A test passed: original code passed correctness verification as expected.")
-            return None
 
         if not is_successful(run_results):
             eval_ctx.record_failed_candidate(candidate.optimization_id)
@@ -1525,15 +1513,6 @@ class FunctionOptimizer:
             is_numerical_code=self.is_numerical_code and not self.args.no_jit_opts,
             language=self.function_to_optimize.language,
         )
-
-        # Prepend original code as an A/A test candidate (must pass correctness by definition)
-        aa_test_candidate = OptimizedCandidate(
-            source_code=code_context.read_writable_code,
-            explanation="Original code (A/A baseline test)",
-            optimization_id="original-code-aa-test",
-            source=OptimizedCandidateSource.OPTIMIZE,
-        )
-        candidates = [aa_test_candidate, *candidates]
 
         processor = CandidateProcessor(
             candidates,
