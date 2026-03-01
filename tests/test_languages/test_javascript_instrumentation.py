@@ -974,3 +974,384 @@ test('test \\'fibonacci(5)\\' escaping', () => {
         # Escaped quote doesn't end string
         code4 = "test('fib\\'s result', () => {})"
         assert is_inside_string(code4, 15) is True  # Still inside after escaped quote
+
+
+class TestSplitCallArgs:
+    """Tests for the split_call_args helper."""
+
+    def test_simple_two_args(self):
+        from codeflash.languages.javascript.instrument import split_call_args
+
+        assert split_call_args("thisObj, arg1") == ("thisObj", "arg1")
+
+    def test_only_this_arg(self):
+        from codeflash.languages.javascript.instrument import split_call_args
+
+        assert split_call_args("thisObj") == ("thisObj", "")
+
+    def test_nested_parens_in_this_arg(self):
+        from codeflash.languages.javascript.instrument import split_call_args
+
+        assert split_call_args("getCtx(req), arg1") == ("getCtx(req)", "arg1")
+
+    def test_string_with_comma(self):
+        from codeflash.languages.javascript.instrument import split_call_args
+
+        assert split_call_args("this, 'a,b', c") == ("this", "'a,b', c")
+
+    def test_empty_string(self):
+        from codeflash.languages.javascript.instrument import split_call_args
+
+        assert split_call_args("") == ("", "")
+
+    def test_array_arg(self):
+        from codeflash.languages.javascript.instrument import split_call_args
+
+        assert split_call_args("ctx, [1, 2, 3]") == ("ctx", "[1, 2, 3]")
+
+    def test_object_arg(self):
+        from codeflash.languages.javascript.instrument import split_call_args
+
+        assert split_call_args("ctx, {a: 1, b: 2}") == ("ctx", "{a: 1, b: 2}")
+
+    def test_multiple_remaining_args(self):
+        from codeflash.languages.javascript.instrument import split_call_args
+
+        assert split_call_args("this, a, b, c") == ("this", "a, b, c")
+
+
+class TestDotCallPatternInstrumentation:
+    """Tests for .call() pattern instrumentation."""
+
+    def test_standalone_dot_call_simple(self):
+        """Test funcName.call(thisArg, arg1)."""
+        from codeflash.languages.javascript.instrument import transform_standalone_calls
+
+        code = "    getIdempotencyKey.call(instance, context);"
+        transformed, counter = transform_standalone_calls(
+            code=code, function_to_optimize=make_func("getIdempotencyKey"), capture_func="capture"
+        )
+        expected = "    codeflash.capture('getIdempotencyKey', '1', getIdempotencyKey.bind(instance), context);"
+        assert transformed == expected
+        assert counter == 1
+
+    def test_standalone_dot_call_no_extra_args(self):
+        """Test funcName.call(thisArg) with no additional arguments."""
+        from codeflash.languages.javascript.instrument import transform_standalone_calls
+
+        code = "    getIdempotencyKey.call(instance);"
+        transformed, counter = transform_standalone_calls(
+            code=code, function_to_optimize=make_func("getIdempotencyKey"), capture_func="capture"
+        )
+        expected = "    codeflash.capture('getIdempotencyKey', '1', getIdempotencyKey.bind(instance));"
+        assert transformed == expected
+        assert counter == 1
+
+    def test_standalone_dot_call_multiple_args(self):
+        """Test funcName.call(thisArg, arg1, arg2, arg3)."""
+        from codeflash.languages.javascript.instrument import transform_standalone_calls
+
+        code = "    func.call(thisObj, a, b, c);"
+        transformed, counter = transform_standalone_calls(
+            code=code, function_to_optimize=make_func("func"), capture_func="capture"
+        )
+        expected = "    codeflash.capture('func', '1', func.bind(thisObj), a, b, c);"
+        assert transformed == expected
+
+    def test_standalone_dot_call_with_object_prefix(self):
+        """Test obj.funcName.call(thisArg, args) with prototype chain."""
+        from codeflash.languages.javascript.instrument import transform_standalone_calls
+
+        code = "    IdempotencyInterceptor.prototype.getIdempotencyKey.call(instance, ctx);"
+        transformed, counter = transform_standalone_calls(
+            code=code,
+            function_to_optimize=make_func("getIdempotencyKey", class_name="IdempotencyInterceptor"),
+            capture_func="capture",
+        )
+        expected = (
+            "    codeflash.capture('IdempotencyInterceptor.getIdempotencyKey', '1', "
+            "IdempotencyInterceptor.prototype.getIdempotencyKey.bind(instance), ctx);"
+        )
+        assert transformed == expected
+
+    def test_standalone_dot_call_with_await(self):
+        """Test await funcName.call(thisArg, args)."""
+        from codeflash.languages.javascript.instrument import transform_standalone_calls
+
+        code = "    await fetchData.call(apiClient, '/endpoint');"
+        transformed, counter = transform_standalone_calls(
+            code=code, function_to_optimize=make_func("fetchData"), capture_func="capture"
+        )
+        expected = "    await codeflash.capture('fetchData', '1', fetchData.bind(apiClient), '/endpoint');"
+        assert transformed == expected
+
+    def test_expect_dot_call_preserve_assertion(self):
+        """Test expect(funcName.call(thisArg, args)).toBe(value) with assertion preserved."""
+        from codeflash.languages.javascript.instrument import transform_expect_calls
+
+        code = "    expect(getIdempotencyKey.call(instance, ctx)).toBe('abc-123');"
+        transformed, counter = transform_expect_calls(
+            code=code, function_to_optimize=make_func("getIdempotencyKey"), capture_func="capture"
+        )
+        expected = (
+            "    expect(codeflash.capture('getIdempotencyKey', '1', "
+            "getIdempotencyKey.bind(instance), ctx)).toBe('abc-123');"
+        )
+        assert transformed == expected
+        assert counter == 1
+
+    def test_expect_dot_call_remove_assertions(self):
+        """Test expect(funcName.call(thisArg, args)).toBe() with assertion removal."""
+        from codeflash.languages.javascript.instrument import transform_expect_calls
+
+        code = "    expect(getIdempotencyKey.call(instance, ctx)).toBe('abc-123');"
+        transformed, counter = transform_expect_calls(
+            code=code,
+            function_to_optimize=make_func("getIdempotencyKey"),
+            capture_func="capture",
+            remove_assertions=True,
+        )
+        expected = "    codeflash.capture('getIdempotencyKey', '1', getIdempotencyKey.bind(instance), ctx);"
+        assert transformed == expected
+
+    def test_expect_dot_call_with_object_prefix(self):
+        """Test expect(obj.funcName.call(thisArg, args)).toBe()."""
+        from codeflash.languages.javascript.instrument import transform_expect_calls
+
+        code = "    expect(Proto.getKey.call(instance, ctx)).toBe('val');"
+        transformed, counter = transform_expect_calls(
+            code=code,
+            function_to_optimize=make_func("getKey", class_name="Proto"),
+            capture_func="capture",
+        )
+        expected = (
+            "    expect(codeflash.capture('Proto.getKey', '1', "
+            "Proto.getKey.bind(instance), ctx)).toBe('val');"
+        )
+        assert transformed == expected
+
+    def test_dot_call_not_matching_callback(self):
+        """Test that funcName.callback() is NOT matched by .call() pattern."""
+        from codeflash.languages.javascript.instrument import transform_standalone_calls
+
+        code = "    myFunc.callback(arg1);"
+        transformed, counter = transform_standalone_calls(
+            code=code, function_to_optimize=make_func("myFunc"), capture_func="capture"
+        )
+        assert transformed == "    myFunc.callback(arg1);"
+        assert counter == 0
+
+    def test_dot_call_with_nested_args(self):
+        """Test .call() with nested function calls in arguments."""
+        from codeflash.languages.javascript.instrument import transform_standalone_calls
+
+        code = "    func.call(getContext(req), transform(data, opts));"
+        transformed, counter = transform_standalone_calls(
+            code=code, function_to_optimize=make_func("func"), capture_func="capture"
+        )
+        expected = "    codeflash.capture('func', '1', func.bind(getContext(req)), transform(data, opts));"
+        assert transformed == expected
+
+    def test_is_function_used_dot_call(self):
+        """Test _is_function_used_in_test detects .call() usage."""
+        from codeflash.languages.javascript.instrument import _is_function_used_in_test
+
+        code = """
+const getKey = IdempotencyInterceptor.prototype.getIdempotencyKey;
+const result = getKey.call(instance, context);
+"""
+        assert _is_function_used_in_test(code, "getKey") is True
+
+    def test_capturePerf_dot_call(self):
+        """Test .call() with capturePerf mode."""
+        from codeflash.languages.javascript.instrument import transform_standalone_calls
+
+        code = "    func.call(obj, arg1);"
+        transformed, counter = transform_standalone_calls(
+            code=code, function_to_optimize=make_func("func"), capture_func="capturePerf"
+        )
+        expected = "    codeflash.capturePerf('func', '1', func.bind(obj), arg1);"
+        assert transformed == expected
+
+    def test_dot_call_inside_expect_lambda_skipped_by_standalone(self):
+        """Test that .call() inside expect(() => ...) is skipped by standalone transformer."""
+        from codeflash.languages.javascript.instrument import transform_standalone_calls
+
+        code = "    expect(() => getKey.call(instance, ctx)).toThrow(TypeError);"
+        transformed, counter = transform_standalone_calls(
+            code=code, function_to_optimize=make_func("getKey"), capture_func="capture"
+        )
+        assert transformed == "    expect(() => getKey.call(instance, ctx)).toThrow(TypeError);"
+        assert counter == 0
+
+    def test_dot_call_in_string_skipped(self):
+        """Test that .call() inside a string literal is not transformed."""
+        from codeflash.languages.javascript.instrument import transform_standalone_calls
+
+        code = """test('should handle getKey.call(obj, arg) pattern', () => {
+    const result = getKey.call(instance, ctx);
+});"""
+        transformed, counter = transform_standalone_calls(
+            code=code, function_to_optimize=make_func("getKey"), capture_func="capture"
+        )
+        expected = """test('should handle getKey.call(obj, arg) pattern', () => {
+    const result = codeflash.capture('getKey', '1', getKey.bind(instance), ctx);
+});"""
+        assert transformed == expected
+        assert counter == 1
+
+    def test_multiple_dot_call_invocations(self):
+        """Test multiple .call() invocations get unique IDs."""
+        from codeflash.languages.javascript.instrument import transform_standalone_calls
+
+        code = """    const a = getKey.call(inst1, ctx1);
+    const b = getKey.call(inst2, ctx2);"""
+        transformed, counter = transform_standalone_calls(
+            code=code, function_to_optimize=make_func("getKey"), capture_func="capture"
+        )
+        expected = """    const a = codeflash.capture('getKey', '1', getKey.bind(inst1), ctx1);
+    const b = codeflash.capture('getKey', '2', getKey.bind(inst2), ctx2);"""
+        assert transformed == expected
+        assert counter == 2
+
+    def test_full_integration_dot_call(self):
+        """Integration test: instrument_generated_js_test with .call() pattern."""
+        from codeflash.languages.javascript.instrument import TestingMode, instrument_generated_js_test
+
+        code = """const { IdempotencyInterceptor } = require('../interceptor');
+
+describe('getIdempotencyKey', () => {
+    test('returns header value', () => {
+        const instance = new IdempotencyInterceptor();
+        const getIdempotencyKey = IdempotencyInterceptor.prototype.getIdempotencyKey;
+        const ctx = { switchToHttp: () => ({ getRequest: () => ({ headers: { 'idempotency-key': 'abc' } }) }) };
+        expect(getIdempotencyKey.call(instance, ctx)).toBe('abc');
+    });
+
+    test('standalone call', () => {
+        const instance = new IdempotencyInterceptor();
+        const getIdempotencyKey = IdempotencyInterceptor.prototype.getIdempotencyKey;
+        const ctx = { switchToHttp: () => ({ getRequest: () => ({ headers: { 'idempotency-key': 'xyz' } }) }) };
+        const result = getIdempotencyKey.call(instance, ctx);
+    });
+});"""
+        result = instrument_generated_js_test(code, make_func("getIdempotencyKey"), TestingMode.BEHAVIOR)
+        expected = """const { IdempotencyInterceptor } = require('../interceptor');
+
+const codeflash = require('codeflash');
+describe('getIdempotencyKey', () => {
+    test('returns header value', () => {
+        const instance = new IdempotencyInterceptor();
+        const getIdempotencyKey = IdempotencyInterceptor.prototype.getIdempotencyKey;
+        const ctx = { switchToHttp: () => ({ getRequest: () => ({ headers: { 'idempotency-key': 'abc' } }) }) };
+        codeflash.capture('getIdempotencyKey', '1', getIdempotencyKey.bind(instance), ctx);
+    });
+
+    test('standalone call', () => {
+        const instance = new IdempotencyInterceptor();
+        const getIdempotencyKey = IdempotencyInterceptor.prototype.getIdempotencyKey;
+        const ctx = { switchToHttp: () => ({ getRequest: () => ({ headers: { 'idempotency-key': 'xyz' } }) }) };
+        const result = codeflash.capture('getIdempotencyKey', '2', getIdempotencyKey.bind(instance), ctx);
+    });
+});"""
+        assert result == expected
+
+    def test_full_example(self):
+        """Integration test: instrument_generated_js_test with .call() pattern."""
+        from codeflash.languages.javascript.instrument import TestingMode, instrument_generated_js_test
+
+        code = """describe('Basic functionality', () => {
+    test('should return the idempotency header value when present (normal lower-case header)', () => {
+      // Arrange: instance and a simple ExecutionContext with lower-case header key
+      const instance = makeInstance();
+      const getIdempotencyKey = IdempotencyInterceptor.prototype.getIdempotencyKey;
+      const context = {
+        switchToHttp: () => ({
+          getRequest: () => ({
+            headers: {
+              // the function uses 'idempotency-key' as lowercased lookup
+              'idempotency-key': 'abc-123',
+            },
+          }),
+        }),
+      };
+
+      // Act
+      const result = getIdempotencyKey.call(instance, context);
+
+      // Assert
+      expect(result).toBe('abc-123');
+    });
+
+    test('should return undefined when header is not present', () => {
+      // Arrange: headers object does not contain the idempotency key
+      const instance = makeInstance();
+      const getIdempotencyKey = IdempotencyInterceptor.prototype.getIdempotencyKey;
+      const context = {
+        switchToHttp: () => ({
+          getRequest: () => ({
+            headers: {
+              'content-type': 'application/json',
+            },
+          }),
+        }),
+      };
+
+      // Act
+      const result = getIdempotencyKey.call(instance, context);
+
+      // Assert: when missing, the function should return undefined
+      expect(result).toBeUndefined();
+    });
+  });
+"""
+
+        result = instrument_generated_js_test(code, make_func("getIdempotencyKey", class_name="IdempotencyInterceptor"), TestingMode.BEHAVIOR)
+        expected = """const codeflash = require('codeflash');
+
+describe('Basic functionality', () => {
+    test('should return the idempotency header value when present (normal lower-case header)', () => {
+      // Arrange: instance and a simple ExecutionContext with lower-case header key
+      const instance = makeInstance();
+      const getIdempotencyKey = IdempotencyInterceptor.prototype.getIdempotencyKey;
+      const context = {
+        switchToHttp: () => ({
+          getRequest: () => ({
+            headers: {
+              // the function uses 'idempotency-key' as lowercased lookup
+              'idempotency-key': 'abc-123',
+            },
+          }),
+        }),
+      };
+
+      // Act
+      const result = codeflash.capture('IdempotencyInterceptor.getIdempotencyKey', '1', getIdempotencyKey.bind(instance), context);
+
+      // Assert
+      expect(result).toBe('abc-123');
+    });
+
+    test('should return undefined when header is not present', () => {
+      // Arrange: headers object does not contain the idempotency key
+      const instance = makeInstance();
+      const getIdempotencyKey = IdempotencyInterceptor.prototype.getIdempotencyKey;
+      const context = {
+        switchToHttp: () => ({
+          getRequest: () => ({
+            headers: {
+              'content-type': 'application/json',
+            },
+          }),
+        }),
+      };
+
+      // Act
+      const result = codeflash.capture('IdempotencyInterceptor.getIdempotencyKey', '2', getIdempotencyKey.bind(instance), context);
+
+      // Assert: when missing, the function should return undefined
+      expect(result).toBeUndefined();
+    });
+  });
+"""
+        assert result == expected

@@ -36,6 +36,7 @@ class ExpectCallMatch:
     assertion_chain: str
     has_trailing_semicolon: bool
     object_prefix: str = ""  # Object prefix like "calc." or "this." or ""
+    this_arg: str = ""  # For .call() patterns: the thisArg value
 
 
 @dataclass
@@ -49,6 +50,7 @@ class StandaloneCallMatch:
     prefix: str  # "await " or ""
     object_prefix: str  # Object prefix like "calc." or "this." or ""
     has_trailing_semicolon: bool
+    this_arg: str = ""  # For .call() patterns: the thisArg value
 
 
 codeflash_import_pattern = re.compile(
@@ -96,6 +98,52 @@ def is_inside_string(code: str, pos: int) -> bool:
     return in_string
 
 
+def split_call_args(args_str: str) -> tuple[str, str]:
+    """Split .call() arguments into (thisArg, remaining_args).
+
+    The first argument to .call() is thisArg. Remaining arguments are the
+    actual function arguments. Handles nested parens, brackets, braces, and
+    string literals when finding the first top-level comma.
+
+    Returns:
+        Tuple of (thisArg, remaining_args_str). remaining_args_str may be empty.
+
+    """
+    args_str = args_str.strip()
+    if not args_str:
+        return "", ""
+
+    depth = 0
+    in_string = False
+    string_char = None
+    s = args_str
+    s_len = len(s)
+
+    for i in range(s_len):
+        char = s[i]
+
+        if char in "\"'`" and (i == 0 or s[i - 1] != "\\"):
+            if not in_string:
+                in_string = True
+                string_char = char
+            elif char == string_char:
+                in_string = False
+                string_char = None
+            continue
+
+        if in_string:
+            continue
+
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+        elif char == "," and depth == 0:
+            return s[:i].strip(), s[i + 1 :].strip()
+
+    return s.strip(), ""
+
+
 class StandaloneCallTransformer:
     """Transforms standalone func(...) calls in JavaScript test code.
 
@@ -127,6 +175,9 @@ class StandaloneCallTransformer:
         self._bracket_call_pattern = re.compile(
             rf"(\s*)(await\s+)?(\w+)\[['\"]({re.escape(self.func_name)})['\"]]\s*\("
         )
+        # Pattern to match .call() invocation: func_name.call( or obj.func_name.call(
+        # Captures: (whitespace)(await )?(object.)*func_name.call(
+        self._dot_call_pattern = re.compile(rf"(\s*)(await\s+)?((?:\w+\.)*){re.escape(self.func_name)}\.call\s*\(")
 
     def transform(self, code: str) -> str:
         """Transform all standalone calls in the code."""
@@ -134,28 +185,26 @@ class StandaloneCallTransformer:
         pos = 0
 
         while pos < len(code):
-            # Try both dot notation and bracket notation patterns
+            # Try all patterns: dot notation, bracket notation, and .call() notation
             dot_match = self._call_pattern.search(code, pos)
             bracket_match = self._bracket_call_pattern.search(code, pos)
+            call_match = self._dot_call_pattern.search(code, pos)
 
-            # Choose the first match (by position)
-            match = None
-            is_bracket_notation = False
-            if dot_match and bracket_match:
-                if dot_match.start() <= bracket_match.start():
-                    match = dot_match
-                else:
-                    match = bracket_match
-                    is_bracket_notation = True
-            elif dot_match:
-                match = dot_match
-            elif bracket_match:
-                match = bracket_match
-                is_bracket_notation = True
+            # Choose the earliest match by position
+            candidates: list[tuple[str, re.Match[str]]] = []
+            if dot_match:
+                candidates.append(("dot", dot_match))
+            if bracket_match:
+                candidates.append(("bracket", bracket_match))
+            if call_match:
+                candidates.append(("call", call_match))
 
-            if not match:
+            if not candidates:
                 result.append(code[pos:])
                 break
+
+            candidates.sort(key=lambda x: x[1].start())
+            match_type, match = candidates[0]
 
             match_start = match.start()
 
@@ -169,7 +218,9 @@ class StandaloneCallTransformer:
             result.append(code[pos:match_start])
 
             # Try to parse the full standalone call
-            if is_bracket_notation:
+            if match_type == "call":
+                standalone_match = self._parse_dot_call_standalone(code, match)
+            elif match_type == "bracket":
                 standalone_match = self._parse_bracket_standalone_call(code, match)
             else:
                 standalone_match = self._parse_standalone_call(code, match)
@@ -182,13 +233,15 @@ class StandaloneCallTransformer:
 
             # Generate the transformed code
             self.invocation_counter += 1
-            transformed = self._generate_transformed_call(standalone_match, is_bracket_notation)
+            transformed = self._generate_transformed_call(
+                standalone_match, is_bracket_notation=(match_type == "bracket"), is_dot_call=(match_type == "call")
+            )
             result.append(transformed)
             pos = standalone_match.end_pos
 
         return "".join(result)
 
-    def _should_skip_match(self, code: str, start: int, match: re.Match) -> bool:
+    def _should_skip_match(self, code: str, start: int, match: re.Match[str]) -> bool:
         """Check if the match should be skipped (inside expect, already transformed, etc.)."""
         # Skip if inside a string literal (e.g., test description)
         if is_inside_string(code, start):
@@ -272,7 +325,7 @@ class StandaloneCallTransformer:
 
         return pos if depth == 0 else -1
 
-    def _parse_standalone_call(self, code: str, match: re.Match) -> StandaloneCallMatch | None:
+    def _parse_standalone_call(self, code: str, match: re.Match[str]) -> StandaloneCallMatch | None:
         """Parse a complete standalone func(...) call."""
         leading_ws = match.group(1)
         prefix = match.group(2) or ""  # "await " or ""
@@ -355,7 +408,7 @@ class StandaloneCallTransformer:
         # slice once
         return s[open_paren_pos + 1 : pos - 1], pos
 
-    def _parse_bracket_standalone_call(self, code: str, match: re.Match) -> StandaloneCallMatch | None:
+    def _parse_bracket_standalone_call(self, code: str, match: re.Match[str]) -> StandaloneCallMatch | None:
         """Parse a complete standalone obj['func'](...) call with bracket notation."""
         leading_ws = match.group(1)
         prefix = match.group(2) or ""  # "await " or ""
@@ -394,11 +447,71 @@ class StandaloneCallTransformer:
             has_trailing_semicolon=has_trailing_semicolon,
         )
 
-    def _generate_transformed_call(self, match: StandaloneCallMatch, is_bracket_notation: bool = False) -> str:
+    def _parse_dot_call_standalone(self, code: str, match: re.Match[str]) -> StandaloneCallMatch | None:
+        """Parse a funcName.call(thisArg, args) or obj.funcName.call(thisArg, args) call."""
+        leading_ws = match.group(1)
+        prefix = match.group(2) or ""  # "await " or ""
+        object_prefix = match.group(3) or ""  # "obj." or ""
+
+        # Find the opening paren position
+        match_text = match.group(0)
+        paren_offset = match_text.rfind("(")
+        open_paren_pos = match.start() + paren_offset
+
+        # Find all arguments inside .call(...)
+        all_args, close_pos = self._find_balanced_parens(code, open_paren_pos)
+        if all_args is None:
+            return None
+
+        # Split into thisArg and remaining args
+        this_arg, remaining_args = split_call_args(all_args)
+        if not this_arg:
+            return None  # .call() with no arguments is invalid
+
+        # Check for trailing semicolon
+        end_pos = close_pos
+        while end_pos < len(code) and code[end_pos] in " \t":
+            end_pos += 1
+        has_trailing_semicolon = end_pos < len(code) and code[end_pos] == ";"
+        if has_trailing_semicolon:
+            end_pos += 1
+
+        return StandaloneCallMatch(
+            start_pos=match.start(),
+            end_pos=end_pos,
+            leading_whitespace=leading_ws,
+            func_args=remaining_args,
+            prefix=prefix,
+            object_prefix=object_prefix,
+            has_trailing_semicolon=has_trailing_semicolon,
+            this_arg=this_arg,
+        )
+
+    def _generate_transformed_call(
+        self, match: StandaloneCallMatch, is_bracket_notation: bool = False, is_dot_call: bool = False
+    ) -> str:
         """Generate the transformed code for a standalone call."""
         line_id = str(self.invocation_counter)
         args_str = match.func_args.strip()
         semicolon = ";" if match.has_trailing_semicolon else ""
+
+        # Handle .call() pattern: funcName.call(thisArg, args) -> codeflash.capture(..., funcName.bind(thisArg), args)
+        if is_dot_call:
+            if match.object_prefix:
+                obj = match.object_prefix.rstrip(".")
+                func_ref = f"{obj}.{self.func_name}"
+            else:
+                func_ref = self.func_name
+            bind_expr = f"{func_ref}.bind({match.this_arg})"
+            if args_str:
+                return (
+                    f"{match.leading_whitespace}{match.prefix}codeflash.{self.capture_func}('{self.qualified_name}', "
+                    f"'{line_id}', {bind_expr}, {args_str}){semicolon}"
+                )
+            return (
+                f"{match.leading_whitespace}{match.prefix}codeflash.{self.capture_func}('{self.qualified_name}', "
+                f"'{line_id}', {bind_expr}){semicolon}"
+            )
 
         # Handle method calls on objects (e.g., calc.fibonacci, this.method, instance['method'])
         if match.object_prefix:
@@ -481,20 +594,69 @@ class ExpectCallTransformer:
         # Pattern to match start of expect((object.)*func_name(
         # Captures: (whitespace), (object prefix like calc. or this.)
         self._expect_pattern = re.compile(rf"(\s*)expect\s*\(\s*((?:\w+\.)*){re.escape(self.func_name)}\s*\(")
+        # Pattern to match expect((object.)*func_name.call(
+        self._expect_dot_call_pattern = re.compile(
+            rf"(\s*)expect\s*\(\s*((?:\w+\.)*){re.escape(self.func_name)}\.call\s*\("
+        )
 
     def transform(self, code: str) -> str:
         """Transform all expect calls in the code."""
         result: list[str] = []
         pos = 0
+        # Track string state incrementally to avoid O(n²) rescanning
+        in_string = False
+        string_char = None
+        last_checked_pos = 0
 
         while pos < len(code):
-            match = self._expect_pattern.search(code, pos)
+            expect_match = self._expect_pattern.search(code, pos)
+            call_match = self._expect_dot_call_pattern.search(code, pos)
+
+            # Pick the earliest match
+            match = None
+            is_dot_call = False
+            if expect_match and call_match:
+                if call_match.start() <= expect_match.start():
+                    match = call_match
+                    is_dot_call = True
+                else:
+                    match = expect_match
+            elif expect_match:
+                match = expect_match
+            elif call_match:
+                match = call_match
+                is_dot_call = True
+
             if not match:
                 result.append(code[pos:])
                 break
 
+            # Update string state up to match.start() incrementally
+            match_start = match.start()
+            i = last_checked_pos
+            while i < match_start:
+                char = code[i]
+
+                if in_string:
+                    # Check for escape sequence
+                    if char == "\\" and i + 1 < len(code):
+                        i += 2
+                        continue
+                    # Check for end of string
+                    if char == string_char:
+                        in_string = False
+                        string_char = None
+                # Check for start of string
+                elif char in "\"'`":
+                    in_string = True
+                    string_char = char
+
+                i += 1
+
+            last_checked_pos = match_start
+
             # Skip if inside a string literal (e.g., test description)
-            if is_inside_string(code, match.start()):
+            if in_string:
                 result.append(code[pos : match.end()])
                 pos = match.end()
                 continue
@@ -503,8 +665,11 @@ class ExpectCallTransformer:
             result.append(code[pos : match.start()])
 
             # Try to parse the full expect call
-            expect_match = self._parse_expect_call(code, match)
-            if expect_match is None:
+            if is_dot_call:
+                parsed_match = self._parse_expect_dot_call(code, match)
+            else:
+                parsed_match = self._parse_expect_call(code, match)
+            if parsed_match is None:
                 # Couldn't parse, skip this match
                 result.append(code[match.start() : match.end()])
                 pos = match.end()
@@ -512,13 +677,13 @@ class ExpectCallTransformer:
 
             # Generate the transformed code
             self.invocation_counter += 1
-            transformed = self._generate_transformed_call(expect_match)
+            transformed = self._generate_transformed_call(parsed_match)
             result.append(transformed)
-            pos = expect_match.end_pos
+            pos = parsed_match.end_pos
 
         return "".join(result)
 
-    def _parse_expect_call(self, code: str, match: re.Match) -> ExpectCallMatch | None:
+    def _parse_expect_call(self, code: str, match: re.Match[str]) -> ExpectCallMatch | None:
         """Parse a complete expect(func(...)).assertion() call.
 
         Returns None if the pattern doesn't match expected structure.
@@ -565,6 +730,53 @@ class ExpectCallTransformer:
             assertion_chain=assertion_chain,
             has_trailing_semicolon=has_trailing_semicolon,
             object_prefix=object_prefix,
+        )
+
+    def _parse_expect_dot_call(self, code: str, match: re.Match[str]) -> ExpectCallMatch | None:
+        """Parse expect(funcName.call(thisArg, args)).assertion()."""
+        leading_ws = match.group(1)
+        object_prefix = match.group(2) or ""
+
+        if "." not in self.qualified_name and object_prefix:
+            return None
+
+        # Find arguments inside .call(...)
+        args_start = match.end()
+        all_args, call_close_pos = self._find_balanced_parens(code, args_start - 1)
+        if all_args is None:
+            return None
+
+        # Split thisArg from remaining args
+        this_arg, remaining_args = split_call_args(all_args)
+        if not this_arg:
+            return None
+
+        # Find closing ) of expect(
+        expect_close_pos = call_close_pos
+        while expect_close_pos < len(code) and code[expect_close_pos].isspace():
+            expect_close_pos += 1
+        if expect_close_pos >= len(code) or code[expect_close_pos] != ")":
+            return None
+        expect_close_pos += 1
+
+        # Parse assertion chain
+        assertion_chain, chain_end_pos = self._parse_assertion_chain(code, expect_close_pos)
+        if assertion_chain is None:
+            return None
+
+        has_trailing_semicolon = chain_end_pos < len(code) and code[chain_end_pos] == ";"
+        if has_trailing_semicolon:
+            chain_end_pos += 1
+
+        return ExpectCallMatch(
+            start_pos=match.start(),
+            end_pos=chain_end_pos,
+            leading_whitespace=leading_ws,
+            func_args=remaining_args,
+            assertion_chain=assertion_chain,
+            has_trailing_semicolon=has_trailing_semicolon,
+            object_prefix=object_prefix,
+            this_arg=this_arg,
         )
 
     def _find_balanced_parens(self, code: str, open_paren_pos: int) -> tuple[str | None, int]:
@@ -698,7 +910,14 @@ class ExpectCallTransformer:
         args_str = match.func_args.strip()
 
         # Determine the function reference to use
-        if match.object_prefix:
+        if match.this_arg:
+            # .call() pattern: funcName.call(thisArg, ...) -> funcName.bind(thisArg)
+            if match.object_prefix:
+                obj = match.object_prefix.rstrip(".")
+                func_ref = f"{obj}.{self.func_name}.bind({match.this_arg})"
+            else:
+                func_ref = f"{self.func_name}.bind({match.this_arg})"
+        elif match.object_prefix:
             # Method call on object: calc.fibonacci -> calc.fibonacci.bind(calc)
             obj = match.object_prefix.rstrip(".")
             func_ref = f"{obj}.{self.func_name}.bind({obj})"
@@ -829,6 +1048,11 @@ def _is_function_used_in_test(code: str, func_name: str) -> bool:
 
     default_import = rf"import\s+{re.escape(func_name)}\s+from"
     if re.search(default_import, code):
+        return True
+
+    # Check for .call() pattern: funcName.call( or obj.funcName.call(
+    dot_call_pattern = rf"(?:\w+\.)*{re.escape(func_name)}\.call\s*\("
+    if re.search(dot_call_pattern, code):
         return True
 
     # Check for method calls: obj.funcName( or this.funcName(
