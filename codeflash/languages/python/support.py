@@ -794,7 +794,7 @@ class PythonSupport:
         try:
             return ReferenceGraph(project_root, language=self.language.value)
         except Exception:
-            logger.debug("Failed to initialize ReferenceGraph, falling back to per-function Jedi analysis")
+            logger.info("Failed to initialize ReferenceGraph, falling back to per-function Jedi analysis")
             return None
 
     def instrument_existing_test(

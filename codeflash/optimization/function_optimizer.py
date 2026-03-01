@@ -444,6 +444,7 @@ class FunctionOptimizer:
         args: Namespace | None = None,
         replay_tests_dir: Path | None = None,
         call_graph: DependencyResolver | None = None,
+        effort_override: str | None = None,
     ) -> None:
         self.project_root = test_cfg.project_root_path.resolve()
         self.test_cfg = test_cfg
@@ -475,7 +476,8 @@ class FunctionOptimizer:
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
         self.test_files = TestFiles(test_files=[])
 
-        self.effort = getattr(args, "effort", EffortLevel.MEDIUM.value) if args else EffortLevel.MEDIUM.value
+        default_effort = getattr(args, "effort", EffortLevel.MEDIUM.value) if args else EffortLevel.MEDIUM.value
+        self.effort = effort_override or default_effort
 
         self.args = args  # Check defaults for these
         self.function_trace_id: str = str(uuid.uuid4())

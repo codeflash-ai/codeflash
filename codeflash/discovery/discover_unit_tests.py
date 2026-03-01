@@ -35,6 +35,14 @@ if TYPE_CHECKING:
     from codeflash.verification.verification_utils import TestConfig
 
 
+def existing_unit_test_count(
+    func: FunctionToOptimize, project_root: Path, function_to_tests: dict[str, set[FunctionCalledInTest]]
+) -> int:
+    key = func.qualified_name_with_modules_from_root(project_root)
+    tests = function_to_tests.get(key, set())
+    return sum(1 for t in tests if t.tests_in_file.test_type == TestType.EXISTING_UNIT_TEST)
+
+
 @final
 class PytestExitCode(enum.IntEnum):  # don't need to import entire pytest just for this
     #: Tests passed.
