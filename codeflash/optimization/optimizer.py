@@ -544,6 +544,7 @@ class Optimizer:
 
     def run(self) -> None:
         from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
+        from codeflash.discovery.discover_unit_tests import existing_unit_test_count
 
         ph("cli-optimize-run-start")
         logger.info("Running optimizer.")
@@ -664,6 +665,14 @@ class Optimizer:
                     ref_count = callee_counts.get((original_module_path, function_to_optimize.qualified_name), 0)
                     ref_suffix = f" [{ref_count} references]"
 
+                test_suffix = ""
+                if function_to_tests:
+                    test_count = existing_unit_test_count(
+                        function_to_optimize, self.args.project_root, function_to_tests
+                    )
+                    if test_count > 0:
+                        test_suffix = f" [{test_count} tests]"
+
                 effort_override = None
                 if i < HIGH_EFFORT_TOP_N:
                     effort_override = EffortLevel.HIGH.value
@@ -671,7 +680,7 @@ class Optimizer:
                 effort_suffix = f" [effort={effort_override}]" if effort_override else ""
                 logger.info(
                     f"Optimizing function {function_iterator_count} of {len(globally_ranked_functions)}: "
-                    f"{function_to_optimize.qualified_name} (in {original_module_path.name}){ref_suffix}{effort_suffix}"
+                    f"{function_to_optimize.qualified_name} (in {original_module_path.name}){test_suffix}{ref_suffix}{effort_suffix}"
                 )
                 console.rule()
                 function_optimizer = None
