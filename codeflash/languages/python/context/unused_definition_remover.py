@@ -748,7 +748,6 @@ def detect_unused_helper_functions(
     """
     # Skip this analysis for non-Python languages since we use Python's ast module
     if not is_python():
-        logger.debug("Skipping unused helper function detection for non-Python languages")
         return []
 
     if isinstance(optimized_code, CodeStringsMarkdown) and len(optimized_code.code_strings) > 0:
