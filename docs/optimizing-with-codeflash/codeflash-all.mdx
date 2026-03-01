@@ -3,13 +3,13 @@ title: "Optimize Your Entire Codebase"
 description: "Automatically optimize all codepaths in your project with Codeflash's comprehensive analysis"
 icon: "database"
 sidebarTitle: "Optimize Entire Codebase"
-keywords: ["codebase optimization", "all functions", "batch optimization", "github app", "checkpoint", "recovery"]
+keywords: ["codebase optimization", "all functions", "batch optimization", "github app", "checkpoint", "recovery", "javascript", "typescript", "python"]
 ---
 
 # Optimize your entire codebase
 
 Codeflash can optimize your entire codebase by analyzing all the functions in your project and generating optimized versions of them.
-It iterates through all the functions in your codebase and optimizes them one by one.
+It iterates through all the functions in your codebase and optimizes them one by one. This works for Python, JavaScript, and TypeScript projects.
 
 To optimize your entire codebase, run the following command in your project directory:
 
@@ -30,15 +30,27 @@ codeflash --all path/to/dir
 ```
 
 <Tip>
-  If your project has a good number of unit tests, we can trace those to achieve higher quality results.
-  The following approach is recommended instead:
+  If your project has a good number of unit tests, tracing them achieves higher quality results.
+
+  <Tabs>
+  <Tab title="Python">
   ```bash
   codeflash optimize --trace-only -m pytest tests/ ; codeflash --all
   ```
-  This will run your test suite, trace all the code covered by your tests, ensuring higher correctness guarantees
-  and better performance benchmarking, and help create optimizations for code where the LLMs struggle to generate and run tests.
+  </Tab>
+  <Tab title="JavaScript / TypeScript">
+  ```bash
+  codeflash optimize --trace-only --jest ; codeflash --all
+  # or for Vitest projects
+  codeflash optimize --trace-only --vitest ; codeflash --all
+  ```
+  </Tab>
+  </Tabs>
 
-  Even though `codeflash --all` discovers any existing unit tests. It currently can only discover any test that directly calls the
+  This runs your test suite, traces all the code covered by your tests, ensuring higher correctness guarantees
+  and better performance benchmarking, and helps create optimizations for code where the LLMs struggle to generate and run tests.
+
+  `codeflash --all` discovers any existing unit tests, but it currently can only discover tests that directly call the
   function under optimization. Tracing all the tests helps ensure correctness for code that may be indirectly called by your tests.
 
 </Tip>

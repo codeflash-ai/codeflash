@@ -26,9 +26,9 @@ We highly recommend setting this up, since once you set it up all your new code 
 
 ✅ A Codeflash API key from the [Codeflash Web App](https://app.codeflash.ai/)
 
-✅ Completed [local installation](/getting-started/local-installation) with `codeflash init`
+✅ Completed local installation with `codeflash init` ([Python](/getting-started/local-installation) or [JavaScript/TypeScript](/getting-started/javascript-installation))
 
-✅ A Python project with a configured `pyproject.toml` file
+✅ A configured project (`pyproject.toml` for Python, `package.json` for JavaScript/TypeScript)
 </Warning>
 
 ## Setup Options
@@ -113,7 +113,7 @@ jobs:
 </Step>
 
 <Step title="Choose Your Package Manager">
-Customize the dependency installation based on your Python package manager:
+Customize the dependency installation based on your package manager:
 
 The workflow will need to be set up in such a way the Codeflash can create and
 run tests for functionality and speed, so the stock YAML may need to be altered to
@@ -121,7 +121,7 @@ suit the specific codebase. Typically the setup steps for a unit test workflow c
 be copied.
 
 <CodeGroup>
-```yaml Poetry
+```yaml Poetry (Python)
 - name: Install Project Dependencies
   run: |
     python -m pip install --upgrade pip
@@ -129,11 +129,11 @@ be copied.
     poetry install --with dev
 - name: Run Codeflash to optimize code
   run: |
-    poetry env use python 
+    poetry env use python
     poetry run codeflash
 ```
 
-```yaml uv
+```yaml uv (Python)
 - uses: astral-sh/setup-uv@v6
   with:
     enable-cache: true
@@ -142,7 +142,7 @@ be copied.
   run: uv run codeflash
 ```
 
-```yaml pip
+```yaml pip (Python)
 - name: Install Project Dependencies
   run: |
     python -m pip install --upgrade pip
@@ -150,6 +150,16 @@ be copied.
     pip install codeflash
 - name: Run Codeflash to optimize code
   run: codeflash
+```
+
+```yaml npm (JavaScript/TypeScript)
+- uses: actions/setup-node@v4
+  with:
+    node-version: '18'
+- name: Install Project Dependencies
+  run: npm ci
+- name: Run Codeflash to optimize code
+  run: npx codeflash
 ```
 </CodeGroup>
 </Step>
