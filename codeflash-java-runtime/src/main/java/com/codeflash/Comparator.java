@@ -144,8 +144,11 @@ public final class Comparator {
         try (Connection conn = DriverManager.getConnection(url);
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(
-                 "SELECT iteration_id, return_value FROM test_results WHERE loop_index = 1")) {
+                 "SELECT test_module_path, test_class_name, test_function_name, iteration_id, return_value FROM test_results WHERE loop_index = 1")) {
             while (rs.next()) {
+                String testModulePath = rs.getString("test_module_path");
+                String testClassName = rs.getString("test_class_name");
+                String testFunctionName = rs.getString("test_function_name");
                 String iterationId = rs.getString("iteration_id");
                 byte[] returnValue = rs.getBytes("return_value");
                 // Strip the CODEFLASH_TEST_ITERATION suffix (e.g. "7_0" -> "7")
@@ -155,7 +158,10 @@ public final class Comparator {
                 if (lastUnderscore > 0) {
                     iterationId = iterationId.substring(0, lastUnderscore);
                 }
-                results.put(iterationId, returnValue);
+                // Use module:class:function:iteration as key to uniquely identify
+                // each invocation across different test files, classes, and methods
+                String key = testModulePath + ":" + testClassName + ":" + testFunctionName + "::" + iterationId;
+                results.put(key, returnValue);
             }
         }
         return results;

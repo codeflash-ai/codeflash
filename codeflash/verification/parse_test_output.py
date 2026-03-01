@@ -605,23 +605,16 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
             else:
                 # Try original_file_path first (for existing tests that were instrumented)
                 test_type = test_files.get_test_type_by_original_file_path(test_file_path)
-                logger.debug(f"[PARSE-DEBUG] test_module={test_module_path}, test_file_path={test_file_path}")
-                logger.debug(f"[PARSE-DEBUG]   by_original_file_path: {test_type}")
                 # If not found, try instrumented_behavior_file_path (for generated tests)
                 if test_type is None:
                     test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
-                    logger.debug(f"[PARSE-DEBUG]   by_instrumented_file_path: {test_type}")
                 # Default to GENERATED_REGRESSION for Jest/Java tests when test type can't be determined
                 if test_type is None and (is_jest or is_java_test):
                     test_type = TestType.GENERATED_REGRESSION
-                    logger.debug(
-                        f"[PARSE-DEBUG]   defaulting to GENERATED_REGRESSION ({'Jest' if is_jest else 'Java'})"
-                    )
                 elif test_type is None:
                     # Skip results where test type cannot be determined
                     logger.debug(f"Skipping result for {test_function_name}: could not determine test type")
                     continue
-                logger.debug(f"[PARSE-DEBUG]   FINAL test_type={test_type}")
 
             # Deserialize return value
             # For Jest/Java: Store as serialized JSON - comparison happens via language-specific comparator
@@ -699,10 +692,6 @@ def parse_test_xml(
         return test_results
     # Always use tests_project_rootdir since pytest is now the test runner for all frameworks
     base_dir = test_config.tests_project_rootdir
-    logger.debug(f"[PARSE-XML] base_dir for resolution: {base_dir}")
-    logger.debug(
-        f"[PARSE-XML] Registered test files: {[str(tf.instrumented_behavior_file_path) for tf in test_files.test_files]}"
-    )
 
     # For Java: pre-parse fallback stdout once (not per testcase) to avoid O(n²) complexity
     java_fallback_stdout = None
@@ -763,13 +752,9 @@ def parse_test_xml(
             if test_file_name is None:
                 if test_class_path:
                     # TODO : This might not be true if the test is organized under a class
-                    logger.debug(f"[PARSE-XML] Resolving test_class_path={test_class_path} in base_dir={base_dir}")
                     test_file_path = resolve_test_file_from_class_path(test_class_path, base_dir)
 
                     if test_file_path is None:
-                        logger.error(
-                            f"[PARSE-XML] ERROR: Could not resolve test_class_path={test_class_path}, base_dir={base_dir}"
-                        )
                         logger.warning(f"Could not find the test for file name - {test_class_path} ")
                         continue
                 else:
@@ -782,15 +767,11 @@ def parse_test_xml(
                 logger.warning(f"Could not find the test for file name - {test_file_path} ")
                 continue
             # Try to match by instrumented file path first (for generated/instrumented tests)
-            logger.debug(f"[PARSE-XML] Looking up test_type by instrumented_file_path: {test_file_path}")
             test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
-            logger.debug(f"[PARSE-XML] Lookup by instrumented path result: {test_type}")
             if test_type is None:
                 # Fallback: try to match by original file path (for existing unit tests that were instrumented)
                 # JUnit XML may reference the original class name, resolving to the original file path
-                logger.debug(f"[PARSE-XML] Looking up test_type by original_file_path: {test_file_path}")
                 test_type = test_files.get_test_type_by_original_file_path(test_file_path)
-                logger.debug(f"[PARSE-XML] Lookup by original path result: {test_type}")
             if test_type is None:
                 # Log registered paths for debugging
                 registered_paths = [str(tf.instrumented_behavior_file_path) for tf in test_files.test_files]
