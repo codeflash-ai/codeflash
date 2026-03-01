@@ -10,7 +10,7 @@
  * Custom hooks that return unstable references are a common source of
  * unnecessary re-renders in components that consume them.
  */
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 
 interface FilterOptions<T> {
   searchField: keyof T;
@@ -43,44 +43,77 @@ export function useFilteredData<T extends Record<string, unknown>>(
   const [sortField, setSortField] = useState<keyof T>(options.sortField);
   const [sortDirection, setSortDirection] = useState(options.sortDirection);
 
-  // Inefficient: filter runs every call
-  const filteredItems = data.filter(item => {
-    if (!searchQuery) return true;
-    const fieldValue = String(item[options.searchField] || '');
-    return fieldValue.toLowerCase().includes(searchQuery.toLowerCase());
-  });
+  // Optimized: memoize lower-cased query to avoid repeated toLowerCase calls
+  const lowerQuery = useMemo(() => searchQuery.toLowerCase(), [searchQuery]);
 
-  // Inefficient: sort runs every call
-  const sortedItems = filteredItems.sort((a, b) => {
-    const aVal = a[sortField];
-    const bVal = b[sortField];
+  // Optimized: filter is memoized and implemented with a fast for-loop
+  const filteredItems = useMemo(() => {
+    // When there's no query we still return a new array (like data.filter would)
+    if (!lowerQuery) return data.slice();
+
+    const sf = options.searchField;
+    const result: T[] = [];
+    for (let i = 0, len = data.length; i < len; i++) {
+      const item = data[i];
+      const fieldValue = String(item[sf] || '');
+      if (fieldValue.toLowerCase().includes(lowerQuery)) {
+        result.push(item);
+      }
+    }
+    return result;
+  }, [data, lowerQuery, options.searchField]);
+
+  // Optimized: sort is memoized; we sort a shallow copy to avoid mutating shared arrays
+  const sortedItems = useMemo(() => {
+    const arr = filteredItems.slice();
     const dir = sortDirection === 'asc' ? 1 : -1;
+    const sf = sortField;
 
-    if (typeof aVal === 'string' && typeof bVal === 'string') {
-      return aVal.localeCompare(bVal) * dir;
-    }
-    if (typeof aVal === 'number' && typeof bVal === 'number') {
-      return (aVal - bVal) * dir;
-    }
-    return 0;
-  });
+    // Use a single comparator with simple type checks
+    arr.sort((a, b) => {
+      const aVal = a[sf];
+      const bVal = b[sf];
 
-  // Inefficient: function recreated every call
-  const toggleSortDirection = () => {
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        return (aVal as string).localeCompare(bVal as string) * dir;
+      }
+      if (typeof aVal === 'number' && typeof bVal === 'number') {
+        return ((aVal as number) - (bVal as number)) * dir;
+      }
+      return 0;
+    });
+
+    return arr;
+  }, [filteredItems, sortField, sortDirection]);
+
+  // Optimized: stable callback for toggling sort direction
+  const toggleSortDirection = useCallback(() => {
     setSortDirection(d => (d === 'asc' ? 'desc' : 'asc'));
-  };
+  }, []);
 
-  // Inefficient: returns new object reference every call
-  return {
-    filteredItems: sortedItems,
-    searchQuery,
-    setSearchQuery,
-    sortField,
-    sortDirection,
-    setSortField,
-    toggleSortDirection,
-    totalCount: data.length,
-    filteredCount: sortedItems.length,
-    isEmpty: sortedItems.length === 0,
-  };
+  // Optimized: memoize returned object to avoid creating a new reference each render
+  return useMemo<FilteredDataResult<T>>(
+    () => ({
+      filteredItems: sortedItems,
+      searchQuery,
+      setSearchQuery,
+      sortField,
+      sortDirection,
+      setSortField,
+      toggleSortDirection,
+      totalCount: data.length,
+      filteredCount: sortedItems.length,
+      isEmpty: sortedItems.length === 0,
+    }),
+    [
+      sortedItems,
+      searchQuery,
+      setSearchQuery,
+      sortField,
+      sortDirection,
+      setSortField,
+      toggleSortDirection,
+      data.length,
+    ],
+  );
 }
