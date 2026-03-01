@@ -57,6 +57,15 @@ Optional Configuration:
 - `git-remote`: The git remote to use for pull requests. Defaults to `"origin"`.
 - `override-fixtures`: Override pytest fixtures during optimization. Defaults to `false`.
 
+### Overriding configuration from the CLI
+
+You can temporarily override `pyproject.toml` settings when running the CLI:
+
+- **`--config-file PATH`**: Use a different `pyproject.toml` file.
+- **`--module-root PATH`**: Override the configured `module-root`.
+- **`--tests-root PATH`**: Override the configured `tests-root`.
+- **`--benchmarks-root PATH`**: Override the configured `benchmarks-root` (also required when using `--benchmark` if it is not set here).
+
 ## Example Configuration
 
 Here's an example project with the following structure:
