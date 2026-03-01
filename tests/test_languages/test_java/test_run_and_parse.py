@@ -537,29 +537,28 @@ public class PreciseWaiterTest {
         )
 
         # Verify total_passed_runtime sums minimum runtime per test case
-        # InvocationId includes iteration_id, so each inner iteration is a separate "test case"
-        # With 2 inner iterations: 2 test cases (iteration_id=0 and iteration_id=1)
-        # total = min(outer loop runtimes for iter 0) + min(outer loop runtimes for iter 1) ≈ 20ms
+        # iteration_id is now constant (wrapper ID) across inner iterations,
+        # so all 4 runtimes (2 outer × 2 inner) group under 1 InvocationId key
         total_runtime = test_results.total_passed_runtime()
         runtime_by_test = test_results.usable_runtime_data_by_test_case()
 
-        # Should have 2 test cases (one per inner iteration)
-        assert len(runtime_by_test) == 2, (
-            f"Expected 2 test cases (iteration_id=0 and 1), got {len(runtime_by_test)}"
+        # Should have 1 test case (constant iteration_id per call site)
+        assert len(runtime_by_test) == 1, (
+            f"Expected 1 test case (constant iteration_id), got {len(runtime_by_test)}"
         )
 
-        # Each test case should have 2 runtimes (2 outer loops)
+        # The single test case should have 4 runtimes (2 outer loops × 2 inner iterations)
         for test_id, test_runtimes in runtime_by_test.items():
-            assert len(test_runtimes) == 2, (
-                f"Expected 2 runtimes (2 outer loops) for {test_id.iteration_id}, got {len(test_runtimes)}"
+            assert len(test_runtimes) == 4, (
+                f"Expected 4 runtimes (2 outer × 2 inner) for {test_id.iteration_id}, got {len(test_runtimes)}"
             )
 
-        # Total should be sum of 2 minimums (one per inner iteration) ≈ 20ms
+        # Total should be min of all runtimes ≈ 10ms
         # Minimums filter out JIT warmup, so use tighter ±3% tolerance
-        expected_total_ns = 2 * expected_ns
+        expected_total_ns = expected_ns
         assert expected_total_ns * 0.97 <= total_runtime <= expected_total_ns * 1.03, (
             f"total_passed_runtime {total_runtime / 1_000_000:.3f}ms not close to expected "
-            f"{expected_total_ns / 1_000_000:.1f}ms (2 inner iterations × 10ms each, ±3%)"
+            f"{expected_total_ns / 1_000_000:.1f}ms (min of 4 runtimes × 10ms each, ±3%)"
         )
 
     def test_performance_multiple_test_methods_inner_loop(self, java_project):
@@ -630,27 +629,27 @@ public class PreciseWaiterMultiTest {
         )
 
         # Verify total_passed_runtime sums minimum runtime per test case
-        # InvocationId includes iteration_id, so: 2 test methods × 2 inner iterations = 4 "test cases"
-        # total = sum of 4 minimums (each test method × inner iteration gets min of 2 outer loops) ≈ 40ms
+        # iteration_id is now constant (wrapper ID) per call site, so:
+        # 2 test methods = 2 InvocationId keys, each with 4 runtimes (2 outer × 2 inner)
         total_runtime = test_results.total_passed_runtime()
         runtime_by_test = test_results.usable_runtime_data_by_test_case()
 
-        # Should have 4 test cases (2 test methods × 2 inner iterations)
-        assert len(runtime_by_test) == 4, (
-            f"Expected 4 test cases (2 methods × 2 iterations), got {len(runtime_by_test)}"
+        # Should have 2 test cases (one per test method, constant iteration_id)
+        assert len(runtime_by_test) == 2, (
+            f"Expected 2 test cases (2 methods × constant iteration_id), got {len(runtime_by_test)}"
         )
 
-        # Each test case should have 2 runtimes (2 outer loops)
+        # Each test case should have 4 runtimes (2 outer loops × 2 inner iterations)
         for test_id, test_runtimes in runtime_by_test.items():
-            assert len(test_runtimes) == 2, (
-                f"Expected 2 runtimes (2 outer loops) for {test_id.test_function_name}:{test_id.iteration_id}, "
+            assert len(test_runtimes) == 4, (
+                f"Expected 4 runtimes (2 outer × 2 inner) for {test_id.test_function_name}:{test_id.iteration_id}, "
                 f"got {len(test_runtimes)}"
             )
 
-        # Total should be sum of 4 minimums ≈ 40ms
+        # Total should be sum of 2 minimums ≈ 20ms
         # Minimums filter out JIT warmup, so use tighter ±3% tolerance
-        expected_total_ns = 4 * expected_ns  # 4 test cases × 10ms each
+        expected_total_ns = 2 * expected_ns  # 2 test cases × 10ms each
         assert expected_total_ns * 0.97 <= total_runtime <= expected_total_ns * 1.03, (
             f"total_passed_runtime {total_runtime / 1_000_000:.3f}ms not close to expected "
-            f"{expected_total_ns / 1_000_000:.1f}ms (2 methods × 2 inner iterations × 10ms, ±3%)"
+            f"{expected_total_ns / 1_000_000:.1f}ms (2 methods × min of 4 runtimes × 10ms, ±3%)"
         )

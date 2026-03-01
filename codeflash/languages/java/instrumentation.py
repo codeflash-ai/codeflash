@@ -1073,7 +1073,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             timing_lines = [
                 f"{indent}for (int _cf_i{current_id} = 0; _cf_i{current_id} < _cf_innerIterations{current_id}; _cf_i{current_id}++) {{",
                 f"{inner_indent}int _cf_loopId{current_id} = _cf_outerLoop{current_id} * _cf_maxInnerIterations{current_id} + _cf_i{current_id};",
-                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":" + _cf_i{current_id} + "######$!");',
+                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":" + "{current_id}" + "######$!");',
                 f"{inner_indent}long _cf_end{current_id} = -1;",
                 f"{inner_indent}long _cf_start{current_id} = 0;",
                 f"{inner_indent}try {{",
@@ -1083,7 +1083,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 f"{inner_indent}}} finally {{",
                 f"{inner_body_indent}long _cf_end{current_id}_finally = System.nanoTime();",
                 f"{inner_body_indent}long _cf_dur{current_id} = (_cf_end{current_id} != -1 ? _cf_end{current_id} : _cf_end{current_id}_finally) - _cf_start{current_id};",
-                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":" + _cf_i{current_id} + ":" + _cf_dur{current_id} + "######!");',
+                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":" + "{current_id}" + ":" + _cf_dur{current_id} + "######!");',
                 f"{inner_indent}}}",
                 f"{indent}}}",
             ]
@@ -1140,7 +1140,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             timing_lines = [
                 f"{indent}for (int _cf_i{current_id} = 0; _cf_i{current_id} < _cf_innerIterations{current_id}; _cf_i{current_id}++) {{",
                 f"{inner_indent}int _cf_loopId{current_id} = _cf_outerLoop{current_id} * _cf_maxInnerIterations{current_id} + _cf_i{current_id};",
-                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":{current_id}_" + _cf_i{current_id} + "######$!");',
+                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":{current_id}" + "######$!");',
                 f"{inner_indent}long _cf_end{current_id} = -1;",
                 f"{inner_indent}long _cf_start{current_id} = 0;",
                 f"{inner_indent}try {{",
@@ -1150,7 +1150,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 f"{inner_indent}}} finally {{",
                 f"{inner_body_indent}long _cf_end{current_id}_finally = System.nanoTime();",
                 f"{inner_body_indent}long _cf_dur{current_id} = (_cf_end{current_id} != -1 ? _cf_end{current_id} : _cf_end{current_id}_finally) - _cf_start{current_id};",
-                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":{current_id}_" + _cf_i{current_id} + ":" + _cf_dur{current_id} + "######!");',
+                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":{current_id}" + ":" + _cf_dur{current_id} + "######!");',
                 f"{inner_indent}}}",
                 f"{indent}}}",
             ]
