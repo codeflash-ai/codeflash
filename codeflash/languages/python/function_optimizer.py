@@ -30,6 +30,7 @@ if TYPE_CHECKING:
         CodeOptimizationContext,
         CodeStringsMarkdown,
         ConcurrencyMetrics,
+        CoverageData,
         OriginalCodeBaseline,
         TestDiff,
     )
@@ -106,6 +107,13 @@ class PythonFunctionOptimizer(FunctionOptimizer):
     def should_skip_sqlite_cleanup(self, testing_type: TestingMode, optimization_iteration: int) -> bool:
         return False
 
+    def parse_line_profile_test_results(
+        self, line_profiler_output_file: Path | None
+    ) -> tuple[TestResults | dict, CoverageData | None]:
+        from codeflash.verification.parse_line_profile_test_output import parse_line_profile_results
+
+        return parse_line_profile_results(line_profiler_output_file=line_profiler_output_file)
+
     def compare_candidate_results(
         self,
         baseline_results: OriginalCodeBaseline,
@@ -130,7 +138,7 @@ class PythonFunctionOptimizer(FunctionOptimizer):
             revert_unused_helper_functions(self.project_root, unused_helpers, original_helper_code)
         return did_update
 
-    def _line_profiler_step_python(
+    def line_profiler_step(
         self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], candidate_index: int
     ) -> dict[str, Any]:
         candidate_fto_code = Path(self.function_to_optimize.file_path).read_text("utf-8")

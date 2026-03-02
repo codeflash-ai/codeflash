@@ -66,7 +66,6 @@ from codeflash.code_utils.shell_utils import make_env_with_project_root
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
 from codeflash.either import Failure, Success, is_successful
-from codeflash.languages import is_python
 from codeflash.languages.base import Language
 from codeflash.languages.current import current_language_support
 from codeflash.languages.javascript.test_runner import clear_created_config_files, get_created_config_files
@@ -109,7 +108,6 @@ from codeflash.result.explanation import Explanation
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
-from codeflash.verification.parse_line_profile_test_output import parse_line_profile_results
 from codeflash.verification.parse_test_output import parse_concurrency_metrics, parse_test_results
 from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests, run_line_profile_tests
 from codeflash.verification.verification_utils import get_test_file_path
@@ -546,6 +544,11 @@ class FunctionOptimizer:
 
     def should_skip_sqlite_cleanup(self, testing_type: TestingMode, optimization_iteration: int) -> bool:
         return testing_type == TestingMode.BEHAVIOR or optimization_iteration == 0
+
+    def parse_line_profile_test_results(
+        self, line_profiler_output_file: Path | None
+    ) -> tuple[TestResults | dict, CoverageData | None]:
+        return TestResults(test_results=[]), None
 
     # --- End hooks ---
 
@@ -2714,13 +2717,7 @@ class FunctionOptimizer:
             if testing_type == TestingMode.PERFORMANCE:
                 results.perf_stdout = run_result.stdout
             return results, coverage_results
-        # For LINE_PROFILE mode, Python uses .lprof files while JavaScript uses JSON
-        # Return TestResults for JavaScript so _line_profiler_step_javascript can parse the JSON
-        if not is_python():
-            # Return TestResults to indicate tests ran, actual parsing happens in _line_profiler_step_javascript
-            return TestResults(test_results=[]), None
-        results, coverage_results = parse_line_profile_results(line_profiler_output_file=line_profiler_output_file)
-        return results, coverage_results
+        return self.parse_line_profile_test_results(line_profiler_output_file)
 
     def submit_test_generation_tasks(
         self,
@@ -2778,10 +2775,6 @@ class FunctionOptimizer:
     def line_profiler_step(
         self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], candidate_index: int
     ) -> dict:
-        # Dispatch to language-specific implementation
-        if is_python():
-            return self._line_profiler_step_python(code_context, original_helper_code, candidate_index)
-
         if self.language_support is not None and hasattr(self.language_support, "instrument_source_for_line_profiler"):
             try:
                 line_profiler_output_path = get_run_tmp_file(Path("line_profiler_output.json"))
@@ -2821,11 +2814,6 @@ class FunctionOptimizer:
                 Path(self.function_to_optimize.file_path).write_text(original_source)
 
         logger.warning(f"Language support for {self.language_support.language} doesn't support line profiling")
-        return {"timings": {}, "unit": 0, "str_out": ""}
-
-    def _line_profiler_step_python(
-        self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], candidate_index: int
-    ) -> dict:
         return {"timings": {}, "unit": 0, "str_out": ""}
 
     def run_concurrency_benchmark(
