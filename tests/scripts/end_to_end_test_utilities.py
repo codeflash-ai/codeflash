@@ -222,7 +222,7 @@ def validate_output(stdout: str, return_code: int, expected_improvement_pct: int
             return False
 
     if config.expected_unit_test_files is not None:
-        # Match the per-function test discovery message from function_optimizer.py
+        # Match the per-function discovery message from function_optimizer.py
         # Format: "Discovered X existing unit test files, Y replay test files, and Z concolic..."
         unit_test_files_match = re.search(r"Discovered (\d+) existing unit test files?", stdout)
         if not unit_test_files_match:

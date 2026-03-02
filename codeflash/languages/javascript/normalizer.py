@@ -1,17 +1,52 @@
-"""JavaScript/TypeScript code normalizer using tree-sitter."""
+"""JavaScript/TypeScript code normalizer using tree-sitter.
+
+Not currently wired into JavaScriptSupport.normalize_code — kept as a
+ready-to-use upgrade path when AST-based JS deduplication is needed.
+
+The old CodeNormalizer ABC (deleted from base.py) is preserved below for reference.
+"""
 
 from __future__ import annotations
 
 import re
+from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
-
-from codeflash.code_utils.normalizers.base import CodeNormalizer
 
 if TYPE_CHECKING:
     from tree_sitter import Node
 
 
-# TODO:{claude} move to language support directory to keep the directory structure clean
+# ---------------------------------------------------------------------------
+# Reference: the old CodeNormalizer ABC that was deleted from base.py.
+# Kept here so the interface contract is visible if we re-introduce a
+# normalizer hierarchy later.
+# ---------------------------------------------------------------------------
+class CodeNormalizer(ABC):
+    @property
+    @abstractmethod
+    def language(self) -> str: ...
+
+    @abstractmethod
+    def normalize(self, code: str) -> str: ...
+
+    @abstractmethod
+    def normalize_for_hash(self, code: str) -> str: ...
+
+    def are_duplicates(self, code1: str, code2: str) -> bool:
+        try:
+            return self.normalize_for_hash(code1) == self.normalize_for_hash(code2)
+        except Exception:
+            return False
+
+    def get_fingerprint(self, code: str) -> str:
+        import hashlib
+
+        return hashlib.sha256(self.normalize_for_hash(code).encode()).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+
+
 class JavaScriptVariableNormalizer:
     """Normalizes JavaScript/TypeScript code for duplicate detection using tree-sitter.
 
@@ -188,103 +223,35 @@ class JavaScriptVariableNormalizer:
         parts.append(")")
 
 
-def _basic_normalize(code: str) -> str:
+def _basic_normalize_js(code: str) -> str:
     """Basic normalization: remove comments and normalize whitespace."""
-    # Remove single-line comments
     code = re.sub(r"//.*$", "", code, flags=re.MULTILINE)
-    # Remove multi-line comments
     code = re.sub(r"/\*.*?\*/", "", code, flags=re.DOTALL)
-    # Normalize whitespace
     return " ".join(code.split())
 
 
-class JavaScriptNormalizer(CodeNormalizer):
-    """JavaScript code normalizer using tree-sitter.
+def normalize_js_code(code: str, typescript: bool = False) -> str:
+    """Normalize JavaScript/TypeScript code to a canonical form for comparison.
 
-    Normalizes JavaScript code by:
-    - Replacing local variable names with canonical forms (var_0, var_1, etc.)
-    - Preserving function names, class names, parameters, and imports
-    - Removing comments
-    - Normalizing string and number literals
+    Uses tree-sitter to parse and normalize variable names. Falls back to
+    basic comment/whitespace stripping if tree-sitter is unavailable or parsing fails.
+
+    Not currently wired into JavaScriptSupport.normalize_code — kept as a
+    ready-to-use upgrade path when AST-based JS deduplication is needed.
     """
+    try:
+        from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage
 
-    @property
-    def language(self) -> str:
-        """Return the language this normalizer handles."""
-        return "javascript"
+        lang = TreeSitterLanguage.TYPESCRIPT if typescript else TreeSitterLanguage.JAVASCRIPT
+        analyzer = TreeSitterAnalyzer(lang)
+        tree = analyzer.parse(code)
 
-    @property
-    def supported_extensions(self) -> tuple[str, ...]:
-        """Return file extensions this normalizer can handle."""
-        return (".js", ".jsx", ".mjs", ".cjs")
+        if tree.root_node.has_error:
+            return _basic_normalize_js(code)
 
-    def _get_tree_sitter_language(self) -> str:
-        """Get the tree-sitter language identifier."""
-        return "javascript"
-
-    def normalize(self, code: str) -> str:
-        """Normalize JavaScript code to a canonical form.
-
-        Args:
-            code: JavaScript source code to normalize
-
-        Returns:
-            Normalized representation of the code
-
-        """
-        try:
-            from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage
-
-            lang_map = {"javascript": TreeSitterLanguage.JAVASCRIPT, "typescript": TreeSitterLanguage.TYPESCRIPT}
-            lang = lang_map.get(self._get_tree_sitter_language(), TreeSitterLanguage.JAVASCRIPT)
-            analyzer = TreeSitterAnalyzer(lang)
-            tree = analyzer.parse(code)
-
-            if tree.root_node.has_error:
-                return _basic_normalize(code)
-
-            normalizer = JavaScriptVariableNormalizer()
-            source_bytes = code.encode("utf-8")
-
-            # First pass: collect preserved names
-            normalizer.collect_preserved_names(tree.root_node, source_bytes)
-
-            # Second pass: normalize and build representation
-            return normalizer.normalize_tree(tree.root_node, source_bytes)
-        except Exception:
-            return _basic_normalize(code)
-
-    def normalize_for_hash(self, code: str) -> str:
-        """Normalize JavaScript code optimized for hashing.
-
-        For JavaScript, this is the same as normalize().
-
-        Args:
-            code: JavaScript source code to normalize
-
-        Returns:
-            Normalized representation suitable for hashing
-
-        """
-        return self.normalize(code)
-
-
-class TypeScriptNormalizer(JavaScriptNormalizer):
-    """TypeScript code normalizer using tree-sitter.
-
-    Inherits from JavaScriptNormalizer and overrides language-specific settings.
-    """
-
-    @property
-    def language(self) -> str:
-        """Return the language this normalizer handles."""
-        return "typescript"
-
-    @property
-    def supported_extensions(self) -> tuple[str, ...]:
-        """Return file extensions this normalizer can handle."""
-        return (".ts", ".tsx", ".mts", ".cts")
-
-    def _get_tree_sitter_language(self) -> str:
-        """Get the tree-sitter language identifier."""
-        return "typescript"
+        normalizer = JavaScriptVariableNormalizer()
+        source_bytes = code.encode("utf-8")
+        normalizer.collect_preserved_names(tree.root_node, source_bytes)
+        return normalizer.normalize_tree(tree.root_node, source_bytes)
+    except Exception:
+        return _basic_normalize_js(code)

@@ -5,7 +5,7 @@ from tempfile import TemporaryDirectory
 from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports, contains_jit_decorator
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodeOptimizationContext
-from codeflash.optimization.function_optimizer import FunctionOptimizer
+from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
 
@@ -22,7 +22,7 @@ def test_add_decorator_imports_helper_in_class():
         pytest_cmd="pytest",
     )
     func = FunctionToOptimize(function_name="sort_classmethod", parents=[], file_path=code_path)
-    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     os.chdir(run_cwd)
     # func_optimizer = pass
     try:
@@ -94,7 +94,7 @@ def test_add_decorator_imports_helper_in_nested_class():
         pytest_cmd="pytest",
     )
     func = FunctionToOptimize(function_name="sort_classmethod", parents=[], file_path=code_path)
-    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     os.chdir(run_cwd)
     # func_optimizer = pass
     try:
@@ -143,7 +143,7 @@ def test_add_decorator_imports_nodeps():
         pytest_cmd="pytest",
     )
     func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
-    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     os.chdir(run_cwd)
     # func_optimizer = pass
     try:
@@ -194,7 +194,7 @@ def test_add_decorator_imports_helper_outside():
         pytest_cmd="pytest",
     )
     func = FunctionToOptimize(function_name="sorter_deps", parents=[], file_path=code_path)
-    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     os.chdir(run_cwd)
     # func_optimizer = pass
     try:
@@ -271,7 +271,7 @@ class helper:
         pytest_cmd="pytest",
     )
     func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_write_path)
-    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     os.chdir(run_cwd)
     # func_optimizer = pass
     try:

@@ -11,7 +11,7 @@ Usage:
     lang = get_language_support(Path("example.py"))
 
     # Discover functions
-    functions = lang.discover_functions(file_path)
+    functions = lang.discover_functions(source, file_path)
 
     # Replace a function
     new_source = lang.replace_function(file_path, function, new_code)
@@ -80,6 +80,10 @@ def __getattr__(name: str):
         from codeflash.languages.python.support import PythonSupport
 
         return PythonSupport
+    if name == "JavaSupport":
+        from codeflash.languages.java.support import JavaSupport
+
+        return JavaSupport
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)
 
