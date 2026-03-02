@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 
 _MAX_CACHE_SIZE = 128
 
-_resolve_cache: OrderedDict[tuple[str, str, tuple[tuple[str, str], ...]], ast.AST | None] = OrderedDict()
+_resolve_cache: OrderedDict[tuple[str, str, tuple[tuple[str, str], ...]], ast.FunctionDef | ast.AsyncFunctionDef | None] = OrderedDict()
 
 
 class PythonFunctionOptimizer(FunctionOptimizer):
