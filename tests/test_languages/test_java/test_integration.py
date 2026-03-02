@@ -6,17 +6,11 @@ import pytest
 
 from codeflash.languages.base import FunctionFilterCriteria, Language
 from codeflash.languages.java import (
-    JavaSupport,
-    detect_build_tool,
     detect_java_project,
     discover_functions,
     discover_functions_from_source,
     discover_test_methods,
-    discover_tests,
     extract_code_context,
-    find_helper_functions,
-    find_test_root,
-    format_java_code,
     get_java_analyzer,
     get_java_support,
     is_java_project,
@@ -63,7 +57,8 @@ class TestEndToEndWorkflow:
         # Discover functions in each file
         all_functions = []
         for java_file in java_files:
-            functions = discover_functions(java_file)
+            source = java_file.read_text(encoding="utf-8")
+            functions = discover_functions(source, java_file)
             all_functions.extend(functions)
 
         assert len(all_functions) > 0
@@ -96,7 +91,8 @@ class TestEndToEndWorkflow:
             pytest.skip("Calculator.java not found")
 
         # Discover a function
-        functions = discover_functions(calculator_file)
+        source = calculator_file.read_text(encoding="utf-8")
+        functions = discover_functions(source, calculator_file)
         assert len(functions) > 0
 
         # Extract context for the first function
@@ -196,7 +192,8 @@ public class StringUtilsTest {
 """)
 
         # 1. Discover functions
-        functions = support.discover_functions(src_file)
+        source = src_file.read_text(encoding="utf-8")
+        functions = support.discover_functions(source, src_file)
         assert len(functions) == 1
         assert functions[0].function_name == "reverse"
 

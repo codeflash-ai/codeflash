@@ -436,7 +436,7 @@ public class PreciseWaiterTest {
         (src_dir / "PreciseWaiter.java").write_text(PRECISE_WAITER_JAVA, encoding="utf-8")
         return project_root, src_dir, test_dir
 
-    def _instrument_and_run(self, project_root, src_dir, test_dir, test_source, test_filename, inner_iterations=2):
+    def _instrument_and_run(self, project_root, src_dir, test_dir, test_source, test_filename):
         """Instrument a performance test and run it, returning test_results."""
         test_file = test_dir / test_filename
         test_file.write_text(test_source, encoding="utf-8")
@@ -482,7 +482,6 @@ public class PreciseWaiterTest {
             optimization_iteration=0,
             pytest_min_loops=2,
             pytest_max_loops=2,
-            inner_iterations=inner_iterations,
             testing_time=0.0,
         )
         return test_results
@@ -498,7 +497,6 @@ public class PreciseWaiterTest {
             test_dir,
             self.PRECISE_WAITER_TEST,
             "PreciseWaiterTest.java",
-            inner_iterations=2,
         )
 
         # 2 outer loops × 2 inner iterations = 4 total results
@@ -590,7 +588,6 @@ public class PreciseWaiterMultiTest {
             test_dir,
             multi_test_source,
             "PreciseWaiterMultiTest.java",
-            inner_iterations=2,
         )
 
         # 2 test methods × 2 outer loops × 2 inner iterations = 8 total results

@@ -90,7 +90,7 @@ def replace_function_definitions_for_language(
         optimized_code=code_to_apply, original_source=original_source_code, module_abspath=module_abspath
     )
 
-    language = Language(function_to_optimize.language) if function_to_optimize else None
+    language = lang_support.language
 
     if (
         function_to_optimize
