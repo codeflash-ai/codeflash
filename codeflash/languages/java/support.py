@@ -191,6 +191,9 @@ class JavaSupport(LanguageSupport):
             original_source, orig_class.name, new_fields, helpers_before, helpers_after, target_method_name, analyzer
         )
 
+    def adjust_test_config_for_discovery(self, test_cfg: Any) -> None:
+        test_cfg.tests_project_rootdir = test_cfg.tests_root
+
     # === Discovery ===
 
     def discover_functions(

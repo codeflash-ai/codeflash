@@ -35,8 +35,7 @@ def test_java_tests_project_rootdir_set_to_tests_root(tmp_path):
     # Set the current language to Java so protocol dispatch works
     set_current_language("java")
 
-    with patch("codeflash.discovery.discover_unit_tests.is_python", return_value=False), \
-         patch("codeflash.discovery.discover_unit_tests.discover_tests_for_language") as mock_discover:
+    with patch("codeflash.discovery.discover_unit_tests.discover_tests_for_language") as mock_discover:
         mock_discover.return_value = ({}, 0, 0)
 
         # Call discover_unit_tests
@@ -44,8 +43,7 @@ def test_java_tests_project_rootdir_set_to_tests_root(tmp_path):
 
     # Verify that tests_project_rootdir was updated to tests_root
     assert test_cfg.tests_project_rootdir == tests_root, (
-        f"Expected tests_project_rootdir to be {tests_root}, "
-        f"but got {test_cfg.tests_project_rootdir}"
+        f"Expected tests_project_rootdir to be {tests_root}, but got {test_cfg.tests_project_rootdir}"
     )
 
 
@@ -65,9 +63,7 @@ def test_python_tests_project_rootdir_unchanged(tmp_path):
     # Create test config
     original_tests_project_rootdir = project_root / "some" / "other" / "dir"
     test_cfg = TestConfig(
-        tests_root=tests_root,
-        project_root_path=project_root,
-        tests_project_rootdir=original_tests_project_rootdir,
+        tests_root=tests_root, project_root_path=project_root, tests_project_rootdir=original_tests_project_rootdir
     )
 
     # Mock pytest discovery
