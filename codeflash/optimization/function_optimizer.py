@@ -1596,24 +1596,27 @@ class FunctionOptimizer:
 
         for (test_file, test_type), tests_in_file_list in test_file_invocation_positions.items():
             path_obj_test_file = Path(test_file)
+            test_string = path_obj_test_file.read_text(encoding="utf-8")
             # Use language-specific instrumentation
             success, injected_behavior_test = self.language_support.instrument_existing_test(
-                test_path=path_obj_test_file,
+                test_string=test_string,
                 call_positions=[test.position for test in tests_in_file_list],
                 function_to_optimize=self.function_to_optimize,
                 tests_project_root=self.test_cfg.tests_project_rootdir,
                 mode="behavior",
+                test_path=path_obj_test_file,
             )
             if not success:
                 logger.debug(f"Failed to instrument test file {test_file} for behavior testing")
                 continue
 
             success, injected_perf_test = self.language_support.instrument_existing_test(
-                test_path=path_obj_test_file,
+                test_string=test_string,
                 call_positions=[test.position for test in tests_in_file_list],
                 function_to_optimize=self.function_to_optimize,
                 tests_project_root=self.test_cfg.tests_project_rootdir,
                 mode="performance",
+                test_path=path_obj_test_file,
             )
             if not success:
                 logger.debug(f"Failed to instrument test file {test_file} for performance testing")
