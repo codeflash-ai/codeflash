@@ -69,13 +69,12 @@ def _extract_test_method_name(method_lines: list[str]) -> str:
         for mod in ("public ", "private ", "protected "):
             idx = s.find(mod)
             if idx != -1:
-                sub = s[idx:]
-                paren = sub.find("(")
+                paren = s.find("(", idx)
                 if paren != -1:
-                    left = sub[:paren].strip()
-                    parts = left.split()
-                    if parts:
-                        candidate = parts[-1]
+                    left = s[idx:paren].strip()
+                    if left:
+                        # Use rsplit to obtain the last whitespace-separated token without building the full list
+                        candidate = left.rsplit(None, 1)[-1]
                         if _WORD_RE.match(candidate):
                             return candidate
                 break  # if modifier was found but fast-path failed, avoid trying other modifiers
@@ -85,13 +84,13 @@ def _extract_test_method_name(method_lines: list[str]) -> str:
         for typ in ("void ", "String ", "int ", "long ", "boolean ", "double ", "float ", "char ", "byte ", "short "):
             idx = s.find(typ)
             if idx != -1:
-                sub = s[idx + len(typ) :]  # start after the type token
-                paren = sub.find("(")
+                start = idx + len(typ)  # start after the type token
+                paren = s.find("(", start)
                 if paren != -1:
-                    left = sub[:paren].strip()
-                    parts = left.split()
-                    if parts:
-                        candidate = parts[-1]
+                    left = s[start:paren].strip()
+                    if left:
+                        # Use rsplit to obtain the last whitespace-separated token without building the full list
+                        candidate = left.rsplit(None, 1)[-1]
                         if _WORD_RE.match(candidate):
                             return candidate
                 break  # stop after first matching type token
