@@ -765,13 +765,16 @@ class FunctionOptimizer:
 
         optimizations_set, function_references = optimization_result.unwrap()
 
+        precomputed_behavioral: tuple[TestResults, CoverageData | None] | None = None
         if generated_tests.generated_tests:
             review_result = self.review_and_repair_tests(
                 generated_tests=generated_tests, code_context=code_context, original_helper_code=original_helper_code
             )
             if not is_successful(review_result):
                 return Failure(review_result.failure())
-            generated_tests = review_result.unwrap()
+            generated_tests, review_behavioral, review_coverage = review_result.unwrap()
+            if review_behavioral is not None:
+                precomputed_behavioral = (review_behavioral, review_coverage)
 
         # Full baseline (behavioral + benchmarking) runs once on the final approved tests
         baseline_setup_result = self.setup_and_establish_baseline(
@@ -782,6 +785,7 @@ class FunctionOptimizer:
             generated_perf_test_paths=generated_perf_test_paths,
             instrumented_unittests_created_for_function=instrumented_unittests_created_for_function,
             original_conftest_content=original_conftest_content,
+            precomputed_behavioral=precomputed_behavioral,
         )
 
         if not is_successful(baseline_setup_result):
@@ -1838,6 +1842,7 @@ class FunctionOptimizer:
         generated_perf_test_paths: list[Path],
         instrumented_unittests_created_for_function: set[Path],
         original_conftest_content: str | None,
+        precomputed_behavioral: tuple[TestResults, CoverageData | None] | None = None,
     ) -> Result[
         tuple[str, dict[str, set[FunctionCalledInTest]], OriginalCodeBaseline, list[str], dict[Path, set[str]]], str
     ]:
@@ -1854,6 +1859,7 @@ class FunctionOptimizer:
             code_context=code_context,
             original_helper_code=original_helper_code,
             file_path_to_helper_classes=file_path_to_helper_classes,
+            precomputed_behavioral=precomputed_behavioral,
         )
 
         console.rule()
@@ -1905,20 +1911,20 @@ class FunctionOptimizer:
         code_context: CodeOptimizationContext,
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
-    ) -> TestResults | None:
-        """Run behavioral tests only. Returns results or None if no tests ran."""
+    ) -> tuple[TestResults, CoverageData | None] | None:
+        """Run behavioral tests only. Returns (results, coverage) or None if no tests ran."""
         test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
         if self.function_to_optimize.is_async:
             self.instrument_async_for_mode(TestingMode.BEHAVIOR)
         try:
             self.instrument_capture(file_path_to_helper_classes)
-            behavioral_results, _ = self.run_and_parse_tests(
+            behavioral_results, coverage_results = self.run_and_parse_tests(
                 testing_type=TestingMode.BEHAVIOR,
                 test_env=test_env,
                 test_files=self.test_files,
                 optimization_iteration=0,
                 testing_time=TOTAL_LOOPING_TIME_EFFECTIVE,
-                enable_coverage=False,
+                enable_coverage=True,
                 code_context=code_context,
             )
         finally:
@@ -1926,7 +1932,7 @@ class FunctionOptimizer:
                 self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
             )
         if isinstance(behavioral_results, TestResults) and behavioral_results:
-            return behavioral_results
+            return behavioral_results, coverage_results
         return None
 
     def review_and_repair_tests(
@@ -1934,22 +1940,28 @@ class FunctionOptimizer:
         generated_tests: GeneratedTestsList,
         code_context: CodeOptimizationContext,
         original_helper_code: dict[Path, str],
-    ) -> Result[GeneratedTestsList, str]:
+    ) -> Result[tuple[GeneratedTestsList, TestResults | None, CoverageData | None], str]:
         """Run behavioral tests, review quality per-function, repair flagged functions.
 
         Flow (up to MAX_TEST_REPAIR_CYCLES):
           behavioral → collect failures → AI review passing functions → repair flagged → loop
         No benchmarking runs here — only behavioral validation.
+
+        Returns (generated_tests, behavioral_results, coverage) where behavioral/coverage are
+        non-None when the last cycle passed with no repairs (results can be reused by baseline).
         """
         file_path_to_helper_classes = self.build_helper_classes_map(code_context)
+        behavioral_results: TestResults | None = None
+        coverage_results: CoverageData | None = None
         for cycle in range(MAX_TEST_REPAIR_CYCLES):
-            # 1. Run behavioral tests
+            # 1. Run behavioral tests (with coverage so results can be reused by baseline)
             with progress_bar("Validating generated test quality..."):
-                behavioral_results = self.run_behavioral_validation(
+                validation = self.run_behavioral_validation(
                     code_context, original_helper_code, file_path_to_helper_classes
                 )
-            if behavioral_results is None:
+            if validation is None:
                 return Failure("Generated tests failed behavioral validation.")
+            behavioral_results, coverage_results = validation
 
             # 2. Collect per-function failures grouped by behavior file path
             failed_by_file: dict[Path, list[str]] = defaultdict(list)
@@ -1987,7 +1999,9 @@ class FunctionOptimizer:
 
             if not all_to_repair:
                 console.print(Panel("[green]All generated tests passed quality review[/green]", border_style="green"))
-                break
+                # No repairs needed — behavioral results and coverage are valid for baseline reuse
+                console.rule()
+                return Success((generated_tests, behavioral_results, coverage_results))
 
             # Display review findings
             issues_tree = Tree("[bold]Quality issues found[/bold]")
@@ -2047,9 +2061,12 @@ class FunctionOptimizer:
 
             if any_repaired:
                 console.print(f"  [green]Repaired {total_issues} test function(s)[/green]")
+                # Invalidate cached results — repaired code needs fresh behavioral run
+                behavioral_results = None
+                coverage_results = None
 
         console.rule()
-        return Success(generated_tests)
+        return Success((generated_tests, behavioral_results, coverage_results))
 
     def find_and_process_best_optimization(
         self,
@@ -2435,6 +2452,7 @@ class FunctionOptimizer:
         code_context: CodeOptimizationContext,
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
+        precomputed_behavioral: tuple[TestResults, CoverageData | None] | None = None,
     ) -> Result[tuple[OriginalCodeBaseline, list[str]], str]:
         line_profile_results = {"timings": {}, "unit": 0, "str_out": ""}
         # For the original function - run the tests and get the runtime, plus coverage
@@ -2442,34 +2460,37 @@ class FunctionOptimizer:
 
         test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
 
-        if self.function_to_optimize.is_async:
-            self.instrument_async_for_mode(TestingMode.BEHAVIOR)
+        if precomputed_behavioral is not None:
+            # Reuse behavioral results from the review cycle (no repairs were needed)
+            behavioral_results, coverage_results = precomputed_behavioral
+            logger.debug("[PIPELINE] Reusing behavioral results from test review cycle (no repairs were made)")
+        else:
+            if self.function_to_optimize.is_async:
+                self.instrument_async_for_mode(TestingMode.BEHAVIOR)
 
-        # Instrument codeflash capture
-        with progress_bar("Running tests to establish original code behavior..."):
-            try:
-                self.instrument_capture(file_path_to_helper_classes)
-
-                total_looping_time = TOTAL_LOOPING_TIME_EFFECTIVE
-                logger.debug(f"[PIPELINE] Establishing baseline with {len(self.test_files)} test files")
-                for idx, tf in enumerate(self.test_files):
-                    logger.debug(
-                        f"[PIPELINE] Test file {idx}: behavior={tf.instrumented_behavior_file_path}, perf={tf.benchmarking_file_path}"
+            # Instrument codeflash capture
+            with progress_bar("Running tests to establish original code behavior..."):
+                try:
+                    self.instrument_capture(file_path_to_helper_classes)
+                    logger.debug(f"[PIPELINE] Establishing baseline with {len(self.test_files)} test files")
+                    for idx, tf in enumerate(self.test_files):
+                        logger.debug(
+                            f"[PIPELINE] Test file {idx}: behavior={tf.instrumented_behavior_file_path}, perf={tf.benchmarking_file_path}"
+                        )
+                    behavioral_results, coverage_results = self.run_and_parse_tests(
+                        testing_type=TestingMode.BEHAVIOR,
+                        test_env=test_env,
+                        test_files=self.test_files,
+                        optimization_iteration=0,
+                        testing_time=TOTAL_LOOPING_TIME_EFFECTIVE,
+                        enable_coverage=True,
+                        code_context=code_context,
                     )
-                behavioral_results, coverage_results = self.run_and_parse_tests(
-                    testing_type=TestingMode.BEHAVIOR,
-                    test_env=test_env,
-                    test_files=self.test_files,
-                    optimization_iteration=0,
-                    testing_time=total_looping_time,
-                    enable_coverage=True,
-                    code_context=code_context,
-                )
-            finally:
-                # Remove codeflash capture
-                self.write_code_and_helpers(
-                    self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
-                )
+                finally:
+                    # Remove codeflash capture
+                    self.write_code_and_helpers(
+                        self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+                    )
         if not behavioral_results:
             logger.warning(
                 f"force_lsp|Couldn't run any tests for original function {self.function_to_optimize.function_name}. Skipping optimization."
@@ -2507,7 +2528,7 @@ class FunctionOptimizer:
                     test_env=test_env,
                     test_files=self.test_files,
                     optimization_iteration=0,
-                    testing_time=total_looping_time,
+                    testing_time=TOTAL_LOOPING_TIME_EFFECTIVE,
                     enable_coverage=False,
                     code_context=code_context,
                 )
@@ -2660,14 +2681,12 @@ class FunctionOptimizer:
 
             try:
                 self.instrument_capture(file_path_to_helper_classes)
-
-                total_looping_time = TOTAL_LOOPING_TIME_EFFECTIVE
                 candidate_behavior_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.BEHAVIOR,
                     test_env=test_env,
                     test_files=self.test_files,
                     optimization_iteration=optimization_candidate_index,
-                    testing_time=total_looping_time,
+                    testing_time=TOTAL_LOOPING_TIME_EFFECTIVE,
                     enable_coverage=False,
                 )
             finally:
@@ -2707,7 +2726,7 @@ class FunctionOptimizer:
                     test_env=test_env,
                     test_files=self.test_files,
                     optimization_iteration=optimization_candidate_index,
-                    testing_time=total_looping_time,
+                    testing_time=TOTAL_LOOPING_TIME_EFFECTIVE,
                     enable_coverage=False,
                 )
             finally:
