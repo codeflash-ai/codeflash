@@ -574,10 +574,10 @@ class PythonSupport:
             return False
 
     def normalize_code(self, source: str) -> str:
-        from codeflash.code_utils.normalizers import get_normalizer
+        from codeflash.languages.python.normalizer import normalize_python_code
 
         try:
-            return get_normalizer("python").normalize(source, remove_docstrings=True)
+            return normalize_python_code(source, remove_docstrings=True)
         except Exception:
             return source
 
