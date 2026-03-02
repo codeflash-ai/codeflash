@@ -19,6 +19,7 @@ from codeflash.languages.python.static_analysis.code_replacer import (
 from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports, contains_jit_decorator
 from codeflash.models.models import TestingMode, TestResults
 from codeflash.optimization.function_optimizer import FunctionOptimizer
+from functools import lru_cache
 
 if TYPE_CHECKING:
     from codeflash.languages.base import Language
@@ -29,7 +30,7 @@ class PythonFunctionOptimizer(FunctionOptimizer):
     def _resolve_function_ast(
         self, source_code: str, function_name: str, parents: list
     ) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
-        original_module_ast = ast.parse(source_code)
+        original_module_ast = _parse_module_cached(source_code)
         return resolve_python_function_ast(function_name, parents, original_module_ast)
 
     def analyze_code_characteristics(self, code_context: CodeOptimizationContext) -> None:
@@ -116,3 +117,16 @@ class PythonFunctionOptimizer(FunctionOptimizer):
                 f"Couldn't run line profiler for original function {self.function_to_optimize.function_name}"
             )
         return line_profile_results
+
+
+
+@lru_cache(maxsize=128)
+def _parse_module_cached(source_code: str) -> ast.Module:
+    # Cache parsed ASTs for identical source strings to avoid repeated parsing overhead.
+    return ast.parse(source_code)
+
+
+@lru_cache(maxsize=128)
+def _parse_module_cached(source_code: str) -> ast.Module:
+    # Cache parsed ASTs for identical source strings to avoid repeated parsing overhead.
+    return ast.parse(source_code)
