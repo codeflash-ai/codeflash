@@ -474,6 +474,7 @@ public class PreciseWaiterTest {
 
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
+        test_env["CODEFLASH_INNER_ITERATIONS"] = "2"
 
         test_results, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,

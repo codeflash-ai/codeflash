@@ -630,6 +630,25 @@ def parse_test_xml(
         return test_results
     # Always use tests_project_rootdir since pytest is now the test runner for all frameworks
     base_dir = test_config.tests_project_rootdir
+
+    # For Java: pre-parse fallback stdout once (not per testcase) to avoid O(n^2) complexity
+    # Maven/Surefire doesn't always capture per-test stdout in JUnit XML system-out
+    java_fallback_stdout = None
+    java_fallback_begin_matches = None
+    java_fallback_end_matches = None
+    if is_java() and run_result is not None:
+        try:
+            fallback_stdout = run_result.stdout if isinstance(run_result.stdout, str) else run_result.stdout.decode()
+            _begin = list(start_pattern.finditer(fallback_stdout))
+            if _begin:
+                java_fallback_stdout = fallback_stdout
+                java_fallback_begin_matches = _begin
+                java_fallback_end_matches = {}
+                for _m in end_pattern.finditer(fallback_stdout):
+                    java_fallback_end_matches[_m.groups()[:5]] = _m
+        except Exception:
+            pass
+
     for suite in xml:
         for testcase in suite:
             class_name = testcase.classname
@@ -688,6 +707,10 @@ def parse_test_xml(
                 continue
             test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
             if test_type is None:
+                # Fallback: try to match by original file path (for existing unit tests that were instrumented)
+                # JUnit XML may reference the original class name, resolving to the original file path
+                test_type = test_files.get_test_type_by_original_file_path(test_file_path)
+            if test_type is None:
                 # Log registered paths for debugging
                 registered_paths = [str(tf.instrumented_behavior_file_path) for tf in test_files.test_files]
                 logger.warning(
@@ -712,16 +735,30 @@ def parse_test_xml(
                     timed_out = True
 
             sys_stdout = testcase.system_out or ""
-            begin_matches = list(matches_re_start.finditer(sys_stdout))
-            end_matches = {}
-            for match in matches_re_end.finditer(sys_stdout):
-                groups = match.groups()
-                if len(groups[5].split(":")) > 1:
-                    iteration_id = groups[5].split(":")[0]
-                    groups = (*groups[:5], iteration_id)
-                end_matches[groups] = match
 
-            if not begin_matches or not begin_matches:
+            # Use different patterns for Java (5-field) vs Python (6-field)
+            if is_java():
+                begin_matches = list(start_pattern.finditer(sys_stdout))
+                end_matches = {}
+                for match in end_pattern.finditer(sys_stdout):
+                    end_matches[match.groups()[:5]] = match
+
+                # Fallback to subprocess stdout when JUnit XML system-out has no markers
+                if not begin_matches and java_fallback_begin_matches is not None:
+                    sys_stdout = java_fallback_stdout
+                    begin_matches = java_fallback_begin_matches
+                    end_matches = java_fallback_end_matches
+            else:
+                begin_matches = list(matches_re_start.finditer(sys_stdout))
+                end_matches = {}
+                for match in matches_re_end.finditer(sys_stdout):
+                    groups = match.groups()
+                    if len(groups[5].split(":")) > 1:
+                        iteration_id = groups[5].split(":")[0]
+                        groups = (*groups[:5], iteration_id)
+                    end_matches[groups] = match
+
+            if not begin_matches:
                 test_results.add(
                     FunctionTestInvocation(
                         loop_index=loop_index,
@@ -746,8 +783,56 @@ def parse_test_xml(
             else:
                 for match_index, match in enumerate(begin_matches):
                     groups = match.groups()
+                    runtime = None
+
+                    if is_java():
+                        # Java: 5 groups (module, class.test, func, loop, iter)
+                        end_key = groups[:5]
+                        end_match = end_matches.get(end_key)
+                        iteration_id = groups[4]
+                        loop_idx = int(groups[3])
+                        test_module = groups[0]
+                        class_test_field = groups[1]
+                        if "." in class_test_field:
+                            test_class_str, test_func = class_test_field.rsplit(".", 1)
+                        else:
+                            test_class_str = class_test_field
+                            test_func = test_function
+                        func_getting_tested = groups[2]
+
+                        if end_match:
+                            stdout = sys_stdout[match.end() : end_match.start()]
+                            runtime = int(end_match.groups()[5])
+                        elif match_index == len(begin_matches) - 1:
+                            stdout = sys_stdout[match.end() :]
+                        else:
+                            stdout = sys_stdout[match.end() : begin_matches[match_index + 1].start()]
+
+                        test_results.add(
+                            FunctionTestInvocation(
+                                loop_index=loop_idx,
+                                id=InvocationId(
+                                    test_module_path=test_module,
+                                    test_class_name=test_class_str,
+                                    test_function_name=test_func,
+                                    function_getting_tested=func_getting_tested,
+                                    iteration_id=iteration_id,
+                                ),
+                                file_name=test_file_path,
+                                runtime=runtime,
+                                test_framework=test_config.test_framework,
+                                did_pass=result,
+                                test_type=test_type,
+                                return_value=None,
+                                timed_out=timed_out,
+                                stdout=stdout,
+                            )
+                        )
+                        continue
+
+                    # Python: 6 groups (module, class_prefix., test_func, func, loop, iter_or_iter:duration)
                     end_match = end_matches.get(groups)
-                    iteration_id, runtime = groups[5], None
+                    iteration_id = groups[5]
                     if end_match:
                         stdout = sys_stdout[match.end() : end_match.start()]
                         split_val = end_match.groups()[5].split(":")
