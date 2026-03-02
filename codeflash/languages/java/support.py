@@ -33,6 +33,7 @@ from codeflash.languages.java.test_runner import (
     run_tests,
 )
 from codeflash.languages.registry import register_language
+from codeflash.models.models import ValidCode
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -193,6 +194,14 @@ class JavaSupport(LanguageSupport):
 
     def adjust_test_config_for_discovery(self, test_cfg: Any) -> None:
         test_cfg.tests_project_rootdir = test_cfg.tests_root
+
+    def prepare_module(
+        self, module_code: str, module_path: Path, project_root: Path
+    ) -> tuple[dict[Path, ValidCode], None]:
+        validated_original_code: dict[Path, ValidCode] = {
+            module_path: ValidCode(source_code=module_code, normalized_code=module_code)
+        }
+        return validated_original_code, None
 
     # === Discovery ===
 
