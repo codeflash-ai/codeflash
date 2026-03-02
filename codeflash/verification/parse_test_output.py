@@ -1203,6 +1203,7 @@ def parse_test_results(
     coverage = None
     if coverage_database_file and source_file and code_context and function_name:
         all_args = True
+        # TODO: restore Python/JS coverage loading via protocol dispatch when merging main
         if is_java():
             coverage = JacocoCoverageUtils.load_from_jacoco_xml(
                 jacoco_xml_path=coverage_database_file,
@@ -1210,7 +1211,8 @@ def parse_test_results(
                 code_context=code_context,
                 source_code_path=source_file,
             )
-        coverage.log_coverage()
+        if coverage is not None:
+            coverage.log_coverage()
     try:
         failures = parse_test_failures_from_stdout(run_result.stdout)
         results.test_failures = failures
