@@ -765,13 +765,13 @@ class FunctionOptimizer:
 
         optimizations_set, function_references = optimization_result.unwrap()
 
-        review_result = self.review_and_repair_tests(
-            generated_tests=generated_tests, code_context=code_context, original_helper_code=original_helper_code
-        )
-        if not is_successful(review_result):
-            return Failure(review_result.failure())
-
-        generated_tests = review_result.unwrap()
+        if generated_tests.generated_tests:
+            review_result = self.review_and_repair_tests(
+                generated_tests=generated_tests, code_context=code_context, original_helper_code=original_helper_code
+            )
+            if not is_successful(review_result):
+                return Failure(review_result.failure())
+            generated_tests = review_result.unwrap()
 
         # Full baseline (behavioral + benchmarking) runs once on the final approved tests
         baseline_setup_result = self.setup_and_establish_baseline(
@@ -1901,11 +1901,12 @@ class FunctionOptimizer:
         return file_path_to_helper_classes
 
     def run_behavioral_validation(
-        self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str]
+        self,
+        code_context: CodeOptimizationContext,
+        original_helper_code: dict[Path, str],
+        file_path_to_helper_classes: dict[Path, set[str]],
     ) -> TestResults | None:
         """Run behavioral tests only. Returns results or None if no tests ran."""
-        file_path_to_helper_classes = self.build_helper_classes_map(code_context)
-
         test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
         if self.function_to_optimize.is_async:
             self.instrument_async_for_mode(TestingMode.BEHAVIOR)
@@ -1940,10 +1941,13 @@ class FunctionOptimizer:
           behavioral → collect failures → AI review passing functions → repair flagged → loop
         No benchmarking runs here — only behavioral validation.
         """
+        file_path_to_helper_classes = self.build_helper_classes_map(code_context)
         for cycle in range(MAX_TEST_REPAIR_CYCLES):
             # 1. Run behavioral tests
             with progress_bar("Validating generated test quality..."):
-                behavioral_results = self.run_behavioral_validation(code_context, original_helper_code)
+                behavioral_results = self.run_behavioral_validation(
+                    code_context, original_helper_code, file_path_to_helper_classes
+                )
             if behavioral_results is None:
                 return Failure("Generated tests failed behavioral validation.")
 
