@@ -110,11 +110,7 @@ from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.parse_line_profile_test_output import parse_line_profile_results
-from codeflash.verification.parse_test_output import (
-    calculate_function_throughput_from_test_results,
-    parse_concurrency_metrics,
-    parse_test_results,
-)
+from codeflash.verification.parse_test_output import parse_concurrency_metrics, parse_test_results
 from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests, run_line_profile_tests
 from codeflash.verification.verification_utils import get_test_file_path
 from codeflash.verification.verifier import generate_tests
@@ -517,6 +513,15 @@ class FunctionOptimizer:
 
     def should_check_coverage(self) -> bool:
         return False
+
+    def collect_async_metrics(
+        self,
+        benchmarking_results: TestResults,
+        code_context: CodeOptimizationContext,
+        helper_code: dict[Path, str],
+        test_env: dict[str, str],
+    ) -> tuple[int | None, ConcurrencyMetrics | None]:
+        return None, None
 
     # --- End hooks ---
 
@@ -2069,7 +2074,6 @@ class FunctionOptimizer:
 
         if (
             self.function_to_optimize.is_async
-            and is_python()
             and original_code_baseline.async_throughput is not None
             and best_optimization.async_throughput is not None
         ):
@@ -2382,22 +2386,9 @@ class FunctionOptimizer:
         console.rule()
         logger.debug(f"Total original code runtime (ns): {total_timing}")
 
-        async_throughput = None
-        concurrency_metrics = None
-        if self.function_to_optimize.is_async and is_python():
-            async_throughput = calculate_function_throughput_from_test_results(
-                benchmarking_results, self.function_to_optimize.function_name
-            )
-            logger.debug(f"Original async function throughput: {async_throughput} calls/second")
-
-            concurrency_metrics = self.run_concurrency_benchmark(
-                code_context=code_context, original_helper_code=original_helper_code, test_env=test_env
-            )
-            if concurrency_metrics:
-                logger.debug(
-                    f"Original concurrency metrics: ratio={concurrency_metrics.concurrency_ratio:.2f}, "
-                    f"seq={concurrency_metrics.sequential_time_ns}ns, conc={concurrency_metrics.concurrent_time_ns}ns"
-                )
+        async_throughput, concurrency_metrics = self.collect_async_metrics(
+            benchmarking_results, code_context, original_helper_code, test_env
+        )
 
         if self.args.benchmark:
             replay_benchmarking_test_results = benchmarking_results.group_by_benchmarks(
@@ -2595,23 +2586,9 @@ class FunctionOptimizer:
 
             logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
 
-            candidate_async_throughput = None
-            candidate_concurrency_metrics = None
-            if self.function_to_optimize.is_async and is_python():
-                candidate_async_throughput = calculate_function_throughput_from_test_results(
-                    candidate_benchmarking_results, self.function_to_optimize.function_name
-                )
-                logger.debug(f"Candidate async function throughput: {candidate_async_throughput} calls/second")
-
-                # Run concurrency benchmark for candidate
-                candidate_concurrency_metrics = self.run_concurrency_benchmark(
-                    code_context=code_context, original_helper_code=candidate_helper_code, test_env=test_env
-                )
-                if candidate_concurrency_metrics:
-                    logger.debug(
-                        f"Candidate concurrency metrics: ratio={candidate_concurrency_metrics.concurrency_ratio:.2f}, "
-                        f"seq={candidate_concurrency_metrics.sequential_time_ns}ns, conc={candidate_concurrency_metrics.concurrent_time_ns}ns"
-                    )
+            candidate_async_throughput, candidate_concurrency_metrics = self.collect_async_metrics(
+                candidate_benchmarking_results, code_context, candidate_helper_code, test_env
+            )
 
             if self.args.benchmark:
                 candidate_replay_benchmarking_results = candidate_benchmarking_results.group_by_benchmarks(

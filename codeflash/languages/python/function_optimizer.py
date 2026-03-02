@@ -19,13 +19,14 @@ from codeflash.languages.python.static_analysis.code_replacer import (
 from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports, contains_jit_decorator
 from codeflash.models.models import TestingMode, TestResults
 from codeflash.optimization.function_optimizer import FunctionOptimizer
+from codeflash.verification.parse_test_output import calculate_function_throughput_from_test_results
 
 if TYPE_CHECKING:
     from typing import Any
 
     from codeflash.languages.base import Language
     from codeflash.models.function_types import FunctionParent
-    from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown
+    from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, ConcurrencyMetrics
 
 
 class PythonFunctionOptimizer(FunctionOptimizer):
@@ -63,6 +64,31 @@ class PythonFunctionOptimizer(FunctionOptimizer):
 
     def should_check_coverage(self) -> bool:
         return True
+
+    def collect_async_metrics(
+        self,
+        benchmarking_results: TestResults,
+        code_context: CodeOptimizationContext,
+        helper_code: dict[Path, str],
+        test_env: dict[str, str],
+    ) -> tuple[int | None, ConcurrencyMetrics | None]:
+        if not self.function_to_optimize.is_async:
+            return None, None
+
+        async_throughput = calculate_function_throughput_from_test_results(
+            benchmarking_results, self.function_to_optimize.function_name
+        )
+        logger.debug(f"Async function throughput: {async_throughput} calls/second")
+
+        concurrency_metrics = self.run_concurrency_benchmark(
+            code_context=code_context, original_helper_code=helper_code, test_env=test_env
+        )
+        if concurrency_metrics:
+            logger.debug(
+                f"Concurrency metrics: ratio={concurrency_metrics.concurrency_ratio:.2f}, "
+                f"seq={concurrency_metrics.sequential_time_ns}ns, conc={concurrency_metrics.concurrent_time_ns}ns"
+            )
+        return async_throughput, concurrency_metrics
 
     def instrument_async_for_mode(self, mode: TestingMode) -> None:
         from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
