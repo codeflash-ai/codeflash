@@ -27,8 +27,6 @@ if TYPE_CHECKING:
 
 from packaging import version
 
-cfapi_session = requests.Session()
-
 
 @dataclass
 class BaseUrls:
@@ -79,9 +77,9 @@ def make_cfapi_request(
         if method.upper() == "POST":
             json_payload = json.dumps(payload, indent=None, default=pydantic_encoder)
             cfapi_headers["Content-Type"] = "application/json"
-            response = cfapi_session.post(url, data=json_payload, headers=cfapi_headers, timeout=60)
+            response = requests.post(url, data=json_payload, headers=cfapi_headers, timeout=60)
         else:
-            response = cfapi_session.get(url, headers=cfapi_headers, params=params, timeout=60)
+            response = requests.get(url, headers=cfapi_headers, params=params, timeout=60)
         response.raise_for_status()
         return response
     except requests.exceptions.HTTPError:
