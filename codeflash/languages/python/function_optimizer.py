@@ -27,6 +27,8 @@ if TYPE_CHECKING:
     from codeflash.languages.base import Language
     from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown
 
+_parse_cache: dict[str, ast.Module] = {}
+
 
 class PythonFunctionOptimizer(FunctionOptimizer):
     def _resolve_function_ast(
@@ -136,6 +138,7 @@ class PythonFunctionOptimizer(FunctionOptimizer):
         return line_profile_results
 
 
-@lru_cache(maxsize=128)
 def _cached_parse_source(source_code: str) -> ast.Module:
-    return ast.parse(source_code)
+    if source_code not in _parse_cache:
+        _parse_cache[source_code] = ast.parse(source_code)
+    return _parse_cache[source_code]
