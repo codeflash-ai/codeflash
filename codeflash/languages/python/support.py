@@ -230,6 +230,12 @@ class PythonSupport:
         )
         return generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source
 
+    def adjust_test_config_for_discovery(self, test_cfg: Any) -> None:
+        pass
+
+    def detect_module_system(self, project_root: Path, source_file: Path) -> str | None:
+        return None
+
     # === Discovery ===
 
     def discover_functions(
