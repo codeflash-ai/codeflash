@@ -11,20 +11,15 @@ import re
 
 from codeflash.code_utils.normalizers import get_normalizer
 from codeflash.languages import current_language
-from codeflash.languages.base import Language
 
 
-def normalize_code(
-    code: str, remove_docstrings: bool = True, return_ast_dump: bool = False, language: str | None = None
-) -> str:
+def normalize_code(code: str, language: str | None = None) -> str:
     """Normalize code by parsing, cleaning, and normalizing variable names.
 
     Function names, class names, and parameters are preserved.
 
     Args:
         code: Source code as string
-        remove_docstrings: Whether to remove docstrings (Python only)
-        return_ast_dump: Return AST dump instead of unparsed code (Python only)
         language: Language of the code. If None, uses the current session language.
 
     Returns:
@@ -35,30 +30,10 @@ def normalize_code(
         language = current_language().value
 
     try:
-        normalizer = get_normalizer(language)
-
-        # Python has additional options
-        if language == Language.PYTHON:
-            if return_ast_dump:
-                return normalizer.normalize_for_hash(code)
-            return normalizer.normalize(code, remove_docstrings=remove_docstrings)
-
-        # For other languages, use standard normalization
-        return normalizer.normalize(code)
+        return get_normalizer(language).normalize(code)
     except ValueError:
-        # Unknown language - fall back to basic normalization
         return _basic_normalize(code)
     except Exception:
-        # Parsing error - try other languages or fall back
-        if language == Language.PYTHON:
-            # Try JavaScript as fallback
-            try:
-                js_normalizer = get_normalizer("javascript")
-                js_result = js_normalizer.normalize(code)
-                if js_result != _basic_normalize(code):
-                    return js_result
-            except Exception:
-                pass
         return _basic_normalize(code)
 
 

@@ -750,6 +750,20 @@ class LanguageSupport(Protocol):
 
     # === Test Execution ===
 
+    def generate_concolic_tests(
+        self,
+        test_cfg: TestConfig,
+        project_root: Path,
+        function_to_optimize: FunctionToOptimize,
+        function_to_optimize_ast: Any,
+    ) -> tuple[dict, str]:
+        """Generate concolic tests for a function.
+
+        Default implementation returns empty results. Override for languages
+        that support concolic testing (e.g. Python via CrossHair).
+        """
+        return {}, ""
+
     def run_behavioral_tests(
         self,
         test_paths: Any,

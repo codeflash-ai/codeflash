@@ -58,7 +58,6 @@ from codeflash.code_utils.config_consts import (
     EffortLevel,
     get_effort_value,
 )
-from codeflash.code_utils.deduplicate_code import normalize_code
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.formatter import format_code, format_generated_code, sort_imports
 from codeflash.code_utils.git_utils import git_root_dir
@@ -104,7 +103,6 @@ from codeflash.result.critic import (
 )
 from codeflash.result.explanation import Explanation
 from codeflash.telemetry.posthog_cf import ph
-from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.parse_test_output import parse_concurrency_metrics, parse_test_results
 from codeflash.verification.verification_utils import get_test_file_path
@@ -965,7 +963,9 @@ class FunctionOptimizer:
         runtimes_list = []
 
         for valid_opt in eval_ctx.valid_optimizations:
-            valid_opt_normalized_code = normalize_code(valid_opt.candidate.source_code.flat.strip())
+            valid_opt_normalized_code = self.language_support.normalize_code(
+                valid_opt.candidate.source_code.flat.strip()
+            )
             new_candidate_with_shorter_code = OptimizedCandidate(
                 source_code=eval_ctx.ast_code_to_id[valid_opt_normalized_code]["shorter_source_code"],
                 optimization_id=valid_opt.candidate.optimization_id,
@@ -1072,7 +1072,7 @@ class FunctionOptimizer:
 
         candidate = candidate_node.candidate
 
-        normalized_code = normalize_code(candidate.source_code.flat.strip())
+        normalized_code = self.language_support.normalize_code(candidate.source_code.flat.strip())
 
         if normalized_code == normalized_original:
             logger.info(f"h3|Candidate {candidate_index}/{total_candidates}: Identical to original code, skipping.")
@@ -1284,7 +1284,7 @@ class FunctionOptimizer:
             self.future_adaptive_optimizations,
         )
         candidate_index = 0
-        normalized_original = normalize_code(code_context.read_writable_code.flat.strip())
+        normalized_original = self.language_support.normalize_code(code_context.read_writable_code.flat.strip())
 
         # Process candidates using queue-based approach
         while not processor.is_done():
@@ -1679,9 +1679,9 @@ class FunctionOptimizer:
             future_concolic_tests = None
         else:
             future_concolic_tests = self.executor.submit(
-                generate_concolic_tests,
+                self.language_support.generate_concolic_tests,
                 self.test_cfg,
-                self.args,
+                self.args.project_root,
                 self.function_to_optimize,
                 self.function_to_optimize_ast,
             )
