@@ -225,12 +225,7 @@ class AiServiceClient:
             logger.info(f"!lsp|Received {len(optimizations_json)} optimization candidates.")
             console.rule()
             return self._get_valid_candidates(optimizations_json, OptimizedCandidateSource.OPTIMIZE, language)
-        try:
-            error = response.json()["error"]
-        except Exception:
-            error = response.text
-        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
-        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        self.log_error_response(response, "generating optimized candidates", "cli-optimize-error-response")
         console.rule()
         return []
 
@@ -297,12 +292,7 @@ class AiServiceClient:
             end_time = time.perf_counter()
             logger.debug(f"!lsp|Generating jit rewritten code took {end_time - start_time:.2f} seconds.")
             return self._get_valid_candidates(optimizations_json, OptimizedCandidateSource.JIT_REWRITE)
-        try:
-            error = response.json()["error"]
-        except Exception:
-            error = response.text
-        logger.error(f"Error generating jit rewritten candidate: {response.status_code} - {error}")
-        ph("cli-jit-rewrite-error-response", {"response_status_code": response.status_code, "error": error})
+        self.log_error_response(response, "generating jit rewritten candidate", "cli-jit-rewrite-error-response")
         console.rule()
         return []
 
@@ -374,12 +364,7 @@ class AiServiceClient:
             logger.info(f"!lsp|Received {len(optimizations_json)} line profiler optimization candidates.")
             console.rule()
             return self._get_valid_candidates(optimizations_json, OptimizedCandidateSource.OPTIMIZE_LP)
-        try:
-            error = response.json()["error"]
-        except Exception:
-            error = response.text
-        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
-        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        self.log_error_response(response, "generating optimized candidates", "cli-optimize-error-response")
         console.rule()
         return []
 
@@ -407,12 +392,7 @@ class AiServiceClient:
 
             return valid_candidates[0]
 
-        try:
-            error = response.json()["error"]
-        except Exception:
-            error = response.text
-        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
-        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        self.log_error_response(response, "generating optimized candidates", "cli-optimize-error-response")
         return None
 
     def optimize_code_refinement(self, request: list[AIServiceRefinerRequest]) -> list[OptimizedCandidate]:
@@ -468,12 +448,7 @@ class AiServiceClient:
 
             return self._get_valid_candidates(refined_optimizations, OptimizedCandidateSource.REFINE)
 
-        try:
-            error = response.json()["error"]
-        except Exception:
-            error = response.text
-        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
-        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        self.log_error_response(response, "generating optimized candidates", "cli-optimize-error-response")
         console.rule()
         return []
 
@@ -520,12 +495,7 @@ class AiServiceClient:
 
             return valid_candidates[0]
 
-        try:
-            error = response.json()["error"]
-        except Exception:
-            error = response.text
-        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
-        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        self.log_error_response(response, "generating optimized candidates", "cli-optimize-error-response")
         console.rule()
         return None
 
@@ -620,12 +590,7 @@ class AiServiceClient:
             explanation: str = response.json()["explanation"]
             console.rule()
             return explanation
-        try:
-            error = response.json()["error"]
-        except Exception:
-            error = response.text
-        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
-        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        self.log_error_response(response, "generating optimized candidates", "cli-optimize-error-response")
         console.rule()
         return ""
 
@@ -672,12 +637,7 @@ class AiServiceClient:
             ranking: list[int] = response.json()["ranking"]
             console.rule()
             return ranking
-        try:
-            error = response.json()["error"]
-        except Exception:
-            error = response.text
-        logger.error(f"Error generating ranking: {response.status_code} - {error}")
-        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        self.log_error_response(response, "generating ranking", "cli-optimize-error-response")
         console.rule()
         return None
 
@@ -805,15 +765,8 @@ class AiServiceClient:
                 response_json["instrumented_behavior_tests"],
                 response_json["instrumented_perf_tests"],
             )
-        try:
-            error = response.json()["error"]
-            logger.error(f"Error generating tests: {response.status_code} - {error}")
-            ph("cli-testgen-error-response", {"response_status_code": response.status_code, "error": error})
-            return None
-        except Exception:
-            logger.error(f"Error generating tests: {response.status_code} - {response.text}")
-            ph("cli-testgen-error-response", {"response_status_code": response.status_code, "error": response.text})
-            return None
+        self.log_error_response(response, "generating tests", "cli-testgen-error-response")
+        return None
 
     def review_generated_tests(
         self,
@@ -968,12 +921,7 @@ class AiServiceClient:
             return OptimizationReviewResult(
                 review=cast("str", data["review"]), explanation=cast("str", data.get("review_explanation", ""))
             )
-        try:
-            error = cast("str", response.json()["error"])
-        except Exception:
-            error = response.text
-        logger.error(f"Error generating optimization review: {response.status_code} - {error}")
-        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        self.log_error_response(response, "generating optimization review", "cli-optimize-error-response")
         console.rule()
         return OptimizationReviewResult(review="", explanation="")
 

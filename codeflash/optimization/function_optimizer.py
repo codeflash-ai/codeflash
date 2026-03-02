@@ -1850,14 +1850,7 @@ class FunctionOptimizer:
             for key in set(self.function_to_tests) | set(function_to_concolic_tests)
         }
 
-        # Get a dict of file_path_to_classes of fto and helpers_of_fto
-        file_path_to_helper_classes = defaultdict(set)
-        for function_source in code_context.helper_functions:
-            if (
-                function_source.qualified_name != self.function_to_optimize.qualified_name
-                and "." in function_source.qualified_name
-            ):
-                file_path_to_helper_classes[function_source.file_path].add(function_source.qualified_name.split(".")[0])
+        file_path_to_helper_classes = self.build_helper_classes_map(code_context)
 
         baseline_result = self.establish_original_code_baseline(
             code_context=code_context,
@@ -1898,12 +1891,8 @@ class FunctionOptimizer:
             )
         )
 
-    def run_behavioral_validation(
-        self,
-        code_context: CodeOptimizationContext,
-        original_helper_code: dict[Path, str],
-    ) -> TestResults | None:
-        """Run behavioral tests only. Returns results or None if no tests ran."""
+    def build_helper_classes_map(self, code_context: CodeOptimizationContext) -> dict[Path, set[str]]:
+        """Build a mapping of file paths to helper class names from code context."""
         file_path_to_helper_classes: dict[Path, set[str]] = defaultdict(set)
         for function_source in code_context.helper_functions:
             if (
@@ -1913,6 +1902,15 @@ class FunctionOptimizer:
                 file_path_to_helper_classes[function_source.file_path].add(
                     function_source.qualified_name.split(".")[0]
                 )
+        return file_path_to_helper_classes
+
+    def run_behavioral_validation(
+        self,
+        code_context: CodeOptimizationContext,
+        original_helper_code: dict[Path, str],
+    ) -> TestResults | None:
+        """Run behavioral tests only. Returns results or None if no tests ran."""
+        file_path_to_helper_classes = self.build_helper_classes_map(code_context)
 
         test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
         if self.function_to_optimize.is_async:
