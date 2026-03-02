@@ -1948,7 +1948,8 @@ class FunctionOptimizer:
         """
         for cycle in range(MAX_TEST_REPAIR_CYCLES):
             # 1. Run behavioral tests
-            behavioral_results = self.run_behavioral_validation(code_context, original_helper_code)
+            with progress_bar("Validating generated test quality..."):
+                behavioral_results = self.run_behavioral_validation(code_context, original_helper_code)
             if behavioral_results is None:
                 return Failure("Generated tests failed behavioral validation.")
 
@@ -1968,20 +1969,37 @@ class FunctionOptimizer:
                     "failed_test_functions": failed_fns,
                 })
 
-            review_results = self.aiservice_client.review_generated_tests(
-                tests=tests_for_review,
-                function_source_code=self.function_to_optimize_source_code,
-                function_name=self.function_to_optimize.function_name,
-                trace_id=self.function_trace_id,
-                language=self.function_to_optimize.language,
-            )
+            with progress_bar("Reviewing generated tests for quality issues..."):
+                review_results = self.aiservice_client.review_generated_tests(
+                    tests=tests_for_review,
+                    function_source_code=self.function_to_optimize_source_code,
+                    function_name=self.function_to_optimize.function_name,
+                    trace_id=self.function_trace_id,
+                    language=self.function_to_optimize.language,
+                )
 
-            # 4. Repair test files that have flagged functions
+            # 4. Collect all functions to repair across test files
+            all_to_repair = [r for r in review_results if r.functions_to_repair]
+
+            if not all_to_repair:
+                console.print(
+                    Panel("[green]All generated tests passed quality review[/green]", border_style="green")
+                )
+                break
+
+            # Display review findings
+            issues_tree = Tree("[bold]Quality issues found[/bold]")
+            total_issues = 0
+            for review in all_to_repair:
+                for f in review.functions_to_repair:
+                    reason_str = f" — [dim]{f.reason}[/dim]" if f.reason else ""
+                    issues_tree.add(f"[yellow]{f.function_name}[/yellow]{reason_str}")
+                    total_issues += 1
+            console.print(Panel(issues_tree, title=f"Test Review (cycle {cycle + 1})", border_style="yellow"))
+
+            # 5. Repair flagged functions
             any_repaired = False
-            for review in review_results:
-                if not review.functions_to_repair:
-                    continue
-
+            for review in all_to_repair:
                 gt = generated_tests.generated_tests[review.test_index]
                 fn_names = ", ".join(f.function_name for f in review.functions_to_repair)
                 logger.info(f"Repairing test functions in test {review.test_index} (cycle {cycle + 1}): {fn_names}")
@@ -1994,19 +2012,20 @@ class FunctionOptimizer:
                 test_module_path = Path(
                     module_name_from_file_path(gt.behavior_file_path, self.test_cfg.tests_project_rootdir)
                 )
-                repair_result = self.aiservice_client.repair_generated_tests(
-                    test_source=gt.generated_original_test_source,
-                    functions_to_repair=review.functions_to_repair,
-                    function_source_code=self.function_to_optimize_source_code,
-                    function_to_optimize=self.function_to_optimize,
-                    helper_function_names=[],
-                    module_path=Path(self.original_module_path),
-                    test_module_path=test_module_path,
-                    test_framework=self.test_cfg.test_framework,
-                    test_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
-                    trace_id=self.function_trace_id,
-                    language=self.function_to_optimize.language,
-                )
+                with progress_bar(f"Repairing {len(review.functions_to_repair)} flagged test function(s)..."):
+                    repair_result = self.aiservice_client.repair_generated_tests(
+                        test_source=gt.generated_original_test_source,
+                        functions_to_repair=review.functions_to_repair,
+                        function_source_code=self.function_to_optimize_source_code,
+                        function_to_optimize=self.function_to_optimize,
+                        helper_function_names=[],
+                        module_path=Path(self.original_module_path),
+                        test_module_path=test_module_path,
+                        test_framework=self.test_cfg.test_framework,
+                        test_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
+                        trace_id=self.function_trace_id,
+                        language=self.function_to_optimize.language,
+                    )
 
                 if repair_result is None:
                     logger.warning(f"Repair failed for test {review.test_index}, keeping original")
@@ -2021,10 +2040,10 @@ class FunctionOptimizer:
                 gt.perf_file_path.write_text(perf_source, encoding="utf8")
                 any_repaired = True
 
-            # Nothing needed repair — tests are good
-            if not any_repaired:
-                break
+            if any_repaired:
+                console.print(f"  [green]Repaired {total_issues} test function(s)[/green]")
 
+        console.rule()
         return Success(generated_tests)
 
     def find_and_process_best_optimization(
