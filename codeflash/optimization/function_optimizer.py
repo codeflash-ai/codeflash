@@ -1926,7 +1926,9 @@ class FunctionOptimizer:
             self.write_code_and_helpers(
                 self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
             )
-        return behavioral_results if behavioral_results else None
+        if isinstance(behavioral_results, TestResults) and behavioral_results:
+            return behavioral_results
+        return None
 
     def review_and_repair_tests(
         self,
@@ -1950,7 +1952,7 @@ class FunctionOptimizer:
             # 2. Collect per-function failures grouped by behavior file path
             failed_by_file: dict[Path, list[str]] = defaultdict(list)
             for result in behavioral_results.test_results:
-                if result.test_type == TestType.GENERATED_REGRESSION and not result.did_pass:
+                if result.test_type == TestType.GENERATED_REGRESSION and not result.did_pass and result.id.test_function_name:
                     failed_by_file[result.file_name].append(result.id.test_function_name)
 
             # 3. Build review request with failed functions pre-flagged
