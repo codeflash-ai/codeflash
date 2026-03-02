@@ -198,6 +198,10 @@ class JavaAssertTransformer:
         # Precompile regex to find next special character (quotes, parens, braces).
         self._special_re = re.compile(r"[\"'{}()]")
 
+
+        # Precompile lambda arrow pattern to avoid recompiling on each call.
+        self._lambda_re = re.compile(r"\(\s*\)\s*->\s*")
+
     def transform(self, source: str) -> str:
         """Remove assertions from source code, preserving target function calls.
 
@@ -761,35 +765,40 @@ class JavaAssertTransformer:
         For assertThrows(Exception.class, () -> { code(); }), we want 'code();'.
         """
         # Look for lambda: () -> expr or () -> { block }
-        lambda_match = re.search(r"\(\s*\)\s*->\s*", content)
+        lambda_match = self._lambda_re.search(content)
         if not lambda_match:
             return None
 
         body_start = lambda_match.end()
-        remaining = content[body_start:].strip()
 
-        if remaining.startswith("{"):
+        # Skip whitespace to find the first non-space character after the arrow.
+        i = body_start
+        content_len = len(content)
+        while i < content_len and content[i].isspace():
+            i += 1
+
+        if i < content_len and content[i] == "{":
             # Block lambda: () -> { code }
-            _, block_end = self._find_balanced_braces(content, body_start + content[body_start:].index("{"))
-            if block_end != -1:
-                # Extract content inside braces
-                brace_content = content[body_start + content[body_start:].index("{") + 1 : block_end - 1]
-                return brace_content.strip()
+            # Use the balanced-brace finder directly and return its extracted content.
+            block_content, block_end = self._find_balanced_braces(content, i)
+            if block_end != -1 and block_content is not None:
+                return block_content.strip()
         else:
             # Expression lambda: () -> expr
             # Find the end (before the closing paren of assertThrows, or comma at depth 0)
             depth = 0
-            end = len(content)
-            for i, ch in enumerate(content[body_start:]):
+            end = content_len
+            # Iterate using absolute indices to avoid additional slicing.
+            for idx, ch in enumerate(content[body_start:], start=body_start):
                 if ch == "(":
                     depth += 1
                 elif ch == ")":
                     if depth == 0:
-                        end = body_start + i
+                        end = idx
                         break
                     depth -= 1
                 elif ch == "," and depth == 0:
-                    end = body_start + i
+                    end = idx
                     break
             return content[body_start:end].strip()
 
