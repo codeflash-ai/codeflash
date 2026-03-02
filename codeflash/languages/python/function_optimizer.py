@@ -61,6 +61,9 @@ class PythonFunctionOptimizer(FunctionOptimizer):
 
         instrument_codeflash_capture(self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root)
 
+    def should_check_coverage(self) -> bool:
+        return True
+
     def instrument_async_for_mode(self, mode: TestingMode) -> None:
         from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 

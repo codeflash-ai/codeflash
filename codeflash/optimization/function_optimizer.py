@@ -515,6 +515,9 @@ class FunctionOptimizer:
     def instrument_capture(self, file_path_to_helper_classes: dict[Path, set[str]]) -> None:
         pass
 
+    def should_check_coverage(self) -> bool:
+        return False
+
     # --- End hooks ---
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
@@ -1860,7 +1863,7 @@ class FunctionOptimizer:
         # Check test quantity for all languages
         quantity_ok = quantity_of_tests_critic(original_code_baseline)
         # TODO: {Self} Only check coverage for Python - coverage infrastructure not yet reliable for JS/TS
-        coverage_ok = coverage_critic(original_code_baseline.coverage_results) if is_python() else True
+        coverage_ok = coverage_critic(original_code_baseline.coverage_results) if self.should_check_coverage() else True
         if isinstance(original_code_baseline, OriginalCodeBaseline) and (not coverage_ok or not quantity_ok):
             if self.args.override_fixtures:
                 restore_conftest(original_conftest_content)
@@ -2305,7 +2308,7 @@ class FunctionOptimizer:
             console.rule()
             return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
         # Skip coverage check for non-Python languages (coverage not yet supported)
-        if is_python() and not coverage_critic(coverage_results):
+        if self.should_check_coverage() and not coverage_critic(coverage_results):
             did_pass_all_tests = all(result.did_pass for result in behavioral_results)
             if not did_pass_all_tests:
                 return Failure("Tests failed to pass for the original code.")
