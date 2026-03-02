@@ -523,6 +523,27 @@ class FunctionOptimizer:
     ) -> tuple[int | None, ConcurrencyMetrics | None]:
         return None, None
 
+    def compare_candidate_results(
+        self,
+        baseline_results: OriginalCodeBaseline,
+        candidate_behavior_results: TestResults,
+        optimization_candidate_index: int,
+    ) -> tuple[bool, list[TestDiff]]:
+        original_sqlite = get_run_tmp_file(Path("test_return_values_0.sqlite"))
+        candidate_sqlite = get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite"))
+
+        if original_sqlite.exists() and candidate_sqlite.exists():
+            js_root = self.test_cfg.js_project_root or self.args.project_root
+            match, diffs = self.language_support.compare_test_results(
+                original_sqlite, candidate_sqlite, project_root=js_root
+            )
+            candidate_sqlite.unlink(missing_ok=True)
+        else:
+            match, diffs = compare_test_results(
+                baseline_results.behavior_test_results, candidate_behavior_results, pass_fail_only=True
+            )
+        return match, diffs
+
     # --- End hooks ---
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
@@ -2517,30 +2538,9 @@ class FunctionOptimizer:
             )
             console.rule()
 
-            # Use language-appropriate comparison
-            if not is_python():
-                # Non-Python: Compare using language support with SQLite results if available
-                original_sqlite = get_run_tmp_file(Path("test_return_values_0.sqlite"))
-                candidate_sqlite = get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite"))
-
-                if original_sqlite.exists() and candidate_sqlite.exists():
-                    # Full comparison using captured return values via language support
-                    # Use js_project_root where node_modules is located
-                    js_root = self.test_cfg.js_project_root or self.args.project_root
-                    match, diffs = self.language_support.compare_test_results(
-                        original_sqlite, candidate_sqlite, project_root=js_root
-                    )
-                    # Cleanup SQLite files after comparison
-                    candidate_sqlite.unlink(missing_ok=True)
-                else:
-                    # Fallback: compare test pass/fail status (tests aren't instrumented yet)
-                    # If all tests that passed for original also pass for candidate, consider it a match
-                    match, diffs = compare_test_results(
-                        baseline_results.behavior_test_results, candidate_behavior_results, pass_fail_only=True
-                    )
-            else:
-                # Python: Compare using Python comparator
-                match, diffs = compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
+            match, diffs = self.compare_candidate_results(
+                baseline_results, candidate_behavior_results, optimization_candidate_index
+            )
 
             if match:
                 logger.info("h3|Test results matched ✅")

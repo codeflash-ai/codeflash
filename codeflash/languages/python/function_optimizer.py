@@ -26,7 +26,13 @@ if TYPE_CHECKING:
 
     from codeflash.languages.base import Language
     from codeflash.models.function_types import FunctionParent
-    from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, ConcurrencyMetrics
+    from codeflash.models.models import (
+        CodeOptimizationContext,
+        CodeStringsMarkdown,
+        ConcurrencyMetrics,
+        OriginalCodeBaseline,
+        TestDiff,
+    )
 
 
 class PythonFunctionOptimizer(FunctionOptimizer):
@@ -96,6 +102,16 @@ class PythonFunctionOptimizer(FunctionOptimizer):
         add_async_decorator_to_function(
             self.function_to_optimize.file_path, self.function_to_optimize, mode, project_root=self.project_root
         )
+
+    def compare_candidate_results(
+        self,
+        baseline_results: OriginalCodeBaseline,
+        candidate_behavior_results: TestResults,
+        optimization_candidate_index: int,
+    ) -> tuple[bool, list[TestDiff]]:
+        from codeflash.verification.equivalence import compare_test_results
+
+        return compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
 
     def replace_function_and_helpers_with_optimized_code(
         self,
