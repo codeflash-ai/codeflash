@@ -1,8 +1,8 @@
 from pathlib import Path
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, FunctionParent
-from codeflash.optimization.function_optimizer import FunctionOptimizer
+from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown
+from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
 
@@ -106,7 +106,7 @@ def _get_string_usage(text: str) -> Usage:
         test_framework="pytest",
         pytest_cmd="pytest",
     )
-    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
 
     original_helper_code: dict[Path, str] = {}
