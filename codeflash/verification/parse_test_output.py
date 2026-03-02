@@ -20,7 +20,7 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
-from codeflash.languages import is_javascript
+from codeflash.languages import Language
 
 # Import Jest-specific parsing from the JavaScript language module
 from codeflash.languages.javascript.parse import parse_jest_test_xml as _parse_jest_test_xml
@@ -32,7 +32,6 @@ from codeflash.models.models import (
     TestType,
     VerificationType,
 )
-from codeflash.verification.coverage_utils import CoverageUtils, JestCoverageUtils
 
 if TYPE_CHECKING:
     import subprocess
@@ -438,8 +437,10 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
     finally:
         db.close()
 
-    # Check if this is a JavaScript test (use JSON) or Python test (use pickle)
-    is_jest = is_javascript()
+    # Check serialization format: JavaScript uses JSON, Python uses pickle
+    from codeflash.languages.current import current_language_support
+
+    is_json_format = current_language_support().test_result_serialization_format == "json"
 
     for val in data:
         try:
@@ -452,7 +453,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
             # - A module-style path: "tests.fibonacci.test.ts" (dots as separators)
             # - A file path: "tests/fibonacci.test.ts" (slashes as separators)
             # For Python, it's a module path (e.g., "tests.test_foo") that needs conversion
-            if is_jest:
+            if is_json_format:
                 # Jest test file extensions (including .test.ts, .spec.ts patterns)
                 jest_test_extensions = (
                     ".test.ts",
@@ -517,7 +518,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                     test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
                     logger.debug(f"[PARSE-DEBUG]   by_instrumented_file_path: {test_type}")
                 # Default to GENERATED_REGRESSION for Jest tests when test type can't be determined
-                if test_type is None and is_jest:
+                if test_type is None and is_json_format:
                     test_type = TestType.GENERATED_REGRESSION
                     logger.debug("[PARSE-DEBUG]   defaulting to GENERATED_REGRESSION (Jest)")
                 elif test_type is None:
@@ -532,7 +533,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
             ret_val = None
             if loop_index == 1 and val[7]:
                 try:
-                    if is_jest:
+                    if is_json_format:
                         # Jest comparison happens via Node.js script (language_support.compare_test_results)
                         # Store a marker indicating data exists but is not deserialized in Python
                         ret_val = ("__serialized__", val[7])
@@ -578,7 +579,9 @@ def parse_test_xml(
     run_result: subprocess.CompletedProcess | None = None,
 ) -> TestResults:
     # Route to Jest-specific parser for JavaScript/TypeScript tests
-    if is_javascript():
+    from codeflash.languages.current import current_language
+
+    if current_language() in (Language.JAVASCRIPT, Language.TYPESCRIPT):
         return _parse_jest_test_xml(
             test_xml_file_path,
             test_files,
@@ -623,6 +626,9 @@ def parse_test_xml(
                 return test_results
 
             test_class_path = testcase.classname
+            if test_class_path and test_class_path.split(".")[0] in ("pytest", "_pytest"):
+                logger.debug(f"Skipping pytest-internal test entry: {test_class_path}")
+                continue
             try:
                 if testcase.name is None:
                     logger.debug(
@@ -997,7 +1003,9 @@ def parse_test_results(
     # Also try to read legacy binary format for Python tests
     # Binary file may contain additional results (e.g., from codeflash_wrap) even if SQLite has data
     # from @codeflash_capture. We need to merge both sources.
-    if not is_javascript():
+    from codeflash.languages.current import current_language_support as _cls
+
+    if _cls().test_result_serialization_format == "pickle":
         try:
             bin_results_file = get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin"))
             if bin_results_file.exists():
@@ -1033,23 +1041,13 @@ def parse_test_results(
     coverage = None
     if coverage_database_file and source_file and code_context and function_name:
         all_args = True
-        if is_javascript():
-            # Jest uses coverage-final.json (coverage_database_file points to this)
-            coverage = JestCoverageUtils.load_from_jest_json(
-                coverage_json_path=coverage_database_file,
-                function_name=function_name,
-                code_context=code_context,
-                source_code_path=source_file,
-            )
-        else:
-            # Python uses coverage.py SQLite database
-            coverage = CoverageUtils.load_from_sqlite_database(
-                database_path=coverage_database_file,
-                config_path=coverage_config_file,
-                source_code_path=source_file,
-                code_context=code_context,
-                function_name=function_name,
-            )
+        coverage = _cls().load_coverage(
+            coverage_database_file=coverage_database_file,
+            function_name=function_name,
+            code_context=code_context,
+            source_file=source_file,
+            coverage_config_file=coverage_config_file,
+        )
         coverage.log_coverage()
     try:
         failures = parse_test_failures_from_stdout(run_result.stdout)

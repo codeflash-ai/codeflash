@@ -1,7 +1,7 @@
 import tempfile
 from pathlib import Path
 
-from codeflash.code_utils.code_extractor import add_needed_imports_from_module
+from codeflash.languages.python.static_analysis.code_extractor import add_needed_imports_from_module
 
 
 def test_add_needed_imports_with_none_aliases():

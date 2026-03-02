@@ -118,11 +118,9 @@ class TestVitestCodeContext:
         """Test extracting code context for a TypeScript function."""
         skip_if_js_not_supported()
         from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
-        from codeflash.languages import current as lang_current
+        from codeflash.languages import get_language_support
         from codeflash.languages.base import Language
-        from codeflash.languages.python.context.code_context_extractor import get_code_optimization_context
-
-        lang_current._current_language = Language.TYPESCRIPT
+        from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
 
         fib_file = vitest_project_dir / "fibonacci.ts"
         if not fib_file.exists():
@@ -134,7 +132,11 @@ class TestVitestCodeContext:
         fib_func = next((f for f in func_list if f.function_name == "fibonacci"), None)
         assert fib_func is not None
 
-        context = get_code_optimization_context(fib_func, vitest_project_dir)
+        ts_support = get_language_support(Language.TYPESCRIPT)
+        code_context = ts_support.extract_code_context(fib_func, vitest_project_dir, vitest_project_dir)
+        context = JavaScriptFunctionOptimizer._build_optimization_context(
+            code_context, fib_file, "typescript", vitest_project_dir
+        )
 
         assert context.read_writable_code is not None
         assert context.read_writable_code.language == "typescript"

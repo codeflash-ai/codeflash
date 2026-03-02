@@ -53,7 +53,7 @@ describe('add function', () => {
 """)
 
             # Discover functions first
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             assert len(functions) == 1
 
             # Discover tests
@@ -90,7 +90,7 @@ describe('multiply', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             assert len(tests) > 0
@@ -124,7 +124,7 @@ test('formats date correctly', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             assert len(tests) > 0
@@ -170,7 +170,7 @@ describe('String Utils', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             assert len(tests) > 0
@@ -208,7 +208,7 @@ describe('sum function', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             assert len(tests) > 0
@@ -242,7 +242,7 @@ test('subtract two numbers', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             assert len(tests) > 0
@@ -270,7 +270,7 @@ test('greets by name', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             assert len(tests) > 0
@@ -316,7 +316,7 @@ describe('Calculator class', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             # Should find tests for class methods
@@ -363,7 +363,7 @@ describe('clamp', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             assert len(tests) > 0
@@ -399,7 +399,7 @@ describe('async utilities', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             assert len(tests) > 0
@@ -436,7 +436,7 @@ describe('Button component', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             # JSX tests should be discovered
@@ -466,7 +466,7 @@ test('other test', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             # Should not find tests for our function
@@ -502,7 +502,7 @@ describe('validators', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             # Should find tests for isEmail
@@ -546,7 +546,7 @@ test('helper2 returns 2', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             assert len(tests) > 0
@@ -574,7 +574,7 @@ test(`formatNumber with decimal`, () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             # May or may not find depending on template literal handling
@@ -605,7 +605,7 @@ describe('transform', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             # Should still find tests since original name is imported
@@ -626,7 +626,7 @@ it('third test', () => {});
             f.flush()
             file_path = Path(f.name)
 
-            source = file_path.read_text()
+            source = file_path.read_text(encoding="utf-8")
             from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
@@ -651,7 +651,7 @@ describe('Suite B', () => {
             f.flush()
             file_path = Path(f.name)
 
-            source = file_path.read_text()
+            source = file_path.read_text(encoding="utf-8")
             from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
@@ -675,7 +675,7 @@ describe('Outer', () => {
             f.flush()
             file_path = Path(f.name)
 
-            source = file_path.read_text()
+            source = file_path.read_text(encoding="utf-8")
             from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
@@ -699,7 +699,7 @@ describe.skip('skipped describe', () => {
             f.flush()
             file_path = Path(f.name)
 
-            source = file_path.read_text()
+            source = file_path.read_text(encoding="utf-8")
             from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
@@ -720,7 +720,7 @@ describe.only('only describe', () => {
             f.flush()
             file_path = Path(f.name)
 
-            source = file_path.read_text()
+            source = file_path.read_text(encoding="utf-8")
             from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
@@ -738,7 +738,7 @@ describe('describe single', () => {});
             f.flush()
             file_path = Path(f.name)
 
-            source = file_path.read_text()
+            source = file_path.read_text(encoding="utf-8")
             from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
@@ -757,7 +757,7 @@ describe("describe double", () => {});
             f.flush()
             file_path = Path(f.name)
 
-            source = file_path.read_text()
+            source = file_path.read_text(encoding="utf-8")
             from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
@@ -773,7 +773,7 @@ describe("describe double", () => {});
             f.flush()
             file_path = Path(f.name)
 
-            source = file_path.read_text()
+            source = file_path.read_text(encoding="utf-8")
             from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
@@ -806,7 +806,7 @@ test('funcA works', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             # funcA should have tests
@@ -833,7 +833,7 @@ test('funcX works', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             # funcX should have tests
@@ -859,7 +859,7 @@ test('mainFunc works', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             assert len(tests) > 0
@@ -896,7 +896,7 @@ test('block commented', () => {
 */
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             assert len(tests) > 0
@@ -921,7 +921,7 @@ test('broken test' {  // Missing arrow function
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             # Should not crash
             tests = js_support.discover_tests(tmpdir, functions)
             assert isinstance(tests, dict)
@@ -949,7 +949,7 @@ describe('conflict tests', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             # Should still work despite naming conflicts
@@ -966,7 +966,7 @@ export function lonelyFunc() { return 'alone'; }
 module.exports = { lonelyFunc };
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             # Should return empty dict, not crash
@@ -1001,7 +1001,7 @@ test('funcA works', () => {
 });
 """)
 
-            functions_a = js_support.discover_functions(file_a)
+            functions_a = js_support.discover_functions(file_a.read_text(encoding="utf-8"), file_a)
             tests = js_support.discover_tests(tmpdir, functions_a)
 
             # Should handle circular imports gracefully
@@ -1047,7 +1047,7 @@ test.each([
             f.flush()
             file_path = Path(f.name)
 
-            source = file_path.read_text()
+            source = file_path.read_text(encoding="utf-8")
             from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
@@ -1073,7 +1073,7 @@ describe.each([
             f.flush()
             file_path = Path(f.name)
 
-            source = file_path.read_text()
+            source = file_path.read_text(encoding="utf-8")
             from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
@@ -1098,7 +1098,7 @@ describe('Math operations', () => {
             f.flush()
             file_path = Path(f.name)
 
-            source = file_path.read_text()
+            source = file_path.read_text(encoding="utf-8")
             from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
@@ -1174,7 +1174,7 @@ describe('formatName', () => {
 """)
 
             # Discover functions
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             assert len(functions) == 3
 
             # Discover tests
@@ -1242,7 +1242,7 @@ describe('Database', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             assert len(tests) > 0
@@ -1280,7 +1280,7 @@ test('funcA works', () => {
 """)
 
             # Discover functions from moduleB
-            functions_b = js_support.discover_functions(source_b)
+            functions_b = js_support.discover_functions(source_b.read_text(encoding="utf-8"), source_b)
             tests = js_support.discover_tests(tmpdir, functions_b)
 
             # funcB should not have any tests since test file doesn't import it
@@ -1312,7 +1312,7 @@ test('funcOne returns 1', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             # Check that tests were found
@@ -1340,7 +1340,7 @@ test('mentions targetFunc in string', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             # Current implementation may still match on string occurrence
@@ -1367,7 +1367,7 @@ test('calculate doubles', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             # Should find tests since 'calculate' appears in source
@@ -1399,7 +1399,7 @@ describe('MyClass', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             # Should find tests for class methods
@@ -1432,7 +1432,7 @@ test('deepHelper works', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             assert len(tests) > 0
@@ -1456,7 +1456,7 @@ testCases.forEach(name => {
             f.flush()
             file_path = Path(f.name)
 
-            source = file_path.read_text()
+            source = file_path.read_text(encoding="utf-8")
             from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
@@ -1484,7 +1484,7 @@ describe('conditional tests', () => {
             f.flush()
             file_path = Path(f.name)
 
-            source = file_path.read_text()
+            source = file_path.read_text(encoding="utf-8")
             from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
@@ -1508,7 +1508,7 @@ test('slow test', () => {
             f.flush()
             file_path = Path(f.name)
 
-            source = file_path.read_text()
+            source = file_path.read_text(encoding="utf-8")
             from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
@@ -1531,7 +1531,7 @@ test.todo('also needs implementation');
             f.flush()
             file_path = Path(f.name)
 
-            source = file_path.read_text()
+            source = file_path.read_text(encoding="utf-8")
             from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
@@ -1554,7 +1554,7 @@ test.concurrent('concurrent test 2', async () => {
             f.flush()
             file_path = Path(f.name)
 
-            source = file_path.read_text()
+            source = file_path.read_text(encoding="utf-8")
             from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
@@ -1597,7 +1597,7 @@ describe('subtractNumbers', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             # All three functions should be discovered
@@ -1628,7 +1628,7 @@ describe('Unrelated name', () => {
 });
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
             tests = js_support.discover_tests(tmpdir, functions)
 
             # Should still find tests
@@ -1653,7 +1653,7 @@ describe('Array', function() {
             f.flush()
             file_path = Path(f.name)
 
-            source = file_path.read_text()
+            source = file_path.read_text(encoding="utf-8")
             from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
@@ -1684,7 +1684,7 @@ describe('User', () => {
             f.flush()
             file_path = Path(f.name)
 
-            source = file_path.read_text()
+            source = file_path.read_text(encoding="utf-8")
             from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
@@ -1712,7 +1712,7 @@ export class Calculator {
 module.exports = { Calculator };
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
 
             # Check qualified names include class
             add_func = next((f for f in functions if f.function_name == "add"), None)
@@ -1737,7 +1737,7 @@ export class Outer {
 module.exports = { Outer };
 """)
 
-            functions = js_support.discover_functions(source_file)
+            functions = js_support.discover_functions(source_file.read_text(encoding="utf-8"), source_file)
 
             # Should find at least the Outer class method
             assert any(f.class_name == "Outer" for f in functions)

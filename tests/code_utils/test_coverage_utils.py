@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from codeflash.code_utils.coverage_utils import build_fully_qualified_name, extract_dependent_function
+from codeflash.languages.python.static_analysis.coverage_utils import build_fully_qualified_name, extract_dependent_function
 from codeflash.models.function_types import FunctionParent
 from codeflash.models.models import CodeOptimizationContext, CodeString, CodeStringsMarkdown
 from codeflash.verification.coverage_utils import CoverageUtils

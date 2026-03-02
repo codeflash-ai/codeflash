@@ -684,7 +684,7 @@ def resolve_star_import(module_name: str, project_root: Path) -> set[str]:
 
 def add_needed_imports_from_module(
     src_module_code: str,
-    dst_module_code: str,
+    dst_module_code: str | cst.Module,
     src_path: Path,
     dst_path: Path,
     project_root: Path,
@@ -695,6 +695,8 @@ def add_needed_imports_from_module(
     src_module_code = delete___future___aliased_imports(src_module_code)
     if not helper_functions_fqn:
         helper_functions_fqn = {f.fully_qualified_name for f in (helper_functions or [])}
+
+    dst_code_fallback = dst_module_code if isinstance(dst_module_code, str) else dst_module_code.code
 
     src_module_and_package: ModuleNameAndPackage = calculate_module_and_package(project_root, src_path)
     dst_module_and_package: ModuleNameAndPackage = calculate_module_and_package(project_root, dst_path)
@@ -715,15 +717,19 @@ def add_needed_imports_from_module(
         cst.parse_module(src_module_code).visit(gatherer)
     except Exception as e:
         logger.error(f"Error parsing source module code: {e}")
-        return dst_module_code
+        return dst_code_fallback
 
     dotted_import_collector = DottedImportCollector()
-    try:
-        parsed_dst_module = cst.parse_module(dst_module_code)
+    if isinstance(dst_module_code, cst.Module):
+        parsed_dst_module = dst_module_code
         parsed_dst_module.visit(dotted_import_collector)
-    except cst.ParserSyntaxError as e:
-        logger.exception(f"Syntax error in destination module code: {e}")
-        return dst_module_code  # Return the original code if there's a syntax error
+    else:
+        try:
+            parsed_dst_module = cst.parse_module(dst_module_code)
+            parsed_dst_module.visit(dotted_import_collector)
+        except cst.ParserSyntaxError as e:
+            logger.exception(f"Syntax error in destination module code: {e}")
+            return dst_code_fallback
 
     try:
         for mod in gatherer.module_imports:
@@ -768,7 +774,7 @@ def add_needed_imports_from_module(
                     RemoveImportsVisitor.remove_unused_import(dst_context, mod, obj)
     except Exception as e:
         logger.exception(f"Error adding imports to destination module code: {e}")
-        return dst_module_code
+        return dst_code_fallback
 
     for mod, asname in gatherer.module_aliases.items():
         if not asname:
@@ -796,7 +802,7 @@ def add_needed_imports_from_module(
         return transformed_module.code.lstrip("\n")
     except Exception as e:
         logger.exception(f"Error adding imports to destination module code: {e}")
-        return dst_module_code
+        return dst_code_fallback
 
 
 def get_code(functions_to_optimize: list[FunctionToOptimize]) -> tuple[str | None, set[tuple[str, str]]]:
@@ -1659,6 +1665,13 @@ def _format_references_as_markdown(references: list, file_path: Path, project_ro
             refs_by_file[ref.file_path] = []
         refs_by_file[ref.file_path].append(ref)
 
+    from codeflash.languages.registry import get_language_support
+
+    try:
+        lang_support = get_language_support(language)
+    except Exception:
+        lang_support = None
+
     fn_call_context = ""
     context_len = 0
 
@@ -1700,7 +1713,11 @@ def _format_references_as_markdown(references: list, file_path: Path, project_ro
             # Extract context around the reference
             if ref.caller_function:
                 # Try to extract the full calling function
-                func_code = _extract_calling_function(file_content, ref.caller_function, ref.line, language)
+                func_code = None
+                if lang_support is not None:
+                    func_code = lang_support.extract_calling_function_source(
+                        file_content, ref.caller_function, ref.line
+                    )
                 if func_code:
                     caller_contexts.append(func_code)
                     context_len += len(func_code)
@@ -1718,77 +1735,3 @@ def _format_references_as_markdown(references: list, file_path: Path, project_ro
             fn_call_context += "\n```\n"
 
     return fn_call_context
-
-
-def _extract_calling_function(source_code: str, function_name: str, ref_line: int, language: Language) -> str | None:
-    """Extract the source code of a calling function.
-
-    Args:
-        source_code: Full source code of the file.
-        function_name: Name of the function to extract.
-        ref_line: Line number where the reference is.
-        language: The programming language.
-
-    Returns:
-        Source code of the function, or None if not found.
-
-    """
-    if language == Language.PYTHON:
-        return _extract_calling_function_python(source_code, function_name, ref_line)
-    return _extract_calling_function_js(source_code, function_name, ref_line)
-
-
-def _extract_calling_function_python(source_code: str, function_name: str, ref_line: int) -> str | None:
-    """Extract the source code of a calling function in Python."""
-    try:
-        import ast
-
-        tree = ast.parse(source_code)
-        lines = source_code.splitlines()
-
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                if node.name == function_name:
-                    # Check if the reference line is within this function
-                    start_line = node.lineno
-                    end_line = node.end_lineno or start_line
-                    if start_line <= ref_line <= end_line:
-                        return "\n".join(lines[start_line - 1 : end_line])
-        return None
-    except Exception:
-        return None
-
-
-def _extract_calling_function_js(source_code: str, function_name: str, ref_line: int) -> str | None:
-    """Extract the source code of a calling function in JavaScript/TypeScript.
-
-    Args:
-        source_code: Full source code of the file.
-        function_name: Name of the function to extract.
-        ref_line: Line number where the reference is (helps identify the right function).
-
-    Returns:
-        Source code of the function, or None if not found.
-
-    """
-    try:
-        from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage
-
-        # Try TypeScript first, fall back to JavaScript
-        for lang in [TreeSitterLanguage.TYPESCRIPT, TreeSitterLanguage.TSX, TreeSitterLanguage.JAVASCRIPT]:
-            try:
-                analyzer = TreeSitterAnalyzer(lang)
-                functions = analyzer.find_functions(source_code, include_methods=True)
-
-                for func in functions:
-                    if func.name == function_name:
-                        # Check if the reference line is within this function
-                        if func.start_line <= ref_line <= func.end_line:
-                            return func.source_text
-                break
-            except Exception:
-                continue
-
-        return None
-    except Exception:
-        return None

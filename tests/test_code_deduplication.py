@@ -1,4 +1,4 @@
-from codeflash.code_utils.deduplicate_code import are_codes_duplicate, normalize_code
+from codeflash.languages.python.normalizer import normalize_python_code as normalize_code
 
 
 def test_deduplicate1():
@@ -23,7 +23,7 @@ def compute_sum(numbers):
 """
 
     assert normalize_code(code1) == normalize_code(code2)
-    assert are_codes_duplicate(code1, code2)
+    assert normalize_code(code1) == normalize_code(code2)
 
     # Example 3: Same function and parameter names, different local variables (should match)
     code3 = """
@@ -43,7 +43,7 @@ def calculate_sum(numbers):
 """
 
     assert normalize_code(code3) == normalize_code(code4)
-    assert are_codes_duplicate(code3, code4)
+    assert normalize_code(code3) == normalize_code(code4)
 
     # Example 4: Nested functions and classes (preserving names)
     code5 = """
