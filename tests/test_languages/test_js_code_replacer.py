@@ -7,6 +7,7 @@ These tests verify that code replacement correctly handles:
 - ES Modules (import/export) syntax
 - TypeScript import handling
 """
+
 from __future__ import annotations
 
 import shutil
@@ -47,7 +48,6 @@ def temp_project(tmp_path):
     project_root = tmp_path / "project"
     project_root.mkdir()
     return project_root
-
 
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -751,6 +751,7 @@ class TestIntegrationWithFixtures:
                 f"import statements should be converted to require.\nFound import lines: {import_lines}"
             )
 
+
 class TestSimpleFunctionReplacement:
     """Tests for simple function body replacement with strict assertions."""
 
@@ -764,7 +765,8 @@ export function add(a, b) {
         file_path = temp_project / "math.js"
         file_path.write_text(original_source, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         func = functions[0]
 
         # Optimized version with different body
@@ -800,7 +802,8 @@ export function processData(data) {
         file_path = temp_project / "processor.js"
         file_path.write_text(original_source, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         func = functions[0]
 
         # Optimized version using map
@@ -839,7 +842,8 @@ module.exports = { targetFunction, otherFunction };
         file_path = temp_project / "module.js"
         file_path.write_text(original_source, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         target_func = next(f for f in functions if f.function_name == "targetFunction")
 
         optimized_code = """\
@@ -891,7 +895,8 @@ export class Calculator {
         file_path = temp_project / "calculator.js"
         file_path.write_text(original_source, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         add_method = next(f for f in functions if f.function_name == "add")
 
         # Optimized version provided in class context
@@ -954,7 +959,8 @@ export class DataProcessor {
         file_path = temp_project / "processor.js"
         file_path.write_text(original_source, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         process_method = next(f for f in functions if f.function_name == "process")
 
         optimized_code = """\
@@ -1016,7 +1022,8 @@ export function add(a, b) {
         file_path = temp_project / "math.js"
         file_path.write_text(original_source, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         func = functions[0]
 
         optimized_code = """\
@@ -1070,7 +1077,8 @@ export class Cache {
         file_path = temp_project / "cache.js"
         file_path.write_text(original_source, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         get_method = next(f for f in functions if f.function_name == "get")
 
         optimized_code = """\
@@ -1131,7 +1139,8 @@ export async function fetchData(url) {
         file_path = temp_project / "api.js"
         file_path.write_text(original_source, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         func = functions[0]
 
         optimized_code = """\
@@ -1172,7 +1181,8 @@ export class ApiClient {
         file_path = temp_project / "client.js"
         file_path.write_text(original_source, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         get_method = next(f for f in functions if f.function_name == "get")
 
         optimized_code = """\
@@ -1223,7 +1233,8 @@ export function* range(start, end) {
         file_path = temp_project / "generators.js"
         file_path.write_text(original_source, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         func = functions[0]
 
         optimized_code = """\
@@ -1262,7 +1273,8 @@ export function processArray(items: number[]): number {
         file_path = temp_project / "processor.ts"
         file_path.write_text(original_source, encoding="utf-8")
 
-        functions = ts_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = ts_support.discover_functions(source, file_path)
         func = functions[0]
 
         optimized_code = """\
@@ -1303,7 +1315,8 @@ export class Container<T> {
         file_path = temp_project / "container.ts"
         file_path.write_text(original_source, encoding="utf-8")
 
-        functions = ts_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = ts_support.discover_functions(source, file_path)
         get_all_method = next(f for f in functions if f.function_name == "getAll")
 
         optimized_code = """\
@@ -1356,7 +1369,8 @@ export function createUser(name: string, email: string): User {
         file_path = temp_project / "user.ts"
         file_path.write_text(original_source, encoding="utf-8")
 
-        functions = ts_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = ts_support.discover_functions(source, file_path)
         func = next(f for f in functions if f.function_name == "createUser")
 
         optimized_code = """\
@@ -1411,7 +1425,8 @@ export function processItems(items) {
         file_path = temp_project / "processor.js"
         file_path.write_text(original_source, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         process_func = next(f for f in functions if f.function_name == "processItems")
 
         optimized_code = """\
@@ -1458,7 +1473,8 @@ export class MathUtils {
         file_path.write_text(original_source, encoding="utf-8")
 
         # First replacement: sum method
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         sum_method = next(f for f in functions if f.function_name == "sum")
 
         optimized_sum = """\
@@ -1505,7 +1521,8 @@ export function processConfig({ server: { host, port }, database: { url, poolSiz
         file_path = temp_project / "config.js"
         file_path.write_text(original_source, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         func = functions[0]
 
         optimized_code = """\
@@ -1544,7 +1561,8 @@ export function minimal() {
         file_path = temp_project / "minimal.js"
         file_path.write_text(original_source, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         func = functions[0]
 
         optimized_code = """\
@@ -1571,7 +1589,8 @@ export function identity(x) { return x; }
         file_path = temp_project / "utils.js"
         file_path.write_text(original_source, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         func = functions[0]
 
         optimized_code = """\
@@ -1598,7 +1617,8 @@ export function formatMessage(name) {
         file_path = temp_project / "formatter.js"
         file_path.write_text(original_source, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         func = functions[0]
 
         optimized_code = """\
@@ -1633,7 +1653,8 @@ export function validateEmail(email) {
         file_path = temp_project / "validator.js"
         file_path.write_text(original_source, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         func = functions[0]
 
         optimized_code = """\
@@ -1676,7 +1697,8 @@ module.exports = { main, helper };
         file_path = temp_project / "module.js"
         file_path.write_text(original_source, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         main_func = next(f for f in functions if f.function_name == "main")
 
         optimized_code = """\
@@ -1719,7 +1741,8 @@ export function main(data) {
         file_path = temp_project / "module.js"
         file_path.write_text(original_source, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         main_func = next(f for f in functions if f.function_name == "main")
 
         optimized_code = """\
@@ -1750,20 +1773,16 @@ class TestSyntaxValidation:
         """Test that various replacements all produce valid JavaScript."""
         test_cases = [
             # (original, optimized, description)
-            (
-                "export function f(x) { return x + 1; }",
-                "export function f(x) { return ++x; }",
-                "increment replacement"
-            ),
+            ("export function f(x) { return x + 1; }", "export function f(x) { return ++x; }", "increment replacement"),
             (
                 "export function f(arr) { return arr.length > 0; }",
                 "export function f(arr) { return !!arr.length; }",
-                "boolean conversion"
+                "boolean conversion",
             ),
             (
                 "export function f(a, b) { if (a) { return a; } return b; }",
                 "export function f(a, b) { return a || b; }",
-                "logical OR replacement"
+                "logical OR replacement",
             ),
         ]
 
@@ -1771,7 +1790,8 @@ class TestSyntaxValidation:
             file_path = temp_project / f"test_{i}.js"
             file_path.write_text(original, encoding="utf-8")
 
-            functions = js_support.discover_functions(file_path)
+            source = file_path.read_text(encoding="utf-8")
+            functions = js_support.discover_functions(source, file_path)
             func = functions[0]
 
             result = js_support.replace_function(original, func, optimized)
@@ -1875,7 +1895,8 @@ export class DataProcessor<T> {
     target_func = "findDuplicates"
     parent_class = "DataProcessor"
 
-    functions = ts_support.discover_functions(file_path)
+    source = file_path.read_text(encoding="utf-8")
+    functions = ts_support.discover_functions(source, file_path)
     # find function
     target_func_info = None
     for func in functions:
@@ -1920,11 +1941,15 @@ class DataProcessor<T> {
 ```
 """
     code_markdown = CodeStringsMarkdown.parse_markdown_code(new_code)
-    replaced = replace_function_definitions_for_language([f"{parent_class}.{target_func}"], code_markdown, file_path, temp_project, lang_support=ts_support)
+    replaced = replace_function_definitions_for_language(
+        [f"{parent_class}.{target_func}"], code_markdown, file_path, temp_project, lang_support=ts_support
+    )
     assert replaced
 
     new_code = file_path.read_text()
-    assert new_code == """/**
+    assert (
+        new_code
+        == """/**
  * DataProcessor class - demonstrates class method optimization in TypeScript.
  * Contains intentionally inefficient implementations for optimization testing.
  */
@@ -2015,7 +2040,7 @@ export class DataProcessor<T> {
     }
 }
 """
-
+    )
 
 
 class TestNewVariableFromOptimizedCode:
@@ -2055,22 +2080,12 @@ export function isCodeflashEmployee(userId: string): boolean {
 """
 
         code_markdown = CodeStringsMarkdown(
-            code_strings=[
-                CodeString(
-                    code=optimized_code,
-                    file_path=Path("auth.ts"),
-                    language="typescript"
-                )
-            ],
-            language="typescript"
+            code_strings=[CodeString(code=optimized_code, file_path=Path("auth.ts"), language="typescript")],
+            language="typescript",
         )
 
         replaced = replace_function_definitions_for_language(
-            ["isCodeflashEmployee"],
-            code_markdown,
-            file_path,
-            temp_project,
-            lang_support=ts_support,
+            ["isCodeflashEmployee"], code_markdown, file_path, temp_project, lang_support=ts_support
         )
 
         assert replaced
@@ -2091,9 +2106,7 @@ export function isCodeflashEmployee(userId: string): boolean {
 }
 """
         assert result == expected_result, (
-            f"Result does not match expected output.\n"
-            f"Expected:\n{expected_result}\n\n"
-            f"Got:\n{result}"
+            f"Result does not match expected output.\nExpected:\n{expected_result}\n\nGot:\n{result}"
         )
 
 
@@ -2164,21 +2177,13 @@ export function getNearestAbove(
 
         code_markdown = CodeStringsMarkdown(
             code_strings=[
-                CodeString(
-                    code=optimized_code_with_interface,
-                    file_path=Path("helpers.ts"),
-                    language="typescript"
-                )
+                CodeString(code=optimized_code_with_interface, file_path=Path("helpers.ts"), language="typescript")
             ],
-            language="typescript"
+            language="typescript",
         )
 
         replace_function_definitions_for_language(
-            ["getNearestAbove"],
-            code_markdown,
-            file_path,
-            temp_project,
-            lang_support=ts_support,
+            ["getNearestAbove"], code_markdown, file_path, temp_project, lang_support=ts_support
         )
 
         result = file_path.read_text()
@@ -2237,22 +2242,12 @@ export function processNode(node: TreeNode, space: NodeSpace): number {
 """
 
         code_markdown = CodeStringsMarkdown(
-            code_strings=[
-                CodeString(
-                    code=optimized_code,
-                    file_path=Path("processor.ts"),
-                    language="typescript"
-                )
-            ],
-            language="typescript"
+            code_strings=[CodeString(code=optimized_code, file_path=Path("processor.ts"), language="typescript")],
+            language="typescript",
         )
 
         replace_function_definitions_for_language(
-            ["processNode"],
-            code_markdown,
-            file_path,
-            temp_project,
-            lang_support=ts_support,
+            ["processNode"], code_markdown, file_path, temp_project, lang_support=ts_support
         )
 
         result = file_path.read_text()

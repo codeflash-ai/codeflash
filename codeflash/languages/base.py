@@ -168,6 +168,7 @@ class FunctionFilterCriteria:
     include_patterns: list[str] = field(default_factory=list)
     exclude_patterns: list[str] = field(default_factory=list)
     require_return: bool = True
+    require_export: bool = True
     include_async: bool = True
     include_methods: bool = True
     min_lines: int | None = None
@@ -253,7 +254,7 @@ class LanguageSupport(Protocol):
             def language(self) -> Language:
                 return Language.PYTHON
 
-            def discover_functions(self, file_path: Path, ...) -> list[FunctionInfo]:
+            def discover_functions(self, source: str, file_path: Path, ...) -> list[FunctionInfo]:
                 # Python-specific implementation using LibCST
                 ...
 
@@ -307,12 +308,13 @@ class LanguageSupport(Protocol):
     # === Discovery ===
 
     def discover_functions(
-        self, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
+        self, source: str, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
     ) -> list[FunctionToOptimize]:
-        """Find all optimizable functions in a file.
+        """Find all optimizable functions in source code.
 
         Args:
-            file_path: Path to the source file to analyze.
+            source: Source code to analyze.
+            file_path: Path to the source file (used for context and language detection).
             filter_criteria: Optional criteria to filter functions.
 
         Returns:

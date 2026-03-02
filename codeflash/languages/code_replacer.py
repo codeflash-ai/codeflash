@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
+from codeflash.languages.base import FunctionFilterCriteria
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -16,6 +17,9 @@ if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import LanguageSupport
     from codeflash.models.models import CodeStringsMarkdown
+
+# Permissive criteria for discovering functions in code snippets (no export/return filtering)
+_SOURCE_CRITERIA = FunctionFilterCriteria(require_return=False, require_export=False)
 
 
 def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStringsMarkdown) -> str:
@@ -48,7 +52,7 @@ def replace_function_definitions_for_language(
     """Replace function definitions using the LanguageSupport protocol.
 
     Works for any language that implements LanguageSupport.replace_function
-    and LanguageSupport.discover_functions_from_source.
+    and LanguageSupport.discover_functions.
     """
     original_source_code: str = module_abspath.read_text(encoding="utf8")
     code_to_apply = get_optimized_code_for_module(module_abspath.relative_to(project_root_path), optimized_code)
@@ -77,7 +81,7 @@ def replace_function_definitions_for_language(
         functions_to_replace = list(function_names)
 
         for func_name in functions_to_replace:
-            current_functions = lang_support.discover_functions_from_source(new_code, module_abspath)
+            current_functions = lang_support.discover_functions(new_code, module_abspath, _SOURCE_CRITERIA)
 
             func = None
             for f in current_functions:
@@ -107,14 +111,14 @@ def replace_function_definitions_for_language(
 
 
 def _extract_function_from_code(
-    lang_support: LanguageSupport, source_code: str, function_name: str, file_path: Path | None = None
+    lang_support: LanguageSupport, source_code: str, function_name: str, file_path: Path
 ) -> str | None:
     """Extract a specific function's source code from a code string.
 
     Includes JSDoc/docstring comments if present.
     """
     try:
-        functions = lang_support.discover_functions_from_source(source_code, file_path)
+        functions = lang_support.discover_functions(source_code, file_path, _SOURCE_CRITERIA)
         for func in functions:
             if func.function_name == function_name:
                 lines = source_code.splitlines(keepends=True)

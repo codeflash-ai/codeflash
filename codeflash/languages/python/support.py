@@ -112,27 +112,14 @@ class PythonSupport:
     # === Discovery ===
 
     def discover_functions(
-        self, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
+        self, source: str, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
     ) -> list[FunctionToOptimize]:
-        """Find all optimizable functions in a Python file.
-
-        Uses libcst to parse the file and find functions with return statements.
-
-        Args:
-            file_path: Path to the Python file to analyze.
-            filter_criteria: Optional criteria to filter functions.
-
-        Returns:
-            List of FunctionToOptimize objects for discovered functions.
-
-        """
         import libcst as cst
 
         from codeflash.discovery.functions_to_optimize import FunctionVisitor
 
         criteria = filter_criteria or FunctionFilterCriteria()
 
-        source = file_path.read_text(encoding="utf-8")
         tree = cst.parse_module(source)
 
         wrapper = cst.metadata.MetadataWrapper(tree)
@@ -886,6 +873,7 @@ class PythonSupport:
 
         from codeflash.code_utils.code_utils import get_run_tmp_file
         from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
+        from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
         from codeflash.languages.python.static_analysis.coverage_utils import prepare_coverage_files
         from codeflash.models.models import TestType
         from codeflash.verification.test_runner import execute_test_subprocess
@@ -914,7 +902,7 @@ class PythonSupport:
             "--codeflash_loops_scope=session",
             "--codeflash_min_loops=1",
             "--codeflash_max_loops=1",
-            "--codeflash_seconds=10.0",
+            f"--codeflash_seconds={TOTAL_LOOPING_TIME_EFFECTIVE}",
         ]
         if timeout is not None:
             common_pytest_args.append(f"--timeout={timeout}")
@@ -1037,6 +1025,7 @@ class PythonSupport:
 
         from codeflash.code_utils.code_utils import get_run_tmp_file
         from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
+        from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
         from codeflash.verification.test_runner import execute_test_subprocess
 
         blocklisted_plugins = ["codspeed", "cov", "benchmark", "profiling", "xdist", "sugar"]
@@ -1049,7 +1038,7 @@ class PythonSupport:
             "--codeflash_loops_scope=session",
             "--codeflash_min_loops=1",
             "--codeflash_max_loops=1",
-            "--codeflash_seconds=10.0",
+            f"--codeflash_seconds={TOTAL_LOOPING_TIME_EFFECTIVE}",
         ]
         if timeout is not None:
             pytest_args.append(f"--timeout={timeout}")
