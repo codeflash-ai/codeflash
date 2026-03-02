@@ -109,7 +109,6 @@ from codeflash.result.explanation import Explanation
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
-from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
 from codeflash.verification.parse_line_profile_test_output import parse_line_profile_results
 from codeflash.verification.parse_test_output import (
     calculate_function_throughput_from_test_results,
@@ -508,6 +507,12 @@ class FunctionOptimizer:
 
     def instrument_test_fixtures(self, test_paths: list[Path]) -> dict[Path, list[str]] | None:
         return None
+
+    def instrument_async_for_mode(self, mode: TestingMode) -> None:
+        pass
+
+    def instrument_capture(self, file_path_to_helper_classes: dict[Path, set[str]]) -> None:
+        pass
 
     # --- End hooks ---
 
@@ -2264,25 +2269,13 @@ class FunctionOptimizer:
 
         test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
 
-        if self.function_to_optimize.is_async and is_python():
-            from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
-
-            success = add_async_decorator_to_function(
-                self.function_to_optimize.file_path,
-                self.function_to_optimize,
-                TestingMode.BEHAVIOR,
-                project_root=self.project_root,
-            )
+        if self.function_to_optimize.is_async:
+            self.instrument_async_for_mode(TestingMode.BEHAVIOR)
 
         # Instrument codeflash capture
         with progress_bar("Running tests to establish original code behavior..."):
             try:
-                # Only instrument Python code here - non-Python languages use their own runtime helpers
-                # which are already included in the generated/instrumented tests
-                if is_python():
-                    instrument_codeflash_capture(
-                        self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
-                    )
+                self.instrument_capture(file_path_to_helper_classes)
 
                 total_looping_time = TOTAL_LOOPING_TIME_EFFECTIVE
                 logger.debug(f"[PIPELINE] Establishing baseline with {len(self.test_files)} test files")
@@ -2332,15 +2325,8 @@ class FunctionOptimizer:
             for idx, tf in enumerate(self.test_files.test_files):
                 logger.debug(f"[BENCHMARK-FILES] Test file {idx}: perf_file={tf.benchmarking_file_path}")
 
-            if self.function_to_optimize.is_async and is_python():
-                from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
-
-                add_async_decorator_to_function(
-                    self.function_to_optimize.file_path,
-                    self.function_to_optimize,
-                    TestingMode.PERFORMANCE,
-                    project_root=self.project_root,
-                )
+            if self.function_to_optimize.is_async:
+                self.instrument_async_for_mode(TestingMode.PERFORMANCE)
 
             try:
                 benchmarking_results, _ = self.run_and_parse_tests(
@@ -2509,22 +2495,11 @@ class FunctionOptimizer:
             candidate_helper_code = {}
             for module_abspath in original_helper_code:
                 candidate_helper_code[module_abspath] = Path(module_abspath).read_text("utf-8")
-            if self.function_to_optimize.is_async and is_python():
-                from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
-
-                add_async_decorator_to_function(
-                    self.function_to_optimize.file_path,
-                    self.function_to_optimize,
-                    TestingMode.BEHAVIOR,
-                    project_root=self.project_root,
-                )
+            if self.function_to_optimize.is_async:
+                self.instrument_async_for_mode(TestingMode.BEHAVIOR)
 
             try:
-                # Only instrument Python code here - non-Python languages use their own runtime helpers
-                if is_python():
-                    instrument_codeflash_capture(
-                        self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
-                    )
+                self.instrument_capture(file_path_to_helper_classes)
 
                 total_looping_time = TOTAL_LOOPING_TIME_EFFECTIVE
                 candidate_behavior_results, _ = self.run_and_parse_tests(
@@ -2587,16 +2562,8 @@ class FunctionOptimizer:
             logger.info(f"loading|Running performance tests for candidate {optimization_candidate_index}...")
             console.rule()
 
-            # For async functions, instrument at definition site for performance benchmarking
-            if self.function_to_optimize.is_async and is_python():
-                from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
-
-                add_async_decorator_to_function(
-                    self.function_to_optimize.file_path,
-                    self.function_to_optimize,
-                    TestingMode.PERFORMANCE,
-                    project_root=self.project_root,
-                )
+            if self.function_to_optimize.is_async:
+                self.instrument_async_for_mode(TestingMode.PERFORMANCE)
 
             try:
                 candidate_benchmarking_results, _ = self.run_and_parse_tests(

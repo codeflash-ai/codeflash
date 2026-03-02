@@ -56,6 +56,18 @@ class PythonFunctionOptimizer(FunctionOptimizer):
         add_custom_marker_to_all_tests(test_paths)
         return original_conftest_content
 
+    def instrument_capture(self, file_path_to_helper_classes: dict[Path, set[str]]) -> None:
+        from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
+
+        instrument_codeflash_capture(self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root)
+
+    def instrument_async_for_mode(self, mode: TestingMode) -> None:
+        from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
+
+        add_async_decorator_to_function(
+            self.function_to_optimize.file_path, self.function_to_optimize, mode, project_root=self.project_root
+        )
+
     def instrument_existing_tests(self, function_to_all_tests: dict[str, set[FunctionCalledInTest]]) -> set[Path]:
         existing_test_files_count = 0
         replay_test_files_count = 0
