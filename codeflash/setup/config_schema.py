@@ -55,42 +55,56 @@ class CodeflashConfig(BaseModel):
         Uses kebab-case keys as per TOML conventions.
         Only includes non-default values to keep config minimal.
         """
+        # Cache attribute accesses to avoid repeated Pydantic field lookups
+        language = self.language
+        module_root = self.module_root
+        tests_root = self.tests_root
+        ignore_paths = self.ignore_paths
+        formatter_cmds = self.formatter_cmds
+        benchmarks_root = self.benchmarks_root
+        git_remote = self.git_remote
+        disable_telemetry = self.disable_telemetry
+        pytest_cmd = self.pytest_cmd
+        disable_imports_sorting = self.disable_imports_sorting
+        override_fixtures = self.override_fixtures
+        
         config: dict[str, Any] = {}
 
         # Include language if not Python (since Python is the default)
-        if self.language and self.language != "python":
-            config["language"] = self.language
+        if language and language != "python":
+            config["language"] = language
 
         # Always include required fields
-        config["module-root"] = self.module_root
-        if self.tests_root:
-            config["tests-root"] = self.tests_root
+        config["module-root"] = module_root
+        if tests_root:
+            config["tests-root"] = tests_root
 
         # Include non-default optional fields
-        if self.ignore_paths:
-            config["ignore-paths"] = self.ignore_paths
+        if ignore_paths:
+            config["ignore-paths"] = ignore_paths
 
-        if self.formatter_cmds and self.formatter_cmds != ["black $file"]:
-            config["formatter-cmds"] = self.formatter_cmds
-        elif not self.formatter_cmds:
+        if formatter_cmds:
+            if len(formatter_cmds) != 1 or formatter_cmds[0] != "black $file":
+                config["formatter-cmds"] = formatter_cmds
+        else:
             config["formatter-cmds"] = ["disabled"]
 
-        if self.benchmarks_root:
-            config["benchmarks-root"] = self.benchmarks_root
+        if benchmarks_root:
+            config["benchmarks-root"] = benchmarks_root
 
-        if self.git_remote and self.git_remote != "origin":
-            config["git-remote"] = self.git_remote
+        if git_remote and git_remote != "origin":
+            config["git-remote"] = git_remote
 
-        if self.disable_telemetry:
+        if disable_telemetry:
             config["disable-telemetry"] = True
 
-        if self.pytest_cmd and self.pytest_cmd != "pytest":
-            config["pytest-cmd"] = self.pytest_cmd
+        if pytest_cmd and pytest_cmd != "pytest":
+            config["pytest-cmd"] = pytest_cmd
 
-        if self.disable_imports_sorting:
+        if disable_imports_sorting:
             config["disable-imports-sorting"] = True
 
-        if self.override_fixtures:
+        if override_fixtures:
             config["override-fixtures"] = True
 
         return config
