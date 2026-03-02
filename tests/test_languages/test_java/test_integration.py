@@ -57,8 +57,7 @@ class TestEndToEndWorkflow:
         # Discover functions in each file
         all_functions = []
         for java_file in java_files:
-            source = java_file.read_text(encoding="utf-8")
-            functions = discover_functions(source, java_file)
+            functions = discover_functions(java_file)
             all_functions.extend(functions)
 
         assert len(all_functions) > 0
@@ -91,8 +90,7 @@ class TestEndToEndWorkflow:
             pytest.skip("Calculator.java not found")
 
         # Discover a function
-        source = calculator_file.read_text(encoding="utf-8")
-        functions = discover_functions(source, calculator_file)
+        functions = discover_functions(calculator_file)
         assert len(functions) > 0
 
         # Extract context for the first function

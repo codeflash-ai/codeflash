@@ -21,6 +21,7 @@ from codeflash.code_utils.code_utils import (
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.languages import Language
+from codeflash.languages.current import is_java
 
 # Import Jest-specific parsing from the JavaScript language module
 from codeflash.languages.javascript.parse import parse_jest_test_xml as _parse_jest_test_xml
@@ -188,6 +189,31 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
                 return potential_path
         except (OSError, RuntimeError):
             pass
+
+        return None
+
+    # Handle Java class paths (e.g., "com.example.TestClass" -> "com/example/TestClass.java")
+    if is_java():
+        relative_path = test_class_path.replace(".", "/") + ".java"
+
+        # 1. Directly under base_dir
+        potential_path = base_dir / relative_path
+        if potential_path.exists():
+            return potential_path
+
+        # 2. Under src/test/java relative to project root (Maven structure)
+        project_root = base_dir.parent if base_dir.name == "java" else base_dir
+        while project_root.name not in ("", "/") and not (project_root / "pom.xml").exists():
+            project_root = project_root.parent
+        if (project_root / "pom.xml").exists():
+            potential_path = project_root / "src" / "test" / "java" / relative_path
+            if potential_path.exists():
+                return potential_path
+
+        # 3. Search by filename in base_dir tree
+        file_name = test_class_path.rsplit(".", maxsplit=1)[-1] + ".java"
+        for java_file in base_dir.rglob(file_name):
+            return java_file
 
         return None
 
@@ -1048,12 +1074,14 @@ def parse_test_results(
             source_file=source_file,
             coverage_config_file=coverage_config_file,
         )
-        coverage.log_coverage()
-    try:
-        failures = parse_test_failures_from_stdout(run_result.stdout)
-        results.test_failures = failures
-    except Exception as e:
-        logger.exception(e)
+        if coverage:
+            coverage.log_coverage()
+    if run_result:
+        try:
+            failures = parse_test_failures_from_stdout(run_result.stdout)
+            results.test_failures = failures
+        except Exception as e:
+            logger.exception(e)
 
     # Cleanup Jest coverage directory after coverage is parsed
     import shutil

@@ -539,6 +539,9 @@ class FunctionOptimizer:
     ) -> tuple[TestResults | dict, CoverageData | None]:
         return TestResults(test_results=[]), None
 
+    def fixup_generated_tests(self, generated_tests: GeneratedTestsList) -> GeneratedTestsList:
+        return generated_tests
+
     # --- End hooks ---
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
@@ -640,6 +643,8 @@ class FunctionOptimizer:
             project_root=self.project_root,
             source_file_path=self.function_to_optimize.file_path,
         )
+
+        generated_tests = self.fixup_generated_tests(generated_tests)
 
         logger.debug(f"[PIPELINE] Processing {count_tests} generated tests")
         for i, generated_test in enumerate(generated_tests.generated_tests):

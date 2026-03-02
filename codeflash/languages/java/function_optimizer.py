@@ -30,7 +30,7 @@ from codeflash.verification.equivalence import compare_test_results
 if TYPE_CHECKING:
     from codeflash.either import Result
     from codeflash.languages.base import CodeContext, HelperFunction
-    from codeflash.models.models import CoverageData, OriginalCodeBaseline, TestDiff
+    from codeflash.models.models import CoverageData, GeneratedTestsList, OriginalCodeBaseline, TestDiff
 
 
 class JavaFunctionOptimizer(FunctionOptimizer):
@@ -290,6 +290,27 @@ class JavaFunctionOptimizer(FunctionOptimizer):
 
         logger.debug(f"[JAVA] Fixed paths: behavior={behavior_path}, perf={perf_path}")
         return behavior_path, perf_path, modified_behavior_source, modified_perf_source
+
+    def fixup_generated_tests(self, generated_tests: GeneratedTestsList) -> GeneratedTestsList:
+        from codeflash.models.models import GeneratedTests, GeneratedTestsList
+
+        used_paths: set[Path] = set()
+        fixed_tests: list[GeneratedTests] = []
+        for test in generated_tests.generated_tests:
+            behavior_path, perf_path, behavior_source, perf_source = self._fix_java_test_paths(
+                test.instrumented_behavior_test_source, test.instrumented_perf_test_source, used_paths
+            )
+            used_paths.add(behavior_path)
+            fixed_tests.append(
+                GeneratedTests(
+                    generated_original_test_source=test.generated_original_test_source,
+                    instrumented_behavior_test_source=behavior_source,
+                    instrumented_perf_test_source=perf_source,
+                    behavior_file_path=behavior_path,
+                    perf_file_path=perf_path,
+                )
+            )
+        return GeneratedTestsList(generated_tests=fixed_tests)
 
     def compare_candidate_results(
         self,
