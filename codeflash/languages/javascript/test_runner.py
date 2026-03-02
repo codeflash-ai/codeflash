@@ -363,7 +363,7 @@ def _get_jest_config_for_project(project_root: Path) -> Path | None:
     return original_jest_config
 
 
-def _find_node_project_root(file_path: Path) -> Path | None:
+def find_node_project_root(file_path: Path) -> Path | None:
     """Find the Node.js project root by looking for package.json.
 
     Traverses up from the given file path to find the nearest directory
@@ -680,7 +680,7 @@ def run_jest_behavioral_tests(
     # Use provided project_root, or detect it as fallback
     if project_root is None and test_files:
         first_test_file = Path(test_files[0])
-        project_root = _find_node_project_root(first_test_file)
+        project_root = find_node_project_root(first_test_file)
 
     # Use the project root, or fall back to provided cwd
     effective_cwd = project_root if project_root else cwd
@@ -930,7 +930,7 @@ def run_jest_benchmarking_tests(
     # Use provided project_root, or detect it as fallback
     if project_root is None and test_files:
         first_test_file = Path(test_files[0])
-        project_root = _find_node_project_root(first_test_file)
+        project_root = find_node_project_root(first_test_file)
 
     effective_cwd = project_root if project_root else cwd
 
@@ -1100,7 +1100,7 @@ def run_jest_line_profile_tests(
     # Use provided project_root, or detect it as fallback
     if project_root is None and test_files:
         first_test_file = Path(test_files[0])
-        project_root = _find_node_project_root(first_test_file)
+        project_root = find_node_project_root(first_test_file)
 
     effective_cwd = project_root if project_root else cwd
     logger.debug(f"Jest line profiling working directory: {effective_cwd}")

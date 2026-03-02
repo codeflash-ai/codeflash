@@ -1929,9 +1929,10 @@ class JavaScriptSupport:
         return prepare_javascript_module(module_code, module_path)
 
     def setup_test_config(self, test_cfg: TestConfig, file_path: Path) -> None:
-        from codeflash.languages.javascript.optimizer import find_js_project_root, verify_js_requirements
+        from codeflash.languages.javascript.optimizer import verify_js_requirements
+        from codeflash.languages.javascript.test_runner import find_node_project_root
 
-        test_cfg.js_project_root = find_js_project_root(file_path)
+        test_cfg.js_project_root = find_node_project_root(file_path)
         verify_js_requirements(test_cfg)
 
     # === Configuration ===

@@ -25,25 +25,6 @@ def prepare_javascript_module(
     return validated_original_code, None
 
 
-def find_js_project_root(file_path: Path) -> Path | None:
-    """Find the JavaScript/TypeScript project root by looking for package.json.
-
-    Traverses up from the given file path to find the nearest directory
-    containing package.json, jest.config.js, jest.config.ts, or tsconfig.json.
-    """
-    current = file_path.parent if file_path.is_file() else file_path
-    while current != current.parent:
-        if (
-            (current / "package.json").exists()
-            or (current / "jest.config.js").exists()
-            or (current / "jest.config.ts").exists()
-            or (current / "tsconfig.json").exists()
-        ):
-            return current
-        current = current.parent
-    return None
-
-
 def verify_js_requirements(test_cfg: TestConfig) -> None:
     """Verify JavaScript/TypeScript requirements before optimization.
 
