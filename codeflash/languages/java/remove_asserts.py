@@ -853,41 +853,39 @@ class JavaAssertTransformer:
         depth = 1
         pos = open_brace_pos + 1
         code_len = len(code)
-        special_re = self._special_re
+        s = code
 
         while pos < code_len and depth > 0:
-            m = special_re.search(code, pos)
-            if m is None:
-                return None, -1
+            ch = s[pos]
 
-            idx = m.start()
-            char = m.group()
-            prev_char = code[idx - 1] if idx > 0 else ""
-
-            if char == "'" and prev_char != "\\":
-                j = code.find("'", idx + 1)
-                while j != -1 and j > 0 and code[j - 1] == "\\":
-                    j = code.find("'", j + 1)
+            # Handle single-quoted literals similar to original behavior:
+            # Only treat as quote start if previous character is not a backslash.
+            if ch == "'" and (pos == 0 or s[pos - 1] != "\\"):
+                j = s.find("'", pos + 1)
+                while j != -1 and j > 0 and s[j - 1] == "\\":
+                    j = s.find("'", j + 1)
                 if j == -1:
                     return None, -1
                 pos = j + 1
                 continue
 
-            if char == '"' and prev_char != "\\":
-                j = code.find('"', idx + 1)
-                while j != -1 and j > 0 and code[j - 1] == "\\":
-                    j = code.find('"', j + 1)
+            # Handle double-quoted literals similar to original behavior:
+            if ch == '"' and (pos == 0 or s[pos - 1] != "\\"):
+                j = s.find('"', pos + 1)
+                while j != -1 and j > 0 and s[j - 1] == "\\":
+                    j = s.find('"', j + 1)
                 if j == -1:
                     return None, -1
                 pos = j + 1
                 continue
 
-            if char == "{":
+            # Adjust depth for braces; other special characters are simply skipped.
+            if ch == "{":
                 depth += 1
-            elif char == "}":
+            elif ch == "}":
                 depth -= 1
 
-            pos = idx + 1
+            pos += 1
 
         if depth != 0:
             return None, -1
