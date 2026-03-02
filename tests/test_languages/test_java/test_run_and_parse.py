@@ -118,12 +118,7 @@ def java_project(tmp_path: Path):
 
 def _make_optimizer(project_root: Path, test_dir: Path, function_name: str, src_file: Path) -> tuple:
     """Create an Optimizer and FunctionOptimizer for the given function."""
-    fto = FunctionToOptimize(
-        function_name=function_name,
-        file_path=src_file,
-        parents=[],
-        language="java",
-    )
+    fto = FunctionToOptimize(function_name=function_name, file_path=src_file, parents=[], language="java")
     opt = Optimizer(
         Namespace(
             project_root=project_root,
@@ -436,7 +431,7 @@ public class PreciseWaiterTest {
         (src_dir / "PreciseWaiter.java").write_text(PRECISE_WAITER_JAVA, encoding="utf-8")
         return project_root, src_dir, test_dir
 
-    def _instrument_and_run(self, project_root, src_dir, test_dir, test_source, test_filename, inner_iterations=2):
+    def _instrument_and_run(self, project_root, src_dir, test_dir, test_source, test_filename):
         """Instrument a performance test and run it, returning test_results."""
         test_file = test_dir / test_filename
         test_file.write_text(test_source, encoding="utf-8")
@@ -474,6 +469,7 @@ public class PreciseWaiterTest {
 
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
+        test_env["CODEFLASH_INNER_ITERATIONS"] = "2"
 
         test_results, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
@@ -482,7 +478,6 @@ public class PreciseWaiterTest {
             optimization_iteration=0,
             pytest_min_loops=2,
             pytest_max_loops=2,
-            inner_iterations=inner_iterations,
             testing_time=0.0,
         )
         return test_results
@@ -493,12 +488,7 @@ public class PreciseWaiterTest {
         project_root, src_dir, test_dir = self._setup_precise_waiter_project(java_project)
 
         test_results = self._instrument_and_run(
-            project_root,
-            src_dir,
-            test_dir,
-            self.PRECISE_WAITER_TEST,
-            "PreciseWaiterTest.java",
-            inner_iterations=2,
+            project_root, src_dir, test_dir, self.PRECISE_WAITER_TEST, "PreciseWaiterTest.java"
         )
 
         # 2 outer loops × 2 inner iterations = 4 total results
@@ -543,9 +533,7 @@ public class PreciseWaiterTest {
         runtime_by_test = test_results.usable_runtime_data_by_test_case()
 
         # Should have 1 test case (constant iteration_id per call site)
-        assert len(runtime_by_test) == 1, (
-            f"Expected 1 test case (constant iteration_id), got {len(runtime_by_test)}"
-        )
+        assert len(runtime_by_test) == 1, f"Expected 1 test case (constant iteration_id), got {len(runtime_by_test)}"
 
         # The single test case should have 4 runtimes (2 outer loops × 2 inner iterations)
         for test_id, test_runtimes in runtime_by_test.items():
@@ -585,12 +573,7 @@ public class PreciseWaiterMultiTest {
 }
 """
         test_results = self._instrument_and_run(
-            project_root,
-            src_dir,
-            test_dir,
-            multi_test_source,
-            "PreciseWaiterMultiTest.java",
-            inner_iterations=2,
+            project_root, src_dir, test_dir, multi_test_source, "PreciseWaiterMultiTest.java"
         )
 
         # 2 test methods × 2 outer loops × 2 inner iterations = 8 total results

@@ -120,7 +120,76 @@ class JavaSupport(LanguageSupport):
         return generated_tests
 
     def add_global_declarations(self, optimized_code: str, original_source: str, module_abspath: Path) -> str:
-        return original_source
+        """Add new class-level fields and helper methods from optimized code to original source.
+
+        Java optimizations may introduce new static fields (e.g. lookup tables) or helper methods
+        alongside the optimized function. These need to be inserted into the original class before
+        the function body is replaced.
+        """
+        from codeflash.languages.java.replacement import _insert_class_members, _parse_optimization_source
+
+        analyzer = self._analyzer
+        classes = analyzer.find_classes(optimized_code)
+        if not classes:
+            return original_source
+
+        original_classes = analyzer.find_classes(original_source)
+        if not original_classes:
+            return original_source
+
+        # Find a matching class in the original source
+        opt_class = classes[0]
+        orig_class = None
+        for c in original_classes:
+            if c.name == opt_class.name:
+                orig_class = c
+                break
+        if not orig_class:
+            return original_source
+
+        # Find the target method (the one being optimized) — first method present in both
+        opt_methods = analyzer.find_methods(optimized_code)
+        orig_methods = analyzer.find_methods(original_source)
+        orig_method_names = {m.name for m in orig_methods}
+        target_method_name = None
+        for m in opt_methods:
+            if m.name in orig_method_names:
+                target_method_name = m.name
+                break
+
+        parsed = _parse_optimization_source(optimized_code, target_method_name or "", analyzer)
+        if not parsed.new_fields and not parsed.helpers_before_target and not parsed.helpers_after_target:
+            return original_source
+
+        existing_methods = {m.name for m in orig_methods}
+        existing_fields = {f.name for f in analyzer.find_fields(original_source)}
+
+        new_fields = []
+        for field_src in parsed.new_fields:
+            dummy_class = f"class __DummyClass__ {{\n{field_src}\n}}"
+            for fi in analyzer.find_fields(dummy_class):
+                if fi.name not in existing_fields:
+                    new_fields.append(field_src)
+                    break
+
+        helpers_before = []
+        for h in parsed.helpers_before_target:
+            hm = analyzer.find_methods(h)
+            if hm and hm[0].name not in existing_methods:
+                helpers_before.append(h)
+
+        helpers_after = []
+        for h in parsed.helpers_after_target:
+            hm = analyzer.find_methods(h)
+            if hm and hm[0].name not in existing_methods:
+                helpers_after.append(h)
+
+        if not new_fields and not helpers_before and not helpers_after:
+            return original_source
+
+        return _insert_class_members(
+            original_source, orig_class.name, new_fields, helpers_before, helpers_after, target_method_name, analyzer
+        )
 
     # === Discovery ===
 
