@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
+from codeflash.either import Failure, Success
 from codeflash.languages.python.context.unused_definition_remover import (
     detect_unused_helper_functions,
     revert_unused_helper_functions,
@@ -24,6 +25,7 @@ from codeflash.verification.parse_test_output import calculate_function_throughp
 if TYPE_CHECKING:
     from typing import Any
 
+    from codeflash.either import Result
     from codeflash.languages.base import Language
     from codeflash.models.function_types import FunctionParent
     from codeflash.models.models import (
@@ -37,11 +39,26 @@ if TYPE_CHECKING:
 
 
 class PythonFunctionOptimizer(FunctionOptimizer):
+    def get_code_optimization_context(self) -> Result[CodeOptimizationContext, str]:
+        from codeflash.languages.python.context import code_context_extractor
+
+        try:
+            return Success(
+                code_context_extractor.get_code_optimization_context(
+                    self.function_to_optimize, self.project_root, call_graph=self.call_graph
+                )
+            )
+        except ValueError as e:
+            return Failure(str(e))
+
     def _resolve_function_ast(
         self, source_code: str, function_name: str, parents: list[FunctionParent]
     ) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
         original_module_ast = ast.parse(source_code)
         return resolve_python_function_ast(function_name, parents, original_module_ast)
+
+    def requires_function_ast(self) -> bool:
+        return True
 
     def analyze_code_characteristics(self, code_context: CodeOptimizationContext) -> None:
         self.is_numerical_code = is_numerical_code(code_string=code_context.read_writable_code.flat)
@@ -130,9 +147,18 @@ class PythonFunctionOptimizer(FunctionOptimizer):
         optimized_code: CodeStringsMarkdown,
         original_helper_code: dict[Path, str],
     ) -> bool:
-        did_update = super().replace_function_and_helpers_with_optimized_code(
-            code_context, optimized_code, original_helper_code
-        )
+        from codeflash.languages.python.static_analysis.code_replacer import replace_function_definitions_in_module
+
+        did_update = False
+        for module_abspath, qualified_names in self.group_functions_by_file(code_context).items():
+            did_update |= replace_function_definitions_in_module(
+                function_names=list(qualified_names),
+                optimized_code=optimized_code,
+                module_abspath=module_abspath,
+                preexisting_objects=code_context.preexisting_objects,
+                project_root_path=self.project_root,
+            )
+
         unused_helpers = detect_unused_helper_functions(self.function_to_optimize, code_context, optimized_code)
         if unused_helpers:
             revert_unused_helper_functions(self.project_root, unused_helpers, original_helper_code)

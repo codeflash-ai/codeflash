@@ -65,9 +65,9 @@ def set_current_test_framework(framework: TestFramework | str | None) -> None:
         framework = framework.lower()
         if framework not in ("jest", "vitest", "mocha", "pytest", "unittest"):
             # Default to jest for unknown JS frameworks, pytest for unknown Python
-            from codeflash.languages.current import is_javascript
+            from codeflash.languages.current import current_language_support
 
-            framework = "jest" if is_javascript() else "pytest"
+            framework = current_language_support().test_framework
 
     _current_test_framework = framework
 

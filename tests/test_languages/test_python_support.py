@@ -49,7 +49,7 @@ def add(a, b):
 """)
             f.flush()
 
-            functions = python_support.discover_functions(Path(f.name))
+            functions = python_support.discover_functions(Path(f.name).read_text(encoding="utf-8"), Path(f.name))
 
             assert len(functions) == 1
             assert functions[0].function_name == "add"
@@ -70,7 +70,7 @@ def multiply(a, b):
 """)
             f.flush()
 
-            functions = python_support.discover_functions(Path(f.name))
+            functions = python_support.discover_functions(Path(f.name).read_text(encoding="utf-8"), Path(f.name))
 
             assert len(functions) == 3
             names = {func.function_name for func in functions}
@@ -88,7 +88,7 @@ def without_return():
 """)
             f.flush()
 
-            functions = python_support.discover_functions(Path(f.name))
+            functions = python_support.discover_functions(Path(f.name).read_text(encoding="utf-8"), Path(f.name))
 
             # Only the function with return should be discovered
             assert len(functions) == 1
@@ -107,7 +107,7 @@ class Calculator:
 """)
             f.flush()
 
-            functions = python_support.discover_functions(Path(f.name))
+            functions = python_support.discover_functions(Path(f.name).read_text(encoding="utf-8"), Path(f.name))
 
             assert len(functions) == 2
             for func in functions:
@@ -126,7 +126,7 @@ def sync_function():
 """)
             f.flush()
 
-            functions = python_support.discover_functions(Path(f.name))
+            functions = python_support.discover_functions(Path(f.name).read_text(encoding="utf-8"), Path(f.name))
 
             assert len(functions) == 2
 
@@ -147,7 +147,7 @@ def outer():
 """)
             f.flush()
 
-            functions = python_support.discover_functions(Path(f.name))
+            functions = python_support.discover_functions(Path(f.name).read_text(encoding="utf-8"), Path(f.name))
 
             # Only outer should be discovered; inner is nested and skipped
             assert len(functions) == 1
@@ -164,7 +164,7 @@ class Utils:
 """)
             f.flush()
 
-            functions = python_support.discover_functions(Path(f.name))
+            functions = python_support.discover_functions(Path(f.name).read_text(encoding="utf-8"), Path(f.name))
 
             assert len(functions) == 1
             assert functions[0].function_name == "helper"
@@ -183,7 +183,9 @@ def sync_func():
             f.flush()
 
             criteria = FunctionFilterCriteria(include_async=False)
-            functions = python_support.discover_functions(Path(f.name), criteria)
+            functions = python_support.discover_functions(
+                Path(f.name).read_text(encoding="utf-8"), Path(f.name), criteria
+            )
 
             assert len(functions) == 1
             assert functions[0].function_name == "sync_func"
@@ -202,7 +204,9 @@ class MyClass:
             f.flush()
 
             criteria = FunctionFilterCriteria(include_methods=False)
-            functions = python_support.discover_functions(Path(f.name), criteria)
+            functions = python_support.discover_functions(
+                Path(f.name).read_text(encoding="utf-8"), Path(f.name), criteria
+            )
 
             assert len(functions) == 1
             assert functions[0].function_name == "standalone"
@@ -220,7 +224,7 @@ def func2():
 """)
             f.flush()
 
-            functions = python_support.discover_functions(Path(f.name))
+            functions = python_support.discover_functions(Path(f.name).read_text(encoding="utf-8"), Path(f.name))
 
             func1 = next(f for f in functions if f.function_name == "func1")
             func2 = next(f for f in functions if f.function_name == "func2")
@@ -239,12 +243,12 @@ def func2():
             f.flush()
 
             with pytest.raises(ParserSyntaxError):
-                python_support.discover_functions(Path(f.name))
+                python_support.discover_functions(Path(f.name).read_text(encoding="utf-8"), Path(f.name))
 
-    def test_discover_nonexistent_file_raises(self, python_support):
-        """Test that nonexistent file raises FileNotFoundError."""
-        with pytest.raises(FileNotFoundError):
-            python_support.discover_functions(Path("/nonexistent/file.py"))
+    def test_discover_empty_source_returns_empty(self, python_support):
+        """Test that empty source returns empty list."""
+        functions = python_support.discover_functions("", Path("/nonexistent/file.py"))
+        assert functions == []
 
 
 class TestReplaceFunction:
@@ -495,7 +499,7 @@ class TestIntegration:
             file_path = Path(f.name)
 
             # Discover
-            functions = python_support.discover_functions(file_path)
+            functions = python_support.discover_functions(file_path.read_text(encoding="utf-8"), file_path)
             assert len(functions) == 1
             func = functions[0]
             assert func.function_name == "fibonacci"
@@ -536,7 +540,7 @@ def standalone():
             f.flush()
             file_path = Path(f.name)
 
-            functions = python_support.discover_functions(file_path)
+            functions = python_support.discover_functions(file_path.read_text(encoding="utf-8"), file_path)
 
             # Should find 4 functions
             assert len(functions) == 4
