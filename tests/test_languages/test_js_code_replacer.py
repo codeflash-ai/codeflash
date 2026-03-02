@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.languages.python.static_analysis.code_replacer import replace_function_definitions_for_language
 from codeflash.languages.base import Language
+from codeflash.languages.code_replacer import replace_function_definitions_for_language
 from codeflash.languages.current import set_current_language
 from codeflash.languages.javascript.module_system import (
     ModuleSystem,
@@ -25,7 +25,6 @@ from codeflash.languages.javascript.module_system import (
     ensure_module_system_compatibility,
     get_import_statement,
 )
-
 from codeflash.languages.javascript.support import JavaScriptSupport, TypeScriptSupport
 from codeflash.models.models import CodeStringsMarkdown
 
@@ -308,6 +307,7 @@ class TestTsJestSkipsConversion:
     When ts-jest is installed, it handles module interoperability internally,
     so we skip conversion to avoid breaking valid imports.
     """
+
     def __init__(self):
         set_current_language(Language.TYPESCRIPT)
 
@@ -1920,7 +1920,7 @@ class DataProcessor<T> {
 ```
 """
     code_markdown = CodeStringsMarkdown.parse_markdown_code(new_code)
-    replaced = replace_function_definitions_for_language([f"{parent_class}.{target_func}"], code_markdown, file_path, temp_project)
+    replaced = replace_function_definitions_for_language([f"{parent_class}.{target_func}"], code_markdown, file_path, temp_project, lang_support=ts_support)
     assert replaced
 
     new_code = file_path.read_text()
@@ -2030,9 +2030,9 @@ class TestNewVariableFromOptimizedCode:
         1. Add the new variable after the constant it references
         2. Replace the function with the optimized version
         """
-        from codeflash.models.models import CodeStringsMarkdown, CodeString
+        from codeflash.models.models import CodeString, CodeStringsMarkdown
 
-        original_source = '''\
+        original_source = """\
 const CODEFLASH_EMPLOYEE_GITHUB_IDS = new Set([
   "1234",
 ]);
@@ -2040,19 +2040,19 @@ const CODEFLASH_EMPLOYEE_GITHUB_IDS = new Set([
 export function isCodeflashEmployee(userId: string): boolean {
   return CODEFLASH_EMPLOYEE_GITHUB_IDS.has(userId);
 }
-'''
+"""
         file_path = temp_project / "auth.ts"
         file_path.write_text(original_source, encoding="utf-8")
 
         # Optimized code introduces a bound method variable for performance
-        optimized_code = '''const _has: (id: string) => boolean = CODEFLASH_EMPLOYEE_GITHUB_IDS.has.bind(
+        optimized_code = """const _has: (id: string) => boolean = CODEFLASH_EMPLOYEE_GITHUB_IDS.has.bind(
   CODEFLASH_EMPLOYEE_GITHUB_IDS
 );
 
 export function isCodeflashEmployee(userId: string): boolean {
   return _has(userId);
 }
-'''
+"""
 
         code_markdown = CodeStringsMarkdown(
             code_strings=[
@@ -2070,13 +2070,14 @@ export function isCodeflashEmployee(userId: string): boolean {
             code_markdown,
             file_path,
             temp_project,
+            lang_support=ts_support,
         )
 
         assert replaced
         result = file_path.read_text()
 
         # Expected result for strict equality check
-        expected_result = '''\
+        expected_result = """\
 const CODEFLASH_EMPLOYEE_GITHUB_IDS = new Set([
   "1234",
 ]);
@@ -2088,7 +2089,7 @@ const _has: (id: string) => boolean = CODEFLASH_EMPLOYEE_GITHUB_IDS.has.bind(
 export function isCodeflashEmployee(userId: string): boolean {
   return _has(userId);
 }
-'''
+"""
         assert result == expected_result, (
             f"Result does not match expected output.\n"
             f"Expected:\n{expected_result}\n\n"
@@ -2113,7 +2114,7 @@ class TestImportedTypeNotDuplicated:
         contains the TreeNode interface definition (from read-only context),
         the replacement should NOT add the interface to the original file.
         """
-        from codeflash.models.models import CodeStringsMarkdown, CodeString
+        from codeflash.models.models import CodeString, CodeStringsMarkdown
 
         # Original source imports TreeNode
         original_source = """\
@@ -2177,6 +2178,7 @@ export function getNearestAbove(
             code_markdown,
             file_path,
             temp_project,
+            lang_support=ts_support,
         )
 
         result = file_path.read_text()
@@ -2203,7 +2205,7 @@ export function getNearestAbove(
 
     def test_multiple_imported_types_not_duplicated(self, ts_support, temp_project):
         """Test that multiple imported types are not duplicated."""
-        from codeflash.models.models import CodeStringsMarkdown, CodeString
+        from codeflash.models.models import CodeString, CodeStringsMarkdown
 
         original_source = """\
 import type { TreeNode, NodeSpace } from "./constants";
@@ -2250,6 +2252,7 @@ export function processNode(node: TreeNode, space: NodeSpace): number {
             code_markdown,
             file_path,
             temp_project,
+            lang_support=ts_support,
         )
 
         result = file_path.read_text()

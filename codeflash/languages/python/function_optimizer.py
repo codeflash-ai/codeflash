@@ -18,7 +18,7 @@ from codeflash.languages.python.static_analysis.code_replacer import (
     modify_autouse_fixture,
 )
 from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports, contains_jit_decorator
-from codeflash.models.models import CodeOptimizationContext, TestingMode, TestResults
+from codeflash.models.models import TestingMode, TestResults
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.parse_test_output import calculate_function_throughput_from_test_results
 
@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from codeflash.languages.base import Language
     from codeflash.models.function_types import FunctionParent
     from codeflash.models.models import (
+        CodeOptimizationContext,
         CodeStringsMarkdown,
         ConcurrencyMetrics,
         CoverageData,
@@ -42,24 +43,13 @@ class PythonFunctionOptimizer(FunctionOptimizer):
         from codeflash.languages.python.context import code_context_extractor
 
         try:
-            new_code_ctx = code_context_extractor.get_code_optimization_context(
-                self.function_to_optimize, self.project_root, call_graph=self.call_graph
+            return Success(
+                code_context_extractor.get_code_optimization_context(
+                    self.function_to_optimize, self.project_root, call_graph=self.call_graph
+                )
             )
         except ValueError as e:
             return Failure(str(e))
-
-        return Success(
-            CodeOptimizationContext(
-                testgen_context=new_code_ctx.testgen_context,
-                read_writable_code=new_code_ctx.read_writable_code,
-                read_only_context_code=new_code_ctx.read_only_context_code,
-                hashing_code_context=new_code_ctx.hashing_code_context,
-                hashing_code_context_hash=new_code_ctx.hashing_code_context_hash,
-                helper_functions=new_code_ctx.helper_functions,
-                testgen_helper_fqns=new_code_ctx.testgen_helper_fqns,
-                preexisting_objects=new_code_ctx.preexisting_objects,
-            )
-        )
 
     def _resolve_function_ast(
         self, source_code: str, function_name: str, parents: list[FunctionParent]

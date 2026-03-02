@@ -212,7 +212,7 @@ class JavaScriptFunctionOptimizer(FunctionOptimizer):
         optimized_code: CodeStringsMarkdown,
         original_helper_code: dict[Path, str],
     ) -> bool:
-        from codeflash.languages.python.static_analysis.code_replacer import replace_function_definitions_for_language
+        from codeflash.languages.code_replacer import replace_function_definitions_for_language
 
         did_update = False
         read_writable_functions_by_file_path: dict[Path, set[str]] = defaultdict(set)
@@ -228,6 +228,7 @@ class JavaScriptFunctionOptimizer(FunctionOptimizer):
                 optimized_code=optimized_code,
                 module_abspath=module_abspath,
                 project_root_path=self.project_root,
+                lang_support=self.language_support,
                 function_to_optimize=self.function_to_optimize,
             )
         return did_update
