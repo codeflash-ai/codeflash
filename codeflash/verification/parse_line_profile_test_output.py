@@ -5,7 +5,6 @@ from __future__ import annotations
 import inspect
 import linecache
 import os
-from pathlib import Path
 
 from codeflash.code_utils.tabulate import tabulate
 
@@ -113,5 +112,3 @@ def show_text_non_python(stats: dict, line_contents: dict[tuple[str, int], str])
         )
         out_table += "\n"
     return out_table
-
-

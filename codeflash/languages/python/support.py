@@ -980,7 +980,7 @@ class PythonSupport:
         if not line_profiler_output_file.exists():
             return {"timings": {}, "unit": 0, "str_out": ""}
         with line_profiler_output_file.open("rb") as f:
-            stats = pickle.load(f)  # noqa: S301
+            stats = pickle.load(f)
             stats_dict["timings"] = stats.timings
             stats_dict["unit"] = stats.unit
             str_out = show_text(stats_dict)
