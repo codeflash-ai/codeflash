@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import copy
 import os
 import tempfile
@@ -30,21 +29,21 @@ from codeflash.code_utils.git_worktree_utils import (
 )
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.either import is_successful
-from codeflash.languages import current_language_support, is_java, is_javascript, set_current_language
+from codeflash.languages import current_language_support, set_current_language
 from codeflash.lsp.helpers import is_subagent_mode
-from codeflash.models.models import ValidCode
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.parse_test_output import clear_test_file_path_cache
 from codeflash.verification.verification_utils import TestConfig
 
 if TYPE_CHECKING:
+    import ast
     from argparse import Namespace
 
     from codeflash.benchmarking.function_ranker import FunctionRanker
     from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import DependencyResolver
-    from codeflash.models.models import BenchmarkKey, FunctionCalledInTest
+    from codeflash.models.models import BenchmarkKey, FunctionCalledInTest, ValidCode
     from codeflash.optimization.function_optimizer import FunctionOptimizer
 
 
@@ -72,59 +71,6 @@ class Optimizer:
         self.current_worktree: Path | None = None
         self.original_args_and_test_cfg: tuple[Namespace, TestConfig] | None = None
         self.patch_files: list[Path] = []
-
-    @staticmethod
-    def _find_js_project_root(file_path: Path) -> Path | None:
-        """Find the JavaScript/TypeScript project root by looking for package.json.
-
-        Traverses up from the given file path to find the nearest directory
-        containing package.json or jest.config.js.
-
-        Args:
-            file_path: A file path within the JavaScript project.
-
-        Returns:
-            The project root directory, or None if not found.
-
-        """
-        current = file_path.parent if file_path.is_file() else file_path
-        while current != current.parent:  # Stop at filesystem root
-            if (
-                (current / "package.json").exists()
-                or (current / "jest.config.js").exists()
-                or (current / "jest.config.ts").exists()
-                or (current / "tsconfig.json").exists()
-            ):
-                return current
-            current = current.parent
-        return None
-
-    def _verify_js_requirements(self) -> None:
-        """Verify JavaScript/TypeScript requirements before optimization.
-
-        Checks that Node.js, npm, and the test framework are available.
-        Logs warnings if requirements are not met but does not abort.
-
-        """
-        from codeflash.languages import get_language_support
-        from codeflash.languages.base import Language
-        from codeflash.languages.test_framework import get_js_test_framework_or_default
-
-        js_project_root = self.test_cfg.js_project_root
-        if not js_project_root:
-            return
-
-        try:
-            js_support = get_language_support(Language.JAVASCRIPT)
-            test_framework = get_js_test_framework_or_default()
-            success, errors = js_support.verify_requirements(js_project_root, test_framework)
-
-            if not success:
-                logger.warning("JavaScript requirements check found issues:")
-                for error in errors:
-                    logger.warning(f"  - {error}")
-        except Exception as e:
-            logger.debug(f"Failed to verify JS requirements: {e}")
 
     def run_benchmarks(
         self, file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]], num_optimizable_functions: int
@@ -297,57 +243,14 @@ class Optimizer:
     def prepare_module_for_optimization(
         self, original_module_path: Path
     ) -> tuple[dict[Path, ValidCode], ast.Module | None] | None:
-        from codeflash.languages.python.static_analysis.code_replacer import normalize_code, normalize_node
-        from codeflash.languages.python.static_analysis.static_analysis import analyze_imported_modules
-
         logger.info(f"loading|Examining file {original_module_path!s}")
         console.rule()
 
         original_module_code: str = original_module_path.read_text(encoding="utf8")
 
-        # For JavaScript/TypeScript/Java, skip Python-specific AST parsing
-        if is_javascript() or is_java():
-            validated_original_code: dict[Path, ValidCode] = {
-                original_module_path: ValidCode(source_code=original_module_code, normalized_code=original_module_code)
-            }
-            return validated_original_code, None
-
-        # Python-specific parsing
-        try:
-            original_module_ast = ast.parse(original_module_code)
-        except SyntaxError as e:
-            logger.warning(f"Syntax error parsing code in {original_module_path}: {e}")
-            logger.info("Skipping optimization due to file error.")
-            return None
-        normalized_original_module_code = ast.unparse(normalize_node(original_module_ast))
-        validated_original_code = {
-            original_module_path: ValidCode(
-                source_code=original_module_code, normalized_code=normalized_original_module_code
-            )
-        }
-
-        imported_module_analyses = analyze_imported_modules(
+        return current_language_support().prepare_module(
             original_module_code, original_module_path, self.args.project_root
         )
-
-        has_syntax_error = False
-        for analysis in imported_module_analyses:
-            callee_original_code = analysis.file_path.read_text(encoding="utf8")
-            try:
-                normalized_callee_original_code = normalize_code(callee_original_code)
-            except SyntaxError as e:
-                logger.warning(f"Syntax error parsing code in callee module {analysis.file_path}: {e}")
-                logger.info("Skipping optimization due to helper file error.")
-                has_syntax_error = True
-                break
-            validated_original_code[analysis.file_path] = ValidCode(
-                source_code=callee_original_code, normalized_code=normalized_callee_original_code
-            )
-
-        if has_syntax_error:
-            return None
-
-        return validated_original_code, original_module_ast
 
     def discover_tests(
         self, file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]
@@ -557,11 +460,7 @@ class Optimizer:
                 if funcs and funcs[0].language:
                     set_current_language(funcs[0].language)
                     self.test_cfg.set_language(funcs[0].language)
-                    # For JavaScript, also set js_project_root for test execution
-                    if is_javascript():
-                        self.test_cfg.js_project_root = self._find_js_project_root(file_path)
-                        # Verify JS requirements before proceeding
-                        self._verify_js_requirements()
+                    current_language_support().setup_test_config(self.test_cfg, file_path)
                     break
 
         if self.args.all:
@@ -781,6 +680,8 @@ class Optimizer:
         if hasattr(get_run_tmp_file, "tmpdir"):
             get_run_tmp_file.tmpdir.cleanup()
             del get_run_tmp_file.tmpdir
+        if hasattr(get_run_tmp_file, "tmpdir_path"):
+            del get_run_tmp_file.tmpdir_path
 
         # Always clean up concolic test directory
         cleanup_paths([self.test_cfg.concolic_test_root_dir])
