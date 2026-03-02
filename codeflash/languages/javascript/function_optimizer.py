@@ -152,7 +152,7 @@ class JavaScriptFunctionOptimizer(FunctionOptimizer):
             candidate_sqlite.unlink(missing_ok=True)
         else:
             match, diffs = compare_test_results(
-                baseline_results.behavior_test_results, candidate_behavior_results, pass_fail_only=True
+                baseline_results.behavior_test_results, candidate_behavior_results
             )
         return match, diffs
 

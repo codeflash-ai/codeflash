@@ -141,7 +141,8 @@ def run_codeflash_command(
 def build_command(
     cwd: pathlib.Path, config: TestConfig, test_root: pathlib.Path, benchmarks_root: pathlib.Path | None = None
 ) -> list[str]:
-    python_path = "../../../codeflash/main.py" if "code_directories" in str(cwd) else "../codeflash/main.py"
+    repo_root = pathlib.Path(__file__).parent.parent.parent
+    python_path = os.path.relpath(repo_root / "codeflash" / "main.py", cwd)
 
     base_command = ["uv", "run", "--no-project", python_path, "--file", config.file_path, "--no-pr"]
 
