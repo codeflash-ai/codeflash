@@ -14,7 +14,7 @@ from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
 from codeflash.code_utils.time_utils import humanize_runtime
-from codeflash.languages import is_java, is_javascript, is_python
+from codeflash.languages import is_java
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     AIServiceRefinerRequest,
@@ -178,17 +178,9 @@ class AiServiceClient:
         }
 
         # Add language-specific version fields
-        # Always include python_version for backward compatibility with older backend
         payload["python_version"] = platform.python_version()
-        if is_python():
-            pass  # python_version already set
-        elif is_java():
-            payload["language_version"] = language_version or "17"  # Default Java version
-        else:
-            payload["language_version"] = language_version or "ES2022"
-            # Add module system for JavaScript/TypeScript (esm or commonjs)
-            if module_system:
-                payload["module_system"] = module_system
+        if is_java():
+            payload["language_version"] = language_version or "17"
 
         # DEBUG: Print payload language field
         logger.debug(
@@ -434,14 +426,9 @@ class AiServiceClient:
                 "language": opt.language,
             }
 
-            # Add language version - always include python_version for backward compatibility
             item["python_version"] = platform.python_version()
-            if is_python():
-                pass  # python_version already set
-            elif opt.language_version:
+            if opt.language_version:
                 item["language_version"] = opt.language_version
-            else:
-                item["language_version"] = "ES2022"  # Default for JS/TS
 
             # Add multi-file context if provided
             if opt.additional_context_files:
@@ -754,18 +741,8 @@ class AiServiceClient:
 
         """
         # Validate test framework based on language
-        python_frameworks = ["pytest", "unittest"]
-        javascript_frameworks = ["jest", "mocha", "vitest"]
         java_frameworks = ["junit5", "junit4", "testng"]
-        if is_python():
-            assert test_framework in python_frameworks, (
-                f"Invalid test framework for Python, got {test_framework} but expected one of {python_frameworks}"
-            )
-        elif is_javascript():
-            assert test_framework in javascript_frameworks, (
-                f"Invalid test framework for JavaScript, got {test_framework} but expected one of {javascript_frameworks}"
-            )
-        elif is_java():
+        if is_java():
             assert test_framework in java_frameworks, (
                 f"Invalid test framework for Java, got {test_framework} but expected one of {java_frameworks}"
             )
@@ -788,17 +765,9 @@ class AiServiceClient:
         }
 
         # Add language-specific version fields
-        # Always include python_version for backward compatibility with older backend
         payload["python_version"] = platform.python_version()
-        if is_python():
-            pass  # python_version already set
-        elif is_java():
-            payload["language_version"] = language_version or "17"  # Default Java version
-        else:
-            payload["language_version"] = language_version or "ES2022"
-            # Add module system for JavaScript/TypeScript (esm or commonjs)
-            if module_system:
-                payload["module_system"] = module_system
+        if is_java():
+            payload["language_version"] = language_version or "17"
 
         # DEBUG: Print payload language field
         logger.debug(f"Sending testgen request with language='{payload['language']}', framework='{test_framework}'")
@@ -884,7 +853,7 @@ class AiServiceClient:
             "codeflash_version": codeflash_version,
             "calling_fn_details": calling_fn_details,
             "language": language,
-            "python_version": platform.python_version() if is_python() else None,
+            "python_version": platform.python_version(),
             "call_sequence": self.get_next_sequence(),
         }
         console.rule()

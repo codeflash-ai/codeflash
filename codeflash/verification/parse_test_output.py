@@ -20,10 +20,9 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
-from codeflash.languages import is_java, is_javascript, is_python
+from codeflash.languages import is_java
 
 # Import Jest-specific parsing from the JavaScript language module
-from codeflash.languages.javascript.parse import parse_jest_test_xml as _parse_jest_test_xml
 from codeflash.models.models import (
     ConcurrencyMetrics,
     FunctionTestInvocation,
@@ -33,7 +32,7 @@ from codeflash.models.models import (
     TestType,
     VerificationType,
 )
-from codeflash.verification.coverage_utils import CoverageUtils, JacocoCoverageUtils, JestCoverageUtils
+from codeflash.verification.coverage_utils import JacocoCoverageUtils
 
 if TYPE_CHECKING:
     import subprocess
@@ -502,8 +501,6 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
     finally:
         db.close()
 
-    # Check if this is a JavaScript or Java test (use JSON) or Python test (use pickle)
-    is_jest = is_javascript()
     is_java_test = is_java()
 
     for val in data:
@@ -517,52 +514,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
             # - A module-style path: "tests.fibonacci.test.ts" (dots as separators)
             # - A file path: "tests/fibonacci.test.ts" (slashes as separators)
             # For Python, it's a module path (e.g., "tests.test_foo") that needs conversion
-            if is_jest:
-                # Jest test file extensions (including .test.ts, .spec.ts patterns)
-                jest_test_extensions = (
-                    ".test.ts",
-                    ".test.js",
-                    ".test.tsx",
-                    ".test.jsx",
-                    ".spec.ts",
-                    ".spec.js",
-                    ".spec.tsx",
-                    ".spec.jsx",
-                    ".ts",
-                    ".js",
-                    ".tsx",
-                    ".jsx",
-                    ".mjs",
-                    ".mts",
-                )
-                # Check if it's a module-style path (no slashes, has dots beyond extension)
-                if "/" not in test_module_path and "\\" not in test_module_path:
-                    # Find the appropriate extension to preserve
-                    extension = ""
-                    for ext in jest_test_extensions:
-                        if test_module_path.endswith(ext):
-                            extension = ext
-                            break
-                    if extension:
-                        # Convert module-style path to file path
-                        # "tests.fibonacci__perfinstrumented.test.ts" -> "tests/fibonacci__perfinstrumented.test.ts"
-                        base_path = test_module_path[: -len(extension)]
-                        file_path = base_path.replace(".", os.sep) + extension
-                        # Check if the module path includes the tests directory name
-                        tests_dir_name = test_config.tests_project_rootdir.name
-                        if file_path.startswith((tests_dir_name + os.sep, tests_dir_name + "/")):
-                            # Module path includes "tests." - use project root parent
-                            test_file_path = test_config.tests_project_rootdir.parent / file_path
-                        else:
-                            # Module path doesn't include tests dir - use tests root directly
-                            test_file_path = test_config.tests_project_rootdir / file_path
-                    else:
-                        # No recognized extension, treat as-is
-                        test_file_path = test_config.tests_project_rootdir / test_module_path
-                else:
-                    # Already a file path
-                    test_file_path = test_config.tests_project_rootdir / test_module_path
-            elif is_java_test:
+            if is_java_test:
                 # Java: test_module_path is the class name (e.g., "CounterTest")
                 # We need to find the test file by searching for it in the test files
                 test_file_path = None
@@ -609,7 +561,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                 if test_type is None:
                     test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
                 # Default to GENERATED_REGRESSION for Jest/Java tests when test type can't be determined
-                if test_type is None and (is_jest or is_java_test):
+                if test_type is None and is_java_test:
                     test_type = TestType.GENERATED_REGRESSION
                 elif test_type is None:
                     # Skip results where test type cannot be determined
@@ -622,7 +574,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
             ret_val = None
             if loop_index == 1 and val[7]:
                 try:
-                    if is_jest or is_java_test:
+                    if is_java_test:
                         # Jest/Java comparison happens via language-specific comparator
                         # Store a marker indicating data exists but is not deserialized in Python
                         # For Java, val[7] is a JSON string from Gson serialization
@@ -668,16 +620,6 @@ def parse_test_xml(
     test_config: TestConfig,
     run_result: subprocess.CompletedProcess | None = None,
 ) -> TestResults:
-    # Route to Jest-specific parser for JavaScript/TypeScript tests
-    if is_javascript():
-        return _parse_jest_test_xml(
-            test_xml_file_path,
-            test_files,
-            test_config,
-            run_result,
-            parse_func=parse_func,
-            resolve_test_file_from_class_path=resolve_test_file_from_class_path,
-        )
 
     test_results = TestResults()
     # Parse unittest output
@@ -1209,7 +1151,7 @@ def parse_test_results(
     # Also try to read legacy binary format for Python tests
     # Binary file may contain additional results (e.g., from codeflash_wrap) even if SQLite has data
     # from @codeflash_capture. We need to merge both sources.
-    if is_python():
+    if not is_java():
         try:
             bin_results_file = get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin"))
             if bin_results_file.exists():
@@ -1261,32 +1203,16 @@ def parse_test_results(
     coverage = None
     if coverage_database_file and source_file and code_context and function_name:
         all_args = True
-        if is_javascript():
-            # Jest uses coverage-final.json (coverage_database_file points to this)
-            coverage = JestCoverageUtils.load_from_jest_json(
-                coverage_json_path=coverage_database_file,
-                function_name=function_name,
-                code_context=code_context,
-                source_code_path=source_file,
-            )
-        elif is_java():
-            # Java uses JaCoCo XML report (coverage_database_file points to jacoco.xml)
+        # TODO: restore Python/JS coverage loading via protocol dispatch when merging main
+        if is_java():
             coverage = JacocoCoverageUtils.load_from_jacoco_xml(
                 jacoco_xml_path=coverage_database_file,
                 function_name=function_name,
                 code_context=code_context,
                 source_code_path=source_file,
             )
-        else:
-            # Python uses coverage.py SQLite database
-            coverage = CoverageUtils.load_from_sqlite_database(
-                database_path=coverage_database_file,
-                config_path=coverage_config_file,
-                source_code_path=source_file,
-                code_context=code_context,
-                function_name=function_name,
-            )
-        coverage.log_coverage()
+        if coverage is not None:
+            coverage.log_coverage()
     try:
         failures = parse_test_failures_from_stdout(run_result.stdout)
         results.test_failures = failures
