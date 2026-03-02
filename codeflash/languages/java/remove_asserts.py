@@ -198,7 +198,6 @@ class JavaAssertTransformer:
         # Precompile regex to find next special character (quotes, parens, braces).
         self._special_re = re.compile(r"[\"'{}()]")
 
-
         # Precompile lambda arrow pattern to avoid recompiling on each call.
         self._lambda_re = re.compile(r"\(\s*\)\s*->\s*")
 
