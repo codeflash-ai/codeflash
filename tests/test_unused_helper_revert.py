@@ -10,8 +10,8 @@ from codeflash.languages.python.context.unused_definition_remover import (
     detect_unused_helper_functions,
     revert_unused_helper_functions,
 )
+from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 from codeflash.models.models import CodeStringsMarkdown
-from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
 
@@ -83,7 +83,7 @@ def helper_function_2(x):
     )
 
     # Create function optimizer
-    optimizer = FunctionOptimizer(
+    optimizer = PythonFunctionOptimizer(
         function_to_optimize=function_to_optimize,
         test_cfg=test_cfg,
         function_to_optimize_source_code=main_file.read_text(),
@@ -194,7 +194,7 @@ def helper_function_2(x):
     )
 
     # Create function optimizer
-    optimizer = FunctionOptimizer(
+    optimizer = PythonFunctionOptimizer(
         function_to_optimize=function_to_optimize,
         test_cfg=test_cfg,
         function_to_optimize_source_code=main_file.read_text(),
@@ -269,7 +269,7 @@ def helper_function_2(x):
     )
 
     # Create function optimizer
-    optimizer = FunctionOptimizer(
+    optimizer = PythonFunctionOptimizer(
         function_to_optimize=function_to_optimize,
         test_cfg=test_cfg,
         function_to_optimize_source_code=main_file.read_text(),
@@ -365,7 +365,7 @@ def entrypoint_function(n):
         )
 
         # Create function optimizer
-        optimizer = FunctionOptimizer(
+        optimizer = PythonFunctionOptimizer(
             function_to_optimize=function_to_optimize,
             test_cfg=test_cfg,
             function_to_optimize_source_code=main_file.read_text(),
@@ -559,7 +559,7 @@ class Calculator:
         )
 
         # Create function optimizer
-        optimizer = FunctionOptimizer(
+        optimizer = PythonFunctionOptimizer(
             function_to_optimize=function_to_optimize,
             test_cfg=test_cfg,
             function_to_optimize_source_code=main_file.read_text(),
@@ -710,7 +710,7 @@ class Processor:
         )
 
         # Create function optimizer
-        optimizer = FunctionOptimizer(
+        optimizer = PythonFunctionOptimizer(
             function_to_optimize=function_to_optimize,
             test_cfg=test_cfg,
             function_to_optimize_source_code=main_file.read_text(),
@@ -895,7 +895,7 @@ class OuterClass:
         )
 
         # Create function optimizer
-        optimizer = FunctionOptimizer(
+        optimizer = PythonFunctionOptimizer(
             function_to_optimize=function_to_optimize,
             test_cfg=test_cfg,
             function_to_optimize_source_code=main_file.read_text(),
@@ -1051,7 +1051,7 @@ def entrypoint_function(n):
         )
 
         # Create function optimizer
-        optimizer = FunctionOptimizer(
+        optimizer = PythonFunctionOptimizer(
             function_to_optimize=function_to_optimize,
             test_cfg=test_cfg,
             function_to_optimize_source_code=main_file.read_text(),
@@ -1215,7 +1215,7 @@ def entrypoint_function(n):
         )
 
         # Create function optimizer
-        optimizer = FunctionOptimizer(
+        optimizer = PythonFunctionOptimizer(
             function_to_optimize=function_to_optimize,
             test_cfg=test_cfg,
             function_to_optimize_source_code=main_file.read_text(),
@@ -1442,7 +1442,7 @@ class MathUtils:
         )
 
         # Create function optimizer
-        optimizer = FunctionOptimizer(
+        optimizer = PythonFunctionOptimizer(
             function_to_optimize=function_to_optimize,
             test_cfg=test_cfg,
             function_to_optimize_source_code=main_file.read_text(),
@@ -1576,7 +1576,7 @@ async def async_entrypoint(n):
         )
 
         # Create function optimizer
-        optimizer = FunctionOptimizer(
+        optimizer = PythonFunctionOptimizer(
             function_to_optimize=function_to_optimize,
             test_cfg=test_cfg,
             function_to_optimize_source_code=main_file.read_text(),
@@ -1664,7 +1664,7 @@ def sync_entrypoint(n):
         function_to_optimize = FunctionToOptimize(file_path=main_file, function_name="sync_entrypoint", parents=[])
 
         # Create function optimizer
-        optimizer = FunctionOptimizer(
+        optimizer = PythonFunctionOptimizer(
             function_to_optimize=function_to_optimize,
             test_cfg=test_cfg,
             function_to_optimize_source_code=main_file.read_text(),
@@ -1773,7 +1773,7 @@ async def mixed_entrypoint(n):
         )
 
         # Create function optimizer
-        optimizer = FunctionOptimizer(
+        optimizer = PythonFunctionOptimizer(
             function_to_optimize=function_to_optimize,
             test_cfg=test_cfg,
             function_to_optimize_source_code=main_file.read_text(),
@@ -1874,7 +1874,7 @@ class AsyncProcessor:
         )
 
         # Create function optimizer
-        optimizer = FunctionOptimizer(
+        optimizer = PythonFunctionOptimizer(
             function_to_optimize=function_to_optimize,
             test_cfg=test_cfg,
             function_to_optimize_source_code=main_file.read_text(),
@@ -1960,7 +1960,7 @@ async def async_entrypoint(n):
         )
 
         # Create function optimizer
-        optimizer = FunctionOptimizer(
+        optimizer = PythonFunctionOptimizer(
             function_to_optimize=function_to_optimize,
             test_cfg=test_cfg,
             function_to_optimize_source_code=main_file.read_text(),
@@ -2039,7 +2039,7 @@ def gcd_recursive(a: int, b: int) -> int:
         function_to_optimize = FunctionToOptimize(file_path=main_file, function_name="gcd_recursive", parents=[])
 
         # Create function optimizer
-        optimizer = FunctionOptimizer(
+        optimizer = PythonFunctionOptimizer(
             function_to_optimize=function_to_optimize,
             test_cfg=test_cfg,
             function_to_optimize_source_code=main_file.read_text(),
@@ -2152,7 +2152,7 @@ async def async_entrypoint_with_generators(n):
         )
 
         # Create function optimizer
-        optimizer = FunctionOptimizer(
+        optimizer = PythonFunctionOptimizer(
             function_to_optimize=function_to_optimize,
             test_cfg=test_cfg,
             function_to_optimize_source_code=main_file.read_text(),
