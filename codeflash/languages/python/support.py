@@ -179,6 +179,57 @@ class PythonSupport:
             }
         )
 
+    @property
+    def default_language_version(self) -> str | None:
+        return None
+
+    @property
+    def valid_test_frameworks(self) -> tuple[str, ...]:
+        return ("pytest", "unittest")
+
+    @property
+    def test_result_serialization_format(self) -> str:
+        return "pickle"
+
+    def load_coverage(
+        self,
+        coverage_database_file: Path,
+        function_name: str,
+        code_context: Any,
+        source_file: Path,
+        coverage_config_file: Path | None = None,
+    ) -> Any:
+        from codeflash.verification.coverage_utils import CoverageUtils
+
+        return CoverageUtils.load_from_sqlite_database(
+            database_path=coverage_database_file,
+            config_path=coverage_config_file,
+            source_code_path=source_file,
+            code_context=code_context,
+            function_name=function_name,
+        )
+
+    def process_generated_test_strings(
+        self,
+        generated_test_source: str,
+        instrumented_behavior_test_source: str,
+        instrumented_perf_test_source: str,
+        function_to_optimize: Any,
+        test_path: Path,
+        test_cfg: Any,
+        project_module_system: str | None,
+    ) -> tuple[str, str, str]:
+        from codeflash.code_utils.code_utils import get_run_tmp_file
+
+        temp_run_dir = get_run_tmp_file(Path()).as_posix()
+        instrumented_behavior_test_source = instrumented_behavior_test_source.replace(
+            "{codeflash_run_tmp_dir_client_side}", temp_run_dir
+        )
+        instrumented_perf_test_source = instrumented_perf_test_source.replace(
+            "{codeflash_run_tmp_dir_client_side}", temp_run_dir
+        )
+        return generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source
+
     # === Discovery ===
 
     def discover_functions(

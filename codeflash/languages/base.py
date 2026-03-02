@@ -93,6 +93,7 @@ class CodeContext:
     target_file: Path
     helper_functions: list[HelperFunction] = field(default_factory=list)
     read_only_context: str = ""
+    imported_type_skeletons: str = ""
     imports: list[str] = field(default_factory=list)
     language: Language = Language.PYTHON
 
@@ -302,6 +303,39 @@ class LanguageSupport(Protocol):
         """Directory name patterns to skip during file discovery.
 
         Supports glob wildcards: "name" for exact, "prefix*" for startswith, "*suffix" for endswith.
+        """
+        ...
+
+    @property
+    def default_language_version(self) -> str | None:
+        """Default language version string sent to AI service.
+
+        Returns None for languages where the runtime version is auto-detected (e.g. Python).
+        Returns a version string (e.g. "ES2022") for languages that need an explicit default.
+        """
+        return None
+
+    @property
+    def valid_test_frameworks(self) -> tuple[str, ...]:
+        """Valid test frameworks for this language."""
+        ...
+
+    @property
+    def test_result_serialization_format(self) -> str:
+        """How test return values are serialized: "pickle" or "json"."""
+        return "pickle"
+
+    def load_coverage(
+        self,
+        coverage_database_file: Path,
+        function_name: str,
+        code_context: Any,
+        source_file: Path,
+        coverage_config_file: Path | None = None,
+    ) -> Any:
+        """Load coverage data from language-specific format.
+
+        Returns a CoverageData instance.
         """
         ...
 
@@ -656,6 +690,29 @@ class LanguageSupport(Protocol):
 
     def setup_test_config(self, test_cfg: TestConfig, file_path: Path) -> None:
         """One-time project setup after language detection. Default: no-op."""
+
+    def adjust_test_config_for_discovery(self, test_cfg: TestConfig) -> None:
+        """Adjust test config before test discovery. Default: no-op."""
+
+    def detect_module_system(self, project_root: Path, source_file: Path) -> str | None:
+        """Detect the module system used by the project. Default: None (not applicable)."""
+        return None
+
+    def process_generated_test_strings(
+        self,
+        generated_test_source: str,
+        instrumented_behavior_test_source: str,
+        instrumented_perf_test_source: str,
+        function_to_optimize: FunctionToOptimize,
+        test_path: Path,
+        test_cfg: Any,
+        project_module_system: str | None,
+    ) -> tuple[str, str, str]:
+        """Process raw generated test strings (instrumentation, placeholder replacement, etc.).
+
+        Returns (generated_test_source, instrumented_behavior_source, instrumented_perf_source).
+        """
+        ...
 
     # === Configuration ===
 
