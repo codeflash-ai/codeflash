@@ -408,14 +408,10 @@ def get_all_function_names(code: str) -> tuple[bool, list[str]]:
 def get_run_tmp_file(file_path: Path | str) -> Path:
     if isinstance(file_path, str):
         file_path = Path(file_path)
-    # Cache both the TemporaryDirectory object (so it isn't garbage-collected)
-    # and the Path to its name to avoid repeatedly constructing Path(tmpdir.name).
-    tmp_path = getattr(get_run_tmp_file, "tmpdir_path", None)
-    if tmp_path is None:
+    if not hasattr(get_run_tmp_file, "tmpdir_path"):
         get_run_tmp_file.tmpdir = TemporaryDirectory(prefix="codeflash_")
         get_run_tmp_file.tmpdir_path = Path(get_run_tmp_file.tmpdir.name)
-        tmp_path = get_run_tmp_file.tmpdir_path
-    return tmp_path / file_path
+    return get_run_tmp_file.tmpdir_path / file_path
 
 
 def path_belongs_to_site_packages(file_path: Path) -> bool:
