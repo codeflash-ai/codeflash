@@ -126,6 +126,7 @@ if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.either import Result
     from codeflash.languages.base import DependencyResolver
+    from codeflash.models.function_types import FunctionParent
     from codeflash.models.models import (
         BenchmarkKey,
         CodeStringsMarkdown,
@@ -487,7 +488,7 @@ class FunctionOptimizer:
     # --- Hooks for language-specific subclasses ---
 
     def _resolve_function_ast(
-        self, source_code: str, function_name: str, parents: list
+        self, source_code: str, function_name: str, parents: list[FunctionParent]
     ) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
         return None
 

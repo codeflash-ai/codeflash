@@ -21,13 +21,16 @@ from codeflash.models.models import TestingMode, TestResults
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 
 if TYPE_CHECKING:
+    from typing import Any
+
     from codeflash.languages.base import Language
+    from codeflash.models.function_types import FunctionParent
     from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown
 
 
 class PythonFunctionOptimizer(FunctionOptimizer):
     def _resolve_function_ast(
-        self, source_code: str, function_name: str, parents: list
+        self, source_code: str, function_name: str, parents: list[FunctionParent]
     ) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
         original_module_ast = ast.parse(source_code)
         return resolve_python_function_ast(function_name, parents, original_module_ast)
@@ -81,7 +84,7 @@ class PythonFunctionOptimizer(FunctionOptimizer):
 
     def _line_profiler_step_python(
         self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], candidate_index: int
-    ) -> dict:
+    ) -> dict[str, Any]:
         candidate_fto_code = Path(self.function_to_optimize.file_path).read_text("utf-8")
         if contains_jit_decorator(candidate_fto_code):
             logger.info(
