@@ -25,11 +25,8 @@ class PrComment:
     best_async_throughput: Optional[int] = None
 
     def to_json(self) -> dict[str, Union[str, int, dict[str, dict[str, int]], list[BenchmarkDetail], None]]:
-        report_table: dict[str, dict[str, int]] = {}
-        for test_type, counts in self.winning_behavior_test_results.get_test_pass_fail_report_by_type().items():
-            name = test_type.to_name()
-            if name:
-                report_table[name] = counts
+        report_table = self.winning_behavior_test_results.get_test_pass_fail_report_by_type_named()
+
 
         json_result: dict[str, Union[str, int, dict[str, dict[str, int]], list[BenchmarkDetail], None]] = {
             "optimization_explanation": self.optimization_explanation,

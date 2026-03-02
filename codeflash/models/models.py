@@ -25,13 +25,20 @@ from pathlib import Path
 from re import Pattern
 from typing import Any, NamedTuple, Optional, cast
 
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, model_validator
+from pydantic import (BaseModel, ConfigDict, Field, PrivateAttr,
+                      ValidationError, model_validator)
 from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger
-from codeflash.code_utils.code_utils import diff_length, module_name_from_file_path, validate_python_code
+from codeflash.code_utils.code_utils import (diff_length,
+                                             module_name_from_file_path,
+                                             validate_python_code)
 from codeflash.code_utils.env_utils import is_end_to_end
 from codeflash.verification.comparator import comparator
+
+_NAMED_TESTTYPE_TO_NAME: dict[TestType, str] = {tt: tt.to_name() for tt in TestType if tt.to_name()}
+
+_NAMED_TEST_NAMES: list[str] = list(_NAMED_TESTTYPE_TO_NAME.values())
 
 
 @dataclass(frozen=True)
@@ -1040,3 +1047,17 @@ class TestResults(BaseModel):  # noqa: PLW1641
                 return False
         sys.setrecursionlimit(original_recursion_limit)
         return True
+
+    def get_test_pass_fail_report_by_type_named(self) -> dict[str, dict[str, int]]:
+        report: dict[str, dict[str, int]] = {name: {"passed": 0, "failed": 0} for name in _NAMED_TEST_NAMES}
+        for test_result in self.test_results:
+            if test_result.loop_index != 1:
+                continue
+            name = _NAMED_TESTTYPE_TO_NAME.get(test_result.test_type)
+            if not name:
+                continue
+            if test_result.did_pass:
+                report[name]["passed"] += 1
+            else:
+                report[name]["failed"] += 1
+        return report
