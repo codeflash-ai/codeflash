@@ -111,6 +111,7 @@ from codeflash.verification.verifier import generate_tests
 if TYPE_CHECKING:
     import ast
     from argparse import Namespace
+    from typing import Any
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.either import Result
@@ -1563,7 +1564,7 @@ class FunctionOptimizer:
                 (tests_in_file.tests_in_file.test_file, tests_in_file.tests_in_file.test_type)
             ].append(tests_in_file)
 
-        for (test_file, test_type), tests_in_file_list in test_file_invocation_positions.items():
+        for test_file, test_type in test_file_invocation_positions:
             path_obj_test_file = Path(test_file)
             if test_type == TestType.EXISTING_UNIT_TEST:
                 existing_test_files_count += 1
@@ -1575,6 +1576,18 @@ class FunctionOptimizer:
                 msg = f"Unexpected test type: {test_type}"
                 raise ValueError(msg)
 
+        if existing_test_files_count > 0 or replay_test_files_count > 0 or concolic_coverage_test_files_count > 0:
+            logger.info(
+                f"Discovered {existing_test_files_count} existing unit test file"
+                f"{'s' if existing_test_files_count != 1 else ''}, {replay_test_files_count} replay test file"
+                f"{'s' if replay_test_files_count != 1 else ''}, and "
+                f"{concolic_coverage_test_files_count} concolic coverage test file"
+                f"{'s' if concolic_coverage_test_files_count != 1 else ''} for {func_qualname}"
+            )
+            console.rule()
+
+        for (test_file, test_type), tests_in_file_list in test_file_invocation_positions.items():
+            path_obj_test_file = Path(test_file)
             # Use language-specific instrumentation
             success, injected_behavior_test = self.language_support.instrument_existing_test(
                 test_path=path_obj_test_file,
@@ -1646,13 +1659,11 @@ class FunctionOptimizer:
                     )
                 )
 
-        if existing_test_files_count > 0 or replay_test_files_count > 0 or concolic_coverage_test_files_count > 0:
+        instrumented_count = len(unique_instrumented_test_files) // 2  # each test produces behavior + perf files
+        if instrumented_count > 0:
             logger.info(
-                f"Instrumented {existing_test_files_count} existing unit test file"
-                f"{'s' if existing_test_files_count != 1 else ''}, {replay_test_files_count} replay test file"
-                f"{'s' if replay_test_files_count != 1 else ''}, and "
-                f"{concolic_coverage_test_files_count} concolic coverage test file"
-                f"{'s' if concolic_coverage_test_files_count != 1 else ''} for {func_qualname}"
+                f"Instrumented {instrumented_count} existing unit test file"
+                f"{'s' if instrumented_count != 1 else ''} for {func_qualname}"
             )
             console.rule()
         return unique_instrumented_test_files
@@ -2723,7 +2734,7 @@ class FunctionOptimizer:
 
     def line_profiler_step(
         self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], candidate_index: int
-    ) -> dict:
+    ) -> dict[str, Any]:
         return {"timings": {}, "unit": 0, "str_out": ""}
 
     def run_concurrency_benchmark(
