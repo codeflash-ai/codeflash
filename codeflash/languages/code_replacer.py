@@ -6,6 +6,7 @@ via the LanguageSupport protocol.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
@@ -30,13 +31,15 @@ def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStrin
         # use it regardless of the expected path (the AI server doesn't always include file paths)
         if "None" in file_to_code_context and len(file_to_code_context) == 1:
             module_optimized_code = file_to_code_context["None"]
-            logger.debug(f"Using code block with None file_path for {relative_path}")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"Using code block with None file_path for {relative_path}")
         else:
-            logger.warning(
-                f"Optimized code not found for {relative_path} In the context\n-------\n{optimized_code}\n-------\n"
-                "re-check your 'markdown code structure'"
-                f"existing files are {file_to_code_context.keys()}"
-            )
+            if logger.isEnabledFor(logging.WARNING):
+                logger.warning(
+                    f"Optimized code not found for {relative_path} In the context\n-------\n{optimized_code}\n-------\n"
+                    "re-check your 'markdown code structure'"
+                    f"existing files are {file_to_code_context.keys()}"
+                )
             module_optimized_code = ""
     return module_optimized_code
 
