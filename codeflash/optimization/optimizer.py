@@ -285,7 +285,7 @@ class Optimizer:
             replay_tests_dir=self.replay_tests_dir,
             call_graph=call_graph,
         )
-        if function_optimizer.function_to_optimize_ast is None:
+        if function_optimizer.function_to_optimize_ast is None and is_python():
             logger.info(
                 f"Function {function_to_optimize.qualified_name} not found in "
                 f"{function_to_optimize.file_path}.\nSkipping optimization."
