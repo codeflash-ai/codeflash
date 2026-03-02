@@ -66,6 +66,16 @@ class AiServiceClient:
             if module_system:
                 payload["module_system"] = module_system
 
+    @staticmethod
+    def log_error_response(response: requests.Response, action: str, ph_event: str) -> None:
+        """Log and report an API error response."""
+        try:
+            error = response.json()["error"]
+        except Exception:
+            error = response.text
+        logger.error(f"Error {action}: {response.status_code} - {error}")
+        ph(ph_event, {"response_status_code": response.status_code, "error": error})
+
     def get_aiservice_base_url(self) -> str:
         if os.environ.get("CODEFLASH_AIS_SERVER", default="prod").lower() == "local":
             logger.info("Using local AI Service at http://localhost:8000")
@@ -841,12 +851,7 @@ class AiServiceClient:
                 )
                 for r in data.get("reviews", [])
             ]
-        try:
-            error = response.json()["error"]
-        except Exception:
-            error = response.text
-        logger.error(f"Error reviewing generated tests: {response.status_code} - {error}")
-        ph("cli-testgen-review-error-response", {"response_status_code": response.status_code, "error": error})
+        self.log_error_response(response, "reviewing generated tests", "cli-testgen-review-error-response")
         return []
 
     def repair_generated_tests(
@@ -875,10 +880,10 @@ class AiServiceClient:
             "test_timeout": test_timeout,
             "trace_id": trace_id,
             "language": language,
-            "python_version": platform.python_version(),
             "codeflash_version": codeflash_version,
             "call_sequence": self.get_next_sequence(),
         }
+        self.add_language_metadata(payload)
         try:
             response = self.make_ai_service_request("/testgen_repair", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
@@ -889,12 +894,7 @@ class AiServiceClient:
         if response.status_code == 200:
             data = response.json()
             return (data["generated_tests"], data["instrumented_behavior_tests"], data["instrumented_perf_tests"])
-        try:
-            error = response.json()["error"]
-        except Exception:
-            error = response.text
-        logger.error(f"Error repairing generated tests: {response.status_code} - {error}")
-        ph("cli-testgen-repair-error-response", {"response_status_code": response.status_code, "error": error})
+        self.log_error_response(response, "repairing generated tests", "cli-testgen-repair-error-response")
         return None
 
     def get_optimization_review(
