@@ -641,14 +641,13 @@ def discover_unit_tests(
     discover_only_these_tests: list[Path] | None = None,
     file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]] | None = None,
 ) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
-    from codeflash.languages import is_python
     from codeflash.languages.current import current_language_support
 
     # Detect language from functions being optimized
     language = _detect_language_from_functions(file_to_funcs_to_optimize)
 
     # Route to language-specific test discovery for non-Python languages
-    if not is_python():
+    if current_language_support().test_result_serialization_format != "pickle":
         current_language_support().adjust_test_config_for_discovery(cfg)
         return discover_tests_for_language(cfg, language, file_to_funcs_to_optimize)
 

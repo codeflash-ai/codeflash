@@ -6,7 +6,7 @@ from typing import Optional
 
 from pydantic.dataclasses import dataclass
 
-from codeflash.languages import current_language_support, is_javascript
+from codeflash.languages import current_language_support
 
 
 def get_test_file_path(
@@ -22,10 +22,7 @@ def get_test_file_path(
     function_name_safe = function_name.replace(".", "_")
     # Use appropriate file extension based on language
     lang_support = current_language_support()
-    if is_javascript():
-        extension = lang_support.get_test_file_suffix()
-    else:
-        extension = lang_support.default_file_extension
+    extension = lang_support.get_test_file_suffix()
 
     if package_name:
         # For Java, create package directory structure
@@ -41,12 +38,11 @@ def get_test_file_path(
         # Create package directory if needed
         path.parent.mkdir(parents=True, exist_ok=True)
     else:
-        # For JavaScript/TypeScript, place generated tests in a subdirectory that matches
-        # Vitest/Jest include patterns (e.g., test/**/*.test.ts)
-        if is_javascript():
-            package_test_dir = _find_js_package_test_dir(test_dir, source_file_path)
-            if package_test_dir:
-                test_dir = package_test_dir
+        # Let language support find the appropriate test subdirectory
+        # (e.g., for JS monorepos: packages/workflow/test/codeflash-generated/)
+        package_test_dir = lang_support.get_test_dir_for_source(test_dir, source_file_path)
+        if package_test_dir:
+            test_dir = package_test_dir
 
         path = test_dir / f"test_{function_name_safe}__{test_type}_test_{iteration}{extension}"
 
@@ -55,66 +51,6 @@ def get_test_file_path(
             test_dir, function_name, iteration + 1, test_type, package_name, class_name, source_file_path
         )
     return path
-
-
-def _find_js_package_test_dir(tests_root: Path, source_file_path: Path | None) -> Path | None:
-    """Find the appropriate test directory for a JavaScript/TypeScript package.
-
-    For monorepos, this finds the package's test directory from the source file path.
-    For example: packages/workflow/src/utils.ts -> packages/workflow/test/codeflash-generated/
-
-    Args:
-        tests_root: The root tests directory (may be monorepo packages root).
-        source_file_path: Path to the source file being tested.
-
-    Returns:
-        The test directory path, or None if not found.
-
-    """
-    if source_file_path is None:
-        # No source path provided, check if test_dir itself has a test subdirectory
-        for test_subdir_name in ["test", "tests", "__tests__", "src/__tests__"]:
-            test_subdir = tests_root / test_subdir_name
-            if test_subdir.is_dir():
-                codeflash_test_dir = test_subdir / "codeflash-generated"
-                codeflash_test_dir.mkdir(parents=True, exist_ok=True)
-                return codeflash_test_dir
-        return None
-
-    try:
-        # Resolve paths for reliable comparison
-        tests_root = tests_root.resolve()
-        source_path = Path(source_file_path).resolve()
-
-        # Walk up from the source file to find a directory with package.json or test/ folder
-        package_dir = None
-
-        for parent in source_path.parents:
-            # Stop if we've gone above or reached the tests_root level
-            # For monorepos, tests_root might be /packages/ and we want to search within packages
-            if parent in (tests_root, tests_root.parent):
-                break
-
-            # Check if this looks like a package root
-            has_package_json = (parent / "package.json").exists()
-            has_test_dir = any((parent / d).is_dir() for d in ["test", "tests", "__tests__"])
-
-            if has_package_json or has_test_dir:
-                package_dir = parent
-                break
-
-        if package_dir:
-            # Find the test directory in this package
-            for test_subdir_name in ["test", "tests", "__tests__", "src/__tests__"]:
-                test_subdir = package_dir / test_subdir_name
-                if test_subdir.is_dir():
-                    codeflash_test_dir = test_subdir / "codeflash-generated"
-                    codeflash_test_dir.mkdir(parents=True, exist_ok=True)
-                    return codeflash_test_dir
-
-        return None
-    except Exception:
-        return None
 
 
 def delete_multiple_if_name_main(test_ast: ast.Module) -> ast.Module:

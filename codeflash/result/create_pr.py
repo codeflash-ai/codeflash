@@ -140,18 +140,18 @@ def existing_tests_source_for(
             else:
                 logger.debug(f"[PR-DEBUG] No mapping found for {instrumented_abs_path.name}")
         else:
-            lang_ext = current_language_support().default_file_extension
-            if lang_ext == ".java":
-                # Java: test_module_path is the class name (e.g., "BubbleSortTest")
-                # Search non_generated_tests for a matching .java file
-                abs_path = (test_cfg.tests_project_rootdir / f"{test_module_path}{lang_ext}").resolve()
-                for candidate in non_generated_tests:
-                    if candidate.stem == test_module_path:
-                        abs_path = candidate
-                        break
+            lang = current_language_support()
+            # Let language-specific resolution handle non-Python module paths
+            lang_result = lang.resolve_test_module_path_for_pr(
+                test_module_path, test_cfg.tests_project_rootdir, non_generated_tests
+            )
+            if lang_result is not None:
+                abs_path = lang_result
             else:
-                # Python: convert module name to path
-                abs_path = Path(test_module_path.replace(".", os.sep)).with_suffix(lang_ext).resolve()
+                # Default (Python): convert module name to path
+                abs_path = (
+                    Path(test_module_path.replace(".", os.sep)).with_suffix(lang.default_file_extension).resolve()
+                )
         if abs_path not in non_generated_tests:
             skipped_count += 1
             if skipped_count <= 5:

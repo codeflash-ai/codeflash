@@ -971,17 +971,21 @@ class PythonSupport:
         return True
 
     def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict:
-        """Parse line profiler output for Python.
+        import dill as pickle
 
-        Args:
-            line_profiler_output_file: Path to profiler output file.
+        from codeflash.verification.parse_line_profile_test_output import show_text
 
-        Returns:
-            Dict with timing information.
-
-        """
-        # Python uses line_profiler which has its own output format
-        return {"timings": {}, "unit": 0, "str_out": ""}
+        line_profiler_output_file = line_profiler_output_file.with_suffix(".lprof")
+        stats_dict: dict = {}
+        if not line_profiler_output_file.exists():
+            return {"timings": {}, "unit": 0, "str_out": ""}
+        with line_profiler_output_file.open("rb") as f:
+            stats = pickle.load(f)  # noqa: S301
+            stats_dict["timings"] = stats.timings
+            stats_dict["unit"] = stats.unit
+            str_out = show_text(stats_dict)
+            stats_dict["str_out"] = str_out
+        return stats_dict
 
     @property
     def function_optimizer_class(self) -> type:
