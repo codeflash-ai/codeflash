@@ -463,14 +463,10 @@ def _initialize_current_function_optimizer() -> Union[dict[str, str], WrappedIni
             "message": "Failed to prepare module for optimization",
         }
 
-    validated_original_code, original_module_ast = module_prep_result
+    validated_original_code, _original_module_ast = module_prep_result
 
     function_optimizer = server.optimizer.create_function_optimizer(
-        fto,
-        function_to_optimize_source_code=validated_original_code[fto.file_path].source_code,
-        original_module_ast=original_module_ast,
-        original_module_path=fto.file_path,
-        function_to_tests={},
+        fto, function_to_optimize_source_code=validated_original_code[fto.file_path].source_code, function_to_tests={}
     )
 
     server.optimizer.current_function_optimizer = function_optimizer

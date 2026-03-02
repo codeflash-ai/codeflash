@@ -30,7 +30,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-TestFramework = Literal["jest", "vitest", "mocha", "pytest", "unittest"]
+TestFramework = Literal["jest", "vitest", "mocha", "pytest", "unittest", "junit5", "junit4", "testng"]
 
 # Module-level singleton for the current test framework
 _current_test_framework: TestFramework | None = None
@@ -63,11 +63,11 @@ def set_current_test_framework(framework: TestFramework | str | None) -> None:
 
     if framework is not None:
         framework = framework.lower()
-        if framework not in ("jest", "vitest", "mocha", "pytest", "unittest"):
+        if framework not in ("jest", "vitest", "mocha", "pytest", "unittest", "junit5", "junit4", "testng"):
             # Default to jest for unknown JS frameworks, pytest for unknown Python
-            from codeflash.languages.current import is_javascript
+            from codeflash.languages.current import current_language_support
 
-            framework = "jest" if is_javascript() else "pytest"
+            framework = current_language_support().test_framework
 
     _current_test_framework = framework
 

@@ -6,6 +6,8 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import libcst as cst
+
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import (
     CodeContext,
@@ -17,12 +19,18 @@ from codeflash.languages.base import (
     TestResult,
 )
 from codeflash.languages.registry import register_language
+from codeflash.models.function_types import FunctionParent
 
 if TYPE_CHECKING:
+    import ast
     from collections.abc import Sequence
 
+    from libcst import CSTNode
+    from libcst.metadata import CodeRange
+
     from codeflash.languages.base import DependencyResolver
-    from codeflash.models.models import FunctionSource, GeneratedTestsList, InvocationId
+    from codeflash.models.models import FunctionSource, GeneratedTestsList, InvocationId, ValidCode
+    from codeflash.verification.verification_utils import TestConfig
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +47,70 @@ def function_sources_to_helpers(sources: list[FunctionSource]) -> list[HelperFun
         )
         for fs in sources
     ]
+
+
+class ReturnStatementVisitor(cst.CSTVisitor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.has_return_statement: bool = False
+
+    def visit_Return(self, node: cst.Return) -> None:
+        self.has_return_statement = True
+
+
+class FunctionVisitor(cst.CSTVisitor):
+    METADATA_DEPENDENCIES = (cst.metadata.PositionProvider, cst.metadata.ParentNodeProvider)
+
+    def __init__(self, file_path: Path) -> None:
+        super().__init__()
+        self.file_path: Path = file_path
+        self.functions: list[FunctionToOptimize] = []
+
+    @staticmethod
+    def is_pytest_fixture(node: cst.FunctionDef) -> bool:
+        for decorator in node.decorators:
+            dec = decorator.decorator
+            if isinstance(dec, cst.Call):
+                dec = dec.func
+            if isinstance(dec, cst.Attribute) and dec.attr.value == "fixture":
+                if isinstance(dec.value, cst.Name) and dec.value.value == "pytest":
+                    return True
+            if isinstance(dec, cst.Name) and dec.value == "fixture":
+                return True
+        return False
+
+    @staticmethod
+    def is_property(node: cst.FunctionDef) -> bool:
+        for decorator in node.decorators:
+            dec = decorator.decorator
+            if isinstance(dec, cst.Name) and dec.value in ("property", "cached_property"):
+                return True
+        return False
+
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
+        return_visitor: ReturnStatementVisitor = ReturnStatementVisitor()
+        node.visit(return_visitor)
+        if return_visitor.has_return_statement and not self.is_pytest_fixture(node) and not self.is_property(node):
+            pos: CodeRange = self.get_metadata(cst.metadata.PositionProvider, node)
+            parents: CSTNode | None = self.get_metadata(cst.metadata.ParentNodeProvider, node)
+            ast_parents: list[FunctionParent] = []
+            while parents is not None:
+                if isinstance(parents, cst.FunctionDef):
+                    # Skip nested functions — only discover top-level and class-level functions
+                    return
+                if isinstance(parents, cst.ClassDef):
+                    ast_parents.append(FunctionParent(parents.name.value, parents.__class__.__name__))
+                parents = self.get_metadata(cst.metadata.ParentNodeProvider, parents, default=None)
+            self.functions.append(
+                FunctionToOptimize(
+                    function_name=node.name.value,
+                    file_path=self.file_path,
+                    parents=list(reversed(ast_parents)),
+                    starting_line=pos.start.line,
+                    ending_line=pos.end.line,
+                    is_async=bool(node.asynchronous),
+                )
+            )
 
 
 @register_language
@@ -107,30 +179,70 @@ class PythonSupport:
             }
         )
 
+    @property
+    def default_language_version(self) -> str | None:
+        return None
+
+    @property
+    def valid_test_frameworks(self) -> tuple[str, ...]:
+        return ("pytest", "unittest")
+
+    @property
+    def test_result_serialization_format(self) -> str:
+        return "pickle"
+
+    def load_coverage(
+        self,
+        coverage_database_file: Path,
+        function_name: str,
+        code_context: Any,
+        source_file: Path,
+        coverage_config_file: Path | None = None,
+    ) -> Any:
+        from codeflash.verification.coverage_utils import CoverageUtils
+
+        return CoverageUtils.load_from_sqlite_database(
+            database_path=coverage_database_file,
+            config_path=coverage_config_file,
+            source_code_path=source_file,
+            code_context=code_context,
+            function_name=function_name,
+        )
+
+    def process_generated_test_strings(
+        self,
+        generated_test_source: str,
+        instrumented_behavior_test_source: str,
+        instrumented_perf_test_source: str,
+        function_to_optimize: Any,
+        test_path: Path,
+        test_cfg: Any,
+        project_module_system: str | None,
+    ) -> tuple[str, str, str]:
+        from codeflash.code_utils.code_utils import get_run_tmp_file
+
+        temp_run_dir = get_run_tmp_file(Path()).as_posix()
+        instrumented_behavior_test_source = instrumented_behavior_test_source.replace(
+            "{codeflash_run_tmp_dir_client_side}", temp_run_dir
+        )
+        instrumented_perf_test_source = instrumented_perf_test_source.replace(
+            "{codeflash_run_tmp_dir_client_side}", temp_run_dir
+        )
+        return generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source
+
+    def adjust_test_config_for_discovery(self, test_cfg: Any) -> None:
+        pass
+
+    def detect_module_system(self, project_root: Path, source_file: Path) -> str | None:
+        return None
+
     # === Discovery ===
 
     def discover_functions(
-        self, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
+        self, source: str, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
     ) -> list[FunctionToOptimize]:
-        """Find all optimizable functions in a Python file.
-
-        Uses libcst to parse the file and find functions with return statements.
-
-        Args:
-            file_path: Path to the Python file to analyze.
-            filter_criteria: Optional criteria to filter functions.
-
-        Returns:
-            List of FunctionToOptimize objects for discovered functions.
-
-        """
-        import libcst as cst
-
-        from codeflash.discovery.functions_to_optimize import FunctionVisitor
-
         criteria = filter_criteria or FunctionFilterCriteria()
 
-        source = file_path.read_text(encoding="utf-8")
         tree = cst.parse_module(source)
 
         wrapper = cst.metadata.MetadataWrapper(tree)
@@ -572,21 +684,10 @@ class PythonSupport:
             return False
 
     def normalize_code(self, source: str) -> str:
-        """Normalize Python code for deduplication.
-
-        Removes comments, normalizes whitespace, and replaces variable names.
-
-        Args:
-            source: Source code to normalize.
-
-        Returns:
-            Normalized source code.
-
-        """
-        from codeflash.code_utils.deduplicate_code import normalize_code
+        from codeflash.languages.python.normalizer import normalize_python_code
 
         try:
-            return normalize_code(source, remove_docstrings=True, language=Language.PYTHON)
+            return normalize_python_code(source, remove_docstrings=True)
         except Exception:
             return source
 
@@ -861,8 +962,335 @@ class PythonSupport:
         # Python uses line_profiler which has its own output format
         return {"timings": {}, "unit": 0, "str_out": ""}
 
+    @property
+    def function_optimizer_class(self) -> type:
+        from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
+
+        return PythonFunctionOptimizer
+
+    def prepare_module(
+        self, module_code: str, module_path: Path, project_root: Path
+    ) -> tuple[dict[Path, ValidCode], ast.Module] | None:
+        from codeflash.languages.python.optimizer import prepare_python_module
+
+        return prepare_python_module(module_code, module_path, project_root)
+
+    pytest_cmd: str = "pytest"
+
+    def setup_test_config(self, test_cfg: TestConfig, file_path: Path) -> None:
+        self.pytest_cmd = test_cfg.pytest_cmd or "pytest"
+
+    def pytest_cmd_tokens(self, is_posix: bool) -> list[str]:
+        import shlex
+
+        return shlex.split(self.pytest_cmd, posix=is_posix)
+
+    def build_pytest_cmd(self, safe_sys_executable: str, is_posix: bool) -> list[str]:
+        return [safe_sys_executable, "-m", *self.pytest_cmd_tokens(is_posix)]
+
     # === Test Execution (Full Protocol) ===
-    # Note: For Python, test execution is handled by the main test_runner.py
-    # which has special Python-specific logic. These methods are not called
-    # for Python as the test_runner checks is_python() and uses the existing path.
-    # They are defined here only for protocol compliance.
+
+    def run_behavioral_tests(
+        self,
+        test_paths: Any,
+        test_env: dict[str, str],
+        cwd: Path,
+        timeout: int | None = None,
+        project_root: Path | None = None,
+        enable_coverage: bool = False,
+        candidate_index: int = 0,
+    ) -> tuple[Path, Any, Path | None, Path | None]:
+        import contextlib
+        import shlex
+        import sys
+
+        from codeflash.code_utils.code_utils import get_run_tmp_file
+        from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
+        from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
+        from codeflash.languages.python.static_analysis.coverage_utils import prepare_coverage_files
+        from codeflash.models.models import TestType
+        from codeflash.verification.test_runner import execute_test_subprocess
+
+        blocklisted_plugins = ["benchmark", "codspeed", "xdist", "sugar"]
+
+        test_files: list[str] = []
+        for file in test_paths.test_files:
+            if file.test_type == TestType.REPLAY_TEST:
+                if file.tests_in_file:
+                    test_files.extend(
+                        [
+                            str(file.instrumented_behavior_file_path) + "::" + test.test_function
+                            for test in file.tests_in_file
+                        ]
+                    )
+            else:
+                test_files.append(str(file.instrumented_behavior_file_path))
+
+        pytest_cmd_list = self.build_pytest_cmd(SAFE_SYS_EXECUTABLE, IS_POSIX)
+        test_files = list(set(test_files))
+
+        common_pytest_args = [
+            "--capture=tee-sys",
+            "-q",
+            "--codeflash_loops_scope=session",
+            "--codeflash_min_loops=1",
+            "--codeflash_max_loops=1",
+            f"--codeflash_seconds={TOTAL_LOOPING_TIME_EFFECTIVE}",
+        ]
+        if timeout is not None:
+            common_pytest_args.append(f"--timeout={timeout}")
+
+        result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
+        result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
+
+        pytest_test_env = test_env.copy()
+        pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
+
+        coverage_database_file: Path | None = None
+        coverage_config_file: Path | None = None
+
+        if enable_coverage:
+            coverage_database_file, coverage_config_file = prepare_coverage_files()
+            pytest_test_env["NUMBA_DISABLE_JIT"] = str(1)
+            pytest_test_env["TORCHDYNAMO_DISABLE"] = str(1)
+            pytest_test_env["PYTORCH_JIT"] = str(0)
+            pytest_test_env["TF_XLA_FLAGS"] = "--tf_xla_auto_jit=0"
+            pytest_test_env["TF_ENABLE_ONEDNN_OPTS"] = str(0)
+            pytest_test_env["JAX_DISABLE_JIT"] = str(0)
+
+            is_windows = sys.platform == "win32"
+            if is_windows:
+                if coverage_database_file.exists():
+                    with contextlib.suppress(PermissionError, OSError):
+                        coverage_database_file.unlink()
+            else:
+                cov_erase = execute_test_subprocess(
+                    shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage erase"), cwd=cwd, env=pytest_test_env, timeout=30
+                )
+                logger.debug(cov_erase)
+            coverage_cmd = [
+                SAFE_SYS_EXECUTABLE,
+                "-m",
+                "coverage",
+                "run",
+                f"--rcfile={coverage_config_file.as_posix()}",
+                "-m",
+            ]
+            coverage_cmd.extend(self.pytest_cmd_tokens(IS_POSIX))
+
+            blocklist_args = [f"-p no:{plugin}" for plugin in blocklisted_plugins if plugin != "cov"]
+            results = execute_test_subprocess(
+                coverage_cmd + common_pytest_args + blocklist_args + result_args + test_files,
+                cwd=cwd,
+                env=pytest_test_env,
+                timeout=600,
+            )
+            logger.debug("Result return code: %s, %s", results.returncode, results.stderr or "")
+        else:
+            blocklist_args = [f"-p no:{plugin}" for plugin in blocklisted_plugins]
+
+            results = execute_test_subprocess(
+                pytest_cmd_list + common_pytest_args + blocklist_args + result_args + test_files,
+                cwd=cwd,
+                env=pytest_test_env,
+                timeout=600,
+            )
+            logger.debug("Result return code: %s, %s", results.returncode, results.stderr or "")
+
+        return result_file_path, results, coverage_database_file, coverage_config_file
+
+    def run_benchmarking_tests(
+        self,
+        test_paths: Any,
+        test_env: dict[str, str],
+        cwd: Path,
+        timeout: int | None = None,
+        project_root: Path | None = None,
+        min_loops: int = 5,
+        max_loops: int = 100_000,
+        target_duration_seconds: float = 10.0,
+    ) -> tuple[Path, Any]:
+
+        from codeflash.code_utils.code_utils import get_run_tmp_file
+        from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
+        from codeflash.verification.test_runner import execute_test_subprocess
+
+        blocklisted_plugins = ["codspeed", "cov", "benchmark", "profiling", "xdist", "sugar"]
+
+        pytest_cmd_list = self.build_pytest_cmd(SAFE_SYS_EXECUTABLE, IS_POSIX)
+        test_files: list[str] = list({str(file.benchmarking_file_path) for file in test_paths.test_files})
+        pytest_args = [
+            "--capture=tee-sys",
+            "-q",
+            "--codeflash_loops_scope=session",
+            f"--codeflash_min_loops={min_loops}",
+            f"--codeflash_max_loops={max_loops}",
+            f"--codeflash_seconds={target_duration_seconds}",
+            "--codeflash_stability_check=true",
+        ]
+        if timeout is not None:
+            pytest_args.append(f"--timeout={timeout}")
+
+        result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
+        result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
+        pytest_test_env = test_env.copy()
+        pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
+        blocklist_args = [f"-p no:{plugin}" for plugin in blocklisted_plugins]
+        results = execute_test_subprocess(
+            pytest_cmd_list + pytest_args + blocklist_args + result_args + test_files,
+            cwd=cwd,
+            env=pytest_test_env,
+            timeout=600,
+        )
+        return result_file_path, results
+
+    def run_line_profile_tests(
+        self,
+        test_paths: Any,
+        test_env: dict[str, str],
+        cwd: Path,
+        timeout: int | None = None,
+        project_root: Path | None = None,
+        line_profile_output_file: Path | None = None,
+    ) -> tuple[Path, Any]:
+
+        from codeflash.code_utils.code_utils import get_run_tmp_file
+        from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
+        from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
+        from codeflash.verification.test_runner import execute_test_subprocess
+
+        blocklisted_plugins = ["codspeed", "cov", "benchmark", "profiling", "xdist", "sugar"]
+
+        pytest_cmd_list = self.build_pytest_cmd(SAFE_SYS_EXECUTABLE, IS_POSIX)
+        test_files: list[str] = list({str(file.benchmarking_file_path) for file in test_paths.test_files})
+        pytest_args = [
+            "--capture=tee-sys",
+            "-q",
+            "--codeflash_loops_scope=session",
+            "--codeflash_min_loops=1",
+            "--codeflash_max_loops=1",
+            f"--codeflash_seconds={TOTAL_LOOPING_TIME_EFFECTIVE}",
+        ]
+        if timeout is not None:
+            pytest_args.append(f"--timeout={timeout}")
+        result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
+        result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
+        pytest_test_env = test_env.copy()
+        pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
+        blocklist_args = [f"-p no:{plugin}" for plugin in blocklisted_plugins]
+        pytest_test_env["LINE_PROFILE"] = "1"
+        results = execute_test_subprocess(
+            pytest_cmd_list + pytest_args + blocklist_args + result_args + test_files,
+            cwd=cwd,
+            env=pytest_test_env,
+            timeout=600,
+        )
+        return result_file_path, results
+
+    def generate_concolic_tests(
+        self, test_cfg: Any, project_root: Path, function_to_optimize: FunctionToOptimize, function_to_optimize_ast: Any
+    ) -> tuple[dict, str]:
+        import ast
+        import importlib.util
+        import subprocess
+        import tempfile
+        import time
+
+        from codeflash.cli_cmds.console import console
+        from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
+        from codeflash.code_utils.shell_utils import make_env_with_project_root
+        from codeflash.discovery.discover_unit_tests import discover_unit_tests
+        from codeflash.languages.python.static_analysis.concolic_utils import (
+            clean_concolic_tests,
+            is_valid_concolic_test,
+        )
+        from codeflash.languages.python.static_analysis.static_analysis import has_typed_parameters
+        from codeflash.lsp.helpers import is_LSP_enabled
+        from codeflash.telemetry.posthog_cf import ph
+        from codeflash.verification.verification_utils import TestConfig
+
+        crosshair_available = importlib.util.find_spec("crosshair") is not None
+
+        start_time = time.perf_counter()
+        function_to_concolic_tests: dict = {}
+        concolic_test_suite_code = ""
+
+        if not crosshair_available:
+            logger.debug("Skipping concolic test generation (crosshair-tool is not installed)")
+            return function_to_concolic_tests, concolic_test_suite_code
+
+        if is_LSP_enabled():
+            logger.debug("Skipping concolic test generation in LSP mode")
+            return function_to_concolic_tests, concolic_test_suite_code
+
+        if (
+            test_cfg.concolic_test_root_dir
+            and isinstance(function_to_optimize_ast, ast.FunctionDef)
+            and has_typed_parameters(function_to_optimize_ast, function_to_optimize.parents)
+        ):
+            logger.info("Generating concolic opcode coverage tests for the original code…")
+            console.rule()
+            try:
+                env = make_env_with_project_root(project_root)
+                cover_result = subprocess.run(
+                    [
+                        SAFE_SYS_EXECUTABLE,
+                        "-m",
+                        "crosshair",
+                        "cover",
+                        "--example_output_format=pytest",
+                        "--per_condition_timeout=20",
+                        ".".join(
+                            [
+                                function_to_optimize.file_path.relative_to(project_root)
+                                .with_suffix("")
+                                .as_posix()
+                                .replace("/", "."),
+                                function_to_optimize.qualified_name,
+                            ]
+                        ),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    cwd=project_root,
+                    check=False,
+                    timeout=600,
+                    env=env,
+                )
+            except subprocess.TimeoutExpired:
+                logger.debug("CrossHair Cover test generation timed out")
+                return function_to_concolic_tests, concolic_test_suite_code
+
+            if cover_result.returncode == 0:
+                generated_concolic_test: str = cover_result.stdout
+                if not is_valid_concolic_test(generated_concolic_test, project_root=str(project_root)):
+                    logger.debug("CrossHair generated invalid test, skipping")
+                    console.rule()
+                    return function_to_concolic_tests, concolic_test_suite_code
+                concolic_test_suite_code = clean_concolic_tests(generated_concolic_test)
+                concolic_test_suite_dir = Path(tempfile.mkdtemp(dir=test_cfg.concolic_test_root_dir))
+                concolic_test_suite_path = concolic_test_suite_dir / "test_concolic_coverage.py"
+                concolic_test_suite_path.write_text(concolic_test_suite_code, encoding="utf8")
+
+                concolic_test_cfg = TestConfig(
+                    tests_root=concolic_test_suite_dir,
+                    tests_project_rootdir=test_cfg.concolic_test_root_dir,
+                    project_root_path=project_root,
+                )
+                function_to_concolic_tests, num_discovered_concolic_tests, _ = discover_unit_tests(concolic_test_cfg)
+                logger.info(
+                    "Created %d concolic unit test case%s ",
+                    num_discovered_concolic_tests,
+                    "s" if num_discovered_concolic_tests != 1 else "",
+                )
+                console.rule()
+                ph("cli-optimize-concolic-tests", {"num_tests": num_discovered_concolic_tests})
+
+            else:
+                logger.debug(
+                    "Error running CrossHair Cover%s", ": " + cover_result.stderr if cover_result.stderr else "."
+                )
+                console.rule()
+        end_time = time.perf_counter()
+        logger.debug("Generated concolic tests in %.2f seconds", end_time - start_time)
+        return function_to_concolic_tests, concolic_test_suite_code

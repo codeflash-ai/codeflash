@@ -18,7 +18,7 @@ from codeflash.languages.python.static_analysis.code_replacer import (
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, FunctionParent, FunctionSource
-from codeflash.optimization.function_optimizer import FunctionOptimizer
+from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
 os.environ["CODEFLASH_API_KEY"] = "cf-test-key"
@@ -54,7 +54,7 @@ def sorter(arr):
         test_framework="pytest",
         pytest_cmd="pytest",
     )
-    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
     original_helper_code: dict[Path, str] = {}
     helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
@@ -834,7 +834,7 @@ class MainClass:
         test_framework="pytest",
         pytest_cmd="pytest",
     )
-    func_optimizer = FunctionOptimizer(function_to_optimize=func_top_optimize, test_cfg=test_config)
+    func_optimizer = PythonFunctionOptimizer(function_to_optimize=func_top_optimize, test_cfg=test_config)
     code_context = func_optimizer.get_code_optimization_context().unwrap()
     assert code_context.testgen_context.flat.rstrip() == get_code_output.rstrip()
 
@@ -1745,7 +1745,7 @@ class NewClass:
         test_framework="pytest",
         pytest_cmd="pytest",
     )
-    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
     original_helper_code: dict[Path, str] = {}
     helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
@@ -1824,7 +1824,7 @@ a=2
         test_framework="pytest",
         pytest_cmd="pytest",
     )
-    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
     original_helper_code: dict[Path, str] = {}
     helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
@@ -1904,7 +1904,7 @@ class NewClass:
         test_framework="pytest",
         pytest_cmd="pytest",
     )
-    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
     original_helper_code: dict[Path, str] = {}
     helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
@@ -1983,7 +1983,7 @@ class NewClass:
         test_framework="pytest",
         pytest_cmd="pytest",
     )
-    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
     original_helper_code: dict[Path, str] = {}
     helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
@@ -2063,7 +2063,7 @@ class NewClass:
         test_framework="pytest",
         pytest_cmd="pytest",
     )
-    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
     original_helper_code: dict[Path, str] = {}
     helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
@@ -2153,7 +2153,7 @@ class NewClass:
         test_framework="pytest",
         pytest_cmd="pytest",
     )
-    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
     original_helper_code: dict[Path, str] = {}
     helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
@@ -3453,7 +3453,7 @@ def hydrate_input_text_actions_with_field_names(
         test_framework="pytest",
         pytest_cmd="pytest",
     )
-    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
 
     original_helper_code: dict[Path, str] = {}
