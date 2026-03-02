@@ -20,12 +20,15 @@ All assertions use strict string equality to verify exact extraction output.
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import Language
 from codeflash.languages.javascript.support import JavaScriptSupport, TypeScriptSupport
-from codeflash.languages.python.context.code_context_extractor import get_code_optimization_context_for_language
+from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
+from codeflash.verification.verification_utils import TestConfig
 
 
 @pytest.fixture
@@ -1319,12 +1322,15 @@ export function isEven(n) {
         assert helper_names == ["isOdd"]
 
         # Verify helper source
-        assert context.helper_functions[0].source_code == """\
+        assert (
+            context.helper_functions[0].source_code
+            == """\
 export function isOdd(n) {
     if (n === 0) return false;
     return isEven(n - 1);
 }
 """
+        )
 
     def test_complex_recursive_tree_traversal(self, js_support, temp_project):
         """Test complex recursive tree traversal with multiple recursive calls."""
@@ -1804,9 +1810,11 @@ export const sendSlackMessage = async (
             language="typescript",
         )
 
-        ctx = get_code_optimization_context_for_language(
-            fto, temp_project
+        test_config = TestConfig(
+            tests_root=temp_project, tests_project_rootdir=temp_project, project_root_path=temp_project
         )
+        func_optimizer = JavaScriptFunctionOptimizer(function_to_optimize=fto, test_cfg=test_config, aiservice_client=MagicMock())
+        ctx = func_optimizer.get_code_optimization_context().unwrap()
 
         # The read_writable_code should contain the target function AND helper functions
         expected_read_writable = """```typescript:slack_util.ts
@@ -1897,7 +1905,6 @@ let web: WebClient | null = null"""
 
         assert ctx.read_writable_code.markdown == expected_read_writable
         assert ctx.read_only_context_code == expected_read_only
-
 
 
 class TestContextProperties:

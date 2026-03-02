@@ -13,7 +13,7 @@ from codeflash.languages.base import Language
 from codeflash.languages.javascript.support import JavaScriptSupport, TypeScriptSupport
 from codeflash.languages.registry import get_language_support
 from codeflash.models.models import FunctionParent
-from codeflash.optimization.function_optimizer import FunctionOptimizer
+from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -1099,7 +1099,7 @@ class TestCodeExtractorIntegration:
             pytest_cmd="jest",
         )
 
-        func_optimizer = FunctionOptimizer(
+        func_optimizer = JavaScriptFunctionOptimizer(
             function_to_optimize=func, test_cfg=test_config, aiservice_client=MagicMock()
         )
         result = func_optimizer.get_code_optimization_context()

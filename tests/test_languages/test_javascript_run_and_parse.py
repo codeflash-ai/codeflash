@@ -357,9 +357,7 @@ class TestRunAndParseJavaScriptTests:
         skip_if_js_not_supported()
         from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
         from codeflash.languages import current as lang_current
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
-
-        lang_current._current_language = Language.TYPESCRIPT
+        from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
 
         # Find the fibonacci function
         fib_file = vitest_project / "fibonacci.ts"
@@ -389,7 +387,7 @@ class TestRunAndParseJavaScriptTests:
         )
 
         # Create optimizer
-        func_optimizer = FunctionOptimizer(
+        func_optimizer = JavaScriptFunctionOptimizer(
             function_to_optimize=func,
             test_cfg=test_config,
             aiservice_client=MagicMock(),
