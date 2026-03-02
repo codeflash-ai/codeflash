@@ -9,10 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.languages.python.static_analysis.code_replacer import (
-    replace_function_definitions_for_language,
-    replace_function_definitions_in_module,
-)
+from codeflash.languages.code_replacer import replace_function_definitions_for_language
+from codeflash.languages.python.static_analysis.code_replacer import replace_function_definitions_in_module
 from codeflash.models.function_types import FunctionParent
 from codeflash.languages.base import Language
 from codeflash.languages import current as language_current
