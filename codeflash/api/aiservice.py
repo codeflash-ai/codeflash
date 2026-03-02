@@ -816,7 +816,12 @@ class AiServiceClient:
             return None
 
     def review_generated_tests(
-        self, tests: list[dict[str, Any]], function_source_code: str, function_name: str, trace_id: str, language: str = "python"
+        self,
+        tests: list[dict[str, Any]],
+        function_source_code: str,
+        function_name: str,
+        trace_id: str,
+        language: str = "python",
     ) -> list[TestFileReview]:
         payload = {
             "tests": tests,
