@@ -728,3 +728,293 @@ class TestBundlerModuleResolutionFix:
             # Verify codeflash configs were NOT created
             assert not (tmpdir_path / "jest.codeflash.config.js").exists()
             assert not (tmpdir_path / "tsconfig.codeflash.json").exists()
+
+
+class TestBundledJestReporter:
+    """Tests for the bundled codeflash/jest-reporter.
+
+    Verifies that:
+    1. The reporter JS file exists in the runtime package
+    2. Jest commands reference 'codeflash/jest-reporter' (not jest-junit)
+    3. The reporter produces valid JUnit XML
+    4. The CODEFLASH_JEST_REPORTER constant is correct
+    """
+
+    def test_reporter_js_file_exists(self):
+        """The jest-reporter.js file must exist in the runtime directory."""
+        reporter_path = Path(__file__).resolve().parents[2] / "packages" / "codeflash" / "runtime" / "jest-reporter.js"
+        assert reporter_path.exists(), f"jest-reporter.js not found at {reporter_path}"
+
+    def test_reporter_constant_value(self):
+        """CODEFLASH_JEST_REPORTER should be 'codeflash/jest-reporter'."""
+        from codeflash.languages.javascript.test_runner import CODEFLASH_JEST_REPORTER
+
+        assert CODEFLASH_JEST_REPORTER == "codeflash/jest-reporter"
+
+    def test_behavioral_command_uses_bundled_reporter(self):
+        """run_jest_behavioral_tests should use codeflash/jest-reporter in --reporters flag."""
+        from codeflash.languages.javascript.test_runner import run_jest_behavioral_tests
+        from codeflash.models.models import TestFile, TestFiles
+        from codeflash.models.test_type import TestType
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            (tmpdir_path / "package.json").write_text('{"name": "test"}')
+            test_dir = tmpdir_path / "test"
+            test_dir.mkdir()
+            test_file = test_dir / "test_func.test.js"
+            test_file.write_text("// test")
+
+            mock_test_files = TestFiles(
+                test_files=[
+                    TestFile(
+                        original_file_path=test_file,
+                        instrumented_behavior_file_path=test_file,
+                        benchmarking_file_path=test_file,
+                        test_type=TestType.GENERATED_REGRESSION,
+                    ),
+                ]
+            )
+
+            with patch("subprocess.run") as mock_run:
+                mock_result = MagicMock()
+                mock_result.stdout = ""
+                mock_result.stderr = ""
+                mock_result.returncode = 1
+                mock_run.return_value = mock_result
+
+                try:
+                    run_jest_behavioral_tests(
+                        test_paths=mock_test_files,
+                        test_env={},
+                        cwd=tmpdir_path,
+                        project_root=tmpdir_path,
+                    )
+                except Exception:
+                    pass
+
+                if mock_run.called:
+                    cmd = mock_run.call_args[0][0]
+                    reporter_args = [a for a in cmd if "--reporters=" in a and "jest-reporter" in a]
+                    assert len(reporter_args) == 1, f"Expected exactly one codeflash/jest-reporter flag, got: {reporter_args}"
+                    assert reporter_args[0] == "--reporters=codeflash/jest-reporter"
+                    # Must NOT reference jest-junit
+                    jest_junit_args = [a for a in cmd if "jest-junit" in a]
+                    assert len(jest_junit_args) == 0, f"Should not reference jest-junit: {jest_junit_args}"
+
+    def test_benchmarking_command_uses_bundled_reporter(self):
+        """run_jest_benchmarking_tests should use codeflash/jest-reporter."""
+        from codeflash.languages.javascript.test_runner import run_jest_benchmarking_tests
+        from codeflash.models.models import TestFile, TestFiles
+        from codeflash.models.test_type import TestType
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            (tmpdir_path / "package.json").write_text('{"name": "test"}')
+            test_dir = tmpdir_path / "test"
+            test_dir.mkdir()
+            test_file = test_dir / "test_func__perf.test.js"
+            test_file.write_text("// test")
+
+            mock_test_files = TestFiles(
+                test_files=[
+                    TestFile(
+                        original_file_path=test_file,
+                        instrumented_behavior_file_path=test_file,
+                        benchmarking_file_path=test_file,
+                        test_type=TestType.GENERATED_REGRESSION,
+                    ),
+                ]
+            )
+
+            with patch("subprocess.run") as mock_run:
+                mock_result = MagicMock()
+                mock_result.stdout = ""
+                mock_result.stderr = ""
+                mock_result.returncode = 1
+                mock_run.return_value = mock_result
+
+                try:
+                    run_jest_benchmarking_tests(
+                        test_paths=mock_test_files,
+                        test_env={},
+                        cwd=tmpdir_path,
+                        project_root=tmpdir_path,
+                    )
+                except Exception:
+                    pass
+
+                if mock_run.called:
+                    cmd = mock_run.call_args[0][0]
+                    reporter_args = [a for a in cmd if "--reporters=codeflash/jest-reporter" in a]
+                    assert len(reporter_args) == 1
+
+    def test_line_profile_command_uses_bundled_reporter(self):
+        """run_jest_line_profile_tests should use codeflash/jest-reporter."""
+        from codeflash.languages.javascript.test_runner import run_jest_line_profile_tests
+        from codeflash.models.models import TestFile, TestFiles
+        from codeflash.models.test_type import TestType
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            (tmpdir_path / "package.json").write_text('{"name": "test"}')
+            test_dir = tmpdir_path / "test"
+            test_dir.mkdir()
+            test_file = test_dir / "test_func__line.test.js"
+            test_file.write_text("// test")
+
+            mock_test_files = TestFiles(
+                test_files=[
+                    TestFile(
+                        original_file_path=test_file,
+                        instrumented_behavior_file_path=test_file,
+                        benchmarking_file_path=test_file,
+                        test_type=TestType.GENERATED_REGRESSION,
+                    ),
+                ]
+            )
+
+            with patch("subprocess.run") as mock_run:
+                mock_result = MagicMock()
+                mock_result.stdout = ""
+                mock_result.stderr = ""
+                mock_result.returncode = 1
+                mock_run.return_value = mock_result
+
+                try:
+                    run_jest_line_profile_tests(
+                        test_paths=mock_test_files,
+                        test_env={},
+                        cwd=tmpdir_path,
+                        project_root=tmpdir_path,
+                    )
+                except Exception:
+                    pass
+
+                if mock_run.called:
+                    cmd = mock_run.call_args[0][0]
+                    reporter_args = [a for a in cmd if "--reporters=codeflash/jest-reporter" in a]
+                    assert len(reporter_args) == 1
+
+    def test_reporter_produces_valid_junit_xml(self):
+        """The reporter JS should produce JUnit XML parseable by junitparser."""
+        import subprocess
+
+        reporter_path = Path(__file__).resolve().parents[2] / "packages" / "codeflash" / "runtime" / "jest-reporter.js"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_file = Path(tmpdir) / "results.xml"
+
+            # Create a Node.js script that exercises the reporter with mock data
+            test_script = Path(tmpdir) / "test_reporter.js"
+            test_script.write_text(f"""
+// Set env vars BEFORE requiring reporter (matches real Jest behavior)
+process.env.JEST_JUNIT_OUTPUT_FILE = '{output_file}';
+process.env.JEST_JUNIT_CLASSNAME = '{{filepath}}';
+process.env.JEST_JUNIT_SUITE_NAME = '{{filepath}}';
+process.env.JEST_JUNIT_ADD_FILE_ATTRIBUTE = 'true';
+process.env.JEST_JUNIT_INCLUDE_CONSOLE_OUTPUT = 'true';
+
+const Reporter = require('{reporter_path}');
+
+// Mock Jest globalConfig
+const globalConfig = {{ rootDir: '/tmp/project' }};
+const reporter = new Reporter(globalConfig, {{}});
+
+// Mock test results (matches Jest's aggregatedResults structure)
+const results = {{
+  testResults: [
+    {{
+      testFilePath: '/tmp/project/test/math.test.js',
+      displayName: 'math tests',
+      console: [{{ type: 'log', message: 'CODEFLASH_START test1' }}],
+      testResults: [
+        {{
+          fullName: 'math > adds numbers',
+          title: 'adds numbers',
+          status: 'passed',
+          duration: 12,
+        }},
+        {{
+          fullName: 'math > handles failure',
+          title: 'handles failure',
+          status: 'failed',
+          duration: 5,
+          failureMessages: ['Expected 4 but got 5'],
+        }},
+        {{
+          fullName: 'math > skipped test',
+          title: 'skipped test',
+          status: 'pending',
+          duration: 0,
+        }},
+      ],
+    }},
+  ],
+}};
+
+// Simulate onTestFileResult for console capture
+reporter.onTestFileResult(null, results.testResults[0], null);
+
+// Simulate onRunComplete
+reporter.onRunComplete([], results);
+
+console.log('OK');
+""")
+
+            result = subprocess.run(
+                ["node", str(test_script)],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+            assert result.returncode == 0, f"Reporter script failed: {result.stderr}"
+            assert output_file.exists(), "Reporter did not create output file"
+
+            xml_content = output_file.read_text()
+
+            # Verify basic XML structure
+            assert '<?xml version="1.0"' in xml_content
+            assert "<testsuites" in xml_content
+            assert "<testsuite" in xml_content
+            assert "<testcase" in xml_content
+
+            # Verify classname uses filepath template
+            assert 'classname="/tmp/project/test/math.test.js"' in xml_content
+
+            # Verify file attribute is present
+            assert 'file="/tmp/project/test/math.test.js"' in xml_content
+
+            # Verify failure element
+            assert "<failure" in xml_content
+            assert "Expected 4 but got 5" in xml_content
+
+            # Verify skipped element
+            assert "<skipped/>" in xml_content
+
+            # Verify system-out with console output
+            assert "<system-out>" in xml_content
+            assert "CODEFLASH_START" in xml_content
+
+            # Verify it's parseable by junitparser (our actual parser)
+            from junitparser import JUnitXml
+
+            parsed = JUnitXml.fromfile(str(output_file))
+            suites = list(parsed)
+            assert len(suites) == 1
+            testcases = list(suites[0])
+            assert len(testcases) == 3
+
+    def test_reporter_export_in_package_json(self):
+        """package.json should export codeflash/jest-reporter."""
+        import json
+
+        pkg_path = Path(__file__).resolve().parents[2] / "packages" / "codeflash" / "package.json"
+        with pkg_path.open() as f:
+            pkg = json.load(f)
+
+        exports = pkg.get("exports", {})
+        assert "./jest-reporter" in exports, "Missing ./jest-reporter export in package.json"
+        assert exports["./jest-reporter"]["require"] == "./runtime/jest-reporter.js"
+
