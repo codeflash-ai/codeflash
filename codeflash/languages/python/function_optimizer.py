@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import ast
+import os
+from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
+from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.languages.python.context.unused_definition_remover import (
     detect_unused_helper_functions,
     revert_unused_helper_functions,
@@ -17,12 +20,12 @@ from codeflash.languages.python.static_analysis.code_replacer import (
     modify_autouse_fixture,
 )
 from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports, contains_jit_decorator
-from codeflash.models.models import TestingMode, TestResults
+from codeflash.models.models import TestFile, TestingMode, TestResults, TestType
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 
 if TYPE_CHECKING:
     from codeflash.languages.base import Language
-    from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown
+    from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, FunctionCalledInTest
 
 
 class PythonFunctionOptimizer(FunctionOptimizer):
@@ -52,6 +55,92 @@ class PythonFunctionOptimizer(FunctionOptimizer):
         logger.info("Add custom marker to generated test files")
         add_custom_marker_to_all_tests(test_paths)
         return original_conftest_content
+
+    def instrument_existing_tests(self, function_to_all_tests: dict[str, set[FunctionCalledInTest]]) -> set[Path]:
+        existing_test_files_count = 0
+        replay_test_files_count = 0
+        concolic_coverage_test_files_count = 0
+        unique_instrumented_test_files = set()
+
+        func_qualname = self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)
+        if func_qualname not in function_to_all_tests:
+            logger.info(f"Did not find any pre-existing tests for '{func_qualname}', will only use generated tests.")
+            return unique_instrumented_test_files
+
+        test_file_invocation_positions = defaultdict(list)
+        for tests_in_file in function_to_all_tests.get(func_qualname):
+            test_file_invocation_positions[
+                (tests_in_file.tests_in_file.test_file, tests_in_file.tests_in_file.test_type)
+            ].append(tests_in_file)
+        for (test_file, test_type), tests_in_file_list in test_file_invocation_positions.items():
+            path_obj_test_file = Path(test_file)
+            if test_type == TestType.EXISTING_UNIT_TEST:
+                existing_test_files_count += 1
+            elif test_type == TestType.REPLAY_TEST:
+                replay_test_files_count += 1
+            elif test_type == TestType.CONCOLIC_COVERAGE_TEST:
+                concolic_coverage_test_files_count += 1
+            else:
+                msg = f"Unexpected test type: {test_type}"
+                raise ValueError(msg)
+            success, injected_behavior_test = inject_profiling_into_existing_test(
+                mode=TestingMode.BEHAVIOR,
+                test_path=path_obj_test_file,
+                call_positions=[test.position for test in tests_in_file_list],
+                function_to_optimize=self.function_to_optimize,
+                tests_project_root=self.test_cfg.tests_project_rootdir,
+            )
+            if not success:
+                continue
+            success, injected_perf_test = inject_profiling_into_existing_test(
+                mode=TestingMode.PERFORMANCE,
+                test_path=path_obj_test_file,
+                call_positions=[test.position for test in tests_in_file_list],
+                function_to_optimize=self.function_to_optimize,
+                tests_project_root=self.test_cfg.tests_project_rootdir,
+            )
+            if not success:
+                continue
+            new_behavioral_test_path = Path(
+                f"{os.path.splitext(test_file)[0]}__perfinstrumented{os.path.splitext(test_file)[1]}"  # noqa: PTH122
+            )
+            new_perf_test_path = Path(
+                f"{os.path.splitext(test_file)[0]}__perfonlyinstrumented{os.path.splitext(test_file)[1]}"  # noqa: PTH122
+            )
+            if injected_behavior_test is not None:
+                with new_behavioral_test_path.open("w", encoding="utf8") as _f:
+                    _f.write(injected_behavior_test)
+            else:
+                msg = "injected_behavior_test is None"
+                raise ValueError(msg)
+            if injected_perf_test is not None:
+                with new_perf_test_path.open("w", encoding="utf8") as _f:
+                    _f.write(injected_perf_test)
+
+            unique_instrumented_test_files.add(new_behavioral_test_path)
+            unique_instrumented_test_files.add(new_perf_test_path)
+
+            if not self.test_files.get_by_original_file_path(path_obj_test_file):
+                self.test_files.add(
+                    TestFile(
+                        instrumented_behavior_file_path=new_behavioral_test_path,
+                        benchmarking_file_path=new_perf_test_path,
+                        original_source=None,
+                        original_file_path=Path(test_file),
+                        test_type=test_type,
+                        tests_in_file=[t.tests_in_file for t in tests_in_file_list],
+                    )
+                )
+
+        logger.info(
+            f"Discovered {existing_test_files_count} existing unit test file"
+            f"{'s' if existing_test_files_count != 1 else ''}, {replay_test_files_count} replay test file"
+            f"{'s' if replay_test_files_count != 1 else ''}, and "
+            f"{concolic_coverage_test_files_count} concolic coverage test file"
+            f"{'s' if concolic_coverage_test_files_count != 1 else ''} for {func_qualname}"
+        )
+        console.rule()
+        return unique_instrumented_test_files
 
     def replace_function_and_helpers_with_optimized_code(
         self,

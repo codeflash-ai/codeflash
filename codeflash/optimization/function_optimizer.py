@@ -62,7 +62,6 @@ from codeflash.code_utils.deduplicate_code import normalize_code
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.formatter import format_code, format_generated_code, sort_imports
 from codeflash.code_utils.git_utils import git_root_dir
-from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.shell_utils import make_env_with_project_root
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
@@ -1561,180 +1560,100 @@ class FunctionOptimizer:
         func_qualname = self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)
         if func_qualname not in function_to_all_tests:
             logger.info(f"Did not find any pre-existing tests for '{func_qualname}', will only use generated tests.")
-        # Handle non-Python existing test instrumentation
-        elif not is_python():
-            test_file_invocation_positions = defaultdict(list)
-            for tests_in_file in function_to_all_tests.get(func_qualname):
-                test_file_invocation_positions[
-                    (tests_in_file.tests_in_file.test_file, tests_in_file.tests_in_file.test_type)
-                ].append(tests_in_file)
+            return unique_instrumented_test_files
 
-            for (test_file, test_type), tests_in_file_list in test_file_invocation_positions.items():
-                path_obj_test_file = Path(test_file)
-                if test_type == TestType.EXISTING_UNIT_TEST:
-                    existing_test_files_count += 1
-                elif test_type == TestType.REPLAY_TEST:
-                    replay_test_files_count += 1
-                elif test_type == TestType.CONCOLIC_COVERAGE_TEST:
-                    concolic_coverage_test_files_count += 1
+        test_file_invocation_positions = defaultdict(list)
+        for tests_in_file in function_to_all_tests.get(func_qualname):
+            test_file_invocation_positions[
+                (tests_in_file.tests_in_file.test_file, tests_in_file.tests_in_file.test_type)
+            ].append(tests_in_file)
+
+        for (test_file, test_type), tests_in_file_list in test_file_invocation_positions.items():
+            path_obj_test_file = Path(test_file)
+            if test_type == TestType.EXISTING_UNIT_TEST:
+                existing_test_files_count += 1
+            elif test_type == TestType.REPLAY_TEST:
+                replay_test_files_count += 1
+            elif test_type == TestType.CONCOLIC_COVERAGE_TEST:
+                concolic_coverage_test_files_count += 1
+            else:
+                msg = f"Unexpected test type: {test_type}"
+                raise ValueError(msg)
+
+            # Use language-specific instrumentation
+            success, injected_behavior_test = self.language_support.instrument_existing_test(
+                test_path=path_obj_test_file,
+                call_positions=[test.position for test in tests_in_file_list],
+                function_to_optimize=self.function_to_optimize,
+                tests_project_root=self.test_cfg.tests_project_rootdir,
+                mode="behavior",
+            )
+            if not success:
+                logger.debug(f"Failed to instrument test file {test_file} for behavior testing")
+                continue
+
+            success, injected_perf_test = self.language_support.instrument_existing_test(
+                test_path=path_obj_test_file,
+                call_positions=[test.position for test in tests_in_file_list],
+                function_to_optimize=self.function_to_optimize,
+                tests_project_root=self.test_cfg.tests_project_rootdir,
+                mode="performance",
+            )
+            if not success:
+                logger.debug(f"Failed to instrument test file {test_file} for performance testing")
+                continue
+
+            # For JS/TS, preserve .test.ts or .spec.ts suffix for Jest pattern matching
+            def get_instrumented_path(original_path: str, suffix: str) -> Path:
+                path_obj = Path(original_path)
+                stem = path_obj.stem
+                ext = path_obj.suffix
+
+                if ".test" in stem:
+                    base, _ = stem.rsplit(".test", 1)
+                    new_stem = f"{base}{suffix}.test"
+                elif ".spec" in stem:
+                    base, _ = stem.rsplit(".spec", 1)
+                    new_stem = f"{base}{suffix}.spec"
                 else:
-                    msg = f"Unexpected test type: {test_type}"
-                    raise ValueError(msg)
+                    new_stem = f"{stem}{suffix}"
 
-                # Use language-specific instrumentation
-                success, injected_behavior_test = self.language_support.instrument_existing_test(
-                    test_path=path_obj_test_file,
-                    call_positions=[test.position for test in tests_in_file_list],
-                    function_to_optimize=self.function_to_optimize,
-                    tests_project_root=self.test_cfg.tests_project_rootdir,
-                    mode="behavior",
-                )
-                if not success:
-                    logger.debug(f"Failed to instrument test file {test_file} for behavior testing")
-                    continue
+                return path_obj.parent / f"{new_stem}{ext}"
 
-                success, injected_perf_test = self.language_support.instrument_existing_test(
-                    test_path=path_obj_test_file,
-                    call_positions=[test.position for test in tests_in_file_list],
-                    function_to_optimize=self.function_to_optimize,
-                    tests_project_root=self.test_cfg.tests_project_rootdir,
-                    mode="performance",
-                )
-                if not success:
-                    logger.debug(f"Failed to instrument test file {test_file} for performance testing")
-                    continue
+            new_behavioral_test_path = get_instrumented_path(test_file, "__perfinstrumented")
+            new_perf_test_path = get_instrumented_path(test_file, "__perfonlyinstrumented")
 
-                # Generate instrumented test file paths
-                # For JS/TS, preserve .test.ts or .spec.ts suffix for Jest pattern matching
-                def get_instrumented_path(original_path: str, suffix: str) -> Path:
-                    """Generate instrumented test file path preserving .test/.spec pattern."""
-                    path_obj = Path(original_path)
-                    stem = path_obj.stem  # e.g., "fibonacci.test"
-                    ext = path_obj.suffix  # e.g., ".ts"
+            if injected_behavior_test is not None:
+                with new_behavioral_test_path.open("w", encoding="utf8") as _f:
+                    _f.write(injected_behavior_test)
+                logger.debug(f"[PIPELINE] Wrote instrumented behavior test to {new_behavioral_test_path}")
+            else:
+                msg = "injected_behavior_test is None"
+                raise ValueError(msg)
 
-                    # Check for .test or .spec in stem (JS/TS pattern)
-                    if ".test" in stem:
-                        # fibonacci.test -> fibonacci__suffix.test
-                        base, _ = stem.rsplit(".test", 1)
-                        new_stem = f"{base}{suffix}.test"
-                    elif ".spec" in stem:
-                        base, _ = stem.rsplit(".spec", 1)
-                        new_stem = f"{base}{suffix}.spec"
-                    else:
-                        # Default Python-style: add suffix before extension
-                        new_stem = f"{stem}{suffix}"
+            if injected_perf_test is not None:
+                with new_perf_test_path.open("w", encoding="utf8") as _f:
+                    _f.write(injected_perf_test)
+                logger.debug(f"[PIPELINE] Wrote instrumented perf test to {new_perf_test_path}")
 
-                    return path_obj.parent / f"{new_stem}{ext}"
+            unique_instrumented_test_files.add(new_behavioral_test_path)
+            unique_instrumented_test_files.add(new_perf_test_path)
 
-                new_behavioral_test_path = get_instrumented_path(test_file, "__perfinstrumented")
-                new_perf_test_path = get_instrumented_path(test_file, "__perfonlyinstrumented")
-
-                if injected_behavior_test is not None:
-                    with new_behavioral_test_path.open("w", encoding="utf8") as _f:
-                        _f.write(injected_behavior_test)
-                    logger.debug(f"[PIPELINE] Wrote instrumented behavior test to {new_behavioral_test_path}")
-                else:
-                    msg = "injected_behavior_test is None"
-                    raise ValueError(msg)
-
-                if injected_perf_test is not None:
-                    with new_perf_test_path.open("w", encoding="utf8") as _f:
-                        _f.write(injected_perf_test)
-                    logger.debug(f"[PIPELINE] Wrote instrumented perf test to {new_perf_test_path}")
-
-                unique_instrumented_test_files.add(new_behavioral_test_path)
-                unique_instrumented_test_files.add(new_perf_test_path)
-
-                if not self.test_files.get_by_original_file_path(path_obj_test_file):
-                    self.test_files.add(
-                        TestFile(
-                            instrumented_behavior_file_path=new_behavioral_test_path,
-                            benchmarking_file_path=new_perf_test_path,
-                            original_source=None,
-                            original_file_path=Path(test_file),
-                            test_type=test_type,
-                            tests_in_file=[t.tests_in_file for t in tests_in_file_list],
-                        )
+            if not self.test_files.get_by_original_file_path(path_obj_test_file):
+                self.test_files.add(
+                    TestFile(
+                        instrumented_behavior_file_path=new_behavioral_test_path,
+                        benchmarking_file_path=new_perf_test_path,
+                        original_source=None,
+                        original_file_path=Path(test_file),
+                        test_type=test_type,
+                        tests_in_file=[t.tests_in_file for t in tests_in_file_list],
                     )
+                )
 
-            if existing_test_files_count > 0 or replay_test_files_count > 0 or concolic_coverage_test_files_count > 0:
-                logger.info(
-                    f"Instrumented {existing_test_files_count} existing unit test file"
-                    f"{'s' if existing_test_files_count != 1 else ''}, {replay_test_files_count} replay test file"
-                    f"{'s' if replay_test_files_count != 1 else ''}, and "
-                    f"{concolic_coverage_test_files_count} concolic coverage test file"
-                    f"{'s' if concolic_coverage_test_files_count != 1 else ''} for {func_qualname}"
-                )
-                console.rule()
-        else:
-            test_file_invocation_positions = defaultdict(list)
-            for tests_in_file in function_to_all_tests.get(func_qualname):
-                test_file_invocation_positions[
-                    (tests_in_file.tests_in_file.test_file, tests_in_file.tests_in_file.test_type)
-                ].append(tests_in_file)
-            for (test_file, test_type), tests_in_file_list in test_file_invocation_positions.items():
-                path_obj_test_file = Path(test_file)
-                if test_type == TestType.EXISTING_UNIT_TEST:
-                    existing_test_files_count += 1
-                elif test_type == TestType.REPLAY_TEST:
-                    replay_test_files_count += 1
-                elif test_type == TestType.CONCOLIC_COVERAGE_TEST:
-                    concolic_coverage_test_files_count += 1
-                else:
-                    msg = f"Unexpected test type: {test_type}"
-                    raise ValueError(msg)
-                success, injected_behavior_test = inject_profiling_into_existing_test(
-                    mode=TestingMode.BEHAVIOR,
-                    test_path=path_obj_test_file,
-                    call_positions=[test.position for test in tests_in_file_list],
-                    function_to_optimize=self.function_to_optimize,
-                    tests_project_root=self.test_cfg.tests_project_rootdir,
-                )
-                if not success:
-                    continue
-                success, injected_perf_test = inject_profiling_into_existing_test(
-                    mode=TestingMode.PERFORMANCE,
-                    test_path=path_obj_test_file,
-                    call_positions=[test.position for test in tests_in_file_list],
-                    function_to_optimize=self.function_to_optimize,
-                    tests_project_root=self.test_cfg.tests_project_rootdir,
-                )
-                if not success:
-                    continue
-                # TODO: this naming logic should be moved to a function and made more standard
-                new_behavioral_test_path = Path(
-                    f"{os.path.splitext(test_file)[0]}__perfinstrumented{os.path.splitext(test_file)[1]}"  # noqa: PTH122
-                )
-                new_perf_test_path = Path(
-                    f"{os.path.splitext(test_file)[0]}__perfonlyinstrumented{os.path.splitext(test_file)[1]}"  # noqa: PTH122
-                )
-                if injected_behavior_test is not None:
-                    with new_behavioral_test_path.open("w", encoding="utf8") as _f:
-                        _f.write(injected_behavior_test)
-                else:
-                    msg = "injected_behavior_test is None"
-                    raise ValueError(msg)
-                if injected_perf_test is not None:
-                    with new_perf_test_path.open("w", encoding="utf8") as _f:
-                        _f.write(injected_perf_test)
-
-                unique_instrumented_test_files.add(new_behavioral_test_path)
-                unique_instrumented_test_files.add(new_perf_test_path)
-
-                if not self.test_files.get_by_original_file_path(path_obj_test_file):
-                    self.test_files.add(
-                        TestFile(
-                            instrumented_behavior_file_path=new_behavioral_test_path,
-                            benchmarking_file_path=new_perf_test_path,
-                            original_source=None,
-                            original_file_path=Path(test_file),
-                            test_type=test_type,
-                            tests_in_file=[t.tests_in_file for t in tests_in_file_list],
-                        )
-                    )
-
+        if existing_test_files_count > 0 or replay_test_files_count > 0 or concolic_coverage_test_files_count > 0:
             logger.info(
-                f"Discovered {existing_test_files_count} existing unit test file"
+                f"Instrumented {existing_test_files_count} existing unit test file"
                 f"{'s' if existing_test_files_count != 1 else ''}, {replay_test_files_count} replay test file"
                 f"{'s' if replay_test_files_count != 1 else ''}, and "
                 f"{concolic_coverage_test_files_count} concolic coverage test file"
