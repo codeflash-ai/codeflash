@@ -93,11 +93,57 @@ class JavaSupport(LanguageSupport):
     def dir_excludes(self) -> frozenset[str]:
         return frozenset({"target", "build", ".gradle", ".mvn", ".idea"})
 
+    @property
+    def default_language_version(self) -> str | None:
+        return "17"
+
+    @property
+    def valid_test_frameworks(self) -> tuple[str, ...]:
+        return ("junit5", "junit4", "testng")
+
+    @property
+    def test_result_serialization_format(self) -> str:
+        return "json"
+
     def postprocess_generated_tests(
         self, generated_tests: GeneratedTestsList, test_framework: str, project_root: Path, source_file_path: Path
     ) -> GeneratedTestsList:
         _ = test_framework, project_root, source_file_path
         return generated_tests
+
+    def process_generated_test_strings(
+        self,
+        generated_test_source: str,
+        instrumented_behavior_test_source: str,
+        instrumented_perf_test_source: str,
+        function_to_optimize: Any,
+        test_path: Path,
+        test_cfg: Any,
+        project_module_system: str | None,
+    ) -> tuple[str, str, str]:
+        from codeflash.languages.java.instrumentation import instrument_generated_java_test
+
+        func_name = function_to_optimize.function_name
+        qualified_name = function_to_optimize.qualified_name
+
+        instrumented_behavior_test_source = instrument_generated_java_test(
+            test_code=generated_test_source,
+            function_name=func_name,
+            qualified_name=qualified_name,
+            mode="behavior",
+            function_to_optimize=function_to_optimize,
+        )
+
+        instrumented_perf_test_source = instrument_generated_java_test(
+            test_code=generated_test_source,
+            function_name=func_name,
+            qualified_name=qualified_name,
+            mode="performance",
+            function_to_optimize=function_to_optimize,
+        )
+
+        logger.debug("Instrumented Java tests locally for %s", func_name)
+        return generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source
 
     def add_global_declarations(self, optimized_code: str, original_source: str, module_abspath: Path) -> str:
         return original_source

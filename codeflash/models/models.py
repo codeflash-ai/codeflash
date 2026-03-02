@@ -245,8 +245,7 @@ class CodeString(BaseModel):
         """Validate code syntax for the specified language."""
         if self.language == "python":
             validate_python_code(self.code)
-        elif self.language in ("javascript", "typescript"):
-            # Validate JavaScript/TypeScript syntax using language support
+        else:
             from codeflash.languages.registry import get_language_support
 
             lang_support = get_language_support(self.language)

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import copy
 import os
 import tempfile
@@ -30,20 +29,20 @@ from codeflash.code_utils.git_worktree_utils import (
 )
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.either import is_successful
-from codeflash.languages import current_language_support, is_java, is_javascript, set_current_language
-from codeflash.models.models import ValidCode
+from codeflash.languages import current_language_support, set_current_language
+from codeflash.lsp.helpers import is_subagent_mode
 from codeflash.telemetry.posthog_cf import ph
-from codeflash.verification.parse_test_output import clear_test_file_path_cache
 from codeflash.verification.verification_utils import TestConfig
 
 if TYPE_CHECKING:
+    import ast
     from argparse import Namespace
 
     from codeflash.benchmarking.function_ranker import FunctionRanker
     from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import DependencyResolver
-    from codeflash.models.models import BenchmarkKey, FunctionCalledInTest
+    from codeflash.models.models import BenchmarkKey, FunctionCalledInTest, ValidCode
     from codeflash.optimization.function_optimizer import FunctionOptimizer
 
 
@@ -71,59 +70,6 @@ class Optimizer:
         self.current_worktree: Path | None = None
         self.original_args_and_test_cfg: tuple[Namespace, TestConfig] | None = None
         self.patch_files: list[Path] = []
-
-    @staticmethod
-    def _find_js_project_root(file_path: Path) -> Path | None:
-        """Find the JavaScript/TypeScript project root by looking for package.json.
-
-        Traverses up from the given file path to find the nearest directory
-        containing package.json or jest.config.js.
-
-        Args:
-            file_path: A file path within the JavaScript project.
-
-        Returns:
-            The project root directory, or None if not found.
-
-        """
-        current = file_path.parent if file_path.is_file() else file_path
-        while current != current.parent:  # Stop at filesystem root
-            if (
-                (current / "package.json").exists()
-                or (current / "jest.config.js").exists()
-                or (current / "jest.config.ts").exists()
-                or (current / "tsconfig.json").exists()
-            ):
-                return current
-            current = current.parent
-        return None
-
-    def _verify_js_requirements(self) -> None:
-        """Verify JavaScript/TypeScript requirements before optimization.
-
-        Checks that Node.js, npm, and the test framework are available.
-        Logs warnings if requirements are not met but does not abort.
-
-        """
-        from codeflash.languages import get_language_support
-        from codeflash.languages.base import Language
-        from codeflash.languages.test_framework import get_js_test_framework_or_default
-
-        js_project_root = self.test_cfg.js_project_root
-        if not js_project_root:
-            return
-
-        try:
-            js_support = get_language_support(Language.JAVASCRIPT)
-            test_framework = get_js_test_framework_or_default()
-            success, errors = js_support.verify_requirements(js_project_root, test_framework)
-
-            if not success:
-                logger.warning("JavaScript requirements check found issues:")
-                for error in errors:
-                    logger.warning(f"  - {error}")
-        except Exception as e:
-            logger.debug(f"Failed to verify JS requirements: {e}")
 
     def run_benchmarks(
         self, file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]], num_optimizable_functions: int
@@ -247,26 +193,8 @@ class Optimizer:
         function_to_optimize_source_code: str | None = "",
         function_benchmark_timings: dict[str, dict[BenchmarkKey, float]] | None = None,
         total_benchmark_timings: dict[BenchmarkKey, float] | None = None,
-        original_module_ast: ast.Module | None = None,
-        original_module_path: Path | None = None,
         call_graph: DependencyResolver | None = None,
     ) -> FunctionOptimizer | None:
-        from codeflash.languages.python.static_analysis.static_analysis import (
-            get_first_top_level_function_or_method_ast,
-        )
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
-
-        if function_to_optimize_ast is None and original_module_ast is not None:
-            function_to_optimize_ast = get_first_top_level_function_or_method_ast(
-                function_to_optimize.function_name, function_to_optimize.parents, original_module_ast
-            )
-            if function_to_optimize_ast is None:
-                logger.info(
-                    f"Function {function_to_optimize.qualified_name} not found in {original_module_path}.\n"
-                    f"Skipping optimization."
-                )
-                return None
-
         qualified_name_w_module = function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root)
 
         function_specific_timings = None
@@ -279,7 +207,11 @@ class Optimizer:
         ):
             function_specific_timings = function_benchmark_timings[qualified_name_w_module]
 
-        return FunctionOptimizer(
+        cls = current_language_support().function_optimizer_class
+
+        # TODO: _resolve_function_ast re-parses source via ast.parse() per function, even when the caller already
+        # has a parsed module AST. Consider passing the pre-parsed AST through to avoid redundant parsing.
+        function_optimizer = cls(
             function_to_optimize=function_to_optimize,
             test_cfg=self.test_cfg,
             function_to_optimize_source_code=function_to_optimize_source_code,
@@ -292,61 +224,25 @@ class Optimizer:
             replay_tests_dir=self.replay_tests_dir,
             call_graph=call_graph,
         )
+        if function_optimizer.function_to_optimize_ast is None and function_optimizer.requires_function_ast():
+            logger.info(
+                f"Function {function_to_optimize.qualified_name} not found in "
+                f"{function_to_optimize.file_path}.\nSkipping optimization."
+            )
+            return None
+        return function_optimizer
 
     def prepare_module_for_optimization(
         self, original_module_path: Path
     ) -> tuple[dict[Path, ValidCode], ast.Module | None] | None:
-        from codeflash.languages.python.static_analysis.code_replacer import normalize_code, normalize_node
-        from codeflash.languages.python.static_analysis.static_analysis import analyze_imported_modules
-
         logger.info(f"loading|Examining file {original_module_path!s}")
         console.rule()
 
         original_module_code: str = original_module_path.read_text(encoding="utf8")
 
-        # For JavaScript/TypeScript/Java, skip Python-specific AST parsing
-        if is_javascript() or is_java():
-            validated_original_code: dict[Path, ValidCode] = {
-                original_module_path: ValidCode(source_code=original_module_code, normalized_code=original_module_code)
-            }
-            return validated_original_code, None
-
-        # Python-specific parsing
-        try:
-            original_module_ast = ast.parse(original_module_code)
-        except SyntaxError as e:
-            logger.warning(f"Syntax error parsing code in {original_module_path}: {e}")
-            logger.info("Skipping optimization due to file error.")
-            return None
-        normalized_original_module_code = ast.unparse(normalize_node(original_module_ast))
-        validated_original_code = {
-            original_module_path: ValidCode(
-                source_code=original_module_code, normalized_code=normalized_original_module_code
-            )
-        }
-
-        imported_module_analyses = analyze_imported_modules(
+        return current_language_support().prepare_module(
             original_module_code, original_module_path, self.args.project_root
         )
-
-        has_syntax_error = False
-        for analysis in imported_module_analyses:
-            callee_original_code = analysis.file_path.read_text(encoding="utf8")
-            try:
-                normalized_callee_original_code = normalize_code(callee_original_code)
-            except SyntaxError as e:
-                logger.warning(f"Syntax error parsing code in callee module {analysis.file_path}: {e}")
-                logger.info("Skipping optimization due to helper file error.")
-                has_syntax_error = True
-                break
-            validated_original_code[analysis.file_path] = ValidCode(
-                source_code=callee_original_code, normalized_code=normalized_callee_original_code
-            )
-
-        if has_syntax_error:
-            return None
-
-        return validated_original_code, original_module_ast
 
     def discover_tests(
         self, file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]
@@ -556,11 +452,7 @@ class Optimizer:
                 if funcs and funcs[0].language:
                     set_current_language(funcs[0].language)
                     self.test_cfg.set_language(funcs[0].language)
-                    # For JavaScript, also set js_project_root for test execution
-                    if is_javascript():
-                        self.test_cfg.js_project_root = self._find_js_project_root(file_path)
-                        # Verify JS requirements before proceeding
-                        self._verify_js_requirements()
+                    current_language_support().setup_test_config(self.test_cfg, file_path)
                     break
 
         if self.args.all:
@@ -604,7 +496,7 @@ class Optimizer:
                 return
 
             function_to_tests, _ = self.discover_tests(file_to_funcs_to_optimize)
-            if self.args.all:
+            if self.args.all and not self.args.subagent:
                 self.functions_checkpoint = CodeflashRunCheckpoint(self.args.module_root)
 
             # GLOBAL RANKING: Rank all functions together before optimizing
@@ -624,7 +516,7 @@ class Optimizer:
                         continue
                     prepared_modules[original_module_path] = module_prep_result
 
-                validated_original_code, original_module_ast = prepared_modules[original_module_path]
+                validated_original_code, _original_module_ast = prepared_modules[original_module_path]
 
                 function_iterator_count = i + 1
                 logger.info(
@@ -632,15 +524,6 @@ class Optimizer:
                     f"{function_to_optimize.qualified_name} (in {original_module_path.name})"
                 )
                 console.rule()
-
-                # Safety-net cleanup: remove any leftover instrumented test files from previous iterations.
-                # This prevents a broken test file from one function from cascading compilation failures
-                # to all subsequent functions (e.g., when Maven compiles all test files together).
-                leftover_files = Optimizer.find_leftover_instrumented_test_files(self.test_cfg.tests_root)
-                if leftover_files:
-                    logger.debug(f"Cleaning up {len(leftover_files)} leftover instrumented test file(s)")
-                    cleanup_paths(leftover_files)
-
                 function_optimizer = None
                 try:
                     function_optimizer = self.create_function_optimizer(
@@ -649,8 +532,6 @@ class Optimizer:
                         function_to_optimize_source_code=validated_original_code[original_module_path].source_code,
                         function_benchmark_timings=function_benchmark_timings,
                         total_benchmark_timings=total_benchmark_timings,
-                        original_module_ast=original_module_ast,
-                        original_module_path=original_module_path,
                         call_graph=resolver,
                     )
                     if function_optimizer is None:
@@ -667,7 +548,7 @@ class Optimizer:
                     if is_successful(best_optimization):
                         optimizations_found += 1
                         # create a diff patch for successful optimization
-                        if self.current_worktree:
+                        if self.current_worktree and not is_subagent_mode():
                             best_opt = best_optimization.unwrap()
                             read_writable_code = best_opt.code_context.read_writable_code
                             relative_file_paths = [
@@ -690,7 +571,6 @@ class Optimizer:
                     if function_optimizer is not None:
                         function_optimizer.executor.shutdown(wait=True)
                         function_optimizer.cleanup_generated_files()
-                        clear_test_file_path_cache()
 
             ph("cli-optimize-run-finished", {"optimizations_found": optimizations_found})
             if len(self.patch_files) > 0:
@@ -701,7 +581,12 @@ class Optimizer:
                 self.functions_checkpoint.cleanup()
             if hasattr(self.args, "command") and self.args.command == "optimize":
                 self.cleanup_replay_tests()
-            if optimizations_found == 0:
+            if is_subagent_mode():
+                if optimizations_found == 0:
+                    import sys
+
+                    sys.stdout.write("<codeflash-summary>No optimizations found.</codeflash-summary>\n")
+            elif optimizations_found == 0:
                 logger.info("❌ No optimizations found.")
             elif self.args.all:
                 logger.info("✨ All functions have been optimized! ✨")
@@ -735,12 +620,6 @@ class Optimizer:
         - '*__perfinstrumented.spec.{js,ts,jsx,tsx}'
         - '*__perfonlyinstrumented.spec.{js,ts,jsx,tsx}'
 
-        Java patterns:
-        - '*Test__perfinstrumented.java'
-        - '*Test__perfonlyinstrumented.java'
-        - '*Test__perfinstrumented_{n}.java' (with optional numeric suffix)
-        - '*Test__perfonlyinstrumented_{n}.java' (with optional numeric suffix)
-
         Returns a list of matching file paths.
         """
         import re
@@ -750,9 +629,7 @@ class Optimizer:
             # Python patterns
             r"test.*__perf_test_\d?\.py|test_.*__unit_test_\d?\.py|test_.*__perfinstrumented\.py|test_.*__perfonlyinstrumented\.py|"
             # JavaScript/TypeScript patterns (new naming with .test/.spec preserved)
-            r".*__perfinstrumented\.(?:test|spec)\.(?:js|ts|jsx|tsx)|.*__perfonlyinstrumented\.(?:test|spec)\.(?:js|ts|jsx|tsx)|"
-            # Java patterns (with optional numeric suffix _2, _3, etc., and existing_ prefix variant)
-            r".*Test__(?:existing_)?perfinstrumented(?:_\d+)?\.java|.*Test__(?:existing_)?perfonlyinstrumented(?:_\d+)?\.java"
+            r".*__perfinstrumented\.(?:test|spec)\.(?:js|ts|jsx|tsx)|.*__perfonlyinstrumented\.(?:test|spec)\.(?:js|ts|jsx|tsx)"
             r")$"
         )
 
@@ -775,6 +652,8 @@ class Optimizer:
         if hasattr(get_run_tmp_file, "tmpdir"):
             get_run_tmp_file.tmpdir.cleanup()
             del get_run_tmp_file.tmpdir
+        if hasattr(get_run_tmp_file, "tmpdir_path"):
+            del get_run_tmp_file.tmpdir_path
 
         # Always clean up concolic test directory
         cleanup_paths([self.test_cfg.concolic_test_root_dir])
