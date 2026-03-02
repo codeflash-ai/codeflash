@@ -1654,3 +1654,276 @@ public final class Buffer {{
 }
 """
         assert new_code == expected
+
+
+class TestWrongMethodNameGeneration:
+    """Tests that guard against the LLM generating a different method name than the target.
+
+    When the optimizer generates code for method X but the LLM produces method Y instead,
+    applying that replacement would:
+      - Replace method X with the body of method Y (creating a duplicate of Y).
+      - Remove method X from the source.
+
+    These tests verify that codeflash detects this mismatch and leaves the original
+    source file unchanged.
+    """
+
+    def test_standalone_wrong_method_name_leaves_source_unchanged(self, tmp_path):
+        """Standalone generated method with wrong name must not replace the target.
+
+        Reproduces the Unpacker.unpackObjectMap bug: the LLM was asked to optimise
+        ``unpackObjectMap`` but generated ``unpackMap`` as a standalone method.
+        Applying that would create a duplicate ``unpackMap`` and delete
+        ``unpackObjectMap``, causing compilation failures.
+        """
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+
+        java_file = tmp_path / "Unpacker.java"
+        original_code = """\
+public abstract class Unpacker {
+    public static Object unpackObjectMap(byte[] buffer, int offset, int length) {
+        return new Object();
+    }
+
+    public Object unpackMap() {
+        return null;
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # The LLM generated an optimised ``unpackMap`` when it should have
+        # optimised ``unpackObjectMap``.
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public final Object unpackMap() {{
+    return new Object();
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        function_to_optimize = FunctionToOptimize(
+            function_name="unpackObjectMap",
+            file_path=java_file,
+            starting_line=2,
+            ending_line=4,
+            parents=[FunctionParent(name="Unpacker", type="ClassDef")],
+            qualified_name="Unpacker.unpackObjectMap",
+            is_method=True,
+        )
+
+        result = replace_function_definitions_for_language(
+            function_names=["unpackObjectMap"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            function_to_optimize=function_to_optimize,
+        )
+
+        # No modification should occur — wrong method name in generated code.
+        assert result is False
+        assert java_file.read_text(encoding="utf-8") == original_code
+
+    def test_class_wrapper_with_wrong_target_method_leaves_source_unchanged(self, tmp_path):
+        """Class-wrapped generated code missing the target method must not modify source.
+
+        Reproduces the Command.estimateKeySize bug: the LLM generated a class that
+        contained only ``sizeTxn`` (a helper) and did not include ``estimateKeySize``
+        (the target).  Applying it would duplicate ``sizeTxn`` in the source.
+        """
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+
+        java_file = tmp_path / "Command.java"
+        original_code = """\
+public class Command {
+    public int estimateKeySize(String key) {
+        return key.length() + 4;
+    }
+
+    private int sizeTxn(String key, Object txn, boolean hasWrite) {
+        return key.length();
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # The LLM generated a class containing only ``sizeTxn`` instead of
+        # the target ``estimateKeySize``.
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class Command {{
+    private int sizeTxn(String key, Object txn, boolean hasWrite) {{
+        return key.length() + 1;
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        function_to_optimize = FunctionToOptimize(
+            function_name="estimateKeySize",
+            file_path=java_file,
+            starting_line=2,
+            ending_line=4,
+            parents=[FunctionParent(name="Command", type="ClassDef")],
+            qualified_name="Command.estimateKeySize",
+            is_method=True,
+        )
+
+        result = replace_function_definitions_for_language(
+            function_names=["estimateKeySize"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            function_to_optimize=function_to_optimize,
+        )
+
+        # No modification should occur — target method absent from generated class.
+        assert result is False
+        assert java_file.read_text(encoding="utf-8") == original_code
+
+
+class TestAnonymousInnerClassMethods:
+    """Tests that methods inside anonymous inner classes are not hoisted as helpers.
+
+    When an optimised method uses an anonymous class (e.g. an inline Iterator),
+    the anonymous class's own methods (hasNext, next, remove ...) must NOT be
+    extracted and inserted as top-level class members.  Doing so would create
+    broken methods: they would carry @Override annotations that do not correspond
+    to any supertype method, and would reference variables only available in the
+    enclosing method scope.
+    """
+
+    def test_anonymous_iterator_methods_not_hoisted_to_class(self, tmp_path):
+        """Reproduces the LuaMap.keySetIterator bug.
+
+        The LLM optimised ``keySetIterator`` by returning an anonymous
+        ``Iterator`` with ``hasNext``, ``next``, and ``remove`` methods.
+        Those three methods must remain inside the anonymous class body and
+        must NOT be added as top-level members of the outer class.
+        """
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+
+        java_file = tmp_path / "LuaMap.java"
+        original_code = """\
+import java.util.Iterator;
+import java.util.Map;
+
+public final class LuaMap {
+    private final Map<String, String> map;
+
+    public LuaMap(Map<String, String> map) {
+        this.map = map;
+    }
+
+    public Iterator<String> keySetIterator() {
+        return map.keySet().iterator();
+    }
+
+    public int size() {
+        return map.size();
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # Optimised version returns a custom anonymous Iterator that avoids
+        # creating a keySet view for empty maps.
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+import java.util.Iterator;
+import java.util.Map;
+
+public final class LuaMap {{
+    private final Map<String, String> map;
+
+    public LuaMap(Map<String, String> map) {{
+        this.map = map;
+    }}
+
+    public Iterator<String> keySetIterator() {{
+        if (map.isEmpty()) {{
+            return java.util.Collections.emptyIterator();
+        }}
+        final Iterator<Map.Entry<String, String>> it = map.entrySet().iterator();
+        return new Iterator<String>() {{
+            @Override
+            public boolean hasNext() {{
+                return it.hasNext();
+            }}
+            @Override
+            public String next() {{
+                return it.next().getKey();
+            }}
+            @Override
+            public void remove() {{
+                it.remove();
+            }}
+        }};
+    }}
+
+    public int size() {{
+        return map.size();
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        function_to_optimize = FunctionToOptimize(
+            function_name="keySetIterator",
+            file_path=java_file,
+            starting_line=11,
+            ending_line=13,
+            parents=[FunctionParent(name="LuaMap", type="ClassDef")],
+            qualified_name="LuaMap.keySetIterator",
+            is_method=True,
+        )
+
+        result = replace_function_definitions_for_language(
+            function_names=["keySetIterator"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            function_to_optimize=function_to_optimize,
+        )
+
+        assert result is True
+        new_code = java_file.read_text(encoding="utf-8")
+
+        expected_code = """\
+import java.util.Iterator;
+import java.util.Map;
+
+public final class LuaMap {
+    private final Map<String, String> map;
+
+    public LuaMap(Map<String, String> map) {
+        this.map = map;
+    }
+
+    public Iterator<String> keySetIterator() {
+        if (map.isEmpty()) {
+            return java.util.Collections.emptyIterator();
+        }
+        final Iterator<Map.Entry<String, String>> it = map.entrySet().iterator();
+        return new Iterator<String>() {
+            @Override
+            public boolean hasNext() {
+                return it.hasNext();
+            }
+            @Override
+            public String next() {
+                return it.next().getKey();
+            }
+            @Override
+            public void remove() {
+                it.remove();
+            }
+        };
+    }
+
+    public int size() {
+        return map.size();
+    }
+}
+"""
+        assert new_code == expected_code
