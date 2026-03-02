@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import ast
+import copy
+from collections import OrderedDict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -21,8 +23,6 @@ from codeflash.languages.python.static_analysis.line_profile_utils import add_de
 from codeflash.models.models import TestingMode, TestResults
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.parse_test_output import calculate_function_throughput_from_test_results
-import copy
-from collections import OrderedDict
 
 if TYPE_CHECKING:
     from typing import Any
@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 
 _MAX_CACHE_SIZE = 128
 
-_resolve_cache: "OrderedDict[tuple[str, str, tuple[tuple[str, str], ...]], ast.AST | None]" = OrderedDict()
+_resolve_cache: OrderedDict[tuple[str, str, tuple[tuple[str, str], ...]], ast.AST | None] = OrderedDict()
 
 
 class PythonFunctionOptimizer(FunctionOptimizer):
