@@ -1,6 +1,6 @@
 {
   "name": "codeflash",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Codeflash - AI-powered code optimization for JavaScript and TypeScript",
   "main": "runtime/index.js",
   "types": "runtime/index.d.ts",
@@ -32,6 +32,10 @@
     "./loop-runner": {
       "require": "./runtime/loop-runner.js",
       "import": "./runtime/loop-runner.js"
+    },
+    "./jest-reporter": {
+      "require": "./runtime/jest-reporter.js",
+      "import": "./runtime/jest-reporter.js"
     }
   },
   "scripts": {

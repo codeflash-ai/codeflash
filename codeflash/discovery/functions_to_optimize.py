@@ -161,6 +161,48 @@ def _is_js_ts_function_exported(file_path: Path, function_name: str) -> tuple[bo
         return True, None
 
 
+def _is_js_ts_function_exists_but_not_exported(file_path: Path, function_name: str) -> bool:
+    """Check if a JS/TS function exists in the file but is not exported.
+
+    Returns True only if the function name is found as a defined function
+    but is_exported is False.
+    """
+    from codeflash.languages.javascript.treesitter import get_analyzer_for_file
+
+    try:
+        source = file_path.read_text(encoding="utf-8")
+        analyzer = get_analyzer_for_file(file_path)
+        all_funcs = analyzer.find_functions(
+            source, include_methods=True, include_arrow_functions=True, require_name=True
+        )
+        for func in all_funcs:
+            if func.name == function_name:
+                return not func.is_exported
+    except Exception as e:
+        logger.debug(f"Failed to check function existence for {function_name}: {e}")
+    return False
+
+
+def _find_all_functions_via_language_support(file_path: Path) -> dict[Path, list[FunctionToOptimize]]:
+    """Find all optimizable functions using the language support abstraction.
+
+    This function uses the registered language support for the file's language
+    to discover functions, then converts them to FunctionToOptimize instances.
+    """
+    from codeflash.languages.base import FunctionFilterCriteria
+
+    functions: dict[Path, list[FunctionToOptimize]] = {}
+
+    try:
+        lang_support = get_language_support(file_path)
+        criteria = FunctionFilterCriteria(require_return=True)
+        functions[file_path] = lang_support.discover_functions(file_path, criteria)
+    except Exception as e:
+        logger.debug(f"Failed to discover functions in {file_path}: {e}")
+
+    return functions
+
+
 def get_functions_to_optimize(
     optimize_all: str | None,
     replay_test: list[Path] | None,
@@ -215,6 +257,18 @@ def get_functions_to_optimize(
                 if found_function is None:
                     if is_lsp:
                         return functions, 0, None
+
+                    # For JS/TS: check if the function exists but is not exported
+                    if is_language_supported(file):
+                        lang_support = get_language_support(file)
+                        if lang_support.language in (Language.JAVASCRIPT, Language.TYPESCRIPT):
+                            if _is_js_ts_function_exists_but_not_exported(file, only_function_name):
+                                exit_with_message(
+                                    f"Function '{only_function_name}' exists in {file} but is not exported.\n"
+                                    f"In JavaScript/TypeScript, only exported functions can be optimized.\n"
+                                    f"Add: export {{ {only_function_name} }}"
+                                )
+
                     found = closest_matching_file_function_name(only_get_this_function, functions)
                     if found is not None:
                         file, found_function = found
