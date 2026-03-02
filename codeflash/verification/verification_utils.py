@@ -6,7 +6,7 @@ from typing import Optional
 
 from pydantic.dataclasses import dataclass
 
-from codeflash.languages import current_language_support, is_java, is_javascript
+from codeflash.languages import is_java
 
 
 def get_test_file_path(
@@ -21,9 +21,7 @@ def get_test_file_path(
     assert test_type in {"unit", "inspired", "replay", "perf"}
     function_name_safe = function_name.replace(".", "_")
     # Use appropriate file extension based on language
-    if is_javascript():
-        extension = current_language_support().get_test_file_suffix()
-    elif is_java():
+    if is_java():
         extension = ".java"
     else:
         extension = ".py"
@@ -42,13 +40,6 @@ def get_test_file_path(
         # Create package directory if needed
         path.parent.mkdir(parents=True, exist_ok=True)
     else:
-        # For JavaScript/TypeScript, place generated tests in a subdirectory that matches
-        # Vitest/Jest include patterns (e.g., test/**/*.test.ts)
-        if is_javascript():
-            package_test_dir = _find_js_package_test_dir(test_dir, source_file_path)
-            if package_test_dir:
-                test_dir = package_test_dir
-
         path = test_dir / f"test_{function_name_safe}__{test_type}_test_{iteration}{extension}"
 
     if path.exists():
@@ -196,11 +187,7 @@ class TestConfig:
         """
         if self._test_framework is not None:
             return self._test_framework
-        if is_javascript():
-            from codeflash.languages.test_framework import get_js_test_framework_or_default
-
-            self._test_framework = get_js_test_framework_or_default()
-        elif is_java():
+        if is_java():
             self._test_framework = self._detect_java_test_framework()
         else:
             self._test_framework = "pytest"
