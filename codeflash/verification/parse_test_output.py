@@ -21,7 +21,7 @@ from codeflash.code_utils.code_utils import (
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.languages import Language
-from codeflash.languages.current import is_java
+from codeflash.languages.current import current_language_support
 
 # Import Jest-specific parsing from the JavaScript language module
 from codeflash.languages.javascript.parse import parse_jest_test_xml as _parse_jest_test_xml
@@ -193,8 +193,9 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         return None
 
     # Handle Java class paths (e.g., "com.example.TestClass" -> "com/example/TestClass.java")
-    if is_java():
-        relative_path = test_class_path.replace(".", "/") + ".java"
+    file_ext = current_language_support().default_file_extension
+    if file_ext == ".java":
+        relative_path = test_class_path.replace(".", "/") + file_ext
 
         # 1. Directly under base_dir
         potential_path = base_dir / relative_path
@@ -211,7 +212,7 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
                 return potential_path
 
         # 3. Search by filename in base_dir tree
-        file_name = test_class_path.rsplit(".", maxsplit=1)[-1] + ".java"
+        file_name = test_class_path.rsplit(".", maxsplit=1)[-1] + file_ext
         for java_file in base_dir.rglob(file_name):
             return java_file
 
@@ -617,6 +618,9 @@ def parse_test_xml(
             resolve_test_file_from_class_path=resolve_test_file_from_class_path,
         )
 
+    # Java uses 5-field timing markers; Python uses 6-field markers
+    uses_java_timing_markers = current_language_support().default_file_extension == ".java"
+
     test_results = TestResults()
     # Parse unittest output
     if not test_xml_file_path.exists():
@@ -636,7 +640,7 @@ def parse_test_xml(
     java_fallback_stdout = None
     java_fallback_begin_matches = None
     java_fallback_end_matches = None
-    if is_java() and run_result is not None:
+    if uses_java_timing_markers and run_result is not None:
         try:
             fallback_stdout = run_result.stdout if isinstance(run_result.stdout, str) else run_result.stdout.decode()
             _begin = list(start_pattern.finditer(fallback_stdout))
@@ -737,7 +741,7 @@ def parse_test_xml(
             sys_stdout = testcase.system_out or ""
 
             # Use different patterns for Java (5-field) vs Python (6-field)
-            if is_java():
+            if uses_java_timing_markers:
                 begin_matches = list(start_pattern.finditer(sys_stdout))
                 end_matches = {}
                 for match in end_pattern.finditer(sys_stdout):
@@ -785,7 +789,7 @@ def parse_test_xml(
                     groups = match.groups()
                     runtime = None
 
-                    if is_java():
+                    if uses_java_timing_markers:
                         # Java: 5 groups (module, class.test, func, loop, iter)
                         end_key = groups[:5]
                         end_match = end_matches.get(end_key)
