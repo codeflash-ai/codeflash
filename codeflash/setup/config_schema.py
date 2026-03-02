@@ -67,7 +67,7 @@ class CodeflashConfig(BaseModel):
         pytest_cmd = self.pytest_cmd
         disable_imports_sorting = self.disable_imports_sorting
         override_fixtures = self.override_fixtures
-        
+
         config: dict[str, Any] = {}
 
         # Include language if not Python (since Python is the default)
