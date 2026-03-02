@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import ast
 
-from codeflash.code_utils.normalizers.base import CodeNormalizer
-
 
 class VariableNormalizer(ast.NodeTransformer):
     """Normalizes only local variable names in AST to canonical forms like var_0, var_1, etc.
@@ -164,63 +162,19 @@ def _remove_docstrings_from_ast(node: ast.AST) -> None:
             stack.extend([child for child in body if isinstance(child, node_types)])
 
 
-class PythonNormalizer(CodeNormalizer):
-    """Python code normalizer using AST transformation.
+def normalize_python_code(code: str, remove_docstrings: bool = True) -> str:
+    """Normalize Python code to a canonical form for comparison.
 
-    Normalizes Python code by:
-    - Replacing local variable names with canonical forms (var_0, var_1, etc.)
-    - Preserving function names, class names, parameters, and imports
-    - Optionally removing docstrings
+    Replaces local variable names with canonical forms (var_0, var_1, etc.)
+    while preserving function names, class names, parameters, and imports.
     """
+    tree = ast.parse(code)
 
-    @property
-    def language(self) -> str:
-        """Return the language this normalizer handles."""
-        return "python"
-
-    @property
-    def supported_extensions(self) -> tuple[str, ...]:
-        """Return file extensions this normalizer can handle."""
-        return (".py", ".pyw", ".pyi")
-
-    def normalize(self, code: str, remove_docstrings: bool = True) -> str:
-        """Normalize Python code to a canonical form.
-
-        Args:
-            code: Python source code to normalize
-            remove_docstrings: Whether to remove docstrings
-
-        Returns:
-            Normalized Python code as a string
-
-        """
-        tree = ast.parse(code)
-
-        if remove_docstrings:
-            _remove_docstrings_from_ast(tree)
-
-        normalizer = VariableNormalizer()
-        normalized_tree = normalizer.visit(tree)
-        ast.fix_missing_locations(normalized_tree)
-
-        return ast.unparse(normalized_tree)
-
-    def normalize_for_hash(self, code: str) -> str:
-        """Normalize Python code optimized for hashing.
-
-        Returns AST dump which is faster than unparsing.
-
-        Args:
-            code: Python source code to normalize
-
-        Returns:
-            AST dump string suitable for hashing
-
-        """
-        tree = ast.parse(code)
+    if remove_docstrings:
         _remove_docstrings_from_ast(tree)
 
-        normalizer = VariableNormalizer()
-        normalized_tree = normalizer.visit(tree)
+    normalizer = VariableNormalizer()
+    normalized_tree = normalizer.visit(tree)
+    ast.fix_missing_locations(normalized_tree)
 
-        return ast.dump(normalized_tree, annotate_fields=False, include_attributes=False)
+    return ast.unparse(normalized_tree)

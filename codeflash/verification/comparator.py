@@ -3,9 +3,11 @@ import ast
 import datetime
 import decimal
 import enum
+import itertools
 import math
 import re
 import types
+import warnings
 import weakref
 from collections import ChainMap, OrderedDict, deque
 from importlib.util import find_spec
@@ -527,6 +529,55 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
                     k in new_attrs_dict and comparator(v, new_attrs_dict[k], superset_obj) for k, v in orig_dict.items()
                 )
             return comparator(orig_dict, new_dict, superset_obj)
+
+        # Handle itertools infinite iterators
+        if isinstance(orig, itertools.count):
+            # repr reliably reflects internal state, e.g. "count(5)" or "count(5, 2)"
+            return repr(orig) == repr(new)
+
+        if isinstance(orig, itertools.repeat):
+            # repr reliably reflects internal state, e.g. "repeat(5)" or "repeat(5, 3)"
+            return repr(orig) == repr(new)
+
+        if isinstance(orig, itertools.cycle):
+            # cycle has no useful repr and no public attributes; use __reduce__ to extract state.
+            # __reduce__ returns (cls, (remaining_iter,), (saved_items, first_pass_done)).
+            # NOTE: consuming the remaining_iter is destructive to the cycle object, but this is
+            # acceptable since the comparator is the final consumer of captured return values.
+            # NOTE: __reduce__ on itertools.cycle was removed in Python 3.14.
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", DeprecationWarning)
+                    orig_reduce = orig.__reduce__()
+                    new_reduce = new.__reduce__()
+                orig_remaining = list(orig_reduce[1][0])
+                new_remaining = list(new_reduce[1][0])
+                orig_saved, orig_started = orig_reduce[2]
+                new_saved, new_started = new_reduce[2]
+                if orig_started != new_started:
+                    return False
+                return comparator(orig_remaining, new_remaining, superset_obj) and comparator(
+                    orig_saved, new_saved, superset_obj
+                )
+            except TypeError:
+                # Python 3.14+: __reduce__ removed. Fall back to consuming elements from both
+                # cycles and comparing. Since the comparator is the final consumer, this is safe.
+                sample_size = 200
+                orig_sample = [next(orig) for _ in range(sample_size)]
+                new_sample = [next(new) for _ in range(sample_size)]
+                return comparator(orig_sample, new_sample, superset_obj)
+
+        # Handle remaining itertools types (chain, islice, starmap, product, permutations, etc.)
+        # by materializing into lists. count/repeat/cycle are already handled above.
+        # NOTE: materializing is destructive (consumes the iterator) and will hang on infinite input,
+        # but the three infinite itertools types are already handled above.
+        if type(orig).__module__ == "itertools":
+            if isinstance(orig, itertools.groupby):
+                # groupby yields (key, group_iterator) — materialize groups too
+                orig_groups = [(k, list(g)) for k, g in orig]
+                new_groups = [(k, list(g)) for k, g in new]
+                return comparator(orig_groups, new_groups, superset_obj)
+            return comparator(list(orig), list(new), superset_obj)
 
         # re.Pattern can be made better by DFA Minimization and then comparing
         if isinstance(
