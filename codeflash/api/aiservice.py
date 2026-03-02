@@ -770,7 +770,7 @@ class AiServiceClient:
 
     def review_generated_tests(
         self,
-        tests: list[dict],
+        tests: list[dict[str, Any]],
         function_source_code: str,
         function_name: str,
         trace_id: str,
@@ -823,7 +823,9 @@ class AiServiceClient:
     ) -> tuple[str, str, str] | None:
         payload: dict[str, Any] = {
             "test_source": test_source,
-            "functions_to_repair": [{"function_name": f.function_name, "reason": f.reason} for f in functions_to_repair],
+            "functions_to_repair": [
+                {"function_name": f.function_name, "reason": f.reason} for f in functions_to_repair
+            ],
             "function_source_code": function_source_code,
             "function_to_optimize": function_to_optimize,
             "helper_function_names": helper_function_names,
