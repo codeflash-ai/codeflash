@@ -77,6 +77,7 @@ from codeflash.languages.python.context.unused_definition_remover import (
     detect_unused_helper_functions,
     revert_unused_helper_functions,
 )
+from codeflash.languages.python.optimizer import resolve_python_function_ast
 from codeflash.languages.python.static_analysis.code_extractor import get_opt_review_metrics, is_numerical_code
 from codeflash.languages.python.static_analysis.code_replacer import (
     add_custom_marker_to_all_tests,
@@ -84,7 +85,6 @@ from codeflash.languages.python.static_analysis.code_replacer import (
     replace_function_definitions_in_module,
 )
 from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports, contains_jit_decorator
-from codeflash.languages.python.static_analysis.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.lsp.helpers import is_LSP_enabled, is_subagent_mode, report_to_markdown_table, tree_to_markdown
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
@@ -459,12 +459,11 @@ class FunctionOptimizer:
         )
         self.language_support = current_language_support()
         if not function_to_optimize_ast:
-            # Skip Python AST parsing for non-Python languages
             if not is_python():
                 self.function_to_optimize_ast = None
             else:
-                original_module_ast = ast.parse(function_to_optimize_source_code)
-                self.function_to_optimize_ast = get_first_top_level_function_or_method_ast(
+                original_module_ast = ast.parse(self.function_to_optimize_source_code)
+                self.function_to_optimize_ast = resolve_python_function_ast(
                     function_to_optimize.function_name, function_to_optimize.parents, original_module_ast
                 )
         else:
