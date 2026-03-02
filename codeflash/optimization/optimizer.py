@@ -31,6 +31,7 @@ from codeflash.code_utils.git_worktree_utils import (
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.either import is_successful
 from codeflash.languages import current_language_support, is_java, is_javascript, set_current_language
+from codeflash.lsp.helpers import is_subagent_mode
 from codeflash.models.models import ValidCode
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.parse_test_output import clear_test_file_path_cache
@@ -604,7 +605,7 @@ class Optimizer:
                 return
 
             function_to_tests, _ = self.discover_tests(file_to_funcs_to_optimize)
-            if self.args.all:
+            if self.args.all and not self.args.subagent:
                 self.functions_checkpoint = CodeflashRunCheckpoint(self.args.module_root)
 
             # GLOBAL RANKING: Rank all functions together before optimizing
@@ -667,7 +668,7 @@ class Optimizer:
                     if is_successful(best_optimization):
                         optimizations_found += 1
                         # create a diff patch for successful optimization
-                        if self.current_worktree:
+                        if self.current_worktree and not is_subagent_mode():
                             best_opt = best_optimization.unwrap()
                             read_writable_code = best_opt.code_context.read_writable_code
                             relative_file_paths = [
@@ -701,7 +702,12 @@ class Optimizer:
                 self.functions_checkpoint.cleanup()
             if hasattr(self.args, "command") and self.args.command == "optimize":
                 self.cleanup_replay_tests()
-            if optimizations_found == 0:
+            if is_subagent_mode():
+                if optimizations_found == 0:
+                    import sys
+
+                    sys.stdout.write("<codeflash-summary>No optimizations found.</codeflash-summary>\n")
+            elif optimizations_found == 0:
                 logger.info("❌ No optimizations found.")
             elif self.args.all:
                 logger.info("✨ All functions have been optimized! ✨")

@@ -61,9 +61,9 @@ def test_mirror_paths_for_worktree_mode(monkeypatch: pytest.MonkeyPatch):
     assert optimizer.args.test_project_root == worktree_dir
     assert optimizer.args.module_root == worktree_dir / "codeflash"
     # tests_root is configured as "codeflash" in pyproject.toml
-    assert optimizer.args.tests_root == worktree_dir / "codeflash"
+    assert optimizer.args.tests_root == worktree_dir / "tests"
     assert optimizer.args.file == worktree_dir / "codeflash/optimization/optimizer.py"
 
-    assert optimizer.test_cfg.tests_root == worktree_dir / "codeflash"
+    assert optimizer.test_cfg.tests_root == worktree_dir / "tests"
     assert optimizer.test_cfg.project_root_path == worktree_dir  # same as project_root
     assert optimizer.test_cfg.tests_project_rootdir == worktree_dir  # same as test_project_root

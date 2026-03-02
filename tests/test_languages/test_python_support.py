@@ -137,7 +137,7 @@ def sync_function():
             assert sync_func.is_async is False
 
     def test_discover_nested_functions(self, python_support):
-        """Test discovering nested functions."""
+        """Test that nested functions are excluded — only top-level and class-level functions are discovered."""
         with tempfile.NamedTemporaryFile(suffix=".py", mode="w", delete=False) as f:
             f.write("""
 def outer():
@@ -149,16 +149,9 @@ def outer():
 
             functions = python_support.discover_functions(Path(f.name))
 
-            # Both outer and inner should be discovered
-            assert len(functions) == 2
-            names = {func.function_name for func in functions}
-            assert names == {"outer", "inner"}
-
-            # Inner should have outer as parent
-            inner = next(f for f in functions if f.function_name == "inner")
-            assert len(inner.parents) == 1
-            assert inner.parents[0].name == "outer"
-            assert inner.parents[0].type == "FunctionDef"
+            # Only outer should be discovered; inner is nested and skipped
+            assert len(functions) == 1
+            assert functions[0].function_name == "outer"
 
     def test_discover_static_method(self, python_support):
         """Test discovering static methods."""
@@ -237,19 +230,21 @@ def func2():
             assert func2.starting_line == 4
             assert func2.ending_line == 7
 
-    def test_discover_invalid_file_returns_empty(self, python_support):
-        """Test that invalid Python file returns empty list."""
+    def test_discover_invalid_file_raises(self, python_support):
+        """Test that invalid Python file raises a parse error."""
+        from libcst._exceptions import ParserSyntaxError
+
         with tempfile.NamedTemporaryFile(suffix=".py", mode="w", delete=False) as f:
             f.write("this is not valid python {{{{")
             f.flush()
 
-            functions = python_support.discover_functions(Path(f.name))
-            assert functions == []
+            with pytest.raises(ParserSyntaxError):
+                python_support.discover_functions(Path(f.name))
 
-    def test_discover_nonexistent_file_returns_empty(self, python_support):
-        """Test that nonexistent file returns empty list."""
-        functions = python_support.discover_functions(Path("/nonexistent/file.py"))
-        assert functions == []
+    def test_discover_nonexistent_file_raises(self, python_support):
+        """Test that nonexistent file raises FileNotFoundError."""
+        with pytest.raises(FileNotFoundError):
+            python_support.discover_functions(Path("/nonexistent/file.py"))
 
 
 class TestReplaceFunction:
@@ -584,12 +579,7 @@ def process(value):
     return helper_function(value) + 1
 """)
 
-    func = FunctionToOptimize(
-        function_name="helper_function",
-        file_path=source_file,
-        starting_line=1,
-        ending_line=2,
-    )
+    func = FunctionToOptimize(function_name="helper_function", file_path=source_file, starting_line=1, ending_line=2)
 
     refs = python_support.find_references(func, project_root=tmp_path)
 
@@ -646,12 +636,7 @@ def test_find_references_no_references(python_support, tmp_path):
     return 42
 """)
 
-    func = FunctionToOptimize(
-        function_name="isolated_function",
-        file_path=source_file,
-        starting_line=1,
-        ending_line=2,
-    )
+    func = FunctionToOptimize(function_name="isolated_function", file_path=source_file, starting_line=1, ending_line=2)
 
     refs = python_support.find_references(func, project_root=tmp_path)
 
@@ -668,10 +653,7 @@ def test_find_references_nonexistent_function(python_support, tmp_path):
 """)
 
     func = FunctionToOptimize(
-        function_name="nonexistent_function",
-        file_path=source_file,
-        starting_line=1,
-        ending_line=2,
+        function_name="nonexistent_function", file_path=source_file, starting_line=1, ending_line=2
     )
 
     refs = python_support.find_references(func, project_root=tmp_path)
