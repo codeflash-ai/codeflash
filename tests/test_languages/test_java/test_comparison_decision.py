@@ -208,12 +208,11 @@ class TestDecisionPointDocumentation:
     """
 
     def test_decision_point_exists_in_function_optimizer(self):
-        """Verify the decision logic pattern exists in function_optimizer.py source.
+        """Verify the comparison routing hook exists in function_optimizer.py source.
 
-        The comparison decision at lines ~2816-2836 checks:
-        1. if not is_python() -> enters non-Python path
-        2. original_sqlite.exists() and candidate_sqlite.exists() -> SQLite path
-        3. else -> fail with error (strict correctness)
+        The comparison is now dispatched via the compare_candidate_results hook method.
+        Language-specific subclasses (JavaFunctionOptimizer, JavaScriptFunctionOptimizer)
+        override this to use SQLite-based comparison.
 
         This is a canary test: if the pattern is refactored, this test fails
         to alert that the routing logic has changed.
@@ -222,16 +221,10 @@ class TestDecisionPointDocumentation:
 
         source = inspect.getsource(fo_module)
 
-        # Verify the non-Python branch exists
-        assert "if not is_python():" in source, (
-            "Decision point 'if not is_python():' not found in function_optimizer.py. "
+        # Verify the compare_candidate_results hook exists
+        assert "def compare_candidate_results" in source, (
+            "Hook method 'compare_candidate_results' not found in function_optimizer.py. "
             "The comparison routing logic may have been refactored."
-        )
-
-        # Verify SQLite file existence check
-        assert "original_sqlite.exists()" in source, (
-            "SQLite existence check 'original_sqlite.exists()' not found. "
-            "The SQLite comparison routing may have been refactored."
         )
 
         # Verify the SQLite file naming pattern

@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from codeflash.languages.code_replacer import replace_function_definitions_for_language
-from codeflash.languages.python.static_analysis.code_replacer import replace_function_definitions_in_module
+from codeflash.languages.java.support import JavaSupport
 from codeflash.models.function_types import FunctionParent
 from codeflash.languages.base import Language
 from codeflash.languages import current as language_current
@@ -50,11 +50,11 @@ public class Calculator {{
 
         optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
 
-        result = replace_function_definitions_in_module(
+        result = replace_function_definitions_for_language(
             function_names=["add"],
             optimized_code=optimized_code,
             module_abspath=java_file,
-            preexisting_objects=set(),
+            lang_support=JavaSupport(),
             project_root_path=tmp_path,
         )
 
@@ -105,11 +105,11 @@ public class Calculator {{
 
         optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
 
-        result = replace_function_definitions_in_module(
+        result = replace_function_definitions_for_language(
             function_names=["add"],
             optimized_code=optimized_code,
             module_abspath=java_file,
-            preexisting_objects=set(),
+            lang_support=JavaSupport(),
             project_root_path=tmp_path,
         )
 
@@ -172,11 +172,11 @@ public class MathUtils {{
 
         optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
 
-        result = replace_function_definitions_in_module(
+        result = replace_function_definitions_for_language(
             function_names=["factorial"],
             optimized_code=optimized_code,
             module_abspath=java_file,
-            preexisting_objects=set(),
+            lang_support=JavaSupport(),
             project_root_path=tmp_path,
         )
 
@@ -221,11 +221,11 @@ public class Identity {{
 
         optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
 
-        result = replace_function_definitions_in_module(
+        result = replace_function_definitions_for_language(
             function_names=["getValue"],
             optimized_code=optimized_code,
             module_abspath=java_file,
-            preexisting_objects=set(),
+            lang_support=JavaSupport(),
             project_root_path=tmp_path,
         )
 
@@ -263,6 +263,7 @@ public class Utils {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is True
@@ -303,6 +304,7 @@ public class Service {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is True
@@ -342,6 +344,7 @@ public interface Processor {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is True
@@ -384,6 +387,7 @@ public enum Color {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is True
@@ -438,6 +442,7 @@ public class Container<T> {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is True
@@ -489,6 +494,7 @@ public class FileReader {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is True
@@ -543,6 +549,7 @@ public class StringJoiner {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is True
@@ -593,6 +600,7 @@ public class ListProcessor {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is True
@@ -641,6 +649,7 @@ public class NullChecker {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is True
@@ -689,6 +698,7 @@ public class CollectionFactory {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is True
@@ -746,6 +756,7 @@ class Helper {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is True
@@ -806,6 +817,7 @@ public class MathOps {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is True
@@ -868,6 +880,7 @@ public class Outer {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is True
@@ -935,6 +948,7 @@ public class Counter {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is True
@@ -980,6 +994,7 @@ class TestEdgeCases:
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is False
@@ -1012,6 +1027,7 @@ public class NotFound {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is False
@@ -1042,6 +1058,7 @@ public class Unicode {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is True
@@ -1097,6 +1114,7 @@ public class Buffer {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is True
@@ -1154,6 +1172,7 @@ public class Encoder {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is True
@@ -1227,6 +1246,7 @@ public class Calculator {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is True
@@ -1308,6 +1328,7 @@ public class StringUtils {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is True
@@ -1370,6 +1391,7 @@ public class MathUtils {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is True
@@ -1436,6 +1458,7 @@ public class Fibonacci {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is True
@@ -1521,6 +1544,7 @@ public final class Buffer {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
         )
 
         assert result is True
@@ -1621,6 +1645,7 @@ public final class Buffer {{
             optimized_code=optimized_code,
             module_abspath=java_file,
             project_root_path=tmp_path,
+            lang_support=JavaSupport(),
             function_to_optimize=function_to_optimize,
         )
 

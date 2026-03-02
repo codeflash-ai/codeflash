@@ -32,10 +32,10 @@ def test_java_tests_project_rootdir_set_to_tests_root(tmp_path):
     mock_java_function.language = "java"
     file_to_funcs = {Path("dummy.java"): [mock_java_function]}
 
-    # Mock is_python() to return False and is_java() to return True
-    # These are imported from codeflash.languages
-    with patch("codeflash.languages.is_python", return_value=False), \
-         patch("codeflash.languages.is_java", return_value=True), \
+    # Set the current language to Java so protocol dispatch works
+    set_current_language("java")
+
+    with patch("codeflash.discovery.discover_unit_tests.is_python", return_value=False), \
          patch("codeflash.discovery.discover_unit_tests.discover_tests_for_language") as mock_discover:
         mock_discover.return_value = ({}, 0, 0)
 
