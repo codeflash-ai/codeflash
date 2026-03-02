@@ -230,6 +230,8 @@ def inject_test_globals(generated_tests: GeneratedTestsList, test_framework: str
     # Use vitest imports for vitest projects, jest imports for jest projects
     if test_framework == "vitest":
         global_import = "import { vi, describe, it, expect, beforeEach, afterEach, beforeAll, test } from 'vitest'\n"
+    elif test_framework == "mocha":
+        global_import = "import assert from 'node:assert/strict';\n"
     else:
         # Default to jest imports for jest and other frameworks
         global_import = (
