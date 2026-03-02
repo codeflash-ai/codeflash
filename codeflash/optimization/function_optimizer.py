@@ -528,9 +528,7 @@ class FunctionOptimizer:
         candidate_behavior_results: TestResults,
         optimization_candidate_index: int,
     ) -> tuple[bool, list[TestDiff]]:
-        return compare_test_results(
-            baseline_results.behavior_test_results, candidate_behavior_results, pass_fail_only=True
-        )
+        return compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
 
     def should_skip_sqlite_cleanup(self, testing_type: TestingMode, optimization_iteration: int) -> bool:
         return False

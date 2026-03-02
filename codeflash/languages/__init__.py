@@ -80,10 +80,6 @@ def __getattr__(name: str):
         from codeflash.languages.python.support import PythonSupport
 
         return PythonSupport
-    if name == "JavaSupport":
-        from codeflash.languages.java.support import JavaSupport
-
-        return JavaSupport
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)
 

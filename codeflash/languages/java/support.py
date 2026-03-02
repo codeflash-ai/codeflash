@@ -7,6 +7,7 @@ required methods for Java language support in codeflash.
 from __future__ import annotations
 
 import logging
+from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
 from codeflash.languages.base import Language, LanguageSupport
@@ -75,9 +76,16 @@ class JavaSupport(LanguageSupport):
         """File extensions supported by Java."""
         return (".java",)
 
-    @property
+    @cached_property
     def test_framework(self) -> str:
-        """Primary test framework name."""
+        from pathlib import Path
+
+        try:
+            config = detect_java_project(Path.cwd())
+            if config and config.test_framework:
+                return config.test_framework
+        except Exception:
+            pass
         return "junit5"
 
     @property
@@ -92,6 +100,18 @@ class JavaSupport(LanguageSupport):
     @property
     def dir_excludes(self) -> frozenset[str]:
         return frozenset({"target", "build", ".gradle", ".mvn", ".idea"})
+
+    @property
+    def default_language_version(self) -> str | None:
+        return "17"
+
+    @property
+    def valid_test_frameworks(self) -> tuple[str, ...]:
+        return ("junit5", "junit4", "testng")
+
+    @property
+    def test_result_serialization_format(self) -> str:
+        return "json"
 
     def postprocess_generated_tests(
         self, generated_tests: GeneratedTestsList, test_framework: str, project_root: Path, source_file_path: Path
