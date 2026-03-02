@@ -1889,23 +1889,41 @@ public final class LuaMap {{
         assert result is True
         new_code = java_file.read_text(encoding="utf-8")
 
-        # The replaced method should contain the anonymous iterator.
-        assert "emptyIterator()" in new_code
-        assert "it.hasNext()" in new_code
+        expected_code = """\
+import java.util.Iterator;
+import java.util.Map;
 
-        # Crucially, hasNext/next/remove must NOT appear as standalone top-level
-        # class members outside the keySetIterator method body.
-        lines = new_code.splitlines()
-        size_idx = next(i for i, ln in enumerate(lines) if "public int size()" in ln)
+public final class LuaMap {
+    private final Map<String, String> map;
 
-        # No anonymous-class methods should appear after size() definition
-        for i in range(size_idx, len(lines)):
-            assert "public boolean hasNext()" not in lines[i], (
-                f"hasNext() was hoisted as a top-level class member at line {i + 1}"
-            )
-            assert "public String next()" not in lines[i], (
-                f"next() was hoisted as a top-level class member at line {i + 1}"
-            )
-            assert "public void remove()" not in lines[i], (
-                f"remove() was hoisted as a top-level class member at line {i + 1}"
-            )
+    public LuaMap(Map<String, String> map) {
+        this.map = map;
+    }
+
+    public Iterator<String> keySetIterator() {
+        if (map.isEmpty()) {
+            return java.util.Collections.emptyIterator();
+        }
+        final Iterator<Map.Entry<String, String>> it = map.entrySet().iterator();
+        return new Iterator<String>() {
+            @Override
+            public boolean hasNext() {
+                return it.hasNext();
+            }
+            @Override
+            public String next() {
+                return it.next().getKey();
+            }
+            @Override
+            public void remove() {
+                it.remove();
+            }
+        };
+    }
+
+    public int size() {
+        return map.size();
+    }
+}
+"""
+        assert new_code == expected_code
