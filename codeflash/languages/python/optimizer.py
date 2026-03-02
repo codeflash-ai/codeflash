@@ -9,6 +9,8 @@ from codeflash.models.models import ValidCode
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from codeflash.models.function_types import FunctionParent
+
 
 def prepare_python_module(
     original_module_code: str, original_module_path: Path, project_root: Path
@@ -53,7 +55,7 @@ def prepare_python_module(
 
 
 def resolve_python_function_ast(
-    function_name: str, parents: list, module_ast: ast.Module
+    function_name: str, parents: list[FunctionParent], module_ast: ast.Module
 ) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
     """Look up a function/method AST node in a parsed Python module."""
     from codeflash.languages.python.static_analysis.static_analysis import get_first_top_level_function_or_method_ast
