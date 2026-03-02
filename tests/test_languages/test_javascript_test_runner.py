@@ -1023,43 +1023,43 @@ console.log('OK');
 class TestUnsupportedFrameworkError:
     """Tests for clear error on unsupported test frameworks."""
 
-    def test_mocha_framework_raises_error_behavioral(self):
-        """run_behavioral_tests should raise NotImplementedError for mocha."""
+    def test_unknown_framework_raises_error_behavioral(self):
+        """run_behavioral_tests should raise NotImplementedError for unknown frameworks."""
         from codeflash.languages.javascript.support import JavaScriptSupport
 
         support = JavaScriptSupport()
-        with pytest.raises(NotImplementedError, match="mocha.*not yet supported"):
+        with pytest.raises(NotImplementedError, match="not yet supported"):
             support.run_behavioral_tests(
                 test_paths=MagicMock(),
                 test_env={},
                 cwd=Path("."),
-                test_framework="mocha",
+                test_framework="tap",
             )
 
-    def test_mocha_framework_raises_error_benchmarking(self):
-        """run_benchmarking_tests should raise NotImplementedError for mocha."""
+    def test_unknown_framework_raises_error_benchmarking(self):
+        """run_benchmarking_tests should raise NotImplementedError for unknown frameworks."""
         from codeflash.languages.javascript.support import JavaScriptSupport
 
         support = JavaScriptSupport()
-        with pytest.raises(NotImplementedError, match="mocha.*not yet supported"):
+        with pytest.raises(NotImplementedError, match="not yet supported"):
             support.run_benchmarking_tests(
                 test_paths=MagicMock(),
                 test_env={},
                 cwd=Path("."),
-                test_framework="mocha",
+                test_framework="tap",
             )
 
-    def test_mocha_framework_raises_error_line_profile(self):
-        """run_line_profile_tests should raise NotImplementedError for mocha."""
+    def test_unknown_framework_raises_error_line_profile(self):
+        """run_line_profile_tests should raise NotImplementedError for unknown frameworks."""
         from codeflash.languages.javascript.support import JavaScriptSupport
 
         support = JavaScriptSupport()
-        with pytest.raises(NotImplementedError, match="mocha.*not yet supported"):
+        with pytest.raises(NotImplementedError, match="not yet supported"):
             support.run_line_profile_tests(
                 test_paths=MagicMock(),
                 test_env={},
                 cwd=Path("."),
-                test_framework="mocha",
+                test_framework="tap",
             )
 
     def test_jest_framework_does_not_raise_not_implemented(self):
@@ -1067,7 +1067,6 @@ class TestUnsupportedFrameworkError:
         from codeflash.languages.javascript.support import JavaScriptSupport
 
         support = JavaScriptSupport()
-        # Jest may succeed or fail for other reasons, but should NOT raise NotImplementedError
         try:
             support.run_behavioral_tests(
                 test_paths=MagicMock(),
@@ -1079,3 +1078,20 @@ class TestUnsupportedFrameworkError:
             pytest.fail("jest framework should not raise NotImplementedError")
         except Exception:
             pass  # Other exceptions are fine — Jest isn't installed in test env
+
+    def test_mocha_framework_does_not_raise_not_implemented(self):
+        """mocha framework should NOT raise NotImplementedError."""
+        from codeflash.languages.javascript.support import JavaScriptSupport
+
+        support = JavaScriptSupport()
+        try:
+            support.run_behavioral_tests(
+                test_paths=MagicMock(),
+                test_env={},
+                cwd=Path("."),
+                test_framework="mocha",
+            )
+        except NotImplementedError:
+            pytest.fail("mocha framework should not raise NotImplementedError")
+        except Exception:
+            pass  # Other exceptions are fine — Mocha isn't installed in test env
