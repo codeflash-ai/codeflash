@@ -58,7 +58,6 @@ from codeflash.code_utils.config_consts import (
     EffortLevel,
     get_effort_value,
 )
-from codeflash.code_utils.deduplicate_code import normalize_code
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.formatter import format_code, format_generated_code, sort_imports
 from codeflash.code_utils.git_utils import git_root_dir
@@ -69,7 +68,6 @@ from codeflash.either import Failure, Success, is_successful
 from codeflash.languages.base import Language
 from codeflash.languages.current import current_language_support
 from codeflash.languages.javascript.test_runner import clear_created_config_files, get_created_config_files
-from codeflash.languages.python.context import code_context_extractor
 from codeflash.lsp.helpers import is_LSP_enabled, is_subagent_mode, report_to_markdown_table, tree_to_markdown
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
@@ -79,7 +77,6 @@ from codeflash.models.models import (
     AIServiceCodeRepairRequest,
     BestOptimization,
     CandidateEvaluationContext,
-    CodeOptimizationContext,
     GeneratedTests,
     GeneratedTestsList,
     OptimizationReviewResult,
@@ -106,10 +103,8 @@ from codeflash.result.critic import (
 )
 from codeflash.result.explanation import Explanation
 from codeflash.telemetry.posthog_cf import ph
-from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.parse_test_output import parse_concurrency_metrics, parse_test_results
-from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests, run_line_profile_tests
 from codeflash.verification.verification_utils import get_test_file_path
 from codeflash.verification.verifier import generate_tests
 
@@ -124,6 +119,7 @@ if TYPE_CHECKING:
     from codeflash.models.function_types import FunctionParent
     from codeflash.models.models import (
         BenchmarkKey,
+        CodeOptimizationContext,
         CodeStringsMarkdown,
         ConcurrencyMetrics,
         CoverageData,
@@ -487,6 +483,9 @@ class FunctionOptimizer:
     ) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
         return None
 
+    def requires_function_ast(self) -> bool:
+        return False
+
     def analyze_code_characteristics(self, code_context: CodeOptimizationContext) -> None:
         pass
 
@@ -528,23 +527,12 @@ class FunctionOptimizer:
         candidate_behavior_results: TestResults,
         optimization_candidate_index: int,
     ) -> tuple[bool, list[TestDiff]]:
-        original_sqlite = get_run_tmp_file(Path("test_return_values_0.sqlite"))
-        candidate_sqlite = get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite"))
-
-        if original_sqlite.exists() and candidate_sqlite.exists():
-            js_root = self.test_cfg.js_project_root or self.args.project_root
-            match, diffs = self.language_support.compare_test_results(
-                original_sqlite, candidate_sqlite, project_root=js_root
-            )
-            candidate_sqlite.unlink(missing_ok=True)
-        else:
-            match, diffs = compare_test_results(
-                baseline_results.behavior_test_results, candidate_behavior_results, pass_fail_only=True
-            )
-        return match, diffs
+        return compare_test_results(
+            baseline_results.behavior_test_results, candidate_behavior_results, pass_fail_only=True
+        )
 
     def should_skip_sqlite_cleanup(self, testing_type: TestingMode, optimization_iteration: int) -> bool:
-        return testing_type == TestingMode.BEHAVIOR or optimization_iteration == 0
+        return False
 
     def parse_line_profile_test_results(
         self, line_profiler_output_file: Path | None
@@ -976,7 +964,9 @@ class FunctionOptimizer:
         runtimes_list = []
 
         for valid_opt in eval_ctx.valid_optimizations:
-            valid_opt_normalized_code = normalize_code(valid_opt.candidate.source_code.flat.strip())
+            valid_opt_normalized_code = self.language_support.normalize_code(
+                valid_opt.candidate.source_code.flat.strip()
+            )
             new_candidate_with_shorter_code = OptimizedCandidate(
                 source_code=eval_ctx.ast_code_to_id[valid_opt_normalized_code]["shorter_source_code"],
                 optimization_id=valid_opt.candidate.optimization_id,
@@ -1083,7 +1073,7 @@ class FunctionOptimizer:
 
         candidate = candidate_node.candidate
 
-        normalized_code = normalize_code(candidate.source_code.flat.strip())
+        normalized_code = self.language_support.normalize_code(candidate.source_code.flat.strip())
 
         if normalized_code == normalized_original:
             logger.info(f"h3|Candidate {candidate_index}/{total_candidates}: Identical to original code, skipping.")
@@ -1295,7 +1285,7 @@ class FunctionOptimizer:
             self.future_adaptive_optimizations,
         )
         candidate_index = 0
-        normalized_original = normalize_code(code_context.read_writable_code.flat.strip())
+        normalized_original = self.language_support.normalize_code(code_context.read_writable_code.flat.strip())
 
         # Process candidates using queue-based approach
         while not processor.is_done():
@@ -1540,55 +1530,24 @@ class FunctionOptimizer:
 
         return new_code, new_helper_code
 
+    def group_functions_by_file(self, code_context: CodeOptimizationContext) -> dict[Path, set[str]]:
+        functions_by_file: dict[Path, set[str]] = defaultdict(set)
+        functions_by_file[self.function_to_optimize.file_path].add(self.function_to_optimize.qualified_name)
+        for helper in code_context.helper_functions:
+            if helper.definition_type != "class":
+                functions_by_file[helper.file_path].add(helper.qualified_name)
+        return functions_by_file
+
     def replace_function_and_helpers_with_optimized_code(
         self,
         code_context: CodeOptimizationContext,
         optimized_code: CodeStringsMarkdown,
         original_helper_code: dict[Path, str],
     ) -> bool:
-        # Despite the module path, this function dispatches to language-specific replacers internally
-        from codeflash.languages.python.static_analysis.code_replacer import replace_function_definitions_in_module
+        raise NotImplementedError
 
-        did_update = False
-        read_writable_functions_by_file_path = defaultdict(set)
-        read_writable_functions_by_file_path[self.function_to_optimize.file_path].add(
-            self.function_to_optimize.qualified_name
-        )
-        for helper_function in code_context.helper_functions:
-            if helper_function.definition_type != "class":
-                read_writable_functions_by_file_path[helper_function.file_path].add(helper_function.qualified_name)
-        for module_abspath, qualified_names in read_writable_functions_by_file_path.items():
-            did_update |= replace_function_definitions_in_module(
-                function_names=list(qualified_names),
-                optimized_code=optimized_code,
-                module_abspath=module_abspath,
-                preexisting_objects=code_context.preexisting_objects,
-                project_root_path=self.project_root,
-            )
-        return did_update
-
-    # TODO: Extract into PythonFunctionOptimizer — code_context_extractor is Python-only.
-    # Needs a JS context extractor equivalent first.
     def get_code_optimization_context(self) -> Result[CodeOptimizationContext, str]:
-        try:
-            new_code_ctx = code_context_extractor.get_code_optimization_context(
-                self.function_to_optimize, self.project_root, call_graph=self.call_graph
-            )
-        except ValueError as e:
-            return Failure(str(e))
-
-        return Success(
-            CodeOptimizationContext(
-                testgen_context=new_code_ctx.testgen_context,
-                read_writable_code=new_code_ctx.read_writable_code,
-                read_only_context_code=new_code_ctx.read_only_context_code,
-                hashing_code_context=new_code_ctx.hashing_code_context,
-                hashing_code_context_hash=new_code_ctx.hashing_code_context_hash,
-                helper_functions=new_code_ctx.helper_functions,
-                testgen_helper_fqns=new_code_ctx.testgen_helper_fqns,
-                preexisting_objects=new_code_ctx.preexisting_objects,
-            )
-        )
+        raise NotImplementedError
 
     @staticmethod
     def cleanup_leftover_test_return_values() -> None:
@@ -1739,9 +1698,9 @@ class FunctionOptimizer:
             future_concolic_tests = None
         else:
             future_concolic_tests = self.executor.submit(
-                generate_concolic_tests,
+                self.language_support.generate_concolic_tests,
                 self.test_cfg,
-                self.args,
+                self.args.project_root,
                 self.function_to_optimize,
                 self.function_to_optimize_ast,
             )
@@ -1908,7 +1867,6 @@ class FunctionOptimizer:
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
         # Check test quantity for all languages
         quantity_ok = quantity_of_tests_critic(original_code_baseline)
-        # TODO: {Self} Only check coverage for Python - coverage infrastructure not yet reliable for JS/TS
         coverage_ok = coverage_critic(original_code_baseline.coverage_results) if self.should_check_coverage() else True
         if isinstance(original_code_baseline, OriginalCodeBaseline) and (not coverage_ok or not quantity_ok):
             if self.args.override_fixtures:
@@ -2648,40 +2606,36 @@ class FunctionOptimizer:
         coverage_config_file = None
         try:
             if testing_type == TestingMode.BEHAVIOR:
-                result_file_path, run_result, coverage_database_file, coverage_config_file = run_behavioral_tests(
-                    test_files,
-                    test_framework=self.test_cfg.test_framework,
-                    cwd=self.project_root,
-                    test_env=test_env,
-                    pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
-                    enable_coverage=enable_coverage,
-                    js_project_root=self.test_cfg.js_project_root,
-                    candidate_index=optimization_iteration,
+                result_file_path, run_result, coverage_database_file, coverage_config_file = (
+                    self.language_support.run_behavioral_tests(
+                        test_paths=test_files,
+                        test_env=test_env,
+                        cwd=self.project_root,
+                        timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
+                        project_root=self.test_cfg.js_project_root,
+                        enable_coverage=enable_coverage,
+                        candidate_index=optimization_iteration,
+                    )
                 )
             elif testing_type == TestingMode.LINE_PROFILE:
-                result_file_path, run_result = run_line_profile_tests(
-                    test_files,
-                    cwd=self.project_root,
+                result_file_path, run_result = self.language_support.run_line_profile_tests(
+                    test_paths=test_files,
                     test_env=test_env,
-                    pytest_cmd=self.test_cfg.pytest_cmd,
-                    pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
-                    pytest_target_runtime_seconds=testing_time,
-                    test_framework=self.test_cfg.test_framework,
-                    js_project_root=self.test_cfg.js_project_root,
-                    line_profiler_output_file=line_profiler_output_file,
+                    cwd=self.project_root,
+                    timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
+                    project_root=self.test_cfg.js_project_root,
+                    line_profile_output_file=line_profiler_output_file,
                 )
             elif testing_type == TestingMode.PERFORMANCE:
-                result_file_path, run_result = run_benchmarking_tests(
-                    test_files,
-                    cwd=self.project_root,
+                result_file_path, run_result = self.language_support.run_benchmarking_tests(
+                    test_paths=test_files,
                     test_env=test_env,
-                    pytest_cmd=self.test_cfg.pytest_cmd,
-                    pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
-                    pytest_target_runtime_seconds=testing_time,
-                    pytest_min_loops=pytest_min_loops,
-                    pytest_max_loops=pytest_max_loops,
-                    test_framework=self.test_cfg.test_framework,
-                    js_project_root=self.test_cfg.js_project_root,
+                    cwd=self.project_root,
+                    timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
+                    project_root=self.test_cfg.js_project_root,
+                    min_loops=pytest_min_loops,
+                    max_loops=pytest_max_loops,
+                    target_duration_seconds=testing_time,
                 )
             else:
                 msg = f"Unexpected testing type: {testing_type}"
@@ -2789,45 +2743,6 @@ class FunctionOptimizer:
     def line_profiler_step(
         self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], candidate_index: int
     ) -> dict[str, Any]:
-        if self.language_support is not None and hasattr(self.language_support, "instrument_source_for_line_profiler"):
-            try:
-                line_profiler_output_path = get_run_tmp_file(Path("line_profiler_output.json"))
-                # NOTE: currently this handles single file only, add support to multi file instrumentation (or should it be kept for the main file only)
-                original_source = Path(self.function_to_optimize.file_path).read_text()
-                # Instrument source code
-                success = self.language_support.instrument_source_for_line_profiler(
-                    func_info=self.function_to_optimize, line_profiler_output_file=line_profiler_output_path
-                )
-                if not success:
-                    return {"timings": {}, "unit": 0, "str_out": ""}
-
-                test_env = self.get_test_env(
-                    codeflash_loop_index=0, codeflash_test_iteration=candidate_index, codeflash_tracer_disable=1
-                )
-
-                _test_results, _ = self.run_and_parse_tests(
-                    testing_type=TestingMode.LINE_PROFILE,
-                    test_env=test_env,
-                    test_files=self.test_files,
-                    optimization_iteration=0,
-                    testing_time=TOTAL_LOOPING_TIME_EFFECTIVE,
-                    enable_coverage=False,
-                    code_context=code_context,
-                    line_profiler_output_file=line_profiler_output_path,
-                )
-
-                if not hasattr(self.language_support, "parse_line_profile_results"):
-                    raise ValueError("Language support does not implement parse_line_profile_results")  # noqa: TRY301
-
-                return self.language_support.parse_line_profile_results(line_profiler_output_path)
-            except Exception as e:
-                logger.warning(f"Failed to run line profiling: {e}")
-                return {"timings": {}, "unit": 0, "str_out": ""}
-            finally:
-                # restore original source
-                Path(self.function_to_optimize.file_path).write_text(original_source)
-
-        logger.warning(f"Language support for {self.language_support.language} doesn't support line profiling")
         return {"timings": {}, "unit": 0, "str_out": ""}
 
     def run_concurrency_benchmark(

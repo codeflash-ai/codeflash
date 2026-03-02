@@ -6,7 +6,7 @@ from typing import Optional
 
 from pydantic.dataclasses import dataclass
 
-from codeflash.languages import current_language_support, is_javascript
+from codeflash.languages import current_language_support
 
 
 def get_test_file_path(
@@ -19,7 +19,7 @@ def get_test_file_path(
     assert test_type in {"unit", "inspired", "replay", "perf"}
     function_name = function_name.replace(".", "_")
     # Use appropriate file extension based on language
-    extension = current_language_support().get_test_file_suffix() if is_javascript() else ".py"
+    extension = current_language_support().get_test_file_suffix()
 
     # For JavaScript/TypeScript, place generated tests in a subdirectory that matches
     # Vitest/Jest include patterns (e.g., test/**/*.test.ts)
@@ -164,16 +164,8 @@ class TestConfig:
 
     @property
     def test_framework(self) -> str:
-        """Returns the appropriate test framework based on language.
-
-        For JavaScript/TypeScript: uses the configured framework (vitest, jest, or mocha).
-        For Python: uses pytest as default.
-        """
-        if is_javascript():
-            from codeflash.languages.test_framework import get_js_test_framework_or_default
-
-            return get_js_test_framework_or_default()
-        return "pytest"
+        """Returns the appropriate test framework based on language."""
+        return current_language_support().test_framework
 
     def set_language(self, language: str) -> None:
         """Set the language for this test config.
