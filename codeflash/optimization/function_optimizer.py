@@ -1757,8 +1757,8 @@ class FunctionOptimizer:
 
                 return path_obj.parent / f"{new_stem}{ext}"
 
-            new_behavioral_test_path = get_instrumented_path(test_file, "__perfinstrumented")
-            new_perf_test_path = get_instrumented_path(test_file, "__perfonlyinstrumented")
+            new_behavioral_test_path = get_instrumented_path(test_file, "__existing_perfinstrumented")
+            new_perf_test_path = get_instrumented_path(test_file, "__existing_perfonlyinstrumented")
 
             # For Java, the class name inside the file must match the file name.
             if is_java():
@@ -2819,6 +2819,7 @@ class FunctionOptimizer:
                 coverage_database_file=coverage_database_file,
                 coverage_config_file=coverage_config_file,
                 skip_sqlite_cleanup=skip_cleanup,
+                testing_type=testing_type,
             )
             if testing_type == TestingMode.PERFORMANCE:
                 results.perf_stdout = run_result.stdout

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from functools import cached_property
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from codeflash.languages.base import Language, LanguageSupport
@@ -37,7 +38,6 @@ from codeflash.models.models import ValidCode
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-    from pathlib import Path
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, TestInfo, TestResult
@@ -114,11 +114,38 @@ class JavaSupport(LanguageSupport):
     def test_result_serialization_format(self) -> str:
         return "json"
 
+    @property
+    def function_optimizer_class(self) -> type:
+        from codeflash.languages.java.function_optimizer import JavaFunctionOptimizer
+
+        return JavaFunctionOptimizer
+
     def postprocess_generated_tests(
         self, generated_tests: GeneratedTestsList, test_framework: str, project_root: Path, source_file_path: Path
     ) -> GeneratedTestsList:
         _ = test_framework, project_root, source_file_path
         return generated_tests
+
+    def process_generated_test_strings(
+        self,
+        generated_test_source: str,
+        instrumented_behavior_test_source: str,
+        instrumented_perf_test_source: str,
+        function_to_optimize: Any,
+        test_path: Path,
+        test_cfg: Any,
+        project_module_system: str | None,
+    ) -> tuple[str, str, str]:
+        from codeflash.code_utils.code_utils import get_run_tmp_file
+
+        temp_run_dir = get_run_tmp_file(Path()).as_posix()
+        instrumented_behavior_test_source = instrumented_behavior_test_source.replace(
+            "{codeflash_run_tmp_dir_client_side}", temp_run_dir
+        )
+        instrumented_perf_test_source = instrumented_perf_test_source.replace(
+            "{codeflash_run_tmp_dir_client_side}", temp_run_dir
+        )
+        return generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source
 
     def add_global_declarations(self, optimized_code: str, original_source: str, module_abspath: Path) -> str:
         """Add new class-level fields and helper methods from optimized code to original source.

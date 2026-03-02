@@ -2590,6 +2590,9 @@ public class BrokenCalcTest {
         sqlite_file = get_run_tmp_file(Path("test_return_values_0.sqlite"))
         if sqlite_file.exists():
             sqlite_file.unlink()
+        import tempfile
+        for stale in Path(tempfile.gettempdir()).glob("**/test_return_values_*.sqlite"):
+            stale.unlink(missing_ok=True)
 
         project_root, src_dir, test_dir = java_project
 
