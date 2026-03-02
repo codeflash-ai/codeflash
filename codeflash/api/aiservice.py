@@ -14,7 +14,8 @@ from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
 from codeflash.code_utils.time_utils import humanize_runtime
-from codeflash.languages import is_java
+from codeflash.languages import Language, current_language
+from codeflash.languages.current import current_language_support
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     AIServiceRefinerRequest,
@@ -50,6 +51,18 @@ class AiServiceClient:
     def get_next_sequence(self) -> int:
         """Get the next LLM call sequence number."""
         return next(self.llm_call_counter)
+
+    @staticmethod
+    def add_language_metadata(
+        payload: dict[str, Any], language_version: str | None = None, module_system: str | None = None
+    ) -> None:
+        """Add language version and module system metadata to an API payload."""
+        payload["python_version"] = platform.python_version()
+        default_lang_version = current_language_support().default_language_version
+        if default_lang_version is not None:
+            payload["language_version"] = language_version or default_lang_version
+            if module_system:
+                payload["module_system"] = module_system
 
     def get_aiservice_base_url(self) -> str:
         if os.environ.get("CODEFLASH_AIS_SERVER", default="prod").lower() == "local":
@@ -177,10 +190,7 @@ class AiServiceClient:
             "is_numerical_code": is_numerical_code,
         }
 
-        # Add language-specific version fields
-        payload["python_version"] = platform.python_version()
-        if is_java():
-            payload["language_version"] = language_version or "17"
+        self.add_language_metadata(payload, language_version, module_system)
 
         # DEBUG: Print payload language field
         logger.debug(
@@ -426,9 +436,7 @@ class AiServiceClient:
                 "language": opt.language,
             }
 
-            item["python_version"] = platform.python_version()
-            if opt.language_version:
-                item["language_version"] = opt.language_version
+            self.add_language_metadata(item, opt.language_version)
 
             # Add multi-file context if provided
             if opt.additional_context_files:
@@ -741,11 +749,11 @@ class AiServiceClient:
 
         """
         # Validate test framework based on language
-        java_frameworks = ["junit5", "junit4", "testng"]
-        if is_java():
-            assert test_framework in java_frameworks, (
-                f"Invalid test framework for Java, got {test_framework} but expected one of {java_frameworks}"
-            )
+        lang_support = current_language_support()
+        valid_frameworks = lang_support.valid_test_frameworks
+        assert test_framework in valid_frameworks, (
+            f"Invalid test framework for {current_language()}, got {test_framework} but expected one of {list(valid_frameworks)}"
+        )
 
         payload: dict[str, Any] = {
             "source_code_being_tested": source_code_being_tested,
@@ -764,10 +772,7 @@ class AiServiceClient:
             "is_numerical_code": is_numerical_code,
         }
 
-        # Add language-specific version fields
-        payload["python_version"] = platform.python_version()
-        if is_java():
-            payload["language_version"] = language_version or "17"
+        self.add_language_metadata(payload, language_version, module_system)
 
         # DEBUG: Print payload language field
         logger.debug(f"Sending testgen request with language='{payload['language']}', framework='{test_framework}'")
@@ -853,7 +858,7 @@ class AiServiceClient:
             "codeflash_version": codeflash_version,
             "calling_fn_details": calling_fn_details,
             "language": language,
-            "python_version": platform.python_version(),
+            "python_version": platform.python_version() if current_language() == Language.PYTHON else None,
             "call_sequence": self.get_next_sequence(),
         }
         console.rule()

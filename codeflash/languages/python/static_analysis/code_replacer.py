@@ -4,7 +4,6 @@ import ast
 from collections import defaultdict
 from functools import lru_cache
 from itertools import chain
-from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar
 
 import libcst as cst
@@ -13,6 +12,7 @@ from libcst.metadata import PositionProvider
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.config_parser import find_conftest_files
 from codeflash.code_utils.formatter import sort_imports
+from codeflash.languages.code_replacer import get_optimized_code_for_module
 from codeflash.languages.python.static_analysis.code_extractor import (
     add_global_assignments,
     add_needed_imports_from_module,
@@ -391,10 +391,7 @@ def replace_function_definitions_in_module(
     should_add_global_assignments: bool = True,
 ) -> bool:
     source_code: str = module_abspath.read_text(encoding="utf8")
-    # TODO: import from codeflash.languages.code_replacer when merging main
-    file_to_code = optimized_code.file_to_path()
-    relative_path_str = str(module_abspath.relative_to(project_root_path))
-    code_to_apply = file_to_code.get(relative_path_str, "")
+    code_to_apply = get_optimized_code_for_module(module_abspath.relative_to(project_root_path), optimized_code)
 
     new_code: str = replace_functions_and_add_imports(
         # adding the global assignments before replacing the code, not after

@@ -6,7 +6,7 @@ from typing import Optional
 
 from pydantic.dataclasses import dataclass
 
-from codeflash.languages import is_java, is_javascript
+from codeflash.languages import current_language_support, is_java
 
 
 def get_test_file_path(
@@ -20,28 +20,16 @@ def get_test_file_path(
 ) -> Path:
     assert test_type in {"unit", "inspired", "replay", "perf"}
     function_name_safe = function_name.replace(".", "_")
-    # TODO: replace with current_language_support().get_test_file_suffix() when merging main
-    from codeflash.languages import current_language_support
-
-    if is_javascript():
-        extension = current_language_support().get_test_file_suffix()
-    elif is_java():
-        extension = ".java"
-    else:
-        extension = ".py"
+    extension = current_language_support().get_test_file_suffix()
 
     if is_java() and package_name:
-        # For Java, create package directory structure
-        # e.g., com.example -> com/example/
         package_path = package_name.replace(".", "/")
         java_class_name = class_name or f"{function_name_safe.title()}Test"
-        # Add suffix to avoid conflicts
         if test_type == "perf":
             java_class_name = f"{java_class_name}__perfonlyinstrumented"
         elif test_type == "unit":
             java_class_name = f"{java_class_name}__perfinstrumented"
         path = test_dir / package_path / f"{java_class_name}{extension}"
-        # Create package directory if needed
         path.parent.mkdir(parents=True, exist_ok=True)
     else:
         path = test_dir / f"test_{function_name_safe}__{test_type}_test_{iteration}{extension}"
@@ -174,67 +162,15 @@ class TestConfig:
     use_cache: bool = True
     _language: Optional[str] = None  # Language identifier for multi-language support
     js_project_root: Optional[Path] = None  # JavaScript project root (directory containing package.json)
-    _test_framework: Optional[str] = None  # Cached test framework detection result
 
     def __post_init__(self) -> None:
-        self.tests_root = self.tests_root.resolve()
         self.project_root_path = self.project_root_path.resolve()
         self.tests_project_rootdir = self.tests_project_rootdir.resolve()
 
     @property
     def test_framework(self) -> str:
-        """Returns the appropriate test framework based on language.
-
-        For JavaScript/TypeScript: uses the configured framework (vitest, jest, or mocha).
-        For Python: uses pytest as default.
-        Result is cached after first detection to avoid repeated pom.xml parsing.
-        """
-        if self._test_framework is not None:
-            return self._test_framework
-        # TODO: replace with current_language_support().test_framework when merging main
-        if is_javascript():
-            from codeflash.languages.test_framework import get_js_test_framework_or_default
-
-            self._test_framework = get_js_test_framework_or_default()
-        elif is_java():
-            self._test_framework = self._detect_java_test_framework()
-        else:
-            self._test_framework = "pytest"
-        return self._test_framework
-
-    def _detect_java_test_framework(self) -> str:
-        """Detect the Java test framework from the project configuration.
-
-        Returns 'junit4', 'junit5', or 'testng' based on project dependencies.
-        Checks both the project root and parent directories for multi-module projects.
-        Defaults to 'junit5' if detection fails.
-        """
-        try:
-            from codeflash.languages.java.config import detect_java_project
-
-            # First try the project root
-            config = detect_java_project(self.project_root_path)
-            if config and config.test_framework and (config.has_junit4 or config.has_junit5 or config.has_testng):
-                return config.test_framework
-
-            # For multi-module projects, check parent directories
-            current = self.project_root_path.parent
-            while current != current.parent:
-                pom_path = current / "pom.xml"
-                if pom_path.exists():
-                    parent_config = detect_java_project(current)
-                    if parent_config and (
-                        parent_config.has_junit4 or parent_config.has_junit5 or parent_config.has_testng
-                    ):
-                        return parent_config.test_framework
-                current = current.parent
-
-            # Return whatever the initial detection found, or default
-            if config and config.test_framework:
-                return config.test_framework
-        except Exception:
-            pass
-        return "junit4"  # Default fallback (JUnit 4 is more common in legacy projects)
+        """Returns the appropriate test framework based on language."""
+        return current_language_support().test_framework
 
     def set_language(self, language: str) -> None:
         """Set the language for this test config.

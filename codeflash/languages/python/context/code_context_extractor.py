@@ -12,10 +12,13 @@ import libcst as cst
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import encoded_tokens_len, get_qualified_name, path_belongs_to_site_packages
-from codeflash.code_utils.config_consts import OPTIMIZATION_CONTEXT_TOKEN_LIMIT, TESTGEN_CONTEXT_TOKEN_LIMIT
+from codeflash.code_utils.config_consts import (
+    OPTIMIZATION_CONTEXT_TOKEN_LIMIT,
+    READ_WRITABLE_LIMIT_ERROR,
+    TESTGEN_CONTEXT_TOKEN_LIMIT,
+    TESTGEN_LIMIT_ERROR,
+)
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize  # noqa: TC001
-
-# Language support imports for multi-language code context extraction
 from codeflash.languages.python.context.unused_definition_remover import (
     collect_top_level_defs_with_usages,
     get_section_names,
@@ -41,10 +44,6 @@ if TYPE_CHECKING:
 
     from codeflash.languages.base import DependencyResolver
     from codeflash.languages.python.context.unused_definition_remover import UsageInfo
-
-# Error message constants
-READ_WRITABLE_LIMIT_ERROR = "Read-writable code has exceeded token limit, cannot proceed"
-TESTGEN_LIMIT_ERROR = "Testgen code context has exceeded token limit, cannot proceed"
 
 
 def build_testgen_context(

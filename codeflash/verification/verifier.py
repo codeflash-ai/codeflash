@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import module_name_from_file_path
-from codeflash.languages import is_java
+from codeflash.languages.current import current_language_support
 from codeflash.verification.verification_utils import ModifyInspiredTests, delete_multiple_if_name_main
 
 if TYPE_CHECKING:
@@ -35,8 +35,25 @@ def generate_tests(
     start_time = time.perf_counter()
     test_module_path = Path(module_name_from_file_path(test_path, test_cfg.tests_project_rootdir))
 
-    # TODO: replace with lang_support.detect_module_system() when merging main
-    project_module_system = None
+    # Detect module system via language support (non-None for JS/TS, None for Python)
+    lang_support = current_language_support()
+    source_file = Path(function_to_optimize.file_path)
+    project_module_system = lang_support.detect_module_system(test_cfg.tests_project_rootdir, source_file)
+
+    if project_module_system is not None:
+        # For JavaScript/TypeScript, calculate the correct import path from the actual test location
+        # (test_path) to the source file, not from tests_root
+        import os
+
+        source_file_abs = source_file.resolve().with_suffix("")
+        test_dir_abs = test_path.resolve().parent
+        # Compute relative path from test directory to source file
+        rel_import_path = os.path.relpath(str(source_file_abs), str(test_dir_abs))
+        # Ensure path starts with ./ or ../ for JavaScript/TypeScript imports
+        if not rel_import_path.startswith("../"):
+            rel_import_path = f"./{rel_import_path}"
+        # Keep as string since Path() normalizes away the ./ prefix
+        module_path = rel_import_path
 
     response = aiservice_client.generate_regression_tests(
         source_code_being_tested=source_code_being_tested,
@@ -54,32 +71,18 @@ def generate_tests(
     )
     if response and isinstance(response, tuple) and len(response) == 3:
         generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source = response
-        # TODO: replace with lang_support.process_generated_test_strings() when merging main
-        if is_java():
-            from codeflash.languages.java.instrumentation import instrument_generated_java_test
 
-            func_name = function_to_optimize.function_name
-            qualified_name = function_to_optimize.qualified_name
-
-            # Instrument for behavior verification (renames class)
-            instrumented_behavior_test_source = instrument_generated_java_test(
-                test_code=generated_test_source,
-                function_name=func_name,
-                qualified_name=qualified_name,
-                mode="behavior",
+        generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source = (
+            lang_support.process_generated_test_strings(
+                generated_test_source=generated_test_source,
+                instrumented_behavior_test_source=instrumented_behavior_test_source,
+                instrumented_perf_test_source=instrumented_perf_test_source,
                 function_to_optimize=function_to_optimize,
+                test_path=test_path,
+                test_cfg=test_cfg,
+                project_module_system=project_module_system,
             )
-
-            # Instrument for performance measurement (adds timing markers)
-            instrumented_perf_test_source = instrument_generated_java_test(
-                test_code=generated_test_source,
-                function_name=func_name,
-                qualified_name=qualified_name,
-                mode="performance",
-                function_to_optimize=function_to_optimize,
-            )
-
-            logger.debug(f"Instrumented Java tests locally for {func_name}")
+        )
     else:
         logger.warning(f"Failed to generate and instrument tests for {function_to_optimize.function_name}")
         return None
