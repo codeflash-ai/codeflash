@@ -579,39 +579,7 @@ class TreeSitterAnalyzer:
             module.exports = utils;
         → checks if prop_name is a key of the object literal assigned to var_name.
         """
-        root = node
-        while root.parent:
-            root = root.parent
-
-        for child in root.children:
-            # Look for: const/let/var varName = { ... }
-            if child.type in ("lexical_declaration", "variable_declaration"):
-                for decl in child.children:
-                    if decl.type == "variable_declarator":
-                        name_node = decl.child_by_field_name("name")
-                        value_node = decl.child_by_field_name("value")
-                        if (
-                            name_node
-                            and self.get_node_text(name_node, source_bytes) == var_name
-                            and value_node
-                            and value_node.type == "object"
-                        ):
-                            for obj_child in value_node.children:
-                                if obj_child.type == "method_definition":
-                                    method_name_node = obj_child.child_by_field_name("name")
-                                    if (
-                                        method_name_node
-                                        and self.get_node_text(method_name_node, source_bytes) == prop_name
-                                    ):
-                                        return True
-                                elif obj_child.type == "shorthand_property_identifier":
-                                    if self.get_node_text(obj_child, source_bytes) == prop_name:
-                                        return True
-                                elif obj_child.type == "pair":
-                                    key_node = obj_child.child_by_field_name("key")
-                                    if key_node and self.get_node_text(key_node, source_bytes) == prop_name:
-                                        return True
-        return False
+        return any(name == prop_name for name, _ in self._resolve_variable_object_properties(node, var_name, source_bytes))
 
     def _find_preceding_jsdoc(self, node: Node, source_bytes: bytes) -> int | None:
         """Find JSDoc comment immediately preceding a function node.

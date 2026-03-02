@@ -183,25 +183,6 @@ def _is_js_ts_function_exists_but_not_exported(file_path: Path, function_name: s
     return False
 
 
-def _find_all_functions_via_language_support(file_path: Path) -> dict[Path, list[FunctionToOptimize]]:
-    """Find all optimizable functions using the language support abstraction.
-
-    This function uses the registered language support for the file's language
-    to discover functions, then converts them to FunctionToOptimize instances.
-    """
-    from codeflash.languages.base import FunctionFilterCriteria
-
-    functions: dict[Path, list[FunctionToOptimize]] = {}
-
-    try:
-        lang_support = get_language_support(file_path)
-        criteria = FunctionFilterCriteria(require_return=True)
-        functions[file_path] = lang_support.discover_functions(file_path, criteria)
-    except Exception as e:
-        logger.debug(f"Failed to discover functions in {file_path}: {e}")
-
-    return functions
-
 
 def get_functions_to_optimize(
     optimize_all: str | None,

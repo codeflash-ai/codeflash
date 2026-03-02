@@ -207,15 +207,15 @@ def _extract_mocha_json(stdout: str) -> str | None:
     return None
 
 
-def _build_mocha_behavioral_command(
-    test_files: list[Path], timeout: int | None = None, project_root: Path | None = None
+def _build_mocha_command(
+    test_files: list[Path], timeout: int | None = None, default_timeout_ms: int = 60000
 ) -> list[str]:
-    """Build Mocha command for behavioral tests.
+    """Build a Mocha command.
 
     Args:
         test_files: List of test files to run.
         timeout: Optional timeout in seconds (converted to ms for Mocha).
-        project_root: Project root directory.
+        default_timeout_ms: Default timeout in milliseconds when timeout is not provided.
 
     Returns:
         Command list for subprocess execution.
@@ -226,59 +226,7 @@ def _build_mocha_behavioral_command(
     if timeout:
         cmd.extend(["--timeout", str(timeout * 1000)])
     else:
-        cmd.extend(["--timeout", "60000"])
-
-    cmd.extend(str(f.resolve()) for f in test_files)
-
-    return cmd
-
-
-def _build_mocha_benchmarking_command(
-    test_files: list[Path], timeout: int | None = None, project_root: Path | None = None
-) -> list[str]:
-    """Build Mocha command for benchmarking tests.
-
-    Args:
-        test_files: List of test files to run.
-        timeout: Optional timeout in seconds (converted to ms for Mocha).
-        project_root: Project root directory.
-
-    Returns:
-        Command list for subprocess execution.
-
-    """
-    cmd = ["npx", "mocha", "--reporter", "json", "--jobs", "1", "--exit"]
-
-    if timeout:
-        cmd.extend(["--timeout", str(timeout * 1000)])
-    else:
-        cmd.extend(["--timeout", "120000"])
-
-    cmd.extend(str(f.resolve()) for f in test_files)
-
-    return cmd
-
-
-def _build_mocha_line_profile_command(
-    test_files: list[Path], timeout: int | None = None, project_root: Path | None = None
-) -> list[str]:
-    """Build Mocha command for line profiling tests.
-
-    Args:
-        test_files: List of test files to run.
-        timeout: Optional timeout in seconds (converted to ms for Mocha).
-        project_root: Project root directory.
-
-    Returns:
-        Command list for subprocess execution.
-
-    """
-    cmd = ["npx", "mocha", "--reporter", "json", "--jobs", "1", "--exit"]
-
-    if timeout:
-        cmd.extend(["--timeout", str(timeout * 1000)])
-    else:
-        cmd.extend(["--timeout", "60000"])
+        cmd.extend(["--timeout", str(default_timeout_ms)])
 
     cmd.extend(str(f.resolve()) for f in test_files)
 
@@ -391,7 +339,7 @@ def run_mocha_behavioral_tests(
 
     _ensure_runtime_files(effective_cwd)
 
-    mocha_cmd = _build_mocha_behavioral_command(test_files=test_files, timeout=timeout, project_root=effective_cwd)
+    mocha_cmd = _build_mocha_command(test_files=test_files, timeout=timeout)
 
     mocha_env = test_env.copy()
     codeflash_sqlite_file = get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite"))
@@ -475,7 +423,7 @@ def run_mocha_benchmarking_tests(
 
     _ensure_runtime_files(effective_cwd)
 
-    mocha_cmd = _build_mocha_benchmarking_command(test_files=test_files, timeout=timeout, project_root=effective_cwd)
+    mocha_cmd = _build_mocha_command(test_files=test_files, timeout=timeout, default_timeout_ms=120000)
 
     mocha_env = test_env.copy()
     codeflash_sqlite_file = get_run_tmp_file(Path("test_return_values_0.sqlite"))
@@ -563,7 +511,7 @@ def run_mocha_line_profile_tests(
 
     _ensure_runtime_files(effective_cwd)
 
-    mocha_cmd = _build_mocha_line_profile_command(test_files=test_files, timeout=timeout, project_root=effective_cwd)
+    mocha_cmd = _build_mocha_command(test_files=test_files, timeout=timeout)
 
     mocha_env = test_env.copy()
     codeflash_sqlite_file = get_run_tmp_file(Path("test_return_values_line_profile.sqlite"))

@@ -226,17 +226,17 @@ class TestFindMochaProjectRoot:
             assert result == root
 
 
-class TestMochaBehavioralCommand:
-    """Tests for building Mocha behavioral commands."""
+class TestBuildMochaCommand:
+    """Tests for building Mocha commands."""
 
     def test_basic_command(self):
-        from codeflash.languages.javascript.mocha_runner import _build_mocha_behavioral_command
+        from codeflash.languages.javascript.mocha_runner import _build_mocha_command
 
         with tempfile.TemporaryDirectory() as tmpdir:
             test_file = Path(tmpdir) / "test.js"
             test_file.write_text("// test")
 
-            cmd = _build_mocha_behavioral_command(test_files=[test_file])
+            cmd = _build_mocha_command(test_files=[test_file])
             assert "npx" in cmd
             assert "mocha" in cmd
             assert "--reporter" in cmd
@@ -246,78 +246,46 @@ class TestMochaBehavioralCommand:
             assert "--exit" in cmd
 
     def test_timeout_flag(self):
-        from codeflash.languages.javascript.mocha_runner import _build_mocha_behavioral_command
+        from codeflash.languages.javascript.mocha_runner import _build_mocha_command
 
         with tempfile.TemporaryDirectory() as tmpdir:
             test_file = Path(tmpdir) / "test.js"
             test_file.write_text("// test")
 
-            cmd = _build_mocha_behavioral_command(test_files=[test_file], timeout=30)
+            cmd = _build_mocha_command(test_files=[test_file], timeout=30)
             timeout_idx = cmd.index("--timeout")
             assert cmd[timeout_idx + 1] == "30000"
 
     def test_default_timeout(self):
-        from codeflash.languages.javascript.mocha_runner import _build_mocha_behavioral_command
+        from codeflash.languages.javascript.mocha_runner import _build_mocha_command
 
         with tempfile.TemporaryDirectory() as tmpdir:
             test_file = Path(tmpdir) / "test.js"
             test_file.write_text("// test")
 
-            cmd = _build_mocha_behavioral_command(test_files=[test_file])
+            cmd = _build_mocha_command(test_files=[test_file])
             timeout_idx = cmd.index("--timeout")
             assert cmd[timeout_idx + 1] == "60000"
 
-
-class TestMochaBenchmarkingCommand:
-    """Tests for building Mocha benchmarking commands."""
-
-    def test_basic_command(self):
-        from codeflash.languages.javascript.mocha_runner import _build_mocha_benchmarking_command
+    def test_benchmarking_default_timeout_is_longer(self):
+        from codeflash.languages.javascript.mocha_runner import _build_mocha_command
 
         with tempfile.TemporaryDirectory() as tmpdir:
             test_file = Path(tmpdir) / "test.js"
             test_file.write_text("// test")
 
-            cmd = _build_mocha_benchmarking_command(test_files=[test_file])
-            assert "npx" in cmd
-            assert "mocha" in cmd
-            assert "--exit" in cmd
-
-    def test_default_timeout_is_longer(self):
-        from codeflash.languages.javascript.mocha_runner import _build_mocha_benchmarking_command
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            test_file = Path(tmpdir) / "test.js"
-            test_file.write_text("// test")
-
-            cmd = _build_mocha_benchmarking_command(test_files=[test_file])
+            cmd = _build_mocha_command(test_files=[test_file], default_timeout_ms=120000)
             timeout_idx = cmd.index("--timeout")
             assert cmd[timeout_idx + 1] == "120000"
 
-
-class TestMochaLineProfileCommand:
-    """Tests for building Mocha line profile commands."""
-
-    def test_basic_command(self):
-        from codeflash.languages.javascript.mocha_runner import _build_mocha_line_profile_command
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            test_file = Path(tmpdir) / "test.js"
-            test_file.write_text("// test")
-
-            cmd = _build_mocha_line_profile_command(test_files=[test_file])
-            assert "npx" in cmd
-            assert "mocha" in cmd
-            assert "--exit" in cmd
-
     def test_timeout_conversion(self):
-        from codeflash.languages.javascript.mocha_runner import _build_mocha_line_profile_command
+        from codeflash.languages.javascript.mocha_runner import _build_mocha_command
 
         with tempfile.TemporaryDirectory() as tmpdir:
             test_file = Path(tmpdir) / "test.js"
             test_file.write_text("// test")
 
-            cmd = _build_mocha_line_profile_command(test_files=[test_file], timeout=45)
+            cmd = _build_mocha_command(test_files=[test_file], timeout=45)
             timeout_idx = cmd.index("--timeout")
             assert cmd[timeout_idx + 1] == "45000"
 
