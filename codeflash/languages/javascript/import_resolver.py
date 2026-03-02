@@ -499,6 +499,18 @@ class MultiFileHelperFinder:
         # Split source into lines for JSDoc extraction
         lines = source.splitlines(keepends=True)
 
+        def helper_from_func(func):
+            effective_start = func.doc_start_line or func.start_line
+            helper_source = "".join(lines[effective_start - 1 : func.end_line])
+            return HelperFunction(
+                name=func.name,
+                qualified_name=func.name,
+                file_path=file_path,
+                source_code=helper_source,
+                start_line=effective_start,
+                end_line=func.end_line,
+            )
+
         # Handle "default" export - look for default exported function
         if function_name == "default":
             # Find the default export
@@ -506,38 +518,14 @@ class MultiFileHelperFinder:
             # For now, return first function if looking for default
             # TODO: Implement proper default export detection
             for func in functions:
-                # Extract source including JSDoc if present
-                effective_start = func.doc_start_line or func.start_line
-                helper_lines = lines[effective_start - 1 : func.end_line]
-                helper_source = "".join(helper_lines)
-
-                return HelperFunction(
-                    name=func.name,
-                    qualified_name=func.name,
-                    file_path=file_path,
-                    source_code=helper_source,
-                    start_line=effective_start,
-                    end_line=func.end_line,
-                )
+                return helper_from_func(func)
             return None
 
         # Find the function by name
         functions = file_analyzer.find_functions(source, include_methods=True)
         for func in functions:
             if func.name == function_name:
-                # Extract source including JSDoc if present
-                effective_start = func.doc_start_line or func.start_line
-                helper_lines = lines[effective_start - 1 : func.end_line]
-                helper_source = "".join(helper_lines)
-
-                return HelperFunction(
-                    name=func.name,
-                    qualified_name=func.name,
-                    file_path=file_path,
-                    source_code=helper_source,
-                    start_line=effective_start,
-                    end_line=func.end_line,
-                )
+                return helper_from_func(func)
 
         logger.debug("Function %s not found in %s", function_name, file_path)
         return None

@@ -52,6 +52,18 @@ class AiServiceClient:
         """Get the next LLM call sequence number."""
         return next(self.llm_call_counter)
 
+    @staticmethod
+    def add_language_metadata(
+        payload: dict[str, Any], language_version: str | None = None, module_system: str | None = None
+    ) -> None:
+        """Add language version and module system metadata to an API payload."""
+        payload["python_version"] = platform.python_version()
+        default_lang_version = current_language_support().default_language_version
+        if default_lang_version is not None:
+            payload["language_version"] = language_version or default_lang_version
+            if module_system:
+                payload["module_system"] = module_system
+
     def get_aiservice_base_url(self) -> str:
         if os.environ.get("CODEFLASH_AIS_SERVER", default="prod").lower() == "local":
             logger.info("Using local AI Service at http://localhost:8000")
@@ -178,14 +190,7 @@ class AiServiceClient:
             "is_numerical_code": is_numerical_code,
         }
 
-        # Add language-specific version fields
-        # Always include python_version for backward compatibility with older backend
-        payload["python_version"] = platform.python_version()
-        default_lang_version = current_language_support().default_language_version
-        if default_lang_version is not None:
-            payload["language_version"] = language_version or default_lang_version
-            if module_system:
-                payload["module_system"] = module_system
+        self.add_language_metadata(payload, language_version, module_system)
 
         # DEBUG: Print payload language field
         logger.debug(
@@ -431,11 +436,7 @@ class AiServiceClient:
                 "language": opt.language,
             }
 
-            # Add language version - always include python_version for backward compatibility
-            item["python_version"] = platform.python_version()
-            default_lang_version = current_language_support().default_language_version
-            if default_lang_version is not None:
-                item["language_version"] = opt.language_version or default_lang_version
+            self.add_language_metadata(item, opt.language_version)
 
             # Add multi-file context if provided
             if opt.additional_context_files:
@@ -771,14 +772,7 @@ class AiServiceClient:
             "is_numerical_code": is_numerical_code,
         }
 
-        # Add language-specific version fields
-        # Always include python_version for backward compatibility with older backend
-        payload["python_version"] = platform.python_version()
-        default_lang_version = lang_support.default_language_version
-        if default_lang_version is not None:
-            payload["language_version"] = language_version or default_lang_version
-            if module_system:
-                payload["module_system"] = module_system
+        self.add_language_metadata(payload, language_version, module_system)
 
         # DEBUG: Print payload language field
         logger.debug(f"Sending testgen request with language='{payload['language']}', framework='{test_framework}'")
