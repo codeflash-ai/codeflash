@@ -1698,7 +1698,7 @@ class FunctionOptimizer:
 
         if existing_test_files_count > 0 or replay_test_files_count > 0 or concolic_coverage_test_files_count > 0:
             logger.info(
-                f"Instrumented {existing_test_files_count} existing unit test file"
+                f"Discovered {existing_test_files_count} existing unit test file"
                 f"{'s' if existing_test_files_count != 1 else ''}, {replay_test_files_count} replay test file"
                 f"{'s' if replay_test_files_count != 1 else ''}, and "
                 f"{concolic_coverage_test_files_count} concolic coverage test file"
