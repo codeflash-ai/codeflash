@@ -6,7 +6,7 @@ from typing import Optional
 
 from pydantic.dataclasses import dataclass
 
-from codeflash.languages import is_java
+from codeflash.languages import is_java, is_javascript
 
 
 def get_test_file_path(
@@ -20,8 +20,12 @@ def get_test_file_path(
 ) -> Path:
     assert test_type in {"unit", "inspired", "replay", "perf"}
     function_name_safe = function_name.replace(".", "_")
-    # Use appropriate file extension based on language
-    if is_java():
+    # TODO: replace with current_language_support().get_test_file_suffix() when merging main
+    from codeflash.languages import current_language_support
+
+    if is_javascript():
+        extension = current_language_support().get_test_file_suffix()
+    elif is_java():
         extension = ".java"
     else:
         extension = ".py"
@@ -187,7 +191,12 @@ class TestConfig:
         """
         if self._test_framework is not None:
             return self._test_framework
-        if is_java():
+        # TODO: replace with current_language_support().test_framework when merging main
+        if is_javascript():
+            from codeflash.languages.test_framework import get_js_test_framework_or_default
+
+            self._test_framework = get_js_test_framework_or_default()
+        elif is_java():
             self._test_framework = self._detect_java_test_framework()
         else:
             self._test_framework = "pytest"
