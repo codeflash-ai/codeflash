@@ -50,10 +50,7 @@ class JavaScriptFunctionOptimizer(FunctionOptimizer):
 
         return Success(
             self._build_optimization_context(
-                code_context,
-                self.function_to_optimize.file_path,
-                self.function_to_optimize.language,
-                self.project_root,
+                code_context, self.function_to_optimize.file_path, self.function_to_optimize.language, self.project_root
             )
         )
 
