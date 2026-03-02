@@ -527,23 +527,12 @@ class FunctionOptimizer:
         candidate_behavior_results: TestResults,
         optimization_candidate_index: int,
     ) -> tuple[bool, list[TestDiff]]:
-        original_sqlite = get_run_tmp_file(Path("test_return_values_0.sqlite"))
-        candidate_sqlite = get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite"))
-
-        if original_sqlite.exists() and candidate_sqlite.exists():
-            js_root = self.test_cfg.js_project_root or self.args.project_root
-            match, diffs = self.language_support.compare_test_results(
-                original_sqlite, candidate_sqlite, project_root=js_root
-            )
-            candidate_sqlite.unlink(missing_ok=True)
-        else:
-            match, diffs = compare_test_results(
-                baseline_results.behavior_test_results, candidate_behavior_results, pass_fail_only=True
-            )
-        return match, diffs
+        return compare_test_results(
+            baseline_results.behavior_test_results, candidate_behavior_results, pass_fail_only=True
+        )
 
     def should_skip_sqlite_cleanup(self, testing_type: TestingMode, optimization_iteration: int) -> bool:
-        return testing_type == TestingMode.BEHAVIOR or optimization_iteration == 0
+        return False
 
     def parse_line_profile_test_results(
         self, line_profiler_output_file: Path | None
@@ -1539,6 +1528,9 @@ class FunctionOptimizer:
 
         return new_code, new_helper_code
 
+    # TODO: Move into PythonFunctionOptimizer — this uses the Python-specific replacer.
+    # Currently kept here because PythonFunctionOptimizer.replace_function_and_helpers_with_optimized_code
+    # calls super() to reuse this logic. JS has its own override that bypasses this entirely.
     def replace_function_and_helpers_with_optimized_code(
         self,
         code_context: CodeOptimizationContext,
@@ -2777,45 +2769,6 @@ class FunctionOptimizer:
     def line_profiler_step(
         self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], candidate_index: int
     ) -> dict:
-        if self.language_support is not None and hasattr(self.language_support, "instrument_source_for_line_profiler"):
-            try:
-                line_profiler_output_path = get_run_tmp_file(Path("line_profiler_output.json"))
-                # NOTE: currently this handles single file only, add support to multi file instrumentation (or should it be kept for the main file only)
-                original_source = Path(self.function_to_optimize.file_path).read_text()
-                # Instrument source code
-                success = self.language_support.instrument_source_for_line_profiler(
-                    func_info=self.function_to_optimize, line_profiler_output_file=line_profiler_output_path
-                )
-                if not success:
-                    return {"timings": {}, "unit": 0, "str_out": ""}
-
-                test_env = self.get_test_env(
-                    codeflash_loop_index=0, codeflash_test_iteration=candidate_index, codeflash_tracer_disable=1
-                )
-
-                _test_results, _ = self.run_and_parse_tests(
-                    testing_type=TestingMode.LINE_PROFILE,
-                    test_env=test_env,
-                    test_files=self.test_files,
-                    optimization_iteration=0,
-                    testing_time=TOTAL_LOOPING_TIME_EFFECTIVE,
-                    enable_coverage=False,
-                    code_context=code_context,
-                    line_profiler_output_file=line_profiler_output_path,
-                )
-
-                if not hasattr(self.language_support, "parse_line_profile_results"):
-                    raise ValueError("Language support does not implement parse_line_profile_results")  # noqa: TRY301
-
-                return self.language_support.parse_line_profile_results(line_profiler_output_path)
-            except Exception as e:
-                logger.warning(f"Failed to run line profiling: {e}")
-                return {"timings": {}, "unit": 0, "str_out": ""}
-            finally:
-                # restore original source
-                Path(self.function_to_optimize.file_path).write_text(original_source)
-
-        logger.warning(f"Language support for {self.language_support.language} doesn't support line profiling")
         return {"timings": {}, "unit": 0, "str_out": ""}
 
     def run_concurrency_benchmark(

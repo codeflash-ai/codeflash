@@ -8,6 +8,8 @@ from codeflash.models.models import ValidCode
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from codeflash.verification.verification_utils import TestConfig
+
 
 def prepare_javascript_module(
     original_module_code: str, original_module_path: Path
@@ -42,7 +44,7 @@ def find_js_project_root(file_path: Path) -> Path | None:
     return None
 
 
-def verify_js_requirements(test_cfg) -> None:
+def verify_js_requirements(test_cfg: TestConfig) -> None:
     """Verify JavaScript/TypeScript requirements before optimization.
 
     Checks that Node.js, npm, and the test framework are available.
