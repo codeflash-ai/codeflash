@@ -177,11 +177,10 @@ class PythonFunctionOptimizer(FunctionOptimizer):
             self.write_code_and_helpers(
                 self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
             )
-        if isinstance(line_profile_results, TestResults):
-            if not line_profile_results.test_results:
-                logger.warning(
-                    f"Timeout occurred while running line profiler for original function {self.function_to_optimize.function_name}"
-                )
+        if isinstance(line_profile_results, TestResults) and not line_profile_results.test_results:
+            logger.warning(
+                f"Timeout occurred while running line profiler for original function {self.function_to_optimize.function_name}"
+            )
             return {"timings": {}, "unit": 0, "str_out": ""}
         if line_profile_results["str_out"] == "":
             logger.warning(
