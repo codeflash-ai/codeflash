@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import concurrent.futures
 import dataclasses
 import logging
@@ -73,18 +72,6 @@ from codeflash.languages.base import Language
 from codeflash.languages.current import current_language_support
 from codeflash.languages.javascript.test_runner import clear_created_config_files, get_created_config_files
 from codeflash.languages.python.context import code_context_extractor
-from codeflash.languages.python.context.unused_definition_remover import (
-    detect_unused_helper_functions,
-    revert_unused_helper_functions,
-)
-from codeflash.languages.python.optimizer import resolve_python_function_ast
-from codeflash.languages.python.static_analysis.code_extractor import get_opt_review_metrics, is_numerical_code
-from codeflash.languages.python.static_analysis.code_replacer import (
-    add_custom_marker_to_all_tests,
-    modify_autouse_fixture,
-    replace_function_definitions_in_module,
-)
-from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports, contains_jit_decorator
 from codeflash.lsp.helpers import is_LSP_enabled, is_subagent_mode, report_to_markdown_table, tree_to_markdown
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
@@ -135,6 +122,7 @@ from codeflash.verification.verification_utils import get_test_file_path
 from codeflash.verification.verifier import generate_tests
 
 if TYPE_CHECKING:
+    import ast
     from argparse import Namespace
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -459,13 +447,9 @@ class FunctionOptimizer:
         )
         self.language_support = current_language_support()
         if not function_to_optimize_ast:
-            if not is_python():
-                self.function_to_optimize_ast = None
-            else:
-                original_module_ast = ast.parse(self.function_to_optimize_source_code)
-                self.function_to_optimize_ast = resolve_python_function_ast(
-                    function_to_optimize.function_name, function_to_optimize.parents, original_module_ast
-                )
+            self.function_to_optimize_ast = self._resolve_function_ast(
+                self.function_to_optimize_source_code, function_to_optimize.function_name, function_to_optimize.parents
+            )
         else:
             self.function_to_optimize_ast = function_to_optimize_ast
         self.function_to_tests = function_to_tests if function_to_tests else {}
@@ -501,6 +485,32 @@ class FunctionOptimizer:
         self.adaptive_optimization_counter = 0  # track how many adaptive optimizations we did for each function
         self.is_numerical_code: bool | None = None
         self.code_already_exists: bool = False
+
+    # --- Hooks for language-specific subclasses ---
+
+    def _resolve_function_ast(
+        self, source_code: str, function_name: str, parents: list
+    ) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
+        return None
+
+    def analyze_code_characteristics(self, code_context: CodeOptimizationContext) -> None:
+        pass
+
+    def get_optimization_review_metrics(
+        self,
+        source_code: str,
+        file_path: Path,
+        qualified_name: str,
+        project_root: Path,
+        tests_root: Path,
+        language: Language,
+    ) -> str:
+        return ""
+
+    def instrument_test_fixtures(self, test_paths: list[Path]) -> dict[Path, list[str]] | None:
+        return None
+
+    # --- End hooks ---
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
@@ -655,10 +665,7 @@ class FunctionOptimizer:
 
         original_conftest_content = None
         if self.args.override_fixtures:
-            logger.info("Disabling all autouse fixtures associated with the generated test files")
-            original_conftest_content = modify_autouse_fixture(generated_test_paths + generated_perf_test_paths)
-            logger.info("Add custom marker to generated test files")
-            add_custom_marker_to_all_tests(generated_test_paths + generated_perf_test_paths)
+            original_conftest_content = self.instrument_test_fixtures(generated_test_paths + generated_perf_test_paths)
 
         return Success(
             (
@@ -678,7 +685,7 @@ class FunctionOptimizer:
         if not is_successful(initialization_result):
             return Failure(initialization_result.failure())
         should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
-        self.is_numerical_code = is_numerical_code(code_string=code_context.read_writable_code.flat)
+        self.analyze_code_characteristics(code_context)
         code_print(
             code_context.read_writable_code.flat,
             file_name=self.function_to_optimize.file_path,
@@ -1498,30 +1505,7 @@ class FunctionOptimizer:
         optimized_code: CodeStringsMarkdown,
         original_helper_code: dict[Path, str],
     ) -> bool:
-        did_update = False
-        read_writable_functions_by_file_path = defaultdict(set)
-        read_writable_functions_by_file_path[self.function_to_optimize.file_path].add(
-            self.function_to_optimize.qualified_name
-        )
-        for helper_function in code_context.helper_functions:
-            # Skip class definitions (definition_type may be None for non-Python languages)
-            if helper_function.definition_type != "class":
-                read_writable_functions_by_file_path[helper_function.file_path].add(helper_function.qualified_name)
-        for module_abspath, qualified_names in read_writable_functions_by_file_path.items():
-            did_update |= replace_function_definitions_in_module(
-                function_names=list(qualified_names),
-                optimized_code=optimized_code,
-                module_abspath=module_abspath,
-                preexisting_objects=code_context.preexisting_objects,
-                project_root_path=self.project_root,
-            )
-        unused_helpers = detect_unused_helper_functions(self.function_to_optimize, code_context, optimized_code)
-
-        # Revert unused helper functions to their original definitions
-        if unused_helpers:
-            revert_unused_helper_functions(self.project_root, unused_helpers, original_helper_code)
-
-        return did_update
+        return False
 
     def get_code_optimization_context(self) -> Result[CodeOptimizationContext, str]:
         try:
@@ -1841,7 +1825,7 @@ class FunctionOptimizer:
         )
 
         future_references = self.executor.submit(
-            get_opt_review_metrics,
+            self.get_optimization_review_metrics,
             self.function_to_optimize_source_code,
             self.function_to_optimize.file_path,
             self.function_to_optimize.qualified_name,
@@ -2960,58 +2944,7 @@ class FunctionOptimizer:
     def _line_profiler_step_python(
         self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], candidate_index: int
     ) -> dict:
-        """Python-specific line profiler using decorator imports."""
-        # Check if candidate code contains JIT decorators - line profiler doesn't work with JIT compiled code
-        candidate_fto_code = Path(self.function_to_optimize.file_path).read_text("utf-8")
-        if contains_jit_decorator(candidate_fto_code):
-            logger.info(
-                f"Skipping line profiler for {self.function_to_optimize.function_name} - code contains JIT decorator"
-            )
-            return {"timings": {}, "unit": 0, "str_out": ""}
-
-        # Check helper code for JIT decorators
-        for module_abspath in original_helper_code:
-            candidate_helper_code = Path(module_abspath).read_text("utf-8")
-            if contains_jit_decorator(candidate_helper_code):
-                logger.info(
-                    f"Skipping line profiler for {self.function_to_optimize.function_name} - helper code contains JIT decorator"
-                )
-                return {"timings": {}, "unit": 0, "str_out": ""}
-
-        try:
-            console.rule()
-
-            test_env = self.get_test_env(
-                codeflash_loop_index=0, codeflash_test_iteration=candidate_index, codeflash_tracer_disable=1
-            )
-            line_profiler_output_file = add_decorator_imports(self.function_to_optimize, code_context)
-            line_profile_results, _ = self.run_and_parse_tests(
-                testing_type=TestingMode.LINE_PROFILE,
-                test_env=test_env,
-                test_files=self.test_files,
-                optimization_iteration=0,
-                testing_time=TOTAL_LOOPING_TIME_EFFECTIVE,
-                enable_coverage=False,
-                code_context=code_context,
-                line_profiler_output_file=line_profiler_output_file,
-            )
-        finally:
-            # Remove codeflash capture
-            self.write_code_and_helpers(
-                self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
-            )
-        # this will happen when a timeoutexpired exception happens
-        if isinstance(line_profile_results, TestResults) and not line_profile_results.test_results:
-            logger.warning(
-                f"Timeout occurred while running line profiler for original function {self.function_to_optimize.function_name}"
-            )
-            # set default value for line profiler results
-            return {"timings": {}, "unit": 0, "str_out": ""}
-        if line_profile_results["str_out"] == "":
-            logger.warning(
-                f"Couldn't run line profiler for original function {self.function_to_optimize.function_name}"
-            )
-        return line_profile_results
+        return {"timings": {}, "unit": 0, "str_out": ""}
 
     def run_concurrency_benchmark(
         self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], test_env: dict[str, str]

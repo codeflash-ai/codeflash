@@ -30,7 +30,7 @@ from codeflash.code_utils.git_worktree_utils import (
 )
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.either import is_successful
-from codeflash.languages import current_language_support, is_javascript, set_current_language
+from codeflash.languages import current_language_support, is_javascript, is_python, set_current_language
 from codeflash.lsp.helpers import is_subagent_mode
 from codeflash.models.models import ValidCode
 from codeflash.telemetry.posthog_cf import ph
@@ -277,7 +277,14 @@ class Optimizer:
         ):
             function_specific_timings = function_benchmark_timings[qualified_name_w_module]
 
-        return FunctionOptimizer(
+        if is_python():
+            from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
+
+            cls = PythonFunctionOptimizer
+        else:
+            cls = FunctionOptimizer
+
+        return cls(
             function_to_optimize=function_to_optimize,
             test_cfg=self.test_cfg,
             function_to_optimize_source_code=function_to_optimize_source_code,
