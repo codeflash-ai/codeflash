@@ -25,11 +25,14 @@ from pathlib import Path
 from re import Pattern
 from typing import Any, NamedTuple, Optional, cast
 
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, model_validator
+from pydantic import (BaseModel, ConfigDict, Field, PrivateAttr,
+                      ValidationError, model_validator)
 from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger
-from codeflash.code_utils.code_utils import diff_length, module_name_from_file_path, validate_python_code
+from codeflash.code_utils.code_utils import (diff_length,
+                                             module_name_from_file_path,
+                                             validate_python_code)
 from codeflash.code_utils.env_utils import is_end_to_end
 from codeflash.verification.comparator import comparator
 
@@ -331,12 +334,14 @@ class CodeStringsMarkdown(BaseModel):
             dict[str, str]: Mapping from file path (as string) to code.
 
         """
-        if self._cache.get("file_to_path") is not None:
-            return self._cache["file_to_path"]
-        self._cache["file_to_path"] = {
+        cached = self._cache.get("file_to_path")
+        if cached is not None:
+            return cached
+        result = {
             str(code_string.file_path): code_string.code for code_string in self.code_strings
         }
-        return self._cache["file_to_path"]
+        self._cache["file_to_path"] = result
+        return result
 
     @staticmethod
     def parse_markdown_code(markdown_code: str, expected_language: str = "python") -> CodeStringsMarkdown:

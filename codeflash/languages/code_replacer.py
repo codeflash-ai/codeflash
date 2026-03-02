@@ -28,11 +28,13 @@ def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStrin
             module_optimized_code = file_to_code_context["None"]
             logger.debug(f"Using code block with None file_path for {relative_path}")
         else:
-            logger.warning(
-                f"Optimized code not found for {relative_path} In the context\n-------\n{optimized_code}\n-------\n"
-                "re-check your 'markdown code structure'"
-                f"existing files are {file_to_code_context.keys()}"
-            )
+            # Avoid expensive string formatting when logging is not enabled
+            if logger.isEnabledFor(logger.level):
+                logger.warning(
+                    f"Optimized code not found for {relative_path} In the context\n-------\n{optimized_code}\n-------\n"
+                    "re-check your 'markdown code structure'"
+                    f"existing files are {file_to_code_context.keys()}"
+                )
             module_optimized_code = ""
     return module_optimized_code
 
