@@ -149,15 +149,16 @@ def build_command(
     if config.function_name:
         base_command.extend(["--function", config.function_name])
 
-    # Check if pyproject.toml exists with codeflash config - if so, don't override it
-    pyproject_path = cwd / "pyproject.toml"
-    has_codeflash_config = False
-    if pyproject_path.exists():
-        with contextlib.suppress(Exception), open(pyproject_path, "rb") as f:
-            pyproject_data = tomllib.load(f)
-            has_codeflash_config = "tool" in pyproject_data and "codeflash" in pyproject_data["tool"]
+    # Check if config exists (pyproject.toml or codeflash.toml) - if so, don't override it
+    has_codeflash_config = (cwd / "codeflash.toml").exists()
+    if not has_codeflash_config:
+        pyproject_path = cwd / "pyproject.toml"
+        if pyproject_path.exists():
+            with contextlib.suppress(Exception), open(pyproject_path, "rb") as f:
+                pyproject_data = tomllib.load(f)
+                has_codeflash_config = "tool" in pyproject_data and "codeflash" in pyproject_data["tool"]
 
-    # Only pass --tests-root and --module-root if they're not configured in pyproject.toml
+    # Only pass --tests-root and --module-root if they're not configured in config files
     if not has_codeflash_config:
         base_command.extend(["--tests-root", str(test_root), "--module-root", str(cwd)])
 
