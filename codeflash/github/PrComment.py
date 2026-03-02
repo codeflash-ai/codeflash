@@ -27,7 +27,6 @@ class PrComment:
     def to_json(self) -> dict[str, Union[str, int, dict[str, dict[str, int]], list[BenchmarkDetail], None]]:
         report_table = self.winning_behavior_test_results.get_test_pass_fail_report_by_type_named()
 
-
         json_result: dict[str, Union[str, int, dict[str, dict[str, int]], list[BenchmarkDetail], None]] = {
             "optimization_explanation": self.optimization_explanation,
             "best_runtime": humanize_runtime(self.best_runtime),
