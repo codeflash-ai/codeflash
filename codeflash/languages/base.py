@@ -11,11 +11,13 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
+    import ast
     from collections.abc import Callable, Iterable, Sequence
     from pathlib import Path
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-    from codeflash.models.models import FunctionSource, GeneratedTestsList, InvocationId
+    from codeflash.models.models import FunctionSource, GeneratedTestsList, InvocationId, ValidCode
+    from codeflash.verification.verification_utils import TestConfig
 
 from codeflash.languages.language_enum import Language
 from codeflash.models.function_types import FunctionParent
@@ -637,6 +639,22 @@ class LanguageSupport(Protocol):
         """
         ...
 
+    @property
+    def function_optimizer_class(self) -> type:
+        """Return the FunctionOptimizer subclass for this language."""
+        from codeflash.optimization.function_optimizer import FunctionOptimizer
+
+        return FunctionOptimizer
+
+    def prepare_module(
+        self, module_code: str, module_path: Path, project_root: Path
+    ) -> tuple[dict[Path, ValidCode], ast.Module | None] | None:
+        """Parse/validate a module before optimization."""
+        ...
+
+    def setup_test_config(self, test_cfg: TestConfig, file_path: Path) -> None:
+        """One-time project setup after language detection. Default: no-op."""
+
     # === Configuration ===
 
     def get_test_file_suffix(self) -> str:
@@ -781,6 +799,31 @@ class LanguageSupport(Protocol):
             min_loops: Minimum number of loops for benchmarking.
             max_loops: Maximum number of loops for benchmarking.
             target_duration_seconds: Target duration for benchmarking in seconds.
+
+        Returns:
+            Tuple of (result_file_path, subprocess_result).
+
+        """
+        ...
+
+    def run_line_profile_tests(
+        self,
+        test_paths: Any,
+        test_env: dict[str, str],
+        cwd: Path,
+        timeout: int | None = None,
+        project_root: Path | None = None,
+        line_profile_output_file: Path | None = None,
+    ) -> tuple[Path, Any]:
+        """Run tests for line profiling.
+
+        Args:
+            test_paths: TestFiles object containing test file information.
+            test_env: Environment variables for the test run.
+            cwd: Working directory for running tests.
+            timeout: Optional timeout in seconds.
+            project_root: Project root directory.
+            line_profile_output_file: Path where line profile results will be written.
 
         Returns:
             Tuple of (result_file_path, subprocess_result).

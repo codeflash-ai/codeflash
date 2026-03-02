@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING, Optional, Union
 import libcst as cst
 
 from codeflash.cli_cmds.console import logger
-from codeflash.languages import is_python
+from codeflash.languages import current_language
+from codeflash.languages.base import Language
 from codeflash.languages.python.static_analysis.code_replacer import replace_function_definitions_in_module
 from codeflash.models.models import CodeString, CodeStringsMarkdown
 
@@ -747,7 +748,7 @@ def detect_unused_helper_functions(
 
     """
     # Skip this analysis for non-Python languages since we use Python's ast module
-    if not is_python():
+    if current_language() != Language.PYTHON:
         logger.debug("Skipping unused helper function detection for non-Python languages")
         return []
 

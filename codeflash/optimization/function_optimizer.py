@@ -107,7 +107,6 @@ from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.parse_test_output import parse_concurrency_metrics, parse_test_results
-from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests, run_line_profile_tests
 from codeflash.verification.verification_utils import get_test_file_path
 from codeflash.verification.verifier import generate_tests
 
@@ -484,6 +483,9 @@ class FunctionOptimizer:
         self, source_code: str, function_name: str, parents: list[FunctionParent]
     ) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
         return None
+
+    def requires_function_ast(self) -> bool:
+        return False
 
     def analyze_code_characteristics(self, code_context: CodeOptimizationContext) -> None:
         pass
@@ -2585,40 +2587,36 @@ class FunctionOptimizer:
         coverage_config_file = None
         try:
             if testing_type == TestingMode.BEHAVIOR:
-                result_file_path, run_result, coverage_database_file, coverage_config_file = run_behavioral_tests(
-                    test_files,
-                    test_framework=self.test_cfg.test_framework,
-                    cwd=self.project_root,
-                    test_env=test_env,
-                    pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
-                    enable_coverage=enable_coverage,
-                    js_project_root=self.test_cfg.js_project_root,
-                    candidate_index=optimization_iteration,
+                result_file_path, run_result, coverage_database_file, coverage_config_file = (
+                    self.language_support.run_behavioral_tests(
+                        test_paths=test_files,
+                        test_env=test_env,
+                        cwd=self.project_root,
+                        timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
+                        project_root=self.test_cfg.js_project_root,
+                        enable_coverage=enable_coverage,
+                        candidate_index=optimization_iteration,
+                    )
                 )
             elif testing_type == TestingMode.LINE_PROFILE:
-                result_file_path, run_result = run_line_profile_tests(
-                    test_files,
-                    cwd=self.project_root,
+                result_file_path, run_result = self.language_support.run_line_profile_tests(
+                    test_paths=test_files,
                     test_env=test_env,
-                    pytest_cmd=self.test_cfg.pytest_cmd,
-                    pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
-                    pytest_target_runtime_seconds=testing_time,
-                    test_framework=self.test_cfg.test_framework,
-                    js_project_root=self.test_cfg.js_project_root,
-                    line_profiler_output_file=line_profiler_output_file,
+                    cwd=self.project_root,
+                    timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
+                    project_root=self.test_cfg.js_project_root,
+                    line_profile_output_file=line_profiler_output_file,
                 )
             elif testing_type == TestingMode.PERFORMANCE:
-                result_file_path, run_result = run_benchmarking_tests(
-                    test_files,
-                    cwd=self.project_root,
+                result_file_path, run_result = self.language_support.run_benchmarking_tests(
+                    test_paths=test_files,
                     test_env=test_env,
-                    pytest_cmd=self.test_cfg.pytest_cmd,
-                    pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
-                    pytest_target_runtime_seconds=testing_time,
-                    pytest_min_loops=pytest_min_loops,
-                    pytest_max_loops=pytest_max_loops,
-                    test_framework=self.test_cfg.test_framework,
-                    js_project_root=self.test_cfg.js_project_root,
+                    cwd=self.project_root,
+                    timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
+                    project_root=self.test_cfg.js_project_root,
+                    min_loops=pytest_min_loops,
+                    max_loops=pytest_max_loops,
+                    target_duration_seconds=testing_time,
                 )
             else:
                 msg = f"Unexpected testing type: {testing_type}"

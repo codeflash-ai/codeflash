@@ -23,7 +23,8 @@ if TYPE_CHECKING:
 
     from codeflash.languages.base import ReferenceInfo
     from codeflash.languages.javascript.treesitter import TypeDefinition
-    from codeflash.models.models import GeneratedTestsList, InvocationId
+    from codeflash.models.models import GeneratedTestsList, InvocationId, ValidCode
+    from codeflash.verification.verification_utils import TestConfig
 
 logger = logging.getLogger(__name__)
 
@@ -1908,6 +1909,25 @@ class JavaScriptSupport:
         from codeflash.languages.javascript.comparator import compare_test_results
 
         return compare_test_results(original_results_path, candidate_results_path, project_root=project_root)
+
+    @property
+    def function_optimizer_class(self) -> type:
+        from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
+
+        return JavaScriptFunctionOptimizer
+
+    def prepare_module(
+        self, module_code: str, module_path: Path, project_root: Path
+    ) -> tuple[dict[Path, ValidCode], None]:
+        from codeflash.languages.javascript.optimizer import prepare_javascript_module
+
+        return prepare_javascript_module(module_code, module_path)
+
+    def setup_test_config(self, test_cfg: TestConfig, file_path: Path) -> None:
+        from codeflash.languages.javascript.optimizer import find_js_project_root, verify_js_requirements
+
+        test_cfg.js_project_root = find_js_project_root(file_path)
+        verify_js_requirements(test_cfg)
 
     # === Configuration ===
 

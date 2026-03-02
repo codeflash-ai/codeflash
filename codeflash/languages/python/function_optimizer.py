@@ -57,6 +57,9 @@ class PythonFunctionOptimizer(FunctionOptimizer):
         original_module_ast = ast.parse(source_code)
         return resolve_python_function_ast(function_name, parents, original_module_ast)
 
+    def requires_function_ast(self) -> bool:
+        return True
+
     def analyze_code_characteristics(self, code_context: CodeOptimizationContext) -> None:
         self.is_numerical_code = is_numerical_code(code_string=code_context.read_writable_code.flat)
 

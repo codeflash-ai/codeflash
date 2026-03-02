@@ -19,10 +19,12 @@ from codeflash.languages.base import (
 from codeflash.languages.registry import register_language
 
 if TYPE_CHECKING:
+    import ast
     from collections.abc import Sequence
 
     from codeflash.languages.base import DependencyResolver
-    from codeflash.models.models import FunctionSource, GeneratedTestsList, InvocationId
+    from codeflash.models.models import FunctionSource, GeneratedTestsList, InvocationId, ValidCode
+    from codeflash.verification.verification_utils import TestConfig
 
 logger = logging.getLogger(__name__)
 
@@ -861,8 +863,217 @@ class PythonSupport:
         # Python uses line_profiler which has its own output format
         return {"timings": {}, "unit": 0, "str_out": ""}
 
+    @property
+    def function_optimizer_class(self) -> type:
+        from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
+
+        return PythonFunctionOptimizer
+
+    def prepare_module(
+        self, module_code: str, module_path: Path, project_root: Path
+    ) -> tuple[dict[Path, ValidCode], ast.Module] | None:
+        from codeflash.languages.python.optimizer import prepare_python_module
+
+        return prepare_python_module(module_code, module_path, project_root)
+
+    def setup_test_config(self, test_cfg: TestConfig, file_path: Path) -> None:
+        pass
+
     # === Test Execution (Full Protocol) ===
-    # Note: For Python, test execution is handled by the main test_runner.py
-    # which has special Python-specific logic. These methods are not called
-    # for Python as the test_runner checks is_python() and uses the existing path.
-    # They are defined here only for protocol compliance.
+
+    def run_behavioral_tests(
+        self,
+        test_paths: Any,
+        test_env: dict[str, str],
+        cwd: Path,
+        timeout: int | None = None,
+        project_root: Path | None = None,
+        enable_coverage: bool = False,
+        candidate_index: int = 0,
+    ) -> tuple[Path, Any, Path | None, Path | None]:
+        import contextlib
+        import shlex
+        import sys
+
+        from codeflash.code_utils.code_utils import get_run_tmp_file
+        from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
+        from codeflash.languages.python.static_analysis.coverage_utils import prepare_coverage_files
+        from codeflash.models.models import TestType
+        from codeflash.verification.test_runner import execute_test_subprocess
+
+        blocklisted_plugins = ["benchmark", "codspeed", "xdist", "sugar"]
+
+        test_files: list[str] = []
+        for file in test_paths.test_files:
+            if file.test_type == TestType.REPLAY_TEST:
+                if file.tests_in_file:
+                    test_files.extend(
+                        [
+                            str(file.instrumented_behavior_file_path) + "::" + test.test_function
+                            for test in file.tests_in_file
+                        ]
+                    )
+            else:
+                test_files.append(str(file.instrumented_behavior_file_path))
+
+        pytest_cmd_list = shlex.split(f"{SAFE_SYS_EXECUTABLE} -m pytest", posix=IS_POSIX)
+        test_files = list(set(test_files))
+
+        common_pytest_args = [
+            "--capture=tee-sys",
+            "-q",
+            "--codeflash_loops_scope=session",
+            "--codeflash_min_loops=1",
+            "--codeflash_max_loops=1",
+            "--codeflash_seconds=10.0",
+        ]
+        if timeout is not None:
+            common_pytest_args.append(f"--timeout={timeout}")
+
+        result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
+        result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
+
+        pytest_test_env = test_env.copy()
+        pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
+
+        coverage_database_file: Path | None = None
+        coverage_config_file: Path | None = None
+
+        if enable_coverage:
+            coverage_database_file, coverage_config_file = prepare_coverage_files()
+            pytest_test_env["NUMBA_DISABLE_JIT"] = str(1)
+            pytest_test_env["TORCHDYNAMO_DISABLE"] = str(1)
+            pytest_test_env["PYTORCH_JIT"] = str(0)
+            pytest_test_env["TF_XLA_FLAGS"] = "--tf_xla_auto_jit=0"
+            pytest_test_env["TF_ENABLE_ONEDNN_OPTS"] = str(0)
+            pytest_test_env["JAX_DISABLE_JIT"] = str(0)
+
+            is_windows = sys.platform == "win32"
+            if is_windows:
+                if coverage_database_file.exists():
+                    with contextlib.suppress(PermissionError, OSError):
+                        coverage_database_file.unlink()
+            else:
+                cov_erase = execute_test_subprocess(
+                    shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage erase"), cwd=cwd, env=pytest_test_env, timeout=30
+                )
+                logger.debug(cov_erase)
+            coverage_cmd = [
+                SAFE_SYS_EXECUTABLE,
+                "-m",
+                "coverage",
+                "run",
+                f"--rcfile={coverage_config_file.as_posix()}",
+                "-m",
+                "pytest",
+            ]
+
+            blocklist_args = [f"-p no:{plugin}" for plugin in blocklisted_plugins if plugin != "cov"]
+            results = execute_test_subprocess(
+                coverage_cmd + common_pytest_args + blocklist_args + result_args + test_files,
+                cwd=cwd,
+                env=pytest_test_env,
+                timeout=600,
+            )
+            logger.debug("Result return code: %s, %s", results.returncode, results.stderr or "")
+        else:
+            blocklist_args = [f"-p no:{plugin}" for plugin in blocklisted_plugins]
+
+            results = execute_test_subprocess(
+                pytest_cmd_list + common_pytest_args + blocklist_args + result_args + test_files,
+                cwd=cwd,
+                env=pytest_test_env,
+                timeout=600,
+            )
+            logger.debug("Result return code: %s, %s", results.returncode, results.stderr or "")
+
+        return result_file_path, results, coverage_database_file, coverage_config_file
+
+    def run_benchmarking_tests(
+        self,
+        test_paths: Any,
+        test_env: dict[str, str],
+        cwd: Path,
+        timeout: int | None = None,
+        project_root: Path | None = None,
+        min_loops: int = 5,
+        max_loops: int = 100_000,
+        target_duration_seconds: float = 10.0,
+    ) -> tuple[Path, Any]:
+        import shlex
+
+        from codeflash.code_utils.code_utils import get_run_tmp_file
+        from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
+        from codeflash.verification.test_runner import execute_test_subprocess
+
+        blocklisted_plugins = ["codspeed", "cov", "benchmark", "profiling", "xdist", "sugar"]
+
+        pytest_cmd_list = shlex.split(f"{SAFE_SYS_EXECUTABLE} -m pytest", posix=IS_POSIX)
+        test_files: list[str] = list({str(file.benchmarking_file_path) for file in test_paths.test_files})
+        pytest_args = [
+            "--capture=tee-sys",
+            "-q",
+            "--codeflash_loops_scope=session",
+            f"--codeflash_min_loops={min_loops}",
+            f"--codeflash_max_loops={max_loops}",
+            f"--codeflash_seconds={target_duration_seconds}",
+            "--codeflash_stability_check=true",
+        ]
+        if timeout is not None:
+            pytest_args.append(f"--timeout={timeout}")
+
+        result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
+        result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
+        pytest_test_env = test_env.copy()
+        pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
+        blocklist_args = [f"-p no:{plugin}" for plugin in blocklisted_plugins]
+        results = execute_test_subprocess(
+            pytest_cmd_list + pytest_args + blocklist_args + result_args + test_files,
+            cwd=cwd,
+            env=pytest_test_env,
+            timeout=600,
+        )
+        return result_file_path, results
+
+    def run_line_profile_tests(
+        self,
+        test_paths: Any,
+        test_env: dict[str, str],
+        cwd: Path,
+        timeout: int | None = None,
+        project_root: Path | None = None,
+        line_profile_output_file: Path | None = None,
+    ) -> tuple[Path, Any]:
+        import shlex
+
+        from codeflash.code_utils.code_utils import get_run_tmp_file
+        from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
+        from codeflash.verification.test_runner import execute_test_subprocess
+
+        blocklisted_plugins = ["codspeed", "cov", "benchmark", "profiling", "xdist", "sugar"]
+
+        pytest_cmd_list = shlex.split(f"{SAFE_SYS_EXECUTABLE} -m pytest", posix=IS_POSIX)
+        test_files: list[str] = list({str(file.benchmarking_file_path) for file in test_paths.test_files})
+        pytest_args = [
+            "--capture=tee-sys",
+            "-q",
+            "--codeflash_loops_scope=session",
+            "--codeflash_min_loops=1",
+            "--codeflash_max_loops=1",
+            "--codeflash_seconds=10.0",
+        ]
+        if timeout is not None:
+            pytest_args.append(f"--timeout={timeout}")
+        result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
+        result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
+        pytest_test_env = test_env.copy()
+        pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
+        blocklist_args = [f"-p no:{plugin}" for plugin in blocklisted_plugins]
+        pytest_test_env["LINE_PROFILE"] = "1"
+        results = execute_test_subprocess(
+            pytest_cmd_list + pytest_args + blocklist_args + result_args + test_files,
+            cwd=cwd,
+            env=pytest_test_env,
+            timeout=600,
+        )
+        return result_file_path, results

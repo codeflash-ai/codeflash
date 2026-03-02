@@ -12,7 +12,8 @@ from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.shell_utils import make_env_with_project_root
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
-from codeflash.languages import is_python
+from codeflash.languages import current_language
+from codeflash.languages.base import Language
 from codeflash.languages.python.static_analysis.concolic_utils import clean_concolic_tests, is_valid_concolic_test
 from codeflash.languages.python.static_analysis.static_analysis import has_typed_parameters
 from codeflash.lsp.helpers import is_LSP_enabled
@@ -51,7 +52,7 @@ def generate_concolic_tests(
     concolic_test_suite_code = ""
 
     # CrossHair is Python-only - skip for other languages
-    if not is_python():
+    if current_language() != Language.PYTHON:
         logger.debug("Skipping concolic test generation for non-Python languages (CrossHair is Python-only)")
         return function_to_concolic_tests, concolic_test_suite_code
 

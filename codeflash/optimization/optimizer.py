@@ -29,7 +29,7 @@ from codeflash.code_utils.git_worktree_utils import (
 )
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.either import is_successful
-from codeflash.languages import current_language_support, is_javascript, is_python, set_current_language
+from codeflash.languages import current_language_support, set_current_language
 from codeflash.lsp.helpers import is_subagent_mode
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.verification_utils import TestConfig
@@ -195,8 +195,6 @@ class Optimizer:
         total_benchmark_timings: dict[BenchmarkKey, float] | None = None,
         call_graph: DependencyResolver | None = None,
     ) -> FunctionOptimizer | None:
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
-
         qualified_name_w_module = function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root)
 
         function_specific_timings = None
@@ -209,16 +207,7 @@ class Optimizer:
         ):
             function_specific_timings = function_benchmark_timings[qualified_name_w_module]
 
-        if is_python():
-            from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
-
-            cls = PythonFunctionOptimizer
-        elif is_javascript():
-            from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
-
-            cls = JavaScriptFunctionOptimizer
-        else:
-            cls = FunctionOptimizer
+        cls = current_language_support().function_optimizer_class
 
         # TODO: _resolve_function_ast re-parses source via ast.parse() per function, even when the caller already
         # has a parsed module AST. Consider passing the pre-parsed AST through to avoid redundant parsing.
@@ -235,7 +224,7 @@ class Optimizer:
             replay_tests_dir=self.replay_tests_dir,
             call_graph=call_graph,
         )
-        if function_optimizer.function_to_optimize_ast is None and is_python():
+        if function_optimizer.function_to_optimize_ast is None and function_optimizer.requires_function_ast():
             logger.info(
                 f"Function {function_to_optimize.qualified_name} not found in "
                 f"{function_to_optimize.file_path}.\nSkipping optimization."
@@ -251,14 +240,9 @@ class Optimizer:
 
         original_module_code: str = original_module_path.read_text(encoding="utf8")
 
-        if is_javascript():
-            from codeflash.languages.javascript.optimizer import prepare_javascript_module
-
-            return prepare_javascript_module(original_module_code, original_module_path)
-
-        from codeflash.languages.python.optimizer import prepare_python_module
-
-        return prepare_python_module(original_module_code, original_module_path, self.args.project_root)
+        return current_language_support().prepare_module(
+            original_module_code, original_module_path, self.args.project_root
+        )
 
     def discover_tests(
         self, file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]
@@ -468,14 +452,7 @@ class Optimizer:
                 if funcs and funcs[0].language:
                     set_current_language(funcs[0].language)
                     self.test_cfg.set_language(funcs[0].language)
-                    if is_javascript():
-                        from codeflash.languages.javascript.optimizer import (
-                            find_js_project_root,
-                            verify_js_requirements,
-                        )
-
-                        self.test_cfg.js_project_root = find_js_project_root(file_path)
-                        verify_js_requirements(self.test_cfg)
+                    current_language_support().setup_test_config(self.test_cfg, file_path)
                     break
 
         if self.args.all:
