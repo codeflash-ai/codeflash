@@ -1565,6 +1565,8 @@ class FunctionOptimizer:
             )
         return did_update
 
+    # TODO: Extract into PythonFunctionOptimizer — code_context_extractor is Python-only.
+    # Needs a JS context extractor equivalent first.
     def get_code_optimization_context(self) -> Result[CodeOptimizationContext, str]:
         try:
             new_code_ctx = code_context_extractor.get_code_optimization_context(
