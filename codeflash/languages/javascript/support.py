@@ -1745,6 +1745,11 @@ class JavaScriptSupport:
                 normalized_lines.append(stripped)
         return "\n".join(normalized_lines)
 
+    def generate_concolic_tests(
+        self, test_cfg: Any, project_root: Any, function_to_optimize: Any, function_to_optimize_ast: Any
+    ) -> tuple[dict, str]:
+        return {}, ""
+
     # === Test Editing ===
 
     def add_runtime_comments(
