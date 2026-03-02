@@ -15,7 +15,7 @@ from codeflash.languages.java.comparator import compare_test_results as _compare
 from codeflash.languages.java.concurrency_analyzer import analyze_function_concurrency
 from codeflash.languages.java.config import detect_java_project
 from codeflash.languages.java.context import extract_code_context, find_helper_functions
-from codeflash.languages.java.discovery import discover_functions, discover_functions_from_source
+from codeflash.languages.java.discovery import discover_functions_from_source
 from codeflash.languages.java.formatter import format_java_code, normalize_java_code
 from codeflash.languages.java.instrumentation import (
     instrument_existing_test,
@@ -105,10 +105,10 @@ class JavaSupport(LanguageSupport):
     # === Discovery ===
 
     def discover_functions(
-        self, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
+        self, source: str, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
     ) -> list[FunctionToOptimize]:
         """Find all optimizable functions in a Java file."""
-        return discover_functions(file_path, filter_criteria, self._analyzer)
+        return discover_functions_from_source(source, file_path, filter_criteria, self._analyzer)
 
     def discover_functions_from_source(
         self, source: str, file_path: Path | None = None, filter_criteria: FunctionFilterCriteria | None = None
