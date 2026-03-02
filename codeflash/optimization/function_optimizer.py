@@ -2921,13 +2921,10 @@ class FunctionOptimizer:
                     testing_time=total_looping_time,
                     enable_coverage=False,
                 )
-            # Remove instrumentation
             finally:
-                # Only restore code for Python - non-Python tests are self-contained
-                if is_python():
-                    self.write_code_and_helpers(
-                        candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
-                    )
+                self.write_code_and_helpers(
+                    candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
+                )
             console.print(
                 TestResults.report_to_tree(
                     candidate_behavior_results.get_test_pass_fail_report_by_type(),
@@ -3013,8 +3010,7 @@ class FunctionOptimizer:
                     enable_coverage=False,
                 )
             finally:
-                # Restore original source if we instrumented it
-                if self.function_to_optimize.is_async and is_python():
+                if self.function_to_optimize.is_async:
                     self.write_code_and_helpers(
                         candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
                     )
