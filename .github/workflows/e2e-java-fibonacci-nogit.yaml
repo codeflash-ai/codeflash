@@ -1,0 +1,105 @@
+name: E2E - Java Fibonacci (No Git)
+
+on:
+  pull_request:
+    paths:
+      - 'codeflash/languages/java/**'
+      - 'codeflash/languages/base.py'
+      - 'codeflash/languages/registry.py'
+      - 'codeflash/optimization/**'
+      - 'codeflash/verification/**'
+      - 'code_to_optimize/java/**'
+      - 'codeflash-java-runtime/**'
+      - 'tests/scripts/end_to_end_test_java_fibonacci.py'
+      - '.github/workflows/e2e-java-fibonacci-nogit.yaml'
+
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  java-fibonacci-optimization-no-git:
+    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_AIS_SERVER: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+      COLUMNS: 110
+      MAX_RETRIES: 3
+      RETRY_DELAY: 5
+      EXPECTED_IMPROVEMENT_PCT: 70
+      CODEFLASH_END_TO_END: 1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate PR
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_STATE: ${{ github.event.pull_request.state }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -q "^.github/workflows/"; then
+            echo "⚠️ Workflow changes detected."
+            echo "PR Author: $PR_AUTHOR"
+            if [[ "$PR_AUTHOR" == "misrasaurabh1" || "$PR_AUTHOR" == "KRRT7" ]]; then
+              echo "✅ Authorized user ($PR_AUTHOR). Proceeding."
+            elif [[ "$PR_STATE" == "open" ]]; then
+              echo "✅ PR is open. Proceeding."
+            else
+              echo "⛔ Unauthorized user ($PR_AUTHOR) attempting to modify workflows. Exiting."
+              exit 1
+            fi
+          else
+            echo "✅ No workflow file changes detected. Proceeding."
+          fi
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Set up Python 3.11 for CLI
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: 3.11.6
+
+      - name: Install dependencies (CLI)
+        run: uv sync
+
+      - name: Build codeflash-runtime JAR
+        run: |
+          cd codeflash-java-runtime
+          mvn clean package -q -DskipTests
+          mvn install -q -DskipTests
+
+      - name: Verify Java installation
+        run: |
+          java -version
+          mvn --version
+
+      - name: Remove .git
+        run: |
+          if [ -d ".git" ]; then
+            sudo rm -rf .git
+            echo ".git directory removed."
+          else
+            echo ".git directory does not exist."
+            exit 1
+          fi
+
+      - name: Run Codeflash to optimize Fibonacci
+        run: |
+          uv run python tests/scripts/end_to_end_test_java_fibonacci.py

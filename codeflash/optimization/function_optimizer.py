@@ -65,6 +65,7 @@ from codeflash.code_utils.shell_utils import make_env_with_project_root
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
 from codeflash.either import Failure, Success, is_successful
+from codeflash.languages import is_java
 from codeflash.languages.base import Language
 from codeflash.languages.current import current_language_support
 from codeflash.languages.javascript.test_runner import clear_created_config_files, get_created_config_files
@@ -527,9 +528,7 @@ class FunctionOptimizer:
         candidate_behavior_results: TestResults,
         optimization_candidate_index: int,
     ) -> tuple[bool, list[TestDiff]]:
-        return compare_test_results(
-            baseline_results.behavior_test_results, candidate_behavior_results, pass_fail_only=True
-        )
+        return compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
 
     def should_skip_sqlite_cleanup(self, testing_type: TestingMode, optimization_iteration: int) -> bool:
         return False
@@ -642,7 +641,21 @@ class FunctionOptimizer:
         )
 
         logger.debug(f"[PIPELINE] Processing {count_tests} generated tests")
+        used_behavior_paths: set[Path] = set()
         for i, generated_test in enumerate(generated_tests.generated_tests):
+            # For Java, fix paths to match package structure
+            if is_java():
+                behavior_path, perf_path, modified_behavior_source, modified_perf_source = self._fix_java_test_paths(
+                    generated_test.instrumented_behavior_test_source,
+                    generated_test.instrumented_perf_test_source,
+                    used_behavior_paths,
+                )
+                generated_test.behavior_file_path = behavior_path
+                generated_test.perf_file_path = perf_path
+                generated_test.instrumented_behavior_test_source = modified_behavior_source
+                generated_test.instrumented_perf_test_source = modified_perf_source
+                used_behavior_paths.add(behavior_path)
+
             logger.debug(
                 f"[PIPELINE] Test {i + 1}: behavior_path={generated_test.behavior_file_path}, perf_path={generated_test.perf_file_path}"
             )
@@ -707,6 +720,111 @@ class FunctionOptimizer:
                 original_conftest_content,
             )
         )
+
+    def _get_java_sources_root(self) -> Path:
+        tests_root = self.test_cfg.tests_root
+        parts = tests_root.parts
+        if tests_root.name == "src":
+            return tests_root
+        if len(parts) >= 3 and parts[-3:] == ("src", "test", "java"):
+            return tests_root
+        src_subdir = tests_root / "src"
+        if src_subdir.exists() and src_subdir.is_dir():
+            return src_subdir
+        maven_test_dir = tests_root / "src" / "test" / "java"
+        if maven_test_dir.exists() and maven_test_dir.is_dir():
+            return maven_test_dir
+        standard_package_prefixes = ("com", "org", "net", "io", "edu", "gov")
+        for i, part in enumerate(parts):
+            if part in standard_package_prefixes and i > 0:
+                return Path(*parts[:i])
+        for i, part in enumerate(parts):
+            if part == "java" and i > 0:
+                return Path(*parts[: i + 1])
+        return tests_root
+
+    def _fix_java_test_paths(
+        self, behavior_source: str, perf_source: str, used_paths: set[Path]
+    ) -> tuple[Path, Path, str, str]:
+        import re
+
+        package_match = re.search(r"^\s*package\s+([\w.]+)\s*;", behavior_source, re.MULTILINE)
+        package_name = package_match.group(1) if package_match else ""
+
+        test_dir = self._get_java_sources_root()
+        test_module_info = test_dir / "module-info.java"
+        if package_name and test_module_info.exists():
+            mi_content = test_module_info.read_text()
+            mi_match = re.search(r"module\s+([\w.]+)", mi_content)
+            if mi_match:
+                test_module_name = mi_match.group(1)
+                main_dir = test_dir.parent.parent / "main" / "java"
+                main_module_info = main_dir / "module-info.java"
+                if main_module_info.exists():
+                    main_content = main_module_info.read_text()
+                    main_match = re.search(r"module\s+([\w.]+)", main_content)
+                    if main_match:
+                        main_module_name = main_match.group(1)
+                        if package_name.startswith(main_module_name):
+                            suffix = package_name[len(main_module_name) :]
+                            new_package = test_module_name + suffix
+                            old_decl = f"package {package_name};"
+                            new_decl = f"package {new_package};"
+                            behavior_source = behavior_source.replace(old_decl, new_decl, 1)
+                            perf_source = perf_source.replace(old_decl, new_decl, 1)
+                            package_name = new_package
+
+        class_match = re.search(r"^(?:public\s+)?class\s+(\w+)", behavior_source, re.MULTILINE)
+        behavior_class = class_match.group(1) if class_match else "GeneratedTest"
+        perf_class_match = re.search(r"^(?:public\s+)?class\s+(\w+)", perf_source, re.MULTILINE)
+        perf_class = perf_class_match.group(1) if perf_class_match else "GeneratedPerfTest"
+
+        test_dir = self._get_java_sources_root()
+        if package_name:
+            package_path = package_name.replace(".", "/")
+            behavior_path = test_dir / package_path / f"{behavior_class}.java"
+            perf_path = test_dir / package_path / f"{perf_class}.java"
+        else:
+            package_path = ""
+            behavior_path = test_dir / f"{behavior_class}.java"
+            perf_path = test_dir / f"{perf_class}.java"
+
+        modified_behavior_source = behavior_source
+        modified_perf_source = perf_source
+        if behavior_path in used_paths or behavior_path.exists():
+            index = 2
+            while True:
+                new_behavior_class = f"{behavior_class}_{index}"
+                new_perf_class = f"{perf_class}_{index}"
+                if package_path:
+                    new_behavior_path = test_dir / package_path / f"{new_behavior_class}.java"
+                    new_perf_path = test_dir / package_path / f"{new_perf_class}.java"
+                else:
+                    new_behavior_path = test_dir / f"{new_behavior_class}.java"
+                    new_perf_path = test_dir / f"{new_perf_class}.java"
+                if new_behavior_path not in used_paths and not new_behavior_path.exists():
+                    behavior_path = new_behavior_path
+                    perf_path = new_perf_path
+                    modified_behavior_source = re.sub(
+                        rf"^((?:public\s+)?class\s+){re.escape(behavior_class)}(\b)",
+                        rf"\g<1>{new_behavior_class}\g<2>",
+                        behavior_source,
+                        count=1,
+                        flags=re.MULTILINE,
+                    )
+                    modified_perf_source = re.sub(
+                        rf"^((?:public\s+)?class\s+){re.escape(perf_class)}(\b)",
+                        rf"\g<1>{new_perf_class}\g<2>",
+                        perf_source,
+                        count=1,
+                        flags=re.MULTILINE,
+                    )
+                    break
+                index += 1
+
+        behavior_path.parent.mkdir(parents=True, exist_ok=True)
+        perf_path.parent.mkdir(parents=True, exist_ok=True)
+        return behavior_path, perf_path, modified_behavior_source, modified_perf_source
 
     # note: this isn't called by the lsp, only called by cli
     def optimize_function(self) -> Result[BestOptimization, str]:
@@ -1596,24 +1714,27 @@ class FunctionOptimizer:
 
         for (test_file, test_type), tests_in_file_list in test_file_invocation_positions.items():
             path_obj_test_file = Path(test_file)
+            test_string = path_obj_test_file.read_text(encoding="utf-8")
             # Use language-specific instrumentation
             success, injected_behavior_test = self.language_support.instrument_existing_test(
-                test_path=path_obj_test_file,
+                test_string=test_string,
                 call_positions=[test.position for test in tests_in_file_list],
                 function_to_optimize=self.function_to_optimize,
                 tests_project_root=self.test_cfg.tests_project_rootdir,
                 mode="behavior",
+                test_path=path_obj_test_file,
             )
             if not success:
                 logger.debug(f"Failed to instrument test file {test_file} for behavior testing")
                 continue
 
             success, injected_perf_test = self.language_support.instrument_existing_test(
-                test_path=path_obj_test_file,
+                test_string=test_string,
                 call_positions=[test.position for test in tests_in_file_list],
                 function_to_optimize=self.function_to_optimize,
                 tests_project_root=self.test_cfg.tests_project_rootdir,
                 mode="performance",
+                test_path=path_obj_test_file,
             )
             if not success:
                 logger.debug(f"Failed to instrument test file {test_file} for performance testing")
@@ -1636,8 +1757,19 @@ class FunctionOptimizer:
 
                 return path_obj.parent / f"{new_stem}{ext}"
 
-            new_behavioral_test_path = get_instrumented_path(test_file, "__perfinstrumented")
-            new_perf_test_path = get_instrumented_path(test_file, "__perfonlyinstrumented")
+            new_behavioral_test_path = get_instrumented_path(test_file, "__existing_perfinstrumented")
+            new_perf_test_path = get_instrumented_path(test_file, "__existing_perfonlyinstrumented")
+
+            # For Java, the class name inside the file must match the file name.
+            if is_java():
+                if injected_behavior_test is not None:
+                    injected_behavior_test = injected_behavior_test.replace(
+                        "__perfinstrumented", "__existing_perfinstrumented"
+                    )
+                if injected_perf_test is not None:
+                    injected_perf_test = injected_perf_test.replace(
+                        "__perfonlyinstrumented", "__existing_perfonlyinstrumented"
+                    )
 
             if injected_behavior_test is not None:
                 with new_behavioral_test_path.open("w", encoding="utf8") as _f:
@@ -2378,6 +2510,9 @@ class FunctionOptimizer:
             return Failure("Failed to establish a baseline for the original code.")
 
         loop_count = benchmarking_results.effective_loop_count()
+        # For Java performance mode, loop indices are 0-indexed so add 1 for display
+        if is_java():
+            loop_count += 1
         logger.info(
             f"h3|⌚ Original code summed runtime measured over '{loop_count}' loop{'s' if loop_count > 1 else ''}: "
             f"'{humanize_runtime(total_timing)}' per full loop"
@@ -2553,6 +2688,9 @@ class FunctionOptimizer:
             # across all test cases. This is more accurate for JavaScript tests where
             # capturePerf does internal looping with potentially different iteration counts per test.
             loop_count = candidate_benchmarking_results.effective_loop_count()
+            # For Java performance mode, loop indices are 0-indexed so add 1 for display
+            if is_java():
+                loop_count += 1
 
             if (total_candidate_timing := candidate_benchmarking_results.total_passed_runtime()) == 0:
                 logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
@@ -2612,7 +2750,7 @@ class FunctionOptimizer:
                         test_env=test_env,
                         cwd=self.project_root,
                         timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
-                        project_root=self.test_cfg.js_project_root,
+                        project_root=self.test_cfg.js_project_root or self.project_root,
                         enable_coverage=enable_coverage,
                         candidate_index=optimization_iteration,
                     )
@@ -2623,7 +2761,7 @@ class FunctionOptimizer:
                     test_env=test_env,
                     cwd=self.project_root,
                     timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
-                    project_root=self.test_cfg.js_project_root,
+                    project_root=self.test_cfg.js_project_root or self.project_root,
                     line_profile_output_file=line_profiler_output_file,
                 )
             elif testing_type == TestingMode.PERFORMANCE:
@@ -2632,7 +2770,7 @@ class FunctionOptimizer:
                     test_env=test_env,
                     cwd=self.project_root,
                     timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
-                    project_root=self.test_cfg.js_project_root,
+                    project_root=self.test_cfg.js_project_root or self.project_root,
                     min_loops=pytest_min_loops,
                     max_loops=pytest_max_loops,
                     target_duration_seconds=testing_time,
@@ -2681,6 +2819,7 @@ class FunctionOptimizer:
                 coverage_database_file=coverage_database_file,
                 coverage_config_file=coverage_config_file,
                 skip_sqlite_cleanup=skip_cleanup,
+                testing_type=testing_type,
             )
             if testing_type == TestingMode.PERFORMANCE:
                 results.perf_stdout = run_result.stdout

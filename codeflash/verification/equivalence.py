@@ -27,9 +27,7 @@ def safe_repr(obj: object) -> str:
         return f"<repr failed: {type(e).__name__}: {e}>"
 
 
-def compare_test_results(
-    original_results: TestResults, candidate_results: TestResults, pass_fail_only: bool = False
-) -> tuple[bool, list[TestDiff]]:
+def compare_test_results(original_results: TestResults, candidate_results: TestResults) -> tuple[bool, list[TestDiff]]:
     # This is meant to be only called with test results for the first loop index
     if len(original_results) == 0 or len(candidate_results) == 0:
         return False, []  # empty test results are not equal
@@ -102,9 +100,7 @@ def compare_test_results(
                 )
             )
 
-        elif not pass_fail_only and not comparator(
-            original_test_result.return_value, cdd_test_result.return_value, superset_obj=superset_obj
-        ):
+        elif not comparator(original_test_result.return_value, cdd_test_result.return_value, superset_obj=superset_obj):
             test_diffs.append(
                 TestDiff(
                     scope=TestDiffScope.RETURN_VALUE,
@@ -129,10 +125,8 @@ def compare_test_results(
                 )
             except Exception as e:
                 logger.error(e)
-        elif (
-            not pass_fail_only
-            and (original_test_result.stdout and cdd_test_result.stdout)
-            and not comparator(original_test_result.stdout, cdd_test_result.stdout)
+        elif (original_test_result.stdout and cdd_test_result.stdout) and not comparator(
+            original_test_result.stdout, cdd_test_result.stdout
         ):
             test_diffs.append(
                 TestDiff(

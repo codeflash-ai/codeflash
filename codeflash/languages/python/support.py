@@ -900,20 +900,22 @@ class PythonSupport:
 
     def instrument_existing_test(
         self,
-        test_path: Path,
+        test_string: str,
         call_positions: Sequence[Any],
         function_to_optimize: Any,
         tests_project_root: Path,
         mode: str,
+        test_path: Path | None = None,
     ) -> tuple[bool, str | None]:
         """Inject profiling code into an existing Python test file.
 
         Args:
-            test_path: Path to the test file.
+            test_string: String containing the test file contents.
             call_positions: List of code positions where the function is called.
             function_to_optimize: The function being optimized.
             tests_project_root: Root directory of tests.
             mode: Testing mode - "behavior" or "performance".
+            test_path: Path to the test file.
 
         Returns:
             Tuple of (success, instrumented_code).
@@ -925,6 +927,7 @@ class PythonSupport:
         testing_mode = TestingMode.BEHAVIOR if mode == "behavior" else TestingMode.PERFORMANCE
 
         return inject_profiling_into_existing_test(
+            test_string=test_string,
             test_path=test_path,
             call_positions=list(call_positions),
             function_to_optimize=function_to_optimize,

@@ -6,7 +6,7 @@ from typing import Optional
 
 from pydantic.dataclasses import dataclass
 
-from codeflash.languages import current_language_support
+from codeflash.languages import current_language_support, is_java
 
 
 def get_test_file_path(
@@ -14,25 +14,30 @@ def get_test_file_path(
     function_name: str,
     iteration: int = 0,
     test_type: str = "unit",
+    package_name: str | None = None,
+    class_name: str | None = None,
     source_file_path: Path | None = None,
 ) -> Path:
     assert test_type in {"unit", "inspired", "replay", "perf"}
-    function_name = function_name.replace(".", "_")
-    # Use appropriate file extension based on language
+    function_name_safe = function_name.replace(".", "_")
     extension = current_language_support().get_test_file_suffix()
 
-    # For JavaScript/TypeScript, place generated tests in a subdirectory that matches
-    # Vitest/Jest include patterns (e.g., test/**/*.test.ts)
-    # if is_javascript():
-    #     # For monorepos, first try to find the package directory from the source file path
-    #     # e.g., packages/workflow/src/utils.ts -> packages/workflow/test/codeflash-generated/
-    #     package_test_dir = _find_js_package_test_dir(test_dir, source_file_path)
-    #     if package_test_dir:
-    #         test_dir = package_test_dir
+    if is_java() and package_name:
+        package_path = package_name.replace(".", "/")
+        java_class_name = class_name or f"{function_name_safe.title()}Test"
+        if test_type == "perf":
+            java_class_name = f"{java_class_name}__perfonlyinstrumented"
+        elif test_type == "unit":
+            java_class_name = f"{java_class_name}__perfinstrumented"
+        path = test_dir / package_path / f"{java_class_name}{extension}"
+        path.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        path = test_dir / f"test_{function_name_safe}__{test_type}_test_{iteration}{extension}"
 
-    path = test_dir / f"test_{function_name}__{test_type}_test_{iteration}{extension}"
     if path.exists():
-        return get_test_file_path(test_dir, function_name, iteration + 1, test_type, source_file_path)
+        return get_test_file_path(
+            test_dir, function_name, iteration + 1, test_type, package_name, class_name, source_file_path
+        )
     return path
 
 

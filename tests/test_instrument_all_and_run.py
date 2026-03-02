@@ -116,7 +116,7 @@ def test_sort():
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path(fto_path))
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(6, 13), CodePosition(10, 13)], func, project_root_path, mode=TestingMode.BEHAVIOR
+            code, test_path, [CodePosition(6, 13), CodePosition(10, 13)], func, project_root_path, mode=TestingMode.BEHAVIOR
         )
         os.chdir(original_cwd)
         assert success
@@ -287,7 +287,7 @@ def test_sort():
         tmp_test_path.write_text(code, encoding="utf-8")
 
         success, new_test = inject_profiling_into_existing_test(
-            tmp_test_path, [CodePosition(7, 13), CodePosition(12, 13)], fto, tmp_test_path.parent
+            code, tmp_test_path, [CodePosition(7, 13), CodePosition(12, 13)], fto, tmp_test_path.parent
         )
     assert success
     assert new_test.replace('"', "'") == expected.format(
@@ -557,7 +557,7 @@ def test_sort():
         tmp_test_path.write_text(code, encoding="utf-8")
 
         success, new_test = inject_profiling_into_existing_test(
-            tmp_test_path, [CodePosition(6, 13), CodePosition(10, 13)], fto, tmp_test_path.parent
+            code, tmp_test_path, [CodePosition(6, 13), CodePosition(10, 13)], fto, tmp_test_path.parent
         )
     assert success
     assert new_test.replace('"', "'") == expected.format(
@@ -728,7 +728,7 @@ def test_sort():
         tmp_test_path.write_text(code, encoding="utf-8")
 
         success, new_test = inject_profiling_into_existing_test(
-            tmp_test_path, [CodePosition(6, 13), CodePosition(10, 13)], fto, tmp_test_path.parent
+            code, tmp_test_path, [CodePosition(6, 13), CodePosition(10, 13)], fto, tmp_test_path.parent
         )
     assert success
     assert new_test.replace('"', "'") == expected.format(

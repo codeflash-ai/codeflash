@@ -705,7 +705,7 @@ def tabulate(
     # format rows and columns, convert numeric values to strings
     cols = list(izip_longest(*list_of_lists))
     numparses = _expand_numparse(disable_numparse, len(cols))
-    coltypes = [_column_type(col, numparse=np) for col, np in zip(cols, numparses)]
+    coltypes = [_column_type(col, has_invisible, numparse=np) for col, np in zip(cols, numparses)]
     if isinstance(floatfmt, str):  # old version
         float_formats = len(cols) * [floatfmt]  # just duplicate the string to use in each column
     else:  # if floatfmt is list, tuple etc we have one per column
