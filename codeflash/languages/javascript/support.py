@@ -80,6 +80,21 @@ class JavaScriptSupport:
     def test_result_serialization_format(self) -> str:
         return "json"
 
+    def parse_test_xml(
+        self, test_xml_file_path: Path, test_files: Any, test_config: Any, run_result: Any = None
+    ) -> Any:
+        from codeflash.languages.javascript.parse import parse_jest_test_xml
+        from codeflash.verification.parse_test_output import parse_func, resolve_test_file_from_class_path
+
+        return parse_jest_test_xml(
+            test_xml_file_path,
+            test_files,
+            test_config,
+            run_result,
+            parse_func=parse_func,
+            resolve_test_file_from_class_path=resolve_test_file_from_class_path,
+        )
+
     def load_coverage(
         self,
         coverage_database_file: Path,
@@ -1973,6 +1988,73 @@ class JavaScriptSupport:
 
         """
         return ".test.js"
+
+    def get_test_dir_for_source(self, test_dir: Path, source_file: Path | None) -> Path | None:
+        """Find the appropriate test directory for a JavaScript/TypeScript package.
+
+        For monorepos, this finds the package's test directory from the source file path.
+        For example: packages/workflow/src/utils.ts -> packages/workflow/test/codeflash-generated/
+
+        Args:
+            test_dir: The root tests directory (may be monorepo packages root).
+            source_file: Path to the source file being tested.
+
+        Returns:
+            The test directory path, or None if not found.
+
+        """
+        if source_file is None:
+            # No source path provided, check if test_dir itself has a test subdirectory
+            for test_subdir_name in ["test", "tests", "__tests__", "src/__tests__"]:
+                test_subdir = test_dir / test_subdir_name
+                if test_subdir.is_dir():
+                    codeflash_test_dir = test_subdir / "codeflash-generated"
+                    codeflash_test_dir.mkdir(parents=True, exist_ok=True)
+                    return codeflash_test_dir
+            return None
+
+        try:
+            # Resolve paths for reliable comparison
+            tests_root = test_dir.resolve()
+            source_path = Path(source_file).resolve()
+
+            # Walk up from the source file to find a directory with package.json or test/ folder
+            package_dir = None
+
+            for parent in source_path.parents:
+                # Stop if we've gone above or reached the tests_root level
+                # For monorepos, tests_root might be /packages/ and we want to search within packages
+                if parent in (tests_root, tests_root.parent):
+                    break
+
+                # Check if this looks like a package root
+                has_package_json = (parent / "package.json").exists()
+                has_test_dir = any((parent / d).is_dir() for d in ["test", "tests", "__tests__"])
+
+                if has_package_json or has_test_dir:
+                    package_dir = parent
+                    break
+
+            if package_dir:
+                # Find the test directory in this package
+                for test_subdir_name in ["test", "tests", "__tests__", "src/__tests__"]:
+                    test_subdir = package_dir / test_subdir_name
+                    if test_subdir.is_dir():
+                        codeflash_test_dir = test_subdir / "codeflash-generated"
+                        codeflash_test_dir.mkdir(parents=True, exist_ok=True)
+                        return codeflash_test_dir
+
+            return None
+        except Exception:
+            return None
+
+    def resolve_test_file_from_class_path(self, test_class_path: str, base_dir: Path) -> Path | None:
+        return None
+
+    def resolve_test_module_path_for_pr(
+        self, test_module_path: str, tests_project_rootdir: Path, non_generated_tests: set[Path]
+    ) -> Path | None:
+        return None
 
     def find_test_root(self, project_root: Path) -> Path | None:
         """Find the test root directory for a JavaScript project.

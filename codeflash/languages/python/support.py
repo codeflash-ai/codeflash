@@ -191,6 +191,13 @@ class PythonSupport:
     def test_result_serialization_format(self) -> str:
         return "pickle"
 
+    def parse_test_xml(
+        self, test_xml_file_path: Path, test_files: Any, test_config: Any, run_result: Any = None
+    ) -> Any:
+        from codeflash.languages.python.parse_xml import parse_python_test_xml
+
+        return parse_python_test_xml(test_xml_file_path, test_files, test_config, run_result)
+
     def load_coverage(
         self,
         coverage_database_file: Path,
@@ -824,6 +831,17 @@ class PythonSupport:
 
         """
         return ".py"
+
+    def get_test_dir_for_source(self, test_dir: Path, source_file: Path | None) -> Path | None:
+        return None
+
+    def resolve_test_file_from_class_path(self, test_class_path: str, base_dir: Path) -> Path | None:
+        return None
+
+    def resolve_test_module_path_for_pr(
+        self, test_module_path: str, tests_project_rootdir: Path, non_generated_tests: set[Path]
+    ) -> Path | None:
+        return None
 
     def find_test_root(self, project_root: Path) -> Path | None:
         """Find the test root directory for a Python project.

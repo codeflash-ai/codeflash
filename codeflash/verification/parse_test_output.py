@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import dill as pickle
-from junitparser.xunit2 import JUnitXml
 from lxml.etree import XMLParser, parse
 
 from codeflash.cli_cmds.console import DEBUG_MODE, console, logger
@@ -17,14 +16,9 @@ from codeflash.code_utils.code_utils import (
     file_name_from_test_module_name,
     file_path_from_module_name,
     get_run_tmp_file,
-    module_name_from_file_path,
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
-from codeflash.languages import Language
 from codeflash.languages.current import current_language_support
-
-# Import Jest-specific parsing from the JavaScript language module
-from codeflash.languages.javascript.parse import parse_jest_test_xml as _parse_jest_test_xml
 from codeflash.models.models import (
     ConcurrencyMetrics,
     FunctionTestInvocation,
@@ -192,31 +186,10 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
 
         return None
 
-    # Handle Java class paths (e.g., "com.example.TestClass" -> "com/example/TestClass.java")
-    file_ext = current_language_support().default_file_extension
-    if file_ext == ".java":
-        relative_path = test_class_path.replace(".", "/") + file_ext
-
-        # 1. Directly under base_dir
-        potential_path = base_dir / relative_path
-        if potential_path.exists():
-            return potential_path
-
-        # 2. Under src/test/java relative to project root (Maven structure)
-        project_root = base_dir.parent if base_dir.name == "java" else base_dir
-        while project_root.name not in ("", "/") and not (project_root / "pom.xml").exists():
-            project_root = project_root.parent
-        if (project_root / "pom.xml").exists():
-            potential_path = project_root / "src" / "test" / "java" / relative_path
-            if potential_path.exists():
-                return potential_path
-
-        # 3. Search by filename in base_dir tree
-        file_name = test_class_path.rsplit(".", maxsplit=1)[-1] + file_ext
-        for java_file in base_dir.rglob(file_name):
-            return java_file
-
-        return None
+    # Let language-specific resolution handle non-Python class paths (e.g., Java package names)
+    lang_result = current_language_support().resolve_test_file_from_class_path(test_class_path, base_dir)
+    if lang_result is not None:
+        return lang_result
 
     # First try the full path (Python module path)
     test_file_path = file_name_from_test_module_name(test_class_path, base_dir)
@@ -605,285 +578,7 @@ def parse_test_xml(
     test_config: TestConfig,
     run_result: subprocess.CompletedProcess | None = None,
 ) -> TestResults:
-    # Route to Jest-specific parser for JavaScript/TypeScript tests
-    from codeflash.languages.current import current_language
-
-    if current_language() in (Language.JAVASCRIPT, Language.TYPESCRIPT):
-        return _parse_jest_test_xml(
-            test_xml_file_path,
-            test_files,
-            test_config,
-            run_result,
-            parse_func=parse_func,
-            resolve_test_file_from_class_path=resolve_test_file_from_class_path,
-        )
-
-    # Java uses 5-field timing markers; Python uses 6-field markers
-    uses_java_timing_markers = current_language_support().default_file_extension == ".java"
-
-    test_results = TestResults()
-    # Parse unittest output
-    if not test_xml_file_path.exists():
-        logger.warning(f"No test results for {test_xml_file_path} found.")
-        console.rule()
-        return test_results
-    try:
-        xml = JUnitXml.fromfile(str(test_xml_file_path), parse_func=parse_func)
-    except Exception as e:
-        logger.warning(f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}")
-        return test_results
-    # Always use tests_project_rootdir since pytest is now the test runner for all frameworks
-    base_dir = test_config.tests_project_rootdir
-
-    # For Java: pre-parse fallback stdout once (not per testcase) to avoid O(n^2) complexity
-    # Maven/Surefire doesn't always capture per-test stdout in JUnit XML system-out
-    java_fallback_stdout = None
-    java_fallback_begin_matches = None
-    java_fallback_end_matches = None
-    if uses_java_timing_markers and run_result is not None:
-        try:
-            fallback_stdout = run_result.stdout if isinstance(run_result.stdout, str) else run_result.stdout.decode()
-            _begin = list(start_pattern.finditer(fallback_stdout))
-            if _begin:
-                java_fallback_stdout = fallback_stdout
-                java_fallback_begin_matches = _begin
-                java_fallback_end_matches = {}
-                for _m in end_pattern.finditer(fallback_stdout):
-                    java_fallback_end_matches[_m.groups()[:5]] = _m
-        except Exception:
-            pass
-
-    for suite in xml:
-        for testcase in suite:
-            class_name = testcase.classname
-            test_file_name = suite._elem.attrib.get("file")  # noqa: SLF001
-            if (
-                test_file_name == f"unittest{os.sep}loader.py"
-                and class_name == "unittest.loader._FailedTest"
-                and suite.errors == 1
-                and suite.tests == 1
-            ):
-                # This means that the test failed to load, so we don't want to crash on it
-                logger.info("Test failed to load, skipping it.")
-                if run_result is not None:
-                    if isinstance(run_result.stdout, str) and isinstance(run_result.stderr, str):
-                        logger.info(f"Test log - STDOUT : {run_result.stdout} \n STDERR : {run_result.stderr}")
-                    else:
-                        logger.info(
-                            f"Test log - STDOUT : {run_result.stdout.decode()} \n STDERR : {run_result.stderr.decode()}"
-                        )
-                return test_results
-
-            test_class_path = testcase.classname
-            if test_class_path and test_class_path.split(".")[0] in ("pytest", "_pytest"):
-                logger.debug(f"Skipping pytest-internal test entry: {test_class_path}")
-                continue
-            try:
-                if testcase.name is None:
-                    logger.debug(
-                        f"testcase.name is None for testcase {testcase!r} in file {test_xml_file_path}, skipping"
-                    )
-                    continue
-                test_function = testcase.name.split("[", 1)[0] if "[" in testcase.name else testcase.name
-            except (AttributeError, TypeError) as e:
-                msg = (
-                    f"Accessing testcase.name in parse_test_xml for testcase {testcase!r} in file"
-                    f" {test_xml_file_path} has exception: {e}"
-                )
-                logger.exception(msg)
-                continue
-            if test_file_name is None:
-                if test_class_path:
-                    # TODO : This might not be true if the test is organized under a class
-                    test_file_path = resolve_test_file_from_class_path(test_class_path, base_dir)
-
-                    if test_file_path is None:
-                        logger.warning(f"Could not find the test for file name - {test_class_path} ")
-                        continue
-                else:
-                    test_file_path = file_path_from_module_name(test_function, base_dir)
-            else:
-                test_file_path = base_dir / test_file_name
-            assert test_file_path, f"Test file path not found for {test_file_name}"
-
-            if not test_file_path.exists():
-                logger.warning(f"Could not find the test for file name - {test_file_path} ")
-                continue
-            test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
-            if test_type is None:
-                # Fallback: try to match by original file path (for existing unit tests that were instrumented)
-                # JUnit XML may reference the original class name, resolving to the original file path
-                test_type = test_files.get_test_type_by_original_file_path(test_file_path)
-            if test_type is None:
-                # Log registered paths for debugging
-                registered_paths = [str(tf.instrumented_behavior_file_path) for tf in test_files.test_files]
-                logger.warning(
-                    f"Test type not found for '{test_file_path}'. "
-                    f"Registered test files: {registered_paths}. Skipping test case."
-                )
-                continue
-            test_module_path = module_name_from_file_path(test_file_path, test_config.tests_project_rootdir)
-            result = testcase.is_passed  # TODO: See for the cases of ERROR and SKIPPED
-            test_class = None
-            if class_name is not None and class_name.startswith(test_module_path):
-                test_class = class_name[len(test_module_path) + 1 :]  # +1 for the dot, gets Unittest class name
-
-            loop_index = int(testcase.name.split("[ ")[-1][:-2]) if testcase.name and "[" in testcase.name else 1
-
-            timed_out = False
-            if len(testcase.result) > 1:
-                logger.debug(f"!!!!!Multiple results for {testcase.name or '<None>'} in {test_xml_file_path}!!!")
-            if len(testcase.result) == 1:
-                message = testcase.result[0].message.lower()
-                if "failed: timeout >" in message or "timed out" in message:
-                    timed_out = True
-
-            sys_stdout = testcase.system_out or ""
-
-            # Use different patterns for Java (5-field) vs Python (6-field)
-            if uses_java_timing_markers:
-                begin_matches = list(start_pattern.finditer(sys_stdout))
-                end_matches = {}
-                for match in end_pattern.finditer(sys_stdout):
-                    end_matches[match.groups()[:5]] = match
-
-                # Fallback to subprocess stdout when JUnit XML system-out has no markers
-                if not begin_matches and java_fallback_begin_matches is not None:
-                    sys_stdout = java_fallback_stdout
-                    begin_matches = java_fallback_begin_matches
-                    end_matches = java_fallback_end_matches
-            else:
-                begin_matches = list(matches_re_start.finditer(sys_stdout))
-                end_matches = {}
-                for match in matches_re_end.finditer(sys_stdout):
-                    groups = match.groups()
-                    if len(groups[5].split(":")) > 1:
-                        iteration_id = groups[5].split(":")[0]
-                        groups = (*groups[:5], iteration_id)
-                    end_matches[groups] = match
-
-            if not begin_matches:
-                test_results.add(
-                    FunctionTestInvocation(
-                        loop_index=loop_index,
-                        id=InvocationId(
-                            test_module_path=test_module_path,
-                            test_class_name=test_class,
-                            test_function_name=test_function,
-                            function_getting_tested="",  # TODO: Fix this
-                            iteration_id="",
-                        ),
-                        file_name=test_file_path,
-                        runtime=None,
-                        test_framework=test_config.test_framework,
-                        did_pass=result,
-                        test_type=test_type,
-                        return_value=None,
-                        timed_out=timed_out,
-                        stdout="",
-                    )
-                )
-
-            else:
-                for match_index, match in enumerate(begin_matches):
-                    groups = match.groups()
-                    runtime = None
-
-                    if uses_java_timing_markers:
-                        # Java: 5 groups (module, class.test, func, loop, iter)
-                        end_key = groups[:5]
-                        end_match = end_matches.get(end_key)
-                        iteration_id = groups[4]
-                        loop_idx = int(groups[3])
-                        test_module = groups[0]
-                        class_test_field = groups[1]
-                        if "." in class_test_field:
-                            test_class_str, test_func = class_test_field.rsplit(".", 1)
-                        else:
-                            test_class_str = class_test_field
-                            test_func = test_function
-                        func_getting_tested = groups[2]
-
-                        if end_match:
-                            stdout = sys_stdout[match.end() : end_match.start()]
-                            runtime = int(end_match.groups()[5])
-                        elif match_index == len(begin_matches) - 1:
-                            stdout = sys_stdout[match.end() :]
-                        else:
-                            stdout = sys_stdout[match.end() : begin_matches[match_index + 1].start()]
-
-                        test_results.add(
-                            FunctionTestInvocation(
-                                loop_index=loop_idx,
-                                id=InvocationId(
-                                    test_module_path=test_module,
-                                    test_class_name=test_class_str,
-                                    test_function_name=test_func,
-                                    function_getting_tested=func_getting_tested,
-                                    iteration_id=iteration_id,
-                                ),
-                                file_name=test_file_path,
-                                runtime=runtime,
-                                test_framework=test_config.test_framework,
-                                did_pass=result,
-                                test_type=test_type,
-                                return_value=None,
-                                timed_out=timed_out,
-                                stdout=stdout,
-                            )
-                        )
-                        continue
-
-                    # Python: 6 groups (module, class_prefix., test_func, func, loop, iter_or_iter:duration)
-                    end_match = end_matches.get(groups)
-                    iteration_id = groups[5]
-                    if end_match:
-                        stdout = sys_stdout[match.end() : end_match.start()]
-                        split_val = end_match.groups()[5].split(":")
-                        if len(split_val) > 1:
-                            iteration_id = split_val[0]
-                            runtime = int(split_val[1])
-                        else:
-                            iteration_id, runtime = split_val[0], None
-                    elif match_index == len(begin_matches) - 1:
-                        stdout = sys_stdout[match.end() :]
-                    else:
-                        stdout = sys_stdout[match.end() : begin_matches[match_index + 1].start()]
-
-                    test_results.add(
-                        FunctionTestInvocation(
-                            loop_index=int(groups[4]),
-                            id=InvocationId(
-                                test_module_path=groups[0],
-                                test_class_name=None if groups[1] == "" else groups[1][:-1],
-                                test_function_name=groups[2],
-                                function_getting_tested=groups[3],
-                                iteration_id=iteration_id,
-                            ),
-                            file_name=test_file_path,
-                            runtime=runtime,
-                            test_framework=test_config.test_framework,
-                            did_pass=result,
-                            test_type=test_type,
-                            return_value=None,
-                            timed_out=timed_out,
-                            stdout=stdout,
-                        )
-                    )
-
-    if not test_results:
-        logger.info(
-            f"Tests '{[test_file.original_file_path for test_file in test_files.test_files]}' failed to run, skipping"
-        )
-        if run_result is not None:
-            stdout, stderr = "", ""
-            try:
-                stdout = run_result.stdout.decode()
-                stderr = run_result.stderr.decode()
-            except AttributeError:
-                stdout = run_result.stderr
-            logger.debug(f"Test log - STDOUT : {stdout} \n STDERR : {stderr}")
-    return test_results
+    return current_language_support().parse_test_xml(test_xml_file_path, test_files, test_config, run_result)
 
 
 def merge_test_results(

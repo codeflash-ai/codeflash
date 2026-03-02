@@ -105,6 +105,13 @@ class JavaSupport(LanguageSupport):
     def test_result_serialization_format(self) -> str:
         return "json"
 
+    def parse_test_xml(
+        self, test_xml_file_path: Path, test_files: Any, test_config: Any, run_result: Any = None
+    ) -> Any:
+        from codeflash.languages.java.parse import parse_java_test_xml
+
+        return parse_java_test_xml(test_xml_file_path, test_files, test_config, run_result)
+
     def postprocess_generated_tests(
         self, generated_tests: GeneratedTestsList, test_framework: str, project_root: Path, source_file_path: Path
     ) -> GeneratedTestsList:
@@ -350,9 +357,49 @@ class JavaSupport(LanguageSupport):
         """Get the test file suffix for Java."""
         return "Test.java"
 
+    def resolve_test_file_from_class_path(self, test_class_path: str, base_dir: Path) -> Path | None:
+        """Resolve Java class path (e.g., "com.example.TestClass") to a test file."""
+        file_ext = self.default_file_extension
+        relative_path = test_class_path.replace(".", "/") + file_ext
+
+        # 1. Directly under base_dir
+        potential_path = base_dir / relative_path
+        if potential_path.exists():
+            return potential_path
+
+        # 2. Under src/test/java relative to project root (Maven structure)
+        project_root = base_dir.parent if base_dir.name == "java" else base_dir
+        while project_root.name not in ("", "/") and not (project_root / "pom.xml").exists():
+            project_root = project_root.parent
+        if (project_root / "pom.xml").exists():
+            potential_path = project_root / "src" / "test" / "java" / relative_path
+            if potential_path.exists():
+                return potential_path
+
+        # 3. Search by filename in base_dir tree
+        file_name = test_class_path.rsplit(".", maxsplit=1)[-1] + file_ext
+        for java_file in base_dir.rglob(file_name):
+            return java_file
+
+        return None
+
+    def resolve_test_module_path_for_pr(
+        self, test_module_path: str, tests_project_rootdir: Path, non_generated_tests: set[Path]
+    ) -> Path | None:
+        """Resolve Java test module path (class name) to absolute file path for PR."""
+        lang_ext = self.default_file_extension
+        abs_path = (tests_project_rootdir / f"{test_module_path}{lang_ext}").resolve()
+        for candidate in non_generated_tests:
+            if candidate.stem == test_module_path:
+                return candidate
+        return abs_path
+
     def get_comment_prefix(self) -> str:
         """Get the comment prefix for Java."""
         return "//"
+
+    def get_test_dir_for_source(self, test_dir: Path, source_file: Path | None) -> Path | None:
+        return None
 
     def find_test_root(self, project_root: Path) -> Path | None:
         """Find the test root directory for a Java project."""

@@ -344,6 +344,12 @@ class LanguageSupport(Protocol):
         """How test return values are serialized: "pickle" or "json"."""
         return "pickle"
 
+    def parse_test_xml(
+        self, test_xml_file_path: Path, test_files: Any, test_config: Any, run_result: Any = None
+    ) -> Any:
+        """Parse JUnit XML test results with language-specific timing markers."""
+        ...
+
     def load_coverage(
         self,
         coverage_database_file: Path,
@@ -743,6 +749,58 @@ class LanguageSupport(Protocol):
 
         """
         ...
+
+    def get_test_dir_for_source(self, test_dir: Path, source_file: Path | None) -> Path | None:
+        """Find the appropriate test directory for a source file.
+
+        For monorepos (JS), this finds the package's test directory from the source file path.
+        Default implementation returns None (no special directory resolution needed).
+
+        Args:
+            test_dir: The root tests directory.
+            source_file: Path to the source file being tested.
+
+        Returns:
+            The test directory path, or None if no special handling is needed.
+
+        """
+        return None
+
+    def resolve_test_file_from_class_path(self, test_class_path: str, base_dir: Path) -> Path | None:
+        """Resolve a test file path from a class path string.
+
+        Languages with non-Python module systems (e.g., Java package names like
+        "com.example.TestClass") override this to provide custom resolution.
+        Default: returns None (fall through to shared Python/file-path logic).
+
+        Args:
+            test_class_path: The class path string from JUnit XML (e.g., "com.example.TestClass").
+            base_dir: The base directory for tests.
+
+        Returns:
+            Path to the test file if found, None to fall through to default logic.
+
+        """
+        return None
+
+    def resolve_test_module_path_for_pr(
+        self, test_module_path: str, tests_project_rootdir: Path, non_generated_tests: set[Path]
+    ) -> Path | None:
+        """Resolve test module path to an absolute file path for PR creation.
+
+        Languages with non-Python module naming (e.g., Java class names)
+        override this. Default: returns None (fall through to shared logic).
+
+        Args:
+            test_module_path: The test module path string.
+            tests_project_rootdir: The tests project root directory.
+            non_generated_tests: Set of known non-generated test file paths.
+
+        Returns:
+            Resolved absolute path, or None to fall through to default logic.
+
+        """
+        return None
 
     def find_test_root(self, project_root: Path) -> Path | None:
         """Find the test root directory for a project.
