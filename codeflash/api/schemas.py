@@ -120,6 +120,10 @@ class OptimizeRequest:
     repo_name: str | None = None
     current_username: str | None = None
 
+    # === React-specific ===
+    is_react_component: bool = False
+    react_context: str = ""
+
     def to_payload(self) -> dict[str, Any]:
         """Convert to API payload dict, maintaining backward compatibility."""
         payload = {
@@ -149,6 +153,12 @@ class OptimizeRequest:
         # Module system for JS/TS
         if self.language_info.module_system != ModuleSystem.UNKNOWN:
             payload["module_system"] = self.language_info.module_system.value
+
+        # React-specific fields
+        if self.is_react_component:
+            payload["is_react_component"] = True
+            if self.react_context:
+                payload["react_context"] = self.react_context
 
         return payload
 
@@ -187,6 +197,9 @@ class TestGenRequest:
     # === Metadata ===
     codeflash_version: str = ""
 
+    # === React-specific ===
+    is_react_component: bool = False
+
     def to_payload(self) -> dict[str, Any]:
         """Convert to API payload dict, maintaining backward compatibility."""
         payload = {
@@ -217,6 +230,10 @@ class TestGenRequest:
         # Module system for JS/TS
         if self.language_info.module_system != ModuleSystem.UNKNOWN:
             payload["module_system"] = self.language_info.module_system.value
+
+        # React-specific fields
+        if self.is_react_component:
+            payload["is_react_component"] = True
 
         return payload
 

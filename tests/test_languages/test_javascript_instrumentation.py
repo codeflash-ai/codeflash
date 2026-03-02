@@ -974,3 +974,355 @@ test('test \\'fibonacci(5)\\' escaping', () => {
         # Escaped quote doesn't end string
         code4 = "test('fib\\'s result', () => {})"
         assert is_inside_string(code4, 15) is True  # Still inside after escaped quote
+
+
+class TestRenderCallTransformation:
+    """Tests for React render(React.createElement(Component, ...)) transformation."""
+
+    def test_basic_render_create_element(self):
+        """Test basic render(React.createElement(Counter, null)) transformation."""
+        from codeflash.languages.javascript.instrument import transform_render_calls
+
+        code = "    const { container } = render(React.createElement(Counter, null));"
+        transformed, counter = transform_render_calls(code, make_func("Counter"), "capture")
+
+        expected = "    const { container } = codeflash.captureRender('Counter', '1', render, Counter, null);"
+        assert transformed == expected, f"Expected:\n{expected}\nGot:\n{transformed}"
+        assert counter == 1
+
+    def test_render_with_props_object(self):
+        """Test render with a props object."""
+        from codeflash.languages.javascript.instrument import transform_render_calls
+
+        code = "    render(React.createElement(Counter, { initialCount: 5 }));"
+        transformed, counter = transform_render_calls(code, make_func("Counter"), "capture")
+
+        expected = "    codeflash.captureRender('Counter', '1', render, Counter, { initialCount: 5 });"
+        assert transformed == expected, f"Expected:\n{expected}\nGot:\n{transformed}"
+        assert counter == 1
+
+    def test_render_with_children(self):
+        """Test render with children arguments."""
+        from codeflash.languages.javascript.instrument import transform_render_calls
+
+        code = "    render(React.createElement(Counter, null, child1, child2));"
+        transformed, counter = transform_render_calls(code, make_func("Counter"), "capture")
+
+        expected = "    codeflash.captureRender('Counter', '1', render, Counter, null, child1, child2);"
+        assert transformed == expected, f"Expected:\n{expected}\nGot:\n{transformed}"
+        assert counter == 1
+
+    def test_render_with_nested_create_element(self):
+        """Test render with nested React.createElement in children."""
+        from codeflash.languages.javascript.instrument import transform_render_calls
+
+        code = '    render(React.createElement(Counter, null, React.createElement("div", null, "hello")));'
+        transformed, counter = transform_render_calls(code, make_func("Counter"), "capture")
+
+        expected = "    codeflash.captureRender('Counter', '1', render, Counter, null, React.createElement(\"div\", null, \"hello\"));"
+        assert transformed == expected, f"Expected:\n{expected}\nGot:\n{transformed}"
+        assert counter == 1
+
+    def test_render_no_args(self):
+        """Test render(React.createElement(Counter)) with no args at all."""
+        from codeflash.languages.javascript.instrument import transform_render_calls
+
+        code = "    render(React.createElement(Counter));"
+        transformed, counter = transform_render_calls(code, make_func("Counter"), "capture")
+
+        expected = "    codeflash.captureRender('Counter', '1', render, Counter);"
+        assert transformed == expected, f"Expected:\n{expected}\nGot:\n{transformed}"
+        assert counter == 1
+
+    def test_render_performance_mode(self):
+        """Test that performance mode uses captureRenderPerf."""
+        from codeflash.languages.javascript.instrument import transform_render_calls
+
+        code = "    render(React.createElement(Counter, null));"
+        transformed, counter = transform_render_calls(code, make_func("Counter"), "capturePerf")
+
+        expected = "    codeflash.captureRenderPerf('Counter', '1', render, Counter, null);"
+        assert transformed == expected, f"Expected:\n{expected}\nGot:\n{transformed}"
+        assert counter == 1
+
+    def test_render_jsx_pattern(self):
+        """Test _jsx() compiled JSX pattern."""
+        from codeflash.languages.javascript.instrument import transform_render_calls
+
+        code = "    render(_jsx(Counter, { count: 0 }));"
+        transformed, counter = transform_render_calls(code, make_func("Counter"), "capture")
+
+        expected = "    codeflash.captureRender('Counter', '1', render, Counter, { count: 0 });"
+        assert transformed == expected, f"Expected:\n{expected}\nGot:\n{transformed}"
+        assert counter == 1
+
+    def test_render_jsxs_pattern(self):
+        """Test _jsxs() compiled JSX pattern with children."""
+        from codeflash.languages.javascript.instrument import transform_render_calls
+
+        code = "    render(_jsxs(Counter, { children: [a, b] }));"
+        transformed, counter = transform_render_calls(code, make_func("Counter"), "capture")
+
+        expected = "    codeflash.captureRender('Counter', '1', render, Counter, { children: [a, b] });"
+        assert transformed == expected, f"Expected:\n{expected}\nGot:\n{transformed}"
+        assert counter == 1
+
+    def test_skip_inside_string(self):
+        """Test that render calls inside string literals are not transformed."""
+        from codeflash.languages.javascript.instrument import transform_render_calls
+
+        code = '    const desc = "render(React.createElement(Counter, null))";'
+        transformed, counter = transform_render_calls(code, make_func("Counter"), "capture")
+
+        assert transformed == code, f"Expected:\n{code}\nGot:\n{transformed}"
+        assert counter == 0
+
+    def test_skip_different_component(self):
+        """Test that render calls for different components are not transformed."""
+        from codeflash.languages.javascript.instrument import transform_render_calls
+
+        code = "    render(React.createElement(Counter, null));"
+        transformed, counter = transform_render_calls(code, make_func("Timer"), "capture")
+
+        assert transformed == code, f"Expected:\n{code}\nGot:\n{transformed}"
+        assert counter == 0
+
+    def test_skip_already_transformed(self):
+        """Test that already-transformed calls are not double-transformed."""
+        from codeflash.languages.javascript.instrument import transform_render_calls
+
+        code = "    codeflash.captureRender('Counter', '1', render, Counter, null);"
+        transformed, counter = transform_render_calls(code, make_func("Counter"), "capture")
+
+        assert transformed == code, f"Expected:\n{code}\nGot:\n{transformed}"
+        assert counter == 0
+
+    def test_multiple_render_calls(self):
+        """Test multiple render calls get unique IDs."""
+        from codeflash.languages.javascript.instrument import transform_render_calls
+
+        code = (
+            "    render(React.createElement(Counter, null));\n"
+            "    render(React.createElement(Counter, { count: 5 }));"
+        )
+        transformed, counter = transform_render_calls(code, make_func("Counter"), "capture")
+
+        expected = (
+            "    codeflash.captureRender('Counter', '1', render, Counter, null);\n"
+            "    codeflash.captureRender('Counter', '2', render, Counter, { count: 5 });"
+        )
+        assert transformed == expected, f"Expected:\n{expected}\nGot:\n{transformed}"
+        assert counter == 2
+
+    def test_no_trailing_semicolon(self):
+        """Test render call without trailing semicolon."""
+        from codeflash.languages.javascript.instrument import transform_render_calls
+
+        code = "    render(React.createElement(Counter, null))"
+        transformed, counter = transform_render_calls(code, make_func("Counter"), "capture")
+
+        expected = "    codeflash.captureRender('Counter', '1', render, Counter, null)"
+        assert transformed == expected, f"Expected:\n{expected}\nGot:\n{transformed}"
+        assert counter == 1
+
+    def test_start_counter(self):
+        """Test that start_counter offsets invocation IDs."""
+        from codeflash.languages.javascript.instrument import transform_render_calls
+
+        code = "    render(React.createElement(Counter, null));"
+        transformed, counter = transform_render_calls(code, make_func("Counter"), "capture", start_counter=5)
+
+        expected = "    codeflash.captureRender('Counter', '6', render, Counter, null);"
+        assert transformed == expected, f"Expected:\n{expected}\nGot:\n{transformed}"
+        assert counter == 6
+
+    def test_full_react_test_instrumentation(self):
+        """Test full instrumentation of a React test file."""
+        from codeflash.languages.javascript.instrument import _instrument_js_test_code
+
+        test_code = (
+            "const { Counter } = require('../Counter');\n"
+            "const React = require('react');\n"
+            "const { render, screen, fireEvent } = require('@testing-library/react');\n"
+            "\n"
+            "describe('Counter', () => {\n"
+            "  test('renders and increments', () => {\n"
+            "    const { container } = render(React.createElement(Counter, null));\n"
+            "    expect(screen.getByText('Count: 0')).toBeTruthy();\n"
+            "    const plus = screen.getByRole('button', { name: '+' });\n"
+            "    fireEvent.click(plus);\n"
+            "    expect(screen.getByText('Count: 1')).toBeTruthy();\n"
+            "  });\n"
+            "});"
+        )
+        instrumented = _instrument_js_test_code(
+            code=test_code,
+            function_to_optimize=make_func("Counter"),
+            test_file_path="test.js",
+            mode="behavior",
+        )
+
+        expected = (
+            "const { Counter } = require('../Counter');\n"
+            "const codeflash = require('codeflash');\n"
+            "const React = require('react');\n"
+            "const { render, screen, fireEvent } = require('@testing-library/react');\n"
+            "\n"
+            "describe('Counter', () => {\n"
+            "  test('renders and increments', () => {\n"
+            "    const { container } = codeflash.captureRender('Counter', '1', render, Counter, null);\n"
+            "    expect(screen.getByText('Count: 0')).toBeTruthy();\n"
+            "    const plus = screen.getByRole('button', { name: '+' });\n"
+            "    fireEvent.click(plus);\n"
+            "    expect(screen.getByText('Count: 1')).toBeTruthy();\n"
+            "  });\n"
+            "});"
+        )
+        assert instrumented == expected, f"Expected:\n{expected}\nGot:\n{instrumented}"
+
+    def test_full_react_test_performance_mode(self):
+        """Test full instrumentation of a React test in performance mode."""
+        from codeflash.languages.javascript.instrument import _instrument_js_test_code
+
+        test_code = (
+            "const { Counter } = require('../Counter');\n"
+            "const React = require('react');\n"
+            "const { render } = require('@testing-library/react');\n"
+            "\n"
+            "test('renders counter', () => {\n"
+            "  render(React.createElement(Counter, { initialCount: 5 }));\n"
+            "});"
+        )
+        instrumented = _instrument_js_test_code(
+            code=test_code,
+            function_to_optimize=make_func("Counter"),
+            test_file_path="test.js",
+            mode="performance",
+        )
+
+        expected = (
+            "const { Counter } = require('../Counter');\n"
+            "const codeflash = require('codeflash');\n"
+            "const React = require('react');\n"
+            "const { render } = require('@testing-library/react');\n"
+            "\n"
+            "test('renders counter', () => {\n"
+            "  codeflash.captureRenderPerf('Counter', '1', render, Counter, { initialCount: 5 });\n"
+            "});"
+        )
+        assert instrumented == expected, f"Expected:\n{expected}\nGot:\n{instrumented}"
+
+    def test_render_counter_chaining_with_expect(self):
+        """Test that invocation counters chain correctly across render and expect transforms."""
+        from codeflash.languages.javascript.instrument import _instrument_js_test_code
+
+        test_code = (
+            "const { myFunc } = require('../module');\n"
+            "const React = require('react');\n"
+            "const { render } = require('@testing-library/react');\n"
+            "\n"
+            "test('render test', () => {\n"
+            "  render(React.createElement(myFunc, null));\n"
+            "});\n"
+            "\n"
+            "test('expect test', () => {\n"
+            "  expect(myFunc(1)).toBe(2);\n"
+            "});"
+        )
+        instrumented = _instrument_js_test_code(
+            code=test_code,
+            function_to_optimize=make_func("myFunc"),
+            test_file_path="test.js",
+            mode="behavior",
+        )
+
+        expected = (
+            "const { myFunc } = require('../module');\n"
+            "const codeflash = require('codeflash');\n"
+            "const React = require('react');\n"
+            "const { render } = require('@testing-library/react');\n"
+            "\n"
+            "test('render test', () => {\n"
+            "  codeflash.captureRender('myFunc', '1', render, myFunc, null);\n"
+            "});\n"
+            "\n"
+            "test('expect test', () => {\n"
+            "  expect(codeflash.capture('myFunc', '2', myFunc, 1)).toBe(2);\n"
+            "});"
+        )
+        assert instrumented == expected, f"Expected:\n{expected}\nGot:\n{instrumented}"
+
+    def test_esm_import_with_render(self):
+        """Test that ESM import style works with render transformation."""
+        from codeflash.languages.javascript.instrument import _instrument_js_test_code
+
+        test_code = (
+            "import { Counter } from '../Counter';\n"
+            "import React from 'react';\n"
+            "import { render } from '@testing-library/react';\n"
+            "\n"
+            "test('renders', () => {\n"
+            "  render(React.createElement(Counter, null));\n"
+            "});"
+        )
+        instrumented = _instrument_js_test_code(
+            code=test_code,
+            function_to_optimize=make_func("Counter"),
+            test_file_path="test.js",
+            mode="behavior",
+        )
+
+        expected = (
+            "import { Counter } from '../Counter';\n"
+            "import React from 'react';\n"
+            "import { render } from '@testing-library/react';\n"
+            "\n"
+            "import codeflash from 'codeflash';\n"
+            "test('renders', () => {\n"
+            "  codeflash.captureRender('Counter', '1', render, Counter, null);\n"
+            "});"
+        )
+        assert instrumented == expected, f"Expected:\n{expected}\nGot:\n{instrumented}"
+
+    def test_render_with_multiline_props(self):
+        """Test render with props spanning multiple lines."""
+        from codeflash.languages.javascript.instrument import transform_render_calls
+
+        code = (
+            "    render(React.createElement(Counter, {\n"
+            "      initialCount: 5,\n"
+            "      label: 'Test'\n"
+            "    }));"
+        )
+        transformed, counter = transform_render_calls(code, make_func("Counter"), "capture")
+
+        expected = (
+            "    codeflash.captureRender('Counter', '1', render, Counter, {\n"
+            "      initialCount: 5,\n"
+            "      label: 'Test'\n"
+            "    });"
+        )
+        assert transformed == expected, f"Expected:\n{expected}\nGot:\n{transformed}"
+        assert counter == 1
+
+    def test_does_not_match_partial_component_name(self):
+        """Test that CounterButton does not match when looking for Counter."""
+        from codeflash.languages.javascript.instrument import transform_render_calls
+
+        code = "    render(React.createElement(CounterButton, null));"
+        transformed, counter = transform_render_calls(code, make_func("Counter"), "capture")
+
+        assert transformed == code, f"Expected:\n{code}\nGot:\n{transformed}"
+        assert counter == 0
+
+    def test_render_with_qualified_name(self):
+        """Test render with a qualified (class method) component name."""
+        from codeflash.languages.javascript.instrument import transform_render_calls
+
+        func = make_func("Counter", class_name="MyComponents")
+        code = "    render(React.createElement(Counter, null));"
+        transformed, counter = transform_render_calls(code, func, "capture")
+
+        expected = "    codeflash.captureRender('MyComponents.Counter', '1', render, Counter, null);"
+        assert transformed == expected, f"Expected:\n{expected}\nGot:\n{transformed}"
+        assert counter == 1

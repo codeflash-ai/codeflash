@@ -21,6 +21,7 @@ class AcceptanceReason(Enum):
     RUNTIME = "runtime"
     THROUGHPUT = "throughput"
     CONCURRENCY = "concurrency"
+    RENDER_COUNT = "render_count"
     NONE = "none"
 
 
@@ -208,3 +209,40 @@ def coverage_critic(original_code_coverage: CoverageData | None) -> bool:
     if original_code_coverage:
         return original_code_coverage.coverage >= COVERAGE_THRESHOLD
     return False
+
+
+# Minimum render count reduction percentage to accept a React optimization
+MIN_RENDER_COUNT_REDUCTION_PCT = 0.20  # 20%
+
+
+def render_efficiency_critic(
+    original_render_count: int,
+    optimized_render_count: int,
+    original_render_duration: float,
+    optimized_render_duration: float,
+    best_render_count_until_now: int | None = None,
+) -> bool:
+    """Evaluate whether a React optimization reduces re-renders or render time sufficiently.
+
+    Accepts if:
+    - Render count is reduced by >= 20%
+    - OR render duration is reduced by >= MIN_IMPROVEMENT_THRESHOLD
+    - AND the candidate is the best seen so far
+    """
+    if original_render_count == 0:
+        return False
+
+    # Check render count reduction
+    count_reduction = (original_render_count - optimized_render_count) / original_render_count
+    count_improved = count_reduction >= MIN_RENDER_COUNT_REDUCTION_PCT
+
+    # Check render duration reduction
+    duration_improved = False
+    if original_render_duration > 0:
+        duration_gain = (original_render_duration - optimized_render_duration) / original_render_duration
+        duration_improved = duration_gain > MIN_IMPROVEMENT_THRESHOLD
+
+    # Check if this is the best candidate so far
+    is_best = best_render_count_until_now is None or optimized_render_count <= best_render_count_until_now
+
+    return (count_improved or duration_improved) and is_best

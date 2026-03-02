@@ -30,6 +30,7 @@ class Explanation:
     original_concurrency_metrics: Optional[ConcurrencyMetrics] = None
     best_concurrency_metrics: Optional[ConcurrencyMetrics] = None
     acceptance_reason: AcceptanceReason = AcceptanceReason.RUNTIME
+    render_benchmark_markdown: Optional[str] = None
 
     @property
     def perf_improvement_line(self) -> str:
@@ -37,6 +38,7 @@ class Explanation:
             AcceptanceReason.RUNTIME: "runtime",
             AcceptanceReason.THROUGHPUT: "throughput",
             AcceptanceReason.CONCURRENCY: "concurrency",
+            AcceptanceReason.RENDER_COUNT: "render count",
             AcceptanceReason.NONE: "",
         }.get(self.acceptance_reason, "")
 
@@ -144,10 +146,16 @@ class Explanation:
         else:
             performance_description = f"Runtime went down from {original_runtime_human} to {best_runtime_human} \n\n"
 
+        # Include React render benchmark if available
+        render_info = ""
+        if self.render_benchmark_markdown:
+            render_info = self.render_benchmark_markdown + "\n\n"
+
         return (
             f"Optimized {self.function_name} in {self.file_path}\n"
             f"{self.perf_improvement_line}\n"
             + performance_description
+            + render_info
             + (benchmark_info if benchmark_info else "")
             + self.raw_explanation_message
             + " \n\n"

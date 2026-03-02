@@ -285,7 +285,8 @@ def create_staging(
     optimization_review: str = "",
     original_line_profiler: str | None = None,
     optimized_line_profiler: str | None = None,
-    **_kwargs: Any,  # ignores the language argument TODO Hesham: staging for all langs
+    language: str = "python",
+    **_kwargs: Any,
 ) -> Response:
     """Create a staging pull request, targeting the specified branch. (usually 'staging').
 
@@ -308,7 +309,7 @@ def create_staging(
     }
 
     payload = {
-        "baseBranch": get_current_branch(),
+        "baseBranch": get_current_branch(git.Repo(str(root_dir), search_parent_directories=True)),
         "diffContents": build_file_changes,
         "prCommentFields": PrComment(
             optimization_explanation=explanation.explanation_message(),
@@ -321,6 +322,7 @@ def create_staging(
             winning_behavior_test_results=explanation.winning_behavior_test_results,
             winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
             benchmark_details=explanation.benchmark_details,
+            language=language,
         ).to_json(),
         "existingTests": existing_tests_source,
         "generatedTests": generated_original_test_source,

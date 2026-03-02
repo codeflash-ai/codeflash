@@ -27,7 +27,7 @@ from codeflash.languages.javascript.module_system import (
 )
 
 from codeflash.languages.javascript.support import JavaScriptSupport, TypeScriptSupport
-from codeflash.models.models import CodeStringsMarkdown
+from codeflash.models.models import CodeString, CodeStringsMarkdown
 
 
 @pytest.fixture
@@ -2265,3 +2265,108 @@ export function processNode(node: TreeNode, space: NodeSpace): number {
         assert "// Optimized" in result
 
         assert ts_support.validate_syntax(result) is True
+
+
+class TestReactComponentReplacement:
+    """Tests for replacing React component functions in TSX files."""
+
+    def test_replace_react_component_body_with_useCallback(self, ts_support, temp_project):
+        """Test replacing a React component body when optimized code uses useCallback.
+
+        replace_function_definitions_for_language replaces the function body and
+        merges imports from the optimized code into the original source.
+        """
+        original_source = """\
+import React, { useState } from 'react';
+
+interface CounterProps {
+  initialCount?: number;
+  label?: string;
+}
+
+export function Counter({ initialCount = 0, label = 'Count' }: CounterProps) {
+  const [count, setCount] = useState(initialCount);
+
+  const increment = () => setCount(c => c + 1);
+  const decrement = () => setCount(c => c - 1);
+
+  return (
+    <div>
+      <span>{label}: {count}</span>
+      <button onClick={increment}>+</button>
+      <button onClick={decrement}>-</button>
+    </div>
+  );
+}
+"""
+        file_path = temp_project / "Counter.tsx"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        optimized_code = """\
+import React, { useState, useCallback } from 'react';
+
+export function Counter({ initialCount = 0, label = 'Count' }: CounterProps) {
+  const [count, setCount] = useState(initialCount);
+
+  const increment = useCallback(() => setCount(c => c + 1), [setCount]);
+  const decrement = useCallback(() => setCount(c => c - 1), [setCount]);
+
+  return (
+    <div>
+      <span>{label}: {count}</span>
+      <button onClick={increment}>+</button>
+      <button onClick={decrement}>-</button>
+    </div>
+  );
+}
+"""
+
+        code_markdown = CodeStringsMarkdown(
+            code_strings=[
+                CodeString(
+                    code=optimized_code,
+                    file_path=Path("Counter.tsx"),
+                    language="typescript",
+                )
+            ],
+            language="typescript",
+        )
+
+        replaced = replace_function_definitions_for_language(
+            ["Counter"],
+            code_markdown,
+            file_path,
+            temp_project,
+        )
+
+        assert replaced
+        result = file_path.read_text()
+
+        expected_result = """\
+import React, { useState, useCallback } from 'react';
+
+interface CounterProps {
+  initialCount?: number;
+  label?: string;
+}
+
+export function Counter({ initialCount = 0, label = 'Count' }: CounterProps) {
+  const [count, setCount] = useState(initialCount);
+
+  const increment = useCallback(() => setCount(c => c + 1), [setCount]);
+  const decrement = useCallback(() => setCount(c => c - 1), [setCount]);
+
+  return (
+    <div>
+      <span>{label}: {count}</span>
+      <button onClick={increment}>+</button>
+      <button onClick={decrement}>-</button>
+    </div>
+  );
+}
+"""
+        assert result == expected_result, (
+            f"Result does not match expected output.\n"
+            f"Expected:\n{expected_result}\n\n"
+            f"Got:\n{result}"
+        )

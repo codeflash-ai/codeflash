@@ -117,17 +117,12 @@ function findJestRunnerRecursive(nodeModulesPath, maxDepth = 5) {
 function resolveJestRunner() {
     const monorepoMarkers = ['yarn.lock', 'pnpm-workspace.yaml', 'lerna.json', 'package-lock.json'];
 
-    // Walk up from cwd to find all potential node_modules locations
+    // Walk up from cwd to find jest-runner, checking the project's own
+    // node_modules first. In monorepos, the workspace package (cwd) may have
+    // a different jest-runner version than the monorepo root. The project's
+    // version takes priority since it matches the Jest config being used.
     let currentDir = process.cwd();
     const visitedDirs = new Set();
-
-    // If Python detected a monorepo root, check there first
-    const monorepoRoot = process.env.CODEFLASH_MONOREPO_ROOT;
-    if (monorepoRoot && !visitedDirs.has(monorepoRoot)) {
-        visitedDirs.add(monorepoRoot);
-        const result = findJestRunnerRecursive(path.join(monorepoRoot, 'node_modules'));
-        if (result) return result;
-    }
 
     while (currentDir !== path.dirname(currentDir)) {
         if (visitedDirs.has(currentDir)) break;
@@ -143,6 +138,13 @@ function resolveJestRunner() {
 
         if (isWorkspaceRoot) break;
         currentDir = path.dirname(currentDir);
+    }
+
+    // Fallback: check monorepo root if Python detected one and we haven't visited it yet
+    const monorepoRoot = process.env.CODEFLASH_MONOREPO_ROOT;
+    if (monorepoRoot && !visitedDirs.has(monorepoRoot)) {
+        const result = findJestRunnerRecursive(path.join(monorepoRoot, 'node_modules'));
+        if (result) return result;
     }
 
     throw new Error(

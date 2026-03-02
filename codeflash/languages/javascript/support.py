@@ -13,17 +13,37 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, Language, TestInfo, TestResult
+from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, TestInfo, TestResult
+from codeflash.languages.current import is_typescript
 from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
+from codeflash.languages.language_enum import Language
 from codeflash.languages.registry import register_language
-from codeflash.models.models import FunctionParent
+from codeflash.models.function_types import FunctionParent
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from codeflash.languages.base import ReferenceInfo
+    from codeflash.languages.javascript.frameworks.detector import FrameworkInfo
     from codeflash.languages.javascript.treesitter import TypeDefinition
     from codeflash.models.models import GeneratedTestsList, InvocationId
+
+_PRIMITIVE_TYPES = frozenset(
+    {
+        "number",
+        "string",
+        "boolean",
+        "void",
+        "null",
+        "undefined",
+        "any",
+        "never",
+        "unknown",
+        "object",
+        "symbol",
+        "bigint",
+    }
+)
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +88,22 @@ class JavaScriptSupport:
     def dir_excludes(self) -> frozenset[str]:
         return frozenset({"node_modules", "dist", "build", ".next", ".nuxt", "coverage", ".cache", ".turbo", ".vercel"})
 
+    _cached_framework_info: FrameworkInfo | None = None
+    _cached_framework_root: Path | None = None
+
+    def get_framework_info(self, project_root: Path) -> FrameworkInfo:
+        """Get cached framework info for the project."""
+        if self._cached_framework_root != project_root or self._cached_framework_info is None:
+            from codeflash.languages.javascript.frameworks.detector import detect_framework
+
+            self._cached_framework_info = detect_framework(project_root)
+            self._cached_framework_root = project_root
+        return self._cached_framework_info
+
+    def is_react_project(self, project_root: Path) -> bool:
+        """Check if the project uses React."""
+        return self.get_framework_info(project_root).name == "react"
+
     # === Discovery ===
 
     def discover_functions(
@@ -99,6 +135,29 @@ class JavaScriptSupport:
                 source, include_methods=criteria.include_methods, include_arrow_functions=True, require_name=True
             )
 
+            # Build React component lookup if this is a React project
+            react_component_map: dict[str, Any] = {}
+            project_root = file_path.parent  # Will be refined by caller
+            try:
+                from codeflash.languages.javascript.frameworks.react.discovery import classify_component
+
+                for func in tree_functions:
+                    comp_type = classify_component(func, source, analyzer)
+                    if comp_type is not None:
+                        from codeflash.languages.javascript.frameworks.react.discovery import (
+                            _extract_hooks_used,
+                            _is_wrapped_in_memo,
+                        )
+
+                        react_component_map[func.name] = {
+                            "component_type": comp_type.value,
+                            "hooks_used": _extract_hooks_used(func.source_text),
+                            "is_memoized": _is_wrapped_in_memo(func, source),
+                            "is_react_component": True,
+                        }
+            except Exception as e:
+                logger.debug("React detection skipped: %s", e)
+
             functions: list[FunctionToOptimize] = []
             for func in tree_functions:
                 # Check for return statement if required
@@ -122,6 +181,9 @@ class JavaScriptSupport:
                 if func.parent_function:
                     parents.append(FunctionParent(name=func.parent_function, type="FunctionDef"))
 
+                # Attach React metadata if this function is a component
+                metadata = react_component_map.get(func.name)
+
                 functions.append(
                     FunctionToOptimize(
                         function_name=func.name,
@@ -135,6 +197,7 @@ class JavaScriptSupport:
                         is_method=func.is_method,
                         language=str(self.language),
                         doc_start_line=func.doc_start_line,
+                        metadata=metadata,
                     )
                 )
 
@@ -208,7 +271,20 @@ class JavaScriptSupport:
             List of glob patterns for test files.
 
         """
-        return ["*.test.js", "*.test.jsx", "*.spec.js", "*.spec.jsx", "__tests__/**/*.js", "__tests__/**/*.jsx"]
+        return [
+            "*.test.js",
+            "*.test.jsx",
+            "*.spec.js",
+            "*.spec.jsx",
+            "*.test.ts",
+            "*.test.tsx",
+            "*.spec.ts",
+            "*.spec.tsx",
+            "__tests__/**/*.js",
+            "__tests__/**/*.jsx",
+            "__tests__/**/*.ts",
+            "__tests__/**/*.tsx",
+        ]
 
     def discover_tests(
         self, test_root: Path, source_functions: Sequence[FunctionToOptimize]
@@ -217,6 +293,8 @@ class JavaScriptSupport:
 
         For JavaScript, this uses static analysis to find test files
         and match them to source functions based on imports and function calls.
+        Also searches for co-located test files next to source files (a common
+        JS/TS convention where spec/test files sit alongside source files).
 
         Args:
             test_root: Root directory containing tests.
@@ -234,6 +312,21 @@ class JavaScriptSupport:
         test_files: list[Path] = []
         for pattern in test_patterns:
             test_files.extend(test_root.rglob(pattern))
+
+        # Also search for co-located test files next to source files
+        # This is a common JS/TS convention (e.g., utils.ts + utils.spec.ts in same directory)
+        seen_paths: set[Path] = {f.resolve() for f in test_files}
+        source_dirs: set[Path] = set()
+        for func in source_functions:
+            if func.file_path and func.file_path.parent not in source_dirs:
+                source_dirs.add(func.file_path.parent)
+        for source_dir in source_dirs:
+            for pattern in test_patterns:
+                for test_file in source_dir.glob(pattern):
+                    resolved = test_file.resolve()
+                    if resolved not in seen_paths:
+                        test_files.append(test_file)
+                        seen_paths.add(resolved)
 
         for test_file in test_files:
             try:
@@ -423,6 +516,28 @@ class JavaScriptSupport:
             else:
                 read_only_context = type_definitions_context
 
+        # Append React-specific context if this is a React component
+        react_context_str = ""
+        if function.metadata and function.metadata.get("is_react_component"):
+            try:
+                from codeflash.languages.javascript.frameworks.react.context import extract_react_context
+                from codeflash.languages.javascript.frameworks.react.discovery import find_react_components
+
+                components = find_react_components(source, function.file_path, analyzer)
+                for comp in components:
+                    if comp.function_name == function.function_name:
+                        react_ctx = extract_react_context(comp, source, analyzer, module_root)
+                        react_context_str = react_ctx.to_prompt_string()
+                        if react_context_str:
+                            react_header = "\n\n// === React Component Context ===\n"
+                            if read_only_context:
+                                read_only_context = read_only_context + react_header + react_context_str
+                            else:
+                                read_only_context = react_context_str
+                        break
+            except Exception as e:
+                logger.debug("React context extraction failed: %s", e)
+
         # Validate that the extracted code is syntactically valid
         # If not, raise an error to fail the optimization early
         if target_code and not self.validate_syntax(target_code):
@@ -440,6 +555,7 @@ class JavaScriptSupport:
             read_only_context=read_only_context,
             imports=import_lines,
             language=Language.JAVASCRIPT,
+            react_context=react_context_str if react_context_str else None,
         )
 
     def _find_class_definition(
@@ -461,7 +577,7 @@ class JavaScriptSupport:
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
 
-        def find_class_node(node):
+        def find_class_node(node: Any) -> Any:
             """Recursively find a class declaration with the given name."""
             if node.type in ("class_declaration", "class"):
                 name_node = node.child_by_field_name("name")
@@ -580,7 +696,7 @@ class JavaScriptSupport:
         class_name: str,
         target_method_name: str,
         helpers: list[HelperFunction],
-        tree_functions: list,
+        tree_functions: list[Any],
         lines: list[str],
     ) -> list[tuple[str, str]]:
         """Find helper methods that belong to the same class as the target method.
@@ -926,30 +1042,24 @@ class JavaScriptSupport:
         tree = analyzer.parse(source_bytes)
         type_names: set[str] = set()
 
-        def walk_for_types(node):
+        # Iterative traversal to avoid recursion and reduce call overhead.
+        # Look for type_identifier nodes (user-defined types)
+        # Skip primitive types
+        stack = [tree.root_node]
+        while stack:
+            node = stack.pop()
             # Look for type_identifier nodes (user-defined types)
             if node.type == "type_identifier":
                 type_name = source_bytes[node.start_byte : node.end_byte].decode("utf8")
                 # Skip primitive types
-                if type_name not in (
-                    "number",
-                    "string",
-                    "boolean",
-                    "void",
-                    "null",
-                    "undefined",
-                    "any",
-                    "never",
-                    "unknown",
-                    "object",
-                    "symbol",
-                    "bigint",
-                ):
+                if type_name not in _PRIMITIVE_TYPES:
                     type_names.add(type_name)
-            for child in node.children:
-                walk_for_types(child)
+            # push children onto the stack
+            # using extend is efficient and keeps the traversal iterative
+            children = node.children
+            if children:
+                stack.extend(children)
 
-        walk_for_types(tree.root_node)
         return type_names
 
     def _find_imported_type_definitions(
@@ -1227,7 +1337,7 @@ class JavaScriptSupport:
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
 
-        def find_function_node(node, target_name: str):
+        def find_function_node(node: Any, target_name: str) -> Any:
             """Recursively find a function/method with the given name."""
             # Check method definitions
             if node.type == "method_definition":
@@ -1304,7 +1414,7 @@ class JavaScriptSupport:
         tree = analyzer.parse(source_bytes)
 
         # Find the original function node
-        def find_function_at_line(node, target_name: str, target_line: int):
+        def find_function_at_line(node: Any, target_name: str, target_line: int) -> Any:
             """Find a function with matching name and line number."""
             if node.type == "method_definition":
                 name_node = node.child_by_field_name("name")
@@ -1343,6 +1453,9 @@ class JavaScriptSupport:
 
             return None
 
+        if function.starting_line is None:
+            logger.warning("Cannot replace function %s: starting_line is None", function.function_name)
+            return source
         func_node = find_function_at_line(tree.root_node, function.function_name, function.starting_line)
         if not func_node:
             logger.warning("Could not find function %s at line %s", function.function_name, function.starting_line)
@@ -1441,6 +1554,10 @@ class JavaScriptSupport:
             Modified source code with function replaced.
 
         """
+        if function.starting_line is None:
+            logger.warning("Cannot replace function %s: starting_line is None", function.function_name)
+            return source
+
         lines = source.splitlines(keepends=True)
 
         # Handle case where source doesn't end with newline
@@ -1455,7 +1572,7 @@ class JavaScriptSupport:
                 break
 
         # Use doc_start_line if available, otherwise fall back to start_line
-        effective_start = (target_func.doc_start_line if target_func else None) or function.starting_line
+        effective_start: int = (target_func.doc_start_line if target_func else None) or function.starting_line
 
         # Get indentation from original function's first line
         if function.starting_line <= len(lines):
@@ -1793,7 +1910,7 @@ class JavaScriptSupport:
         module_system = detect_module_system(project_root, source_file_path)
         if module_system == "esm":
             generated_tests = inject_test_globals(generated_tests, test_framework)
-        if self.language == Language.TYPESCRIPT:
+        if is_typescript():
             generated_tests = disable_ts_check(generated_tests)
         return normalize_generated_tests_imports(generated_tests)
 
@@ -1864,6 +1981,9 @@ class JavaScriptSupport:
         from codeflash.languages.javascript.edit_tests import resolve_js_test_module_path
 
         unique_inv_ids: dict[str, int] = {}
+        # Cache resolved path strings per module path to avoid repeated filesystem resolves
+        _resolved_path_cache: dict[str, str] = {}
+
         for inv_id, runtimes in inv_id_runtimes.items():
             test_qualified_name = (
                 inv_id.test_class_name + "." + inv_id.test_function_name  # type: ignore[operator]
@@ -1872,28 +1992,35 @@ class JavaScriptSupport:
             )
             if not test_qualified_name:
                 continue
-            abs_path = resolve_js_test_module_path(inv_id.test_module_path, tests_project_rootdir)
 
-            abs_path_str = str(abs_path.resolve().with_suffix(""))
+            module_path_key = inv_id.test_module_path
+            abs_path_str = _resolved_path_cache.get(module_path_key)
+            if abs_path_str is None:
+                abs_path = resolve_js_test_module_path(module_path_key, tests_project_rootdir)
+                try:
+                    abs_path_str = str(abs_path.resolve().with_suffix(""))
+                except Exception:
+                    # Fallback in case resolve() fails for any reason; preserve behavior
+                    abs_path_str = str(abs_path.with_suffix(""))
+                _resolved_path_cache[module_path_key] = abs_path_str
+
             if "__unit_test_" not in abs_path_str and "__perf_test_" not in abs_path_str:
                 continue
 
             key = test_qualified_name + "#" + abs_path_str
-            parts = inv_id.iteration_id.split("_").__len__()  # type: ignore[union-attr]
-            cur_invid = (
-                inv_id.iteration_id.split("_")[0] if parts < 3 else "_".join(inv_id.iteration_id.split("_")[:-1])
-            )  # type: ignore[union-attr]
+            iteration_id = inv_id.iteration_id or ""
+            parts = iteration_id.split("_")
+            parts_len = len(parts)
+            cur_invid = parts[0] if parts_len < 3 else "_".join(parts[:-1])
             match_key = key + "#" + cur_invid
-            if match_key not in unique_inv_ids:
-                unique_inv_ids[match_key] = 0
-            unique_inv_ids[match_key] += min(runtimes)
+            unique_inv_ids[match_key] = unique_inv_ids.get(match_key, 0) + min(runtimes)
         return unique_inv_ids
 
     # === Test Result Comparison ===
 
     def compare_test_results(
         self, original_results_path: Path, candidate_results_path: Path, project_root: Path | None = None
-    ) -> tuple[bool, list]:
+    ) -> tuple[bool, list[Any]]:
         """Compare test results between original and candidate code.
 
         Args:
@@ -2010,8 +2137,8 @@ class JavaScriptSupport:
             return rel_path
         except ValueError:
             # Fallback if paths are on different drives (Windows)
-            rel_path = source_file.relative_to(project_root)
-            return "../" + rel_path.with_suffix("").as_posix()
+            fallback_path = source_file.relative_to(project_root)
+            return "../" + fallback_path.with_suffix("").as_posix()
 
     def verify_requirements(self, project_root: Path, test_framework: str = "jest") -> tuple[bool, list[str]]:
         """Verify that all JavaScript requirements are met.
@@ -2179,7 +2306,7 @@ class JavaScriptSupport:
             logger.warning("Failed to instrument source for line profiling: %s", e)
             return False
 
-    def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict:
+    def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict[str, Any]:
         from codeflash.languages.javascript.line_profiler import JavaScriptLineProfiler
 
         if line_profiler_output_file.exists():
@@ -2191,28 +2318,45 @@ class JavaScriptSupport:
         logger.warning("No line profiler output file found at %s", line_profiler_output_file)
         return {"timings": {}, "unit": 0, "str_out": ""}
 
-    def _format_js_line_profile_output(self, parsed_results: dict) -> str:
+    def _format_js_line_profile_output(self, parsed_results: dict[str, Any]) -> str:
         """Format JavaScript line profiler results for display."""
         if not parsed_results.get("timings"):
             return ""
 
         lines = ["Line Profile Results:"]
-        for file_path, line_data in parsed_results.get("timings", {}).items():
-            lines.append(f"\nFile: {file_path}")
-            lines.append("-" * 80)
-            lines.append(f"{'Line':>6}  {'Hits':>8}  {'Time (ms)':>12}  {'% Time':>8}  {'Content'}")
-            lines.append("-" * 80)
+        timings = parsed_results.get("timings", {})
 
-            total_time_ms = sum(data.get("time_ms", 0) for data in line_data.values())
+        # Pre-build format strings outside the loop
+        header_format = "{:>6}  {:>8}  {:>12}  {:>8}  {}"
+        data_format = "{:>6}  {:>8}  {:>12.3f}  {:>7.1f}%  {}"
+        separator = "-" * 80
+
+        for file_path, line_data in timings.items():
+            lines.append(f"\nFile: {file_path}")
+            lines.append(separator)
+            lines.append(header_format.format("Line", "Hits", "Time (ms)", "% Time", "Content"))
+            lines.append(separator)
+
+            # Calculate total time using direct access instead of .get() in generator
+            total_time_ms = sum(data["time_ms"] for data in line_data.values() if "time_ms" in data)
+
+            # Pre-compute reciprocal to avoid division in loop
+            time_factor = 100.0 / total_time_ms if total_time_ms > 0 else 0.0
+
             for line_num, data in sorted(line_data.items()):
                 hits = data.get("hits", 0)
                 time_ms = data.get("time_ms", 0)
-                pct = (time_ms / total_time_ms * 100) if total_time_ms > 0 else 0
                 content = data.get("content", "")
+                # Truncate long lines for display
+
+                # Calculate percentage using multiplication instead of division
+                pct = time_ms * time_factor
+
                 # Truncate long lines for display
                 if len(content) > 50:
                     content = content[:47] + "..."
-                lines.append(f"{line_num:>6}  {hits:>8}  {time_ms:>12.3f}  {pct:>7.1f}%  {content}")
+
+                lines.append(data_format.format(line_num, hits, time_ms, pct, content))
 
         return "\n".join(lines)
 
@@ -2416,25 +2560,6 @@ class TypeScriptSupport(JavaScriptSupport):
         """File extensions for TypeScript files."""
         return (".ts", ".tsx", ".mts")
 
-    def _get_test_patterns(self) -> list[str]:
-        """Get test file patterns for TypeScript.
-
-        Includes TypeScript patterns plus JavaScript patterns for mixed projects.
-
-        Returns:
-            List of glob patterns for test files.
-
-        """
-        return [
-            "*.test.ts",
-            "*.test.tsx",
-            "*.spec.ts",
-            "*.spec.tsx",
-            "__tests__/**/*.ts",
-            "__tests__/**/*.tsx",
-            *super()._get_test_patterns(),
-        ]
-
     def get_test_file_suffix(self) -> str:
         """Get the test file suffix for TypeScript.
 
@@ -2448,6 +2573,7 @@ class TypeScriptSupport(JavaScriptSupport):
         """Check if TypeScript source code is syntactically valid.
 
         Uses tree-sitter TypeScript parser to parse and check for errors.
+        Falls back to TSX parser for files containing JSX syntax.
 
         Args:
             source: Source code to validate.
@@ -2459,7 +2585,11 @@ class TypeScriptSupport(JavaScriptSupport):
         try:
             analyzer = TreeSitterAnalyzer(TreeSitterLanguage.TYPESCRIPT)
             tree = analyzer.parse(source)
-            return not tree.root_node.has_error
+            if not tree.root_node.has_error:
+                return True
+            tsx_analyzer = TreeSitterAnalyzer(TreeSitterLanguage.TSX)
+            tsx_tree = tsx_analyzer.parse(source)
+            return not tsx_tree.root_node.has_error
         except Exception:
             return False
 

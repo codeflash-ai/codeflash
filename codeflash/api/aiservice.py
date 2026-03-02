@@ -135,6 +135,8 @@ class AiServiceClient:
         is_async: bool = False,
         n_candidates: int = 5,
         is_numerical_code: bool | None = None,
+        is_react_component: bool = False,
+        react_context: str | None = None,
     ) -> list[OptimizedCandidate]:
         """Optimize the given code for performance by making a request to the Django endpoint.
 
@@ -187,6 +189,12 @@ class AiServiceClient:
             # Add module system for JavaScript/TypeScript (esm or commonjs)
             if module_system:
                 payload["module_system"] = module_system
+
+        # React-specific fields
+        if is_react_component:
+            payload["is_react_component"] = True
+            if react_context:
+                payload["react_context"] = react_context
 
         # DEBUG: Print payload language field
         logger.debug(
