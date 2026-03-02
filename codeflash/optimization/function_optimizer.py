@@ -766,9 +766,7 @@ class FunctionOptimizer:
         optimizations_set, function_references = optimization_result.unwrap()
 
         review_result = self.review_and_repair_tests(
-            generated_tests=generated_tests,
-            code_context=code_context,
-            original_helper_code=original_helper_code,
+            generated_tests=generated_tests, code_context=code_context, original_helper_code=original_helper_code
         )
         if not is_successful(review_result):
             return Failure(review_result.failure())
@@ -1899,9 +1897,7 @@ class FunctionOptimizer:
         )
 
     def run_behavioral_validation(
-        self,
-        code_context: CodeOptimizationContext,
-        original_helper_code: dict[Path, str],
+        self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str]
     ) -> TestResults | None:
         """Run behavioral tests only. Returns results or None if no tests ran."""
         file_path_to_helper_classes: dict[Path, set[str]] = defaultdict(set)
@@ -1910,9 +1906,7 @@ class FunctionOptimizer:
                 function_source.qualified_name != self.function_to_optimize.qualified_name
                 and "." in function_source.qualified_name
             ):
-                file_path_to_helper_classes[function_source.file_path].add(
-                    function_source.qualified_name.split(".")[0]
-                )
+                file_path_to_helper_classes[function_source.file_path].add(function_source.qualified_name.split(".")[0])
 
         test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
         if self.function_to_optimize.is_async:
@@ -1963,11 +1957,13 @@ class FunctionOptimizer:
             tests_for_review = []
             for i, gt in enumerate(generated_tests.generated_tests):
                 failed_fns = failed_by_file.get(gt.behavior_file_path, [])
-                tests_for_review.append({
-                    "test_source": gt.generated_original_test_source,
-                    "test_index": i,
-                    "failed_test_functions": failed_fns,
-                })
+                tests_for_review.append(
+                    {
+                        "test_source": gt.generated_original_test_source,
+                        "test_index": i,
+                        "failed_test_functions": failed_fns,
+                    }
+                )
 
             with progress_bar("Reviewing generated tests for quality issues..."):
                 review_results = self.aiservice_client.review_generated_tests(
@@ -1982,9 +1978,7 @@ class FunctionOptimizer:
             all_to_repair = [r for r in review_results if r.functions_to_repair]
 
             if not all_to_repair:
-                console.print(
-                    Panel("[green]All generated tests passed quality review[/green]", border_style="green")
-                )
+                console.print(Panel("[green]All generated tests passed quality review[/green]", border_style="green"))
                 break
 
             # Display review findings
@@ -2003,11 +1997,14 @@ class FunctionOptimizer:
                 gt = generated_tests.generated_tests[review.test_index]
                 fn_names = ", ".join(f.function_name for f in review.functions_to_repair)
                 logger.info(f"Repairing test functions in test {review.test_index} (cycle {cycle + 1}): {fn_names}")
-                ph("cli-testgen-repair", {
-                    "test_index": review.test_index,
-                    "cycle": cycle + 1,
-                    "functions": [f.function_name for f in review.functions_to_repair],
-                })
+                ph(
+                    "cli-testgen-repair",
+                    {
+                        "test_index": review.test_index,
+                        "cycle": cycle + 1,
+                        "functions": [f.function_name for f in review.functions_to_repair],
+                    },
+                )
 
                 test_module_path = Path(
                     module_name_from_file_path(gt.behavior_file_path, self.test_cfg.tests_project_rootdir)
