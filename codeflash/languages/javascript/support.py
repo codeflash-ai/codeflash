@@ -51,8 +51,7 @@ class JavaScriptSupport:
 
     @property
     def default_file_extension(self) -> str:
-        """Default file extension for JavaScript."""
-        return ".js"
+        return self.file_extensions[0]
 
     @property
     def test_framework(self) -> str:
@@ -1509,7 +1508,7 @@ class JavaScriptSupport:
         return "".join(result_lines)
 
     def format_code(self, source: str, file_path: Path | None = None) -> str:
-        """Format JavaScript code using prettier (if available).
+        """Format JavaScript/TypeScript code using prettier (if available).
 
         Args:
             source: Source code to format.
@@ -1520,9 +1519,10 @@ class JavaScriptSupport:
 
         """
         try:
-            # Try to use prettier via npx
+            stdin_filepath = str(file_path.name) if file_path else f"file{self.default_file_extension}"
+
             result = subprocess.run(
-                ["npx", "prettier", "--stdin-filepath", "file.js"],
+                ["npx", "prettier", "--stdin-filepath", stdin_filepath],
                 check=False,
                 input=source,
                 capture_output=True,
@@ -1703,22 +1703,15 @@ class JavaScriptSupport:
 
     # === Validation ===
 
+    @property
+    def treesitter_language(self) -> TreeSitterLanguage:
+        return TreeSitterLanguage.JAVASCRIPT
+
     def validate_syntax(self, source: str) -> bool:
-        """Check if JavaScript source code is syntactically valid.
-
-        Uses tree-sitter to parse and check for errors.
-
-        Args:
-            source: Source code to validate.
-
-        Returns:
-            True if valid, False otherwise.
-
-        """
+        """Check if source code is syntactically valid using tree-sitter."""
         try:
-            analyzer = TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
+            analyzer = TreeSitterAnalyzer(self.treesitter_language)
             tree = analyzer.parse(source)
-            # Check if tree has errors
             return not tree.root_node.has_error
         except Exception:
             return False
@@ -2604,62 +2597,9 @@ class TypeScriptSupport(JavaScriptSupport):
         ]
 
     def get_test_file_suffix(self) -> str:
-        """Get the test file suffix for TypeScript.
-
-        Returns:
-            Jest test file suffix for TypeScript.
-
-        """
+        """Get the test file suffix for TypeScript."""
         return ".test.ts"
 
-    def validate_syntax(self, source: str) -> bool:
-        """Check if TypeScript source code is syntactically valid.
-
-        Uses tree-sitter TypeScript parser to parse and check for errors.
-
-        Args:
-            source: Source code to validate.
-
-        Returns:
-            True if valid, False otherwise.
-
-        """
-        try:
-            analyzer = TreeSitterAnalyzer(TreeSitterLanguage.TYPESCRIPT)
-            tree = analyzer.parse(source)
-            return not tree.root_node.has_error
-        except Exception:
-            return False
-
-    def format_code(self, source: str, file_path: Path | None = None) -> str:
-        """Format TypeScript code using prettier (if available).
-
-        Args:
-            source: Source code to format.
-            file_path: Optional file path for context.
-
-        Returns:
-            Formatted source code.
-
-        """
-        try:
-            # Determine file extension for prettier
-            stdin_filepath = str(file_path.name) if file_path else "file.ts"
-
-            # Try to use prettier via npx
-            result = subprocess.run(
-                ["npx", "prettier", "--stdin-filepath", stdin_filepath],
-                check=False,
-                input=source,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            if result.returncode == 0:
-                return result.stdout
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
-        except Exception as e:
-            logger.debug("Prettier formatting failed: %s", e)
-
-        return source
+    @property
+    def treesitter_language(self) -> TreeSitterLanguage:
+        return TreeSitterLanguage.TYPESCRIPT
