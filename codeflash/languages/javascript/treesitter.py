@@ -208,6 +208,22 @@ class TreeSitterAnalyzer:
             current_function=None,
         )
 
+        # Post-process: upgrade is_exported for functions referenced in named export clauses
+        # e.g., const joinBy = () => {}; export { joinBy };
+        exports = self.find_exports(source)
+        exported_names: set[str] = set()
+        for export in exports:
+            for name, _ in export.exported_names:
+                exported_names.add(name)
+            if export.default_export:
+                exported_names.add(export.default_export)
+            if export.wrapped_default_args:
+                exported_names.update(export.wrapped_default_args)
+
+        for func in functions:
+            if not func.is_exported and func.name in exported_names:
+                func.is_exported = True
+
         return functions
 
     def _walk_tree_for_functions(
