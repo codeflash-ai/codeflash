@@ -31,7 +31,6 @@ from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.either import is_successful
 from codeflash.languages import current_language_support, is_javascript, is_python, set_current_language
 from codeflash.lsp.helpers import is_subagent_mode
-from codeflash.models.models import ValidCode
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.verification_utils import TestConfig
 
@@ -43,7 +42,7 @@ if TYPE_CHECKING:
     from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import DependencyResolver
-    from codeflash.models.models import BenchmarkKey, FunctionCalledInTest
+    from codeflash.models.models import BenchmarkKey, FunctionCalledInTest, ValidCode
     from codeflash.optimization.function_optimizer import FunctionOptimizer
 
 
@@ -71,59 +70,6 @@ class Optimizer:
         self.current_worktree: Path | None = None
         self.original_args_and_test_cfg: tuple[Namespace, TestConfig] | None = None
         self.patch_files: list[Path] = []
-
-    @staticmethod
-    def _find_js_project_root(file_path: Path) -> Path | None:
-        """Find the JavaScript/TypeScript project root by looking for package.json.
-
-        Traverses up from the given file path to find the nearest directory
-        containing package.json or jest.config.js.
-
-        Args:
-            file_path: A file path within the JavaScript project.
-
-        Returns:
-            The project root directory, or None if not found.
-
-        """
-        current = file_path.parent if file_path.is_file() else file_path
-        while current != current.parent:  # Stop at filesystem root
-            if (
-                (current / "package.json").exists()
-                or (current / "jest.config.js").exists()
-                or (current / "jest.config.ts").exists()
-                or (current / "tsconfig.json").exists()
-            ):
-                return current
-            current = current.parent
-        return None
-
-    def _verify_js_requirements(self) -> None:
-        """Verify JavaScript/TypeScript requirements before optimization.
-
-        Checks that Node.js, npm, and the test framework are available.
-        Logs warnings if requirements are not met but does not abort.
-
-        """
-        from codeflash.languages import get_language_support
-        from codeflash.languages.base import Language
-        from codeflash.languages.test_framework import get_js_test_framework_or_default
-
-        js_project_root = self.test_cfg.js_project_root
-        if not js_project_root:
-            return
-
-        try:
-            js_support = get_language_support(Language.JAVASCRIPT)
-            test_framework = get_js_test_framework_or_default()
-            success, errors = js_support.verify_requirements(js_project_root, test_framework)
-
-            if not success:
-                logger.warning("JavaScript requirements check found issues:")
-                for error in errors:
-                    logger.warning(f"  - {error}")
-        except Exception as e:
-            logger.debug(f"Failed to verify JS requirements: {e}")
 
     def run_benchmarks(
         self, file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]], num_optimizable_functions: int
@@ -267,6 +213,10 @@ class Optimizer:
             from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 
             cls = PythonFunctionOptimizer
+        elif is_javascript():
+            from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
+
+            cls = JavaScriptFunctionOptimizer
         else:
             cls = FunctionOptimizer
 
@@ -296,19 +246,17 @@ class Optimizer:
     def prepare_module_for_optimization(
         self, original_module_path: Path
     ) -> tuple[dict[Path, ValidCode], ast.Module | None] | None:
-        from codeflash.languages.python.optimizer import prepare_python_module
-
         logger.info(f"loading|Examining file {original_module_path!s}")
         console.rule()
 
         original_module_code: str = original_module_path.read_text(encoding="utf8")
 
-        # For JavaScript/TypeScript, skip Python-specific AST parsing
         if is_javascript():
-            validated_original_code: dict[Path, ValidCode] = {
-                original_module_path: ValidCode(source_code=original_module_code, normalized_code=original_module_code)
-            }
-            return validated_original_code, None
+            from codeflash.languages.javascript.optimizer import prepare_javascript_module
+
+            return prepare_javascript_module(original_module_code, original_module_path)
+
+        from codeflash.languages.python.optimizer import prepare_python_module
 
         return prepare_python_module(original_module_code, original_module_path, self.args.project_root)
 
@@ -520,11 +468,14 @@ class Optimizer:
                 if funcs and funcs[0].language:
                     set_current_language(funcs[0].language)
                     self.test_cfg.set_language(funcs[0].language)
-                    # For JavaScript, also set js_project_root for test execution
                     if is_javascript():
-                        self.test_cfg.js_project_root = self._find_js_project_root(file_path)
-                        # Verify JS requirements before proceeding
-                        self._verify_js_requirements()
+                        from codeflash.languages.javascript.optimizer import (
+                            find_js_project_root,
+                            verify_js_requirements,
+                        )
+
+                        self.test_cfg.js_project_root = find_js_project_root(file_path)
+                        verify_js_requirements(self.test_cfg)
                     break
 
         if self.args.all:
