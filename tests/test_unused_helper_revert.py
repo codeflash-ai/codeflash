@@ -10,8 +10,8 @@ from codeflash.languages.python.context.unused_definition_remover import (
     detect_unused_helper_functions,
     revert_unused_helper_functions,
 )
+from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer as FunctionOptimizer
 from codeflash.models.models import CodeStringsMarkdown
-from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
 

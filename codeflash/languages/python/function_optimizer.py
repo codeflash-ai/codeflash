@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -16,7 +15,6 @@ from codeflash.languages.python.static_analysis.code_extractor import get_opt_re
 from codeflash.languages.python.static_analysis.code_replacer import (
     add_custom_marker_to_all_tests,
     modify_autouse_fixture,
-    replace_function_definitions_in_module,
 )
 from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports, contains_jit_decorator
 from codeflash.models.models import TestingMode, TestResults
@@ -61,27 +59,12 @@ class PythonFunctionOptimizer(FunctionOptimizer):
         optimized_code: CodeStringsMarkdown,
         original_helper_code: dict[Path, str],
     ) -> bool:
-        did_update = False
-        read_writable_functions_by_file_path = defaultdict(set)
-        read_writable_functions_by_file_path[self.function_to_optimize.file_path].add(
-            self.function_to_optimize.qualified_name
+        did_update = super().replace_function_and_helpers_with_optimized_code(
+            code_context, optimized_code, original_helper_code
         )
-        for helper_function in code_context.helper_functions:
-            if helper_function.definition_type != "class":
-                read_writable_functions_by_file_path[helper_function.file_path].add(helper_function.qualified_name)
-        for module_abspath, qualified_names in read_writable_functions_by_file_path.items():
-            did_update |= replace_function_definitions_in_module(
-                function_names=list(qualified_names),
-                optimized_code=optimized_code,
-                module_abspath=module_abspath,
-                preexisting_objects=code_context.preexisting_objects,
-                project_root_path=self.project_root,
-            )
         unused_helpers = detect_unused_helper_functions(self.function_to_optimize, code_context, optimized_code)
-
         if unused_helpers:
             revert_unused_helper_functions(self.project_root, unused_helpers, original_helper_code)
-
         return did_update
 
     def _line_profiler_step_python(

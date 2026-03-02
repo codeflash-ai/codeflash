@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import copy
 import os
 import tempfile
@@ -37,6 +36,7 @@ from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.verification_utils import TestConfig
 
 if TYPE_CHECKING:
+    import ast
     from argparse import Namespace
 
     from codeflash.benchmarking.function_ranker import FunctionRanker

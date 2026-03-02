@@ -82,9 +82,9 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.languages.registry import get_language_support
 from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown
-from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
 
