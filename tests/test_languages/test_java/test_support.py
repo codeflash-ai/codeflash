@@ -56,7 +56,8 @@ public class Calculator {
 }
 """)
 
-        functions = support.discover_functions(java_file)
+        source = java_file.read_text(encoding="utf-8")
+        functions = support.discover_functions(source, java_file)
         assert len(functions) == 1
         assert functions[0].function_name == "add"
         assert functions[0].language == Language.JAVA
@@ -130,5 +131,6 @@ class TestJavaSupportWithFixture:
         if not calculator_file.exists():
             pytest.skip("Calculator.java not found")
 
-        functions = support.discover_functions(calculator_file)
+        source = calculator_file.read_text(encoding="utf-8")
+        functions = support.discover_functions(source, calculator_file)
         assert len(functions) > 0
