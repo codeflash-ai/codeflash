@@ -684,7 +684,7 @@ def resolve_star_import(module_name: str, project_root: Path) -> set[str]:
 
 def add_needed_imports_from_module(
     src_module_code: str,
-    dst_module_code: str,
+    dst_module_code: str | cst.Module,
     src_path: Path,
     dst_path: Path,
     project_root: Path,
@@ -695,6 +695,8 @@ def add_needed_imports_from_module(
     src_module_code = delete___future___aliased_imports(src_module_code)
     if not helper_functions_fqn:
         helper_functions_fqn = {f.fully_qualified_name for f in (helper_functions or [])}
+
+    dst_code_fallback = dst_module_code if isinstance(dst_module_code, str) else dst_module_code.code
 
     src_module_and_package: ModuleNameAndPackage = calculate_module_and_package(project_root, src_path)
     dst_module_and_package: ModuleNameAndPackage = calculate_module_and_package(project_root, dst_path)
@@ -715,15 +717,19 @@ def add_needed_imports_from_module(
         cst.parse_module(src_module_code).visit(gatherer)
     except Exception as e:
         logger.error(f"Error parsing source module code: {e}")
-        return dst_module_code
+        return dst_code_fallback
 
     dotted_import_collector = DottedImportCollector()
-    try:
-        parsed_dst_module = cst.parse_module(dst_module_code)
+    if isinstance(dst_module_code, cst.Module):
+        parsed_dst_module = dst_module_code
         parsed_dst_module.visit(dotted_import_collector)
-    except cst.ParserSyntaxError as e:
-        logger.exception(f"Syntax error in destination module code: {e}")
-        return dst_module_code  # Return the original code if there's a syntax error
+    else:
+        try:
+            parsed_dst_module = cst.parse_module(dst_module_code)
+            parsed_dst_module.visit(dotted_import_collector)
+        except cst.ParserSyntaxError as e:
+            logger.exception(f"Syntax error in destination module code: {e}")
+            return dst_code_fallback
 
     try:
         for mod in gatherer.module_imports:
@@ -768,7 +774,7 @@ def add_needed_imports_from_module(
                     RemoveImportsVisitor.remove_unused_import(dst_context, mod, obj)
     except Exception as e:
         logger.exception(f"Error adding imports to destination module code: {e}")
-        return dst_module_code
+        return dst_code_fallback
 
     for mod, asname in gatherer.module_aliases.items():
         if not asname:
@@ -796,7 +802,7 @@ def add_needed_imports_from_module(
         return transformed_module.code.lstrip("\n")
     except Exception as e:
         logger.exception(f"Error adding imports to destination module code: {e}")
-        return dst_module_code
+        return dst_code_fallback
 
 
 def get_code(functions_to_optimize: list[FunctionToOptimize]) -> tuple[str | None, set[tuple[str, str]]]:

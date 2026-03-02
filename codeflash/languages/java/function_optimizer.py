@@ -112,7 +112,13 @@ class JavaFunctionOptimizer(FunctionOptimizer):
             )
 
         read_writable_code = CodeStringsMarkdown(code_strings=read_writable_code_strings, language=language)
-        testgen_context = CodeStringsMarkdown(code_strings=read_writable_code_strings.copy(), language=language)
+
+        testgen_code_strings = read_writable_code_strings.copy()
+        if code_context.imported_type_skeletons:
+            testgen_code_strings.append(
+                CodeString(code=code_context.imported_type_skeletons, file_path=None, language=language)
+            )
+        testgen_context = CodeStringsMarkdown(code_strings=testgen_code_strings, language=language)
 
         read_writable_tokens = encoded_tokens_len(read_writable_code.markdown)
         if read_writable_tokens > optim_token_limit:
