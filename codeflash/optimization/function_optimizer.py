@@ -121,7 +121,6 @@ from codeflash.result.critic import (
 )
 from codeflash.result.explanation import Explanation
 from codeflash.telemetry.posthog_cf import ph
-from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
 from codeflash.verification.parse_line_profile_test_output import parse_line_profile_results
@@ -2098,16 +2097,7 @@ class FunctionOptimizer:
                 self.executor, testgen_context.markdown, helper_fqns, generated_test_paths, generated_perf_test_paths
             )
 
-        if is_subagent_mode():
-            future_concolic_tests = None
-        else:
-            future_concolic_tests = self.executor.submit(
-                generate_concolic_tests,
-                self.test_cfg,
-                self.args,
-                self.function_to_optimize,
-                self.function_to_optimize_ast,
-            )
+        future_concolic_tests = None
 
         if not self.args.no_gen_tests:
             # Wait for test futures to complete
