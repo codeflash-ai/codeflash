@@ -1613,7 +1613,7 @@ class FunctionOptimizer:
                 (tests_in_file.tests_in_file.test_file, tests_in_file.tests_in_file.test_type)
             ].append(tests_in_file)
 
-        for (test_file, test_type), tests_in_file_list in test_file_invocation_positions.items():
+        for test_file, test_type in test_file_invocation_positions:
             path_obj_test_file = Path(test_file)
             if test_type == TestType.EXISTING_UNIT_TEST:
                 existing_test_files_count += 1
