@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from codeflash.languages.base import Language, LanguageSupport
-from codeflash.languages.java.support import JavaSupport, get_java_support
+from codeflash.languages.java.support import get_java_support
 
 
 class TestJavaSupportProtocol:

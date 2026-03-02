@@ -278,8 +278,8 @@ class TestJavaRunAndParseBehavior:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=2,
+            pytest_min_loops=1,
+            pytest_max_loops=2,
             testing_time=0.1,
         )
 
@@ -358,8 +358,8 @@ public class AdderMultiTest {
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=2,
+            pytest_min_loops=1,
+            pytest_max_loops=2,
             testing_time=0.1,
         )
 
@@ -480,8 +480,8 @@ public class PreciseWaiterTest {
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=2,
-            max_outer_loops=2,
+            pytest_min_loops=2,
+            pytest_max_loops=2,
             inner_iterations=inner_iterations,
             testing_time=0.0,
         )
