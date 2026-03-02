@@ -1,6 +1,8 @@
 """Tests for JavaScript/TypeScript project initialization and package manager detection."""
 
+import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -8,6 +10,7 @@ from codeflash.cli_cmds.init_javascript import (
     JsPackageManager,
     determine_js_package_manager,
     get_package_install_command,
+    should_modify_package_json_config,
 )
 
 
@@ -281,3 +284,67 @@ class TestGetPackageInstallCommand:
         result = get_package_install_command(tmp_project, "typescript", dev=True)
 
         assert result == ["pnpm", "add", "typescript", "--save-dev"]
+
+
+class TestShouldModifySkipConfirm:
+    """Tests for should_modify_package_json_config with skip_confirm."""
+
+    def test_should_modify_skip_confirm_no_config(self, tmp_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """With skip_confirm and no codeflash config, should return (True, None)."""
+        monkeypatch.chdir(tmp_project)
+        (tmp_project / "package.json").write_text(json.dumps({"name": "test"}))
+
+        should_modify, config = should_modify_package_json_config(skip_confirm=True)
+
+        assert should_modify is True
+        assert config is None
+
+    def test_should_modify_skip_confirm_with_valid_config(
+        self, tmp_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """With skip_confirm and valid config, should return (False, config) — no reconfigure."""
+        monkeypatch.chdir(tmp_project)
+        codeflash_config = {"moduleRoot": "."}
+        (tmp_project / "package.json").write_text(
+            json.dumps({"name": "test", "codeflash": codeflash_config})
+        )
+
+        should_modify, config = should_modify_package_json_config(skip_confirm=True)
+
+        assert should_modify is False
+        assert config == codeflash_config
+
+    def test_should_modify_skip_confirm_with_invalid_config(
+        self, tmp_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """With skip_confirm and invalid config (bad moduleRoot), should return (True, None)."""
+        monkeypatch.chdir(tmp_project)
+        codeflash_config = {"moduleRoot": "/nonexistent/path/that/does/not/exist"}
+        (tmp_project / "package.json").write_text(
+            json.dumps({"name": "test", "codeflash": codeflash_config})
+        )
+
+        should_modify, config = should_modify_package_json_config(skip_confirm=True)
+
+        assert should_modify is True
+        assert config is None
+
+
+class TestCollectJsSetupInfoSkipConfirm:
+    """Tests for collect_js_setup_info with skip_confirm."""
+
+    def test_collect_js_setup_info_skip_confirm(self, tmp_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """skip_confirm should return defaults without any interactive prompts."""
+        monkeypatch.chdir(tmp_project)
+        (tmp_project / "package.json").write_text(json.dumps({"name": "test"}))
+
+        from codeflash.cli_cmds.init_javascript import ProjectLanguage, collect_js_setup_info
+
+        # Should not call any prompt functions
+        with patch("codeflash.cli_cmds.init_javascript.inquirer") as mock_inquirer:
+            setup_info = collect_js_setup_info(ProjectLanguage.JAVASCRIPT, skip_confirm=True)
+            mock_inquirer.prompt.assert_not_called()
+
+        assert setup_info.module_root_override is None
+        assert setup_info.formatter_override is None
+        assert setup_info.git_remote == "origin"
