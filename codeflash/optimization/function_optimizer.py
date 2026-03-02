@@ -69,7 +69,6 @@ from codeflash.either import Failure, Success, is_successful
 from codeflash.languages.base import Language
 from codeflash.languages.current import current_language_support
 from codeflash.languages.javascript.test_runner import clear_created_config_files, get_created_config_files
-from codeflash.languages.python.context import code_context_extractor
 from codeflash.lsp.helpers import is_LSP_enabled, is_subagent_mode, report_to_markdown_table, tree_to_markdown
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
@@ -79,7 +78,6 @@ from codeflash.models.models import (
     AIServiceCodeRepairRequest,
     BestOptimization,
     CandidateEvaluationContext,
-    CodeOptimizationContext,
     GeneratedTests,
     GeneratedTestsList,
     OptimizationReviewResult,
@@ -123,6 +121,7 @@ if TYPE_CHECKING:
     from codeflash.models.function_types import FunctionParent
     from codeflash.models.models import (
         BenchmarkKey,
+        CodeOptimizationContext,
         CodeStringsMarkdown,
         ConcurrencyMetrics,
         CoverageData,
@@ -1557,28 +1556,8 @@ class FunctionOptimizer:
             )
         return did_update
 
-    # TODO: Extract into PythonFunctionOptimizer — code_context_extractor is Python-only.
-    # Needs a JS context extractor equivalent first.
     def get_code_optimization_context(self) -> Result[CodeOptimizationContext, str]:
-        try:
-            new_code_ctx = code_context_extractor.get_code_optimization_context(
-                self.function_to_optimize, self.project_root, call_graph=self.call_graph
-            )
-        except ValueError as e:
-            return Failure(str(e))
-
-        return Success(
-            CodeOptimizationContext(
-                testgen_context=new_code_ctx.testgen_context,
-                read_writable_code=new_code_ctx.read_writable_code,
-                read_only_context_code=new_code_ctx.read_only_context_code,
-                hashing_code_context=new_code_ctx.hashing_code_context,
-                hashing_code_context_hash=new_code_ctx.hashing_code_context_hash,
-                helper_functions=new_code_ctx.helper_functions,
-                testgen_helper_fqns=new_code_ctx.testgen_helper_fqns,
-                preexisting_objects=new_code_ctx.preexisting_objects,
-            )
-        )
+        return Failure("get_code_optimization_context not implemented for this language")
 
     @staticmethod
     def cleanup_leftover_test_return_values() -> None:
@@ -1888,7 +1867,6 @@ class FunctionOptimizer:
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
         # Check test quantity for all languages
         quantity_ok = quantity_of_tests_critic(original_code_baseline)
-        # TODO: {Self} Only check coverage for Python - coverage infrastructure not yet reliable for JS/TS
         coverage_ok = coverage_critic(original_code_baseline.coverage_results) if self.should_check_coverage() else True
         if isinstance(original_code_baseline, OriginalCodeBaseline) and (not coverage_ok or not quantity_ok):
             if self.args.override_fixtures:
