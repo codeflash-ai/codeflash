@@ -821,3 +821,86 @@ export default curry(traverseEntity);"""
         # createVisitorUtils is NOT wrapped, so not exported via default
         is_utils_exported, _ = ts_analyzer.is_function_exported(code, "createVisitorUtils")
         assert is_utils_exported is False
+
+
+class TestNamedExportConstArrow:
+    """Tests for const arrow functions exported via named export clause.
+
+    Pattern: const joinBy = () => {}; export { joinBy };
+    This is common in TypeScript codebases like Strapi.
+    """
+
+    @pytest.fixture
+    def ts_analyzer(self):
+        return TreeSitterAnalyzer(TreeSitterLanguage.TYPESCRIPT)
+
+    @pytest.fixture
+    def js_analyzer(self):
+        return TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
+
+    def test_named_export_const_arrow(self, ts_analyzer):
+        """const arrow function exported via separate export { } clause."""
+        code = """const joinBy = (arr: string[], separator: string) => {
+    return arr.join(separator);
+};
+
+export { joinBy };"""
+
+        functions = ts_analyzer.find_functions(code)
+        joinBy = next((f for f in functions if f.name == "joinBy"), None)
+        assert joinBy is not None
+        assert joinBy.is_exported is True
+
+    def test_named_export_alias(self, ts_analyzer):
+        """export { foo as bar } — foo should be marked as exported."""
+        code = """const foo = (x: number) => {
+    return x * 2;
+};
+
+export { foo as bar };"""
+
+        functions = ts_analyzer.find_functions(code)
+        foo = next((f for f in functions if f.name == "foo"), None)
+        assert foo is not None
+        assert foo.is_exported is True
+
+    def test_named_export_multiple(self, ts_analyzer):
+        """Multiple functions in a single export clause."""
+        code = """const a = () => { return 1; };
+const b = () => { return 2; };
+const c = () => { return 3; };
+
+export { a, b };"""
+
+        functions = ts_analyzer.find_functions(code)
+        a = next((f for f in functions if f.name == "a"), None)
+        b = next((f for f in functions if f.name == "b"), None)
+        c = next((f for f in functions if f.name == "c"), None)
+        assert a is not None and a.is_exported is True
+        assert b is not None and b.is_exported is True
+        assert c is not None and c.is_exported is False
+
+    def test_named_export_function_declaration(self, js_analyzer):
+        """Regular function declarations exported via export { }."""
+        code = """function processData(data) {
+    return data;
+}
+
+export { processData };"""
+
+        functions = js_analyzer.find_functions(code)
+        f = next((f for f in functions if f.name == "processData"), None)
+        assert f is not None
+        assert f.is_exported is True
+
+    def test_is_function_exported_with_named_export(self, ts_analyzer):
+        """is_function_exported should detect named export clause."""
+        code = """const joinBy = (arr: string[], separator: string) => {
+    return arr.join(separator);
+};
+
+export { joinBy };"""
+
+        is_exported, name = ts_analyzer.is_function_exported(code, "joinBy")
+        assert is_exported is True
+
