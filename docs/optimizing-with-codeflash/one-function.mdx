@@ -1,6 +1,6 @@
 ---
 title: "Optimize a Single Function"
-description: "Target and optimize individual Python functions for maximum performance gains"
+description: "Target and optimize individual functions for maximum performance gains"
 icon: "bullseye"
 sidebarTitle: "Optimize Single Function"
 keywords:
@@ -10,6 +10,9 @@ keywords:
     "class methods",
     "performance",
     "targeted optimization",
+    "javascript",
+    "typescript",
+    "python",
   ]
 ---
 
@@ -24,23 +27,55 @@ your mileage may vary.
 
 ## How to optimize a function
 
-To optimize a function, you can run the following command in your project:
+To optimize a function, run the following command in your project:
 
+<Tabs>
+<Tab title="Python">
 ```bash
 codeflash --file path/to/your/file.py --function function_name
 ```
+</Tab>
+<Tab title="JavaScript">
+```bash
+codeflash --file path/to/your/file.js --function functionName
+```
+</Tab>
+<Tab title="TypeScript">
+```bash
+codeflash --file path/to/your/file.ts --function functionName
+```
+</Tab>
+</Tabs>
 
 If you have installed the GitHub App to your repository, the above command will open a pull request with the optimized function.
-If you want to optimize a function locally, you can add a `--no-pr` argument as follows:
+If you want to optimize a function locally, add a `--no-pr` argument:
 
+<Tabs>
+<Tab title="Python">
 ```bash
 codeflash --file path/to/your/file.py --function function_name --no-pr
 ```
+</Tab>
+<Tab title="JavaScript / TypeScript">
+```bash
+codeflash --file path/to/your/file.ts --function functionName --no-pr
+```
+</Tab>
+</Tabs>
 
 ### Optimizing class methods
 
-To optimize a method `method_name` in a class `ClassName`, you can run the following command:
+To optimize a method `methodName` in a class `ClassName`:
 
+<Tabs>
+<Tab title="Python">
 ```bash
 codeflash --file path/to/your/file.py --function ClassName.method_name
 ```
+</Tab>
+<Tab title="JavaScript / TypeScript">
+```bash
+codeflash --file path/to/your/file.ts --function ClassName.methodName
+```
+</Tab>
+</Tabs>
