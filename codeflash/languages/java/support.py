@@ -279,6 +279,13 @@ class JavaSupport(LanguageSupport):
 
     # === Configuration ===
 
+    def adjust_test_config_for_discovery(self, test_cfg: Any) -> None:
+        """Adjust test config before test discovery for Java.
+
+        Ensures test file resolution works correctly in parse_test_xml.
+        """
+        test_cfg.tests_project_rootdir = test_cfg.tests_root
+
     def get_test_file_suffix(self) -> str:
         """Get the test file suffix for Java."""
         return "Test.java"

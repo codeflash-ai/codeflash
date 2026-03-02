@@ -6,8 +6,10 @@ from typing import Any, Union
 MAX_TEST_RUN_ITERATIONS = 5
 OPTIMIZATION_CONTEXT_TOKEN_LIMIT = 64000
 TESTGEN_CONTEXT_TOKEN_LIMIT = 64000
-INDIVIDUAL_TESTCASE_TIMEOUT = 15  # For Python pytest
-JAVA_TESTCASE_TIMEOUT = 120  # Java Maven tests need more time due to startup overhead
+READ_WRITABLE_LIMIT_ERROR = "Read-writable code has exceeded token limit, cannot proceed"
+TESTGEN_LIMIT_ERROR = "Testgen code context has exceeded token limit, cannot proceed"
+INDIVIDUAL_TESTCASE_TIMEOUT = 15
+JAVA_TESTCASE_TIMEOUT = 120
 MAX_FUNCTION_TEST_SECONDS = 60
 MIN_IMPROVEMENT_THRESHOLD = 0.05
 MIN_THROUGHPUT_IMPROVEMENT_THRESHOLD = 0.10  # 10% minimum improvement for async throughput
