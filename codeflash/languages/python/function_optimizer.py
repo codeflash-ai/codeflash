@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 from collections import defaultdict
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -21,7 +22,6 @@ from codeflash.languages.python.static_analysis.code_replacer import (
 from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports, contains_jit_decorator
 from codeflash.models.models import TestingMode, TestResults
 from codeflash.optimization.function_optimizer import FunctionOptimizer
-from functools import lru_cache
 
 if TYPE_CHECKING:
     from codeflash.languages.base import Language
@@ -134,12 +134,6 @@ class PythonFunctionOptimizer(FunctionOptimizer):
                 f"Couldn't run line profiler for original function {self.function_to_optimize.function_name}"
             )
         return line_profile_results
-
-
-
-@lru_cache(maxsize=128)
-def _cached_parse_source(source_code: str) -> ast.Module:
-    return ast.parse(source_code)
 
 
 @lru_cache(maxsize=128)
