@@ -904,3 +904,70 @@ export { joinBy };"""
         is_exported, name = ts_analyzer.is_function_exported(code, "joinBy")
         assert is_exported is True
 
+
+class TestCjsReexportObjectMethods:
+    """Tests for CJS re-export of object containing methods.
+
+    Pattern: const utils = { match() {} }; module.exports = utils;
+    This is common in Node.js libraries like Moleculer.
+    """
+
+    @pytest.fixture
+    def js_analyzer(self):
+        return TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
+
+    def test_cjs_reexport_object_methods(self, js_analyzer):
+        """module.exports = varName where varName is object with methods."""
+        code = """const utils = {
+    match(text, pattern) {
+        return text.match(pattern);
+    },
+    slugify(str) {
+        return str.toLowerCase();
+    }
+};
+
+module.exports = utils;"""
+
+        is_exported, name = js_analyzer.is_function_exported(code, "match")
+        assert is_exported is True
+
+        is_exported2, _ = js_analyzer.is_function_exported(code, "slugify")
+        assert is_exported2 is True
+
+    def test_cjs_reexport_shorthand_props(self, js_analyzer):
+        """module.exports = varName where object has shorthand properties."""
+        code = """function match(text, pattern) {
+    return text.match(pattern);
+}
+
+const utils = { match };
+module.exports = utils;"""
+
+        is_exported, _ = js_analyzer.is_function_exported(code, "match")
+        assert is_exported is True
+
+    def test_cjs_reexport_pair_props(self, js_analyzer):
+        """module.exports = varName where object has key: value pairs."""
+        code = """function myMatch(text, pattern) {
+    return text.match(pattern);
+}
+
+const utils = { match: myMatch };
+module.exports = utils;"""
+
+        is_exported, _ = js_analyzer.is_function_exported(code, "match")
+        assert is_exported is True
+
+    def test_cjs_reexport_nonexistent_prop(self, js_analyzer):
+        """A function not in the re-exported object should not be exported."""
+        code = """function helper() { return 1; }
+
+const utils = {
+    match(text) { return text; }
+};
+
+module.exports = utils;"""
+
+        is_exported, _ = js_analyzer.is_function_exported(code, "helper")
+        assert is_exported is False
