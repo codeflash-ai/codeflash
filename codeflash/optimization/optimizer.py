@@ -247,23 +247,9 @@ class Optimizer:
         function_to_optimize_source_code: str | None = "",
         function_benchmark_timings: dict[str, dict[BenchmarkKey, float]] | None = None,
         total_benchmark_timings: dict[BenchmarkKey, float] | None = None,
-        original_module_ast: ast.Module | None = None,
-        original_module_path: Path | None = None,
         call_graph: DependencyResolver | None = None,
     ) -> FunctionOptimizer | None:
-        from codeflash.languages.python.optimizer import resolve_python_function_ast
         from codeflash.optimization.function_optimizer import FunctionOptimizer
-
-        if function_to_optimize_ast is None and original_module_ast is not None:
-            function_to_optimize_ast = resolve_python_function_ast(
-                function_to_optimize.function_name, function_to_optimize.parents, original_module_ast
-            )
-            if function_to_optimize_ast is None:
-                logger.info(
-                    f"Function {function_to_optimize.qualified_name} not found in {original_module_path}.\n"
-                    f"Skipping optimization."
-                )
-                return None
 
         qualified_name_w_module = function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root)
 
@@ -284,7 +270,9 @@ class Optimizer:
         else:
             cls = FunctionOptimizer
 
-        return cls(
+        # TODO: _resolve_function_ast re-parses source via ast.parse() per function, even when the caller already
+        # has a parsed module AST. Consider passing the pre-parsed AST through to avoid redundant parsing.
+        function_optimizer = cls(
             function_to_optimize=function_to_optimize,
             test_cfg=self.test_cfg,
             function_to_optimize_source_code=function_to_optimize_source_code,
@@ -297,6 +285,13 @@ class Optimizer:
             replay_tests_dir=self.replay_tests_dir,
             call_graph=call_graph,
         )
+        if function_optimizer.function_to_optimize_ast is None:
+            logger.info(
+                f"Function {function_to_optimize.qualified_name} not found in "
+                f"{function_to_optimize.file_path}.\nSkipping optimization."
+            )
+            return None
+        return function_optimizer
 
     def prepare_module_for_optimization(
         self, original_module_path: Path
@@ -593,7 +588,7 @@ class Optimizer:
                         continue
                     prepared_modules[original_module_path] = module_prep_result
 
-                validated_original_code, original_module_ast = prepared_modules[original_module_path]
+                validated_original_code, _original_module_ast = prepared_modules[original_module_path]
 
                 function_iterator_count = i + 1
                 logger.info(
@@ -609,8 +604,6 @@ class Optimizer:
                         function_to_optimize_source_code=validated_original_code[original_module_path].source_code,
                         function_benchmark_timings=function_benchmark_timings,
                         total_benchmark_timings=total_benchmark_timings,
-                        original_module_ast=original_module_ast,
-                        original_module_path=original_module_path,
                         call_graph=resolver,
                     )
                     if function_optimizer is None:
