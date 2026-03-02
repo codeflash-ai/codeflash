@@ -148,6 +148,21 @@ class JavaSupport(LanguageSupport):
     def add_global_declarations(self, optimized_code: str, original_source: str, module_abspath: Path) -> str:
         return original_source
 
+    def prepare_module(
+        self, module_code: str, module_path: Path, project_root: Path
+    ) -> tuple[dict[Path, Any], None]:
+        from codeflash.models.models import ValidCode
+
+        validated_original_code: dict[Path, ValidCode] = {
+            module_path: ValidCode(source_code=module_code, normalized_code=module_code)
+        }
+        return validated_original_code, None
+
+    def function_optimizer_class(self) -> type:
+        from codeflash.languages.java.function_optimizer import JavaFunctionOptimizer
+
+        return JavaFunctionOptimizer
+
     # === Discovery ===
 
     def discover_functions(
