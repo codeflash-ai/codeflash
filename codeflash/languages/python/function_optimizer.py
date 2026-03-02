@@ -103,6 +103,9 @@ class PythonFunctionOptimizer(FunctionOptimizer):
             self.function_to_optimize.file_path, self.function_to_optimize, mode, project_root=self.project_root
         )
 
+    def should_skip_sqlite_cleanup(self, testing_type: TestingMode, optimization_iteration: int) -> bool:
+        return False
+
     def compare_candidate_results(
         self,
         baseline_results: OriginalCodeBaseline,

@@ -544,6 +544,9 @@ class FunctionOptimizer:
             )
         return match, diffs
 
+    def should_skip_sqlite_cleanup(self, testing_type: TestingMode, optimization_iteration: int) -> bool:
+        return testing_type == TestingMode.BEHAVIOR or optimization_iteration == 0
+
     # --- End hooks ---
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
@@ -2693,9 +2696,7 @@ class FunctionOptimizer:
                         console.print(panel)
 
         if testing_type in {TestingMode.BEHAVIOR, TestingMode.PERFORMANCE}:
-            # For non-Python behavior tests, skip SQLite cleanup - files needed for language-native comparison
-            non_python_original_code = not is_python() and optimization_iteration == 0
-            skip_cleanup = (not is_python() and testing_type == TestingMode.BEHAVIOR) or non_python_original_code
+            skip_cleanup = self.should_skip_sqlite_cleanup(testing_type, optimization_iteration)
 
             results, coverage_results = parse_test_results(
                 test_xml_path=result_file_path,
