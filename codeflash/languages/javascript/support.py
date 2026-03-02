@@ -2262,6 +2262,10 @@ class JavaScriptSupport:
                 candidate_index=candidate_index,
             )
 
+        if framework not in ("jest", "vitest"):
+            msg = f"Test framework '{framework}' is not yet supported. Supported frameworks: jest, vitest."
+            raise NotImplementedError(msg)
+
         from codeflash.languages.javascript.test_runner import run_jest_behavioral_tests
 
         return run_jest_behavioral_tests(
@@ -2330,6 +2334,10 @@ class JavaScriptSupport:
                 target_duration_ms=int(target_duration_seconds * 1000),
             )
 
+        if framework not in ("jest", "vitest"):
+            msg = f"Test framework '{framework}' is not yet supported. Supported frameworks: jest, vitest."
+            raise NotImplementedError(msg)
+
         from codeflash.languages.javascript.test_runner import run_jest_benchmarking_tests
 
         return run_jest_benchmarking_tests(
@@ -2383,6 +2391,10 @@ class JavaScriptSupport:
                 project_root=project_root,
                 line_profile_output_file=line_profile_output_file,
             )
+
+        if framework not in ("jest", "vitest"):
+            msg = f"Test framework '{framework}' is not yet supported. Supported frameworks: jest, vitest."
+            raise NotImplementedError(msg)
 
         from codeflash.languages.javascript.test_runner import run_jest_line_profile_tests
 

@@ -1018,3 +1018,64 @@ console.log('OK');
         assert "./jest-reporter" in exports, "Missing ./jest-reporter export in package.json"
         assert exports["./jest-reporter"]["require"] == "./runtime/jest-reporter.js"
 
+
+
+class TestUnsupportedFrameworkError:
+    """Tests for clear error on unsupported test frameworks."""
+
+    def test_mocha_framework_raises_error_behavioral(self):
+        """run_behavioral_tests should raise NotImplementedError for mocha."""
+        from codeflash.languages.javascript.support import JavaScriptSupport
+
+        support = JavaScriptSupport()
+        with pytest.raises(NotImplementedError, match="mocha.*not yet supported"):
+            support.run_behavioral_tests(
+                test_paths=MagicMock(),
+                test_env={},
+                cwd=Path("."),
+                test_framework="mocha",
+            )
+
+    def test_mocha_framework_raises_error_benchmarking(self):
+        """run_benchmarking_tests should raise NotImplementedError for mocha."""
+        from codeflash.languages.javascript.support import JavaScriptSupport
+
+        support = JavaScriptSupport()
+        with pytest.raises(NotImplementedError, match="mocha.*not yet supported"):
+            support.run_benchmarking_tests(
+                test_paths=MagicMock(),
+                test_env={},
+                cwd=Path("."),
+                test_framework="mocha",
+            )
+
+    def test_mocha_framework_raises_error_line_profile(self):
+        """run_line_profile_tests should raise NotImplementedError for mocha."""
+        from codeflash.languages.javascript.support import JavaScriptSupport
+
+        support = JavaScriptSupport()
+        with pytest.raises(NotImplementedError, match="mocha.*not yet supported"):
+            support.run_line_profile_tests(
+                test_paths=MagicMock(),
+                test_env={},
+                cwd=Path("."),
+                test_framework="mocha",
+            )
+
+    def test_jest_framework_does_not_raise_not_implemented(self):
+        """jest framework should NOT raise NotImplementedError."""
+        from codeflash.languages.javascript.support import JavaScriptSupport
+
+        support = JavaScriptSupport()
+        # Jest may succeed or fail for other reasons, but should NOT raise NotImplementedError
+        try:
+            support.run_behavioral_tests(
+                test_paths=MagicMock(),
+                test_env={},
+                cwd=Path("."),
+                test_framework="jest",
+            )
+        except NotImplementedError:
+            pytest.fail("jest framework should not raise NotImplementedError")
+        except Exception:
+            pass  # Other exceptions are fine — Jest isn't installed in test env
