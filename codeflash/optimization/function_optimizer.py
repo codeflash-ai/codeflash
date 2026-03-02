@@ -1625,6 +1625,18 @@ class FunctionOptimizer:
                 msg = f"Unexpected test type: {test_type}"
                 raise ValueError(msg)
 
+        if existing_test_files_count > 0 or replay_test_files_count > 0 or concolic_coverage_test_files_count > 0:
+            logger.info(
+                f"Discovered {existing_test_files_count} existing unit test file"
+                f"{'s' if existing_test_files_count != 1 else ''}, {replay_test_files_count} replay test file"
+                f"{'s' if replay_test_files_count != 1 else ''}, and "
+                f"{concolic_coverage_test_files_count} concolic coverage test file"
+                f"{'s' if concolic_coverage_test_files_count != 1 else ''} for {func_qualname}"
+            )
+            console.rule()
+
+        for (test_file, test_type), tests_in_file_list in test_file_invocation_positions.items():
+            path_obj_test_file = Path(test_file)
             # Use language-specific instrumentation
             success, injected_behavior_test = self.language_support.instrument_existing_test(
                 test_path=path_obj_test_file,
@@ -1696,13 +1708,11 @@ class FunctionOptimizer:
                     )
                 )
 
-        if existing_test_files_count > 0 or replay_test_files_count > 0 or concolic_coverage_test_files_count > 0:
+        instrumented_count = len(unique_instrumented_test_files) // 2  # each test produces behavior + perf files
+        if instrumented_count > 0:
             logger.info(
-                f"Discovered {existing_test_files_count} existing unit test file"
-                f"{'s' if existing_test_files_count != 1 else ''}, {replay_test_files_count} replay test file"
-                f"{'s' if replay_test_files_count != 1 else ''}, and "
-                f"{concolic_coverage_test_files_count} concolic coverage test file"
-                f"{'s' if concolic_coverage_test_files_count != 1 else ''} for {func_qualname}"
+                f"Instrumented {instrumented_count} existing unit test file"
+                f"{'s' if instrumented_count != 1 else ''} for {func_qualname}"
             )
             console.rule()
         return unique_instrumented_test_files
