@@ -21,6 +21,8 @@ from codeflash.languages.python.static_analysis.line_profile_utils import add_de
 from codeflash.models.models import TestingMode, TestResults
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.parse_test_output import calculate_function_throughput_from_test_results
+import copy
+from collections import OrderedDict
 
 if TYPE_CHECKING:
     from typing import Any
@@ -36,6 +38,10 @@ if TYPE_CHECKING:
         OriginalCodeBaseline,
         TestDiff,
     )
+
+_MAX_CACHE_SIZE = 128
+
+_resolve_cache: "OrderedDict[tuple[str, str, tuple[tuple[str, str], ...]], ast.AST | None]" = OrderedDict()
 
 
 class PythonFunctionOptimizer(FunctionOptimizer):
@@ -54,8 +60,38 @@ class PythonFunctionOptimizer(FunctionOptimizer):
     def _resolve_function_ast(
         self, source_code: str, function_name: str, parents: list[FunctionParent]
     ) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
+        original_module_ast = None  # preserve variable name used previously
+
+        # Build a lightweight, hashable representation of parents
+        if parents:
+            # Use tuple of (type, name) for each parent; these are the same attributes
+            # consulted by static analysis, and are expected to be strings.
+            parents_key = tuple((p.type, p.name) for p in parents)
+        else:
+            parents_key = ()
+
+        cache_key = (source_code, function_name, parents_key)
+
+        # Fast-path: return cached result copy if available.
+        cached = _resolve_cache.get(cache_key)
+        if cached is not None or (cache_key in _resolve_cache and cached is None):
+            # Return a deep copy so callers can't mutate the cached AST.
+            return copy.deepcopy(cached)
+
+        # Cache miss: parse then resolve
         original_module_ast = ast.parse(source_code)
-        return resolve_python_function_ast(function_name, parents, original_module_ast)
+        result = resolve_python_function_ast(function_name, parents, original_module_ast)
+
+        # Store a deep copy in cache to avoid future mutations affecting cache
+        frozen = copy.deepcopy(result)
+        _resolve_cache[cache_key] = frozen
+        # Enforce cache size (LRU)
+        if len(_resolve_cache) > _MAX_CACHE_SIZE:
+            # popitem(last=False) pops the oldest inserted item
+            _resolve_cache.popitem(last=False)
+
+        # Return a deep copy of frozen result to preserve original semantics
+        return copy.deepcopy(frozen)
 
     def requires_function_ast(self) -> bool:
         return True
