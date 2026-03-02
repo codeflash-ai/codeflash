@@ -437,8 +437,13 @@ def run_behavioral_tests(
     else:
         # Direct JVM execution (fast path — bypasses Maven overhead)
         result, result_xml_path = _run_direct_or_fallback_maven(
-            maven_root, test_module, test_paths, run_env,
-            effective_timeout, mode="behavior", candidate_index=candidate_index,
+            maven_root,
+            test_module,
+            test_paths,
+            run_env,
+            effective_timeout,
+            mode="behavior",
+            candidate_index=candidate_index,
         )
 
     # Debug: Log Maven result and coverage file status
