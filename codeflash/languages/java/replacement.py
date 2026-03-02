@@ -88,8 +88,7 @@ def _parse_optimization_source(new_source: str, target_method_name: str, analyze
             # Target method not found in the generated class — the LLM generated
             # a different method. Signal invalid candidate with empty source.
             logger.warning(
-                "Generated class does not contain target method '%s'. Skipping candidate.",
-                target_method_name,
+                "Generated class does not contain target method '%s'. Skipping candidate.", target_method_name
             )
             target_method_source = ""
 
@@ -102,8 +101,7 @@ def _parse_optimization_source(new_source: str, target_method_name: str, analyze
             if method.name != target_method_name:
                 # Skip methods nested inside the target (e.g. anonymous class methods)
                 if target_method and (
-                    method.start_line >= target_method.start_line
-                    and method.end_line <= target_method.end_line
+                    method.start_line >= target_method.start_line and method.end_line <= target_method.end_line
                 ):
                     continue
                 start = (method.javadoc_start_line or method.start_line) - 1
