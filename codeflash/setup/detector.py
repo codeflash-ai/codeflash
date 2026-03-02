@@ -894,9 +894,10 @@ def has_existing_config(project_root: Path) -> tuple[bool, str | None]:
         toml_path = project_root / toml_filename
         if toml_path.exists():
             try:
-                with toml_path.open("rb") as f:
-                    data = tomlkit.parse(f.read())
-                if "tool" in data and "codeflash" in data["tool"]:
+                with toml_path.open("r", encoding="utf8", errors="ignore") as f:
+                    content = f.read()
+                # Quick string search before expensive parsing
+                if "codeflash" in content and "[tool" in content:
                     return True, toml_filename
             except Exception:
                 pass
@@ -905,9 +906,10 @@ def has_existing_config(project_root: Path) -> tuple[bool, str | None]:
     package_json_path = project_root / "package.json"
     if package_json_path.exists():
         try:
-            with package_json_path.open(encoding="utf8") as f:
-                data = json.load(f)
-            if "codeflash" in data:
+            with package_json_path.open("r", encoding="utf8", errors="ignore") as f:
+                content = f.read()
+            # Quick string search for codeflash key
+            if '"codeflash"' in content:
                 return True, "package.json"
         except Exception:
             pass
