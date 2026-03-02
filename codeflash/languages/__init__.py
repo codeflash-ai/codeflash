@@ -11,7 +11,7 @@ Usage:
     lang = get_language_support(Path("example.py"))
 
     # Discover functions
-    functions = lang.discover_functions(file_path)
+    functions = lang.discover_functions(source, file_path)
 
     # Replace a function
     new_source = lang.replace_function(file_path, function, new_code)

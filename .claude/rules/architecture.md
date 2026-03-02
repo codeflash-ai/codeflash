@@ -15,6 +15,9 @@ codeflash/
 ├── code_utils/             # Code parsing, git utilities
 ├── models/                 # Pydantic models and types
 ├── languages/              # Multi-language support (Python, JavaScript/TypeScript)
+│   └── python/
+│       ├── function_optimizer.py  # PythonFunctionOptimizer (Python-specific hooks)
+│       └── optimizer.py           # Python module preparation & AST resolution
 ├── setup/                  # Config schema, auto-detection, first-run experience
 ├── picklepatch/            # Serialization/deserialization utilities
 ├── tracing/                # Function call tracing
@@ -32,7 +35,7 @@ codeflash/
 |------|------------|
 | CLI arguments & commands | `cli_cmds/cli.py` |
 | Optimization orchestration | `optimization/optimizer.py` → `run()` |
-| Per-function optimization | `optimization/function_optimizer.py` |
+| Per-function optimization | `optimization/function_optimizer.py` (base), `languages/python/function_optimizer.py` (Python subclass) |
 | Function discovery | `discovery/functions_to_optimize.py` |
 | Context extraction | `languages/<lang>/context/code_context_extractor.py` |
 | Test execution | `verification/test_runner.py`, `verification/pytest_plugin.py` |

@@ -72,14 +72,15 @@ class JavaScriptSupport:
     # === Discovery ===
 
     def discover_functions(
-        self, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
+        self, source: str, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
     ) -> list[FunctionToOptimize]:
-        """Find all optimizable functions in a JavaScript file.
+        """Find all optimizable functions in JavaScript/TypeScript source code.
 
-        Uses tree-sitter to parse the file and find functions.
+        Uses tree-sitter to parse the source and find functions.
 
         Args:
-            file_path: Path to the JavaScript file to analyze.
+            source: Source code to analyze.
+            file_path: Path to the source file (used for language detection).
             filter_criteria: Optional criteria to filter functions.
 
         Returns:
@@ -87,12 +88,6 @@ class JavaScriptSupport:
 
         """
         criteria = filter_criteria or FunctionFilterCriteria()
-
-        try:
-            source = file_path.read_text(encoding="utf-8")
-        except Exception as e:
-            logger.warning("Failed to read %s: %s", file_path, e)
-            return []
 
         try:
             analyzer = get_analyzer_for_file(file_path)
@@ -112,7 +107,7 @@ class JavaScriptSupport:
 
                 # Skip non-exported functions (can't be imported in tests)
                 # Exception: nested functions and methods are allowed if their parent is exported
-                if not func.is_exported and not func.parent_function:
+                if criteria.require_export and not func.is_exported and not func.parent_function:
                     logger.debug(f"Skipping non-exported function: {func.name}")  # noqa: G004
                     continue
 
@@ -143,61 +138,6 @@ class JavaScriptSupport:
 
         except Exception as e:
             logger.warning("Failed to parse %s: %s", file_path, e)
-            return []
-
-    def discover_functions_from_source(self, source: str, file_path: Path | None = None) -> list[FunctionToOptimize]:
-        """Find all functions in source code string.
-
-        Uses tree-sitter to parse the source and find functions.
-
-        Args:
-            source: The source code to analyze.
-            file_path: Optional file path for context (used for language detection).
-
-        Returns:
-            List of FunctionToOptimize objects for discovered functions.
-
-        """
-        try:
-            # Use JavaScript analyzer by default, or detect from file path
-            if file_path:
-                analyzer = get_analyzer_for_file(file_path)
-            else:
-                analyzer = TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
-
-            tree_functions = analyzer.find_functions(
-                source, include_methods=True, include_arrow_functions=True, require_name=True
-            )
-
-            functions: list[FunctionToOptimize] = []
-            for func in tree_functions:
-                # Build parents list
-                parents: list[FunctionParent] = []
-                if func.class_name:
-                    parents.append(FunctionParent(name=func.class_name, type="ClassDef"))
-                if func.parent_function:
-                    parents.append(FunctionParent(name=func.parent_function, type="FunctionDef"))
-
-                functions.append(
-                    FunctionToOptimize(
-                        function_name=func.name,
-                        file_path=file_path or Path("unknown"),
-                        parents=parents,
-                        starting_line=func.start_line,
-                        ending_line=func.end_line,
-                        starting_col=func.start_col,
-                        ending_col=func.end_col,
-                        is_async=func.is_async,
-                        is_method=func.is_method,
-                        language=str(self.language),
-                        doc_start_line=func.doc_start_line,
-                    )
-                )
-
-            return functions
-
-        except Exception as e:
-            logger.warning("Failed to parse source: %s", e)
             return []
 
     def _get_test_patterns(self) -> list[str]:
@@ -1745,6 +1685,11 @@ class JavaScriptSupport:
                 normalized_lines.append(stripped)
         return "\n".join(normalized_lines)
 
+    def generate_concolic_tests(
+        self, test_cfg: Any, project_root: Any, function_to_optimize: Any, function_to_optimize_ast: Any
+    ) -> tuple[dict, str]:
+        return {}, ""
+
     # === Test Editing ===
 
     def add_runtime_comments(
@@ -1924,9 +1869,10 @@ class JavaScriptSupport:
         return prepare_javascript_module(module_code, module_path)
 
     def setup_test_config(self, test_cfg: TestConfig, file_path: Path) -> None:
-        from codeflash.languages.javascript.optimizer import find_js_project_root, verify_js_requirements
+        from codeflash.languages.javascript.optimizer import verify_js_requirements
+        from codeflash.languages.javascript.test_runner import find_node_project_root
 
-        test_cfg.js_project_root = find_js_project_root(file_path)
+        test_cfg.js_project_root = find_node_project_root(file_path)
         verify_js_requirements(test_cfg)
 
     # === Configuration ===
