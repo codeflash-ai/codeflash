@@ -7,6 +7,7 @@ language implementations and provides utilities for language detection.
 
 from __future__ import annotations
 
+import importlib
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -17,6 +18,12 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from codeflash.languages.base import LanguageSupport
+
+_support_module_names = (
+    "codeflash.languages.python.support",
+    "codeflash.languages.javascript.support",
+    "codeflash.languages.java.support",
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,18 +52,13 @@ def _ensure_languages_registered() -> None:
     if _languages_registered:
         return
 
-    # Import support modules to trigger registration
     # These imports are deferred to avoid circular imports
-    import contextlib
-
-    with contextlib.suppress(ImportError):
-        from codeflash.languages.python import support as _
-
-    with contextlib.suppress(ImportError):
-        from codeflash.languages.javascript import support as _
-
-    with contextlib.suppress(ImportError):
-        from codeflash.languages.java import support as _  # noqa: F401
+    for module_name in _support_module_names:
+        try:
+            importlib.import_module(module_name)
+        except ImportError:
+            # Intentionally ignore missing optional language support modules
+            continue
 
     _languages_registered = True
 
