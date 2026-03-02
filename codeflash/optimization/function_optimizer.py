@@ -116,6 +116,7 @@ from codeflash.verification.verifier import generate_tests
 if TYPE_CHECKING:
     import ast
     from argparse import Namespace
+    from typing import Any
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.either import Result
@@ -1545,6 +1546,7 @@ class FunctionOptimizer:
         optimized_code: CodeStringsMarkdown,
         original_helper_code: dict[Path, str],
     ) -> bool:
+        # Despite the module path, this function dispatches to language-specific replacers internally
         from codeflash.languages.python.static_analysis.code_replacer import replace_function_definitions_in_module
 
         did_update = False
@@ -2776,7 +2778,7 @@ class FunctionOptimizer:
 
     def line_profiler_step(
         self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], candidate_index: int
-    ) -> dict:
+    ) -> dict[str, Any]:
         if self.language_support is not None and hasattr(self.language_support, "instrument_source_for_line_profiler"):
             try:
                 line_profiler_output_path = get_run_tmp_file(Path("line_profiler_output.json"))
