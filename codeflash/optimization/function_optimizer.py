@@ -42,6 +42,7 @@ from codeflash.code_utils.code_utils import (
     extract_unique_errors,
     file_name_from_test_module_name,
     get_run_tmp_file,
+    module_name_from_file_path,
     normalize_by_max,
     restore_conftest,
     unified_diff_strings,
@@ -49,6 +50,7 @@ from codeflash.code_utils.code_utils import (
 from codeflash.code_utils.config_consts import (
     COVERAGE_THRESHOLD,
     INDIVIDUAL_TESTCASE_TIMEOUT,
+    MAX_TEST_REPAIR_CYCLES,
     MIN_CORRECT_CANDIDATES,
     OPTIMIZATION_CONTEXT_TOKEN_LIMIT,
     REFINED_CANDIDATE_RANKING_WEIGHTS,
@@ -763,6 +765,17 @@ class FunctionOptimizer:
 
         optimizations_set, function_references = optimization_result.unwrap()
 
+        review_result = self.review_and_repair_tests(
+            generated_tests=generated_tests,
+            code_context=code_context,
+            original_helper_code=original_helper_code,
+        )
+        if not is_successful(review_result):
+            return Failure(review_result.failure())
+
+        generated_tests = review_result.unwrap()
+
+        # Full baseline (behavioral + benchmarking) runs once on the final approved tests
         baseline_setup_result = self.setup_and_establish_baseline(
             code_context=code_context,
             original_helper_code=original_helper_code,
@@ -1884,6 +1897,135 @@ class FunctionOptimizer:
                 file_path_to_helper_classes,
             )
         )
+
+    def run_behavioral_validation(
+        self,
+        code_context: CodeOptimizationContext,
+        original_helper_code: dict[Path, str],
+    ) -> TestResults | None:
+        """Run behavioral tests only. Returns results or None if no tests ran."""
+        file_path_to_helper_classes: dict[Path, set[str]] = defaultdict(set)
+        for function_source in code_context.helper_functions:
+            if (
+                function_source.qualified_name != self.function_to_optimize.qualified_name
+                and "." in function_source.qualified_name
+            ):
+                file_path_to_helper_classes[function_source.file_path].add(
+                    function_source.qualified_name.split(".")[0]
+                )
+
+        test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
+        if self.function_to_optimize.is_async:
+            self.instrument_async_for_mode(TestingMode.BEHAVIOR)
+        try:
+            self.instrument_capture(file_path_to_helper_classes)
+            behavioral_results, _ = self.run_and_parse_tests(
+                testing_type=TestingMode.BEHAVIOR,
+                test_env=test_env,
+                test_files=self.test_files,
+                optimization_iteration=0,
+                testing_time=TOTAL_LOOPING_TIME_EFFECTIVE,
+                enable_coverage=False,
+                code_context=code_context,
+            )
+        finally:
+            self.write_code_and_helpers(
+                self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+            )
+        return behavioral_results if behavioral_results else None
+
+    def review_and_repair_tests(
+        self,
+        generated_tests: GeneratedTestsList,
+        code_context: CodeOptimizationContext,
+        original_helper_code: dict[Path, str],
+    ) -> Result[GeneratedTestsList, str]:
+        """Run behavioral tests, review quality per-function, repair flagged functions.
+
+        Flow (up to MAX_TEST_REPAIR_CYCLES):
+          behavioral → collect failures → AI review passing functions → repair flagged → loop
+        No benchmarking runs here — only behavioral validation.
+        """
+        for cycle in range(MAX_TEST_REPAIR_CYCLES):
+            # 1. Run behavioral tests
+            behavioral_results = self.run_behavioral_validation(code_context, original_helper_code)
+            if behavioral_results is None:
+                return Failure("Generated tests failed behavioral validation.")
+
+            # 2. Collect per-function failures grouped by behavior file path
+            failed_by_file: dict[Path, list[str]] = defaultdict(list)
+            for result in behavioral_results.test_results:
+                if result.test_type == TestType.GENERATED_REGRESSION and not result.did_pass:
+                    failed_by_file[result.file_name].append(result.id.test_function_name)
+
+            # 3. Build review request with failed functions pre-flagged
+            tests_for_review = []
+            for i, gt in enumerate(generated_tests.generated_tests):
+                failed_fns = failed_by_file.get(gt.behavior_file_path, [])
+                tests_for_review.append({
+                    "test_source": gt.generated_original_test_source,
+                    "test_index": i,
+                    "failed_test_functions": failed_fns,
+                })
+
+            review_results = self.aiservice_client.review_generated_tests(
+                tests=tests_for_review,
+                function_source_code=self.function_to_optimize_source_code,
+                function_name=self.function_to_optimize.function_name,
+                trace_id=self.function_trace_id,
+                language=self.function_to_optimize.language,
+            )
+
+            # 4. Repair test files that have flagged functions
+            any_repaired = False
+            for review in review_results:
+                if not review.functions_to_repair:
+                    continue
+
+                gt = generated_tests.generated_tests[review.test_index]
+                fn_names = ", ".join(f.function_name for f in review.functions_to_repair)
+                logger.info(f"Repairing test functions in test {review.test_index} (cycle {cycle + 1}): {fn_names}")
+                ph("cli-testgen-repair", {
+                    "test_index": review.test_index,
+                    "cycle": cycle + 1,
+                    "functions": [f.function_name for f in review.functions_to_repair],
+                })
+
+                test_module_path = Path(
+                    module_name_from_file_path(gt.behavior_file_path, self.test_cfg.tests_project_rootdir)
+                )
+                repair_result = self.aiservice_client.repair_generated_tests(
+                    test_source=gt.generated_original_test_source,
+                    functions_to_repair=review.functions_to_repair,
+                    function_source_code=self.function_to_optimize_source_code,
+                    function_to_optimize=self.function_to_optimize,
+                    helper_function_names=[],
+                    module_path=Path(self.original_module_path),
+                    test_module_path=test_module_path,
+                    test_framework=self.test_cfg.test_framework,
+                    test_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
+                    trace_id=self.function_trace_id,
+                    language=self.function_to_optimize.language,
+                )
+
+                if repair_result is None:
+                    logger.warning(f"Repair failed for test {review.test_index}, keeping original")
+                    continue
+
+                repaired_source, behavior_source, perf_source = repair_result
+                gt.generated_original_test_source = repaired_source
+                gt.instrumented_behavior_test_source = behavior_source
+                gt.instrumented_perf_test_source = perf_source
+
+                gt.behavior_file_path.write_text(behavior_source, encoding="utf8")
+                gt.perf_file_path.write_text(perf_source, encoding="utf8")
+                any_repaired = True
+
+            # Nothing needed repair — tests are good
+            if not any_repaired:
+                break
+
+        return Success(generated_tests)
 
     def find_and_process_best_optimization(
         self,

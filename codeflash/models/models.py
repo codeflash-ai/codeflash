@@ -115,6 +115,16 @@ class OptimizationReviewResult(NamedTuple):
     explanation: str
 
 
+class FunctionRepairInfo(NamedTuple):
+    function_name: str
+    reason: str
+
+
+class TestFileReview(NamedTuple):
+    test_index: int
+    functions_to_repair: list[FunctionRepairInfo]
+
+
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
 # qualified name of the method is foo.eggs.Ham.spam, its qualified name is Ham.spam, and its name is spam. The full name
 # of the module is foo.eggs.
