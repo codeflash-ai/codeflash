@@ -10,6 +10,7 @@ import site
 import sys
 from contextlib import contextmanager
 from functools import lru_cache
+from importlib.util import find_spec
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -361,8 +362,6 @@ def validate_module_import(module_path: str, project_root: Path) -> tuple[bool, 
     Returns (success, error_message). Uses importlib.util.find_spec to check
     module availability without triggering module initialization.
     """
-    from importlib.util import find_spec
-
     project_root_str = str(project_root)
     added = False
     if project_root_str not in sys.path:

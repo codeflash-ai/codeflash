@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 import libcst as cst
+import tomlkit
 from git import Repo as GitRepo
 from rich.console import Group
 from rich.panel import Panel
@@ -23,6 +24,7 @@ from rich.tree import Tree
 from codeflash.api.aiservice import AiServiceClient, AIServiceRefinerRequest, LocalAiServiceClient
 from codeflash.api.cfapi import add_code_context_hash, create_staging, get_cfapi_base_urls, mark_optimization_success
 from codeflash.benchmarking.utils import process_benchmark_data
+from codeflash.cli_cmds.cli import project_root_from_module_root
 from codeflash.cli_cmds.console import (
     code_print,
     console,
@@ -61,6 +63,7 @@ from codeflash.code_utils.config_consts import (
     EffortLevel,
     get_effort_value,
 )
+from codeflash.code_utils.config_parser import find_pyproject_toml
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.formatter import format_code, format_generated_code, sort_imports
 from codeflash.code_utils.git_utils import git_root_dir
@@ -550,9 +553,6 @@ class FunctionOptimizer:
         Walks the __init__.py chain to determine the correct module-root, validates
         it by trying an import, and updates pyproject.toml + in-memory config on success.
         """
-        from codeflash.cli_cmds.cli import project_root_from_module_root
-        from codeflash.code_utils.config_parser import find_pyproject_toml
-
         try:
             pyproject_path = find_pyproject_toml(None)
         except ValueError:
@@ -576,8 +576,6 @@ class FunctionOptimizer:
 
         # Import succeeded with the inferred module-root — update pyproject.toml
         try:
-            import tomlkit
-
             with pyproject_path.open("rb") as f:
                 data = tomlkit.parse(f.read())
             relative_root = os.path.relpath(new_module_root, pyproject_dir)
