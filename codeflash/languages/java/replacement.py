@@ -35,6 +35,7 @@ class ParsedOptimization:
     new_fields: list[str]  # Source text of new fields to add
     helpers_before_target: list[str] = field(default_factory=list)  # Helpers appearing before target in optimized code
     helpers_after_target: list[str] = field(default_factory=list)  # Helpers appearing after target in optimized code
+    modified_constructors: list[str] = field(default_factory=list)  # Constructor sources that need to replace originals
 
 
 def _parse_optimization_source(
@@ -73,6 +74,7 @@ def _parse_optimization_source(
 
     helpers_before_target: list[str] = []
     helpers_after_target: list[str] = []
+    modified_constructors: list[str] = []
 
     if classes:
         # It's a class - extract components
@@ -138,6 +140,22 @@ def _parse_optimization_source(
                 else:
                     helpers_after_target.append(helper_source)
 
+        # Extract constructors that belong to the same class as the target method.
+        # When the LLM adds a new field (e.g. a cached value), it also updates the
+        # constructors to initialize it.  We must replace those constructors in the
+        # original source, otherwise the new final field will be uninitialized
+        # (Bug 3: uninitialized variable errors).
+        # Use line-sliced text (same as helper methods) so that the leading whitespace
+        # is preserved and _dedent_member can normalise indentation correctly.
+        if target_method:
+            target_class_name_for_ctors = target_method.class_name
+            new_constructors = analyzer.find_constructors(new_source, class_name=target_class_name_for_ctors)
+            ctor_lines = new_source.splitlines(keepends=True)
+            for c in new_constructors:
+                ctor_start = (c.javadoc_start_line or c.start_line) - 1
+                ctor_end = c.end_line
+                modified_constructors.append("".join(ctor_lines[ctor_start:ctor_end]))
+
         # Extract fields
         for f in fields:
             if f.source_text:
@@ -164,6 +182,7 @@ def _parse_optimization_source(
         new_fields=new_fields,
         helpers_before_target=helpers_before_target,
         helpers_after_target=helpers_after_target,
+        modified_constructors=modified_constructors,
     )
 
 
@@ -294,6 +313,89 @@ def _insert_class_members(
             before = result_bytes[:insert_point]
             after = result_bytes[insert_point:]
             result = (before + method_text.encode("utf8") + after).decode("utf8")
+
+    return result
+
+
+def _replace_constructors(
+    source: str,
+    class_name: str,
+    new_constructor_sources: list[str],
+    analyzer: JavaAnalyzer,
+) -> str:
+    """Replace constructors in source with updated versions from the optimization.
+
+    Matches constructors by their formal parameter signature.  When a matching
+    constructor is found in the original source it is replaced in-place,
+    preserving the original indentation.  Constructors for which no match
+    exists in the original are silently skipped (they would need to be inserted
+    as new members, which is out of scope for this helper).
+
+    Args:
+        source: The original source code to modify.
+        class_name: Name of the class whose constructors should be replaced.
+        new_constructor_sources: Source text of each updated constructor.
+        analyzer: JavaAnalyzer instance.
+
+    Returns:
+        Modified source code with constructors replaced.
+
+    """
+    if not new_constructor_sources:
+        return source
+
+    original_constructors = analyzer.find_constructors(source, class_name=class_name)
+    if not original_constructors:
+        return source
+
+    result = source
+
+    for new_ctor_src in new_constructor_sources:
+        # Wrap in a dummy class so the parser can handle a bare constructor
+        dummy = f"class __Dummy__ {{\n{new_ctor_src}\n}}"
+        parsed_new = analyzer.find_constructors(dummy)
+        if not parsed_new:
+            continue
+        new_ctor = parsed_new[0]
+        new_params = (new_ctor.formal_parameters_text or "()").strip()
+
+        # Find the matching constructor in the current (potentially already
+        # modified) source by parameter signature.
+        current_constructors = analyzer.find_constructors(result, class_name=class_name)
+        matching = None
+        for orig in current_constructors:
+            if (orig.formal_parameters_text or "()").strip() == new_params:
+                matching = orig
+                break
+
+        if not matching:
+            logger.debug(
+                "No matching constructor with params %s found in class %s; skipping.",
+                new_params,
+                class_name,
+            )
+            continue
+
+        # Determine replacement range (include Javadoc if present)
+        ctor_start = matching.javadoc_start_line or matching.start_line
+        ctor_end = matching.end_line
+
+        lines = result.splitlines(keepends=True)
+        original_first_line = lines[ctor_start - 1] if ctor_start <= len(lines) else ""
+        indent = _get_indentation(original_first_line)
+
+        # Dedent first to remove any class-level indentation, then re-apply
+        # the correct indentation (same as _insert_class_members / format_member).
+        new_ctor_lines = _dedent_member(new_ctor_src).splitlines(keepends=True)
+        indented_new_ctor = _apply_indentation(new_ctor_lines, indent)
+        if indented_new_ctor and not indented_new_ctor.endswith("\n"):
+            indented_new_ctor += "\n"
+
+        before = lines[: ctor_start - 1]
+        after = lines[ctor_end:]
+        result = "".join(before) + indented_new_ctor + "".join(after)
+
+        logger.debug("Replaced constructor %s(%s) in class %s", class_name, new_params, class_name)
 
     return result
 
@@ -496,7 +598,14 @@ def replace_function(
     before = lines[: start_line - 1]  # Lines before the method
     after = lines[end_line:]  # Lines after the method
 
-    return "".join(before) + indented_new_source + "".join(after)
+    result = "".join(before) + indented_new_source + "".join(after)
+
+    # Replace modified constructors if the optimization introduced new field
+    # initializations (Bug 3: uninitialized variable errors).
+    if class_name and parsed.modified_constructors:
+        result = _replace_constructors(result, class_name, parsed.modified_constructors, analyzer)
+
+    return result
 
 
 def _get_indentation(line: str) -> str:
