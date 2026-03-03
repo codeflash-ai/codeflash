@@ -13,6 +13,7 @@ import re
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import uuid
 import xml.etree.ElementTree as ET
@@ -55,15 +56,18 @@ def _run_cmd_kill_pg_on_timeout(
     timeout: int | None = None,
     text: bool = True,
 ) -> subprocess.CompletedProcess:
-    """Run a command, killing its entire process group on timeout.
+    """Run a command, killing its entire process group on timeout (POSIX only).
 
-    Unlike subprocess.run(), this function uses start_new_session=True so the
-    child process gets its own process group.  When the timeout fires we send
-    SIGTERM (then SIGKILL) to the whole process group, not just the process
-    itself.  This is critical for Maven, which forks child JVM processes
-    (Maven Surefire forks) that would otherwise become orphaned when the Maven
-    parent is killed by a plain subprocess.run() timeout.  Orphaned JVMs keep
-    SQLite file-handles open, causing "database is locked" errors.
+    On POSIX systems this function uses start_new_session=True so the child
+    process gets its own process group.  When the timeout fires we send SIGTERM
+    (then SIGKILL) to the whole process group, not just the process itself.
+    This is critical for Maven, which forks child JVM processes (Maven Surefire
+    forks) that would otherwise become orphaned when the Maven parent is killed
+    by a plain subprocess.run() timeout.  Orphaned JVMs keep SQLite
+    file-handles open, causing "database is locked" errors.
+
+    On Windows, process groups work differently (no POSIX signals / killpg), so
+    we fall back to plain subprocess.run() which kills only the parent process.
 
     Args:
         cmd: Command and arguments.
@@ -77,6 +81,19 @@ def _run_cmd_kill_pg_on_timeout(
         human-readable explanation.
 
     """
+    if sys.platform == "win32":
+        # Windows does not have POSIX process groups / killpg.  Fall back to
+        # the standard subprocess.run() behaviour (kills parent only).
+        try:
+            return subprocess.run(
+                cmd, cwd=cwd, env=env, capture_output=True, text=text, timeout=timeout, check=False
+            )
+        except subprocess.TimeoutExpired:
+            return subprocess.CompletedProcess(
+                args=cmd, returncode=-2, stdout="", stderr=f"Process timed out after {timeout}s"
+            )
+
+    # POSIX path: start in its own process group so we can kill the tree.
     proc = subprocess.Popen(
         cmd,
         cwd=cwd,
@@ -103,10 +120,8 @@ def _run_cmd_kill_pg_on_timeout(
             proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             if pgid is not None:
-                try:
+                with contextlib.suppress(ProcessLookupError, OSError):
                     os.killpg(pgid, signal.SIGKILL)
-                except (ProcessLookupError, OSError):
-                    pass
             else:
                 proc.kill()
             proc.wait()

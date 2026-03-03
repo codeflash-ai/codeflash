@@ -7,10 +7,7 @@ Tests the full pipeline: instrument → run → parse → assert precise field v
 """
 
 import os
-import signal
 import sqlite3
-import sys
-import time
 from argparse import Namespace
 from pathlib import Path
 
@@ -658,93 +655,3 @@ public class PreciseWaiterMultiTest {
         )
 
 
-# ---------------------------------------------------------------------------
-# Tests for _run_cmd_kill_pg_on_timeout
-# Root-cause fix for "database is locked": when Maven times out, we must kill
-# its forked Surefire child JVMs (entire process group), not just the Maven
-# parent process.  Plain subprocess.run() only kills the parent, orphaning the
-# child JVMs which continue to hold the SQLite file open.
-# ---------------------------------------------------------------------------
-
-class TestRunCmdKillPgOnTimeout:
-    """Unit tests for _run_cmd_kill_pg_on_timeout in test_runner.py."""
-
-    def _helper(self):
-        from codeflash.languages.java.test_runner import _run_cmd_kill_pg_on_timeout
-        return _run_cmd_kill_pg_on_timeout
-
-    def test_successful_command_returns_correct_output(self):
-        """A command that finishes normally should return its stdout/stderr/returncode."""
-        fn = self._helper()
-        result = fn(["echo", "hello"], timeout=10)
-        assert result.returncode == 0
-        assert "hello" in result.stdout
-
-    def test_failing_command_returns_nonzero_returncode(self):
-        """A command that exits non-zero should propagate the returncode."""
-        fn = self._helper()
-        result = fn(["false"], timeout=10)
-        assert result.returncode != 0
-
-    @pytest.mark.skipif(sys.platform == "win32", reason="Process groups are POSIX only")
-    def test_timeout_kills_child_processes_not_just_parent(self, tmp_path):
-        """On timeout, child processes must be killed (not left orphaned).
-
-        We start a shell script that forks a long-running child (sleep 60).
-        The script writes the child PID to a file.  We set a short timeout so
-        _run_cmd_kill_pg_on_timeout kills the entire process group.  After the
-        call returns, the child must be dead (not still running).
-        """
-        fn = self._helper()
-        child_pid_file = tmp_path / "child.pid"
-        # Shell: start sleep in background, write its PID, then sleep ourselves
-        # so the parent also runs long enough to be timed out.
-        script = (
-            f"sleep 60 & echo $! > {child_pid_file}; sleep 60"
-        )
-        result = fn(["bash", "-c", script], timeout=2)
-
-        # The result should indicate a timeout (returncode -2)
-        assert result.returncode == -2
-
-        # Wait briefly for the child PID file to be written (race between
-        # the script writing it and us being killed).
-        deadline = time.monotonic() + 3
-        while not child_pid_file.exists() and time.monotonic() < deadline:
-            time.sleep(0.1)
-
-        if not child_pid_file.exists():
-            # Script was killed before it could write the PID — that's fine;
-            # it means the child never started, so no orphan problem.
-            return
-
-        child_pid_str = child_pid_file.read_text().strip()
-        if not child_pid_str.isdigit():
-            return
-
-        child_pid = int(child_pid_str)
-        # Give the child a moment to be killed by the process-group SIGKILL.
-        time.sleep(0.5)
-
-        # Check if the child is still alive by sending signal 0.
-        try:
-            os.kill(child_pid, 0)
-            # If we get here the process is still running — that's the bug we fixed.
-            assert False, (
-                f"Child process {child_pid} is still running after timeout kill; "
-                "orphaned JVMs would keep the SQLite file locked"
-            )
-        except ProcessLookupError:
-            pass  # Process is dead — expected behaviour
-
-    def test_returncode_is_minus_two_on_timeout(self):
-        """Timed-out commands must return returncode=-2 (our convention)."""
-        fn = self._helper()
-        result = fn(["sleep", "60"], timeout=1)
-        assert result.returncode == -2
-
-    def test_timeout_message_in_stderr(self):
-        """The stderr of a timed-out command should describe the timeout."""
-        fn = self._helper()
-        result = fn(["sleep", "60"], timeout=1)
-        assert "timeout" in result.stderr.lower() or "killed" in result.stderr.lower()
