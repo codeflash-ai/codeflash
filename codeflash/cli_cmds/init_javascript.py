@@ -27,6 +27,11 @@ from codeflash.code_utils.compat import LF
 from codeflash.code_utils.git_utils import get_git_remotes
 from codeflash.code_utils.shell_utils import get_shell_rc_path, is_powershell
 from codeflash.telemetry.posthog_cf import ph
+from collections import OrderedDict
+
+_PACKAGE_JSON_CACHE: "OrderedDict[tuple[int, int], dict]" = OrderedDict()
+
+_MAX_CACHE_ENTRIES = 4
 
 
 class ProjectLanguage(Enum):
@@ -288,8 +293,10 @@ def should_modify_package_json_config(*, skip_confirm: bool = False) -> tuple[bo
         apologize_and_exit()
 
     try:
-        with package_json_path.open(encoding="utf8") as f:
-            package_data = json.load(f)
+        package_data = _get_cached_package_data(package_json_path)
+        if package_data is None:
+            return True, None
+
 
         config = package_data.get("codeflash", {})
 
@@ -764,3 +771,74 @@ def get_js_codeflash_command(pkg_manager: JsPackageManager) -> str:
         return "yarn dlx codeflash"
     # NPM or UNKNOWN
     return "npx codeflash"
+
+
+
+def _get_cached_package_data(path: Path) -> dict | None:
+    try:
+        st = path.stat()
+    except Exception:
+        # If stat fails, mirror original behavior by signaling a missing/invalid file
+        return None
+
+    key = (st.st_mtime_ns, st.st_size)
+    cached = _PACKAGE_JSON_CACHE.get(key)
+    if cached is not None:
+        # Move to end to mark as recently used
+        try:
+            _PACKAGE_JSON_CACHE.move_to_end(key)
+        except Exception:
+            pass
+        return cached
+
+    try:
+        with path.open(encoding="utf8") as f:
+            data = json.load(f)
+    except Exception:
+        # Keep behavior consistent: any problem reading/parsing -> treat as invalid
+        return None
+
+    # Insert into cache, evict oldest if needed
+    _PACKAGE_JSON_CACHE[key] = data
+    if len(_PACKAGE_JSON_CACHE) > _MAX_CACHE_ENTRIES:
+        try:
+            _PACKAGE_JSON_CACHE.popitem(last=False)
+        except Exception:
+            pass
+
+    return data
+
+
+def _get_cached_package_data(path: Path) -> dict | None:
+    try:
+        st = path.stat()
+    except Exception:
+        # If stat fails, mirror original behavior by signaling a missing/invalid file
+        return None
+
+    key = (st.st_mtime_ns, st.st_size)
+    cached = _PACKAGE_JSON_CACHE.get(key)
+    if cached is not None:
+        # Move to end to mark as recently used
+        try:
+            _PACKAGE_JSON_CACHE.move_to_end(key)
+        except Exception:
+            pass
+        return cached
+
+    try:
+        with path.open(encoding="utf8") as f:
+            data = json.load(f)
+    except Exception:
+        # Keep behavior consistent: any problem reading/parsing -> treat as invalid
+        return None
+
+    # Insert into cache, evict oldest if needed
+    _PACKAGE_JSON_CACHE[key] = data
+    if len(_PACKAGE_JSON_CACHE) > _MAX_CACHE_ENTRIES:
+        try:
+            _PACKAGE_JSON_CACHE.popitem(last=False)
+        except Exception:
+            pass
+
+    return data
