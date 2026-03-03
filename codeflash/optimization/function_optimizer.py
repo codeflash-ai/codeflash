@@ -613,19 +613,18 @@ class FunctionOptimizer:
                     f"Cannot optimize without tests when --no-gen-tests is set."
                 )
 
-        # Pre-flight import check: verify the target module can be imported before expensive API calls
+        # Pre-flight: verify module-root consistency and importability before expensive API calls
         if self.function_to_optimize.language == "python":
+            # Auto-correct module-root if it doesn't match the inferred root from __init__.py chain
+            self.try_correct_module_root()
+            # Now validate the (possibly corrected) module can actually be imported
             import_ok, import_error = validate_module_import(self.original_module_path, self.project_root)
             if not import_ok:
-                corrected = self.try_correct_module_root()
-                if corrected:
-                    import_ok, import_error = validate_module_import(self.original_module_path, self.project_root)
-                if not import_ok:
-                    return Failure(
-                        f"Cannot import module '{self.original_module_path}': {import_error}\n"
-                        "This prevents test execution. Please check that all dependencies are installed "
-                        "and that 'module-root' is correctly configured in pyproject.toml."
-                    )
+                return Failure(
+                    f"Cannot import module '{self.original_module_path}': {import_error}\n"
+                    "This prevents test execution. Please check that all dependencies are installed "
+                    "and that 'module-root' is correctly configured in pyproject.toml."
+                )
 
         self.cleanup_leftover_test_return_values()
         file_name_from_test_module_name.cache_clear()
