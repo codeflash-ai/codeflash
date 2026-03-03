@@ -954,10 +954,15 @@ class JavaAssertTransformer:
         if not first_arg:
             return "Object"
 
-        # assertEquals has (expected, actual) or (expected, actual, message/delta)
-        # Some overloads have (message, expected, actual) in JUnit 4 but JUnit 5 uses (expected, actual[, message])
-        # Try the first argument as the expected value
         expected = first_arg.strip()
+
+        # JUnit 4 has assertEquals(String message, expected, actual) where the first arg is a message.
+        # If the first arg is a string literal, check if there are 3+ args — if so, the real expected
+        # value is the second argument, not the message string.
+        if expected.startswith('"') and method in ("assertEquals", "assertNotEquals"):
+            all_args = self._split_top_level_args(args_str)
+            if len(all_args) >= 3:
+                expected = all_args[1].strip()
 
         return self._type_from_literal(expected)
 

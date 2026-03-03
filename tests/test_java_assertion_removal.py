@@ -769,9 +769,56 @@ public void testFibonacci() {
         expected = """\
 @Test
 public void testFibonacci() {
-    String _cf_result1 = calculator.fibonacci(10);
+    int _cf_result1 = calculator.fibonacci(10);
 }"""
         result = transform_java_assertions(source, "fibonacci")
+        assert result == expected
+
+    def test_junit4_message_first_with_string_expected(self):
+        """When assertEquals has 3 args and the first is a message but the second is also a string,
+        the type should be inferred from the second arg (the real expected value), not the message."""
+        source = """\
+@Test
+public void testGetName() {
+    assertEquals("Name should match", "Alice", user.getName());
+}"""
+        expected = """\
+@Test
+public void testGetName() {
+    String _cf_result1 = user.getName();
+}"""
+        result = transform_java_assertions(source, "getName")
+        assert result == expected
+
+    def test_junit4_message_first_with_boolean_expected(self):
+        """JUnit 4 assertEquals with message, boolean expected, and actual."""
+        source = """\
+@Test
+public void testIsValid() {
+    assertEquals("Should be true", true, validator.isValid(input));
+}"""
+        expected = """\
+@Test
+public void testIsValid() {
+    boolean _cf_result1 = validator.isValid(input);
+}"""
+        result = transform_java_assertions(source, "isValid")
+        assert result == expected
+
+    def test_two_arg_string_expected_not_treated_as_message(self):
+        """When assertEquals has only 2 args and the first is a string, it IS the expected value,
+        not a message. This tests that we don't incorrectly skip the first arg."""
+        source = """\
+@Test
+public void testGetGreeting() {
+    assertEquals("hello", greeter.getGreeting());
+}"""
+        expected = """\
+@Test
+public void testGetGreeting() {
+    String _cf_result1 = greeter.getGreeting();
+}"""
+        result = transform_java_assertions(source, "getGreeting")
         assert result == expected
 
 
