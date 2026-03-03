@@ -41,6 +41,10 @@ if TYPE_CHECKING:
     from codeflash.models.models import CodeOptimizationContext
     from codeflash.verification.verification_utils import TestConfig
 
+_TEST_NAME_PATTERNS = (".test.", ".spec.", "_test.", "_spec.")
+
+_TEST_DIR_PATTERNS = (os.sep + "test" + os.sep, os.sep + "tests" + os.sep, os.sep + "__tests__" + os.sep)
+
 
 @dataclass(frozen=True)
 class FunctionProperties:
@@ -877,12 +881,14 @@ def _is_test_file_by_pattern(file_path: Path) -> bool:
     name = file_path.name.lower()
     if name.startswith("test_") or name == "conftest.py":
         return True
-    test_name_patterns = (".test.", ".spec.", "_test.", "_spec.")
-    if any(p in name for p in test_name_patterns):
+    # Inline the small set of substring checks to avoid generator overhead of any(...)
+    if (".test." in name) or (".spec." in name) or ("_test." in name) or ("_spec." in name):
         return True
     path_str = str(file_path).lower()
-    test_dir_patterns = (os.sep + "test" + os.sep, os.sep + "tests" + os.sep, os.sep + "__tests__" + os.sep)
-    return any(p in path_str for p in test_dir_patterns)
+    # Unroll checks against the three directory patterns to avoid creating a generator.
+    if (_TEST_DIR_PATTERNS[0] in path_str) or (_TEST_DIR_PATTERNS[1] in path_str) or (_TEST_DIR_PATTERNS[2] in path_str):
+        return True
+    return False
 
 
 def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list[Path], module_root: Path) -> bool:
