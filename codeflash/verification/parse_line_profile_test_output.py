@@ -112,4 +112,3 @@ def show_text_non_python(stats: dict, line_contents: dict[tuple[str, int], str])
         )
         out_table += "\n"
     return out_table
-
