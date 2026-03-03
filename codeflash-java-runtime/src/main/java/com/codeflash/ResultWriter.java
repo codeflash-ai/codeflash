@@ -50,13 +50,6 @@ public final class ResultWriter {
         try {
             // Create connection and initialize schema
             this.connection = DriverManager.getConnection("jdbc:sqlite:" + dbPath.toAbsolutePath());
-            // Enable WAL mode so that readers can access the database while this
-            // writer is active, avoiding SQLITE_BUSY ("database is locked") errors.
-            // Also configure a generous busy_timeout as a defence-in-depth measure.
-            try (Statement pragmaStmt = connection.createStatement()) {
-                pragmaStmt.execute("PRAGMA journal_mode=WAL");
-                pragmaStmt.execute("PRAGMA busy_timeout=30000");
-            }
             initializeSchema();
             prepareStatements();
 

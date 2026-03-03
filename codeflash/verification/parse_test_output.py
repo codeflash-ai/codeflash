@@ -488,9 +488,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
         return test_results
     db = None
     try:
-        # timeout=30: wait up to 30 s for the Java writer JVM to release the lock
-        # instead of immediately raising "database is locked".
-        db = sqlite3.connect(sqlite_file_path, timeout=30)
+        db = sqlite3.connect(sqlite_file_path)
         cur = db.cursor()
         data = cur.execute(
             "SELECT test_module_path, test_class_name, test_function_name, "
