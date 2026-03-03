@@ -53,6 +53,7 @@ class JavaMethodNode:
     source_text: str
     javadoc_start_line: int | None = None  # Line where Javadoc comment starts
     formal_parameters_text: str | None = None  # Raw formal parameters "(Type name, ...)" for matching
+    is_class_nested: bool = False  # True when the enclosing class is itself nested inside another class
 
 
 @dataclass
@@ -289,6 +290,7 @@ class JavaAnalyzer:
         include_private: bool,
         include_static: bool,
         current_class: str | None,
+        class_depth: int = 0,
     ) -> None:
         """Recursively walk the tree to find method definitions."""
         new_class = current_class
@@ -304,6 +306,10 @@ class JavaAnalyzer:
             method_info = self._extract_method_info(node, source_bytes, current_class)
 
             if method_info:
+                # A method is nested when its enclosing class is itself inside another
+                # class (class_depth >= 2: depth 1 = outermost class, depth 2+ = nested).
+                method_info.is_class_nested = class_depth >= 2
+
                 # Apply filters
                 should_include = True
 
@@ -316,7 +322,7 @@ class JavaAnalyzer:
                 if should_include:
                     methods.append(method_info)
 
-        # Recurse into children
+        # Recurse into children, incrementing depth when entering a type declaration
         for child in node.children:
             self._walk_tree_for_methods(
                 child,
@@ -325,6 +331,7 @@ class JavaAnalyzer:
                 include_private=include_private,
                 include_static=include_static,
                 current_class=new_class if node.type in type_declarations else current_class,
+                class_depth=class_depth + 1 if node.type in type_declarations else class_depth,
             )
 
     def _extract_method_info(self, node: Node, source_bytes: bytes, current_class: str | None) -> JavaMethodNode | None:

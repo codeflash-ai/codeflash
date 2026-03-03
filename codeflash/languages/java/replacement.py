@@ -42,7 +42,6 @@ def _parse_optimization_source(
     new_source: str,
     target_method_name: str,
     analyzer: JavaAnalyzer,
-    target_class_name: str | None = None,
 ) -> ParsedOptimization:
     """Parse optimization source to extract method and additional class members.
 
@@ -54,11 +53,6 @@ def _parse_optimization_source(
         new_source: The optimization source code.
         target_method_name: Name of the method being optimized.
         analyzer: JavaAnalyzer instance.
-        target_class_name: Optional name of the class that owns the target method.
-            When provided and the generated code contains multiple methods with the
-            same name (e.g. an abstract method in an outer class AND the concrete
-            override in an inner class), the method whose ``class_name`` matches
-            this value is preferred as the actual replacement target.
 
     Returns:
         ParsedOptimization with the method and any additional members.
@@ -86,17 +80,9 @@ def _parse_optimization_source(
         target_method_index: int | None = None
         for i, method in enumerate(methods):
             if method.name == target_method_name:
-                # When a target_class_name is known, prefer the method in that class
-                # (e.g. ObjectUnpacker.getString over the abstract outer getString).
-                # Still accept any match as fallback if no class-specific one is found.
-                if target_class_name is None or method.class_name == target_class_name:
-                    target_method = method
-                    target_method_index = i
-                    break
-                elif target_method is None:
-                    # Keep as tentative fallback (class didn't match yet)
-                    target_method = method
-                    target_method_index = i
+                target_method = method
+                target_method_index = i
+                break
 
         if target_method:
             # Extract target method source (including Javadoc if present)
@@ -116,11 +102,6 @@ def _parse_optimization_source(
         # Skip methods whose line range falls entirely inside the target method's
         # range, as these belong to anonymous/inner classes inside the target body
         # and must not be hoisted out as top-level class members.
-        # Also skip methods that belong to a different class than the target — this
-        # handles the case where the target is in an inner class and the generated
-        # code also contains outer-class methods that must not be injected into the
-        # inner class (outer-class methods would reference type parameters or instance
-        # variables that are not in scope inside a static inner class).
         lines = new_source.splitlines(keepends=True)
         for i, method in enumerate(methods):
             if method.name != target_method_name:
@@ -128,9 +109,6 @@ def _parse_optimization_source(
                 if target_method and (
                     method.start_line >= target_method.start_line and method.end_line <= target_method.end_line
                 ):
-                    continue
-                # Skip methods from a different class than the target method
-                if target_method and method.class_name != target_method.class_name:
                     continue
                 start = (method.javadoc_start_line or method.start_line) - 1
                 end = method.end_line
@@ -434,10 +412,7 @@ def replace_function(
     func_end_line = function.ending_line
 
     # Parse the optimization to extract components.
-    # Pass the class name so that when the generated code contains multiple
-    # methods with the same name (outer abstract + inner concrete), the correct
-    # one is selected as the replacement target.
-    parsed = _parse_optimization_source(new_source, func_name, analyzer, target_class_name=function.class_name)
+    parsed = _parse_optimization_source(new_source, func_name, analyzer)
 
     # If the parsed optimization has no valid target source (e.g., the LLM generated
     # a method with a different name), skip this candidate entirely.

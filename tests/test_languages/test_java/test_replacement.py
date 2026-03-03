@@ -832,8 +832,12 @@ public class MathOps {{
 class TestNestedClasses:
     """Tests for nested class scenarios."""
 
-    def test_replace_method_in_nested_class(self, tmp_path: Path):
-        """Test replacing a method in a nested class."""
+    def test_inner_class_method_is_not_replaced(self, tmp_path: Path):
+        """Inner-class methods are not supported for optimization and must be skipped.
+
+        Methods of static nested or non-static inner classes are excluded from
+        discovery and therefore cannot be replaced via the high-level API.
+        """
         java_file = tmp_path / "Outer.java"
         original_code = """public class Outer {
     public int outerMethod() {
@@ -865,6 +869,8 @@ public class Outer {{
 
         optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
 
+        # Inner class methods are excluded from discovery, so the replacement
+        # is a no-op and the original file must remain unchanged.
         result = replace_function_definitions_for_language(
             function_names=["innerMethod"],
             optimized_code=optimized_code,
@@ -872,21 +878,9 @@ public class Outer {{
             project_root_path=tmp_path,
         )
 
-        assert result is True
-        new_code = java_file.read_text(encoding="utf-8")
-        expected = """public class Outer {
-    public int outerMethod() {
-        return 1;
-    }
-
-    public static class Inner {
-        public int innerMethod() {
-            return 2 + 0;
-        }
-    }
-}
-"""
-        assert new_code == expected
+        assert result is False
+        # File must be unchanged
+        assert java_file.read_text(encoding="utf-8") == original_code
 
 
 class TestPreservesStructure:
@@ -1923,141 +1917,6 @@ public final class LuaMap {
 
     public int size() {
         return map.size();
-    }
-}
-"""
-        assert new_code == expected_code
-
-
-class TestInnerClassHelperFilter:
-    """Tests that outer-class methods are not injected into a static inner class.
-
-    When the target method lives in a *static* inner class (e.g. ObjectUnpacker),
-    the generated optimisation class typically wraps the inner class inside the
-    outer class.  Methods that belong to the outer class must NOT be extracted as
-    helpers and inserted into the inner class — they would reference outer-class
-    type parameters or instance variables that are unavailable in a static context.
-    """
-
-    def test_outer_class_methods_not_injected_into_static_inner_class(self, tmp_path):
-        """Reproduces the Unpacker.ObjectUnpacker.getString bug.
-
-        The outer class ``Unpacker<T>`` has a method ``getString(String)``.
-        When the LLM generates an optimisation for ``ObjectUnpacker.getString``,
-        the generated file still contains the outer ``Unpacker<T>`` skeleton.
-        Codeflash must NOT inject the outer ``getString`` helper into the
-        ``ObjectUnpacker`` inner class.
-        """
-        from codeflash.discovery.functions_to_optimize import FunctionToOptimize, FunctionParent
-        from codeflash.languages.java.replacement import replace_function
-
-        original_code = """\
-public abstract class Unpacker<T> {
-    protected byte[] buffer;
-    protected int offset;
-    protected int length;
-
-    public Unpacker(byte[] buffer, int offset, int length) {
-        this.buffer = buffer;
-        this.offset = offset;
-        this.length = length;
-    }
-
-    protected abstract T getString(String value);
-
-    public T unpackString() {
-        return getString(new String(buffer, offset, length));
-    }
-
-    public static final class ObjectUnpacker extends Unpacker<Object> {
-        public ObjectUnpacker(byte[] buffer, int offset, int length) {
-            super(buffer, offset, length);
-        }
-
-        @Override
-        protected Object getString(String value) {
-            return value;
-        }
-    }
-}
-"""
-        java_file = tmp_path / "Unpacker.java"
-        java_file.write_text(original_code, encoding="utf-8")
-
-        # LLM-generated optimisation: the outer class is present in the generated
-        # code, but only ObjectUnpacker.getString is the actual optimisation target.
-        optimized_source = """\
-public abstract class Unpacker<T> {
-    protected byte[] buffer;
-    protected int offset;
-    protected int length;
-
-    public Unpacker(byte[] buffer, int offset, int length) {
-        this.buffer = buffer;
-        this.offset = offset;
-        this.length = length;
-    }
-
-    protected abstract T getString(String value);
-
-    public T unpackString() {
-        return getString(new String(buffer, offset, length));
-    }
-
-    public static final class ObjectUnpacker extends Unpacker<Object> {
-        public ObjectUnpacker(byte[] buffer, int offset, int length) {
-            super(buffer, offset, length);
-        }
-
-        @Override
-        protected Object getString(String value) {
-            return value.intern();
-        }
-    }
-}
-"""
-
-        func = FunctionToOptimize(
-            function_name="getString",
-            file_path=java_file,
-            starting_line=21,
-            ending_line=23,
-            parents=[FunctionParent(name="ObjectUnpacker", type="ClassDef")],
-            is_method=True,
-            language="java",
-        )
-
-        new_code = replace_function(original_code, func, optimized_source)
-
-        # The outer-class unpackString() method must NOT be inserted into ObjectUnpacker.
-        # The result should only differ from the original in the ObjectUnpacker.getString body.
-        expected_code = """\
-public abstract class Unpacker<T> {
-    protected byte[] buffer;
-    protected int offset;
-    protected int length;
-
-    public Unpacker(byte[] buffer, int offset, int length) {
-        this.buffer = buffer;
-        this.offset = offset;
-        this.length = length;
-    }
-
-    protected abstract T getString(String value);
-
-    public T unpackString() {
-        return getString(new String(buffer, offset, length));
-    }
-
-    public static final class ObjectUnpacker extends Unpacker<Object> {
-        public ObjectUnpacker(byte[] buffer, int offset, int length) {
-            super(buffer, offset, length);
-        }
-
-        @Override
-        protected Object getString(String value) {
-            return value.intern();
-        }
     }
 }
 """
