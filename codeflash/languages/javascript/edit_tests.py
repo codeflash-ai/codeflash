@@ -225,13 +225,15 @@ def inject_test_globals(
             "import { jest, describe, it, expect, beforeEach, afterEach, beforeAll, test } from '@jest/globals'\n"
         )
 
+
+    stripped_import = global_import.strip()
     for test in generated_tests.generated_tests:
         # Skip injection if the source already has the import (LLM may have included it)
-        if global_import.strip() not in test.generated_original_test_source:
+        if stripped_import not in test.generated_original_test_source:
             test.generated_original_test_source = global_import + test.generated_original_test_source
-        if global_import.strip() not in test.instrumented_behavior_test_source:
+        if stripped_import not in test.instrumented_behavior_test_source:
             test.instrumented_behavior_test_source = global_import + test.instrumented_behavior_test_source
-        if global_import.strip() not in test.instrumented_perf_test_source:
+        if stripped_import not in test.instrumented_perf_test_source:
             test.instrumented_perf_test_source = global_import + test.instrumented_perf_test_source
     return generated_tests
 
