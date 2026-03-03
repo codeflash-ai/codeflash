@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 
 from codeflash.languages import set_current_language
 from codeflash.languages.base import Language
-from codeflash.verification.parse_line_profile_test_output import parse_line_profile_results
+from codeflash.languages.java.line_profiler import JavaLineProfiler
 
 
 def test_parse_line_profile_results_non_python_java_json():
@@ -42,7 +42,7 @@ def test_parse_line_profile_results_non_python_java_json():
         }
         profile_file.write_text(json.dumps(profile_data), encoding="utf-8")
 
-        results, _ = parse_line_profile_results(profile_file)
+        results = JavaLineProfiler.parse_results(profile_file)
 
     assert results["unit"] == 1e-9
     assert results["str_out"] == (
@@ -56,4 +56,3 @@ def test_parse_line_profile_results_non_python_java_json():
     )
     assert (source_file.as_posix(), 3, "Util.java") in results["timings"]
     assert results["timings"][(source_file.as_posix(), 3, "Util.java")] == [(3, 6, 1000), (4, 6, 2000)]
-
