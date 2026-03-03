@@ -96,9 +96,7 @@ def _run_cmd_kill_pg_on_timeout(
         # Windows does not have POSIX process groups / killpg.  Fall back to
         # the standard subprocess.run() behaviour (kills parent only).
         try:
-            return subprocess.run(
-                cmd, cwd=cwd, env=env, capture_output=True, text=text, timeout=timeout, check=False
-            )
+            return subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=text, timeout=timeout, check=False)
         except subprocess.TimeoutExpired:
             return subprocess.CompletedProcess(
                 args=cmd, returncode=-2, stdout="", stderr=f"Process timed out after {timeout}s"
@@ -1576,7 +1574,16 @@ def _run_maven_tests(
         # -am = also make dependencies
         # -DfailIfNoTests=false allows dependency modules without tests to pass
         # -DskipTests=false overrides any skipTests=true in pom.xml
-        cmd.extend(["-pl", test_module, "-am", "-DfailIfNoTests=false", "-Dsurefire.failIfNoSpecifiedTests=false", "-DskipTests=false"])
+        cmd.extend(
+            [
+                "-pl",
+                test_module,
+                "-am",
+                "-DfailIfNoTests=false",
+                "-Dsurefire.failIfNoSpecifiedTests=false",
+                "-DskipTests=false",
+            ]
+        )
 
     if test_filter:
         # Validate test filter to prevent command injection

@@ -198,7 +198,6 @@ class JavaAssertTransformer:
         # Precompile regex to find next special character (quotes, parens, braces).
         self._special_re = re.compile(r"[\"'{}()]")
 
-
         # Precompile literal/cast regexes to avoid recompilation on each literal check.
         self._LONG_LITERAL_RE = re.compile(r"^-?\d+[lL]$")
         self._INT_LITERAL_RE = re.compile(r"^-?\d+$")
@@ -1078,7 +1077,6 @@ class JavaAssertTransformer:
                 inv += 1
                 var_name = "_cf_result" + str(inv)
                 replacements.append(f"{base_indent}{return_type} {var_name} = {call.full_call};")
-
 
         # Write back the counter
         self.invocation_counter = inv
