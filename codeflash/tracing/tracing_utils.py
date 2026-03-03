@@ -9,6 +9,10 @@ from typing import Optional, cast
 
 import git
 
+_LOWER_TEST_NAME_PATTERNS = (".test.", ".spec.", "_test.", "_spec.")
+
+_TEST_DIR_PATTERNS = (os.sep + "test" + os.sep, os.sep + "tests" + os.sep, os.sep + "__tests__" + os.sep)
+
 
 # This can't be pydantic dataclass because then conflicts with the logfire pytest plugin
 # for pydantic tracing. We want to not use pydantic in the tracing code.
@@ -60,12 +64,16 @@ def _is_test_file_by_pattern(file_path: Path) -> bool:
     name = file_path.name.lower()
     if name.startswith("test_") or name == "conftest.py":
         return True
-    test_name_patterns = (".test.", ".spec.", "_test.", "_spec.")
-    if any(p in name for p in test_name_patterns):
-        return True
+    # check name-based patterns
+    for p in _LOWER_TEST_NAME_PATTERNS:
+        if p in name:
+            return True
+    # Only build the lower-cased path string if needed
     path_str = str(file_path).lower()
-    test_dir_patterns = (os.sep + "test" + os.sep, os.sep + "tests" + os.sep, os.sep + "__tests__" + os.sep)
-    return any(p in path_str for p in test_dir_patterns)
+    for p in _TEST_DIR_PATTERNS:
+        if p in path_str:
+            return True
+    return False
 
 
 def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list[Path], module_root: Path) -> bool:
