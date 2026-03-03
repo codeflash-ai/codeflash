@@ -832,8 +832,12 @@ public class MathOps {{
 class TestNestedClasses:
     """Tests for nested class scenarios."""
 
-    def test_replace_method_in_nested_class(self, tmp_path: Path):
-        """Test replacing a method in a nested class."""
+    def test_inner_class_method_is_not_replaced(self, tmp_path: Path):
+        """Inner-class methods are not supported for optimization and must be skipped.
+
+        Methods of static nested or non-static inner classes are excluded from
+        discovery and therefore cannot be replaced via the high-level API.
+        """
         java_file = tmp_path / "Outer.java"
         original_code = """public class Outer {
     public int outerMethod() {
@@ -865,6 +869,8 @@ public class Outer {{
 
         optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
 
+        # Inner class methods are excluded from discovery, so the replacement
+        # is a no-op and the original file must remain unchanged.
         result = replace_function_definitions_for_language(
             function_names=["innerMethod"],
             optimized_code=optimized_code,
@@ -872,21 +878,9 @@ public class Outer {{
             project_root_path=tmp_path,
         )
 
-        assert result is True
-        new_code = java_file.read_text(encoding="utf-8")
-        expected = """public class Outer {
-    public int outerMethod() {
-        return 1;
-    }
-
-    public static class Inner {
-        public int innerMethod() {
-            return 2 + 0;
-        }
-    }
-}
-"""
-        assert new_code == expected
+        assert result is False
+        # File must be unchanged
+        assert java_file.read_text(encoding="utf-8") == original_code
 
 
 class TestPreservesStructure:
@@ -1923,6 +1917,171 @@ public final class LuaMap {
 
     public int size() {
         return map.size();
+    }
+}
+"""
+        assert new_code == expected_code
+
+
+class TestConstructorReplacement:
+    """Tests that constructors in the generated class are propagated to the original.
+
+    When the LLM introduces a new ``final`` field (e.g. a cached hash) it must
+    also initialise that field inside every constructor.  Codeflash must detect
+    the modified constructors in the generated class and replace the corresponding
+    constructors in the original source, otherwise the new field is uninitialised
+    and the compiler rejects the file with "variable X might not have been
+    initialized".
+    """
+
+    def test_constructor_updated_when_new_final_field_added(self, tmp_path):
+        """Reproduces the Expression.hashCode / LuaMap.valuesIterator pattern.
+
+        The LLM optimises ``hashCode`` by caching the result in a new final
+        field ``cachedHash``.  The generated class includes the updated
+        constructor that initialises ``cachedHash``.  Codeflash must also
+        replace the original constructor so that the field is properly
+        initialised.
+        """
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize, FunctionParent
+        from codeflash.languages.java.replacement import replace_function
+
+        original_code = """\
+public final class Expression {
+    private final byte[] bytes;
+
+    Expression(byte[] bytes) {
+        this.bytes = bytes;
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Arrays.hashCode(bytes);
+    }
+}
+"""
+        java_file = tmp_path / "Expression.java"
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # LLM optimisation: cache the hash in a new final field.  The generated
+        # class includes both the updated constructor and the simplified hashCode.
+        optimized_source = """\
+public final class Expression {
+    private final byte[] bytes;
+    private final int cachedHash;
+
+    Expression(byte[] bytes) {
+        this.bytes = bytes;
+        this.cachedHash = java.util.Arrays.hashCode(bytes);
+    }
+
+    @Override
+    public int hashCode() {
+        return cachedHash;
+    }
+}
+"""
+
+        func = FunctionToOptimize(
+            function_name="hashCode",
+            file_path=java_file,
+            starting_line=9,
+            ending_line=11,
+            parents=[FunctionParent(name="Expression", type="ClassDef")],
+            is_method=True,
+            language="java",
+        )
+
+        new_code = replace_function(original_code, func, optimized_source)
+
+        # The result should have:
+        #   1. The new field "cachedHash" added
+        #   2. The constructor updated to initialise "cachedHash"
+        #   3. hashCode() returning cachedHash
+        expected_code = """\
+public final class Expression {
+    private final byte[] bytes;
+    private final int cachedHash;
+
+    Expression(byte[] bytes) {
+        this.bytes = bytes;
+        this.cachedHash = java.util.Arrays.hashCode(bytes);
+    }
+
+    @Override
+    public int hashCode() {
+        return cachedHash;
+    }
+}
+"""
+        assert new_code == expected_code
+
+    def test_constructor_updated_for_cached_collection_view(self, tmp_path):
+        """Reproduces the LuaMap.valuesIterator caching pattern.
+
+        The LLM caches ``map.values()`` in a new final field ``valuesView``
+        which is initialised in the constructor.  The original constructor
+        must be updated.
+        """
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize, FunctionParent
+        from codeflash.languages.java.replacement import replace_function
+
+        original_code = """\
+public class DataStore {
+    private final java.util.Map<String, String> data;
+
+    public DataStore(java.util.Map<String, String> data) {
+        this.data = data;
+    }
+
+    public java.util.Collection<String> values() {
+        return data.values();
+    }
+}
+"""
+        java_file = tmp_path / "DataStore.java"
+        java_file.write_text(original_code, encoding="utf-8")
+
+        optimized_source = """\
+public class DataStore {
+    private final java.util.Map<String, String> data;
+    private final java.util.Collection<String> cachedValues;
+
+    public DataStore(java.util.Map<String, String> data) {
+        this.data = data;
+        this.cachedValues = data.values();
+    }
+
+    public java.util.Collection<String> values() {
+        return cachedValues;
+    }
+}
+"""
+
+        func = FunctionToOptimize(
+            function_name="values",
+            file_path=java_file,
+            starting_line=8,
+            ending_line=10,
+            parents=[FunctionParent(name="DataStore", type="ClassDef")],
+            is_method=True,
+            language="java",
+        )
+
+        new_code = replace_function(original_code, func, optimized_source)
+
+        expected_code = """\
+public class DataStore {
+    private final java.util.Map<String, String> data;
+    private final java.util.Collection<String> cachedValues;
+
+    public DataStore(java.util.Map<String, String> data) {
+        this.data = data;
+        this.cachedValues = data.values();
+    }
+
+    public java.util.Collection<String> values() {
+        return cachedValues;
     }
 }
 """

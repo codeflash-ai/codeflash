@@ -52,6 +52,8 @@ class JavaMethodNode:
     class_name: str | None
     source_text: str
     javadoc_start_line: int | None = None  # Line where Javadoc comment starts
+    formal_parameters_text: str | None = None  # Raw formal parameters "(Type name, ...)" for matching
+    is_class_nested: bool = False  # True when the enclosing class is itself nested inside another class
 
 
 @dataclass
@@ -182,6 +184,104 @@ class JavaAnalyzer:
 
         return methods
 
+    def find_constructors(self, source: str, class_name: str | None = None) -> list[JavaMethodNode]:
+        """Find all constructor definitions in source code.
+
+        Args:
+            source: The source code to analyze.
+            class_name: Optional class name to filter constructors.
+
+        Returns:
+            List of JavaMethodNode objects describing found constructors.
+            The ``name`` field of each node is the constructor name (i.e. the class name).
+
+        """
+        source_bytes = source.encode("utf8")
+        tree = self.parse(source_bytes)
+        constructors: list[JavaMethodNode] = []
+        self._walk_tree_for_constructors(
+            tree.root_node, source_bytes, constructors, current_class=None, target_class=class_name
+        )
+        return constructors
+
+    def _walk_tree_for_constructors(
+        self,
+        node: Node,
+        source_bytes: bytes,
+        constructors: list[JavaMethodNode],
+        current_class: str | None,
+        target_class: str | None,
+    ) -> None:
+        """Recursively walk the tree to find constructor declarations."""
+        new_class = current_class
+        type_declarations = ("class_declaration", "interface_declaration", "enum_declaration")
+        if node.type in type_declarations:
+            name_node = node.child_by_field_name("name")
+            if name_node:
+                new_class = self.get_node_text(name_node, source_bytes)
+
+        if node.type == "constructor_declaration":
+            constructor_info = self._extract_constructor_info(node, source_bytes, new_class)
+            if constructor_info:
+                if target_class is None or constructor_info.class_name == target_class:
+                    constructors.append(constructor_info)
+
+        for child in node.children:
+            self._walk_tree_for_constructors(
+                child,
+                source_bytes,
+                constructors,
+                current_class=new_class if node.type in type_declarations else current_class,
+                target_class=target_class,
+            )
+
+    def _extract_constructor_info(
+        self, node: Node, source_bytes: bytes, current_class: str | None
+    ) -> JavaMethodNode | None:
+        """Extract constructor information from a constructor_declaration node."""
+        name_node = node.child_by_field_name("name")
+        if not name_node:
+            return None
+        name = self.get_node_text(name_node, source_bytes)
+
+        is_public = False
+        is_private = False
+        is_protected = False
+        for child in node.children:
+            if child.type == "modifiers":
+                modifier_text = self.get_node_text(child, source_bytes)
+                is_public = "public" in modifier_text
+                is_private = "private" in modifier_text
+                is_protected = "protected" in modifier_text
+                break
+
+        # Extract formal parameters text for signature matching
+        params_node = node.child_by_field_name("parameters")
+        formal_parameters_text = self.get_node_text(params_node, source_bytes) if params_node else "()"
+
+        source_text = self.get_node_text(node, source_bytes)
+        javadoc_start_line = self._find_preceding_javadoc(node, source_bytes)
+
+        return JavaMethodNode(
+            name=name,
+            node=node,
+            start_line=node.start_point[0] + 1,
+            end_line=node.end_point[0] + 1,
+            start_col=node.start_point[1],
+            end_col=node.end_point[1],
+            is_static=False,
+            is_public=is_public,
+            is_private=is_private,
+            is_protected=is_protected,
+            is_abstract=False,
+            is_synchronized=False,
+            return_type=None,
+            class_name=current_class,
+            source_text=source_text,
+            javadoc_start_line=javadoc_start_line,
+            formal_parameters_text=formal_parameters_text,
+        )
+
     def _walk_tree_for_methods(
         self,
         node: Node,
@@ -190,6 +290,7 @@ class JavaAnalyzer:
         include_private: bool,
         include_static: bool,
         current_class: str | None,
+        class_depth: int = 0,
     ) -> None:
         """Recursively walk the tree to find method definitions."""
         new_class = current_class
@@ -205,6 +306,10 @@ class JavaAnalyzer:
             method_info = self._extract_method_info(node, source_bytes, current_class)
 
             if method_info:
+                # A method is nested when its enclosing class is itself inside another
+                # class (class_depth >= 2: depth 1 = outermost class, depth 2+ = nested).
+                method_info.is_class_nested = class_depth >= 2
+
                 # Apply filters
                 should_include = True
 
@@ -217,7 +322,7 @@ class JavaAnalyzer:
                 if should_include:
                     methods.append(method_info)
 
-        # Recurse into children
+        # Recurse into children, incrementing depth when entering a type declaration
         for child in node.children:
             self._walk_tree_for_methods(
                 child,
@@ -226,6 +331,7 @@ class JavaAnalyzer:
                 include_private=include_private,
                 include_static=include_static,
                 current_class=new_class if node.type in type_declarations else current_class,
+                class_depth=class_depth + 1 if node.type in type_declarations else class_depth,
             )
 
     def _extract_method_info(self, node: Node, source_bytes: bytes, current_class: str | None) -> JavaMethodNode | None:
