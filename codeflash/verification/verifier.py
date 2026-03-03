@@ -126,6 +126,7 @@ def generate_tests(
             logger.debug(f"Instrumented JS/TS tests locally for {function_to_optimize.function_name}")
         elif is_java():
             from codeflash.languages.java.instrumentation import instrument_generated_java_test
+            from codeflash.languages.java.remove_asserts import strip_java_assertions
 
             func_name = function_to_optimize.function_name
             qualified_name = function_to_optimize.qualified_name
@@ -147,6 +148,9 @@ def generate_tests(
                 mode="performance",
                 function_to_optimize=function_to_optimize,
             )
+
+            # Compute clean display version: bare function calls, no capture variables
+            generated_test_source = strip_java_assertions(generated_test_source, func_name, qualified_name)
 
             logger.debug(f"Instrumented Java tests locally for {func_name}")
         else:
