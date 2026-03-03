@@ -139,7 +139,7 @@ def compare_test_results(
 
     This function calls the Java Comparator CLI that:
     1. Reads serialized behavior data from both SQLite databases
-    2. Deserializes using Gson
+    2. Deserializes using Kryo
     3. Compares results using deep equality (handles Maps, Lists, arrays, etc.)
     4. Returns comparison results as JSON
 
@@ -219,6 +219,9 @@ def compare_test_results(
                 return False, []
 
             comparison = json.loads(result.stdout)
+
+            if result.stderr:
+                logger.debug("Java comparator stderr: %s", result.stderr.strip())
         except json.JSONDecodeError as e:
             logger.exception("Failed to parse Java comparator output: %s", e)
             logger.exception("stdout: %s", result.stdout[:500] if result.stdout else "(empty)")
@@ -274,12 +277,25 @@ def compare_test_results(
             )
 
         equivalent = comparison.get("equivalent", False)
+        actual_comparisons = comparison.get("actualComparisons", -1)
+        skipped_placeholders = comparison.get("skippedPlaceholders", 0)
+        skipped_deser_errors = comparison.get("skippedDeserializationErrors", 0)
+
+        if actual_comparisons == 0:
+            logger.warning(
+                "Java comparison: no actual comparisons performed "
+                "(total=%s, skipped_placeholders=%s, skipped_deser_errors=%s). "
+                "Treating as NOT equivalent.",
+                comparison.get("totalInvocations", 0),
+                skipped_placeholders, skipped_deser_errors,
+            )
+            return False, []
 
         logger.info(
-            "Java comparison: %s (%s invocations, %s diffs)",
+            "Java comparison: %s (%s invocations, %s compared, %s placeholder skips, %s deser skips, %s diffs)",
             "equivalent" if equivalent else "DIFFERENT",
             comparison.get("totalInvocations", 0),
-            len(test_diffs),
+            actual_comparisons, skipped_placeholders, skipped_deser_errors, len(test_diffs),
         )
 
         return equivalent, test_diffs
