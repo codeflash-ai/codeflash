@@ -127,7 +127,7 @@ class PythonFunctionOptimizer(FunctionOptimizer):
     def parse_line_profile_test_results(
         self, line_profiler_output_file: Path | None
     ) -> tuple[TestResults | dict, CoverageData | None]:
-        if line_profiler_output_file is None or not line_profiler_output_file.exists():
+        if line_profiler_output_file is None:
             return {"timings": {}, "unit": 0, "str_out": ""}, None
         return self.language_support.parse_line_profile_results(line_profiler_output_file), None
 
