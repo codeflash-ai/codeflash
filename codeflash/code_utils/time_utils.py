@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from functools import lru_cache
+
 from codeflash.result.critic import performance_gain
 
 
+@lru_cache(maxsize=1024)
 def humanize_runtime(time_in_ns: int) -> str:
     runtime_human: str = str(time_in_ns)
     units = "nanoseconds"

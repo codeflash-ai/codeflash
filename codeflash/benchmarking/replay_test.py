@@ -6,11 +6,6 @@ import textwrap
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.formatter import sort_imports
-from codeflash.discovery.functions_to_optimize import inspect_top_level_functions_or_methods
-from codeflash.verification.verification_utils import get_test_file_path
-
 if TYPE_CHECKING:
     from collections.abc import Generator
 
@@ -232,6 +227,11 @@ def generate_replay_test(trace_file_path: Path, output_dir: Path, max_run_count:
         The number of replay tests generated
 
     """
+    from codeflash.cli_cmds.console import logger
+    from codeflash.code_utils.formatter import sort_imports
+    from codeflash.discovery.functions_to_optimize import inspect_top_level_functions_or_methods
+    from codeflash.verification.verification_utils import get_test_file_path
+
     count = 0
     try:
         # Connect to the database

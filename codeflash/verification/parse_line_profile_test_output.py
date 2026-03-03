@@ -5,14 +5,8 @@ from __future__ import annotations
 import inspect
 import linecache
 import os
-from typing import TYPE_CHECKING, Optional
-
-import dill as pickle
 
 from codeflash.code_utils.tabulate import tabulate
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def show_func(
@@ -25,6 +19,7 @@ def show_func(
     if total_hits == 0:
         return ""
     scalar = 1
+    sublines = []
     if os.path.exists(filename):  # noqa: PTH110
         out_table += f"## Function: {func_name}\n"
         # Clear the cache to ensure that we get up-to-date results.
@@ -77,15 +72,43 @@ def show_text(stats: dict) -> str:
     return out_table
 
 
-def parse_line_profile_results(line_profiler_output_file: Optional[Path]) -> dict:
-    line_profiler_output_file = line_profiler_output_file.with_suffix(".lprof")
-    stats_dict = {}
-    if not line_profiler_output_file.exists():
-        return {"timings": {}, "unit": 0, "str_out": ""}, None
-    with line_profiler_output_file.open("rb") as f:
-        stats = pickle.load(f)
-        stats_dict["timings"] = stats.timings
-        stats_dict["unit"] = stats.unit
-        str_out = show_text(stats_dict)
-        stats_dict["str_out"] = str_out
-    return stats_dict, None
+def show_text_non_python(stats: dict, line_contents: dict[tuple[str, int], str]) -> str:
+    """Show text for non-Python timings using profiler-provided line contents."""
+    out_table = ""
+    out_table += "# Timer unit: {:g} s\n".format(stats["unit"])
+    stats_order = sorted(stats["timings"].items())
+    for (fn, _lineno, name), timings in stats_order:
+        total_hits = sum(t[1] for t in timings)
+        total_time = sum(t[2] for t in timings)
+        if total_hits == 0:
+            continue
+
+        out_table += f"## Function: {name}\n"
+        out_table += "## Total time: %g s\n" % (total_time * stats["unit"])
+
+        default_column_sizes = {"hits": 9, "time": 12, "perhit": 8, "percent": 8}
+        table_rows = []
+        for lineno, nhits, time in timings:
+            if nhits == 0:
+                table_rows.append(("", "", "", "", line_contents.get((fn, lineno), "")))
+                continue
+            percent = "" if total_time == 0 else "%5.1f" % (100 * time / total_time)
+            time_disp = f"{time:5.1f}"
+            if len(time_disp) > default_column_sizes["time"]:
+                time_disp = f"{time:5.1g}"
+            perhit = (float(time) / nhits) if nhits > 0 else 0.0
+            perhit_disp = f"{perhit:5.1f}"
+            if len(perhit_disp) > default_column_sizes["perhit"]:
+                perhit_disp = f"{perhit:5.1g}"
+            nhits_disp = "%d" % nhits  # noqa: UP031
+            if len(nhits_disp) > default_column_sizes["hits"]:
+                nhits_disp = f"{nhits:g}"
+
+            table_rows.append((nhits_disp, time_disp, perhit_disp, percent, line_contents.get((fn, lineno), "")))
+
+        table_cols = ("Hits", "Time", "Per Hit", "% Time", "Line Contents")
+        out_table += tabulate(
+            headers=table_cols, tabular_data=table_rows, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
+        )
+        out_table += "\n"
+    return out_table

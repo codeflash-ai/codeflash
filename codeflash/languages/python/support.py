@@ -191,6 +191,13 @@ class PythonSupport:
     def test_result_serialization_format(self) -> str:
         return "pickle"
 
+    def parse_test_xml(
+        self, test_xml_file_path: Path, test_files: Any, test_config: Any, run_result: Any = None
+    ) -> Any:
+        from codeflash.languages.python.parse_xml import parse_python_test_xml
+
+        return parse_python_test_xml(test_xml_file_path, test_files, test_config, run_result)
+
     def load_coverage(
         self,
         coverage_database_file: Path,
@@ -825,6 +832,17 @@ class PythonSupport:
         """
         return ".py"
 
+    def get_test_dir_for_source(self, test_dir: Path, source_file: Path | None) -> Path | None:
+        return None
+
+    def resolve_test_file_from_class_path(self, test_class_path: str, base_dir: Path) -> Path | None:
+        return None
+
+    def resolve_test_module_path_for_pr(
+        self, test_module_path: str, tests_project_rootdir: Path, non_generated_tests: set[Path]
+    ) -> Path | None:
+        return None
+
     def find_test_root(self, project_root: Path) -> Path | None:
         """Find the test root directory for a Python project.
 
@@ -900,20 +918,22 @@ class PythonSupport:
 
     def instrument_existing_test(
         self,
-        test_path: Path,
+        test_string: str,
         call_positions: Sequence[Any],
         function_to_optimize: Any,
         tests_project_root: Path,
         mode: str,
+        test_path: Path | None,
     ) -> tuple[bool, str | None]:
         """Inject profiling code into an existing Python test file.
 
         Args:
-            test_path: Path to the test file.
+            test_string: The test file content as a string.
             call_positions: List of code positions where the function is called.
             function_to_optimize: The function being optimized.
             tests_project_root: Root directory of tests.
             mode: Testing mode - "behavior" or "performance".
+            test_path: Path to the test file.
 
         Returns:
             Tuple of (success, instrumented_code).
@@ -925,6 +945,7 @@ class PythonSupport:
         testing_mode = TestingMode.BEHAVIOR if mode == "behavior" else TestingMode.PERFORMANCE
 
         return inject_profiling_into_existing_test(
+            test_string=test_string,
             test_path=test_path,
             call_positions=list(call_positions),
             function_to_optimize=function_to_optimize,
@@ -950,17 +971,21 @@ class PythonSupport:
         return True
 
     def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict:
-        """Parse line profiler output for Python.
+        import dill as pickle
 
-        Args:
-            line_profiler_output_file: Path to profiler output file.
+        from codeflash.verification.parse_line_profile_test_output import show_text
 
-        Returns:
-            Dict with timing information.
-
-        """
-        # Python uses line_profiler which has its own output format
-        return {"timings": {}, "unit": 0, "str_out": ""}
+        line_profiler_output_file = line_profiler_output_file.with_suffix(".lprof")
+        stats_dict: dict = {}
+        if not line_profiler_output_file.exists():
+            return {"timings": {}, "unit": 0, "str_out": ""}
+        with line_profiler_output_file.open("rb") as f:
+            stats = pickle.load(f)
+            stats_dict["timings"] = stats.timings
+            stats_dict["unit"] = stats.unit
+            str_out = show_text(stats_dict)
+            stats_dict["str_out"] = str_out
+        return stats_dict
 
     @property
     def function_optimizer_class(self) -> type:
