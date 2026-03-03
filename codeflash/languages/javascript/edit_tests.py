@@ -252,7 +252,13 @@ def inject_test_globals(
 
 
 _VITEST_IMPORT_RE = re.compile(r"^.*import\s+\{[^}]*\}\s+from\s+['\"]vitest['\"].*\n?", re.MULTILINE)
+_VITEST_REQUIRE_RE = re.compile(
+    r"^.*(?:const|let|var)\s+\{[^}]*\}\s*=\s*require\s*\(\s*['\"]vitest['\"]\s*\).*\n?", re.MULTILINE
+)
 _JEST_GLOBALS_IMPORT_RE = re.compile(r"^.*import\s+\{[^}]*\}\s+from\s+['\"]@jest/globals['\"].*\n?", re.MULTILINE)
+_JEST_GLOBALS_REQUIRE_RE = re.compile(
+    r"^.*(?:const|let|var)\s+\{[^}]*\}\s*=\s*require\s*\(\s*['\"]@jest/globals['\"]\s*\).*\n?", re.MULTILINE
+)
 _MOCHA_REQUIRE_RE = re.compile(
     r"^.*(?:const|let|var)\s+\{[^}]*\}\s*=\s*require\s*\(\s*['\"]mocha['\"]\s*\).*\n?", re.MULTILINE
 )
@@ -275,7 +281,9 @@ def sanitize_mocha_imports(source: str) -> str:
 
     """
     source = _VITEST_IMPORT_RE.sub("", source)
+    source = _VITEST_REQUIRE_RE.sub("", source)
     source = _JEST_GLOBALS_IMPORT_RE.sub("", source)
+    source = _JEST_GLOBALS_REQUIRE_RE.sub("", source)
     source = _MOCHA_REQUIRE_RE.sub("", source)
     return _VITEST_COMMENT_RE.sub("", source)
 
