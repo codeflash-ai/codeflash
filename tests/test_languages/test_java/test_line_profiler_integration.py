@@ -484,7 +484,7 @@ def run_spin_timer_profiled(tmppath: Path, spin_durations_ns: list[int]) -> dict
     agent_arg = profiler.build_javaagent_arg(config_path)
 
     result = subprocess.run(
-        ["javac", "--release", "21", str(java_file)],
+        ["javac", "--release", "11", str(java_file)],
         capture_output=True,
         text=True,
         cwd=str(tmppath),
