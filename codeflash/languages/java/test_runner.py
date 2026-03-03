@@ -89,9 +89,7 @@ def _run_cmd_kill_pg_on_timeout(
         # Windows does not have POSIX process groups / killpg.  Fall back to
         # the standard subprocess.run() behaviour (kills parent only).
         try:
-            return subprocess.run(
-                cmd, cwd=cwd, env=env, capture_output=True, text=text, timeout=timeout, check=False
-            )
+            return subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=text, timeout=timeout, check=False)
         except subprocess.TimeoutExpired:
             return subprocess.CompletedProcess(
                 args=cmd, returncode=-2, stdout="", stderr=f"Process timed out after {timeout}s"
@@ -340,9 +338,7 @@ def _filter_test_paths_excluding_files(test_paths: Any, removed_files: list[Path
                 tf.instrumented_behavior_file_path is not None
                 and tf.instrumented_behavior_file_path.resolve() in removed_set
             )
-            bench_removed = (
-                tf.benchmarking_file_path is not None and tf.benchmarking_file_path.resolve() in removed_set
-            )
+            bench_removed = tf.benchmarking_file_path is not None and tf.benchmarking_file_path.resolve() in removed_set
             if not behavior_removed and not bench_removed:
                 kept.append(tf)
         return TestFiles(test_files=kept)
@@ -1069,19 +1065,18 @@ def _run_direct_or_fallback_maven(
         removed = _remove_failing_generated_tests(failing_files)
         if removed:
             logger.info(
-                "Removed %d failing generated test file(s) before retry: %s",
-                len(removed),
-                [str(r) for r in removed],
+                "Removed %d failing generated test file(s) before retry: %s", len(removed), [str(r) for r in removed]
             )
             test_paths = _filter_test_paths_excluding_files(test_paths, removed)
             compile_result = _compile_tests(maven_root, run_env, test_module, timeout=120)
 
         if compile_result.returncode != 0:
             logger.warning(
-                "Compilation failed (rc=%d), falling back to Maven-based execution",
-                compile_result.returncode,
+                "Compilation failed (rc=%d), falling back to Maven-based execution", compile_result.returncode
             )
-            result = _run_maven_tests(maven_root, test_paths, run_env, timeout=timeout, mode=mode, test_module=test_module)
+            result = _run_maven_tests(
+                maven_root, test_paths, run_env, timeout=timeout, mode=mode, test_module=test_module
+            )
             target_dir = _get_test_module_target_dir(maven_root, test_module)
             surefire_dir = target_dir / "surefire-reports"
             result_xml_path = _get_combined_junit_xml(surefire_dir, candidate_index)
@@ -1753,9 +1748,7 @@ def _run_maven_tests(
                     if retry_filter:
                         retry_cmd = [c for c in cmd if not c.startswith("-Dtest=")]
                         retry_cmd.append(f"-Dtest={_validate_test_filter(retry_filter)}")
-                        result = _run_cmd_kill_pg_on_timeout(
-                            retry_cmd, cwd=project_root, env=env, timeout=timeout
-                        )
+                        result = _run_cmd_kill_pg_on_timeout(retry_cmd, cwd=project_root, env=env, timeout=timeout)
                         if result.returncode != 0:
                             retry_output = (result.stdout or "") + (result.stderr or "")
                             logger.error(
