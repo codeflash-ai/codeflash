@@ -225,7 +225,6 @@ def inject_test_globals(
             "import { jest, describe, it, expect, beforeEach, afterEach, beforeAll, test } from '@jest/globals'\n"
         )
 
-
     stripped_import = global_import.strip()
     for test in generated_tests.generated_tests:
         # Skip injection if the source already has the import (LLM may have included it)
