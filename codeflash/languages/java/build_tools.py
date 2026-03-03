@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET
@@ -645,6 +646,26 @@ def add_codeflash_dependency_to_pom(pom_path: Path) -> bool:
 
         # Check if already present
         if "codeflash-runtime" in content:
+            # If a previous run left a system-scope dependency, replace it with test scope.
+            # System-scope dependencies cause Maven warnings and are rejected by some projects.
+            if "<scope>system</scope>" in content and "codeflash-runtime" in content:
+                content = re.sub(
+                    r"<dependency>\s*<groupId>com\.codeflash</groupId>\s*"
+                    r"<artifactId>codeflash-runtime</artifactId>\s*"
+                    r"<version>[^<]*</version>\s*"
+                    r"<scope>system</scope>\s*"
+                    r"<systemPath>[^<]*</systemPath>\s*</dependency>",
+                    "<dependency>\n"
+                    "            <groupId>com.codeflash</groupId>\n"
+                    "            <artifactId>codeflash-runtime</artifactId>\n"
+                    "            <version>1.0.0</version>\n"
+                    "            <scope>test</scope>\n"
+                    "        </dependency>",
+                    content,
+                )
+                pom_path.write_text(content, encoding="utf-8")
+                logger.info("Replaced system-scope codeflash-runtime dependency with test scope")
+                return True
             logger.info("codeflash-runtime dependency already present in pom.xml")
             return True
 
