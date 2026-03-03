@@ -1670,3 +1670,62 @@ public final class Buffer {{
 }
 """
         assert new_code == expected
+
+
+class TestWrongMethodNameGeneration:
+    """Tests for handling AI-generated code with wrong method names."""
+
+    def test_standalone_wrong_method_name_leaves_source_unchanged(self, tmp_path: Path, java_support: JavaSupport):
+        """When the AI generates code with a wrong method name, the source should be left unchanged."""
+        from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+
+        java_file = tmp_path / "Unpacker.java"
+        original_code = """public class Unpacker {
+    public int unpack(byte[] data) {
+        int result = 0;
+        for (int i = 0; i < data.length; i++) {
+            result = (result << 8) | (data[i] & 0xFF);
+        }
+        return result;
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # AI generated code with wrong method name "decode" instead of "unpack"
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class Unpacker {{
+    public int decode(byte[] data) {{
+        int result = 0;
+        for (int i = 0; i < data.length; i++) {{
+            result = (result << 8) | (data[i] & 0xFF);
+        }}
+        return result;
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        function_to_optimize = FunctionToOptimize(
+            function_name="unpack",
+            file_path=java_file,
+            starting_line=2,
+            ending_line=7,
+            parents=[FunctionParent(name="Unpacker", type="ClassDef")],
+            qualified_name="Unpacker.unpack",
+            is_method=True,
+        )
+
+        result = replace_function_definitions_for_language(
+            function_names=["unpack"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            lang_support=java_support,
+            function_to_optimize=function_to_optimize,
+        )
+
+        assert result is False
+        new_code = java_file.read_text(encoding="utf-8")
+        assert new_code == original_code

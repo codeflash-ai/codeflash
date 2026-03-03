@@ -35,6 +35,7 @@ class ParsedOptimization:
     new_fields: list[str]  # Source text of new fields to add
     helpers_before_target: list[str] = field(default_factory=list)  # Helpers appearing before target in optimized code
     helpers_after_target: list[str] = field(default_factory=list)  # Helpers appearing after target in optimized code
+    target_found: bool = True  # Whether the target method was found in the optimized code
 
 
 def _parse_optimization_source(new_source: str, target_method_name: str, analyzer: JavaAnalyzer) -> ParsedOptimization:
@@ -63,6 +64,8 @@ def _parse_optimization_source(new_source: str, target_method_name: str, analyze
     helpers_before_target: list[str] = []
     helpers_after_target: list[str] = []
 
+    target_found = True
+
     if classes:
         # It's a class - extract components
         methods = analyzer.find_methods(new_source)
@@ -83,6 +86,8 @@ def _parse_optimization_source(new_source: str, target_method_name: str, analyze
             start = (target_method.javadoc_start_line or target_method.start_line) - 1
             end = target_method.end_line
             target_method_source = "".join(lines[start:end])
+        else:
+            target_found = False
 
         # Extract helper methods, categorised by position relative to the target
         for i, method in enumerate(methods):
@@ -106,6 +111,7 @@ def _parse_optimization_source(new_source: str, target_method_name: str, analyze
         new_fields=new_fields,
         helpers_before_target=helpers_before_target,
         helpers_after_target=helpers_after_target,
+        target_found=target_found,
     )
 
 
@@ -275,6 +281,10 @@ def replace_function(
 
     # Parse the optimization to extract components
     parsed = _parse_optimization_source(new_source, func_name, analyzer)
+
+    if not parsed.target_found:
+        logger.error("Optimized code does not contain the target method %s", func_name)
+        return source
 
     # Find the method in the original source
     methods = analyzer.find_methods(source)
