@@ -313,11 +313,29 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     return handle_optimize_all_arg_parsing(args)
 
 
-SKIP_DIRS = frozenset({
-    "node_modules", ".git", "__pycache__", ".venv", "venv", "build", "dist",
-    ".next", ".nuxt", "coverage", ".cache", ".turbo", ".vercel", ".tox",
-    ".mypy_cache", ".pytest_cache", ".ruff_cache", "egg-info", ".eggs",
-})
+SKIP_DIRS = frozenset(
+    {
+        "node_modules",
+        ".git",
+        "__pycache__",
+        ".venv",
+        "venv",
+        "build",
+        "dist",
+        ".next",
+        ".nuxt",
+        "coverage",
+        ".cache",
+        ".turbo",
+        ".vercel",
+        ".tox",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        "egg-info",
+        ".eggs",
+    }
+)
 
 PYTHON_EXTENSIONS = frozenset({".py"})
 JS_TS_EXTENSIONS = frozenset({".js", ".ts", ".jsx", ".tsx"})
