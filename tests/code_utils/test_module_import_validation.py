@@ -48,7 +48,7 @@ class TestValidateModuleImport:
             sys.path.remove(root_str)
 
     def test_find_spec_returns_none(self, tmp_path: Path) -> None:
-        with patch("importlib.util.find_spec", return_value=None) as mock_fs:
+        with patch("codeflash.code_utils.code_utils.find_spec", return_value=None) as mock_fs:
             ok, err = validate_module_import("some.mod", tmp_path)
             mock_fs.assert_called_once_with("some.mod")
         assert ok is False
@@ -56,7 +56,7 @@ class TestValidateModuleImport:
 
     def test_find_spec_raises_module_not_found(self, tmp_path: Path) -> None:
         with patch(
-            "importlib.util.find_spec",
+            "codeflash.code_utils.code_utils.find_spec",
             side_effect=ModuleNotFoundError("No module named 'boom'"),
         ):
             ok, err = validate_module_import("boom", tmp_path)
@@ -65,7 +65,7 @@ class TestValidateModuleImport:
 
     def test_find_spec_raises_generic_exception(self, tmp_path: Path) -> None:
         with patch(
-            "importlib.util.find_spec",
+            "codeflash.code_utils.code_utils.find_spec",
             side_effect=RuntimeError("something broke"),
         ):
             ok, err = validate_module_import("broken.mod", tmp_path)
@@ -75,7 +75,7 @@ class TestValidateModuleImport:
     def test_sys_path_cleaned_on_exception(self, tmp_path: Path) -> None:
         root_str = str(tmp_path)
         assert root_str not in sys.path
-        with patch("importlib.util.find_spec", side_effect=RuntimeError("boom")):
+        with patch("codeflash.code_utils.code_utils.find_spec", side_effect=RuntimeError("boom")):
             validate_module_import("mod", tmp_path)
         assert root_str not in sys.path
 
@@ -191,7 +191,7 @@ class TestTryCorrectModuleRoot:
         optimizer = self._make_optimizer_stub(mod, tmp_path / "pkg", tmp_path)
 
         with patch(
-            "codeflash.code_utils.config_parser.find_pyproject_toml",
+            "codeflash.optimization.function_optimizer.find_pyproject_toml",
             side_effect=ValueError("not found"),
         ):
             result = FunctionOptimizer.try_correct_module_root(optimizer)
@@ -212,7 +212,7 @@ class TestTryCorrectModuleRoot:
         optimizer = self._make_optimizer_stub(mod, pkg, tmp_path)
 
         with patch(
-            "codeflash.code_utils.config_parser.find_pyproject_toml",
+            "codeflash.optimization.function_optimizer.find_pyproject_toml",
             return_value=pyproject,
         ):
             result = FunctionOptimizer.try_correct_module_root(optimizer)
@@ -241,11 +241,11 @@ class TestTryCorrectModuleRoot:
 
         with (
             patch(
-                "codeflash.code_utils.config_parser.find_pyproject_toml",
+                "codeflash.optimization.function_optimizer.find_pyproject_toml",
                 return_value=pyproject,
             ),
             patch(
-                "codeflash.cli_cmds.cli.project_root_from_module_root",
+                "codeflash.optimization.function_optimizer.project_root_from_module_root",
                 return_value=tmp_path,
             ),
             patch(
@@ -285,11 +285,11 @@ class TestTryCorrectModuleRoot:
 
         with (
             patch(
-                "codeflash.code_utils.config_parser.find_pyproject_toml",
+                "codeflash.optimization.function_optimizer.find_pyproject_toml",
                 return_value=pyproject,
             ),
             patch(
-                "codeflash.cli_cmds.cli.project_root_from_module_root",
+                "codeflash.optimization.function_optimizer.project_root_from_module_root",
                 return_value=tmp_path,
             ),
             patch(
@@ -327,11 +327,11 @@ class TestTryCorrectModuleRoot:
 
         with (
             patch(
-                "codeflash.code_utils.config_parser.find_pyproject_toml",
+                "codeflash.optimization.function_optimizer.find_pyproject_toml",
                 return_value=pyproject,
             ),
             patch(
-                "codeflash.cli_cmds.cli.project_root_from_module_root",
+                "codeflash.optimization.function_optimizer.project_root_from_module_root",
                 return_value=tmp_path,
             ),
             patch(
