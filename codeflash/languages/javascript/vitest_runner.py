@@ -194,10 +194,13 @@ def _ensure_codeflash_vitest_config(project_root: Path) -> Path | None:
 
     codeflash_config_path = project_root / "codeflash.vitest.config.mjs"
 
-    # If already exists, use it
+    # Regenerate if existing config is missing required settings (e.g., pool: 'forks')
     if codeflash_config_path.exists():
-        logger.debug(f"Using existing Codeflash Vitest config: {codeflash_config_path}")
-        return codeflash_config_path
+        existing_content = codeflash_config_path.read_text(encoding="utf-8")
+        if "pool: 'forks'" in existing_content:
+            logger.debug(f"Using existing Codeflash Vitest config: {codeflash_config_path}")
+            return codeflash_config_path
+        logger.debug("Regenerating Codeflash Vitest config (missing pool: 'forks')")
 
     # Find the original vitest config to extend
     original_config = None
