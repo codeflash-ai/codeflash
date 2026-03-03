@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import site
+import subprocess
 import sys
 from contextlib import contextmanager
 from functools import lru_cache
@@ -353,6 +354,56 @@ def module_name_from_file_path(file_path: Path, project_root_path: Path, *, trav
                     parent = parent.parent
         msg = f"File {file_path} is not within the project root {project_root_path}."
         raise ValueError(msg)  # noqa: B904
+
+
+def validate_module_import(module_path: str, project_root: Path) -> tuple[bool, str]:
+    """Try importing a module in a subprocess to check if it's importable.
+
+    Returns (success, error_message). Uses the same Python executable and
+    PYTHONPATH setup as the test runner to ensure consistent behavior.
+    If the import times out (heavy frameworks like TensorFlow), assume it's fine
+    since the module was found but is just slow to initialize.
+    """
+    from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
+    from codeflash.code_utils.shell_utils import make_env_with_project_root
+
+    env = make_env_with_project_root(project_root)
+    try:
+        result = subprocess.run(
+            [SAFE_SYS_EXECUTABLE, "-c", f"import {module_path}"],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            cwd=str(project_root),
+            errors="replace",
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        # Heavy modules (e.g. tensorflow) can take a long time — the module exists, just slow to init
+        return True, ""
+    if result.returncode == 0:
+        return True, ""
+    return False, result.stderr.strip()
+
+
+def infer_module_root_from_file(file_path: Path, pyproject_dir: Path) -> Path | None:
+    """Infer the correct module-root for a Python file by walking the __init__.py chain.
+
+    Walks up from the file's parent directory toward pyproject_dir. The module-root
+    is the first ancestor directory that is NOT a Python package (has no __init__.py),
+    meaning it's the directory that should be on sys.path.
+
+    Returns the inferred module-root path, or None if inference fails.
+    """
+    file_path = file_path.resolve()
+    pyproject_dir = pyproject_dir.resolve()
+    current = file_path.parent
+    while current not in (pyproject_dir, current.parent):
+        if not (current / "__init__.py").exists():
+            return current
+        current = current.parent
+    return pyproject_dir
 
 
 def file_path_from_module_name(module_name: str, project_root_path: Path) -> Path:

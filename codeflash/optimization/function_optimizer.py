@@ -42,9 +42,12 @@ from codeflash.code_utils.code_utils import (
     extract_unique_errors,
     file_name_from_test_module_name,
     get_run_tmp_file,
+    infer_module_root_from_file,
+    module_name_from_file_path,
     normalize_by_max,
     restore_conftest,
     unified_diff_strings,
+    validate_module_import,
 )
 from codeflash.code_utils.config_consts import (
     COVERAGE_THRESHOLD,
@@ -541,6 +544,61 @@ class FunctionOptimizer:
 
     # --- End hooks ---
 
+    def try_correct_module_root(self) -> bool:
+        """Try to infer and apply the correct module-root if the current one is wrong.
+
+        Walks the __init__.py chain to determine the correct module-root, validates
+        it by trying an import, and updates pyproject.toml + in-memory config on success.
+        """
+        from codeflash.cli_cmds.cli import project_root_from_module_root
+        from codeflash.code_utils.config_parser import find_pyproject_toml
+
+        try:
+            pyproject_path = find_pyproject_toml(None)
+        except ValueError:
+            return False
+
+        pyproject_dir = pyproject_path.parent
+        inferred_root = infer_module_root_from_file(self.function_to_optimize.file_path, pyproject_dir)
+        if inferred_root is None or inferred_root.resolve() == self.args.module_root.resolve():
+            return False
+
+        new_module_root = inferred_root.resolve()
+        new_project_root = project_root_from_module_root(new_module_root, pyproject_path)
+        try:
+            new_module_path = module_name_from_file_path(self.function_to_optimize.file_path, new_project_root)
+        except ValueError:
+            return False
+
+        import_ok, _ = validate_module_import(new_module_path, new_project_root)
+        if not import_ok:
+            return False
+
+        # Import succeeded with the inferred module-root — update pyproject.toml
+        try:
+            import tomlkit
+
+            with pyproject_path.open("rb") as f:
+                data = tomlkit.parse(f.read())
+            relative_root = os.path.relpath(new_module_root, pyproject_dir)
+            data["tool"]["codeflash"]["module-root"] = relative_root  # type: ignore[index]
+            with pyproject_path.open("w", encoding="utf-8") as f:
+                f.write(tomlkit.dumps(data))
+        except Exception:
+            logger.debug("Failed to update pyproject.toml with corrected module-root")
+            return False
+
+        # Update in-memory config
+        self.args.module_root = new_module_root
+        self.args.project_root = new_project_root
+        self.project_root = new_project_root.resolve()
+        self.original_module_path = new_module_path
+
+        logger.info(
+            f"Auto-corrected module-root to '{os.path.relpath(new_module_root, pyproject_dir)}' in pyproject.toml"
+        )
+        return True
+
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
         logger.info(f"!lsp|Function Trace ID: {self.function_trace_id}")
@@ -554,6 +612,20 @@ class FunctionOptimizer:
                     f"No existing tests found for '{self.function_to_optimize.function_name}'. "
                     f"Cannot optimize without tests when --no-gen-tests is set."
                 )
+
+        # Pre-flight import check: verify the target module can be imported before expensive API calls
+        if self.function_to_optimize.language == "python":
+            import_ok, import_error = validate_module_import(self.original_module_path, self.project_root)
+            if not import_ok:
+                corrected = self.try_correct_module_root()
+                if corrected:
+                    import_ok, import_error = validate_module_import(self.original_module_path, self.project_root)
+                if not import_ok:
+                    return Failure(
+                        f"Cannot import module '{self.original_module_path}': {import_error}\n"
+                        "This prevents test execution. Please check that all dependencies are installed "
+                        "and that 'module-root' is correctly configured in pyproject.toml."
+                    )
 
         self.cleanup_leftover_test_return_values()
         file_name_from_test_module_name.cache_clear()
