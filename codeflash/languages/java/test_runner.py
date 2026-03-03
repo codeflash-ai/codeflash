@@ -120,10 +120,8 @@ def _run_cmd_kill_pg_on_timeout(
             proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             if pgid is not None:
-                try:
+                with contextlib.suppress(ProcessLookupError, OSError):
                     os.killpg(pgid, signal.SIGKILL)
-                except (ProcessLookupError, OSError):
-                    pass
             else:
                 proc.kill()
             proc.wait()
