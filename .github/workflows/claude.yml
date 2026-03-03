@@ -4,6 +4,17 @@ on:
   workflow_dispatch:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
+    paths-ignore:
+      - '.github/workflows/**'
+      - '*.md'
+      - 'docs/**'
+      - 'demos/**'
+      - 'experiments/**'
+      - 'LICENSE'
+      - '.tessl/**'
+      - 'code_to_optimize/**'
+      - 'codeflash.code-workspace'
+      - 'uv.lock'
   issue_comment:
     types: [created]
   pull_request_review_comment:
@@ -23,7 +34,7 @@ jobs:
     if: |
       (
         github.event_name == 'pull_request' &&
-        github.actor != 'claude[bot]' &&
+        github.event.sender.login != 'claude[bot]' &&
         github.event.pull_request.head.repo.full_name == github.repository
       ) ||
       github.event_name == 'workflow_dispatch'
@@ -76,6 +87,20 @@ jobs:
             Execute these steps in order. If a step has no work, state that and continue to the next step.
             Post all review findings in a single summary comment only — never as inline PR review comments.
             </commitment>
+
+            <step name="triage">
+            Before doing any work, assess the PR scope:
+
+            1. Run `gh pr diff ${{ github.event.pull_request.number }} --name-only` to get changed files.
+            2. Classify as TRIVIAL if ALL changed files are:
+               - Config/CI files (.github/, .tessl/, *.toml, *.lock, *.json, *.yml, *.yaml)
+               - Documentation (*.md, docs/)
+               - Non-production code (demos/, experiments/, code_to_optimize/)
+               - Only whitespace, formatting, or comment changes
+
+            If TRIVIAL: post a single comment "No substantive code changes to review." and stop — do not execute any further steps.
+            Otherwise: continue with the full review below.
+            </step>
 
             <step name="lint_and_typecheck">
             Run checks on files changed in this PR and auto-fix what you can.
@@ -194,7 +219,7 @@ jobs:
             - All findings are in a single summary comment (no inline review comments were created)
             - If fixes were made, they were verified with prek
             </verification>
-          claude_args: '--model us.anthropic.claude-opus-4-6-v1 --max-turns 25 --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr checks:*),Bash(gh pr merge:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh api:*),Bash(uv run prek *),Bash(uv run mypy *),Bash(uv run coverage *),Bash(uv run pytest *),Bash(git status*),Bash(git add *),Bash(git commit *),Bash(git push*),Bash(git diff *),Bash(git checkout *),Read,Glob,Grep,Edit,Skill"'
+          claude_args: '--model us.anthropic.claude-sonnet-4-6 --max-turns 25 --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr checks:*),Bash(gh pr merge:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh api:*),Bash(uv run prek *),Bash(uv run mypy *),Bash(uv run coverage *),Bash(uv run pytest *),Bash(git status*),Bash(git add *),Bash(git commit *),Bash(git push*),Bash(git diff *),Bash(git checkout *),Read,Glob,Grep,Edit,Skill"'
           additional_permissions: |
             actions: read
 
@@ -272,6 +297,6 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           use_bedrock: "true"
-          claude_args: '--model us.anthropic.claude-opus-4-6-v1 --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git status*),Bash(git diff*),Bash(git add *),Bash(git commit *),Bash(git push*),Bash(git log*),Bash(git merge*),Bash(git fetch*),Bash(git checkout*),Bash(git branch*),Bash(uv run prek *),Bash(prek *),Bash(uv run ruff *),Bash(uv run pytest *),Bash(uv run mypy *),Bash(uv run coverage *),Bash(gh pr comment*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr merge*),Bash(gh pr close*)"'
+          claude_args: '--model us.anthropic.claude-sonnet-4-6 --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git status*),Bash(git diff*),Bash(git add *),Bash(git commit *),Bash(git push*),Bash(git log*),Bash(git merge*),Bash(git fetch*),Bash(git checkout*),Bash(git branch*),Bash(uv run prek *),Bash(prek *),Bash(uv run ruff *),Bash(uv run pytest *),Bash(uv run mypy *),Bash(uv run coverage *),Bash(gh pr comment*),Bash(gh pr view*),Bash(gh pr diff*),Bash(gh pr merge*),Bash(gh pr close*)"'
           additional_permissions: |
             actions: read
