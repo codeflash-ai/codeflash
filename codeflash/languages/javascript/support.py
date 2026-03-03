@@ -1970,6 +1970,13 @@ class JavaScriptSupport:
         # Ensure vitest imports are present when using vitest framework
         generated_test_source = ensure_vitest_imports(generated_test_source, test_cfg.test_framework)
 
+        # For Mocha: convert expect()/test() to assert/it() BEFORE instrumentation
+        # to prevent instrumentation from breaking Chai-style assertion chains
+        if test_cfg.test_framework == "mocha":
+            from codeflash.languages.javascript.edit_tests import sanitize_mocha_imports
+
+            generated_test_source = sanitize_mocha_imports(generated_test_source)
+
         # Instrument for behavior verification (writes to SQLite)
         instrumented_behavior_test_source = instrument_generated_js_test(
             test_code=generated_test_source, function_to_optimize=function_to_optimize, mode=TestingMode.BEHAVIOR
