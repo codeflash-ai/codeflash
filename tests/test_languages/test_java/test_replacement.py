@@ -832,8 +832,12 @@ public class MathOps {{
 class TestNestedClasses:
     """Tests for nested class scenarios."""
 
-    def test_replace_method_in_nested_class(self, tmp_path: Path):
-        """Test replacing a method in a nested class."""
+    def test_inner_class_method_is_not_replaced(self, tmp_path: Path):
+        """Inner-class methods are not supported for optimization and must be skipped.
+
+        Methods of static nested or non-static inner classes are excluded from
+        discovery and therefore cannot be replaced via the high-level API.
+        """
         java_file = tmp_path / "Outer.java"
         original_code = """public class Outer {
     public int outerMethod() {
@@ -865,6 +869,8 @@ public class Outer {{
 
         optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
 
+        # Inner class methods are excluded from discovery, so the replacement
+        # is a no-op and the original file must remain unchanged.
         result = replace_function_definitions_for_language(
             function_names=["innerMethod"],
             optimized_code=optimized_code,
@@ -872,21 +878,9 @@ public class Outer {{
             project_root_path=tmp_path,
         )
 
-        assert result is True
-        new_code = java_file.read_text(encoding="utf-8")
-        expected = """public class Outer {
-    public int outerMethod() {
-        return 1;
-    }
-
-    public static class Inner {
-        public int innerMethod() {
-            return 2 + 0;
-        }
-    }
-}
-"""
-        assert new_code == expected
+        assert result is False
+        # File must be unchanged
+        assert java_file.read_text(encoding="utf-8") == original_code
 
 
 class TestPreservesStructure:
@@ -1654,3 +1648,441 @@ public final class Buffer {{
 }
 """
         assert new_code == expected
+
+
+class TestWrongMethodNameGeneration:
+    """Tests that guard against the LLM generating a different method name than the target.
+
+    When the optimizer generates code for method X but the LLM produces method Y instead,
+    applying that replacement would:
+      - Replace method X with the body of method Y (creating a duplicate of Y).
+      - Remove method X from the source.
+
+    These tests verify that codeflash detects this mismatch and leaves the original
+    source file unchanged.
+    """
+
+    def test_standalone_wrong_method_name_leaves_source_unchanged(self, tmp_path):
+        """Standalone generated method with wrong name must not replace the target.
+
+        Reproduces the Unpacker.unpackObjectMap bug: the LLM was asked to optimise
+        ``unpackObjectMap`` but generated ``unpackMap`` as a standalone method.
+        Applying that would create a duplicate ``unpackMap`` and delete
+        ``unpackObjectMap``, causing compilation failures.
+        """
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+
+        java_file = tmp_path / "Unpacker.java"
+        original_code = """\
+public abstract class Unpacker {
+    public static Object unpackObjectMap(byte[] buffer, int offset, int length) {
+        return new Object();
+    }
+
+    public Object unpackMap() {
+        return null;
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # The LLM generated an optimised ``unpackMap`` when it should have
+        # optimised ``unpackObjectMap``.
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public final Object unpackMap() {{
+    return new Object();
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        function_to_optimize = FunctionToOptimize(
+            function_name="unpackObjectMap",
+            file_path=java_file,
+            starting_line=2,
+            ending_line=4,
+            parents=[FunctionParent(name="Unpacker", type="ClassDef")],
+            qualified_name="Unpacker.unpackObjectMap",
+            is_method=True,
+        )
+
+        result = replace_function_definitions_for_language(
+            function_names=["unpackObjectMap"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            function_to_optimize=function_to_optimize,
+        )
+
+        # No modification should occur — wrong method name in generated code.
+        assert result is False
+        assert java_file.read_text(encoding="utf-8") == original_code
+
+    def test_class_wrapper_with_wrong_target_method_leaves_source_unchanged(self, tmp_path):
+        """Class-wrapped generated code missing the target method must not modify source.
+
+        Reproduces the Command.estimateKeySize bug: the LLM generated a class that
+        contained only ``sizeTxn`` (a helper) and did not include ``estimateKeySize``
+        (the target).  Applying it would duplicate ``sizeTxn`` in the source.
+        """
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+
+        java_file = tmp_path / "Command.java"
+        original_code = """\
+public class Command {
+    public int estimateKeySize(String key) {
+        return key.length() + 4;
+    }
+
+    private int sizeTxn(String key, Object txn, boolean hasWrite) {
+        return key.length();
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # The LLM generated a class containing only ``sizeTxn`` instead of
+        # the target ``estimateKeySize``.
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class Command {{
+    private int sizeTxn(String key, Object txn, boolean hasWrite) {{
+        return key.length() + 1;
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        function_to_optimize = FunctionToOptimize(
+            function_name="estimateKeySize",
+            file_path=java_file,
+            starting_line=2,
+            ending_line=4,
+            parents=[FunctionParent(name="Command", type="ClassDef")],
+            qualified_name="Command.estimateKeySize",
+            is_method=True,
+        )
+
+        result = replace_function_definitions_for_language(
+            function_names=["estimateKeySize"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            function_to_optimize=function_to_optimize,
+        )
+
+        # No modification should occur — target method absent from generated class.
+        assert result is False
+        assert java_file.read_text(encoding="utf-8") == original_code
+
+
+class TestAnonymousInnerClassMethods:
+    """Tests that methods inside anonymous inner classes are not hoisted as helpers.
+
+    When an optimised method uses an anonymous class (e.g. an inline Iterator),
+    the anonymous class's own methods (hasNext, next, remove ...) must NOT be
+    extracted and inserted as top-level class members.  Doing so would create
+    broken methods: they would carry @Override annotations that do not correspond
+    to any supertype method, and would reference variables only available in the
+    enclosing method scope.
+    """
+
+    def test_anonymous_iterator_methods_not_hoisted_to_class(self, tmp_path):
+        """Reproduces the LuaMap.keySetIterator bug.
+
+        The LLM optimised ``keySetIterator`` by returning an anonymous
+        ``Iterator`` with ``hasNext``, ``next``, and ``remove`` methods.
+        Those three methods must remain inside the anonymous class body and
+        must NOT be added as top-level members of the outer class.
+        """
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+
+        java_file = tmp_path / "LuaMap.java"
+        original_code = """\
+import java.util.Iterator;
+import java.util.Map;
+
+public final class LuaMap {
+    private final Map<String, String> map;
+
+    public LuaMap(Map<String, String> map) {
+        this.map = map;
+    }
+
+    public Iterator<String> keySetIterator() {
+        return map.keySet().iterator();
+    }
+
+    public int size() {
+        return map.size();
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # Optimised version returns a custom anonymous Iterator that avoids
+        # creating a keySet view for empty maps.
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+import java.util.Iterator;
+import java.util.Map;
+
+public final class LuaMap {{
+    private final Map<String, String> map;
+
+    public LuaMap(Map<String, String> map) {{
+        this.map = map;
+    }}
+
+    public Iterator<String> keySetIterator() {{
+        if (map.isEmpty()) {{
+            return java.util.Collections.emptyIterator();
+        }}
+        final Iterator<Map.Entry<String, String>> it = map.entrySet().iterator();
+        return new Iterator<String>() {{
+            @Override
+            public boolean hasNext() {{
+                return it.hasNext();
+            }}
+            @Override
+            public String next() {{
+                return it.next().getKey();
+            }}
+            @Override
+            public void remove() {{
+                it.remove();
+            }}
+        }};
+    }}
+
+    public int size() {{
+        return map.size();
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        function_to_optimize = FunctionToOptimize(
+            function_name="keySetIterator",
+            file_path=java_file,
+            starting_line=11,
+            ending_line=13,
+            parents=[FunctionParent(name="LuaMap", type="ClassDef")],
+            qualified_name="LuaMap.keySetIterator",
+            is_method=True,
+        )
+
+        result = replace_function_definitions_for_language(
+            function_names=["keySetIterator"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            function_to_optimize=function_to_optimize,
+        )
+
+        assert result is True
+        new_code = java_file.read_text(encoding="utf-8")
+
+        expected_code = """\
+import java.util.Iterator;
+import java.util.Map;
+
+public final class LuaMap {
+    private final Map<String, String> map;
+
+    public LuaMap(Map<String, String> map) {
+        this.map = map;
+    }
+
+    public Iterator<String> keySetIterator() {
+        if (map.isEmpty()) {
+            return java.util.Collections.emptyIterator();
+        }
+        final Iterator<Map.Entry<String, String>> it = map.entrySet().iterator();
+        return new Iterator<String>() {
+            @Override
+            public boolean hasNext() {
+                return it.hasNext();
+            }
+            @Override
+            public String next() {
+                return it.next().getKey();
+            }
+            @Override
+            public void remove() {
+                it.remove();
+            }
+        };
+    }
+
+    public int size() {
+        return map.size();
+    }
+}
+"""
+        assert new_code == expected_code
+
+
+class TestConstructorReplacement:
+    """Tests that constructors in the generated class are propagated to the original.
+
+    When the LLM introduces a new ``final`` field (e.g. a cached hash) it must
+    also initialise that field inside every constructor.  Codeflash must detect
+    the modified constructors in the generated class and replace the corresponding
+    constructors in the original source, otherwise the new field is uninitialised
+    and the compiler rejects the file with "variable X might not have been
+    initialized".
+    """
+
+    def test_constructor_updated_when_new_final_field_added(self, tmp_path):
+        """Reproduces the Expression.hashCode / LuaMap.valuesIterator pattern.
+
+        The LLM optimises ``hashCode`` by caching the result in a new final
+        field ``cachedHash``.  The generated class includes the updated
+        constructor that initialises ``cachedHash``.  Codeflash must also
+        replace the original constructor so that the field is properly
+        initialised.
+        """
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize, FunctionParent
+        from codeflash.languages.java.replacement import replace_function
+
+        original_code = """\
+public final class Expression {
+    private final byte[] bytes;
+
+    Expression(byte[] bytes) {
+        this.bytes = bytes;
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Arrays.hashCode(bytes);
+    }
+}
+"""
+        java_file = tmp_path / "Expression.java"
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # LLM optimisation: cache the hash in a new final field.  The generated
+        # class includes both the updated constructor and the simplified hashCode.
+        optimized_source = """\
+public final class Expression {
+    private final byte[] bytes;
+    private final int cachedHash;
+
+    Expression(byte[] bytes) {
+        this.bytes = bytes;
+        this.cachedHash = java.util.Arrays.hashCode(bytes);
+    }
+
+    @Override
+    public int hashCode() {
+        return cachedHash;
+    }
+}
+"""
+
+        func = FunctionToOptimize(
+            function_name="hashCode",
+            file_path=java_file,
+            starting_line=9,
+            ending_line=11,
+            parents=[FunctionParent(name="Expression", type="ClassDef")],
+            is_method=True,
+            language="java",
+        )
+
+        new_code = replace_function(original_code, func, optimized_source)
+
+        # The result should have:
+        #   1. The new field "cachedHash" added
+        #   2. The constructor updated to initialise "cachedHash"
+        #   3. hashCode() returning cachedHash
+        expected_code = """\
+public final class Expression {
+    private final byte[] bytes;
+    private final int cachedHash;
+
+    Expression(byte[] bytes) {
+        this.bytes = bytes;
+        this.cachedHash = java.util.Arrays.hashCode(bytes);
+    }
+
+    @Override
+    public int hashCode() {
+        return cachedHash;
+    }
+}
+"""
+        assert new_code == expected_code
+
+    def test_constructor_updated_for_cached_collection_view(self, tmp_path):
+        """Reproduces the LuaMap.valuesIterator caching pattern.
+
+        The LLM caches ``map.values()`` in a new final field ``valuesView``
+        which is initialised in the constructor.  The original constructor
+        must be updated.
+        """
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize, FunctionParent
+        from codeflash.languages.java.replacement import replace_function
+
+        original_code = """\
+public class DataStore {
+    private final java.util.Map<String, String> data;
+
+    public DataStore(java.util.Map<String, String> data) {
+        this.data = data;
+    }
+
+    public java.util.Collection<String> values() {
+        return data.values();
+    }
+}
+"""
+        java_file = tmp_path / "DataStore.java"
+        java_file.write_text(original_code, encoding="utf-8")
+
+        optimized_source = """\
+public class DataStore {
+    private final java.util.Map<String, String> data;
+    private final java.util.Collection<String> cachedValues;
+
+    public DataStore(java.util.Map<String, String> data) {
+        this.data = data;
+        this.cachedValues = data.values();
+    }
+
+    public java.util.Collection<String> values() {
+        return cachedValues;
+    }
+}
+"""
+
+        func = FunctionToOptimize(
+            function_name="values",
+            file_path=java_file,
+            starting_line=8,
+            ending_line=10,
+            parents=[FunctionParent(name="DataStore", type="ClassDef")],
+            is_method=True,
+            language="java",
+        )
+
+        new_code = replace_function(original_code, func, optimized_source)
+
+        expected_code = """\
+public class DataStore {
+    private final java.util.Map<String, String> data;
+    private final java.util.Collection<String> cachedValues;
+
+    public DataStore(java.util.Map<String, String> data) {
+        this.data = data;
+        this.cachedValues = data.values();
+    }
+
+    public java.util.Collection<String> values() {
+        return cachedValues;
+    }
+}
+"""
+        assert new_code == expected_code

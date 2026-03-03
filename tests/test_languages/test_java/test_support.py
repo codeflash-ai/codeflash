@@ -6,6 +6,7 @@ import pytest
 
 from codeflash.languages.base import Language, LanguageSupport
 from codeflash.languages.java.support import JavaSupport, get_java_support
+from codeflash.discovery.functions_to_optimize import get_files_for_language
 
 
 class TestJavaSupportProtocol:
@@ -132,3 +133,73 @@ class TestJavaSupportWithFixture:
 
         functions = support.discover_functions(calculator_file)
         assert len(functions) > 0
+
+
+class TestJavaDirExcludes:
+    """Tests that Java-specific directories are excluded from file discovery."""
+
+    @pytest.fixture
+    def support(self):
+        return get_java_support()
+
+    def test_dir_excludes_contains_apidocs(self, support):
+        """apidocs (generated Javadoc HTML) must not be walked during --all."""
+        assert "apidocs" in support.dir_excludes
+
+    def test_dir_excludes_contains_javadoc(self, support):
+        """javadoc directory must not be walked during --all."""
+        assert "javadoc" in support.dir_excludes
+
+    def test_apidocs_js_files_not_discovered(self, tmp_path: Path):
+        """JS files inside apidocs/ must not appear in Java file discovery."""
+        # Simulate a Java project with an apidocs directory that contains .js files
+        src_dir = tmp_path / "src" / "main" / "java"
+        src_dir.mkdir(parents=True)
+        (src_dir / "Foo.java").write_text("public class Foo { public void bar() {} }")
+
+        apidocs_dir = tmp_path / "apidocs" / "script-files"
+        apidocs_dir.mkdir(parents=True)
+        (apidocs_dir / "jquery-3.7.1.min.js").write_text("/* jQuery */")
+        (apidocs_dir / "search.js").write_text("/* search */")
+
+        files = get_files_for_language(tmp_path, language=Language.JAVA)
+        file_names = [f.name for f in files]
+
+        assert "Foo.java" in file_names
+        assert "jquery-3.7.1.min.js" not in file_names
+        assert "search.js" not in file_names
+
+    def test_javadoc_files_not_discovered(self, tmp_path: Path):
+        """Files inside javadoc/ must not appear in Java file discovery."""
+        src_dir = tmp_path / "src"
+        src_dir.mkdir(parents=True)
+        (src_dir / "Bar.java").write_text("public class Bar { public void baz() {} }")
+
+        javadoc_dir = tmp_path / "javadoc"
+        javadoc_dir.mkdir(parents=True)
+        (javadoc_dir / "index.html").write_text("<html></html>")
+        # Also create a .java file here (edge case: javadoc may contain source snippets)
+        (javadoc_dir / "Snippet.java").write_text("public class Snippet {}")
+
+        files = get_files_for_language(tmp_path, language=Language.JAVA)
+        file_names = [f.name for f in files]
+
+        assert "Bar.java" in file_names
+        assert "Snippet.java" not in file_names
+
+    def test_apidocs_excluded_in_all_mode(self, tmp_path: Path):
+        """In --all mode (language=None), apidocs .js files must also be excluded."""
+        src_dir = tmp_path / "src"
+        src_dir.mkdir(parents=True)
+        (src_dir / "Hello.java").write_text("public class Hello { public void hi() {} }")
+
+        apidocs_dir = tmp_path / "apidocs"
+        apidocs_dir.mkdir(parents=True)
+        (apidocs_dir / "jquery.min.js").write_text("/* jQuery */")
+
+        # language=None simulates --all mode
+        files = get_files_for_language(tmp_path, language=None)
+        file_names = [f.name for f in files]
+
+        assert "Hello.java" in file_names
+        assert "jquery.min.js" not in file_names
