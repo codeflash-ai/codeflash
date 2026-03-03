@@ -275,15 +275,20 @@ def sanitize_mocha_imports(source: str) -> str:
         Source with incorrect framework imports stripped and test() converted to it().
 
     """
-    source = _VITEST_IMPORT_RE.sub("", source)
-    source = _VITEST_REQUIRE_RE.sub("", source)
-    source = _JEST_GLOBALS_IMPORT_RE.sub("", source)
-    source = _JEST_GLOBALS_REQUIRE_RE.sub("", source)
-    source = _MOCHA_REQUIRE_RE.sub("", source)
-    source = _VITEST_COMMENT_RE.sub("", source)
-    source = _CHAI_IMPORT_RE.sub("", source)
-    source = _CHAI_REQUIRE_RE.sub("", source)
-    source = _TEST_CALL_RE.sub(r"\1it(", source)
+    if "vitest" in source:
+        source = _VITEST_IMPORT_RE.sub("", source)
+        source = _VITEST_REQUIRE_RE.sub("", source)
+        source = _VITEST_COMMENT_RE.sub("", source)
+    if "@jest/globals" in source:
+        source = _JEST_GLOBALS_IMPORT_RE.sub("", source)
+        source = _JEST_GLOBALS_REQUIRE_RE.sub("", source)
+    if "mocha" in source:
+        source = _MOCHA_REQUIRE_RE.sub("", source)
+    if "chai" in source:
+        source = _CHAI_IMPORT_RE.sub("", source)
+        source = _CHAI_REQUIRE_RE.sub("", source)
+    if "test(" in source:
+        source = _TEST_CALL_RE.sub(r"\1it(", source)
     return convert_expect_to_assert(source)
 
 
@@ -339,8 +344,10 @@ def convert_expect_to_assert(source: str) -> str:
     converted: list[str] = []
 
     for line in lines:
-        converted_line = _convert_expect_line(line)
-        converted.append(converted_line)
+        if "expect(" in line:
+            converted.append(_convert_expect_line(line))
+        else:
+            converted.append(line)
 
     return "\n".join(converted)
 
