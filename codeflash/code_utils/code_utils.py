@@ -390,20 +390,27 @@ def validate_module_import(module_path: str, project_root: Path) -> tuple[bool, 
 def infer_module_root_from_file(file_path: Path, pyproject_dir: Path) -> Path | None:
     """Infer the correct module-root for a Python file by walking the __init__.py chain.
 
-    Walks up from the file's parent directory toward pyproject_dir. The module-root
-    is the first ancestor directory that is NOT a Python package (has no __init__.py),
-    meaning it's the directory that should be on sys.path.
+    Walks up from the file's parent directory toward pyproject_dir, tracking the
+    topmost directory that contains ``__init__.py`` (i.e. the top-level package).
+    The module-root is this top-level package directory, since
+    ``project_root_from_module_root`` will use its parent as the PYTHONPATH entry.
 
     Returns the inferred module-root path, or None if inference fails.
     """
     file_path = file_path.resolve()
     pyproject_dir = pyproject_dir.resolve()
     current = file_path.parent
+    top_package: Path | None = None
     while current not in (pyproject_dir, current.parent):
-        if not (current / "__init__.py").exists():
-            return current
+        if (current / "__init__.py").exists():
+            top_package = current
+        else:
+            break
         current = current.parent
-    return pyproject_dir
+    if top_package is not None:
+        return top_package
+    # No __init__.py found — treat the file's own directory as the module-root
+    return file_path.parent
 
 
 def file_path_from_module_name(module_name: str, project_root_path: Path) -> Path:
