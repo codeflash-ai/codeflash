@@ -491,6 +491,30 @@ class TestSanitizeMochaImports:
         assert "vitest" not in result
         assert "const x = 1;" in result
 
+    def test_strips_vitest_require_cjs(self):
+        from codeflash.languages.javascript.edit_tests import sanitize_mocha_imports
+
+        source = "const { describe, test, expect, vi, beforeEach, afterEach } = require('vitest');\nconst x = 1;\n"
+        result = sanitize_mocha_imports(source)
+        assert "vitest" not in result
+        assert "const x = 1;" in result
+
+    def test_strips_jest_globals_require_cjs(self):
+        from codeflash.languages.javascript.edit_tests import sanitize_mocha_imports
+
+        source = "const { jest, describe, it } = require('@jest/globals');\nconst x = 1;\n"
+        result = sanitize_mocha_imports(source)
+        assert "@jest/globals" not in result
+        assert "const x = 1;" in result
+
+    def test_strips_vitest_comment_and_cjs_require(self):
+        from codeflash.languages.javascript.edit_tests import sanitize_mocha_imports
+
+        source = "// vitest imports (REQUIRED for vitest - globals are NOT enabled by default)\nconst { describe, test, expect, vi, beforeEach, afterEach } = require('vitest');\nconst { setCharset } = require('../lib/utils');\n"
+        result = sanitize_mocha_imports(source)
+        assert "vitest" not in result
+        assert "require('../lib/utils')" in result
+
     def test_preserves_unrelated_imports(self):
         from codeflash.languages.javascript.edit_tests import sanitize_mocha_imports
 
