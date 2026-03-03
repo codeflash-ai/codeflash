@@ -456,6 +456,142 @@ class TestRunMochaBenchmarkingTests:
             assert env.get("CODEFLASH_PERF_STABILITY_CHECK") == "false"
 
 
+class TestSanitizeMochaImports:
+    """Tests for stripping wrong framework imports from Mocha tests."""
+
+    def test_strips_vitest_import(self):
+        from codeflash.languages.javascript.edit_tests import sanitize_mocha_imports
+
+        source = "import { describe, test, expect, vi } from 'vitest'\nconst x = 1;\n"
+        result = sanitize_mocha_imports(source)
+        assert "vitest" not in result
+        assert "const x = 1;" in result
+
+    def test_strips_jest_globals_import(self):
+        from codeflash.languages.javascript.edit_tests import sanitize_mocha_imports
+
+        source = "import { jest, describe, it, expect } from '@jest/globals'\nconst x = 1;\n"
+        result = sanitize_mocha_imports(source)
+        assert "@jest/globals" not in result
+        assert "const x = 1;" in result
+
+    def test_strips_mocha_require(self):
+        from codeflash.languages.javascript.edit_tests import sanitize_mocha_imports
+
+        source = "const { describe, it, expect } = require('mocha');\nconst x = 1;\n"
+        result = sanitize_mocha_imports(source)
+        assert "require('mocha')" not in result
+        assert "const x = 1;" in result
+
+    def test_strips_vitest_comment(self):
+        from codeflash.languages.javascript.edit_tests import sanitize_mocha_imports
+
+        source = "// vitest imports (REQUIRED for vitest)\nimport { describe } from 'vitest'\nconst x = 1;\n"
+        result = sanitize_mocha_imports(source)
+        assert "vitest" not in result
+        assert "const x = 1;" in result
+
+    def test_preserves_unrelated_imports(self):
+        from codeflash.languages.javascript.edit_tests import sanitize_mocha_imports
+
+        source = "const sinon = require('sinon');\nconst assert = require('node:assert/strict');\n"
+        result = sanitize_mocha_imports(source)
+        assert "sinon" in result
+        assert "node:assert/strict" in result
+
+
+class TestInjectTestGlobalsModuleSystem:
+    """Tests for inject_test_globals with different module systems."""
+
+    def test_mocha_esm_uses_import(self):
+        from codeflash.languages.javascript.edit_tests import inject_test_globals
+        from codeflash.models.models import GeneratedTests, GeneratedTestsList
+
+        tests = GeneratedTestsList(
+            generated_tests=[
+                GeneratedTests(
+                    generated_original_test_source="describe('test', () => {});",
+                    instrumented_behavior_test_source="describe('test', () => {});",
+                    instrumented_perf_test_source="describe('test', () => {});",
+                    behavior_file_path=Path("test.test.js"),
+                    perf_file_path=Path("test.perf.test.js"),
+                )
+            ]
+        )
+
+        result = inject_test_globals(tests, test_framework="mocha", module_system="esm")
+        assert "import assert from 'node:assert/strict'" in result.generated_tests[0].generated_original_test_source
+
+    def test_mocha_cjs_uses_require(self):
+        from codeflash.languages.javascript.edit_tests import inject_test_globals
+        from codeflash.models.models import GeneratedTests, GeneratedTestsList
+
+        tests = GeneratedTestsList(
+            generated_tests=[
+                GeneratedTests(
+                    generated_original_test_source="describe('test', () => {});",
+                    instrumented_behavior_test_source="describe('test', () => {});",
+                    instrumented_perf_test_source="describe('test', () => {});",
+                    behavior_file_path=Path("test.test.js"),
+                    perf_file_path=Path("test.perf.test.js"),
+                )
+            ]
+        )
+
+        result = inject_test_globals(tests, test_framework="mocha", module_system="commonjs")
+        src = result.generated_tests[0].generated_original_test_source
+        assert "const assert = require('node:assert/strict')" in src
+        assert "import assert" not in src
+
+    def test_vitest_always_uses_import(self):
+        from codeflash.languages.javascript.edit_tests import inject_test_globals
+        from codeflash.models.models import GeneratedTests, GeneratedTestsList
+
+        tests = GeneratedTestsList(
+            generated_tests=[
+                GeneratedTests(
+                    generated_original_test_source="describe('test', () => {});",
+                    instrumented_behavior_test_source="describe('test', () => {});",
+                    instrumented_perf_test_source="describe('test', () => {});",
+                    behavior_file_path=Path("test.test.js"),
+                    perf_file_path=Path("test.perf.test.js"),
+                )
+            ]
+        )
+
+        result = inject_test_globals(tests, test_framework="vitest", module_system="commonjs")
+        assert "from 'vitest'" in result.generated_tests[0].generated_original_test_source
+
+
+class TestEnsureModuleSystemCompatibilityMixed:
+    """Tests for ensure_module_system_compatibility with mixed ESM+CJS code."""
+
+    def test_converts_imports_in_mixed_code_to_cjs(self):
+        from codeflash.languages.javascript.module_system import ensure_module_system_compatibility
+
+        # Code with both import (from inject_test_globals) and require (from backend)
+        code = "import assert from 'node:assert/strict';\nconst { foo } = require('./module');\n"
+        result = ensure_module_system_compatibility(code, "commonjs")
+        assert "require('node:assert/strict')" in result
+        assert "import assert" not in result
+
+    def test_converts_require_in_mixed_code_to_esm(self):
+        from codeflash.languages.javascript.module_system import ensure_module_system_compatibility
+
+        code = "import { describe } from 'vitest';\nconst foo = require('./module');\n"
+        result = ensure_module_system_compatibility(code, "esm")
+        assert "require" not in result
+        assert "import" in result
+
+    def test_pure_esm_to_cjs(self):
+        from codeflash.languages.javascript.module_system import ensure_module_system_compatibility
+
+        code = "import assert from 'node:assert/strict';\nimport { foo } from './module';\n"
+        result = ensure_module_system_compatibility(code, "commonjs")
+        assert "require('node:assert/strict')" in result
+        assert "import" not in result
+
+
 class TestRunMochaLineProfileTests:
     """Tests for running Mocha line profile tests with mocked subprocess."""
 
