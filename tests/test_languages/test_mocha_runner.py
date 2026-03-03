@@ -147,6 +147,108 @@ class TestMochaJsonToJunitXml:
             assert "suite A" in suite_names
             assert "suite B" in suite_names
 
+    def test_file_attribute_set_from_test_files(self):
+        """When test_files are passed, the file attribute should be set on testcase elements."""
+        from codeflash.languages.javascript.mocha_runner import mocha_json_to_junit_xml
+
+        mocha_json = json.dumps(
+            {
+                "stats": {"tests": 2, "passes": 2, "failures": 0, "duration": 50},
+                "tests": [
+                    {"title": "test1", "fullTitle": "escapeHtml test1", "duration": 10, "err": {}},
+                    {"title": "test2", "fullTitle": "escapeHtml test2", "duration": 20, "err": {}},
+                ],
+                "passes": [],
+                "failures": [],
+                "pending": [],
+            }
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            # Create a test file whose describe block matches the suite name
+            test_file = tmpdir_path / "test_escapeHtml__unit_test_0.test.js"
+            test_file.write_text(
+                "const assert = require('node:assert/strict');\n"
+                "const escapeHtml = require('../index.js');\n"
+                "describe('escapeHtml', () => {\n"
+                "  it('test1', () => { assert.ok(true); });\n"
+                "  it('test2', () => { assert.ok(true); });\n"
+                "});\n",
+                encoding="utf-8",
+            )
+
+            output_file = tmpdir_path / "results.xml"
+            mocha_json_to_junit_xml(mocha_json, output_file, test_files=[test_file])
+
+            # Parse the XML and verify file attributes
+            import xml.etree.ElementTree as ET
+
+            tree = ET.parse(output_file)
+            root = tree.getroot()
+            testcases = root.findall(".//testcase")
+            assert len(testcases) == 2
+            for tc in testcases:
+                assert tc.get("file") == str(test_file)
+
+    def test_file_attribute_uses_default_when_no_describe_match(self):
+        """When describe name doesn't match, the default (first) test file should be used."""
+        from codeflash.languages.javascript.mocha_runner import mocha_json_to_junit_xml
+
+        mocha_json = json.dumps(
+            {
+                "stats": {"tests": 1, "passes": 1, "failures": 0, "duration": 10},
+                "tests": [
+                    {"title": "test1", "fullTitle": "someOtherSuite test1", "duration": 10, "err": {}},
+                ],
+                "passes": [],
+                "failures": [],
+                "pending": [],
+            }
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            test_file = tmpdir_path / "test.test.js"
+            test_file.write_text("// no describe block", encoding="utf-8")
+
+            output_file = tmpdir_path / "results.xml"
+            mocha_json_to_junit_xml(mocha_json, output_file, test_files=[test_file])
+
+            import xml.etree.ElementTree as ET
+
+            tree = ET.parse(output_file)
+            testcases = tree.getroot().findall(".//testcase")
+            assert len(testcases) == 1
+            assert testcases[0].get("file") == str(test_file)
+
+    def test_no_file_attribute_when_no_test_files(self):
+        """When test_files is not passed, no file attribute should be set."""
+        from codeflash.languages.javascript.mocha_runner import mocha_json_to_junit_xml
+
+        mocha_json = json.dumps(
+            {
+                "stats": {"tests": 1, "passes": 1, "failures": 0, "duration": 10},
+                "tests": [
+                    {"title": "test1", "fullTitle": "suite test1", "duration": 10, "err": {}},
+                ],
+                "passes": [],
+                "failures": [],
+                "pending": [],
+            }
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_file = Path(tmpdir) / "results.xml"
+            mocha_json_to_junit_xml(mocha_json, output_file)
+
+            import xml.etree.ElementTree as ET
+
+            tree = ET.parse(output_file)
+            testcases = tree.getroot().findall(".//testcase")
+            assert len(testcases) == 1
+            assert testcases[0].get("file") is None
+
 
 class TestExtractMochaJson:
     """Tests for extracting Mocha JSON from mixed stdout."""

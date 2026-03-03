@@ -1929,6 +1929,99 @@ class JavaScriptSupport:
 
         return compare_test_results(original_results_path, candidate_results_path, project_root=project_root)
 
+    @property
+    def function_optimizer_class(self) -> type:
+        from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
+
+        return JavaScriptFunctionOptimizer
+
+    def prepare_module(
+        self, module_code: str, module_path: Path, project_root: Path
+    ) -> tuple[dict[Path, ValidCode], None]:
+        from codeflash.languages.javascript.optimizer import prepare_javascript_module
+
+        return prepare_javascript_module(module_code, module_path)
+
+    def setup_test_config(self, test_cfg: TestConfig, file_path: Path) -> None:
+        from codeflash.languages.javascript.optimizer import verify_js_requirements
+        from codeflash.languages.javascript.test_runner import find_node_project_root
+
+        test_cfg.js_project_root = find_node_project_root(file_path)
+        verify_js_requirements(test_cfg)
+
+    def adjust_test_config_for_discovery(self, test_cfg: TestConfig) -> None:
+        test_cfg.tests_project_rootdir = test_cfg.tests_root
+
+    def detect_module_system(self, project_root: Path, source_file: Path) -> str | None:
+        from codeflash.languages.javascript.module_system import detect_module_system
+
+        return detect_module_system(project_root, source_file)
+
+    def process_generated_test_strings(
+        self,
+        generated_test_source: str,
+        instrumented_behavior_test_source: str,
+        instrumented_perf_test_source: str,
+        function_to_optimize: Any,
+        test_path: Path,
+        test_cfg: Any,
+        project_module_system: str | None,
+    ) -> tuple[str, str, str]:
+        from codeflash.languages.javascript.instrument import (
+            TestingMode,
+            fix_imports_inside_test_blocks,
+            fix_jest_mock_paths,
+            instrument_generated_js_test,
+            validate_and_fix_import_style,
+        )
+        from codeflash.languages.javascript.module_system import (
+            ensure_module_system_compatibility,
+            ensure_vitest_imports,
+        )
+
+        source_file = Path(function_to_optimize.file_path)
+
+        # Fix import statements that appear inside test blocks (invalid JS syntax)
+        generated_test_source = fix_imports_inside_test_blocks(generated_test_source)
+
+        # Fix relative paths in jest.mock() calls
+        generated_test_source = fix_jest_mock_paths(
+            generated_test_source, test_path, source_file, test_cfg.tests_project_rootdir
+        )
+
+        # Validate and fix import styles (default vs named exports)
+        generated_test_source = validate_and_fix_import_style(
+            generated_test_source, source_file, function_to_optimize.function_name
+        )
+
+        # Convert module system if needed (e.g., CommonJS -> ESM for ESM projects)
+        generated_test_source = ensure_module_system_compatibility(
+            generated_test_source, project_module_system, test_cfg.tests_project_rootdir
+        )
+
+        # Ensure vitest imports are present when using vitest framework
+        generated_test_source = ensure_vitest_imports(generated_test_source, test_cfg.test_framework)
+
+        # For Mocha: convert expect()/test() to assert/it() BEFORE instrumentation
+        # to prevent instrumentation from breaking Chai-style assertion chains
+        if test_cfg.test_framework == "mocha":
+            from codeflash.languages.javascript.edit_tests import sanitize_mocha_imports
+
+            generated_test_source = sanitize_mocha_imports(generated_test_source)
+
+        # Instrument for behavior verification (writes to SQLite)
+        instrumented_behavior_test_source = instrument_generated_js_test(
+            test_code=generated_test_source, function_to_optimize=function_to_optimize, mode=TestingMode.BEHAVIOR
+        )
+
+        # Instrument for performance measurement (prints to stdout)
+        instrumented_perf_test_source = instrument_generated_js_test(
+            test_code=generated_test_source, function_to_optimize=function_to_optimize, mode=TestingMode.PERFORMANCE
+        )
+
+        logger.debug("Instrumented JS/TS tests locally for %s", function_to_optimize.function_name)
+        return generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source
+
     # === Configuration ===
 
     def get_test_file_suffix(self) -> str:
