@@ -338,6 +338,16 @@ public class CodeflashHelper {
             // Connect to database
             dbConnection = DriverManager.getConnection("jdbc:sqlite:" + OUTPUT_FILE);
 
+            // Enable WAL mode so that readers can access the database while this
+            // writer is active.  Without WAL, any concurrent reader gets
+            // SQLITE_BUSY ("database is locked") while the JVM holds the connection.
+            // Also set a generous busy_timeout so that if a lock collision does occur,
+            // SQLite will retry automatically instead of immediately failing.
+            try (java.sql.Statement pragmaStmt = dbConnection.createStatement()) {
+                pragmaStmt.execute("PRAGMA journal_mode=WAL");
+                pragmaStmt.execute("PRAGMA busy_timeout=30000");
+            }
+
             // Create table if not exists
             String createTableSql = "CREATE TABLE IF NOT EXISTS test_results (" +
                     "test_module_path TEXT, " +

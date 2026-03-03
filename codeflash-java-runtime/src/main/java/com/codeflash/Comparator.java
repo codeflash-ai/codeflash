@@ -142,9 +142,12 @@ public final class Comparator {
         String url = "jdbc:sqlite:" + dbPath;
 
         try (Connection conn = DriverManager.getConnection(url);
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(
-                 "SELECT test_module_path, test_class_name, test_function_name, iteration_id, return_value FROM test_results WHERE loop_index = 1")) {
+             Statement stmt = conn.createStatement()) {
+            // Wait up to 30 s if the database is held by the writer JVM instead of
+            // immediately throwing SQLITE_BUSY ("database is locked").
+            stmt.execute("PRAGMA busy_timeout=30000");
+            ResultSet rs = stmt.executeQuery(
+                 "SELECT test_module_path, test_class_name, test_function_name, iteration_id, return_value FROM test_results WHERE loop_index = 1");
             while (rs.next()) {
                 String testModulePath = rs.getString("test_module_path");
                 String testClassName = rs.getString("test_class_name");

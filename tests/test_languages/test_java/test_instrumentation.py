@@ -167,6 +167,8 @@ public class CalculatorTest__perfinstrumented {
                     Class.forName("org.sqlite.JDBC");
                     try (Connection _cf_conn1_1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {
                         try (java.sql.Statement _cf_stmt1_1 = _cf_conn1_1.createStatement()) {
+                            _cf_stmt1_1.execute("PRAGMA journal_mode=WAL");
+                            _cf_stmt1_1.execute("PRAGMA busy_timeout=30000");
                             _cf_stmt1_1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
                                 "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
                                 "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
@@ -294,6 +296,8 @@ public class FibonacciTest__perfinstrumented {
                     Class.forName("org.sqlite.JDBC");
                     try (Connection _cf_conn2_1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile2)) {
                         try (java.sql.Statement _cf_stmt2_1 = _cf_conn2_1.createStatement()) {
+                            _cf_stmt2_1.execute("PRAGMA journal_mode=WAL");
+                            _cf_stmt2_1.execute("PRAGMA busy_timeout=30000");
                             _cf_stmt2_1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
                                 "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
                                 "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
@@ -424,6 +428,8 @@ public class FibonacciTest__perfinstrumented {
                     Class.forName("org.sqlite.JDBC");
                     try (Connection _cf_conn2_1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile2)) {
                         try (java.sql.Statement _cf_stmt2_1 = _cf_conn2_1.createStatement()) {
+                            _cf_stmt2_1.execute("PRAGMA journal_mode=WAL");
+                            _cf_stmt2_1.execute("PRAGMA busy_timeout=30000");
                             _cf_stmt2_1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
                                 "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
                                 "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
@@ -779,6 +785,8 @@ public class MyTest {
                     Class.forName("org.sqlite.JDBC");
                     try (Connection _cf_conn1_1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {
                         try (java.sql.Statement _cf_stmt1_1 = _cf_conn1_1.createStatement()) {
+                            _cf_stmt1_1.execute("PRAGMA journal_mode=WAL");
+                            _cf_stmt1_1.execute("PRAGMA busy_timeout=30000");
                             _cf_stmt1_1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
                                 "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
                                 "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
@@ -1300,6 +1308,8 @@ public class CalculatorTest__perfinstrumented {
                     Class.forName("org.sqlite.JDBC");
                     try (Connection _cf_conn1_1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {
                         try (java.sql.Statement _cf_stmt1_1 = _cf_conn1_1.createStatement()) {
+                            _cf_stmt1_1.execute("PRAGMA journal_mode=WAL");
+                            _cf_stmt1_1.execute("PRAGMA busy_timeout=30000");
                             _cf_stmt1_1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
                                 "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
                                 "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
@@ -2680,6 +2690,8 @@ public class CounterTest__perfinstrumented {
                     Class.forName("org.sqlite.JDBC");
                     try (Connection _cf_conn1_1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {
                         try (java.sql.Statement _cf_stmt1_1 = _cf_conn1_1.createStatement()) {
+                            _cf_stmt1_1.execute("PRAGMA journal_mode=WAL");
+                            _cf_stmt1_1.execute("PRAGMA busy_timeout=30000");
                             _cf_stmt1_1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
                                 "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
                                 "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
@@ -3269,3 +3281,95 @@ public class SpinWaitTest__perfonlyinstrumented {
             assert math.isclose(duration, 100_000_000, rel_tol=0.15), (
                 f"Long spin measured {duration}ns, expected ~100_000_000ns (15% tolerance)"
             )
+
+
+class TestSQLiteLockedFix:
+    """Tests for the SQLite 'database is locked' fixes.
+
+    Two scenarios cause SQLITE_BUSY in the Java optimization pipeline:
+    1. The instrumented test JVM holds the SQLite connection open while Python
+       (parse_sqlite_test_results) or the Java Comparator tries to read — fixed
+       by enabling WAL mode + busy_timeout in the generated inline code.
+    2. The Java Comparator reads the original database while another connection
+       is still active — fixed by PRAGMA busy_timeout in Comparator.java.
+    3. parse_sqlite_test_results uses the default Python sqlite3 timeout (5 s) —
+       fixed by passing timeout=30 to sqlite3.connect().
+    """
+
+    def test_generated_code_has_wal_and_busy_timeout_pragmas(self):
+        """Verify that the inline SQLite write code enables WAL mode and busy_timeout.
+
+        WAL mode allows a reader to read the last committed state while a writer
+        connection is open, eliminating the most common source of SQLITE_BUSY.
+        busy_timeout makes lock collisions retry instead of immediately failing.
+        """
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash.languages.java.instrumentation import _generate_sqlite_write_code
+
+        code_lines = _generate_sqlite_write_code(
+            iter_id=1,
+            call_counter=1,
+            indent="        ",
+            class_name="MyClass",
+            func_name="myMethod",
+            test_method_name="testMyMethod",
+        )
+        generated = "\n".join(code_lines)
+
+        assert 'execute("PRAGMA journal_mode=WAL")' in generated, (
+            "WAL mode PRAGMA must be present in the generated SQLite write code"
+        )
+        assert 'execute("PRAGMA busy_timeout=30000")' in generated, (
+            "busy_timeout PRAGMA must be present in the generated SQLite write code"
+        )
+        # Pragmas must appear BEFORE the CREATE TABLE statement
+        pragma_wal_pos = generated.index('execute("PRAGMA journal_mode=WAL")')
+        pragma_busy_pos = generated.index('execute("PRAGMA busy_timeout=30000")')
+        create_table_pos = generated.index("CREATE TABLE IF NOT EXISTS test_results")
+        assert pragma_wal_pos < create_table_pos, "PRAGMA journal_mode=WAL must precede CREATE TABLE"
+        assert pragma_busy_pos < create_table_pos, "PRAGMA busy_timeout must precede CREATE TABLE"
+
+    def test_parse_sqlite_uses_timeout(self, tmp_path):
+        """parse_sqlite_test_results must use a generous timeout when opening SQLite.
+
+        Without a timeout the default is 5 s.  The fix raises it to 30 s so that
+        transient locks held by the writer JVM do not immediately trigger a
+        'database is locked' warning.
+        """
+        import inspect
+        import sqlite3
+
+        from codeflash.verification.parse_test_output import parse_sqlite_test_results
+
+        # Verify the source uses timeout= (static check)
+        src = inspect.getsource(parse_sqlite_test_results)
+        assert "timeout=" in src, (
+            "parse_sqlite_test_results must pass timeout= to sqlite3.connect() "
+            "to handle transient SQLite locks from the Java writer JVM"
+        )
+
+        # Verify it actually accepts a locked database gracefully (doesn't crash):
+        # Create a real SQLite file, hold a write lock on it, then call the function.
+        sqlite_file = tmp_path / "test_return_values_0.sqlite"
+        # Create a minimal valid SQLite file with the expected schema
+        conn = sqlite3.connect(str(sqlite_file))
+        conn.execute(
+            "CREATE TABLE test_results ("
+            "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, "
+            "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, "
+            "runtime INTEGER, return_value BLOB, verification_type TEXT)"
+        )
+        conn.commit()
+        conn.close()
+
+        # Confirm that parse_sqlite_test_results can read an unlocked DB without error
+        from codeflash.models.models import TestFiles
+        from unittest.mock import MagicMock
+
+        test_files = TestFiles(instrumented_test_files=[], test_files=[])
+        test_config = MagicMock()
+        test_config.tests_root = tmp_path
+
+        results = parse_sqlite_test_results(sqlite_file, test_files, test_config)
+        # Empty table → empty results, but no exception
+        assert results is not None

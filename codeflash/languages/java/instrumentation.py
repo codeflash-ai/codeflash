@@ -224,6 +224,11 @@ def _generate_sqlite_write_code(
         f'{inner_indent}        Class.forName("org.sqlite.JDBC");',
         f'{inner_indent}        try (Connection _cf_conn{iter_id}_{call_counter} = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile{iter_id})) {{',
         f"{inner_indent}            try (java.sql.Statement _cf_stmt{iter_id}_{call_counter} = _cf_conn{iter_id}_{call_counter}.createStatement()) {{",
+        # Enable WAL mode so that a Python reader process can read the last committed
+        # state while this connection is open, avoiding SQLITE_BUSY.  Also set
+        # busy_timeout so that lock collisions are retried automatically.
+        f'{inner_indent}                _cf_stmt{iter_id}_{call_counter}.execute("PRAGMA journal_mode=WAL");',
+        f'{inner_indent}                _cf_stmt{iter_id}_{call_counter}.execute("PRAGMA busy_timeout=30000");',
         f'{inner_indent}                _cf_stmt{iter_id}_{call_counter}.execute("CREATE TABLE IF NOT EXISTS test_results (" +',
         f'{inner_indent}                    "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +',
         f'{inner_indent}                    "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +',
