@@ -24,7 +24,7 @@ void testFibonacci() {
         expected = """\
 @Test
 void testFibonacci() {
-    Object _cf_result1 = calculator.fibonacci(10);
+    int _cf_result1 = calculator.fibonacci(10);
 }"""
         result = transform_java_assertions(source, "fibonacci")
         assert result == expected
@@ -38,7 +38,7 @@ void testFibonacci() {
         expected = """\
 @Test
 void testFibonacci() {
-    Object _cf_result1 = calculator.fibonacci(10);
+    int _cf_result1 = calculator.fibonacci(10);
 }"""
         result = transform_java_assertions(source, "fibonacci")
         assert result == expected
@@ -52,7 +52,7 @@ void testIsValid() {
         expected = """\
 @Test
 void testIsValid() {
-    Object _cf_result1 = validator.isValid("test");
+    boolean _cf_result1 = validator.isValid("test");
 }"""
         result = transform_java_assertions(source, "isValid")
         assert result == expected
@@ -66,7 +66,7 @@ void testIsInvalid() {
         expected = """\
 @Test
 void testIsInvalid() {
-    Object _cf_result1 = validator.isValid("");
+    boolean _cf_result1 = validator.isValid("");
 }"""
         result = transform_java_assertions(source, "isValid")
         assert result == expected
@@ -108,7 +108,7 @@ void testDifferent() {
         expected = """\
 @Test
 void testDifferent() {
-    Object _cf_result1 = calculator.add(1, 2);
+    int _cf_result1 = calculator.add(1, 2);
 }"""
         result = transform_java_assertions(source, "add")
         assert result == expected
@@ -154,7 +154,7 @@ void testFibonacci() {
         expected = """\
 @Test
 void testFibonacci() {
-    Object _cf_result1 = calculator.fibonacci(10);
+    int _cf_result1 = calculator.fibonacci(10);
 }"""
         result = transform_java_assertions(source, "fibonacci")
         assert result == expected
@@ -168,7 +168,7 @@ void testAdd() {
         expected = """\
 @Test
 void testAdd() {
-    Object _cf_result1 = calculator.add(2, 3);
+    int _cf_result1 = calculator.add(2, 3);
 }"""
         result = transform_java_assertions(source, "add")
         assert result == expected
@@ -234,7 +234,7 @@ void testQuickAdd() {
         expected = """\
 @Test
 void testQuickAdd() {
-    Object _cf_result1 = Calculator.quickAdd(10.0, 5.0);
+    double _cf_result1 = Calculator.quickAdd(10.0, 5.0);
 }"""
         result = transform_java_assertions(source, "quickAdd")
         assert result == expected
@@ -248,7 +248,7 @@ void testReverse() {
         expected = """\
 @Test
 void testReverse() {
-    Object _cf_result1 = com.example.StringUtils.reverse("hello");
+    String _cf_result1 = com.example.StringUtils.reverse("hello");
 }"""
         result = transform_java_assertions(source, "reverse")
         assert result == expected
@@ -268,9 +268,9 @@ void testFibonacciSequence() {
         expected = """\
 @Test
 void testFibonacciSequence() {
-    Object _cf_result1 = calculator.fibonacci(0);
-    Object _cf_result2 = calculator.fibonacci(1);
-    Object _cf_result3 = calculator.fibonacci(10);
+    int _cf_result1 = calculator.fibonacci(0);
+    int _cf_result2 = calculator.fibonacci(1);
+    int _cf_result3 = calculator.fibonacci(10);
 }"""
         result = transform_java_assertions(source, "fibonacci")
         assert result == expected
@@ -285,7 +285,7 @@ void testCalculator() {
         expected = """\
 @Test
 void testCalculator() {
-    Object _cf_result1 = calculator.add(2, 3);
+    int _cf_result1 = calculator.add(2, 3);
 }"""
         result = transform_java_assertions(source, "add")
         assert result == expected
@@ -421,7 +421,7 @@ void testSubtract() {
         expected = """\
 @Test
 void testSubtract() {
-    Object _cf_result1 = add(2, subtract(2, 2));
+    int _cf_result1 = add(2, subtract(2, 2));
 }"""
         result = transform_java_assertions(source, "subtract")
         assert result == expected
@@ -435,7 +435,7 @@ void testAdd() {
         expected = """\
 @Test
 void testAdd() {
-    Object _cf_result1 = subtract(2, add(2, 3));
+    int _cf_result1 = subtract(2, add(2, 3));
 }"""
         result = transform_java_assertions(source, "add")
         assert result == expected
@@ -449,7 +449,7 @@ void testOuter() {
         expected = """\
 @Test
 void testOuter() {
-    Object _cf_result1 = outer(subtract(1, 1), subtract(2, 2));
+    int _cf_result1 = outer(subtract(1, 1), subtract(2, 2));
 }"""
         result = transform_java_assertions(source, "subtract")
         assert result == expected
@@ -467,7 +467,7 @@ class TestWhitespacePreservation:
         expected = """\
     @Test
     void testFibonacci() {
-        Object _cf_result1 = calculator.fibonacci(10);
+        int _cf_result1 = calculator.fibonacci(10);
     }"""
         result = transform_java_assertions(source, "fibonacci")
         assert result == expected
@@ -510,7 +510,7 @@ void testFormat() {
         expected = """\
 @Test
 void testFormat() {
-    Object _cf_result1 = formatter.format("hello", "world");
+    String _cf_result1 = formatter.format("hello", "world");
 }"""
         result = transform_java_assertions(source, "format")
         assert result == expected
@@ -524,7 +524,7 @@ void testEscape() {
         expected = """\
 @Test
 void testEscape() {
-    Object _cf_result1 = formatter.escape("hello \\"world\\"");
+    String _cf_result1 = formatter.escape("hello \\"world\\"");
 }"""
         result = transform_java_assertions(source, "escape")
         assert result == expected
@@ -538,7 +538,7 @@ void testMultiline() {
         expected = """\
 @Test
 void testMultiline() {
-    Object _cf_result1 = processor.join("line1", "line2");
+    String _cf_result1 = processor.join("line1", "line2");
 }"""
         result = transform_java_assertions(source, "join")
         assert result == expected
@@ -560,7 +560,7 @@ void testWithSetup() {
 void testWithSetup() {
     Calculator calc = new Calculator(2);
     int input = 10;
-    Object _cf_result1 = calc.fibonacci(input);
+    int _cf_result1 = calc.fibonacci(input);
 }"""
         result = transform_java_assertions(source, "fibonacci")
         assert result == expected
@@ -577,7 +577,7 @@ void testWithHelper() {
 @Test
 void testWithHelper() {
     helper.setup();
-    Object _cf_result1 = calculator.fibonacci(10);
+    int _cf_result1 = calculator.fibonacci(10);
     helper.cleanup();
 }"""
         result = transform_java_assertions(source, "fibonacci")
@@ -649,7 +649,7 @@ class FibonacciTests {
 class FibonacciTests {
     @Test
     void testBasic() {
-        Object _cf_result1 = calculator.fibonacci(10);
+        int _cf_result1 = calculator.fibonacci(10);
     }
 }"""
         result = transform_java_assertions(source, "fibonacci")
@@ -670,7 +670,7 @@ void testWithMock() {
 @Test
 void testWithMock() {
     when(mockService.getData()).thenReturn("test");
-    Object _cf_result1 = processor.process(mockService);
+    String _cf_result1 = processor.process(mockService);
 }"""
         result = transform_java_assertions(source, "process")
         assert result == expected
@@ -733,7 +733,7 @@ void testWithStringContainingFunctionName() {
         expected = """\
 @Test
 void testWithStringContainingFunctionName() {
-    Object _cf_result1 = formatter.format("fibonacci", 10, 55);
+    String _cf_result1 = formatter.format("fibonacci", 10, 55);
 }"""
         result = transform_java_assertions(source, "format")
         assert result == expected
@@ -755,7 +755,7 @@ import static org.junit.Assert.*;
 
 @Test
 public void testFibonacci() {
-    Object _cf_result1 = calculator.fibonacci(10);
+    int _cf_result1 = calculator.fibonacci(10);
 }"""
         result = transform_java_assertions(source, "fibonacci")
         assert result == expected
@@ -769,7 +769,7 @@ public void testFibonacci() {
         expected = """\
 @Test
 public void testFibonacci() {
-    Object _cf_result1 = calculator.fibonacci(10);
+    String _cf_result1 = calculator.fibonacci(10);
 }"""
         result = transform_java_assertions(source, "fibonacci")
         assert result == expected
@@ -813,8 +813,8 @@ void test() {
         expected = """\
 @Test
 void test() {
-    Object _cf_result1 = calc.fibonacci(0);
-    Object _cf_result2 = calc.fibonacci(1);
+    int _cf_result1 = calc.fibonacci(0);
+    int _cf_result2 = calc.fibonacci(1);
 }"""
         result = transformer.transform(source)
         assert result == expected
@@ -983,8 +983,8 @@ void testReverseSimple() {
 @Test
 @DisplayName("should reverse a simple string")
 void testReverseSimple() {
-    Object _cf_result1 = StringUtils.reverse("hello");
-    Object _cf_result2 = StringUtils.reverse("world");
+    String _cf_result1 = StringUtils.reverse("hello");
+    String _cf_result2 = StringUtils.reverse("world");
 }"""
         result = transform_java_assertions(source, "reverse")
         assert result == expected
@@ -1012,7 +1012,7 @@ void setUp() {
 
 @Test
 void testFibonacci() {
-    Object _cf_result1 = calculator.fibonacci(10);
+    int _cf_result1 = calculator.fibonacci(10);
 }"""
         result = transform_java_assertions(source, "fibonacci")
         assert result == expected
@@ -1039,7 +1039,7 @@ void testSynchronizedAccess() {
 @Test
 void testSynchronizedAccess() {
     synchronized (lock) {
-        Object _cf_result1 = counter.incrementAndGet();
+        int _cf_result1 = counter.incrementAndGet();
     }
 }"""
         result = transform_java_assertions(source, "incrementAndGet")
@@ -1055,7 +1055,7 @@ void testVolatileRead() {
         expected = """\
 @Test
 void testVolatileRead() {
-    Object _cf_result1 = buffer.isReady();
+    boolean _cf_result1 = buffer.isReady();
 }"""
         result = transform_java_assertions(source, "isReady")
         assert result == expected
@@ -1076,7 +1076,7 @@ void testSynchronizedBlock() {
 @Test
 void testSynchronizedBlock() {
     synchronized (cache) {
-        Object _cf_result1 = cache.size();
+        int _cf_result1 = cache.size();
     }
 }"""
         result = transform_java_assertions(source, "size")
@@ -1114,8 +1114,8 @@ void testAtomicCounter() {
         expected = """\
 @Test
 void testAtomicCounter() {
-    Object _cf_result1 = counter.incrementAndGet();
-    Object _cf_result2 = counter.incrementAndGet();
+    int _cf_result1 = counter.incrementAndGet();
+    int _cf_result2 = counter.incrementAndGet();
 }"""
         result = transform_java_assertions(source, "incrementAndGet")
         assert result == expected
@@ -1130,7 +1130,7 @@ void testConcurrentMap() {
         expected = """\
 @Test
 void testConcurrentMap() {
-    Object _cf_result1 = concurrentMap.putIfAbsent("key", "value");
+    String _cf_result1 = concurrentMap.putIfAbsent("key", "value");
 }"""
         result = transform_java_assertions(source, "putIfAbsent")
         assert result == expected
@@ -1147,7 +1147,7 @@ void testWithThreadSleep() throws InterruptedException {
 @Test
 void testWithThreadSleep() throws InterruptedException {
     Thread.sleep(100);
-    Object _cf_result1 = processor.getResult();
+    int _cf_result1 = processor.getResult();
 }"""
         result = transform_java_assertions(source, "getResult")
         assert result == expected
@@ -1162,7 +1162,7 @@ synchronized void testSyncMethod() {
         expected = """\
 @Test
 synchronized void testSyncMethod() {
-    Object _cf_result1 = calculator.compute(5);
+    int _cf_result1 = calculator.compute(5);
 }"""
         result = transform_java_assertions(source, "compute")
         assert result == expected
@@ -1183,7 +1183,7 @@ void testWaitNotify() {
     synchronized (monitor) {
         monitor.notify();
     }
-    Object _cf_result1 = listener.wasNotified();
+    boolean _cf_result1 = listener.wasNotified();
 }"""
         result = transform_java_assertions(source, "wasNotified")
         assert result == expected
@@ -1205,7 +1205,7 @@ void testReentrantLock() {
 void testReentrantLock() {
     lock.lock();
     try {
-        Object _cf_result1 = sharedResource.getValue();
+        int _cf_result1 = sharedResource.getValue();
     } finally {
         lock.unlock();
     }
@@ -1227,7 +1227,7 @@ void testCountDownLatch() throws InterruptedException {
 void testCountDownLatch() throws InterruptedException {
     latch.countDown();
     latch.await();
-    Object _cf_result1 = collector.getTotal();
+    int _cf_result1 = collector.getTotal();
 }"""
         result = transform_java_assertions(source, "getTotal")
         assert result == expected
@@ -1245,8 +1245,8 @@ void testTokenBucketAllowRequest() {
 @Test
 void testTokenBucketAllowRequest() {
     TokenBucket bucket = new TokenBucket(10, 1);
-    Object _cf_result1 = bucket.allowRequest();
-    Object _cf_result2 = bucket.allowRequest();
+    boolean _cf_result1 = bucket.allowRequest();
+    boolean _cf_result2 = bucket.allowRequest();
 }"""
         result = transform_java_assertions(source, "allowRequest")
         assert result == expected
@@ -1268,9 +1268,9 @@ void testCircularBufferOperations() {
 @Test
 void testCircularBufferOperations() {
     CircularBuffer<Integer> buffer = new CircularBuffer<>(3);
-    Object _cf_result1 = buffer.isEmpty();
+    boolean _cf_result1 = buffer.isEmpty();
     buffer.put(1);
-    Object _cf_result2 = buffer.isEmpty();
+    boolean _cf_result2 = buffer.isEmpty();
 }"""
         result = transform_java_assertions(source, "isEmpty")
         assert result == expected
@@ -1328,7 +1328,7 @@ void testAdd() {
         expected = """\
 @Test
 void testAdd() {
-    Object _cf_result1 = calc.add(2, 3);
+    int _cf_result1 = calc.add(2, 3);
 }"""
         result = transform_java_assertions(source, "add")
         assert result == expected

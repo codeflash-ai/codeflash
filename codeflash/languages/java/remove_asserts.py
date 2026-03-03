@@ -913,11 +913,11 @@ class JavaAssertTransformer:
         method = assertion.assertion_method
 
         # assertTrue/assertFalse always deal with boolean values
-        if method == "assertTrue" or method == "assertFalse":
+        if method in {"assertTrue", "assertFalse"}:
             return "boolean"
 
         # assertNull/assertNotNull — keep Object (reference type)
-        if method == "assertNull" or method == "assertNotNull":
+        if method in {"assertNull", "assertNotNull"}:
             return "Object"
 
         # For assertEquals/assertNotEquals/assertSame, try to infer from the expected literal
