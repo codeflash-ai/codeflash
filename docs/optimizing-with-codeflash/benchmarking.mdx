@@ -1,6 +1,6 @@
 ---
 title: "Optimize Performance Benchmarks with every Pull Request"
-description: "Configure and use pytest-benchmark integration for performance-critical code optimization"
+description: "Configure and use benchmark integration for performance-critical code optimization"
 icon: "chart-line"
 sidebarTitle: Setup Benchmarks to Optimize
 keywords:
@@ -26,6 +26,10 @@ It will then try to optimize the new code for the benchmark and calculate the im
 
 ## Using Codeflash in Benchmark Mode
 
+<Note>
+  Benchmark mode currently supports Python projects using pytest-benchmark. JavaScript/TypeScript benchmark support is coming soon.
+</Note>
+
 1. **Create a benchmarks root:**
 
    Create a directory for benchmarks if it does not already exist.
@@ -44,7 +48,7 @@ It will then try to optimize the new code for the benchmark and calculate the im
 
 2. **Define your benchmarks:**
 
-   Currently, Codeflash only supports benchmarks written as pytest-benchmarks. Check out the [pytest-benchmark](https://pytest-benchmark.readthedocs.io/en/stable/index.html) documentation for more information on syntax.
+   Codeflash supports benchmarks written as pytest-benchmarks. Check out the [pytest-benchmark](https://pytest-benchmark.readthedocs.io/en/stable/index.html) documentation for more information on syntax.
 
    For example:
 
@@ -58,7 +62,7 @@ It will then try to optimize the new code for the benchmark and calculate the im
 
    Note that these benchmarks should be defined in such a way that they don't take a long time to run.
 
-   The pytest-benchmark format is simply used as an interface. The plugin is actually not used - Codeflash will run these benchmarks with its own pytest plugin
+   The pytest-benchmark format is simply used as an interface. The plugin is actually not used - Codeflash will run these benchmarks with its own pytest plugin.
 
 3. **Run and Test Codeflash:**
 
@@ -74,7 +78,7 @@ It will then try to optimize the new code for the benchmark and calculate the im
    codeflash --file test_file.py --benchmark --benchmarks-root path/to/benchmarks
    ```
 
-4. **Run Codeflash :**
+4. **Run Codeflash with GitHub Actions:**
 
    Benchmark mode is best used together with Codeflash as a GitHub Action. This way,
    Codeflash will trace through your benchmark and optimize the functions modified in your Pull Request to speed up the benchmark.

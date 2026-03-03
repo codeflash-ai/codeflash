@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-CodeFlash is an AI-powered Python code optimizer that automatically improves code performance while maintaining correctness. It uses LLMs to generate optimization candidates, verifies correctness through test execution, and benchmarks performance improvements.
+CodeFlash is an AI-powered code optimizer that automatically improves performance while maintaining correctness. It supports Python, JavaScript, and TypeScript, with more languages planned. It uses LLMs to generate optimization candidates, verifies correctness through test execution, and benchmarks performance improvements.
 
 ## Optimization Pipeline
 
@@ -12,7 +12,7 @@ Discovery → Ranking → Context Extraction → Test Gen + Optimization → Bas
 
 1. **Discovery** (`discovery/`): Find optimizable functions across the codebase
 2. **Ranking** (`benchmarking/function_ranker.py`): Rank functions by addressable time using trace data
-3. **Context** (`context/`): Extract code dependencies (read-writable code + read-only imports)
+3. **Context** (`languages/<lang>/context/`): Extract code dependencies (read-writable code + read-only imports)
 4. **Optimization** (`optimization/`, `api/`): Generate candidates via AI service, run in parallel with test generation
 5. **Verification** (`verification/`): Run candidates against tests, compare outputs via custom pytest plugin
 6. **Benchmarking** (`benchmarking/`): Measure performance, select best candidate by speedup
