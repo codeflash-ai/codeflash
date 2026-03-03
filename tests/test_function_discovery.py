@@ -346,6 +346,65 @@ def test_filter_files_optimized():
     assert not filter_files_optimized(file_path_above_level, tests_root, ignore_paths, module_root)
 
 
+def test_filter_files_optimized_same_root(tmp_path):
+    """When testsRoot == moduleRoot (collocated tests pattern), use pattern matching instead of directory matching."""
+    src = tmp_path / "src"
+    src.mkdir()
+
+    # Both roots point to the same directory
+    tests_root = src
+    module_root = src
+
+    source_file = src / "utils.ts"
+    source_file.touch()
+    nested_source = src / "lib" / "helpers.ts"
+    nested_source.parent.mkdir(parents=True, exist_ok=True)
+    nested_source.touch()
+
+    # Test files by naming convention
+    test_spec = src / "utils.spec.ts"
+    test_spec.touch()
+    test_dot = src / "utils.test.ts"
+    test_dot.touch()
+
+    # Test files by directory convention
+    tests_dir = src / "__tests__" / "utils.ts"
+    tests_dir.parent.mkdir(parents=True, exist_ok=True)
+    tests_dir.touch()
+
+    ignore_paths: list[Path] = []
+
+    # Source files should pass filter (not excluded)
+    assert filter_files_optimized(source_file, tests_root, ignore_paths, module_root)
+    assert filter_files_optimized(nested_source, tests_root, ignore_paths, module_root)
+
+    # Test files should be excluded by pattern matching
+    assert not filter_files_optimized(test_spec, tests_root, ignore_paths, module_root)
+    assert not filter_files_optimized(test_dot, tests_root, ignore_paths, module_root)
+    assert not filter_files_optimized(tests_dir, tests_root, ignore_paths, module_root)
+
+
+def test_filter_files_optimized_tests_root_contains_module_root(tmp_path):
+    """When tests_root is a parent of module_root, use pattern matching."""
+    project = tmp_path / "project"
+    src = project / "src"
+    src.mkdir(parents=True)
+
+    # testsRoot is parent of moduleRoot
+    tests_root = project
+    module_root = src
+
+    source_file = src / "index.ts"
+    source_file.touch()
+    test_file = src / "index.test.ts"
+    test_file.touch()
+
+    ignore_paths: list[Path] = []
+
+    assert filter_files_optimized(source_file, tests_root, ignore_paths, module_root)
+    assert not filter_files_optimized(test_file, tests_root, ignore_paths, module_root)
+
+
 def test_filter_functions():
     with tempfile.TemporaryDirectory() as temp_dir_str:
         temp_dir = Path(temp_dir_str)

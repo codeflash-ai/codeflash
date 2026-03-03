@@ -439,8 +439,8 @@ def ensure_module_system_compatibility(code: str, target_module_system: str, pro
         logger.debug("Converting CommonJS require statements to ES Module syntax")
         return convert_commonjs_to_esm(code)
 
-    if target_module_system == ModuleSystem.COMMONJS and is_esm and not is_commonjs:
-        logger.debug("Converting ES Module to CommonJS syntax")
+    if target_module_system == ModuleSystem.COMMONJS and is_esm:
+        logger.debug("Converting ES Module imports to CommonJS syntax")
         return convert_esm_to_commonjs(code)
 
     logger.debug("No module system conversion needed")

@@ -1755,12 +1755,32 @@ class JavaScriptSupport:
             disable_ts_check,
             inject_test_globals,
             normalize_generated_tests_imports,
+            sanitize_mocha_imports,
         )
         from codeflash.languages.javascript.module_system import detect_module_system
+        from codeflash.models.models import GeneratedTests as GeneratedTestsModel
+        from codeflash.models.models import GeneratedTestsList
+
+        # For Mocha, strip vitest/jest/require('mocha') imports the AI may have generated
+        if test_framework == "mocha":
+            sanitized = []
+            for test in generated_tests.generated_tests:
+                sanitized.append(
+                    GeneratedTestsModel(
+                        generated_original_test_source=sanitize_mocha_imports(test.generated_original_test_source),
+                        instrumented_behavior_test_source=sanitize_mocha_imports(
+                            test.instrumented_behavior_test_source
+                        ),
+                        instrumented_perf_test_source=sanitize_mocha_imports(test.instrumented_perf_test_source),
+                        behavior_file_path=test.behavior_file_path,
+                        perf_file_path=test.perf_file_path,
+                    )
+                )
+            generated_tests = GeneratedTestsList(generated_tests=sanitized)
 
         module_system = detect_module_system(project_root, source_file_path)
-        if module_system == "esm":
-            generated_tests = inject_test_globals(generated_tests, test_framework)
+        if module_system == "esm" or test_framework == "mocha":
+            generated_tests = inject_test_globals(generated_tests, test_framework, module_system)
         if self.language == Language.TYPESCRIPT:
             generated_tests = disable_ts_check(generated_tests)
         return normalize_generated_tests_imports(generated_tests)

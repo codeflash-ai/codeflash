@@ -456,6 +456,142 @@ class TestRunMochaBenchmarkingTests:
             assert env.get("CODEFLASH_PERF_STABILITY_CHECK") == "false"
 
 
+class TestSanitizeMochaImports:
+    """Tests for stripping wrong framework imports from Mocha tests."""
+
+    def test_strips_vitest_import(self):
+        from codeflash.languages.javascript.edit_tests import sanitize_mocha_imports
+
+        source = "import { describe, test, expect, vi } from 'vitest'\nconst x = 1;\n"
+        result = sanitize_mocha_imports(source)
+        assert "vitest" not in result
+        assert "const x = 1;" in result
+
+    def test_strips_jest_globals_import(self):
+        from codeflash.languages.javascript.edit_tests import sanitize_mocha_imports
+
+        source = "import { jest, describe, it, expect } from '@jest/globals'\nconst x = 1;\n"
+        result = sanitize_mocha_imports(source)
+        assert "@jest/globals" not in result
+        assert "const x = 1;" in result
+
+    def test_strips_mocha_require(self):
+        from codeflash.languages.javascript.edit_tests import sanitize_mocha_imports
+
+        source = "const { describe, it, expect } = require('mocha');\nconst x = 1;\n"
+        result = sanitize_mocha_imports(source)
+        assert "require('mocha')" not in result
+        assert "const x = 1;" in result
+
+    def test_strips_vitest_comment(self):
+        from codeflash.languages.javascript.edit_tests import sanitize_mocha_imports
+
+        source = "// vitest imports (REQUIRED for vitest)\nimport { describe } from 'vitest'\nconst x = 1;\n"
+        result = sanitize_mocha_imports(source)
+        assert "vitest" not in result
+        assert "const x = 1;" in result
+
+    def test_preserves_unrelated_imports(self):
+        from codeflash.languages.javascript.edit_tests import sanitize_mocha_imports
+
+        source = "const sinon = require('sinon');\nconst assert = require('node:assert/strict');\n"
+        result = sanitize_mocha_imports(source)
+        assert "sinon" in result
+        assert "node:assert/strict" in result
+
+
+class TestInjectTestGlobalsModuleSystem:
+    """Tests for inject_test_globals with different module systems."""
+
+    def test_mocha_esm_uses_import(self):
+        from codeflash.languages.javascript.edit_tests import inject_test_globals
+        from codeflash.models.models import GeneratedTests, GeneratedTestsList
+
+        tests = GeneratedTestsList(
+            generated_tests=[
+                GeneratedTests(
+                    generated_original_test_source="describe('test', () => {});",
+                    instrumented_behavior_test_source="describe('test', () => {});",
+                    instrumented_perf_test_source="describe('test', () => {});",
+                    behavior_file_path=Path("test.test.js"),
+                    perf_file_path=Path("test.perf.test.js"),
+                )
+            ]
+        )
+
+        result = inject_test_globals(tests, test_framework="mocha", module_system="esm")
+        assert "import assert from 'node:assert/strict'" in result.generated_tests[0].generated_original_test_source
+
+    def test_mocha_cjs_uses_require(self):
+        from codeflash.languages.javascript.edit_tests import inject_test_globals
+        from codeflash.models.models import GeneratedTests, GeneratedTestsList
+
+        tests = GeneratedTestsList(
+            generated_tests=[
+                GeneratedTests(
+                    generated_original_test_source="describe('test', () => {});",
+                    instrumented_behavior_test_source="describe('test', () => {});",
+                    instrumented_perf_test_source="describe('test', () => {});",
+                    behavior_file_path=Path("test.test.js"),
+                    perf_file_path=Path("test.perf.test.js"),
+                )
+            ]
+        )
+
+        result = inject_test_globals(tests, test_framework="mocha", module_system="commonjs")
+        src = result.generated_tests[0].generated_original_test_source
+        assert "const assert = require('node:assert/strict')" in src
+        assert "import assert" not in src
+
+    def test_vitest_always_uses_import(self):
+        from codeflash.languages.javascript.edit_tests import inject_test_globals
+        from codeflash.models.models import GeneratedTests, GeneratedTestsList
+
+        tests = GeneratedTestsList(
+            generated_tests=[
+                GeneratedTests(
+                    generated_original_test_source="describe('test', () => {});",
+                    instrumented_behavior_test_source="describe('test', () => {});",
+                    instrumented_perf_test_source="describe('test', () => {});",
+                    behavior_file_path=Path("test.test.js"),
+                    perf_file_path=Path("test.perf.test.js"),
+                )
+            ]
+        )
+
+        result = inject_test_globals(tests, test_framework="vitest", module_system="commonjs")
+        assert "from 'vitest'" in result.generated_tests[0].generated_original_test_source
+
+
+class TestEnsureModuleSystemCompatibilityMixed:
+    """Tests for ensure_module_system_compatibility with mixed ESM+CJS code."""
+
+    def test_converts_imports_in_mixed_code_to_cjs(self):
+        from codeflash.languages.javascript.module_system import ensure_module_system_compatibility
+
+        # Code with both import (from inject_test_globals) and require (from backend)
+        code = "import assert from 'node:assert/strict';\nconst { foo } = require('./module');\n"
+        result = ensure_module_system_compatibility(code, "commonjs")
+        assert "require('node:assert/strict')" in result
+        assert "import assert" not in result
+
+    def test_converts_require_in_mixed_code_to_esm(self):
+        from codeflash.languages.javascript.module_system import ensure_module_system_compatibility
+
+        code = "import { describe } from 'vitest';\nconst foo = require('./module');\n"
+        result = ensure_module_system_compatibility(code, "esm")
+        assert "require" not in result
+        assert "import" in result
+
+    def test_pure_esm_to_cjs(self):
+        from codeflash.languages.javascript.module_system import ensure_module_system_compatibility
+
+        code = "import assert from 'node:assert/strict';\nimport { foo } from './module';\n"
+        result = ensure_module_system_compatibility(code, "commonjs")
+        assert "require('node:assert/strict')" in result
+        assert "import" not in result
+
+
 class TestRunMochaLineProfileTests:
     """Tests for running Mocha line profile tests with mocked subprocess."""
 
@@ -500,3 +636,70 @@ class TestRunMochaLineProfileTests:
             env = call_kwargs.kwargs.get("env") or call_kwargs[1].get("env", {})
             assert env.get("CODEFLASH_MODE") == "line_profile"
             assert env.get("CODEFLASH_LINE_PROFILE_OUTPUT") == str(profile_output)
+
+
+class TestParserUnknownTestNameFallback:
+    """Tests for the parser's fallback when perf markers have 'unknown' test name."""
+
+    def test_unknown_markers_matched_to_first_testcase(self):
+        """When capturePerf markers have 'unknown' test name (Vitest beforeEach not firing),
+        the parser should still match them to testcases via the fallback logic."""
+        from codeflash.languages.javascript.parse import parse_jest_test_xml
+        from codeflash.models.models import TestFile, TestFiles
+        from codeflash.models.test_type import TestType
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+
+            # Create a JUnit XML with one test suite and one testcase
+            xml_content = """<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="src/test_func__perf_test_0.test.ts" tests="1" failures="0" time="10.5">
+    <testcase name="should compute correctly" classname="src/test_func__perf_test_0.test.ts" time="10.5">
+    </testcase>
+  </testsuite>
+</testsuites>"""
+            xml_path = tmpdir_path / "results.xml"
+            xml_path.write_text(xml_content, encoding="utf-8")
+
+            # Create test files
+            test_file = tmpdir_path / "test_func__perf_test_0.test.ts"
+            test_file.write_text("// perf test", encoding="utf-8")
+
+            test_files = TestFiles(
+                test_files=[
+                    TestFile(
+                        instrumented_behavior_file_path=test_file,
+                        benchmarking_file_path=test_file,
+                        test_type=TestType.GENERATED_REGRESSION,
+                    )
+                ]
+            )
+
+            # Create a mock subprocess result with perf markers using "unknown" test name
+            # This simulates what happens when Vitest's beforeEach doesn't fire
+            markers = []
+            for i in range(1, 6):
+                markers.append(f"!######test_mod:unknown:computeFunc:{i}:1_0:{1000 + i * 100}######!")
+            stdout = "\n".join(markers)
+
+            mock_result = MagicMock()
+            mock_result.stdout = stdout
+
+            test_config = MagicMock()
+            test_config.tests_project_rootdir = tmpdir_path
+            test_config.test_framework = "vitest"
+
+            results = parse_jest_test_xml(
+                test_xml_file_path=xml_path,
+                test_files=test_files,
+                test_config=test_config,
+                run_result=mock_result,
+            )
+
+            # The "unknown" fallback should assign all 5 markers to the testcase
+            assert len(results.test_results) == 5
+            # Verify runtimes were extracted (not the 10.5s XML fallback)
+            runtimes = [r.runtime for r in results.test_results if r.runtime is not None]
+            assert len(runtimes) == 5
+            assert all(r < 100_000 for r in runtimes)  # All under 100 microseconds (nanoseconds)

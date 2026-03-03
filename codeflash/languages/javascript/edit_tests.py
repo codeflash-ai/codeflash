@@ -195,24 +195,30 @@ def normalize_codeflash_imports(source: str) -> str:
 
 
 # Author: ali <mohammed18200118@gmail.com>
-def inject_test_globals(generated_tests: GeneratedTestsList, test_framework: str = "jest") -> GeneratedTestsList:
+def inject_test_globals(
+    generated_tests: GeneratedTestsList, test_framework: str = "jest", module_system: str = "esm"
+) -> GeneratedTestsList:
     # TODO: inside the prompt tell the llm if it should import jest functions or it's already injected in the global window
     """Inject test globals into all generated tests.
 
     Args:
         generated_tests: List of generated tests.
         test_framework: The test framework being used ("jest", "vitest", or "mocha").
+        module_system: The module system ("esm" or "commonjs").
 
     Returns:
         Generated tests with test globals injected.
 
     """
-    # we only inject test globals for esm modules
+    is_cjs = module_system == "commonjs"
     # Use vitest imports for vitest projects, jest imports for jest projects
     if test_framework == "vitest":
         global_import = "import { vi, describe, it, expect, beforeEach, afterEach, beforeAll, test } from 'vitest'\n"
     elif test_framework == "mocha":
-        global_import = "import assert from 'node:assert/strict';\n"
+        if is_cjs:
+            global_import = "const assert = require('node:assert/strict');\n"
+        else:
+            global_import = "import assert from 'node:assert/strict';\n"
     else:
         # Default to jest imports for jest and other frameworks
         global_import = (
@@ -224,6 +230,35 @@ def inject_test_globals(generated_tests: GeneratedTestsList, test_framework: str
         test.instrumented_behavior_test_source = global_import + test.instrumented_behavior_test_source
         test.instrumented_perf_test_source = global_import + test.instrumented_perf_test_source
     return generated_tests
+
+
+_VITEST_IMPORT_RE = re.compile(r"^.*import\s+\{[^}]*\}\s+from\s+['\"]vitest['\"].*\n?", re.MULTILINE)
+_JEST_GLOBALS_IMPORT_RE = re.compile(r"^.*import\s+\{[^}]*\}\s+from\s+['\"]@jest/globals['\"].*\n?", re.MULTILINE)
+_MOCHA_REQUIRE_RE = re.compile(
+    r"^.*(?:const|let|var)\s+\{[^}]*\}\s*=\s*require\s*\(\s*['\"]mocha['\"]\s*\).*\n?", re.MULTILINE
+)
+_VITEST_COMMENT_RE = re.compile(r"^.*//.*vitest imports.*\n?", re.MULTILINE | re.IGNORECASE)
+
+
+def sanitize_mocha_imports(source: str) -> str:
+    """Remove vitest/jest/mocha-require imports from Mocha test source.
+
+    The AI service sometimes generates vitest or jest-style imports when the
+    framework is mocha. Mocha provides describe/it/before*/after* as globals,
+    so these imports must be removed. Also removes ``require('mocha')``
+    destructures since Mocha doesn't export those.
+
+    Args:
+        source: Generated test source code.
+
+    Returns:
+        Source with incorrect framework imports stripped.
+
+    """
+    source = _VITEST_IMPORT_RE.sub("", source)
+    source = _JEST_GLOBALS_IMPORT_RE.sub("", source)
+    source = _MOCHA_REQUIRE_RE.sub("", source)
+    return _VITEST_COMMENT_RE.sub("", source)
 
 
 # Author: ali <mohammed18200118@gmail.com>
