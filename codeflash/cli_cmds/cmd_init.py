@@ -27,6 +27,9 @@ from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.cli_cmds.console import console, logger
 from codeflash.cli_cmds.extension import install_vscode_extension
 
+# Import Java init module
+from codeflash.cli_cmds.init_java import init_java_project
+
 # Import JS/TS init module
 from codeflash.cli_cmds.init_javascript import (
     ProjectLanguage,
@@ -113,6 +116,10 @@ def init_codeflash() -> None:
         # TODO:{claude}  move the init_javascript to the support folder. Move any other language related specific implementation (other than python) to its support.
         # Detect project language
         project_language = detect_project_language()
+
+        if project_language == ProjectLanguage.JAVA:
+            init_java_project()
+            return
 
         if project_language in (ProjectLanguage.JAVASCRIPT, ProjectLanguage.TYPESCRIPT):
             init_js_project(project_language)
@@ -840,7 +847,9 @@ def install_github_actions(override_formatter_check: bool = False) -> None:
 
         # Select the appropriate workflow template based on project language
         project_language = detect_project_language_for_workflow(Path.cwd())
-        if project_language in ("javascript", "typescript"):
+        if project_language == "java":
+            workflow_template = "codeflash-optimize-java.yaml"
+        elif project_language in ("javascript", "typescript"):
             workflow_template = "codeflash-optimize-js.yaml"
         else:
             workflow_template = "codeflash-optimize.yaml"
@@ -1252,8 +1261,16 @@ def get_github_action_working_directory(toml_path: Path, git_root: Path) -> str:
 def detect_project_language_for_workflow(project_root: Path) -> str:
     """Detect the primary language of the project for workflow generation.
 
-    Returns: 'python', 'javascript', or 'typescript'
+    Returns: 'python', 'javascript', 'typescript', or 'java'
     """
+    # Check for Java project (Maven or Gradle)
+    has_pom_xml = (project_root / "pom.xml").exists()
+    has_build_gradle = (project_root / "build.gradle").exists() or (project_root / "build.gradle.kts").exists()
+    has_java_src = (project_root / "src" / "main" / "java").is_dir()
+
+    if has_pom_xml or has_build_gradle or has_java_src:
+        return "java"
+
     # Check for TypeScript config
     if (project_root / "tsconfig.json").exists():
         return "typescript"
@@ -1272,6 +1289,7 @@ def detect_project_language_for_workflow(project_root: Path) -> str:
     # Both exist - count files to determine primary language
     js_count = 0
     py_count = 0
+    java_count = 0
     for file in project_root.rglob("*"):
         if file.is_file():
             suffix = file.suffix.lower()
@@ -1279,8 +1297,13 @@ def detect_project_language_for_workflow(project_root: Path) -> str:
                 js_count += 1
             elif suffix == ".py":
                 py_count += 1
+            elif suffix == ".java":
+                java_count += 1
 
-    if js_count > py_count:
+    max_count = max(js_count, py_count, java_count)
+    if max_count == java_count and java_count > 0:
+        return "java"
+    if max_count == js_count and js_count > 0:
         return "javascript"
     return "python"
 
@@ -1385,9 +1408,9 @@ def generate_dynamic_workflow_content(
     # Detect project language
     project_language = detect_project_language_for_workflow(Path.cwd())
 
-    # For JavaScript/TypeScript projects, use static template customization
+    # For JavaScript/TypeScript and Java projects, use static template customization
     # (AI-generated steps are currently Python-only)
-    if project_language in ("javascript", "typescript"):
+    if project_language in ("javascript", "typescript", "java"):
         return customize_codeflash_yaml_content(optimize_yml_content, config, git_root, benchmark_mode)
 
     # Python project - try AI-generated steps
@@ -1508,6 +1531,10 @@ def customize_codeflash_yaml_content(
     # Detect project language
     project_language = detect_project_language_for_workflow(Path.cwd())
 
+    if project_language == "java":
+        # Java project
+        return _customize_java_workflow_content(optimize_yml_content, git_root, benchmark_mode)
+
     if project_language in ("javascript", "typescript"):
         # JavaScript/TypeScript project
         return _customize_js_workflow_content(optimize_yml_content, git_root, benchmark_mode)
@@ -1602,6 +1629,52 @@ def _customize_js_workflow_content(optimize_yml_content: str, git_root: Path, be
     if benchmark_mode:
         codeflash_cmd += " --benchmark"
     return optimize_yml_content.replace("{{ codeflash_command }}", codeflash_cmd)
+
+
+def _customize_java_workflow_content(optimize_yml_content: str, git_root: Path, benchmark_mode: bool = False) -> str:
+    """Customize workflow content for Java projects."""
+    from codeflash.cli_cmds.init_java import (
+        JavaBuildTool,
+        detect_java_build_tool,
+        get_java_dependency_installation_commands,
+    )
+
+    project_root = Path.cwd()
+
+    # Check for pom.xml or build.gradle
+    has_pom = (project_root / "pom.xml").exists()
+    has_gradle = (project_root / "build.gradle").exists() or (project_root / "build.gradle.kts").exists()
+
+    if not has_pom and not has_gradle:
+        click.echo(
+            f"I couldn't find a pom.xml or build.gradle in the current directory.{LF}"
+            f"Please ensure you're in a Maven or Gradle project directory."
+        )
+        apologize_and_exit()
+
+    # Determine working directory relative to git root
+    if project_root == git_root:
+        working_dir = ""
+    else:
+        rel_path = str(project_root.relative_to(git_root))
+        working_dir = f"""defaults:
+      run:
+        working-directory: ./{rel_path}"""
+
+    optimize_yml_content = optimize_yml_content.replace("{{ working_directory }}", working_dir)
+
+    # Determine build tool
+    build_tool = detect_java_build_tool(project_root)
+
+    # Set build tool cache type for actions/setup-java
+    if build_tool == JavaBuildTool.GRADLE:
+        optimize_yml_content = optimize_yml_content.replace("{{ java_build_tool }}", "gradle")
+    else:
+        optimize_yml_content = optimize_yml_content.replace("{{ java_build_tool }}", "maven")
+
+    # Install dependencies
+    install_deps_cmd = get_java_dependency_installation_commands(build_tool)
+    return optimize_yml_content.replace("{{ install_dependencies_command }}", install_deps_cmd)
 
 
 def get_formatter_cmds(formatter: str) -> list[str]:
