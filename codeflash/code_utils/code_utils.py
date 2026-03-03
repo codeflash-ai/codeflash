@@ -7,7 +7,6 @@ import os
 import re
 import shutil
 import site
-import subprocess
 import sys
 from contextlib import contextmanager
 from functools import lru_cache
@@ -357,34 +356,29 @@ def module_name_from_file_path(file_path: Path, project_root_path: Path, *, trav
 
 
 def validate_module_import(module_path: str, project_root: Path) -> tuple[bool, str]:
-    """Try importing a module in a subprocess to check if it's importable.
+    """Check if a module is importable using find_spec (no actual import or subprocess).
 
-    Returns (success, error_message). Uses the same Python executable and
-    PYTHONPATH setup as the test runner to ensure consistent behavior.
-    If the import times out (heavy frameworks like TensorFlow), assume it's fine
-    since the module was found but is just slow to initialize.
+    Returns (success, error_message). Uses importlib.util.find_spec to check
+    module availability without triggering module initialization.
     """
-    from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
-    from codeflash.code_utils.shell_utils import make_env_with_project_root
+    from importlib.util import find_spec
 
-    env = make_env_with_project_root(project_root)
+    project_root_str = str(project_root)
+    added = False
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
+        added = True
     try:
-        result = subprocess.run(
-            [SAFE_SYS_EXECUTABLE, "-c", f"import {module_path}"],
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=60,
-            cwd=str(project_root),
-            errors="replace",
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        # Heavy modules (e.g. tensorflow) can take a long time — the module exists, just slow to init
-        return True, ""
-    if result.returncode == 0:
-        return True, ""
-    return False, result.stderr.strip()
+        if find_spec(module_path) is not None:
+            return True, ""
+        return False, f"Module '{module_path}' not found (find_spec returned None)"
+    except ModuleNotFoundError as e:
+        return False, str(e)
+    except Exception as e:
+        return False, f"Error checking module '{module_path}': {e}"
+    finally:
+        if added:
+            sys.path.remove(project_root_str)
 
 
 def infer_module_root_from_file(file_path: Path, pyproject_dir: Path) -> Path | None:
