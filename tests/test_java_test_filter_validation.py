@@ -1,7 +1,8 @@
 """Test that empty test filters are caught and raise errors."""
 
+import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 import pytest
 
 from codeflash.languages.java.test_runner import _run_maven_tests, _build_test_filter
@@ -110,11 +111,12 @@ def test_run_maven_tests_succeeds_with_valid_filter():
         ]
     )
 
-    # Mock Maven executable and subprocess.run
+    # Mock Maven executable and _run_cmd_kill_pg_on_timeout (which replaced subprocess.run)
     with patch("codeflash.languages.java.test_runner.find_maven_executable") as mock_maven, \
-         patch("codeflash.languages.java.test_runner.subprocess.run") as mock_run:
+         patch("codeflash.languages.java.test_runner._run_cmd_kill_pg_on_timeout") as mock_run:
         mock_maven.return_value = "mvn"
-        mock_run.return_value = MagicMock(
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[],
             returncode=0,
             stdout="Tests run: 1, Failures: 0, Errors: 0, Skipped: 0",
             stderr="",
