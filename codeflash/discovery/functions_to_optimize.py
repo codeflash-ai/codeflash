@@ -967,6 +967,23 @@ def _is_test_file_by_pattern(file_path: Path) -> bool:
     return any(p in path_str for p in test_dir_patterns)
 
 
+def _is_test_file_by_pattern(file_path: Path) -> bool:
+    """Check if a file is a test file using naming conventions.
+
+    Used when tests_root overlaps with module_root, so directory-based filtering would
+    incorrectly exclude all source files. Falls back to filename and directory patterns.
+    """
+    name = file_path.name.lower()
+    if name.startswith("test_") or name == "conftest.py":
+        return True
+    test_name_patterns = (".test.", ".spec.", "_test.", "_spec.")
+    if any(p in name for p in test_name_patterns):
+        return True
+    path_str = str(file_path).lower()
+    test_dir_patterns = (os.sep + "test" + os.sep, os.sep + "tests" + os.sep, os.sep + "__tests__" + os.sep)
+    return any(p in path_str for p in test_dir_patterns)
+
+
 def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list[Path], module_root: Path) -> bool:
     """Optimized version of the filter_functions function above.
 
