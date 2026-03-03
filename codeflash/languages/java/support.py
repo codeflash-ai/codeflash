@@ -218,6 +218,26 @@ class JavaSupport(LanguageSupport):
         """Replace a function in source code with new implementation."""
         return replace_function(source, function, new_source, self._analyzer)
 
+    def replace_function_definitions(
+        self,
+        function_names: list[str],
+        optimized_code: Any,
+        module_abspath: Path,
+        project_root_path: Path,
+        function_to_optimize: FunctionToOptimize | None = None,
+    ) -> bool:
+        """Replace function definitions in a Java source file with optimized code."""
+        from codeflash.languages.code_replacer import replace_function_definitions_for_language
+
+        return replace_function_definitions_for_language(
+            function_names=function_names,
+            optimized_code=optimized_code,
+            module_abspath=module_abspath,
+            project_root_path=project_root_path,
+            lang_support=self,
+            function_to_optimize=function_to_optimize,
+        )
+
     def format_code(self, source: str, file_path: Path | None = None) -> str:
         """Format Java code."""
         project_root = file_path.parent if file_path else None

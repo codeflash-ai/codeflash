@@ -35,7 +35,6 @@ class ParsedOptimization:
     new_fields: list[str]  # Source text of new fields to add
     helpers_before_target: list[str] = field(default_factory=list)  # Helpers appearing before target in optimized code
     helpers_after_target: list[str] = field(default_factory=list)  # Helpers appearing after target in optimized code
-    target_found: bool = True  # Whether the target method was found in the optimized code
 
 
 def _parse_optimization_source(new_source: str, target_method_name: str, analyzer: JavaAnalyzer) -> ParsedOptimization:
@@ -52,10 +51,11 @@ def _parse_optimization_source(new_source: str, target_method_name: str, analyze
 
     Returns:
         ParsedOptimization with the method and any additional members.
+        If the generated code contains no method matching target_method_name,
+        target_method_source will be empty to signal that the candidate is invalid.
 
     """
     new_fields: list[str] = []
-    new_helper_methods: list[str] = []
     target_method_source = new_source  # Default to the whole source
 
     # Check if this is a full class or just a method
@@ -63,8 +63,6 @@ def _parse_optimization_source(new_source: str, target_method_name: str, analyze
 
     helpers_before_target: list[str] = []
     helpers_after_target: list[str] = []
-
-    target_found = True
 
     if classes:
         # It's a class - extract components
@@ -87,12 +85,23 @@ def _parse_optimization_source(new_source: str, target_method_name: str, analyze
             end = target_method.end_line
             target_method_source = "".join(lines[start:end])
         else:
-            target_found = False
+            logger.warning(
+                "Generated class does not contain target method '%s'. Skipping candidate.", target_method_name
+            )
+            target_method_source = ""
 
-        # Extract helper methods, categorised by position relative to the target
+        # Extract helper methods, categorised by position relative to the target.
+        # Skip methods whose line range falls entirely inside the target method's
+        # range, as these belong to anonymous/inner classes inside the target body
+        # and must not be hoisted out as top-level class members.
+        lines = new_source.splitlines(keepends=True)
         for i, method in enumerate(methods):
             if method.name != target_method_name:
-                lines = new_source.splitlines(keepends=True)
+                # Skip methods nested inside the target (e.g. anonymous class methods)
+                if target_method and (
+                    method.start_line >= target_method.start_line and method.end_line <= target_method.end_line
+                ):
+                    continue
                 start = (method.javadoc_start_line or method.start_line) - 1
                 end = method.end_line
                 helper_source = "".join(lines[start:end])
@@ -106,12 +115,27 @@ def _parse_optimization_source(new_source: str, target_method_name: str, analyze
             if f.source_text:
                 new_fields.append(f.source_text)
 
+    else:
+        # No class found — generated code is a standalone method (or snippet).
+        # Validate that it actually defines the target method; if it defines a
+        # *different* method, applying it would corrupt the original source.
+        standalone_methods = analyzer.find_methods(new_source)
+        if standalone_methods:
+            matching = [m for m in standalone_methods if m.name == target_method_name]
+            if not matching:
+                logger.warning(
+                    "Generated standalone method '%s' does not match target method '%s'. "
+                    "Skipping candidate to avoid corrupting the source.",
+                    standalone_methods[0].name,
+                    target_method_name,
+                )
+                target_method_source = ""
+
     return ParsedOptimization(
         target_method_source=target_method_source,
         new_fields=new_fields,
         helpers_before_target=helpers_before_target,
         helpers_after_target=helpers_after_target,
-        target_found=target_found,
     )
 
 
@@ -282,8 +306,8 @@ def replace_function(
     # Parse the optimization to extract components
     parsed = _parse_optimization_source(new_source, func_name, analyzer)
 
-    if not parsed.target_found:
-        logger.error("Optimized code does not contain the target method %s", func_name)
+    if not parsed.target_method_source.strip():
+        logger.warning("No valid replacement found for method '%s'. Returning original source.", func_name)
         return source
 
     # Find the method in the original source

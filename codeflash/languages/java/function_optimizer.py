@@ -387,16 +387,13 @@ class JavaFunctionOptimizer(FunctionOptimizer):
         optimized_code: CodeStringsMarkdown,
         original_helper_code: dict[Path, str],
     ) -> bool:
-        from codeflash.languages.code_replacer import replace_function_definitions_for_language
-
         did_update = False
         for module_abspath, qualified_names in self.group_functions_by_file(code_context).items():
-            did_update |= replace_function_definitions_for_language(
+            did_update |= self.language_support.replace_function_definitions(
                 function_names=list(qualified_names),
                 optimized_code=optimized_code,
                 module_abspath=module_abspath,
                 project_root_path=self.project_root,
-                lang_support=self.language_support,
                 function_to_optimize=self.function_to_optimize,
             )
         return did_update
