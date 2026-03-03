@@ -11,6 +11,7 @@ import logging
 import os
 import re
 import shutil
+import signal
 import subprocess
 import tempfile
 import uuid
@@ -44,6 +45,83 @@ _classpath_cache: dict[tuple[Path, str | None], str] = {}
 # Regex pattern for valid Java class names (package.ClassName format)
 # Allows: letters, digits, underscores, dots, and dollar signs (inner classes)
 _VALID_JAVA_CLASS_NAME = re.compile(r"^[a-zA-Z_$][a-zA-Z0-9_$.]*$")
+
+
+def _run_cmd_kill_pg_on_timeout(
+    cmd: list[str],
+    *,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+    timeout: int | None = None,
+    text: bool = True,
+) -> subprocess.CompletedProcess:
+    """Run a command, killing its entire process group on timeout.
+
+    Unlike subprocess.run(), this function uses start_new_session=True so the
+    child process gets its own process group.  When the timeout fires we send
+    SIGTERM (then SIGKILL) to the whole process group, not just the process
+    itself.  This is critical for Maven, which forks child JVM processes
+    (Maven Surefire forks) that would otherwise become orphaned when the Maven
+    parent is killed by a plain subprocess.run() timeout.  Orphaned JVMs keep
+    SQLite file-handles open, causing "database is locked" errors.
+
+    Args:
+        cmd: Command and arguments.
+        cwd: Working directory.
+        env: Environment variables.
+        timeout: Seconds to wait before killing the process group.
+        text: If True, decode stdout/stderr as text.
+
+    Returns:
+        CompletedProcess.  On timeout, returncode is -2 and stderr contains a
+        human-readable explanation.
+
+    """
+    proc = subprocess.Popen(
+        cmd,
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=text,
+        start_new_session=True,  # puts proc in its own process group
+    )
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+        return subprocess.CompletedProcess(args=cmd, returncode=proc.returncode, stdout=stdout, stderr=stderr)
+    except subprocess.TimeoutExpired:
+        # Kill the entire process group so Maven's forked Surefire JVMs don't
+        # become orphans that keep the SQLite database locked.
+        pgid = None
+        try:
+            pgid = os.getpgid(proc.pid)
+            os.killpg(pgid, signal.SIGTERM)
+        except (ProcessLookupError, OSError):
+            proc.kill()
+        # Give processes a few seconds to shut down gracefully before SIGKILL.
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            if pgid is not None:
+                try:
+                    os.killpg(pgid, signal.SIGKILL)
+                except (ProcessLookupError, OSError):
+                    pass
+            else:
+                proc.kill()
+            proc.wait()
+        # Drain pipes so we don't leave zombie pipe buffers.
+        try:
+            stdout_data = proc.stdout.read() if proc.stdout else ""
+            stderr_data = proc.stderr.read() if proc.stderr else ""
+        except Exception:
+            stdout_data, stderr_data = "", ""
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=-2,
+            stdout=stdout_data,
+            stderr=f"Process group killed after timeout ({timeout}s): {stderr_data}",
+        )
 
 
 def _validate_java_class_name(class_name: str) -> bool:
@@ -505,14 +583,7 @@ def _compile_tests(
     logger.debug("Compiling tests: %s in %s", " ".join(cmd), project_root)
 
     try:
-        return subprocess.run(
-            cmd, check=False, cwd=project_root, env=env, capture_output=True, text=True, timeout=timeout
-        )
-    except subprocess.TimeoutExpired:
-        logger.exception("Maven compilation timed out after %d seconds", timeout)
-        return subprocess.CompletedProcess(
-            args=cmd, returncode=-2, stdout="", stderr=f"Compilation timed out after {timeout} seconds"
-        )
+        return _run_cmd_kill_pg_on_timeout(cmd, cwd=project_root, env=env, timeout=timeout)
     except Exception as e:
         logger.exception("Maven compilation failed: %s", e)
         return subprocess.CompletedProcess(args=cmd, returncode=-1, stdout="", stderr=str(e))
@@ -548,9 +619,7 @@ def _get_test_classpath(
     logger.debug("Getting classpath: %s", " ".join(cmd))
 
     try:
-        result = subprocess.run(
-            cmd, check=False, cwd=project_root, env=env, capture_output=True, text=True, timeout=timeout
-        )
+        result = _run_cmd_kill_pg_on_timeout(cmd, cwd=project_root, env=env, timeout=timeout)
 
         if result.returncode != 0:
             logger.error("Failed to get classpath: %s", result.stderr)
@@ -600,9 +669,6 @@ def _get_test_classpath(
 
         return os.pathsep.join(cp_parts)
 
-    except subprocess.TimeoutExpired:
-        logger.exception("Getting classpath timed out")
-        return None
     except Exception as e:
         logger.exception("Failed to get classpath: %s", e)
         return None
@@ -804,14 +870,7 @@ def _run_tests_direct(
         logger.debug("Running tests directly: java -cp ... ConsoleLauncher --select-class %s", test_classes)
 
     try:
-        return subprocess.run(
-            cmd, check=False, cwd=working_dir, env=env, capture_output=True, text=True, timeout=timeout
-        )
-    except subprocess.TimeoutExpired:
-        logger.exception("Direct test execution timed out after %d seconds", timeout)
-        return subprocess.CompletedProcess(
-            args=cmd, returncode=-2, stdout="", stderr=f"Test execution timed out after {timeout} seconds"
-        )
+        return _run_cmd_kill_pg_on_timeout(cmd, cwd=working_dir, env=env, timeout=timeout)
     except Exception as e:
         logger.exception("Direct test execution failed: %s", e)
         return subprocess.CompletedProcess(args=cmd, returncode=-1, stdout="", stderr=str(e))
@@ -1511,9 +1570,13 @@ def _run_maven_tests(
     logger.debug("Running Maven command: %s in %s", " ".join(cmd), project_root)
 
     try:
-        result = subprocess.run(
-            cmd, check=False, cwd=project_root, env=env, capture_output=True, text=True, timeout=timeout
-        )
+        # Use _run_cmd_kill_pg_on_timeout instead of subprocess.run so that on
+        # timeout we kill the entire Maven process GROUP (including forked Surefire
+        # JVMs).  With plain subprocess.run(), only the Maven parent is killed and
+        # the child JVMs become orphaned, holding the SQLite result file open and
+        # causing "database is locked" errors when Python reads the file immediately
+        # after Maven is killed.
+        result = _run_cmd_kill_pg_on_timeout(cmd, cwd=project_root, env=env, timeout=timeout)
 
         # Check if Maven failed due to compilation errors (not just test failures)
         if result.returncode != 0:
@@ -1546,11 +1609,6 @@ def _run_maven_tests(
 
         return result
 
-    except subprocess.TimeoutExpired:
-        logger.exception("Maven test execution timed out after %d seconds", timeout)
-        return subprocess.CompletedProcess(
-            args=cmd, returncode=-2, stdout="", stderr=f"Test execution timed out after {timeout} seconds"
-        )
     except Exception as e:
         logger.exception("Maven test execution failed: %s", e)
         return subprocess.CompletedProcess(args=cmd, returncode=-1, stdout="", stderr=str(e))
