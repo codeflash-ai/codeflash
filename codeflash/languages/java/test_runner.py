@@ -47,6 +47,10 @@ _classpath_cache: dict[tuple[Path, str | None], str] = {}
 # Allows: letters, digits, underscores, dots, and dollar signs (inner classes)
 _VALID_JAVA_CLASS_NAME = re.compile(r"^[a-zA-Z_$][a-zA-Z0-9_$.]*$")
 
+# Regex to extract Java file paths from Maven compilation error output.
+# Maven reports errors like: [ERROR] /path/to/File.java:[line,col] message
+_MAVEN_COMPILATION_FILE_RE = re.compile(r"\[ERROR\]\s+(/[^\s\[]+\.java):\[\d+,\d+\]")
+
 
 def _run_cmd_kill_pg_on_timeout(
     cmd: list[str],
@@ -264,6 +268,90 @@ def _extract_modules_from_pom_content(content: str) -> list[str]:
         return []
 
     return [m.text for m in modules_elem if m.text]
+
+
+def _extract_failing_java_files(output: str) -> set[Path]:
+    """Extract Java file paths from Maven compilation error output.
+
+    Parses lines like: [ERROR] /path/to/File.java:[line,col] message
+
+    Args:
+        output: Combined stdout+stderr from a Maven run.
+
+    Returns:
+        Set of Path objects for files that have compilation errors.
+
+    """
+    files: set[Path] = set()
+    for match in _MAVEN_COMPILATION_FILE_RE.finditer(output):
+        files.add(Path(match.group(1)))
+    return files
+
+
+def _remove_failing_generated_tests(failing_files: set[Path]) -> list[Path]:
+    """Remove generated test files that have compilation errors.
+
+    Only removes files whose names contain '__perfinstrumented' or
+    '__perfonlyinstrumented' (i.e., files written by codeflash).
+    Original source files and manually written tests are never removed.
+
+    Args:
+        failing_files: Set of file paths that have compilation errors.
+
+    Returns:
+        List of paths that were actually removed.
+
+    """
+    removed: list[Path] = []
+    for path in failing_files:
+        if "__perfinstrumented" in path.name or "__perfonlyinstrumented" in path.name:
+            if path.exists():
+                path.unlink()
+                removed.append(path)
+                logger.info("Removed failing generated test file: %s", path)
+    return removed
+
+
+def _filter_test_paths_excluding_files(test_paths: Any, removed_files: list[Path]) -> Any:
+    """Return a copy of test_paths with the given files excluded.
+
+    Filters out TestFile entries whose instrumented_behavior_file_path or
+    benchmarking_file_path matches any of the removed files.
+
+    Args:
+        test_paths: TestFiles object or list/tuple of paths.
+        removed_files: Paths that were removed from disk.
+
+    Returns:
+        Filtered test_paths of the same type.
+
+    """
+    if not removed_files:
+        return test_paths
+
+    removed_set = {p.resolve() for p in removed_files}
+
+    if hasattr(test_paths, "test_files"):
+        from codeflash.models.models import TestFiles
+
+        kept = []
+        for tf in test_paths.test_files:
+            behavior_removed = (
+                tf.instrumented_behavior_file_path is not None
+                and tf.instrumented_behavior_file_path.resolve() in removed_set
+            )
+            bench_removed = (
+                tf.benchmarking_file_path is not None and tf.benchmarking_file_path.resolve() in removed_set
+            )
+            if not behavior_removed and not bench_removed:
+                kept.append(tf)
+        return TestFiles(test_files=kept)
+
+    if isinstance(test_paths, (list, tuple)):
+        kept_paths = [p for p in test_paths if not (isinstance(p, Path) and p.resolve() in removed_set)]
+        return type(test_paths)(kept_paths)
+
+    return test_paths
 
 
 def _validate_test_filter(test_filter: str) -> str:
@@ -972,12 +1060,39 @@ def _run_direct_or_fallback_maven(
     logger.debug("Step 1: Compiling tests for %s mode", mode)
     compile_result = _compile_tests(maven_root, run_env, test_module, timeout=120)
     if compile_result.returncode != 0:
-        logger.warning("Compilation failed (rc=%d), falling back to Maven-based execution", compile_result.returncode)
-        result = _run_maven_tests(maven_root, test_paths, run_env, timeout=timeout, mode=mode, test_module=test_module)
-        target_dir = _get_test_module_target_dir(maven_root, test_module)
-        surefire_dir = target_dir / "surefire-reports"
-        result_xml_path = _get_combined_junit_xml(surefire_dir, candidate_index)
-        return result, result_xml_path
+        # Recovery: if compilation failed, check whether codeflash-generated test files are
+        # to blame (e.g. LLM generated tests using Mockito or incorrect API calls).
+        # Remove the offending files and retry compilation so that pre-existing tests can
+        # still run and establish a baseline.
+        combined_compile_output = (compile_result.stdout or "") + (compile_result.stderr or "")
+        failing_files = _extract_failing_java_files(combined_compile_output)
+        removed = _remove_failing_generated_tests(failing_files)
+        if removed:
+            logger.info(
+                "Removed %d failing generated test file(s) before retry: %s",
+                len(removed),
+                [str(r) for r in removed],
+            )
+            test_paths = _filter_test_paths_excluding_files(test_paths, removed)
+            compile_result = _compile_tests(maven_root, run_env, test_module, timeout=120)
+
+        if compile_result.returncode != 0:
+            logger.warning(
+                "Compilation failed (rc=%d), falling back to Maven-based execution",
+                compile_result.returncode,
+            )
+            result = _run_maven_tests(maven_root, test_paths, run_env, timeout=timeout, mode=mode, test_module=test_module)
+            target_dir = _get_test_module_target_dir(maven_root, test_module)
+            surefire_dir = target_dir / "surefire-reports"
+            result_xml_path = _get_combined_junit_xml(surefire_dir, candidate_index)
+            return result, result_xml_path
+
+        # Re-extract test classes after filtering
+        test_classes = _get_test_class_names(test_paths, mode=mode)
+        if not test_classes:
+            logger.warning("No valid test classes remain after removing failing generated tests")
+            result_xml_path, empty_result = _get_empty_result(maven_root, test_module)
+            return empty_result, result_xml_path
 
     # Step 2: Get classpath (cached after first call)
     logger.debug("Step 2: Getting classpath")
@@ -1617,10 +1732,39 @@ def _run_maven_tests(
                     mode,
                     result.returncode,
                 )
-                # Log first 50 lines of output to help diagnose compilation errors
-                output_lines = combined_output.split("\n")
-                error_context = "\n".join(output_lines[:50]) if len(output_lines) > 50 else combined_output
-                logger.error("Maven compilation error output:\n%s", error_context)
+                # Log full error output for diagnostics
+                logger.error("Maven compilation error output:\n%s", combined_output)
+
+                # Recovery: remove failing generated test files and retry.
+                # LLM-generated tests may use unavailable dependencies (e.g. Mockito)
+                # or incorrect API calls that prevent compilation. Removing them allows
+                # existing (pre-instrumented) tests to still run and establish a baseline.
+                failing_files = _extract_failing_java_files(combined_output)
+                removed = _remove_failing_generated_tests(failing_files)
+                if removed:
+                    logger.info(
+                        "Removed %d failing generated test file(s), retrying Maven run: %s",
+                        len(removed),
+                        [str(r) for r in removed],
+                    )
+                    # Rebuild test filter without the removed files
+                    filtered_paths = _filter_test_paths_excluding_files(test_paths, removed)
+                    retry_filter = _build_test_filter(filtered_paths, mode=mode)
+                    if retry_filter:
+                        retry_cmd = [c for c in cmd if not c.startswith("-Dtest=")]
+                        retry_cmd.append(f"-Dtest={_validate_test_filter(retry_filter)}")
+                        result = _run_cmd_kill_pg_on_timeout(
+                            retry_cmd, cwd=project_root, env=env, timeout=timeout
+                        )
+                        if result.returncode != 0:
+                            retry_output = (result.stdout or "") + (result.stderr or "")
+                            logger.error(
+                                "Maven still failed after removing %d generated test files: %s",
+                                len(removed),
+                                retry_output[:500],
+                            )
+                    else:
+                        logger.warning("No valid tests remain after removing failing generated tests")
 
         return result
 

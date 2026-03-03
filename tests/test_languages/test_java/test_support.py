@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.languages.base import Language, LanguageSupport
-from codeflash.languages.java.support import JavaSupport, get_java_support
 from codeflash.discovery.functions_to_optimize import get_files_for_language
+from codeflash.languages.base import Language, LanguageSupport
+from codeflash.languages.java.support import get_java_support
 
 
 class TestJavaSupportProtocol:
@@ -143,11 +143,11 @@ class TestJavaDirExcludes:
         return get_java_support()
 
     def test_dir_excludes_contains_apidocs(self, support):
-        """apidocs (generated Javadoc HTML) must not be walked during --all."""
+        """Apidocs (generated Javadoc HTML) must not be walked during --all."""
         assert "apidocs" in support.dir_excludes
 
     def test_dir_excludes_contains_javadoc(self, support):
-        """javadoc directory must not be walked during --all."""
+        """Javadoc directory must not be walked during --all."""
         assert "javadoc" in support.dir_excludes
 
     def test_apidocs_js_files_not_discovered(self, tmp_path: Path):
