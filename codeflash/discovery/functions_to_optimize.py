@@ -865,6 +865,12 @@ def filter_functions(
         if len(tree.children) > 0:
             console.print(tree)
             console.rule()
+        if functions_count == 0 and non_modules_removed_count > 0:
+            logger.warning(
+                f"All {non_modules_removed_count} discovered function(s) were outside module-root '{module_root}'.\n"
+                "This usually means module-root is set incorrectly.\n"
+                "Check that module-root in your config points to the directory containing your source code."
+            )
     return {k: v for k, v in filtered_modified_functions.items() if v}, functions_count
 
 

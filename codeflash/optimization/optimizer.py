@@ -246,7 +246,7 @@ class Optimizer:
 
     def discover_tests(
         self, file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]]
-    ) -> tuple[dict[str, set[FunctionCalledInTest]], int]:
+    ) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
         from codeflash.discovery.discover_unit_tests import discover_unit_tests
 
         console.rule()
@@ -261,7 +261,7 @@ class Optimizer:
         )
         console.rule()
         ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
-        return function_to_tests, num_discovered_tests
+        return function_to_tests, num_discovered_tests, num_discovered_replay_tests
 
     def display_global_ranking(
         self, globally_ranked: list[tuple[Path, FunctionToOptimize]], ranker: FunctionRanker, show_top_n: int = 15
@@ -492,10 +492,24 @@ class Optimizer:
         try:
             ph("cli-optimize-functions-to-optimize", {"num_functions": num_optimizable_functions})
             if num_optimizable_functions == 0:
-                logger.info("No functions found to optimize. Exiting…")
+                logger.info(
+                    "No functions found to optimize. Possible causes:\n"
+                    "  - module-root may not point to your source code directory\n"
+                    "  - The target file(s) may not contain optimizable functions\n"
+                    "  - All functions may be filtered out (check ignored paths, blocklist, etc.)\n"
+                    "Run with --verbose for detailed filtering info, or --show-config to verify your configuration."
+                )
                 return
 
-            function_to_tests, _ = self.discover_tests(file_to_funcs_to_optimize)
+            function_to_tests, num_discovered_tests, num_discovered_replay_tests = self.discover_tests(
+                file_to_funcs_to_optimize
+            )
+            if num_discovered_tests == 0 and num_discovered_replay_tests == 0:
+                logger.warning(
+                    f"No tests were discovered at tests-root '{self.test_cfg.tests_root}'.\n"
+                    "If you have existing tests, check that tests-root in your config points to the correct directory.\n"
+                    "Optimization will continue with AI-generated tests only."
+                )
             if self.args.all and not self.args.subagent:
                 self.functions_checkpoint = CodeflashRunCheckpoint(self.args.module_root)
 

@@ -43,7 +43,7 @@ def sync_perform_optimization(server: CodeflashLanguageServer, cancel_event: thr
 
     devnull_writer = open(os.devnull, "w")  # noqa
     with contextlib.redirect_stdout(devnull_writer):
-        function_to_tests, _num_discovered_tests = server.optimizer.discover_tests(optimizable_funcs)
+        function_to_tests, _num_discovered_tests, _num_replay_tests = server.optimizer.discover_tests(optimizable_funcs)
         function_optimizer.function_to_tests = function_to_tests
 
     abort_if_cancelled(cancel_event)

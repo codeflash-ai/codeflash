@@ -276,7 +276,7 @@ def parse_package_json_config(package_json_path: Path) -> tuple[dict[str, Any], 
         config["module_root"] = str((project_root / Path(detected_module_root)).resolve())
 
     if codeflash_config.get("testsRoot"):
-        config["tests_root"] = str(project_root / Path(codeflash_config["testsRoot"]).resolve())
+        config["tests_root"] = str((project_root / Path(codeflash_config["testsRoot"])).resolve())
 
     # Check for explicit test framework override, otherwise auto-detect
     # Uses "test-framework" to match Python's pyproject.toml convention

@@ -309,7 +309,115 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     if is_LSP_enabled():
         args.all = None
         return args
+    validate_roots(args.module_root, args.tests_root, is_js_ts_project)
     return handle_optimize_all_arg_parsing(args)
+
+
+SKIP_DIRS = frozenset({
+    "node_modules", ".git", "__pycache__", ".venv", "venv", "build", "dist",
+    ".next", ".nuxt", "coverage", ".cache", ".turbo", ".vercel", ".tox",
+    ".mypy_cache", ".pytest_cache", ".ruff_cache", "egg-info", ".eggs",
+})
+
+PYTHON_EXTENSIONS = frozenset({".py"})
+JS_TS_EXTENSIONS = frozenset({".js", ".ts", ".jsx", ".tsx"})
+
+COMMON_SOURCE_DIRS = ("src", "lib", "app", "pkg", "packages")
+COMMON_TEST_DIRS = ("test", "tests", "__tests__", "spec")
+
+
+def _should_skip_dir(dirname: str) -> bool:
+    lower = dirname.lower()
+    if lower in SKIP_DIRS or lower.startswith("."):
+        return True
+    return lower.endswith(".egg-info")
+
+
+def _has_source_files(directory: Path, extensions: frozenset[str]) -> bool:
+    for _root, dirs, files in os.walk(directory):
+        dirs[:] = [d for d in dirs if not _should_skip_dir(d)]
+        for f in files:
+            if any(f.endswith(ext) for ext in extensions):
+                return True
+    return False
+
+
+def _has_test_files(directory: Path, is_js_ts: bool) -> bool:
+    for root, dirs, files in os.walk(directory):
+        dirs[:] = [d for d in dirs if not _should_skip_dir(d)]
+        for f in files:
+            lower = f.lower()
+            if is_js_ts:
+                if any(lower.endswith(p + ext) for p in (".test", ".spec") for ext in (".js", ".ts", ".jsx", ".tsx")):
+                    return True
+            else:
+                if lower.startswith("test_") and lower.endswith(".py"):
+                    return True
+                if lower.endswith("_test.py"):
+                    return True
+        root_name = Path(root).name.lower()
+        if root_name == "__tests__":
+            return True
+    return False
+
+
+def _suggest_module_root(project_root: Path, extensions: frozenset[str], lang_name: str) -> str:
+    candidates = []
+    if _has_source_files(project_root, extensions):
+        candidates.append(str(project_root))
+    for dirname in COMMON_SOURCE_DIRS:
+        candidate = project_root / dirname
+        if candidate.is_dir() and _has_source_files(candidate, extensions):
+            candidates.append(str(candidate))
+    if candidates:
+        paths_list = "\n  ".join(candidates)
+        return f"Directories with {lang_name} source files found at:\n  {paths_list}"
+    return f"No directories with {lang_name} source files were found under {project_root}"
+
+
+def _suggest_tests_root(project_root: Path, is_js_ts: bool, lang_name: str) -> str:
+    candidates = []
+    for dirname in COMMON_TEST_DIRS:
+        candidate = project_root / dirname
+        if candidate.is_dir() and _has_test_files(candidate, is_js_ts):
+            candidates.append(str(candidate))
+    for dirname in COMMON_SOURCE_DIRS:
+        for test_dir in COMMON_TEST_DIRS:
+            candidate = project_root / dirname / test_dir
+            if candidate.is_dir() and _has_test_files(candidate, is_js_ts):
+                candidates.append(str(candidate))
+    if candidates:
+        paths_list = "\n  ".join(candidates)
+        return f"Directories with {lang_name} test files found at:\n  {paths_list}"
+    return f"No directories with {lang_name} test files were found under {project_root}"
+
+
+def validate_roots(module_root: Path, tests_root: Path, is_js_ts_project: bool) -> None:
+    if is_js_ts_project:
+        extensions = JS_TS_EXTENSIONS
+        lang_name = "JavaScript/TypeScript"
+    else:
+        extensions = PYTHON_EXTENSIONS
+        lang_name = "Python"
+
+    if not _has_source_files(module_root, extensions):
+        project_root = module_root.parent
+        suggestion = _suggest_module_root(project_root, extensions, lang_name)
+        exit_with_message(
+            f"module-root '{module_root}' does not contain any {lang_name} source files.\n\n"
+            f"{suggestion}\n\n"
+            f"Set 'module-root' in your config file to the directory containing your source code.",
+            error_on_exit=True,
+        )
+
+    if not _has_test_files(tests_root, is_js_ts_project):
+        project_root = module_root.parent
+        suggestion = _suggest_tests_root(project_root, is_js_ts_project, lang_name)
+        logger.warning(
+            f"tests-root '{tests_root}' does not appear to contain any test files.\n"
+            f"{suggestion}\n"
+            f"Set 'tests-root' in your config file to the directory containing your tests."
+        )
 
 
 def project_root_from_module_root(module_root: Path, pyproject_file_path: Path) -> Path:
