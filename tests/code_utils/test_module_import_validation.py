@@ -170,9 +170,9 @@ class TestTryCorrectModuleRoot:
         project_root: Path,
         original_module_path: str = "pkg.mod",
     ) -> MagicMock:
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
+        from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 
-        optimizer = MagicMock(spec=FunctionOptimizer)
+        optimizer = MagicMock(spec=PythonFunctionOptimizer)
         optimizer.function_to_optimize = MagicMock()
         optimizer.function_to_optimize.file_path = file_path
         optimizer.args = MagicMock()
@@ -183,7 +183,7 @@ class TestTryCorrectModuleRoot:
         return optimizer
 
     def test_returns_false_when_pyproject_not_found(self, tmp_path: Path) -> None:
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
+        from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 
         mod = tmp_path / "pkg" / "mod.py"
         mod.parent.mkdir()
@@ -191,14 +191,14 @@ class TestTryCorrectModuleRoot:
         optimizer = self._make_optimizer_stub(mod, tmp_path / "pkg", tmp_path)
 
         with patch(
-            "codeflash.optimization.function_optimizer.find_pyproject_toml",
+            "codeflash.languages.python.function_optimizer.find_pyproject_toml",
             side_effect=ValueError("not found"),
         ):
-            result = FunctionOptimizer.try_correct_module_root(optimizer)
+            result = PythonFunctionOptimizer.try_correct_module_root(optimizer)
         assert result is False
 
     def test_returns_false_when_inferred_same_as_current(self, tmp_path: Path) -> None:
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
+        from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 
         pkg = tmp_path / "pkg"
         pkg.mkdir()
@@ -212,14 +212,14 @@ class TestTryCorrectModuleRoot:
         optimizer = self._make_optimizer_stub(mod, pkg, tmp_path)
 
         with patch(
-            "codeflash.optimization.function_optimizer.find_pyproject_toml",
+            "codeflash.languages.python.function_optimizer.find_pyproject_toml",
             return_value=pyproject,
         ):
-            result = FunctionOptimizer.try_correct_module_root(optimizer)
+            result = PythonFunctionOptimizer.try_correct_module_root(optimizer)
         assert result is False
 
     def test_corrects_module_root_and_updates_pyproject(self, tmp_path: Path) -> None:
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
+        from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 
         pkg = tmp_path / "pkg"
         sub = pkg / "sub"
@@ -241,30 +241,30 @@ class TestTryCorrectModuleRoot:
 
         with (
             patch(
-                "codeflash.optimization.function_optimizer.find_pyproject_toml",
+                "codeflash.languages.python.function_optimizer.find_pyproject_toml",
                 return_value=pyproject,
             ),
             patch(
-                "codeflash.optimization.function_optimizer.project_root_from_module_root",
+                "codeflash.languages.python.function_optimizer.project_root_from_module_root",
                 return_value=tmp_path,
             ),
             patch(
-                "codeflash.optimization.function_optimizer.module_name_from_file_path",
+                "codeflash.languages.python.function_optimizer.module_name_from_file_path",
                 return_value="pkg.sub.mod",
             ),
             patch(
-                "codeflash.optimization.function_optimizer.validate_module_import",
+                "codeflash.languages.python.function_optimizer.validate_module_import",
                 return_value=(True, ""),
             ),
         ):
-            result = FunctionOptimizer.try_correct_module_root(optimizer)
+            result = PythonFunctionOptimizer.try_correct_module_root(optimizer)
 
         assert result is True
         data = tomlkit.parse(pyproject.read_text(encoding="utf-8"))
         assert data["tool"]["codeflash"]["module-root"] == os.path.relpath(pkg.resolve(), tmp_path)
 
     def test_returns_false_when_import_validation_fails(self, tmp_path: Path) -> None:
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
+        from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 
         pkg = tmp_path / "pkg"
         sub = pkg / "sub"
@@ -285,28 +285,28 @@ class TestTryCorrectModuleRoot:
 
         with (
             patch(
-                "codeflash.optimization.function_optimizer.find_pyproject_toml",
+                "codeflash.languages.python.function_optimizer.find_pyproject_toml",
                 return_value=pyproject,
             ),
             patch(
-                "codeflash.optimization.function_optimizer.project_root_from_module_root",
+                "codeflash.languages.python.function_optimizer.project_root_from_module_root",
                 return_value=tmp_path,
             ),
             patch(
-                "codeflash.optimization.function_optimizer.module_name_from_file_path",
+                "codeflash.languages.python.function_optimizer.module_name_from_file_path",
                 return_value="pkg.sub.mod",
             ),
             patch(
-                "codeflash.optimization.function_optimizer.validate_module_import",
+                "codeflash.languages.python.function_optimizer.validate_module_import",
                 return_value=(False, "Module not found"),
             ),
         ):
-            result = FunctionOptimizer.try_correct_module_root(optimizer)
+            result = PythonFunctionOptimizer.try_correct_module_root(optimizer)
 
         assert result is False
 
     def test_returns_false_when_module_name_raises(self, tmp_path: Path) -> None:
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
+        from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 
         pkg = tmp_path / "pkg"
         sub = pkg / "sub"
@@ -327,18 +327,18 @@ class TestTryCorrectModuleRoot:
 
         with (
             patch(
-                "codeflash.optimization.function_optimizer.find_pyproject_toml",
+                "codeflash.languages.python.function_optimizer.find_pyproject_toml",
                 return_value=pyproject,
             ),
             patch(
-                "codeflash.optimization.function_optimizer.project_root_from_module_root",
+                "codeflash.languages.python.function_optimizer.project_root_from_module_root",
                 return_value=tmp_path,
             ),
             patch(
-                "codeflash.optimization.function_optimizer.module_name_from_file_path",
+                "codeflash.languages.python.function_optimizer.module_name_from_file_path",
                 side_effect=ValueError("cannot derive module name"),
             ),
         ):
-            result = FunctionOptimizer.try_correct_module_root(optimizer)
+            result = PythonFunctionOptimizer.try_correct_module_root(optimizer)
 
         assert result is False
