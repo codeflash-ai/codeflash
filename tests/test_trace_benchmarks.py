@@ -17,6 +17,7 @@ def test_trace_benchmarks() -> None:
     replay_tests_dir = benchmarks_root / "codeflash_replay_tests"
     tests_root = project_root / "tests"
     output_file = (benchmarks_root / Path("test_trace_benchmarks.trace")).resolve()
+    conn: sqlite3.Connection | None = None
     trace_benchmarks_pytest(benchmarks_root, tests_root, project_root, output_file)
     assert output_file.exists()
     try:
