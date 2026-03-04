@@ -24,9 +24,19 @@ public class FibonacciTest {
         original = {"FibonacciTest.testFibonacci#L8": 2_890_000}
         optimized = {"FibonacciTest.testFibonacci#L8": 26_200}
         result = add_runtime_comments(source, original, optimized)
-        lines = result.splitlines()
-        assert "// 2.89ms ->" in lines[7]
-        assert "faster" in lines[7]
+        expected = """\
+package com.example;
+
+import org.junit.jupiter.api.Test;
+
+public class FibonacciTest {
+    @Test
+    void testFibonacci() {
+        Fibonacci.fibonacci(10); // 2.89ms -> 26.2\u03bcs (10931% faster)
+    }
+}
+"""
+        assert result == expected
 
     def test_multiple_calls_different_lines(self) -> None:
         source = """\
@@ -45,9 +55,20 @@ public class FibTest {
         original = {"FibTest.testMultiple#L8": 1_000_000, "FibTest.testMultiple#L9": 5_000_000}
         optimized = {"FibTest.testMultiple#L8": 100_000, "FibTest.testMultiple#L9": 500_000}
         result = add_runtime_comments(source, original, optimized)
-        lines = result.splitlines()
-        assert "//" in lines[7]
-        assert "//" in lines[8]
+        expected = """\
+package com.example;
+
+import org.junit.jupiter.api.Test;
+
+public class FibTest {
+    @Test
+    void testMultiple() {
+        Fibonacci.fibonacci(5); // 1.00ms -> 100\u03bcs (900% faster)
+        Fibonacci.fibonacci(10); // 5.00ms -> 500\u03bcs (900% faster)
+    }
+}
+"""
+        assert result == expected
 
     def test_multiple_test_methods(self) -> None:
         source = """\
@@ -70,9 +91,24 @@ public class FibTest {
         original = {"FibTest.testSmall#L8": 500_000, "FibTest.testLarge#L13": 10_000_000}
         optimized = {"FibTest.testSmall#L8": 50_000, "FibTest.testLarge#L13": 1_000_000}
         result = add_runtime_comments(source, original, optimized)
-        lines = result.splitlines()
-        assert "//" in lines[7]
-        assert "//" in lines[12]
+        expected = """\
+package com.example;
+
+import org.junit.jupiter.api.Test;
+
+public class FibTest {
+    @Test
+    void testSmall() {
+        Fibonacci.fibonacci(5); // 500\u03bcs -> 50.0\u03bcs (900% faster)
+    }
+
+    @Test
+    void testLarge() {
+        Fibonacci.fibonacci(100); // 10.0ms -> 1.00ms (900% faster)
+    }
+}
+"""
+        assert result == expected
 
     def test_no_runtime_data_unchanged(self) -> None:
         source = "public class Test {}\n"
@@ -117,9 +153,19 @@ public class FibTest {
         original = {"FibTest.test#L8": 3_000_000}  # sum of both calls
         optimized = {"FibTest.test#L8": 300_000}
         result = add_runtime_comments(source, original, optimized)
-        lines = result.splitlines()
-        assert "//" in lines[7]
-        assert "faster" in lines[7]
+        expected = """\
+package com.example;
+
+import org.junit.jupiter.api.Test;
+
+public class FibTest {
+    @Test
+    void test() {
+        Fibonacci.fibonacci(10); // 3.00ms -> 300\u03bcs (900% faster)
+    }
+}
+"""
+        assert result == expected
 
 
 class TestBuildRuntimeMap:
