@@ -9,7 +9,11 @@ import tomlkit
 
 from codeflash.cli_cmds.cli import project_root_from_module_root
 from codeflash.cli_cmds.console import console, logger
-from codeflash.code_utils.code_utils import infer_module_root_from_file, module_name_from_file_path, validate_module_import
+from codeflash.code_utils.code_utils import (
+    infer_module_root_from_file,
+    module_name_from_file_path,
+    validate_module_import,
+)
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
 from codeflash.code_utils.config_parser import find_pyproject_toml
 from codeflash.either import Failure, Success
@@ -54,6 +58,9 @@ class PythonFunctionOptimizer(FunctionOptimizer):
         try:
             pyproject_path = find_pyproject_toml(None)
         except ValueError:
+            return False
+
+        if self.args is None:
             return False
 
         pyproject_dir = pyproject_path.parent
