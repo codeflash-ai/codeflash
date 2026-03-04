@@ -907,15 +907,17 @@ class TestBundledJestReporter:
 
             # Create a Node.js script that exercises the reporter with mock data
             test_script = Path(tmpdir) / "test_reporter.js"
+            reporter_path_js = reporter_path.as_posix()
+            output_file_js = output_file.as_posix()
             test_script.write_text(f"""
 // Set env vars BEFORE requiring reporter (matches real Jest behavior)
-process.env.JEST_JUNIT_OUTPUT_FILE = '{output_file}';
+process.env.JEST_JUNIT_OUTPUT_FILE = '{output_file_js}';
 process.env.JEST_JUNIT_CLASSNAME = '{{filepath}}';
 process.env.JEST_JUNIT_SUITE_NAME = '{{filepath}}';
 process.env.JEST_JUNIT_ADD_FILE_ATTRIBUTE = 'true';
 process.env.JEST_JUNIT_INCLUDE_CONSOLE_OUTPUT = 'true';
 
-const Reporter = require('{reporter_path}');
+const Reporter = require('{reporter_path_js}');
 
 // Mock Jest globalConfig
 const globalConfig = {{ rootDir: '/tmp/project' }};
@@ -960,7 +962,7 @@ reporter.onTestFileResult(null, results.testResults[0], null);
 reporter.onRunComplete([], results);
 
 console.log('OK');
-""")
+""", encoding="utf-8")
 
             result = subprocess.run(
                 ["node", str(test_script)],
