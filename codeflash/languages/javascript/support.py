@@ -23,7 +23,8 @@ if TYPE_CHECKING:
 
     from codeflash.languages.base import ReferenceInfo
     from codeflash.languages.javascript.treesitter import TypeDefinition
-    from codeflash.models.models import GeneratedTestsList, InvocationId
+    from codeflash.models.models import GeneratedTestsList, InvocationId, ValidCode
+    from codeflash.verification.verification_utils import TestConfig
 
 logger = logging.getLogger(__name__)
 
