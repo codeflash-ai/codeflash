@@ -40,6 +40,8 @@ class JavaScriptFunctionOptimizer(FunctionOptimizer):
 
         Returns True if the module root was corrected, False if no correction was needed.
         """
+        if self.args is None:
+            return False
         source_file = self.function_to_optimize.file_path
         project_root = self.project_root
         module_root = Path(self.args.module_root).resolve()
@@ -88,6 +90,9 @@ class JavaScriptFunctionOptimizer(FunctionOptimizer):
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         self.try_correct_module_root()
 
+        if self.args is None:
+            return super().can_be_optimized()
+
         source_file = self.function_to_optimize.file_path
         project_root = self.project_root
         module_root = Path(self.args.module_root).resolve()
@@ -100,7 +105,7 @@ class JavaScriptFunctionOptimizer(FunctionOptimizer):
 
     def get_code_optimization_context(self) -> Result[CodeOptimizationContext, str]:
         from codeflash.languages import get_language_support
-        from codeflash.languages.base import Language
+        from codeflash.languages.language_enum import Language
 
         language = Language(self.function_to_optimize.language)
         lang_support = get_language_support(language)
