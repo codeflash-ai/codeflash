@@ -23,7 +23,8 @@ if TYPE_CHECKING:
 
     from codeflash.languages.base import ReferenceInfo
     from codeflash.languages.javascript.treesitter import TypeDefinition
-    from codeflash.models.models import GeneratedTestsList, InvocationId
+    from codeflash.models.models import GeneratedTestsList, InvocationId, ValidCode
+    from codeflash.verification.verification_utils import TestConfig
 
 logger = logging.getLogger(__name__)
 
@@ -1787,12 +1788,32 @@ class JavaScriptSupport:
             disable_ts_check,
             inject_test_globals,
             normalize_generated_tests_imports,
+            sanitize_mocha_imports,
         )
         from codeflash.languages.javascript.module_system import detect_module_system
+        from codeflash.models.models import GeneratedTests as GeneratedTestsModel
+        from codeflash.models.models import GeneratedTestsList
+
+        # For Mocha, strip vitest/jest/require('mocha') imports the AI may have generated
+        if test_framework == "mocha":
+            sanitized = []
+            for test in generated_tests.generated_tests:
+                sanitized.append(
+                    GeneratedTestsModel(
+                        generated_original_test_source=sanitize_mocha_imports(test.generated_original_test_source),
+                        instrumented_behavior_test_source=sanitize_mocha_imports(
+                            test.instrumented_behavior_test_source
+                        ),
+                        instrumented_perf_test_source=sanitize_mocha_imports(test.instrumented_perf_test_source),
+                        behavior_file_path=test.behavior_file_path,
+                        perf_file_path=test.perf_file_path,
+                    )
+                )
+            generated_tests = GeneratedTestsList(generated_tests=sanitized)
 
         module_system = detect_module_system(project_root, source_file_path)
-        if module_system == "esm":
-            generated_tests = inject_test_globals(generated_tests, test_framework)
+        if module_system == "esm" or test_framework == "mocha":
+            generated_tests = inject_test_globals(generated_tests, test_framework, module_system)
         if self.language == Language.TYPESCRIPT:
             generated_tests = disable_ts_check(generated_tests)
         return normalize_generated_tests_imports(generated_tests)
@@ -1908,6 +1929,99 @@ class JavaScriptSupport:
         from codeflash.languages.javascript.comparator import compare_test_results
 
         return compare_test_results(original_results_path, candidate_results_path, project_root=project_root)
+
+    @property
+    def function_optimizer_class(self) -> type:
+        from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
+
+        return JavaScriptFunctionOptimizer
+
+    def prepare_module(
+        self, module_code: str, module_path: Path, project_root: Path
+    ) -> tuple[dict[Path, ValidCode], None]:
+        from codeflash.languages.javascript.optimizer import prepare_javascript_module
+
+        return prepare_javascript_module(module_code, module_path)
+
+    def setup_test_config(self, test_cfg: TestConfig, file_path: Path) -> None:
+        from codeflash.languages.javascript.optimizer import verify_js_requirements
+        from codeflash.languages.javascript.test_runner import find_node_project_root
+
+        test_cfg.js_project_root = find_node_project_root(file_path)
+        verify_js_requirements(test_cfg)
+
+    def adjust_test_config_for_discovery(self, test_cfg: TestConfig) -> None:
+        test_cfg.tests_project_rootdir = test_cfg.tests_root
+
+    def detect_module_system(self, project_root: Path, source_file: Path) -> str | None:
+        from codeflash.languages.javascript.module_system import detect_module_system
+
+        return detect_module_system(project_root, source_file)
+
+    def process_generated_test_strings(
+        self,
+        generated_test_source: str,
+        instrumented_behavior_test_source: str,
+        instrumented_perf_test_source: str,
+        function_to_optimize: Any,
+        test_path: Path,
+        test_cfg: Any,
+        project_module_system: str | None,
+    ) -> tuple[str, str, str]:
+        from codeflash.languages.javascript.instrument import (
+            TestingMode,
+            fix_imports_inside_test_blocks,
+            fix_jest_mock_paths,
+            instrument_generated_js_test,
+            validate_and_fix_import_style,
+        )
+        from codeflash.languages.javascript.module_system import (
+            ensure_module_system_compatibility,
+            ensure_vitest_imports,
+        )
+
+        source_file = Path(function_to_optimize.file_path)
+
+        # Fix import statements that appear inside test blocks (invalid JS syntax)
+        generated_test_source = fix_imports_inside_test_blocks(generated_test_source)
+
+        # Fix relative paths in jest.mock() calls
+        generated_test_source = fix_jest_mock_paths(
+            generated_test_source, test_path, source_file, test_cfg.tests_project_rootdir
+        )
+
+        # Validate and fix import styles (default vs named exports)
+        generated_test_source = validate_and_fix_import_style(
+            generated_test_source, source_file, function_to_optimize.function_name
+        )
+
+        # Convert module system if needed (e.g., CommonJS -> ESM for ESM projects)
+        generated_test_source = ensure_module_system_compatibility(
+            generated_test_source, project_module_system, test_cfg.tests_project_rootdir
+        )
+
+        # Ensure vitest imports are present when using vitest framework
+        generated_test_source = ensure_vitest_imports(generated_test_source, test_cfg.test_framework)
+
+        # For Mocha: convert expect()/test() to assert/it() BEFORE instrumentation
+        # to prevent instrumentation from breaking Chai-style assertion chains
+        if test_cfg.test_framework == "mocha":
+            from codeflash.languages.javascript.edit_tests import sanitize_mocha_imports
+
+            generated_test_source = sanitize_mocha_imports(generated_test_source)
+
+        # Instrument for behavior verification (writes to SQLite)
+        instrumented_behavior_test_source = instrument_generated_js_test(
+            test_code=generated_test_source, function_to_optimize=function_to_optimize, mode=TestingMode.BEHAVIOR
+        )
+
+        # Instrument for performance measurement (prints to stdout)
+        instrumented_perf_test_source = instrument_generated_js_test(
+            test_code=generated_test_source, function_to_optimize=function_to_optimize, mode=TestingMode.PERFORMANCE
+        )
+
+        logger.debug("Instrumented JS/TS tests locally for %s", function_to_optimize.function_name)
+        return generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source
 
     # === Configuration ===
 
@@ -2264,6 +2378,23 @@ class JavaScriptSupport:
                 candidate_index=candidate_index,
             )
 
+        if framework == "mocha":
+            from codeflash.languages.javascript.mocha_runner import run_mocha_behavioral_tests
+
+            return run_mocha_behavioral_tests(
+                test_paths=test_paths,
+                test_env=test_env,
+                cwd=cwd,
+                timeout=timeout,
+                project_root=project_root,
+                enable_coverage=enable_coverage,
+                candidate_index=candidate_index,
+            )
+
+        if framework not in ("jest", "vitest", "mocha"):
+            msg = f"Test framework '{framework}' is not yet supported. Supported frameworks: jest, vitest, mocha."
+            raise NotImplementedError(msg)
+
         from codeflash.languages.javascript.test_runner import run_jest_behavioral_tests
 
         return run_jest_behavioral_tests(
@@ -2332,6 +2463,25 @@ class JavaScriptSupport:
                 target_duration_ms=int(target_duration_seconds * 1000),
             )
 
+        if framework == "mocha":
+            from codeflash.languages.javascript.mocha_runner import run_mocha_benchmarking_tests
+
+            logger.debug("Dispatching to run_mocha_benchmarking_tests")
+            return run_mocha_benchmarking_tests(
+                test_paths=test_paths,
+                test_env=test_env,
+                cwd=cwd,
+                timeout=timeout,
+                project_root=project_root,
+                min_loops=min_loops,
+                max_loops=effective_max_loops,
+                target_duration_ms=int(target_duration_seconds * 1000),
+            )
+
+        if framework not in ("jest", "vitest", "mocha"):
+            msg = f"Test framework '{framework}' is not yet supported. Supported frameworks: jest, vitest, mocha."
+            raise NotImplementedError(msg)
+
         from codeflash.languages.javascript.test_runner import run_jest_benchmarking_tests
 
         return run_jest_benchmarking_tests(
@@ -2385,6 +2535,22 @@ class JavaScriptSupport:
                 project_root=project_root,
                 line_profile_output_file=line_profile_output_file,
             )
+
+        if framework == "mocha":
+            from codeflash.languages.javascript.mocha_runner import run_mocha_line_profile_tests
+
+            return run_mocha_line_profile_tests(
+                test_paths=test_paths,
+                test_env=test_env,
+                cwd=cwd,
+                timeout=timeout,
+                project_root=project_root,
+                line_profile_output_file=line_profile_output_file,
+            )
+
+        if framework not in ("jest", "vitest", "mocha"):
+            msg = f"Test framework '{framework}' is not yet supported. Supported frameworks: jest, vitest, mocha."
+            raise NotImplementedError(msg)
 
         from codeflash.languages.javascript.test_runner import run_jest_line_profile_tests
 

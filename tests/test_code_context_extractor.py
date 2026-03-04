@@ -104,6 +104,7 @@ def test_code_replacement10() -> None:
 ```python:{file_path.relative_to(file_path.parent)}
 from __future__ import annotations
 
+
 class HelperClass:
     def __init__(self, name):
         self.name = name
@@ -163,6 +164,7 @@ def test_class_method_dependencies() -> None:
 ```python:{file_path.relative_to(file_path.parent)}
 from __future__ import annotations
 from collections import defaultdict
+
 
 class Graph:
     def __init__(self, vertices):
@@ -243,6 +245,7 @@ def test_bubble_sort_helper() -> None:
 ```python:code_to_optimize/code_directories/retriever/bubble_sort_with_math.py
 import math
 
+
 def sorter(arr):
     arr.sort()
     x = math.sqrt(2)
@@ -251,6 +254,7 @@ def sorter(arr):
 ```
 ```python:code_to_optimize/code_directories/retriever/bubble_sort_imported.py
 from bubble_sort_with_math import sorter
+
 
 def sort_from_another_file(arr):
     sorted_arr = sorter(arr)
@@ -1180,6 +1184,7 @@ API_URL = "https://api.example.com/data"
 ```python:{path_to_utils.relative_to(project_root)}
 import math
 
+
 class DataProcessor:
 
     def __init__(self, default_prefix: str = "PREFIX_"):
@@ -1199,6 +1204,7 @@ class DataProcessor:
 import requests
 from globals import API_URL
 from utils import DataProcessor
+
 
 def fetch_and_process_data():
     # Use the global variable for the request
@@ -1279,6 +1285,7 @@ API_URL = "https://api.example.com/data"
 import math
 from transform_utils import DataTransformer
 
+
 class DataProcessor:
 
     def __init__(self, default_prefix: str = "PREFIX_"):
@@ -1298,6 +1305,7 @@ class DataProcessor:
 import requests
 from globals import API_URL
 from utils import DataProcessor
+
 
 def fetch_and_transform_data():
     # Use the global variable for the request
@@ -1387,6 +1395,7 @@ class DataTransformer:
 import math
 from transform_utils import DataTransformer
 
+
 class DataProcessor:
 
     def __init__(self, default_prefix: str = "PREFIX_"):
@@ -1466,6 +1475,7 @@ class DataTransformer:
 ```python:{path_to_utils.relative_to(project_root)}
 import math
 from transform_utils import DataTransformer
+
 
 class DataProcessor:
 
@@ -1598,6 +1608,7 @@ def test_repo_helper_circular_dependency() -> None:
 import math
 from transform_utils import DataTransformer
 
+
 class DataProcessor:
 
     def __init__(self, default_prefix: str = "PREFIX_"):
@@ -1611,6 +1622,7 @@ class DataProcessor:
 ```
 ```python:{path_to_transform_utils.relative_to(project_root)}
 from code_to_optimize.code_directories.retriever.utils import DataProcessor
+
 
 class DataTransformer:
     def __init__(self):
@@ -1744,6 +1756,7 @@ def test_direct_module_import() -> None:
 import math
 from transform_utils import DataTransformer
 
+
 class DataProcessor:
     \"\"\"A class for processing data.\"\"\"
 
@@ -1786,6 +1799,7 @@ def function_to_optimize():
 import requests
 from globals import API_URL
 from utils import DataProcessor
+
 
 def fetch_and_transform_data():
     # Use the global variable for the request
@@ -4076,6 +4090,7 @@ def reify_channel_message(data: dict) -> MessageIn:
 import dataclasses
 import enum
 import typing as t
+
 
 class MessageKind(enum.StrEnum):
     ASK_FOR_CLIPBOARD_RESPONSE = "ask-for-clipboard-response"

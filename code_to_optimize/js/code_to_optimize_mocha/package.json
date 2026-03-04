@@ -1,0 +1,13 @@
+{
+  "name": "code-to-optimize-mocha",
+  "version": "1.0.0",
+  "description": "Mocha CJS JavaScript test project for Codeflash E2E testing",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha"
+  },
+  "devDependencies": {
+    "codeflash": "file:../../../packages/codeflash",
+    "mocha": "^10.7.0"
+  }
+}

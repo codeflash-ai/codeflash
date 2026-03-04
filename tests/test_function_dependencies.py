@@ -163,6 +163,7 @@ def test_class_method_dependencies() -> None:
         == """# file: test_function_dependencies.py
 from collections import defaultdict
 
+
 class Graph:
     def __init__(self, vertices):
         self.graph = defaultdict(list)
