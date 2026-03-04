@@ -979,6 +979,7 @@ class LanguageSupport(Protocol):
         """
         ...
 
+
 def convert_parents_to_tuple(parents: list | tuple) -> tuple[FunctionParent, ...]:
     """Convert a list of parent objects to a tuple of FunctionParent.
 
