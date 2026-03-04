@@ -156,6 +156,22 @@ class InitDecorator(ast.NodeTransformer):
                     self.inserted_decorator = True
 
         if not has_init:
+            # Skip dataclasses — their __init__ is auto-generated at class creation time and isn't in the AST.
+            # The synthetic __init__ with super().__init__(*args, **kwargs) overrides it and fails because
+            # object.__init__() doesn't accept the dataclass field kwargs.
+            # TODO: support by saving a reference to the generated __init__ before overriding, e.g.
+            # _orig_init = ClassName.__init__; then calling _orig_init(self, *args, **kwargs) in the wrapper
+            for dec in node.decorator_list:
+                dec_name = None
+                if isinstance(dec, ast.Name):
+                    dec_name = dec.id
+                elif isinstance(dec, ast.Call) and isinstance(dec.func, ast.Name):
+                    dec_name = dec.func.id
+                elif isinstance(dec, ast.Attribute):
+                    dec_name = dec.attr
+                if dec_name == "dataclass":
+                    return node
+
             # Create super().__init__(*args, **kwargs) call (use prebuilt AST fragments)
             super_call = ast.Expr(
                 value=ast.Call(func=self._super_func, args=[self._super_starred], keywords=[self._super_kwarg])

@@ -354,3 +354,94 @@ class AnotherHelperClass:
         test_path.unlink(missing_ok=True)
         helper1_path.unlink(missing_ok=True)
         helper2_path.unlink(missing_ok=True)
+
+
+def test_dataclass_no_init_skipped():
+    """Dataclasses have auto-generated __init__ not visible in AST. Instrumentation should skip them."""
+    original_code = """
+from dataclasses import dataclass
+
+@dataclass
+class MyDataClass:
+    x: int
+    y: str
+
+    def target_function(self):
+        return self.x + len(self.y)
+"""
+    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
+    test_path.write_text(original_code)
+
+    function = FunctionToOptimize(
+        function_name="target_function", file_path=test_path, parents=[FunctionParent(type="ClassDef", name="MyDataClass")]
+    )
+
+    try:
+        instrument_codeflash_capture(function, {}, test_path.parent)
+        modified_code = test_path.read_text()
+        # Dataclass should NOT get a synthetic __init__ injected
+        assert "super().__init__" not in modified_code
+        assert "codeflash_capture" not in modified_code
+    finally:
+        test_path.unlink(missing_ok=True)
+
+
+def test_dataclass_with_call_syntax_skipped():
+    """@dataclass(frozen=True) should also be skipped."""
+    original_code = """
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class FrozenData:
+    value: int
+
+    def compute(self):
+        return self.value * 2
+"""
+    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
+    test_path.write_text(original_code)
+
+    function = FunctionToOptimize(
+        function_name="compute", file_path=test_path, parents=[FunctionParent(type="ClassDef", name="FrozenData")]
+    )
+
+    try:
+        instrument_codeflash_capture(function, {}, test_path.parent)
+        modified_code = test_path.read_text()
+        assert "super().__init__" not in modified_code
+        assert "codeflash_capture" not in modified_code
+    finally:
+        test_path.unlink(missing_ok=True)
+
+
+def test_dataclass_with_explicit_init_still_instrumented():
+    """A dataclass that defines its own __init__ should still be instrumented normally."""
+    original_code = """
+from dataclasses import dataclass
+
+@dataclass
+class CustomInit:
+    x: int
+
+    def __init__(self, x: int):
+        self.x = x * 2
+
+    def target(self):
+        return self.x
+"""
+    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
+    test_path.write_text(original_code)
+
+    function = FunctionToOptimize(
+        function_name="target", file_path=test_path, parents=[FunctionParent(type="ClassDef", name="CustomInit")]
+    )
+
+    try:
+        instrument_codeflash_capture(function, {}, test_path.parent)
+        modified_code = test_path.read_text()
+        # Should be instrumented because it has an explicit __init__
+        assert "codeflash_capture" in modified_code
+        # Should NOT have super().__init__ injected (it has its own __init__)
+        assert "super().__init__" not in modified_code
+    finally:
+        test_path.unlink(missing_ok=True)
