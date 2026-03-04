@@ -251,10 +251,10 @@ class Optimizer:
         original_module_path: Path | None = None,
         call_graph: DependencyResolver | None = None,
     ) -> FunctionOptimizer | None:
+        from codeflash.languages.current import current_language_support
         from codeflash.languages.python.static_analysis.static_analysis import (
             get_first_top_level_function_or_method_ast,
         )
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
 
         if function_to_optimize_ast is None and original_module_ast is not None:
             function_to_optimize_ast = get_first_top_level_function_or_method_ast(
@@ -279,7 +279,8 @@ class Optimizer:
         ):
             function_specific_timings = function_benchmark_timings[qualified_name_w_module]
 
-        return FunctionOptimizer(
+        cls = current_language_support().function_optimizer_class
+        return cls(
             function_to_optimize=function_to_optimize,
             test_cfg=self.test_cfg,
             function_to_optimize_source_code=function_to_optimize_source_code,

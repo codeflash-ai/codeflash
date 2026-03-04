@@ -471,6 +471,12 @@ class JavaSupport(LanguageSupport):
             inner_iterations,
         )
 
+    @property
+    def function_optimizer_class(self) -> type:
+        from codeflash.languages.java.function_optimizer import JavaFunctionOptimizer
+
+        return JavaFunctionOptimizer
+
     def run_line_profile_tests(
         self,
         test_paths: Any,
