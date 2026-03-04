@@ -944,9 +944,12 @@ class FunctionOptimizer:
                         perf_source,
                     )
                     if display_source:
+                        # Display source has the original (non-instrumented) class name
+                        original_class = behavior_class.replace("__perfinstrumented", "")
+                        new_original_class = f"{original_class}_{index}"
                         modified_display_source = re.sub(
-                            rf"\b{re.escape(behavior_class)}\b",
-                            new_behavior_class,
+                            rf"\b{re.escape(original_class)}\b",
+                            new_original_class,
                             display_source,
                         )
                     logger.debug(f"[JAVA] Renamed duplicate test class from {behavior_class} to {new_behavior_class}")
