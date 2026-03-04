@@ -172,12 +172,22 @@ def parse_jest_test_xml(
             if global_stdout:
                 marker_count = len(jest_start_pattern.findall(global_stdout))
                 if marker_count > 0:
-                    logger.debug(f"Found {marker_count} timing start markers in subprocess stdout")
+                    logger.debug(f"Found {marker_count} timing start markers in Jest stdout")
+                else:
+                    logger.debug(f"No timing start markers found in Jest stdout (len={len(global_stdout)})")
+                # Check for END markers with duration (perf test markers)
                 end_marker_count = len(jest_end_pattern.findall(global_stdout))
                 if end_marker_count > 0:
-                    logger.debug(f"Found {end_marker_count} END timing markers with duration in subprocess stdout")
+                    logger.debug(
+                        f"[PERF-DEBUG] Found {end_marker_count} END timing markers with duration in Jest stdout"
+                    )
+                    # Sample a few markers to verify loop indices
+                    end_samples = list(jest_end_pattern.finditer(global_stdout))[:5]
+                    for sample in end_samples:
+                        groups = sample.groups()
+                        logger.debug(f"[PERF-DEBUG] Sample END marker: loopIndex={groups[3]}, duration={groups[5]}")
                 else:
-                    logger.debug(f"No END markers found in subprocess stdout (len={len(global_stdout)})")
+                    logger.debug("[PERF-DEBUG] No END markers with duration found in Jest stdout")
         except (AttributeError, UnicodeDecodeError):
             global_stdout = ""
 
@@ -205,10 +215,6 @@ def parse_jest_test_xml(
             # Key: (testName, testName2, funcName, loopIndex, lineId)
             key = match.groups()[:5]
             end_matches_dict[key] = match
-        logger.debug(
-            f"Suite {suite_count}: combined_stdout len={len(combined_stdout)}, "
-            f"start_matches={len(start_matches)}, end_matches={len(end_matches_dict)}"
-        )
 
         # Debug: log suite-level END marker parsing for perf tests
         if end_matches_dict:
@@ -365,25 +371,6 @@ def parse_jest_test_xml(
                     # end_key is (module, testName, funcName, loopIndex, invocationId)
                     if len(end_key) >= 2 and sanitized_test_name in end_key[1]:
                         matching_ends_direct.append(end_match)
-
-                # Fallback: If no matches found but END markers exist with "unknown" test name
-                # (happens in Vitest where beforeEach hook doesn't fire to set currentTestName),
-                # match ALL "unknown" markers to this testcase. Use a consumed set to avoid
-                # assigning the same marker to multiple testcases.
-                if not matching_ends_direct and end_matches_dict:
-                    unknown_markers = [(k, m) for k, m in end_matches_dict.items() if len(k) >= 2 and k[1] == "unknown"]
-                    if unknown_markers:
-                        # Assign all unconsumed unknown markers to this testcase
-                        for _, end_match in unknown_markers:
-                            matching_ends_direct.append(end_match)
-                        # Remove consumed markers so they aren't double-assigned to other testcases
-                        for end_key, _ in unknown_markers:
-                            end_matches_dict.pop(end_key, None)
-                        logger.debug(
-                            f"[PERF-UNKNOWN-MATCH] Testcase '{test_name[:40]}': matched {len(matching_ends_direct)} "
-                            f"'unknown' END markers (Vitest fallback)"
-                        )
-
                 # Debug: log matching results for perf tests
                 if matching_ends_direct:
                     loop_indices = [int(m.groups()[3]) if m.groups()[3].isdigit() else 1 for m in matching_ends_direct]
