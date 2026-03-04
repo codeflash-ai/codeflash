@@ -1,11 +1,6 @@
 """Tests for the regex patterns and string matching in parse_test_output.py."""
 
-from codeflash.verification.parse_test_output import (
-    matches_re_end,
-    matches_re_start,
-    parse_test_failures_from_stdout,
-)
-
+from codeflash.verification.parse_test_output import matches_re_end, matches_re_start, parse_test_failures_from_stdout
 
 # --- matches_re_start tests ---
 
@@ -42,10 +37,7 @@ class TestMatchesReStart:
         assert m.groups() == ("mod", "", "test_fn", "f", "1", "x")
 
     def test_multiple_matches(self) -> None:
-        s = (
-            "!$######m1:C1.fn1:t1:1:a######$!\n"
-            "!$######m2:fn2:t2:2:b######$!\n"
-        )
+        s = "!$######m1:C1.fn1:t1:1:a######$!\n!$######m2:fn2:t2:2:b######$!\n"
         matches = list(matches_re_start.finditer(s))
         assert len(matches) == 2
         assert matches[0].groups() == ("m1", "C1.", "fn1", "t1", "1", "a")
@@ -170,20 +162,12 @@ class TestParseTestFailuresHeader:
 
     def test_word_failures_without_equals_is_not_matched(self) -> None:
         """'FAILURES' without surrounding '=' signs should not trigger the header detection."""
-        stdout = (
-            "FAILURES detected in module\n"
-            "_______ test_baz _______\n"
-            "\n"
-            "    assert False\n"
-        )
+        stdout = "FAILURES detected in module\n_______ test_baz _______\n\n    assert False\n"
         result = parse_test_failures_from_stdout(stdout)
         assert result == {}
 
     def test_failures_in_test_output_not_matched(self) -> None:
         """A test printing 'FAILURES' (no = signs) should not trigger header detection."""
-        stdout = (
-            "Testing FAILURES handling\n"
-            "All good\n"
-        )
+        stdout = "Testing FAILURES handling\nAll good\n"
         result = parse_test_failures_from_stdout(stdout)
         assert result == {}

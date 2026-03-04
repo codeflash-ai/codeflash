@@ -8,12 +8,13 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import Language
+from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
 from codeflash.languages.javascript.support import JavaScriptSupport, TypeScriptSupport
 from codeflash.languages.registry import get_language_support
 from codeflash.models.models import FunctionParent
-from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"

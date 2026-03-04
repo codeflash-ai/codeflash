@@ -304,7 +304,9 @@ def test_conditional_class_definitions() -> None:
                 print("other")
     """
 
-    output = parse_code_and_prune_cst(dedent(code), CodeContextType.TESTGEN, {"PlatformClass.target_method"}, set()).code
+    output = parse_code_and_prune_cst(
+        dedent(code), CodeContextType.TESTGEN, {"PlatformClass.target_method"}, set()
+    ).code
     assert dedent(expected).strip() == output.strip()
 
 

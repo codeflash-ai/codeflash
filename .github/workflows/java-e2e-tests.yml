@@ -1,0 +1,76 @@
+name: Java E2E Tests
+
+on:
+  push:
+    branches:
+      - main
+      - omni-java
+    paths:
+      - 'codeflash/languages/java/**'
+      - 'tests/test_languages/test_java*.py'
+      - 'code_to_optimize/java/**'
+      - '.github/workflows/java-e2e-tests.yml'
+  pull_request:
+    paths:
+      - 'codeflash/languages/java/**'
+      - 'tests/test_languages/test_java*.py'
+      - 'code_to_optimize/java/**'
+      - '.github/workflows/java-e2e-tests.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  java-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python environment
+        run: |
+          uv venv --seed
+          uv sync
+
+      - name: Verify Java installation
+        run: |
+          java -version
+          mvn --version
+
+      - name: Build codeflash-runtime JAR
+        run: |
+          cd codeflash-java-runtime
+          mvn clean package -q -DskipTests
+          mvn install -q -DskipTests
+
+      - name: Build Java sample project
+        run: |
+          cd code_to_optimize/java
+          mvn compile -q
+
+      - name: Run Java sample project tests
+        run: |
+          cd code_to_optimize/java
+          mvn test -q
+
+      - name: Run Java E2E tests
+        run: |
+          uv run pytest tests/test_languages/test_java_e2e.py -v --tb=short
+
+      - name: Run Java unit tests
+        run: |
+          uv run pytest tests/test_languages/test_java/ -v --tb=short -x

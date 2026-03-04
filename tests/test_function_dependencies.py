@@ -4,8 +4,8 @@ import pytest
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.either import is_successful
-from codeflash.models.models import FunctionParent
 from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
+from codeflash.models.models import FunctionParent
 from codeflash.verification.verification_utils import TestConfig
 
 
