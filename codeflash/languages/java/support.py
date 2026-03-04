@@ -379,6 +379,9 @@ class JavaSupport(LanguageSupport):
 
     def _detect_java_version(self) -> None:
         """Detect and cache the Java runtime version."""
+        if self._language_version is not None:
+            return
+
         import subprocess
 
         try:
