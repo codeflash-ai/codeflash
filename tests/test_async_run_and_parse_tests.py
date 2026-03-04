@@ -805,7 +805,6 @@ def test_sync_sort():
         os.chdir(run_cwd)
 
         success, instrumented_test = inject_profiling_into_existing_test(
-            test_code,
             test_path,
             [CodePosition(6, 13), CodePosition(10, 13)],  # Lines where sync_sorter is called
             func,

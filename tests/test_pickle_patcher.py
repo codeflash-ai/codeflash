@@ -349,7 +349,7 @@ def test_run_and_parse_picklepatch() -> None:
         run_cwd = project_root
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            original_replay_test_code, replay_test_path, [CodePosition(17, 15)], func, project_root, mode=TestingMode.BEHAVIOR
+            replay_test_path, [CodePosition(17, 15)], func, project_root, mode=TestingMode.BEHAVIOR
         )
         os.chdir(original_cwd)
         assert success
@@ -443,7 +443,7 @@ def bubble_sort_with_unused_socket(data_container):
             function_name="bubble_sort_with_used_socket", parents=[], file_path=Path(fto_used_socket_path)
         )
         success, new_test = inject_profiling_into_existing_test(
-            original_replay_test_code, replay_test_path, [CodePosition(23, 15)], func, project_root, mode=TestingMode.BEHAVIOR
+            replay_test_path, [CodePosition(23, 15)], func, project_root, mode=TestingMode.BEHAVIOR
         )
         os.chdir(original_cwd)
         assert success

@@ -5,8 +5,14 @@ from __future__ import annotations
 import inspect
 import linecache
 import os
+from typing import TYPE_CHECKING, Optional
+
+import dill as pickle
 
 from codeflash.code_utils.tabulate import tabulate
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def show_func(
@@ -112,3 +118,17 @@ def show_text_non_python(stats: dict, line_contents: dict[tuple[str, int], str])
         )
         out_table += "\n"
     return out_table
+
+
+def parse_line_profile_results(line_profiler_output_file: Optional[Path]) -> tuple[dict, None]:
+    line_profiler_output_file = line_profiler_output_file.with_suffix(".lprof")
+    stats_dict: dict = {}
+    if not line_profiler_output_file.exists():
+        return {"timings": {}, "unit": 0, "str_out": ""}, None
+    with line_profiler_output_file.open("rb") as f:
+        stats = pickle.load(f)
+        stats_dict["timings"] = stats.timings
+        stats_dict["unit"] = stats.unit
+        str_out = show_text(stats_dict)
+        stats_dict["str_out"] = str_out
+    return stats_dict, None
