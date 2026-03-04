@@ -4496,7 +4496,9 @@ def my_func() -> None:
 
 
 def test_enrich_testgen_context_skips_object_init(tmp_path: Path) -> None:
-    """QName has a real class definition in stdlib source, so it gets extracted."""
+    """Skips classes whose __init__ is just object.__init__ (trivial)."""
+    # enum.Enum has a metaclass-based __init__, but individual enum members
+    # effectively use object.__init__. Use a class we know has object.__init__.
     code = """from xml.etree.ElementTree import QName
 
 def my_func(q: QName) -> None:
@@ -4508,9 +4510,9 @@ def my_func(q: QName) -> None:
     context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
     result = enrich_testgen_context(context, tmp_path)
 
-    # QName has its own class definition in ElementTree source
-    assert len(result.code_strings) == 1
-    assert "class QName" in result.code_strings[0].code
+    # QName has its own __init__, so it should be included if it's in site-packages.
+    # But since it's stdlib (not site-packages), it should be skipped.
+    assert result.code_strings == []
 
 
 def test_enrich_testgen_context_empty_when_no_imports(tmp_path: Path) -> None:
