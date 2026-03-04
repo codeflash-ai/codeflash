@@ -128,6 +128,7 @@ if TYPE_CHECKING:
         FunctionCalledInTest,
         FunctionSource,
         TestDiff,
+        TestFileReview,
     )
     from codeflash.verification.verification_utils import TestConfig
 
@@ -1899,6 +1900,26 @@ class FunctionOptimizer:
             )
         )
 
+    def display_repaired_functions(
+        self, generated_tests: GeneratedTestsList, reviews: list[TestFileReview]
+    ) -> None:
+        """Display only the repaired function bodies, not the full test files."""
+        import libcst as cst
+
+        for review in reviews:
+            gt = generated_tests.generated_tests[review.test_index]
+            source = gt.raw_generated_test_source or gt.generated_original_test_source
+            repaired_names = {f.function_name for f in review.functions_to_repair}
+            try:
+                tree = cst.parse_module(source)
+                for node in tree.body:
+                    if isinstance(node, cst.FunctionDef) and node.name.value in repaired_names:
+                        console.rule()
+                        logger.info(f"Repaired: {node.name.value}")
+                        code_print(tree.code_for_node(node), language=self.function_to_optimize.language)
+            except cst.ParserSyntaxError:
+                pass
+
     def build_helper_classes_map(self, code_context: CodeOptimizationContext) -> dict[Path, set[str]]:
         """Build a mapping of file paths to helper class names from code context."""
         file_path_to_helper_classes: dict[Path, set[str]] = defaultdict(set)
@@ -1958,8 +1979,7 @@ class FunctionOptimizer:
         behavioral_results: TestResults | None = None
         coverage_results: CoverageData | None = None
         for cycle in range(MAX_TEST_REPAIR_CYCLES):
-            # 1. Run behavioral tests (with coverage so results can be reused by baseline)
-            with progress_bar("Validating generated test quality..."):
+            with progress_bar("Running generated tests to validate quality..."):
                 validation = self.run_behavioral_validation(
                     code_context, original_helper_code, file_path_to_helper_classes
                 )
@@ -1967,7 +1987,6 @@ class FunctionOptimizer:
                 return Failure("Generated tests failed behavioral validation.")
             behavioral_results, coverage_results = validation
 
-            # 2. Collect per-function failures grouped by behavior file path
             failed_by_file: dict[Path, list[str]] = defaultdict(list)
             for result in behavioral_results.test_results:
                 if (
@@ -1977,15 +1996,20 @@ class FunctionOptimizer:
                 ):
                     failed_by_file[result.file_name].append(result.id.test_function_name)
 
-            # 3. Build review request with failed functions pre-flagged
+            test_failure_messages = behavioral_results.test_failures or {}
+
             tests_for_review = []
             for i, gt in enumerate(generated_tests.generated_tests):
                 failed_fns = failed_by_file.get(gt.behavior_file_path, [])
+                failure_details = {
+                    fn: test_failure_messages[fn] for fn in failed_fns if fn in test_failure_messages
+                }
                 tests_for_review.append(
                     {
                         "test_source": gt.raw_generated_test_source or gt.generated_original_test_source,
                         "test_index": i,
                         "failed_test_functions": failed_fns,
+                        "failure_messages": failure_details,
                     }
                 )
 
@@ -1999,16 +2023,13 @@ class FunctionOptimizer:
                     language=self.function_to_optimize.language,
                 )
 
-            # 4. Collect all functions to repair across test files
             all_to_repair = [r for r in review_results if r.functions_to_repair]
 
             if not all_to_repair:
                 console.print(Panel("[green]All generated tests passed quality review[/green]", border_style="green"))
-                # No repairs needed — behavioral results and coverage are valid for baseline reuse
                 console.rule()
                 return Success((generated_tests, behavioral_results, coverage_results))
 
-            # Display review findings
             issues_tree = Tree("[bold]Quality issues found[/bold]")
             total_issues = 0
             for review in all_to_repair:
@@ -2018,17 +2039,11 @@ class FunctionOptimizer:
                     total_issues += 1
             console.print(Panel(issues_tree, title=f"Test Review (cycle {cycle + 1})", border_style="yellow"))
 
-            # 5. Repair flagged functions
             any_repaired = False
             repaired_count = 0
-            temp_run_dir = get_run_tmp_file(Path()).as_posix()
             with progress_bar(f"Repairing {total_issues} flagged test function(s)..."):
                 for review in all_to_repair:
                     gt = generated_tests.generated_tests[review.test_index]
-                    fn_names = ", ".join(f.function_name for f in review.functions_to_repair)
-                    logger.debug(
-                        f"Repairing test functions in test {review.test_index} (cycle {cycle + 1}): {fn_names}"
-                    )
                     ph(
                         "cli-testgen-repair",
                         {
@@ -2060,8 +2075,6 @@ class FunctionOptimizer:
                         continue
 
                     repaired_source, behavior_source, perf_source = repair_result
-
-                    # Apply the same client-side processing as initial test generation
                     repaired_source, behavior_source, perf_source = (
                         self.language_support.process_generated_test_strings(
                             generated_test_source=repaired_source,
@@ -2084,7 +2097,6 @@ class FunctionOptimizer:
                     repaired_count += len(review.functions_to_repair)
 
             if any_repaired:
-                # Run language-specific postprocessing (same as initial generation)
                 generated_tests = self.language_support.postprocess_generated_tests(
                     generated_tests,
                     test_framework=self.test_cfg.test_framework,
@@ -2092,19 +2104,14 @@ class FunctionOptimizer:
                     source_file_path=self.function_to_optimize.file_path,
                 )
                 console.print(f"  [green]Repaired {repaired_count} test function(s)[/green]")
-                test_ext = self.language_support.get_test_file_suffix()
-                for review in all_to_repair:
-                    gt = generated_tests.generated_tests[review.test_index]
-                    console.rule()
-                    logger.info(f"Repaired test {review.test_index + 1}:")
-                    code_print(
-                        gt.generated_original_test_source,
-                        file_name=f"test_{review.test_index + 1}_repaired{test_ext}",
-                        language=self.function_to_optimize.language,
+                self.display_repaired_functions(generated_tests, all_to_repair)
+                with progress_bar("Re-validating repaired tests..."):
+                    validation = self.run_behavioral_validation(
+                        code_context, original_helper_code, file_path_to_helper_classes
                     )
-                # Invalidate cached results — repaired code needs fresh behavioral run
-                behavioral_results = None
-                coverage_results = None
+                if validation is None:
+                    return Failure("Repaired tests failed behavioral validation.")
+                behavioral_results, coverage_results = validation
 
         console.rule()
         return Success((generated_tests, behavioral_results, coverage_results))
