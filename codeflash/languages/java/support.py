@@ -64,6 +64,7 @@ class JavaSupport(LanguageSupport):
         self._analyzer = get_java_analyzer()
         self.line_profiler_agent_arg: str | None = None
         self.line_profiler_warmup_iterations: int = 0
+        self._language_version: str | None = None
 
     @property
     def language(self) -> Language:
@@ -94,8 +95,8 @@ class JavaSupport(LanguageSupport):
         return frozenset({"target", "build", ".gradle", ".mvn", ".idea", "apidocs", "javadoc"})
 
     @property
-    def default_language_version(self) -> str | None:
-        return "17"
+    def language_version(self) -> str | None:
+        return self._language_version
 
     @property
     def valid_test_frameworks(self) -> tuple[str, ...]:
@@ -498,9 +499,38 @@ class JavaSupport(LanguageSupport):
         if config is None:
             return False
 
+        self._language_version = config.java_version
+        if self._language_version is None:
+            self._detect_java_version()
+
         # For now, assume the runtime is available
         # A full implementation would check/install the JAR
         return True
+
+    def _detect_java_version(self) -> None:
+        """Detect and cache the Java runtime version."""
+        if self._language_version is not None:
+            return
+
+        import subprocess
+
+        try:
+            result = subprocess.run(["java", "-version"], check=False, capture_output=True, text=True, timeout=10)
+            # java -version outputs to stderr, e.g. 'openjdk version "17.0.2"'
+            output = result.stderr or result.stdout
+            for line in output.splitlines():
+                if "version" in line:
+                    # Extract version between quotes: "17.0.2" -> "17"
+                    start = line.find('"')
+                    end = line.find('"', start + 1)
+                    if start != -1 and end != -1:
+                        full_version = line[start + 1 : end]
+                        # Use major version only: "17.0.2" -> "17", "1.8.0_292" -> "8"
+                        major = full_version.split(".")[0]
+                        self._language_version = "8" if major == "1" else major
+                        return
+        except Exception:
+            pass
 
     def instrument_existing_test(
         self,

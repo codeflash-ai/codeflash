@@ -326,12 +326,8 @@ class LanguageSupport(Protocol):
         ...
 
     @property
-    def default_language_version(self) -> str | None:
-        """Default language version string sent to AI service.
-
-        Returns None for languages where the runtime version is auto-detected (e.g. Python).
-        Returns a version string (e.g. "ES2022") for languages that need an explicit default.
-        """
+    def language_version(self) -> str | None:
+        """The detected language version (e.g., "17" for Java, "ES2022" for JS)."""
         ...
 
     @property
@@ -900,6 +896,31 @@ class LanguageSupport(Protocol):
         """
         return {}, ""
 
+    def run_line_profile_tests(
+        self,
+        test_paths: Any,
+        test_env: dict[str, str],
+        cwd: Path,
+        timeout: int | None = None,
+        project_root: Path | None = None,
+        line_profile_output_file: Path | None = None,
+    ) -> tuple[Path, Any]:
+        """Run tests for line profiling.
+
+        Args:
+            test_paths: TestFiles object containing test file information.
+            test_env: Environment variables for the test run.
+            cwd: Working directory for running tests.
+            timeout: Optional timeout in seconds.
+            project_root: Project root directory.
+            line_profile_output_file: Path where line profile results will be written.
+
+        Returns:
+            Tuple of (result_file_path, subprocess_result).
+
+        """
+        ...
+
     def run_behavioral_tests(
         self,
         test_paths: Any,
@@ -957,32 +978,6 @@ class LanguageSupport(Protocol):
 
         """
         ...
-
-    def run_line_profile_tests(
-        self,
-        test_paths: Any,
-        test_env: dict[str, str],
-        cwd: Path,
-        timeout: int | None = None,
-        project_root: Path | None = None,
-        line_profile_output_file: Path | None = None,
-    ) -> tuple[Path, Any]:
-        """Run tests for line profiling.
-
-        Args:
-            test_paths: TestFiles object containing test file information.
-            test_env: Environment variables for the test run.
-            cwd: Working directory for running tests.
-            timeout: Optional timeout in seconds.
-            project_root: Project root directory.
-            line_profile_output_file: Path where line profile results will be written.
-
-        Returns:
-            Tuple of (result_file_path, subprocess_result).
-
-        """
-        ...
-
 
 def convert_parents_to_tuple(parents: list | tuple) -> tuple[FunctionParent, ...]:
     """Convert a list of parent objects to a tuple of FunctionParent.

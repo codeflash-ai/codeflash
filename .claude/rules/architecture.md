@@ -64,7 +64,7 @@ Core protocol in `languages/base.py`. Each language (`PythonSupport`, `JavaScrip
 |----------|----------------|---------|
 | Identity | `language`, `file_extensions`, `default_file_extension` | Language identification |
 | Identity | `comment_prefix`, `dir_excludes` | Language conventions |
-| AI service | `default_language_version` | Language version for API payloads (`None` for Python, `"ES2022"` for JS) |
+| AI service | `language_version` | Detected language version for API payloads (e.g., `"3.11.0"` for Python, `"17"` for Java) |
 | AI service | `valid_test_frameworks` | Allowed test frameworks for validation |
 | Discovery | `discover_functions`, `discover_tests` | Find optimizable functions and their tests |
 | Discovery | `adjust_test_config_for_discovery` | Pre-discovery config adjustment (no-op default) |

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import platform
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -180,8 +181,8 @@ class PythonSupport:
         )
 
     @property
-    def default_language_version(self) -> str | None:
-        return None
+    def language_version(self) -> str | None:
+        return platform.python_version()
 
     @property
     def valid_test_frameworks(self) -> tuple[str, ...]:
