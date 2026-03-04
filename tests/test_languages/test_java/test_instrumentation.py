@@ -1872,23 +1872,23 @@ public class Utf8Test {
             '        String _cf_fn1 = "compute";\n'
             "        \n"
             '        String label = "\u30c6\u30b9\u30c8\u540d\u524d";\n'
-            '        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {\n'
-            '            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;\n'
+            "        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {\n"
+            "            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;\n"
             '            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L9_1" + "######$!");\n'
-            '            long _cf_end1 = -1;\n'
-            '            long _cf_start1 = 0;\n'
-            '            try {\n'
-            '                _cf_start1 = System.nanoTime();\n'
-            '                assertEquals(42, compute(21));\n'
-            '                _cf_end1 = System.nanoTime();\n'
-            '            } finally {\n'
-            '                long _cf_end1_finally = System.nanoTime();\n'
-            '                long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;\n'
+            "            long _cf_end1 = -1;\n"
+            "            long _cf_start1 = 0;\n"
+            "            try {\n"
+            "                _cf_start1 = System.nanoTime();\n"
+            "                assertEquals(42, compute(21));\n"
+            "                _cf_end1 = System.nanoTime();\n"
+            "            } finally {\n"
+            "                long _cf_end1_finally = System.nanoTime();\n"
+            "                long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;\n"
             '                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L9_1" + ":" + _cf_dur1 + "######!");\n'
-            '            }\n'
-            '        }\n'
-            '    }\n'
-            '}\n'
+            "            }\n"
+            "        }\n"
+            "    }\n"
+            "}\n"
         )
         assert success is True
         assert result == expected
@@ -1945,23 +1945,23 @@ public class AccentTest {
             "        \n"
             "        // R\u00e9sum\u00e9 processing test with accented chars\n"
             '        String name = "caf\u00e9";\n'
-            '        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {\n'
-            '            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;\n'
+            "        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {\n"
+            "            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;\n"
             '            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L10_1" + "######$!");\n'
-            '            long _cf_end1 = -1;\n'
-            '            long _cf_start1 = 0;\n'
-            '            try {\n'
-            '                _cf_start1 = System.nanoTime();\n'
-            '                assertEquals(10, calculate(5));\n'
-            '                _cf_end1 = System.nanoTime();\n'
-            '            } finally {\n'
-            '                long _cf_end1_finally = System.nanoTime();\n'
-            '                long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;\n'
+            "            long _cf_end1 = -1;\n"
+            "            long _cf_start1 = 0;\n"
+            "            try {\n"
+            "                _cf_start1 = System.nanoTime();\n"
+            "                assertEquals(10, calculate(5));\n"
+            "                _cf_end1 = System.nanoTime();\n"
+            "            } finally {\n"
+            "                long _cf_end1_finally = System.nanoTime();\n"
+            "                long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;\n"
             '                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L10_1" + ":" + _cf_dur1 + "######!");\n'
-            '            }\n'
-            '        }\n'
-            '    }\n'
-            '}\n'
+            "            }\n"
+            "        }\n"
+            "    }\n"
+            "}\n"
         )
         assert result == expected
 

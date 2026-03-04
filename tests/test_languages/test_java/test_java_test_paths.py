@@ -100,7 +100,11 @@ class TestFixJavaTestPathsIntegration:
 
         # Bind the actual methods
         mock_optimizer._get_java_sources_root = lambda: JavaFunctionOptimizer._get_java_sources_root(mock_optimizer)
-        mock_optimizer._fix_java_test_paths = lambda behavior_source, perf_source, used_paths, display_source="": JavaFunctionOptimizer._fix_java_test_paths(mock_optimizer, behavior_source, perf_source, used_paths, display_source)
+        mock_optimizer._fix_java_test_paths = lambda behavior_source, perf_source, used_paths, display_source="": (
+            JavaFunctionOptimizer._fix_java_test_paths(
+                mock_optimizer, behavior_source, perf_source, used_paths, display_source
+            )
+        )
 
         return mock_optimizer
 

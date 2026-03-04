@@ -42,14 +42,8 @@ public class FibTest {
     }
 }
 """
-        original = {
-            "FibTest.testMultiple#L8": 1_000_000,
-            "FibTest.testMultiple#L9": 5_000_000,
-        }
-        optimized = {
-            "FibTest.testMultiple#L8": 100_000,
-            "FibTest.testMultiple#L9": 500_000,
-        }
+        original = {"FibTest.testMultiple#L8": 1_000_000, "FibTest.testMultiple#L9": 5_000_000}
+        optimized = {"FibTest.testMultiple#L8": 100_000, "FibTest.testMultiple#L9": 500_000}
         result = add_runtime_comments(source, original, optimized)
         lines = result.splitlines()
         assert "//" in lines[7]
@@ -73,14 +67,8 @@ public class FibTest {
     }
 }
 """
-        original = {
-            "FibTest.testSmall#L8": 500_000,
-            "FibTest.testLarge#L13": 10_000_000,
-        }
-        optimized = {
-            "FibTest.testSmall#L8": 50_000,
-            "FibTest.testLarge#L13": 1_000_000,
-        }
+        original = {"FibTest.testSmall#L8": 500_000, "FibTest.testLarge#L13": 10_000_000}
+        optimized = {"FibTest.testSmall#L8": 50_000, "FibTest.testLarge#L13": 1_000_000}
         result = add_runtime_comments(source, original, optimized)
         lines = result.splitlines()
         assert "//" in lines[7]
@@ -153,10 +141,7 @@ class TestBuildRuntimeMap:
         inv_id_2.test_function_name = "testFib"
         inv_id_2.iteration_id = "L15_2"
 
-        inv_id_runtimes = {
-            inv_id_1: [100, 200, 150],
-            inv_id_2: [300, 400, 350],
-        }
+        inv_id_runtimes = {inv_id_1: [100, 200, 150], inv_id_2: [300, 400, 350]}
 
         result = support._build_runtime_map(inv_id_runtimes)
         # Both L15_1 and L15_2 map to "L15", so their min runtimes (100 + 300 = 400) are summed
@@ -180,10 +165,7 @@ class TestBuildRuntimeMap:
         inv_id_2.test_function_name = "testFib"
         inv_id_2.iteration_id = "L20_1"
 
-        inv_id_runtimes = {
-            inv_id_1: [100, 200],
-            inv_id_2: [500, 600],
-        }
+        inv_id_runtimes = {inv_id_1: [100, 200], inv_id_2: [500, 600]}
 
         result = support._build_runtime_map(inv_id_runtimes)
         assert result == {"FibTest.testFib#L10": 100, "FibTest.testFib#L20": 500}
