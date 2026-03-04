@@ -3364,6 +3364,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 
+@SuppressWarnings("CheckReturnValue")
 public class WorkerTest__perfinstrumented {
     @Test
     public void testDoWork() {
@@ -3468,6 +3469,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 
+@SuppressWarnings("CheckReturnValue")
 public class UtilsTest__perfinstrumented {
     @Test
     public void testProcess() {
@@ -3572,6 +3574,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 
+@SuppressWarnings("CheckReturnValue")
 public class CacheTest__perfinstrumented {
     @Test
     public void testReset() {
@@ -3676,6 +3679,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 
+@SuppressWarnings("CheckReturnValue")
 public class ConfigTest__perfinstrumented {
     @Test
     public void testReload() {
@@ -3781,6 +3785,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 
+@SuppressWarnings("CheckReturnValue")
 public class SwapperTest__perfinstrumented {
     @Test
     public void testSwap() {
