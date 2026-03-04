@@ -662,19 +662,8 @@ class FunctionOptimizer:
             behavior_path = generated_test.behavior_file_path
             perf_path = generated_test.perf_file_path
 
-            # For Java, fix class name references and paths to match package structure
+            # For Java, fix paths to match package structure
             if is_java():
-                correct_class = self.function_to_optimize.class_name
-                if correct_class:
-                    generated_test.generated_original_test_source = self._fix_java_test_class_name(
-                        generated_test.generated_original_test_source, correct_class
-                    )
-                    generated_test.instrumented_behavior_test_source = self._fix_java_test_class_name(
-                        generated_test.instrumented_behavior_test_source, correct_class
-                    )
-                    generated_test.instrumented_perf_test_source = self._fix_java_test_class_name(
-                        generated_test.instrumented_perf_test_source, correct_class
-                    )
                 behavior_path, perf_path, modified_behavior_source, modified_perf_source = self._fix_java_test_paths(
                     generated_test.instrumented_behavior_test_source,
                     generated_test.instrumented_perf_test_source,
@@ -843,43 +832,6 @@ class FunctionOptimizer:
         logger.debug(f"[JAVA] Using tests_root as Java sources root: {tests_root}")
         logger.debug(f"[JAVA-ROOT] Returning Java sources root: {tests_root}, tests_root was: {tests_root}")
         return tests_root
-
-    @staticmethod
-    def _fix_java_test_class_name(source: str, correct_class_name: str) -> str:
-        """Fix incorrect class name references in generated Java test code.
-
-        The backend LLM sometimes generates tests that reference a wrong class name
-        (e.g. 'with' instead of 'DataCalculator'). This method detects the class being
-        tested from the test source and replaces it with the correct class name.
-        """
-        import re
-
-        # Extract the package from the test source
-        pkg_match = re.search(r"^\s*package\s+([\w.]+)\s*;", source, re.MULTILINE)
-        if not pkg_match:
-            return source
-
-        package = pkg_match.group(1)
-
-        # Find imports from the same package that aren't the correct class
-        # Pattern: import <package>.<ClassName>;
-        import_pattern = re.compile(rf"^\s*import\s+{re.escape(package)}\.(\w+)\s*;", re.MULTILINE)
-        wrong_class = None
-        for m in import_pattern.finditer(source):
-            imported = m.group(1)
-            if imported != correct_class_name and not imported.endswith("Test"):
-                wrong_class = imported
-                break
-
-        if not wrong_class or wrong_class == correct_class_name:
-            return source
-
-        logger.debug(
-            f"[JAVA] Fixing class name: replacing '{wrong_class}' with '{correct_class_name}' in generated test"
-        )
-        # Replace all occurrences of the wrong class name with the correct one
-        # Use word boundary to avoid partial replacements
-        return re.sub(rf"\b{re.escape(wrong_class)}\b", correct_class_name, source)
 
     def _fix_java_test_paths(
         self, behavior_source: str, perf_source: str, used_paths: set[Path]
