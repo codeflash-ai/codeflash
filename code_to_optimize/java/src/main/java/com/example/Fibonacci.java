@@ -21,17 +21,7 @@ public class Fibonacci {
         if (n <= 1) {
             return n;
         }
-        
-        long prev = 0;
-        long curr = 1;
-        
-        for (int i = 2; i <= n; i++) {
-            long next = prev + curr;
-            prev = curr;
-            curr = next;
-        }
-        
-        return curr;
+        return fibonacci(n - 1) + fibonacci(n - 2);
     }
 
     /**
@@ -193,9 +183,15 @@ public class Fibonacci {
         if (arr == null) {
             throw new IllegalArgumentException("Array must not be null");
         }
-        // Use the JDK's optimized sort for primitive long arrays (dual-pivot quicksort).
-        // This preserves in-place behavior while providing O(n log n) performance.
-        java.util.Arrays.sort(arr);
+        for (int i = 0; i < arr.length; i++) {
+            for (int j = 0; j < arr.length - 1 - i; j++) {
+                if (arr[j] > arr[j + 1]) {
+                    long temp = arr[j];
+                    arr[j] = arr[j + 1];
+                    arr[j + 1] = temp;
+                }
+            }
+        }
     }
 
     /**
