@@ -125,15 +125,7 @@ class InitDecorator(ast.NodeTransformer):
             return node
 
         has_init = False
-        # Build decorator node ONCE for each class, not per loop iteration
-        decorator = ast.Call(
-            func=self._base_decorator_func,
-            args=[],
-            keywords=[
-                ast.keyword(arg="function_name", value=ast.Constant(value=f"{node.name}.__init__")),
-                *self._base_decorator_keywords,
-            ],
-        )
+        decorator = None
 
         # Only scan node.body once for both __init__ and decorator check
         for item in node.body:
@@ -151,9 +143,19 @@ class InitDecorator(ast.NodeTransformer):
                     if isinstance(d, ast.Call) and isinstance(d.func, ast.Name) and d.func.id == "codeflash_capture":
                         break
                 else:
-                    # No decorator found
+                    # No decorator found - create it lazily on first use
+                    if decorator is None:
+                        decorator = ast.Call(
+                            func=self._base_decorator_func,
+                            args=[],
+                            keywords=[
+                                ast.keyword(arg="function_name", value=ast.Constant(value=f"{node.name}.__init__")),
+                                *self._base_decorator_keywords,
+                            ],
+                        )
                     item.decorator_list.insert(0, decorator)
                     self.inserted_decorator = True
+
 
         if not has_init:
             # Skip dataclasses — their __init__ is auto-generated at class creation time and isn't in the AST.
@@ -185,6 +187,16 @@ class InitDecorator(ast.NodeTransformer):
                 kw_defaults=[],
                 kwarg=self._init_kwarg,
                 defaults=[],
+            )
+
+            # Build decorator for the synthetic __init__
+            decorator = ast.Call(
+                func=self._base_decorator_func,
+                args=[],
+                keywords=[
+                    ast.keyword(arg="function_name", value=ast.Constant(value=f"{node.name}.__init__")),
+                    *self._base_decorator_keywords,
+                ],
             )
 
             # Create the complete function
