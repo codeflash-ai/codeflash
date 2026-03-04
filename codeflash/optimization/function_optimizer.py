@@ -1899,50 +1899,10 @@ class FunctionOptimizer:
     def display_repaired_functions(
         self, generated_tests: GeneratedTestsList, reviews: list[TestFileReview], original_sources: dict[int, str]
     ) -> None:
-        """Display diffs of repaired functions showing what changed."""
-        import libcst as cst
-
-        def extract_functions(source: str, names: set[str]) -> dict[str, str]:
-            """Extract functions by name from top-level and class bodies."""
-            try:
-                tree = cst.parse_module(source)
-            except cst.ParserSyntaxError:
-                return {}
-            result: dict[str, str] = {}
-            for node in tree.body:
-                if isinstance(node, cst.FunctionDef) and node.name.value in names:
-                    result[node.name.value] = tree.code_for_node(node)
-                elif isinstance(node, cst.ClassDef):
-                    for child in node.body.body:
-                        if isinstance(child, cst.FunctionDef) and child.name.value in names:
-                            result[child.name.value] = tree.code_for_node(child)
-            return result
-
+        """Display repaired functions. Override in language subclasses for richer diff output."""
         for review in reviews:
-            gt = generated_tests.generated_tests[review.test_index]
-            repaired_names = {f.function_name for f in review.functions_to_repair}
-            new_source = gt.generated_original_test_source
-            old_source = original_sources.get(review.test_index, "")
-
-            old_funcs = extract_functions(old_source, repaired_names)
-            new_funcs = extract_functions(new_source, repaired_names)
-
-            for name in repaired_names:
-                old_func = old_funcs.get(name, "")
-                new_func = new_funcs.get(name, "")
-                if not new_func:
-                    continue
-                console.rule()
-                if old_func and old_func != new_func:
-                    diff = unified_diff_strings(
-                        old_func, new_func, fromfile=f"{name} (before)", tofile=f"{name} (after)"
-                    )
-                    if diff:
-                        logger.info(f"Repaired: {name}")
-                        console.print(Syntax(diff, "diff", theme="monokai"))
-                        continue
-                logger.info(f"Repaired: {name}")
-                code_print(new_func, language=self.function_to_optimize.language)
+            for f in review.functions_to_repair:
+                logger.info(f"Repaired: {f.function_name}")
 
     def build_helper_classes_map(self, code_context: CodeOptimizationContext) -> dict[Path, set[str]]:
         """Build a mapping of file paths to helper class names from code context."""
