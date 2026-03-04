@@ -218,18 +218,51 @@ def process_pyproject_config(args: Namespace) -> Namespace:
         "git_remote",
         "override_fixtures",
     ]
+    # When --module-root is explicitly provided, check if the config file belongs to a different project.
+    # This prevents the CLI's own pyproject.toml from overriding path settings (tests_root, module_root, etc.)
+    # when optimizing files in an external project via `uv run --directory /path/to/cli codeflash ...`.
+    path_keys = {"module_root", "tests_root", "benchmarks_root"}
+    config_is_foreign = False
+    if args.module_root is not None and pyproject_file_path is not None:
+        try:
+            module_root_resolved = Path(args.module_root).resolve()
+            config_dir_resolved = pyproject_file_path.resolve().parent
+            # Check if the config's own module-root encompasses the CLI-provided module-root.
+            # If the config has module_root = "codeflash" (relative to config dir), the config's
+            # module root is config_dir/codeflash. If the CLI's --module-root is NOT under that
+            # path, the config is foreign even if both are in the same directory tree.
+            config_module_root = pyproject_config.get("module_root") or pyproject_config.get("module-root")
+            if config_module_root:
+                config_module_root_resolved = (config_dir_resolved / config_module_root).resolve()
+                config_is_foreign = not (
+                    module_root_resolved == config_module_root_resolved
+                    or config_module_root_resolved in module_root_resolved.parents
+                )
+            else:
+                config_is_foreign = not (
+                    module_root_resolved == config_dir_resolved or config_dir_resolved in module_root_resolved.parents
+                )
+        except (ValueError, OSError):
+            pass
+
     for key in supported_keys:
         if key in pyproject_config and (
             (hasattr(args, key.replace("-", "_")) and getattr(args, key.replace("-", "_")) is None)
             or not hasattr(args, key.replace("-", "_"))
         ):
+            # Skip path-related keys from foreign config files
+            if config_is_foreign and key in path_keys:
+                continue
             setattr(args, key.replace("-", "_"), pyproject_config[key])
     assert args.module_root is not None, "--module-root must be specified"
     assert Path(args.module_root).is_dir(), f"--module-root {args.module_root} must be a valid directory"
 
     # For JS/TS projects, tests_root is optional (Jest auto-discovers tests)
     # Default to module_root if not specified
+    # Detect JS/TS from config or from the file extension when optimizing an external project
     is_js_ts_project = pyproject_config.get("language") in ("javascript", "typescript")
+    if not is_js_ts_project and hasattr(args, "file") and args.file is not None:
+        is_js_ts_project = Path(args.file).suffix in (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts")
 
     # Set the test framework singleton for JS/TS projects
     if is_js_ts_project and pyproject_config.get("test_framework"):
@@ -237,13 +270,8 @@ def process_pyproject_config(args: Namespace) -> Namespace:
 
     if args.tests_root is None:
         if is_js_ts_project:
-            # Try common JS test directories at project root first
-            for test_dir in ["test", "tests", "__tests__"]:
-                if Path(test_dir).is_dir():
-                    args.tests_root = test_dir
-                    break
-            # If not found at project root, try inside module_root (e.g., src/test, src/__tests__)
-            if args.tests_root is None and args.module_root:
+            # Try common JS test directories inside module_root
+            if args.module_root:
                 module_root_path = Path(args.module_root)
                 for test_dir in ["test", "tests", "__tests__"]:
                     test_path = module_root_path / test_dir

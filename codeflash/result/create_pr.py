@@ -287,9 +287,10 @@ def check_create_pr(
     optimization_review: str = "",
     original_line_profiler: str | None = None,
     optimized_line_profiler: str | None = None,
+    language: str = "python",
 ) -> None:
     pr_number: Optional[int] = env_utils.get_pr_number()
-    git_repo = git.Repo(search_parent_directories=True)
+    git_repo = git.Repo(str(root_dir), search_parent_directories=True)
 
     if pr_number is not None:
         logger.info(f"Suggesting changes to PR #{pr_number} ...")
@@ -323,6 +324,7 @@ def check_create_pr(
                 benchmark_details=explanation.benchmark_details,
                 original_async_throughput=explanation.original_async_throughput,
                 best_async_throughput=explanation.best_async_throughput,
+                language=language,
             ),
             existing_tests=existing_tests_source,
             generated_tests=generated_original_test_source,
@@ -351,7 +353,7 @@ def check_create_pr(
             logger.warning("⏭️ Branch is not pushed, skipping PR creation...")
             return
         relative_path = explanation.file_path.resolve().relative_to(root_dir.resolve()).as_posix()
-        base_branch = get_current_branch()
+        base_branch = get_current_branch(git_repo)
         build_file_changes = {
             Path(p).resolve().relative_to(root_dir.resolve()).as_posix(): FileDiffContent(
                 oldContent=original_code[p], newContent=new_code[p]
@@ -377,6 +379,7 @@ def check_create_pr(
                 benchmark_details=explanation.benchmark_details,
                 original_async_throughput=explanation.original_async_throughput,
                 best_async_throughput=explanation.best_async_throughput,
+                language=language,
             ),
             existing_tests=existing_tests_source,
             generated_tests=generated_original_test_source,
@@ -389,9 +392,23 @@ def check_create_pr(
             optimized_line_profiler=optimized_line_profiler,
         )
         if response.ok:
-            pr_id = response.text
-            pr_url = github_pr_url(owner, repo, pr_id)
-            logger.info(f"Successfully created a new PR #{pr_id} with the optimized code: {pr_url}")
+            # The cf-api returns a PR number on success, or a JSON object when staging is used as fallback
+            try:
+                response_data = response.json()
+                if isinstance(response_data, int):
+                    pr_url = github_pr_url(owner, repo, str(response_data))
+                    logger.info(f"Successfully created a new PR #{response_data} with the optimized code: {pr_url}")
+                elif isinstance(response_data, dict) and "storageType" in response_data:
+                    logger.info(
+                        f"PR creation fell back to staging (storageType: {response_data.get('storageType')}). "
+                        f"The optimization is saved and can be reviewed in the Codeflash dashboard."
+                    )
+                else:
+                    logger.info(f"PR creation response: {response.text}")
+            except Exception:
+                pr_id = response.text
+                pr_url = github_pr_url(owner, repo, pr_id)
+                logger.info(f"Successfully created a new PR #{pr_id} with the optimized code: {pr_url}")
         else:
             logger.error(
                 f"Optimization was successful, but I failed to create a PR with the optimized code."

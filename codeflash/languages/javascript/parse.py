@@ -517,7 +517,7 @@ def parse_jest_test_xml(
 
                     # Find matching end marker
                     end_key = groups[:5]
-                    end_match = end_matches_dict.get(end_key)
+                    end_match: re.Match[str] | None = end_matches_dict.get(end_key)
 
                     runtime = None
                     if end_match:

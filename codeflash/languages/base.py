@@ -624,7 +624,7 @@ class LanguageSupport(Protocol):
 
     def compare_test_results(
         self, original_results_path: Path, candidate_results_path: Path, project_root: Path | None = None
-    ) -> tuple[bool, list]:
+    ) -> tuple[bool, list[Any]]:
         """Compare test results between original and candidate code.
 
         Args:
@@ -727,7 +727,7 @@ class LanguageSupport(Protocol):
         """Instrument source code before line profiling."""
         ...
 
-    def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict:
+    def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict[str, Any]:
         """Parse line profiler output."""
         ...
 
@@ -790,7 +790,7 @@ class LanguageSupport(Protocol):
         ...
 
 
-def convert_parents_to_tuple(parents: list | tuple) -> tuple[FunctionParent, ...]:
+def convert_parents_to_tuple(parents: list[Any] | tuple[Any, ...]) -> tuple[FunctionParent, ...]:
     """Convert a list of parent objects to a tuple of FunctionParent.
 
     Args:

@@ -30,12 +30,12 @@ def get_test_file_path(
 
     # For JavaScript/TypeScript, place generated tests in a subdirectory that matches
     # Vitest/Jest include patterns (e.g., test/**/*.test.ts)
-    # if is_javascript():
-    #     # For monorepos, first try to find the package directory from the source file path
-    #     # e.g., packages/workflow/src/utils.ts -> packages/workflow/test/codeflash-generated/
-    #     package_test_dir = _find_js_package_test_dir(test_dir, source_file_path)
-    #     if package_test_dir:
-    #         test_dir = package_test_dir
+    if is_javascript():
+        # For monorepos, first try to find the package directory from the source file path
+        # e.g., packages/workflow/src/utils.ts -> packages/workflow/test/codeflash-generated/
+        package_test_dir = _find_js_package_test_dir(test_dir, source_file_path)
+        if package_test_dir:
+            test_dir = package_test_dir
 
     path = test_dir / f"test_{function_name}__{test_type}_test_{iteration}{extension}"
     if path.exists():
@@ -76,17 +76,16 @@ def _find_js_package_test_dir(tests_root: Path, source_file_path: Path | None) -
         package_dir = None
 
         for parent in source_path.parents:
-            # Stop if we've gone above or reached the tests_root level
-            # For monorepos, tests_root might be /packages/ and we want to search within packages
-            if parent in (tests_root, tests_root.parent):
-                break
-
-            # Check if this looks like a package root
+            # Check if this looks like a package root (has package.json or test directory)
             has_package_json = (parent / "package.json").exists()
             has_test_dir = any((parent / d).is_dir() for d in ["test", "tests", "__tests__"])
 
             if has_package_json or has_test_dir:
                 package_dir = parent
+                break
+
+            # Stop if we've gone above the tests_root's parent (beyond the project scope)
+            if parent == tests_root.parent:
                 break
 
         if package_dir:

@@ -23,11 +23,12 @@ class PrComment:
     benchmark_details: Optional[list[BenchmarkDetail]] = None
     original_async_throughput: Optional[int] = None
     best_async_throughput: Optional[int] = None
+    language: str = "python"
 
     def to_json(self) -> dict[str, Union[str, int, dict[str, dict[str, int]], list[BenchmarkDetail], None]]:
         report_table: dict[str, dict[str, int]] = {}
         for test_type, counts in self.winning_behavior_test_results.get_test_pass_fail_report_by_type().items():
-            name = test_type.to_name()
+            name = test_type.to_name(self.language)
             if name:
                 report_table[name] = counts
 
@@ -42,6 +43,7 @@ class PrComment:
             "loop_count": self.winning_benchmarking_test_results.number_of_loops(),
             "report_table": report_table,
             "benchmark_details": self.benchmark_details if self.benchmark_details else None,
+            "language": self.language,
         }
 
         if self.original_async_throughput is not None and self.best_async_throughput is not None:
