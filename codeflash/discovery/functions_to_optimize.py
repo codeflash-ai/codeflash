@@ -46,6 +46,10 @@ import contextlib
 
 from rich.text import Text
 
+_TEST_NAME_PATTERNS = (".test.", ".spec.", "_test.", "_spec.")
+
+_TEST_DIR_NAMES = frozenset(("test", "tests", "__tests__"))
+
 
 @dataclass(frozen=True)
 class FunctionProperties:
@@ -959,12 +963,13 @@ def _is_test_file_by_pattern(file_path: Path) -> bool:
     name = file_path.name.lower()
     if name.startswith("test_") or name == "conftest.py":
         return True
-    test_name_patterns = (".test.", ".spec.", "_test.", "_spec.")
-    if any(p in name for p in test_name_patterns):
-        return True
-    path_str = str(file_path).lower()
-    test_dir_patterns = (os.sep + "test" + os.sep, os.sep + "tests" + os.sep, os.sep + "__tests__" + os.sep)
-    return any(p in path_str for p in test_dir_patterns)
+    for p in _TEST_NAME_PATTERNS:
+        if p in name:
+            return True
+    for part in file_path.parts[:-1]:
+        if part.lower() in _TEST_DIR_NAMES:
+            return True
+    return False
 
 
 def _is_test_file_by_pattern(file_path: Path) -> bool:
@@ -976,12 +981,13 @@ def _is_test_file_by_pattern(file_path: Path) -> bool:
     name = file_path.name.lower()
     if name.startswith("test_") or name == "conftest.py":
         return True
-    test_name_patterns = (".test.", ".spec.", "_test.", "_spec.")
-    if any(p in name for p in test_name_patterns):
-        return True
-    path_str = str(file_path).lower()
-    test_dir_patterns = (os.sep + "test" + os.sep, os.sep + "tests" + os.sep, os.sep + "__tests__" + os.sep)
-    return any(p in path_str for p in test_dir_patterns)
+    for p in _TEST_NAME_PATTERNS:
+        if p in name:
+            return True
+    for part in file_path.parts[:-1]:
+        if part.lower() in _TEST_DIR_NAMES:
+            return True
+    return False
 
 
 def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list[Path], module_root: Path) -> bool:
