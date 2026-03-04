@@ -879,8 +879,7 @@ class FunctionOptimizer:
         )
         # Replace all occurrences of the wrong class name with the correct one
         # Use word boundary to avoid partial replacements
-        source = re.sub(rf"\b{re.escape(wrong_class)}\b", correct_class_name, source)
-        return source
+        return re.sub(rf"\b{re.escape(wrong_class)}\b", correct_class_name, source)
 
     def _fix_java_test_paths(
         self, behavior_source: str, perf_source: str, used_paths: set[Path]

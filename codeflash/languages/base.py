@@ -859,6 +859,7 @@ class LanguageSupport(Protocol):
 
         Returns:
             Tuple of (result_file_path, subprocess_result).
+
         """
         ...
 
