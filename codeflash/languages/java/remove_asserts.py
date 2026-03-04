@@ -956,8 +956,29 @@ class JavaAssertTransformer:
         elif args_str.endswith(")"):
             args_str = args_str[:-1]
 
-        # Fast-path: only extract the first top-level argument instead of splitting all arguments.
-        first_arg = self._extract_first_arg(args_str)
+        # Fast-path: try to cheaply obtain the first top-level argument without invoking
+        # the full parser. If the first comma occurs before any special characters that
+        # would affect top-levelness (quotes/parens/braces), we can take the substring
+        # up to that comma as the first argument.
+        if not args_str:
+            return "Object"
+
+        # Find first comma; if none, the entire args_str is the single argument
+        comma_idx = args_str.find(",")
+        if comma_idx == -1:
+            first_arg = args_str
+        else:
+            # If there are no special delimiter characters before this comma, we can
+            # safely take the substring as the first argument.
+            before = args_str[:comma_idx]
+            if not self._special_re.search(before):
+                first_arg = before
+            else:
+                # Fallback: use the full extractor which respects nesting/strings/generics.
+                first_arg = self._extract_first_arg(args_str)
+                if first_arg is None:
+                    return "Object"
+
         if not first_arg:
             return "Object"
 
