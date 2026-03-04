@@ -325,13 +325,9 @@ class LanguageSupport(Protocol):
         ...
 
     @property
-    def default_language_version(self) -> str | None:
-        """Default language version string sent to AI service.
-
-        Returns None for languages where the runtime version is auto-detected (e.g. Python).
-        Returns a version string (e.g. "ES2022") for languages that need an explicit default.
-        """
-        return None
+    def language_version(self) -> str | None:
+        """The detected language version (e.g., "17" for Java, "ES2022" for JS)."""
+        ...
 
     @property
     def valid_test_frameworks(self) -> tuple[str, ...]:
@@ -863,6 +859,7 @@ class LanguageSupport(Protocol):
 
         Returns:
             Tuple of (result_file_path, subprocess_result).
+
         """
         ...
 

@@ -279,7 +279,7 @@ def wrap_target_calls_with_treesitter(
     class_name: str = "",
     test_method_name: str = "",
     is_void: bool = False,
-    return_type: str | None = None,
+    target_return_type: str = "",
 ) -> tuple[list[str], int]:
     """Replace target method calls in body_lines with capture + serialize using tree-sitter.
 
@@ -349,8 +349,8 @@ def wrap_target_calls_with_treesitter(
             call_counter += 1
             var_name = f"_cf_result{iter_id}_{call_counter}"
             cast_type = _infer_array_cast_type(body_line)
-            if not cast_type and return_type and return_type not in ("void", "Object"):
-                cast_type = return_type
+            if not cast_type and target_return_type and target_return_type not in ("void", "Object"):
+                cast_type = target_return_type
             var_with_cast = f"({cast_type}){var_name}" if cast_type else var_name
 
             # For void functions, we can't assign the return value to a variable
@@ -605,6 +605,26 @@ def _infer_array_cast_type(line: str) -> str | None:
     return None
 
 
+def _extract_return_type(function_to_optimize: Any) -> str:
+    """Extract the return type of a Java function from its source file using tree-sitter."""
+    file_path = getattr(function_to_optimize, "file_path", None)
+    func_name = _get_function_name(function_to_optimize)
+    if file_path and file_path.exists():
+        try:
+            from codeflash.languages.java.parser import get_java_analyzer
+
+            analyzer = get_java_analyzer()
+            source_text = file_path.read_text(encoding="utf-8")
+            methods = analyzer.find_methods(source_text)
+            for method in methods:
+                if method.name == func_name and method.return_type:
+                    return method.return_type
+        except Exception:
+            logger.debug("Could not extract return type for %s", func_name)
+    # Fall back to the return_type attribute on the function model
+    return getattr(function_to_optimize, "return_type", "") or ""
+
+
 def _get_qualified_name(func: Any) -> str:
     """Get the qualified name from FunctionToOptimize."""
     if hasattr(func, "qualified_name"):
@@ -698,6 +718,7 @@ def instrument_existing_test(
     """
     source = test_string
     func_name = _get_function_name(function_to_optimize)
+    target_return_type = _extract_return_type(function_to_optimize)
 
     # Get the original class name from the file name
     if test_path:
@@ -719,8 +740,7 @@ def instrument_existing_test(
     # replacing substrings of other identifiers.
     modified_source = re.sub(rf"\b{re.escape(original_class_name)}\b", new_class_name, source)
 
-    return_type = getattr(function_to_optimize, "return_type", None)
-    is_void = return_type == "void"
+    is_void = target_return_type == "void"
 
     # Add @SuppressWarnings("CheckReturnValue") to the class declaration.
     # Projects using Error Prone (e.g. Guava) enforce CheckReturnValue as a compiler error.
@@ -739,7 +759,7 @@ def instrument_existing_test(
     else:
         # Behavior mode: add timing instrumentation that also writes to SQLite
         modified_source = _add_behavior_instrumentation(
-            modified_source, original_class_name, func_name, is_void=is_void, return_type=return_type
+            modified_source, original_class_name, func_name, is_void=is_void, target_return_type=target_return_type
         )
 
     logger.debug("Java %s testing for %s: renamed class %s -> %s", mode, func_name, original_class_name, new_class_name)
@@ -748,7 +768,7 @@ def instrument_existing_test(
 
 
 def _add_behavior_instrumentation(
-    source: str, class_name: str, func_name: str, is_void: bool = False, return_type: str | None = None
+    source: str, class_name: str, func_name: str, is_void: bool = False, target_return_type: str = ""
 ) -> str:
     """Add behavior instrumentation to test methods.
 
@@ -891,7 +911,7 @@ def _add_behavior_instrumentation(
                 class_name=class_name,
                 test_method_name=test_method_name,
                 is_void=is_void,
-                return_type=return_type,
+                target_return_type=target_return_type,
             )
 
             # Add behavior instrumentation setup code (shared variables for all calls in the method)
