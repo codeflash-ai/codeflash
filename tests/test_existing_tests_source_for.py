@@ -294,6 +294,7 @@ class MockTestConfig:
     """Mocks codeflash.verification.verification_utils.TestConfig"""
 
     tests_root: Path
+    tests_project_rootdir: Path = Path(".")
 
 
 @contextlib.contextmanager

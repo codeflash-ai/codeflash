@@ -10,7 +10,7 @@ import hashlib
 import re
 
 from codeflash.code_utils.normalizers import get_normalizer
-from codeflash.languages import current_language, is_python
+from codeflash.languages import current_language
 
 
 def normalize_code(
@@ -36,20 +36,20 @@ def normalize_code(
     try:
         normalizer = get_normalizer(language)
 
-        # Python has additional options
-        if is_python():
-            if return_ast_dump:
-                return normalizer.normalize_for_hash(code)
+        if return_ast_dump:
+            return normalizer.normalize_for_hash(code)
+        # Only Python normalizer accepts remove_docstrings; pass it via **kwargs
+        # so non-Python normalizers (which don't accept it) still work
+        try:
             return normalizer.normalize(code, remove_docstrings=remove_docstrings)
-
-        # For other languages, use standard normalization
-        return normalizer.normalize(code)
+        except TypeError:
+            return normalizer.normalize(code)
     except ValueError:
         # Unknown language - fall back to basic normalization
         return _basic_normalize(code)
     except Exception:
         # Parsing error - try other languages or fall back
-        if is_python():
+        if language == "python":
             # Try JavaScript as fallback
             try:
                 js_normalizer = get_normalizer("javascript")

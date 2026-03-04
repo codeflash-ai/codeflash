@@ -284,15 +284,7 @@ def ensure_multi_module_deps_installed(maven_root: Path, test_module: str | None
         logger.error("Maven not found — cannot pre-install multi-module dependencies")
         return False
 
-    cmd = [
-        mvn,
-        "install",
-        "-DskipTests",
-        "-B",
-        "-pl",
-        test_module,
-        "-am",
-    ]
+    cmd = [mvn, "install", "-DskipTests", "-B", "-pl", test_module, "-am"]
     cmd.extend(_MAVEN_VALIDATION_SKIP_FLAGS)
 
     logger.info("Pre-installing multi-module dependencies: %s (module: %s)", maven_root, test_module)
@@ -1152,7 +1144,8 @@ def _run_benchmarking_tests_maven(
         run_env["CODEFLASH_LOOP_INDEX"] = str(loop_idx)
         run_env["CODEFLASH_MODE"] = "performance"
         run_env["CODEFLASH_TEST_ITERATION"] = "0"
-        run_env["CODEFLASH_INNER_ITERATIONS"] = str(inner_iterations)
+        if "CODEFLASH_INNER_ITERATIONS" not in run_env:
+            run_env["CODEFLASH_INNER_ITERATIONS"] = str(inner_iterations)
 
         result = _run_maven_tests(
             maven_root, test_paths, run_env, timeout=per_loop_timeout, mode="performance", test_module=test_module
@@ -1348,7 +1341,8 @@ def run_benchmarking_tests(
         run_env["CODEFLASH_LOOP_INDEX"] = str(loop_idx)
         run_env["CODEFLASH_MODE"] = "performance"
         run_env["CODEFLASH_TEST_ITERATION"] = "0"
-        run_env["CODEFLASH_INNER_ITERATIONS"] = str(inner_iterations)
+        if "CODEFLASH_INNER_ITERATIONS" not in run_env:
+            run_env["CODEFLASH_INNER_ITERATIONS"] = str(inner_iterations)
 
         # Run tests directly with XML report generation
         loop_start = time.time()

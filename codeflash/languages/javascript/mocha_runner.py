@@ -8,7 +8,6 @@ and converts the output to JUnit XML in Python, avoiding extra npm dependencies.
 from __future__ import annotations
 
 import json
-import re
 import subprocess
 import time
 from pathlib import Path
@@ -87,7 +86,7 @@ def _ensure_runtime_files(project_root: Path) -> None:
     logger.error(f"Could not install codeflash. Please install it manually: {' '.join(install_cmd)}")
 
 
-def mocha_json_to_junit_xml(json_str: str, output_file: Path, test_files: list[Path] | None = None) -> None:
+def mocha_json_to_junit_xml(json_str: str, output_file: Path) -> None:
     """Convert Mocha's JSON reporter output to JUnit XML.
 
     Mocha JSON format:
@@ -95,16 +94,9 @@ def mocha_json_to_junit_xml(json_str: str, output_file: Path, test_files: list[P
 
     Each test object has: fullTitle, title, duration, err, ...
 
-    Mocha's JSON reporter does NOT include a ``file`` field on test objects,
-    so we accept the known ``test_files`` list from the caller and set the
-    ``file`` attribute on testcase/testsuite elements.  This allows
-    ``parse_jest_test_xml()`` to resolve the test file via its ``file``
-    attribute lookup path.
-
     Args:
         json_str: JSON string from Mocha's --reporter json output.
         output_file: Path to write the JUnit XML file.
-        test_files: Optional list of test file paths that were passed to Mocha.
 
     """
     try:
@@ -133,34 +125,10 @@ def mocha_json_to_junit_xml(json_str: str, output_file: Path, test_files: list[P
         suite_name = suite_name or "root"
         suites.setdefault(suite_name, []).append(test)
 
-    # Build a mapping from describe block names to file paths by reading test files.
-    # Each generated test file wraps tests in describe('functionName', ...) so we
-    # can map suite names back to their source file.
-    suite_to_file: dict[str, str] = {}
-    if test_files:
-        for tf in test_files:
-            suite_to_file[tf.name] = str(tf)
-            # Try to extract the top-level describe name from the file content
-            try:
-                content = tf.read_text(encoding="utf-8")
-                m = re.search(r"describe\s*\(\s*['\"]([^'\"]+)['\"]", content)
-                if m:
-                    suite_to_file[m.group(1)] = str(tf)
-            except Exception:
-                pass
-
-    # Fallback: if we have test files, use the first one as default for any unmatched suites
-    default_file = str(test_files[0]) if test_files else ""
-
     for suite_name, suite_tests in suites.items():
         testsuite = SubElement(testsuites, "testsuite")
         testsuite.set("name", suite_name)
         testsuite.set("tests", str(len(suite_tests)))
-
-        # Resolve file path: try suite name match, then use default
-        resolved_file = suite_to_file.get(suite_name, default_file)
-        if resolved_file:
-            testsuite.set("file", resolved_file)
 
         suite_failures = 0
         suite_time = 0.0
@@ -172,9 +140,6 @@ def mocha_json_to_junit_xml(json_str: str, output_file: Path, test_files: list[P
             duration_ms = test.get("duration", 0) or 0
             duration_s = duration_ms / 1000.0
             testcase.set("time", str(duration_s))
-
-            if resolved_file:
-                testcase.set("file", resolved_file)
             suite_time += duration_s
 
             err = test.get("err", {})
@@ -327,7 +292,6 @@ def _run_mocha_and_convert(
     result_file_path: Path,
     subprocess_timeout: int,
     label: str,
-    test_files: list[Path] | None = None,
 ) -> subprocess.CompletedProcess:
     """Run Mocha subprocess, extract JSON output, and convert to JUnit XML.
 
@@ -338,7 +302,6 @@ def _run_mocha_and_convert(
         result_file_path: Path to write JUnit XML.
         subprocess_timeout: Timeout in seconds.
         label: Label for log messages (e.g. "behavioral", "benchmarking").
-        test_files: Test file paths passed to Mocha (for file attribute in XML).
 
     Returns:
         CompletedProcess with combined stdout/stderr.
@@ -380,7 +343,7 @@ def _run_mocha_and_convert(
     if result.stdout:
         mocha_json = _extract_mocha_json(result.stdout)
         if mocha_json:
-            mocha_json_to_junit_xml(mocha_json, result_file_path, test_files=test_files)
+            mocha_json_to_junit_xml(mocha_json, result_file_path)
             logger.debug(f"Converted Mocha JSON to JUnit XML: {result_file_path}")
         else:
             logger.warning(f"Could not extract Mocha JSON from stdout (len={len(result.stdout)})")
@@ -451,7 +414,6 @@ def run_mocha_behavioral_tests(
             result_file_path=result_file_path,
             subprocess_timeout=subprocess_timeout,
             label="behavioral",
-            test_files=test_files,
         )
     finally:
         wall_clock_ns = time.perf_counter_ns() - start_time_ns
@@ -553,7 +515,6 @@ def run_mocha_benchmarking_tests(
             result_file_path=result_file_path,
             subprocess_timeout=total_timeout,
             label="benchmarking",
-            test_files=test_files,
         )
     finally:
         wall_clock_seconds = time.time() - total_start_time
@@ -628,7 +589,6 @@ def run_mocha_line_profile_tests(
             result_file_path=result_file_path,
             subprocess_timeout=subprocess_timeout,
             label="line_profile",
-            test_files=test_files,
         )
     finally:
         wall_clock_ns = time.perf_counter_ns() - start_time_ns

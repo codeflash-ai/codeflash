@@ -141,7 +141,7 @@ def run_codeflash_command(
 def build_command(
     cwd: pathlib.Path, config: TestConfig, test_root: pathlib.Path, benchmarks_root: pathlib.Path | None = None
 ) -> list[str]:
-    repo_root = pathlib.Path(__file__).resolve().parent.parent.parent
+    repo_root = pathlib.Path(__file__).parent.parent.parent
     python_path = os.path.relpath(repo_root / "codeflash" / "main.py", cwd)
 
     base_command = ["uv", "run", "--no-project", python_path, "--file", config.file_path, "--no-pr"]
@@ -149,7 +149,7 @@ def build_command(
     if config.function_name:
         base_command.extend(["--function", config.function_name])
 
-    # Check if codeflash config exists (pyproject.toml or codeflash.toml) - if so, don't override it
+    # Check if config exists (pyproject.toml or codeflash.toml) - if so, don't override it
     has_codeflash_config = (cwd / "codeflash.toml").exists()
     if not has_codeflash_config:
         pyproject_path = cwd / "pyproject.toml"
@@ -158,7 +158,7 @@ def build_command(
                 pyproject_data = tomllib.load(f)
                 has_codeflash_config = "tool" in pyproject_data and "codeflash" in pyproject_data["tool"]
 
-    # Only pass --tests-root and --module-root if they're not configured
+    # Only pass --tests-root and --module-root if they're not configured in config files
     if not has_codeflash_config:
         base_command.extend(["--tests-root", str(test_root), "--module-root", str(cwd)])
 
@@ -222,7 +222,7 @@ def validate_output(stdout: str, return_code: int, expected_improvement_pct: int
             return False
 
     if config.expected_unit_test_files is not None:
-        # Match the per-function test discovery message from function_optimizer.py
+        # Match the per-function discovery message from function_optimizer.py
         # Format: "Discovered X existing unit test files, Y replay test files, and Z concolic..."
         unit_test_files_match = re.search(r"Discovered (\d+) existing unit test files?", stdout)
         if not unit_test_files_match:

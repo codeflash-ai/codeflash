@@ -68,17 +68,62 @@ class JavaScriptSupport:
     def dir_excludes(self) -> frozenset[str]:
         return frozenset({"node_modules", "dist", "build", ".next", ".nuxt", "coverage", ".cache", ".turbo", ".vercel"})
 
+    @property
+    def default_language_version(self) -> str | None:
+        return "ES2022"
+
+    @property
+    def valid_test_frameworks(self) -> tuple[str, ...]:
+        return ("jest", "mocha", "vitest")
+
+    @property
+    def test_result_serialization_format(self) -> str:
+        return "json"
+
+    def parse_test_xml(
+        self, test_xml_file_path: Path, test_files: Any, test_config: Any, run_result: Any = None
+    ) -> Any:
+        from codeflash.languages.javascript.parse import parse_jest_test_xml
+        from codeflash.verification.parse_test_output import parse_func, resolve_test_file_from_class_path
+
+        return parse_jest_test_xml(
+            test_xml_file_path,
+            test_files,
+            test_config,
+            run_result,
+            parse_func=parse_func,
+            resolve_test_file_from_class_path=resolve_test_file_from_class_path,
+        )
+
+    def load_coverage(
+        self,
+        coverage_database_file: Path,
+        function_name: str,
+        code_context: Any,
+        source_file: Path,
+        coverage_config_file: Path | None = None,
+    ) -> Any:
+        from codeflash.verification.coverage_utils import JestCoverageUtils
+
+        return JestCoverageUtils.load_from_jest_json(
+            coverage_json_path=coverage_database_file,
+            function_name=function_name,
+            code_context=code_context,
+            source_code_path=source_file,
+        )
+
     # === Discovery ===
 
     def discover_functions(
-        self, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
+        self, source: str, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
     ) -> list[FunctionToOptimize]:
-        """Find all optimizable functions in a JavaScript file.
+        """Find all optimizable functions in JavaScript/TypeScript source code.
 
-        Uses tree-sitter to parse the file and find functions.
+        Uses tree-sitter to parse the source and find functions.
 
         Args:
-            file_path: Path to the JavaScript file to analyze.
+            source: Source code to analyze.
+            file_path: Path to the source file (used for language detection).
             filter_criteria: Optional criteria to filter functions.
 
         Returns:
@@ -86,12 +131,6 @@ class JavaScriptSupport:
 
         """
         criteria = filter_criteria or FunctionFilterCriteria()
-
-        try:
-            source = file_path.read_text(encoding="utf-8")
-        except Exception as e:
-            logger.warning("Failed to read %s: %s", file_path, e)
-            return []
 
         try:
             analyzer = get_analyzer_for_file(file_path)
@@ -111,7 +150,7 @@ class JavaScriptSupport:
 
                 # Skip non-exported functions (can't be imported in tests)
                 # Exception: nested functions and methods are allowed if their parent is exported
-                if not func.is_exported and not func.parent_function:
+                if criteria.require_export and not func.is_exported and not func.parent_function:
                     logger.debug(f"Skipping non-exported function: {func.name}")  # noqa: G004
                     continue
 
@@ -142,61 +181,6 @@ class JavaScriptSupport:
 
         except Exception as e:
             logger.warning("Failed to parse %s: %s", file_path, e)
-            return []
-
-    def discover_functions_from_source(self, source: str, file_path: Path | None = None) -> list[FunctionToOptimize]:
-        """Find all functions in source code string.
-
-        Uses tree-sitter to parse the source and find functions.
-
-        Args:
-            source: The source code to analyze.
-            file_path: Optional file path for context (used for language detection).
-
-        Returns:
-            List of FunctionToOptimize objects for discovered functions.
-
-        """
-        try:
-            # Use JavaScript analyzer by default, or detect from file path
-            if file_path:
-                analyzer = get_analyzer_for_file(file_path)
-            else:
-                analyzer = TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
-
-            tree_functions = analyzer.find_functions(
-                source, include_methods=True, include_arrow_functions=True, require_name=True
-            )
-
-            functions: list[FunctionToOptimize] = []
-            for func in tree_functions:
-                # Build parents list
-                parents: list[FunctionParent] = []
-                if func.class_name:
-                    parents.append(FunctionParent(name=func.class_name, type="ClassDef"))
-                if func.parent_function:
-                    parents.append(FunctionParent(name=func.parent_function, type="FunctionDef"))
-
-                functions.append(
-                    FunctionToOptimize(
-                        function_name=func.name,
-                        file_path=file_path or Path("unknown"),
-                        parents=parents,
-                        starting_line=func.start_line,
-                        ending_line=func.end_line,
-                        starting_col=func.start_col,
-                        ending_col=func.end_col,
-                        is_async=func.is_async,
-                        is_method=func.is_method,
-                        language=str(self.language),
-                        doc_start_line=func.doc_start_line,
-                    )
-                )
-
-            return functions
-
-        except Exception as e:
-            logger.warning("Failed to parse source: %s", e)
             return []
 
     def _get_test_patterns(self) -> list[str]:
@@ -1738,6 +1722,11 @@ class JavaScriptSupport:
                 normalized_lines.append(stripped)
         return "\n".join(normalized_lines)
 
+    def generate_concolic_tests(
+        self, test_cfg: Any, project_root: Any, function_to_optimize: Any, function_to_optimize_ast: Any
+    ) -> tuple[dict, str]:
+        return {}, ""
+
     # === Test Editing ===
 
     def add_runtime_comments(
@@ -1781,32 +1770,12 @@ class JavaScriptSupport:
             disable_ts_check,
             inject_test_globals,
             normalize_generated_tests_imports,
-            sanitize_mocha_imports,
         )
         from codeflash.languages.javascript.module_system import detect_module_system
-        from codeflash.models.models import GeneratedTests as GeneratedTestsModel
-        from codeflash.models.models import GeneratedTestsList
-
-        # For Mocha, strip vitest/jest/require('mocha') imports the AI may have generated
-        if test_framework == "mocha":
-            sanitized = []
-            for test in generated_tests.generated_tests:
-                sanitized.append(
-                    GeneratedTestsModel(
-                        generated_original_test_source=sanitize_mocha_imports(test.generated_original_test_source),
-                        instrumented_behavior_test_source=sanitize_mocha_imports(
-                            test.instrumented_behavior_test_source
-                        ),
-                        instrumented_perf_test_source=sanitize_mocha_imports(test.instrumented_perf_test_source),
-                        behavior_file_path=test.behavior_file_path,
-                        perf_file_path=test.perf_file_path,
-                    )
-                )
-            generated_tests = GeneratedTestsList(generated_tests=sanitized)
 
         module_system = detect_module_system(project_root, source_file_path)
-        if module_system == "esm" or test_framework == "mocha":
-            generated_tests = inject_test_globals(generated_tests, test_framework, module_system)
+        if module_system == "esm":
+            generated_tests = inject_test_globals(generated_tests, test_framework)
         if self.language == Language.TYPESCRIPT:
             generated_tests = disable_ts_check(generated_tests)
         return normalize_generated_tests_imports(generated_tests)
@@ -1996,13 +1965,6 @@ class JavaScriptSupport:
         # Ensure vitest imports are present when using vitest framework
         generated_test_source = ensure_vitest_imports(generated_test_source, test_cfg.test_framework)
 
-        # For Mocha: convert expect()/test() to assert/it() BEFORE instrumentation
-        # to prevent instrumentation from breaking Chai-style assertion chains
-        if test_cfg.test_framework == "mocha":
-            from codeflash.languages.javascript.edit_tests import sanitize_mocha_imports
-
-            generated_test_source = sanitize_mocha_imports(generated_test_source)
-
         # Instrument for behavior verification (writes to SQLite)
         instrumented_behavior_test_source = instrument_generated_js_test(
             test_code=generated_test_source, function_to_optimize=function_to_optimize, mode=TestingMode.BEHAVIOR
@@ -2026,6 +1988,73 @@ class JavaScriptSupport:
 
         """
         return ".test.js"
+
+    def get_test_dir_for_source(self, test_dir: Path, source_file: Path | None) -> Path | None:
+        """Find the appropriate test directory for a JavaScript/TypeScript package.
+
+        For monorepos, this finds the package's test directory from the source file path.
+        For example: packages/workflow/src/utils.ts -> packages/workflow/test/codeflash-generated/
+
+        Args:
+            test_dir: The root tests directory (may be monorepo packages root).
+            source_file: Path to the source file being tested.
+
+        Returns:
+            The test directory path, or None if not found.
+
+        """
+        if source_file is None:
+            # No source path provided, check if test_dir itself has a test subdirectory
+            for test_subdir_name in ["test", "tests", "__tests__", "src/__tests__"]:
+                test_subdir = test_dir / test_subdir_name
+                if test_subdir.is_dir():
+                    codeflash_test_dir = test_subdir / "codeflash-generated"
+                    codeflash_test_dir.mkdir(parents=True, exist_ok=True)
+                    return codeflash_test_dir
+            return None
+
+        try:
+            # Resolve paths for reliable comparison
+            tests_root = test_dir.resolve()
+            source_path = Path(source_file).resolve()
+
+            # Walk up from the source file to find a directory with package.json or test/ folder
+            package_dir = None
+
+            for parent in source_path.parents:
+                # Stop if we've gone above or reached the tests_root level
+                # For monorepos, tests_root might be /packages/ and we want to search within packages
+                if parent in (tests_root, tests_root.parent):
+                    break
+
+                # Check if this looks like a package root
+                has_package_json = (parent / "package.json").exists()
+                has_test_dir = any((parent / d).is_dir() for d in ["test", "tests", "__tests__"])
+
+                if has_package_json or has_test_dir:
+                    package_dir = parent
+                    break
+
+            if package_dir:
+                # Find the test directory in this package
+                for test_subdir_name in ["test", "tests", "__tests__", "src/__tests__"]:
+                    test_subdir = package_dir / test_subdir_name
+                    if test_subdir.is_dir():
+                        codeflash_test_dir = test_subdir / "codeflash-generated"
+                        codeflash_test_dir.mkdir(parents=True, exist_ok=True)
+                        return codeflash_test_dir
+
+            return None
+        except Exception:
+            return None
+
+    def resolve_test_file_from_class_path(self, test_class_path: str, base_dir: Path) -> Path | None:
+        return None
+
+    def resolve_test_module_path_for_pr(
+        self, test_module_path: str, tests_project_rootdir: Path, non_generated_tests: set[Path]
+    ) -> Path | None:
+        return None
 
     def find_test_root(self, project_root: Path) -> Path | None:
         """Find the test root directory for a JavaScript project.
@@ -2240,11 +2269,12 @@ class JavaScriptSupport:
         for behavioral verification and performance benchmarking.
 
         Args:
-            test_path: Path to the test file.
+            test_string: The test source code string.
             call_positions: List of code positions where the function is called.
             function_to_optimize: The function being optimized.
             tests_project_root: Root directory of tests.
             mode: Testing mode - "behavior" or "performance".
+            test_path: Path to the test file.
 
         Returns:
             Tuple of (success, instrumented_code).

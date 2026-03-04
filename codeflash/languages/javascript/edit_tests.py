@@ -11,27 +11,8 @@ import re
 from pathlib import Path
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.time_utils import format_perf, format_time
+from codeflash.code_utils.time_utils import format_runtime_comment
 from codeflash.models.models import GeneratedTests, GeneratedTestsList
-from codeflash.result.critic import performance_gain
-
-
-def format_runtime_comment(original_time: int, optimized_time: int) -> str:
-    """Format a runtime comparison comment for JavaScript.
-
-    Args:
-        original_time: Original runtime in nanoseconds.
-        optimized_time: Optimized runtime in nanoseconds.
-
-    Returns:
-        Formatted comment string with // prefix.
-
-    """
-    perf_gain = format_perf(
-        abs(performance_gain(original_runtime_ns=original_time, optimized_runtime_ns=optimized_time) * 100)
-    )
-    status = "slower" if optimized_time > original_time else "faster"
-    return f"// {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain}% {status})"
 
 
 def add_runtime_comments(source: str, original_runtimes: dict[str, int], optimized_runtimes: dict[str, int]) -> str:
@@ -120,7 +101,7 @@ def add_runtime_comments(source: str, original_runtimes: dict[str, int], optimiz
             # Only add comment if line has a function call and doesn't already have a comment
             if func_call_pattern.search(line) and "//" not in line and "expect(" in line:
                 orig_time, opt_time = timing_by_full_name[current_matched_full_name]
-                comment = format_runtime_comment(orig_time, opt_time)
+                comment = format_runtime_comment(orig_time, opt_time, comment_prefix="//")
                 logger.debug(f"[js-annotations] Adding comment to test '{current_test_name}': {comment}")
                 # Add comment at end of line
                 line = f"{line.rstrip()}  {comment}"
@@ -214,30 +195,24 @@ def normalize_codeflash_imports(source: str) -> str:
 
 
 # Author: ali <mohammed18200118@gmail.com>
-def inject_test_globals(
-    generated_tests: GeneratedTestsList, test_framework: str = "jest", module_system: str = "esm"
-) -> GeneratedTestsList:
+def inject_test_globals(generated_tests: GeneratedTestsList, test_framework: str = "jest") -> GeneratedTestsList:
     # TODO: inside the prompt tell the llm if it should import jest functions or it's already injected in the global window
     """Inject test globals into all generated tests.
 
     Args:
         generated_tests: List of generated tests.
         test_framework: The test framework being used ("jest", "vitest", or "mocha").
-        module_system: The module system ("esm" or "commonjs").
 
     Returns:
         Generated tests with test globals injected.
 
     """
-    is_cjs = module_system == "commonjs"
+    # we only inject test globals for esm modules
     # Use vitest imports for vitest projects, jest imports for jest projects
     if test_framework == "vitest":
         global_import = "import { vi, describe, it, expect, beforeEach, afterEach, beforeAll, test } from 'vitest'\n"
     elif test_framework == "mocha":
-        if is_cjs:
-            global_import = "const assert = require('node:assert/strict');\n"
-        else:
-            global_import = "import assert from 'node:assert/strict';\n"
+        global_import = "import assert from 'node:assert/strict';\n"
     else:
         # Default to jest imports for jest and other frameworks
         global_import = (
@@ -245,281 +220,10 @@ def inject_test_globals(
         )
 
     for test in generated_tests.generated_tests:
-        # Skip injection if the source already has the import (LLM may have included it)
-        if global_import.strip() not in test.generated_original_test_source:
-            test.generated_original_test_source = global_import + test.generated_original_test_source
-        if global_import.strip() not in test.instrumented_behavior_test_source:
-            test.instrumented_behavior_test_source = global_import + test.instrumented_behavior_test_source
-        if global_import.strip() not in test.instrumented_perf_test_source:
-            test.instrumented_perf_test_source = global_import + test.instrumented_perf_test_source
+        test.generated_original_test_source = global_import + test.generated_original_test_source
+        test.instrumented_behavior_test_source = global_import + test.instrumented_behavior_test_source
+        test.instrumented_perf_test_source = global_import + test.instrumented_perf_test_source
     return generated_tests
-
-
-_VITEST_IMPORT_RE = re.compile(r"^.*import\s+\{[^}]*\}\s+from\s+['\"]vitest['\"].*\n?", re.MULTILINE)
-_VITEST_REQUIRE_RE = re.compile(
-    r"^.*(?:const|let|var)\s+\{[^}]*\}\s*=\s*require\s*\(\s*['\"]vitest['\"]\s*\).*\n?", re.MULTILINE
-)
-_JEST_GLOBALS_IMPORT_RE = re.compile(r"^.*import\s+\{[^}]*\}\s+from\s+['\"]@jest/globals['\"].*\n?", re.MULTILINE)
-_JEST_GLOBALS_REQUIRE_RE = re.compile(
-    r"^.*(?:const|let|var)\s+\{[^}]*\}\s*=\s*require\s*\(\s*['\"]@jest/globals['\"]\s*\).*\n?", re.MULTILINE
-)
-_MOCHA_REQUIRE_RE = re.compile(
-    r"^.*(?:const|let|var)\s+\{[^}]*\}\s*=\s*require\s*\(\s*['\"]mocha['\"]\s*\).*\n?", re.MULTILINE
-)
-_VITEST_COMMENT_RE = re.compile(r"^.*//.*vitest imports.*\n?", re.MULTILINE | re.IGNORECASE)
-
-# Chai import patterns — LLMs sometimes associate Mocha with Chai
-_CHAI_IMPORT_RE = re.compile(r"^.*import\s+.*\s+from\s+['\"]chai['\"].*\n?", re.MULTILINE)
-_CHAI_REQUIRE_RE = re.compile(r"^.*(?:const|let|var)\s+.*\s*=\s*require\s*\(\s*['\"]chai['\"]\s*\).*\n?", re.MULTILINE)
-
-# Pattern to convert test() → it() — Mocha uses it(), not test()
-_TEST_CALL_RE = re.compile(r"(\s*)test\s*\(")
-
-
-def sanitize_mocha_imports(source: str) -> str:
-    """Remove vitest/jest/mocha-require/chai imports from Mocha test source.
-
-    The AI service sometimes generates vitest or jest-style imports when the
-    framework is mocha. Mocha provides describe/it/before*/after* as globals,
-    so these imports must be removed. Also removes ``require('mocha')``
-    destructures since Mocha doesn't export those.
-
-    Additionally converts ``test()`` calls to ``it()`` since Mocha only
-    supports ``it()`` as its test function.
-
-    Args:
-        source: Generated test source code.
-
-    Returns:
-        Source with incorrect framework imports stripped and test() converted to it().
-
-    """
-    source = _VITEST_IMPORT_RE.sub("", source)
-    source = _VITEST_REQUIRE_RE.sub("", source)
-    source = _JEST_GLOBALS_IMPORT_RE.sub("", source)
-    source = _JEST_GLOBALS_REQUIRE_RE.sub("", source)
-    source = _MOCHA_REQUIRE_RE.sub("", source)
-    source = _VITEST_COMMENT_RE.sub("", source)
-    source = _CHAI_IMPORT_RE.sub("", source)
-    source = _CHAI_REQUIRE_RE.sub("", source)
-    source = _TEST_CALL_RE.sub(r"\1it(", source)
-    return convert_expect_to_assert(source)
-
-
-def _find_matching_paren(source: str, open_pos: int) -> int:
-    """Find the position of the closing parenthesis matching the one at open_pos."""
-    depth = 0
-    in_string = False
-    string_char = None
-    i = open_pos
-    while i < len(source):
-        char = source[i]
-        if char in ('"', "'", "`") and (i == 0 or source[i - 1] != "\\"):
-            if not in_string:
-                in_string = True
-                string_char = char
-            elif char == string_char:
-                in_string = False
-                string_char = None
-        elif not in_string:
-            if char == "(":
-                depth += 1
-            elif char == ")":
-                depth -= 1
-                if depth == 0:
-                    return i
-        i += 1
-    return -1
-
-
-def convert_expect_to_assert(source: str) -> str:
-    """Convert expect()-style assertions to node:assert/strict equivalents.
-
-    LLMs frequently generate Chai-style (``expect(x).to.equal(y)``) or
-    Jest-style (``expect(x).toBe(y)``) assertions for Mocha tests despite
-    being instructed to use ``assert``.  This function converts the common
-    patterns to their ``node:assert/strict`` equivalents so that
-    instrumentation and Mocha execution work correctly.
-
-    Any ``expect()`` calls that cannot be converted are commented out with
-    ``// SKIPPED`` to prevent ``ReferenceError: expect is not defined``.
-
-    Args:
-        source: Test source code that may contain expect() calls.
-
-    Returns:
-        Source with expect() calls converted to assert equivalents.
-
-    """
-    if "expect(" not in source:
-        return source
-
-    lines = source.split("\n")
-    converted: list[str] = []
-
-    for line in lines:
-        converted_line = _convert_expect_line(line)
-        converted.append(converted_line)
-
-    return "\n".join(converted)
-
-
-# Patterns mapping (chain_suffix → conversion_type)
-# "simple" = assert.func(actual, value), "ok_cmp" = assert.ok(actual OP value)
-# "ok_method" = assert.ok(actual.method(value)), "type" = assert.ok(typeof actual === ...)
-# "truthy" = assert.ok(actual) / assert.strictEqual(actual, bool)
-# "throws" = assert.throws, "noop" = assert.ok(actual !== undefined)
-_EXPECT_CHAIN_MAP: list[tuple[str, str, str | None]] = [
-    # Jest patterns (most common)
-    (".toBe(", "simple_strictEqual", None),
-    (".toEqual(", "simple_deepStrictEqual", None),
-    (".toStrictEqual(", "simple_deepStrictEqual", None),
-    (".toBeGreaterThan(", "ok_gt", None),
-    (".toBeGreaterThanOrEqual(", "ok_gte", None),
-    (".toBeLessThan(", "ok_lt", None),
-    (".toBeLessThanOrEqual(", "ok_lte", None),
-    (".toContain(", "ok_includes", None),
-    (".toHaveLength(", "ok_length", None),
-    (".toBeNull(", "null_check", None),
-    (".toBeUndefined(", "undef_check", None),
-    (".toBeTruthy(", "truthy", None),
-    (".toBeFalsy(", "falsy", None),
-    (".toThrow(", "throws", None),
-    (".toMatch(", "ok_match", None),
-    # Chai .to. patterns
-    (".to.equal(", "simple_strictEqual", None),
-    (".to.eql(", "simple_deepStrictEqual", None),
-    (".to.deep.equal(", "simple_deepStrictEqual", None),
-    (".to.be.greaterThan(", "ok_gt", None),
-    (".to.be.lessThan(", "ok_lt", None),
-    (".to.be.above(", "ok_gt", None),
-    (".to.be.below(", "ok_lt", None),
-    (".to.be.at.least(", "ok_gte", None),
-    (".to.be.at.most(", "ok_lte", None),
-    (".to.include(", "ok_includes", None),
-    (".to.contain(", "ok_includes", None),
-    (".to.not.include(", "ok_not_includes", None),
-    (".to.not.contain(", "ok_not_includes", None),
-    (".to.have.length(", "ok_length", None),
-    (".to.have.lengthOf(", "ok_length", None),
-    (".to.throw(", "throws", None),
-    (".to.match(", "ok_match", None),
-    (".to.be.a(", "noop", None),
-    (".to.be.an(", "noop", None),
-    (".to.be.instanceOf(", "noop", None),
-    (".to.be.instanceof(", "noop", None),
-    (".to.exist", "truthy_no_arg", None),
-    (".to.not.exist", "falsy_no_arg", None),
-    (".to.be.true", "true_no_arg", None),
-    (".to.be.false", "false_no_arg", None),
-    (".to.be.null", "null_no_arg", None),
-    (".to.be.undefined", "undef_no_arg", None),
-    (".to.be.ok", "truthy_no_arg", None),
-    (".to.not.be.ok", "falsy_no_arg", None),
-]
-
-
-def _convert_expect_line(line: str) -> str:
-    """Convert a single line containing expect() to an assert equivalent."""
-    stripped = line.lstrip()
-    if "expect(" not in stripped:
-        return line
-
-    indent = line[: len(line) - len(stripped)]
-
-    expect_idx = line.find("expect(")
-    if expect_idx == -1:
-        return line
-
-    open_paren = expect_idx + len("expect")
-    close_paren = _find_matching_paren(line, open_paren)
-    if close_paren == -1:
-        # Multi-line expect or malformed — comment out to prevent ReferenceError
-        return f"{indent}// SKIPPED (unconvertible expect): {stripped}"
-
-    actual_expr = line[open_paren + 1 : close_paren]
-    rest = line[close_paren + 1 :].strip()
-    trailing_semi = ";" if rest.endswith(";") else ""
-
-    # Try each chain pattern
-    for chain_prefix, conversion_type, _ in _EXPECT_CHAIN_MAP:
-        if not rest.startswith(chain_prefix):
-            continue
-
-        # No-argument chains (e.g. .to.be.true, .to.exist)
-        if conversion_type.endswith("_no_arg"):
-            return _convert_no_arg(indent, actual_expr, conversion_type, trailing_semi)
-
-        # Extract the argument inside the chain's parentheses
-        chain_open = rest.find("(")
-        if chain_open == -1:
-            break
-        chain_close = _find_matching_paren(rest, chain_open)
-        if chain_close == -1:
-            break
-        value_expr = rest[chain_open + 1 : chain_close]
-
-        return _convert_with_arg(indent, actual_expr, value_expr, conversion_type, trailing_semi)
-
-    # Fallback: comment out unconvertible expect() to prevent ReferenceError
-    return f"{indent}// SKIPPED (unconvertible expect): {stripped}"
-
-
-def _convert_no_arg(indent: str, actual: str, conversion_type: str, semi: str) -> str:
-    """Convert expect patterns that take no argument (e.g., .to.be.true)."""
-    if conversion_type == "true_no_arg":
-        return f"{indent}assert.strictEqual({actual}, true){semi}"
-    if conversion_type == "false_no_arg":
-        return f"{indent}assert.strictEqual({actual}, false){semi}"
-    if conversion_type == "null_no_arg":
-        return f"{indent}assert.strictEqual({actual}, null){semi}"
-    if conversion_type == "undef_no_arg":
-        return f"{indent}assert.strictEqual({actual}, undefined){semi}"
-    if conversion_type == "truthy_no_arg":
-        return f"{indent}assert.ok({actual}){semi}"
-    if conversion_type == "falsy_no_arg":
-        return f"{indent}assert.ok(!({actual})){semi}"
-    return f"{indent}assert.ok({actual} !== undefined){semi}"
-
-
-def _convert_with_arg(indent: str, actual: str, value: str, conversion_type: str, semi: str) -> str:
-    """Convert expect patterns that take an argument."""
-    if conversion_type == "simple_strictEqual":
-        return f"{indent}assert.strictEqual({actual}, {value}){semi}"
-    if conversion_type == "simple_deepStrictEqual":
-        return f"{indent}assert.deepStrictEqual({actual}, {value}){semi}"
-    if conversion_type == "ok_gt":
-        return f"{indent}assert.ok(({actual}) > ({value})){semi}"
-    if conversion_type == "ok_gte":
-        return f"{indent}assert.ok(({actual}) >= ({value})){semi}"
-    if conversion_type == "ok_lt":
-        return f"{indent}assert.ok(({actual}) < ({value})){semi}"
-    if conversion_type == "ok_lte":
-        return f"{indent}assert.ok(({actual}) <= ({value})){semi}"
-    if conversion_type == "ok_includes":
-        return f"{indent}assert.ok(String({actual}).includes({value})){semi}"
-    if conversion_type == "ok_not_includes":
-        return f"{indent}assert.ok(!String({actual}).includes({value})){semi}"
-    if conversion_type == "ok_length":
-        return f"{indent}assert.strictEqual(({actual}).length, {value}){semi}"
-    if conversion_type == "ok_match":
-        return f"{indent}assert.match(String({actual}), {value}){semi}"
-    if conversion_type == "null_check":
-        return f"{indent}assert.strictEqual({actual}, null){semi}"
-    if conversion_type == "undef_check":
-        return f"{indent}assert.strictEqual({actual}, undefined){semi}"
-    if conversion_type == "truthy":
-        return f"{indent}assert.ok({actual}){semi}"
-    if conversion_type == "falsy":
-        return f"{indent}assert.ok(!({actual})){semi}"
-    if conversion_type == "throws":
-        if value:
-            return f"{indent}assert.throws(() => {{ {actual}; }}, {value}){semi}"
-        return f"{indent}assert.throws(() => {{ {actual}; }}){semi}"
-    # noop: type checks like .to.be.a('string') — just verify defined
-    if conversion_type == "noop":
-        return f"{indent}assert.ok({actual} !== undefined){semi}"
-    return f"{indent}assert.ok({actual} !== undefined){semi}"
 
 
 # Author: ali <mohammed18200118@gmail.com>
