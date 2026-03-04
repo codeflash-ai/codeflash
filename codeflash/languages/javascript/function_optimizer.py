@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -14,6 +15,7 @@ from codeflash.code_utils.config_consts import (
     TESTGEN_LIMIT_ERROR,
     TOTAL_LOOPING_TIME_EFFECTIVE,
 )
+from codeflash.code_utils.config_js_validation import infer_js_module_root, validate_js_module_resolution
 from codeflash.either import Failure, Success
 from codeflash.models.models import (
     CodeOptimizationContext,
@@ -33,6 +35,69 @@ if TYPE_CHECKING:
 
 
 class JavaScriptFunctionOptimizer(FunctionOptimizer):
+    def try_correct_module_root(self) -> bool:
+        """Attempt to auto-correct a misconfigured module root.
+
+        Returns True if the module root was corrected, False if no correction was needed.
+        """
+        source_file = self.function_to_optimize.file_path
+        project_root = self.project_root
+        module_root = Path(self.args.module_root).resolve()
+
+        valid, _ = validate_js_module_resolution(source_file, project_root, module_root)
+        if valid:
+            return False
+
+        inferred = infer_js_module_root(source_file, project_root)
+
+        try:
+            source_file.resolve().relative_to(inferred)
+        except ValueError:
+            return False
+
+        logger.info(f"Auto-correcting module root from {module_root} to {inferred}")
+        self.args.module_root = inferred
+        self.args.project_root = project_root
+        self.project_root = project_root
+
+        package_json_path = project_root / "package.json"
+        if package_json_path.exists():
+            try:
+                with package_json_path.open(encoding="utf-8") as f:
+                    doc = json.load(f)
+
+                relative_module_root = inferred.relative_to(project_root).as_posix()
+                codeflash_section = doc.get("codeflash", {})
+                if not isinstance(codeflash_section, dict):
+                    codeflash_section = {}
+                codeflash_section["moduleRoot"] = relative_module_root
+                doc["codeflash"] = codeflash_section
+
+                with package_json_path.open("w", encoding="utf-8") as f:
+                    json.dump(doc, f, indent=2)
+                    f.write("\n")
+
+                from codeflash.code_utils.config_js import PACKAGE_JSON_DATA_CACHE
+
+                PACKAGE_JSON_DATA_CACHE.pop(package_json_path, None)
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning(f"Could not update package.json with corrected module root: {e}")
+
+        return True
+
+    def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
+        self.try_correct_module_root()
+
+        source_file = self.function_to_optimize.file_path
+        project_root = self.project_root
+        module_root = Path(self.args.module_root).resolve()
+
+        valid, error = validate_js_module_resolution(source_file, project_root, module_root)
+        if not valid:
+            return Failure(f"Cannot optimize '{self.function_to_optimize.function_name}': {error}")
+
+        return super().can_be_optimized()
+
     def get_code_optimization_context(self) -> Result[CodeOptimizationContext, str]:
         from codeflash.languages import get_language_support
         from codeflash.languages.base import Language
