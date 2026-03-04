@@ -775,9 +775,10 @@ class AiServiceClient:
         function_source_code: str,
         function_name: str,
         trace_id: str,
+        coverage_summary: str = "",
         language: str = "python",
     ) -> list[TestFileReview]:
-        payload = {
+        payload: dict[str, Any] = {
             "tests": tests,
             "function_source_code": function_source_code,
             "function_name": function_name,
@@ -786,6 +787,8 @@ class AiServiceClient:
             "codeflash_version": codeflash_version,
             "call_sequence": self.get_next_sequence(),
         }
+        if coverage_summary:
+            payload["coverage_summary"] = coverage_summary
         try:
             response = self.make_ai_service_request("/testgen_review", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:

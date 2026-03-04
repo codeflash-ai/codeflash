@@ -2030,6 +2030,10 @@ class FunctionOptimizer:
                     }
                 )
 
+            coverage_summary = ""
+            if coverage_results and coverage_results.coverage is not None:
+                coverage_summary = f"{coverage_results.coverage:.1f}%"
+
             console.rule()
             with progress_bar("Reviewing generated tests for quality issues..."):
                 review_results = self.aiservice_client.review_generated_tests(
@@ -2037,6 +2041,7 @@ class FunctionOptimizer:
                     function_source_code=self.function_to_optimize_source_code,
                     function_name=self.function_to_optimize.function_name,
                     trace_id=self.function_trace_id,
+                    coverage_summary=coverage_summary,
                     language=self.function_to_optimize.language,
                 )
 
