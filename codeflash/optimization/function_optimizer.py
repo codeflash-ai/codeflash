@@ -1896,23 +1896,48 @@ class FunctionOptimizer:
             )
         )
 
-    def display_repaired_functions(self, generated_tests: GeneratedTestsList, reviews: list[TestFileReview]) -> None:
-        """Display only the repaired function bodies, not the full test files."""
+    def display_repaired_functions(
+        self, generated_tests: GeneratedTestsList, reviews: list[TestFileReview], original_sources: dict[int, str]
+    ) -> None:
+        """Display diffs of repaired functions showing what changed."""
         import libcst as cst
+
+        def extract_functions(source: str, names: set[str]) -> dict[str, str]:
+            try:
+                tree = cst.parse_module(source)
+                return {
+                    node.name.value: tree.code_for_node(node)
+                    for node in tree.body
+                    if isinstance(node, cst.FunctionDef) and node.name.value in names
+                }
+            except cst.ParserSyntaxError:
+                return {}
 
         for review in reviews:
             gt = generated_tests.generated_tests[review.test_index]
-            source = gt.raw_generated_test_source or gt.generated_original_test_source
             repaired_names = {f.function_name for f in review.functions_to_repair}
-            try:
-                tree = cst.parse_module(source)
-                for node in tree.body:
-                    if isinstance(node, cst.FunctionDef) and node.name.value in repaired_names:
-                        console.rule()
-                        logger.info(f"Repaired: {node.name.value}")
-                        code_print(tree.code_for_node(node), language=self.function_to_optimize.language)
-            except cst.ParserSyntaxError:
-                pass
+            new_source = gt.generated_original_test_source
+            old_source = original_sources.get(review.test_index, "")
+
+            old_funcs = extract_functions(old_source, repaired_names)
+            new_funcs = extract_functions(new_source, repaired_names)
+
+            for name in repaired_names:
+                old_func = old_funcs.get(name, "")
+                new_func = new_funcs.get(name, "")
+                if not new_func:
+                    continue
+                console.rule()
+                if old_func and old_func != new_func:
+                    diff = unified_diff_strings(
+                        old_func, new_func, fromfile=f"{name} (before)", tofile=f"{name} (after)"
+                    )
+                    if diff:
+                        logger.info(f"Repaired: {name}")
+                        console.print(Syntax(diff, "diff", theme="monokai"))
+                        continue
+                logger.info(f"Repaired: {name}")
+                code_print(new_func, language=self.function_to_optimize.language)
 
     def build_helper_classes_map(self, code_context: CodeOptimizationContext) -> dict[Path, set[str]]:
         """Build a mapping of file paths to helper class names from code context."""
@@ -2033,6 +2058,11 @@ class FunctionOptimizer:
 
             any_repaired = False
             repaired_count = 0
+            # Snapshot original sources before repair so we can show diffs
+            original_sources: dict[int, str] = {
+                r.test_index: generated_tests.generated_tests[r.test_index].generated_original_test_source
+                for r in all_to_repair
+            }
             with progress_bar(f"Repairing {total_issues} flagged test function(s)..."):
                 for review in all_to_repair:
                     gt = generated_tests.generated_tests[review.test_index]
@@ -2096,7 +2126,7 @@ class FunctionOptimizer:
                     source_file_path=self.function_to_optimize.file_path,
                 )
                 console.print(f"  [green]Repaired {repaired_count} test function(s)[/green]")
-                self.display_repaired_functions(generated_tests, all_to_repair)
+                self.display_repaired_functions(generated_tests, all_to_repair, original_sources)
                 with progress_bar("Re-validating repaired tests..."):
                     validation = self.run_behavioral_validation(
                         code_context, original_helper_code, file_path_to_helper_classes
