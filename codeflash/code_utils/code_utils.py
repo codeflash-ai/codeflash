@@ -10,6 +10,7 @@ import site
 import sys
 from contextlib import contextmanager
 from functools import lru_cache
+from importlib.util import find_spec
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -353,6 +354,56 @@ def module_name_from_file_path(file_path: Path, project_root_path: Path, *, trav
                     parent = parent.parent
         msg = f"File {file_path} is not within the project root {project_root_path}."
         raise ValueError(msg)  # noqa: B904
+
+
+def validate_module_import(module_path: str, project_root: Path) -> tuple[bool, str]:
+    """Check if a module is importable using find_spec (no actual import or subprocess).
+
+    Returns (success, error_message). Uses importlib.util.find_spec to check
+    module availability without triggering module initialization.
+    """
+    project_root_str = str(project_root)
+    added = False
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
+        added = True
+    try:
+        if find_spec(module_path) is not None:
+            return True, ""
+        return False, f"Module '{module_path}' not found (find_spec returned None)"
+    except ModuleNotFoundError as e:
+        return False, str(e)
+    except Exception as e:
+        return False, f"Error checking module '{module_path}': {e}"
+    finally:
+        if added:
+            sys.path.remove(project_root_str)
+
+
+def infer_module_root_from_file(file_path: Path, pyproject_dir: Path) -> Path | None:
+    """Infer the correct module-root for a Python file by walking the __init__.py chain.
+
+    Walks up from the file's parent directory toward pyproject_dir, tracking the
+    topmost directory that contains ``__init__.py`` (i.e. the top-level package).
+    The module-root is this top-level package directory, since
+    ``project_root_from_module_root`` will use its parent as the PYTHONPATH entry.
+
+    Returns the inferred module-root path, or None if inference fails.
+    """
+    file_path = file_path.resolve()
+    pyproject_dir = pyproject_dir.resolve()
+    current = file_path.parent
+    top_package: Path | None = None
+    while current not in (pyproject_dir, current.parent):
+        if (current / "__init__.py").exists():
+            top_package = current
+        else:
+            break
+        current = current.parent
+    if top_package is not None:
+        return top_package
+    # No __init__.py found — treat the file's own directory as the module-root
+    return file_path.parent
 
 
 def file_path_from_module_name(module_name: str, project_root_path: Path) -> Path:

@@ -1,11 +1,21 @@
 from __future__ import annotations
 
 import ast
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import tomlkit
+
+from codeflash.cli_cmds.cli import project_root_from_module_root
 from codeflash.cli_cmds.console import console, logger
+from codeflash.code_utils.code_utils import (
+    infer_module_root_from_file,
+    module_name_from_file_path,
+    validate_module_import,
+)
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
+from codeflash.code_utils.config_parser import find_pyproject_toml
 from codeflash.either import Failure, Success
 from codeflash.languages.python.context.unused_definition_remover import (
     detect_unused_helper_functions,
@@ -39,6 +49,72 @@ if TYPE_CHECKING:
 
 
 class PythonFunctionOptimizer(FunctionOptimizer):
+    def try_correct_module_root(self) -> bool:
+        """Try to infer and apply the correct module-root if the current one is wrong.
+
+        Walks the __init__.py chain to determine the correct module-root, validates
+        it by trying an import, and updates pyproject.toml + in-memory config on success.
+        """
+        try:
+            pyproject_path = find_pyproject_toml(None)
+        except ValueError:
+            return False
+
+        if self.args is None:
+            return False
+
+        pyproject_dir = pyproject_path.parent
+        inferred_root = infer_module_root_from_file(self.function_to_optimize.file_path, pyproject_dir)
+        if inferred_root is None or inferred_root.resolve() == self.args.module_root.resolve():
+            return False
+
+        new_module_root = inferred_root.resolve()
+        new_project_root = project_root_from_module_root(new_module_root, pyproject_path)
+        try:
+            new_module_path = module_name_from_file_path(self.function_to_optimize.file_path, new_project_root)
+        except ValueError:
+            return False
+
+        import_ok, _ = validate_module_import(new_module_path, new_project_root)
+        if not import_ok:
+            return False
+
+        # Import succeeded with the inferred module-root — update pyproject.toml
+        try:
+            with pyproject_path.open("rb") as f:
+                data = tomlkit.parse(f.read())
+            relative_root = os.path.relpath(new_module_root, pyproject_dir)
+            data["tool"]["codeflash"]["module-root"] = relative_root  # type: ignore[index]
+            with pyproject_path.open("w", encoding="utf-8") as f:
+                f.write(tomlkit.dumps(data))
+        except Exception:
+            logger.debug("Failed to update pyproject.toml with corrected module-root")
+            return False
+
+        # Update in-memory config
+        self.args.module_root = new_module_root
+        self.args.project_root = new_project_root
+        self.project_root = new_project_root.resolve()
+        self.original_module_path = new_module_path
+
+        logger.info(
+            f"Auto-corrected module-root to '{os.path.relpath(new_module_root, pyproject_dir)}' in pyproject.toml"
+        )
+        return True
+
+    def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
+        # Auto-correct module-root if it doesn't match the inferred root from __init__.py chain
+        self.try_correct_module_root()
+        # Validate the (possibly corrected) module can actually be imported
+        import_ok, import_error = validate_module_import(self.original_module_path, self.project_root)
+        if not import_ok:
+            return Failure(
+                f"Cannot import module '{self.original_module_path}': {import_error}\n"
+                "This prevents test execution. Please check that all dependencies are installed "
+                "and that 'module-root' is correctly configured in pyproject.toml."
+            )
+        return super().can_be_optimized()
+
     def get_code_optimization_context(self) -> Result[CodeOptimizationContext, str]:
         from codeflash.languages.python.context import code_context_extractor
 

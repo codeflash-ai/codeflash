@@ -909,13 +909,13 @@ class TestBundledJestReporter:
             test_script = Path(tmpdir) / "test_reporter.js"
             test_script.write_text(f"""
 // Set env vars BEFORE requiring reporter (matches real Jest behavior)
-process.env.JEST_JUNIT_OUTPUT_FILE = '{output_file}';
+process.env.JEST_JUNIT_OUTPUT_FILE = '{output_file.as_posix()}';
 process.env.JEST_JUNIT_CLASSNAME = '{{filepath}}';
 process.env.JEST_JUNIT_SUITE_NAME = '{{filepath}}';
 process.env.JEST_JUNIT_ADD_FILE_ATTRIBUTE = 'true';
 process.env.JEST_JUNIT_INCLUDE_CONSOLE_OUTPUT = 'true';
 
-const Reporter = require('{reporter_path}');
+const Reporter = require('{reporter_path.as_posix()}');
 
 // Mock Jest globalConfig
 const globalConfig = {{ rootDir: '/tmp/project' }};
