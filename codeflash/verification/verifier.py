@@ -29,7 +29,7 @@ def generate_tests(
     test_path: Path,
     test_perf_path: Path,
     is_numerical_code: bool | None = None,
-) -> tuple[str, str, str, Path, Path] | None:
+) -> tuple[str, str, str, str | None, Path, Path] | None:
     # TODO: Sometimes this recreates the original Class definition. This overrides and messes up the original
     #  class import. Remove the recreation of the class definition
     start_time = time.perf_counter()
@@ -69,8 +69,9 @@ def generate_tests(
         module_system=project_module_system,
         is_numerical_code=is_numerical_code,
     )
-    if response and isinstance(response, tuple) and len(response) == 3:
-        generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source = response
+    if response and isinstance(response, tuple) and len(response) >= 3:
+        generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source, *rest = response
+        raw_generated_tests = rest[0] if rest else None
 
         generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source = (
             lang_support.process_generated_test_strings(
@@ -92,6 +93,7 @@ def generate_tests(
         generated_test_source,
         instrumented_behavior_test_source,
         instrumented_perf_test_source,
+        raw_generated_tests,
         test_path,
         test_perf_path,
     )

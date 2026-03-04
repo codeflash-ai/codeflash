@@ -415,6 +415,7 @@ class GeneratedTests(BaseModel):
     generated_original_test_source: str
     instrumented_behavior_test_source: str
     instrumented_perf_test_source: str
+    raw_generated_test_source: str | None = None
     behavior_file_path: Path
     perf_file_path: Path
 

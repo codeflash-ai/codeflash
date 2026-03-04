@@ -679,8 +679,10 @@ class FunctionOptimizer:
             logger.info(f"Generated test {i + 1}/{count_tests}:")
             # Use correct extension based on language
             test_ext = self.language_support.get_test_file_suffix()
+            # Show the raw LLM output when available, otherwise the post-processed source
+            display_source = generated_test.raw_generated_test_source or generated_test.generated_original_test_source
             code_print(
-                generated_test.generated_original_test_source,
+                display_source,
                 file_name=f"test_{i + 1}{test_ext}",
                 language=self.function_to_optimize.language,
             )
@@ -1738,6 +1740,7 @@ class FunctionOptimizer:
                         generated_test_source,
                         instrumented_behavior_test_source,
                         instrumented_perf_test_source,
+                        raw_generated_test_source,
                         test_behavior_path,
                         test_perf_path,
                     ) = res
@@ -1746,6 +1749,7 @@ class FunctionOptimizer:
                             generated_original_test_source=generated_test_source,
                             instrumented_behavior_test_source=instrumented_behavior_test_source,
                             instrumented_perf_test_source=instrumented_perf_test_source,
+                            raw_generated_test_source=raw_generated_test_source,
                             behavior_file_path=test_behavior_path,
                             perf_file_path=test_perf_path,
                         )
@@ -1985,6 +1989,7 @@ class FunctionOptimizer:
                     }
                 )
 
+            console.rule()
             with progress_bar("Reviewing generated tests for quality issues..."):
                 review_results = self.aiservice_client.review_generated_tests(
                     tests=tests_for_review,
@@ -2015,23 +2020,27 @@ class FunctionOptimizer:
 
             # 5. Repair flagged functions
             any_repaired = False
-            for review in all_to_repair:
-                gt = generated_tests.generated_tests[review.test_index]
-                fn_names = ", ".join(f.function_name for f in review.functions_to_repair)
-                logger.info(f"Repairing test functions in test {review.test_index} (cycle {cycle + 1}): {fn_names}")
-                ph(
-                    "cli-testgen-repair",
-                    {
-                        "test_index": review.test_index,
-                        "cycle": cycle + 1,
-                        "functions": [f.function_name for f in review.functions_to_repair],
-                    },
-                )
+            repaired_count = 0
+            temp_run_dir = get_run_tmp_file(Path()).as_posix()
+            with progress_bar(f"Repairing {total_issues} flagged test function(s)..."):
+                for review in all_to_repair:
+                    gt = generated_tests.generated_tests[review.test_index]
+                    fn_names = ", ".join(f.function_name for f in review.functions_to_repair)
+                    logger.debug(
+                        f"Repairing test functions in test {review.test_index} (cycle {cycle + 1}): {fn_names}"
+                    )
+                    ph(
+                        "cli-testgen-repair",
+                        {
+                            "test_index": review.test_index,
+                            "cycle": cycle + 1,
+                            "functions": [f.function_name for f in review.functions_to_repair],
+                        },
+                    )
 
-                test_module_path = Path(
-                    module_name_from_file_path(gt.behavior_file_path, self.test_cfg.tests_project_rootdir)
-                )
-                with progress_bar(f"Repairing {len(review.functions_to_repair)} flagged test function(s)..."):
+                    test_module_path = Path(
+                        module_name_from_file_path(gt.behavior_file_path, self.test_cfg.tests_project_rootdir)
+                    )
                     repair_result = self.aiservice_client.repair_generated_tests(
                         test_source=gt.generated_original_test_source,
                         functions_to_repair=review.functions_to_repair,
@@ -2046,21 +2055,53 @@ class FunctionOptimizer:
                         language=self.function_to_optimize.language,
                     )
 
-                if repair_result is None:
-                    logger.warning(f"Repair failed for test {review.test_index}, keeping original")
-                    continue
+                    if repair_result is None:
+                        logger.debug(f"Repair failed for test {review.test_index}, keeping original")
+                        continue
 
-                repaired_source, behavior_source, perf_source = repair_result
-                gt.generated_original_test_source = repaired_source
-                gt.instrumented_behavior_test_source = behavior_source
-                gt.instrumented_perf_test_source = perf_source
+                    repaired_source, behavior_source, perf_source = repair_result
 
-                gt.behavior_file_path.write_text(behavior_source, encoding="utf8")
-                gt.perf_file_path.write_text(perf_source, encoding="utf8")
-                any_repaired = True
+                    # Apply the same client-side processing as initial test generation
+                    repaired_source, behavior_source, perf_source = (
+                        self.language_support.process_generated_test_strings(
+                            generated_test_source=repaired_source,
+                            instrumented_behavior_test_source=behavior_source,
+                            instrumented_perf_test_source=perf_source,
+                            function_to_optimize=self.function_to_optimize,
+                            test_path=gt.behavior_file_path,
+                            test_cfg=self.test_cfg,
+                            project_module_system=None,
+                        )
+                    )
+
+                    gt.generated_original_test_source = repaired_source
+                    gt.instrumented_behavior_test_source = behavior_source
+                    gt.instrumented_perf_test_source = perf_source
+
+                    gt.behavior_file_path.write_text(behavior_source, encoding="utf8")
+                    gt.perf_file_path.write_text(perf_source, encoding="utf8")
+                    any_repaired = True
+                    repaired_count += len(review.functions_to_repair)
 
             if any_repaired:
-                console.print(f"  [green]Repaired {total_issues} test function(s)[/green]")
+                # Run language-specific postprocessing (same as initial generation)
+                generated_tests = self.language_support.postprocess_generated_tests(
+                    generated_tests,
+                    test_framework=self.test_cfg.test_framework,
+                    project_root=self.project_root,
+                    source_file_path=self.function_to_optimize.file_path,
+                )
+                console.print(f"  [green]Repaired {repaired_count} test function(s)[/green]")
+                test_ext = self.language_support.get_test_file_suffix()
+                for review in all_to_repair:
+                    gt = generated_tests.generated_tests[review.test_index]
+                    console.rule()
+                    logger.info(f"Repaired test {review.test_index + 1}:")
+                    code_print(
+                        gt.generated_original_test_source,
+                        file_name=f"test_{review.test_index + 1}_repaired{test_ext}",
+                        language=self.function_to_optimize.language,
+                    )
                 # Invalidate cached results — repaired code needs fresh behavioral run
                 behavioral_results = None
                 coverage_results = None

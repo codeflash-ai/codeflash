@@ -698,7 +698,7 @@ class AiServiceClient:
         language_version: str | None = None,
         module_system: str | None = None,
         is_numerical_code: bool | None = None,
-    ) -> tuple[str, str, str] | None:
+    ) -> tuple[str, str, str, str | None] | None:
         """Generate regression tests for the given function by making a request to the Django endpoint.
 
         Parameters
@@ -764,6 +764,7 @@ class AiServiceClient:
                 response_json["generated_tests"],
                 response_json["instrumented_behavior_tests"],
                 response_json["instrumented_perf_tests"],
+                response_json.get("raw_generated_tests"),
             )
         self.log_error_response(response, "generating tests", "cli-testgen-error-response")
         return None
