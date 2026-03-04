@@ -36,6 +36,9 @@ class JavaScriptSupport:
     using tree-sitter for code analysis and Jest for test execution.
     """
 
+    def __init__(self) -> None:
+        self._language_version: str | None = None
+
     # === Properties ===
 
     @property
@@ -67,6 +70,10 @@ class JavaScriptSupport:
     @property
     def dir_excludes(self) -> frozenset[str]:
         return frozenset({"node_modules", "dist", "build", ".next", ".nuxt", "coverage", ".cache", ".turbo", ".vercel"})
+
+    @property
+    def language_version(self) -> str | None:
+        return self._language_version
 
     # === Discovery ===
 
@@ -2077,6 +2084,15 @@ class JavaScriptSupport:
 
         return len(errors) == 0, errors
 
+    def _detect_node_version(self) -> None:
+        """Detect and cache the Node.js runtime version."""
+        try:
+            result = subprocess.run(["node", "--version"], check=False, capture_output=True, text=True, timeout=10)
+            if result.returncode == 0 and result.stdout.strip():
+                self._language_version = result.stdout.strip().lstrip("v")
+        except Exception:
+            pass
+
     def ensure_runtime_environment(self, project_root: Path) -> bool:
         """Ensure codeflash npm package is installed.
 
@@ -2090,6 +2106,8 @@ class JavaScriptSupport:
 
         """
         from codeflash.cli_cmds.console import logger
+
+        self._detect_node_version()
 
         node_modules_pkg = project_root / "node_modules" / "codeflash"
         if node_modules_pkg.exists():
