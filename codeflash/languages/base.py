@@ -332,7 +332,7 @@ class LanguageSupport(Protocol):
         Returns None for languages where the runtime version is auto-detected (e.g. Python).
         Returns a version string (e.g. "ES2022") for languages that need an explicit default.
         """
-        return None
+        ...
 
     @property
     def valid_test_frameworks(self) -> tuple[str, ...]:
@@ -862,12 +862,11 @@ class LanguageSupport(Protocol):
         behavioral verification and performance benchmarking.
 
         Args:
-            test_string: String containing the test file contents.
+            test_path: Path to the test file.
             call_positions: List of code positions where the function is called.
             function_to_optimize: The function being optimized.
             tests_project_root: Root directory of tests.
             mode: Testing mode - "behavior" or "performance".
-            test_path: Path to the test file.
 
         Returns:
             Tuple of (success, instrumented_code).

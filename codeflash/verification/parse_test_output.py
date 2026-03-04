@@ -858,14 +858,12 @@ def parse_test_results(
             source_file=source_file,
             coverage_config_file=coverage_config_file,
         )
-        if coverage:
-            coverage.log_coverage()
-    if run_result:
-        try:
-            failures = parse_test_failures_from_stdout(run_result.stdout)
-            results.test_failures = failures
-        except Exception as e:
-            logger.exception(e)
+        coverage.log_coverage()
+    try:
+        failures = parse_test_failures_from_stdout(run_result.stdout)
+        results.test_failures = failures
+    except Exception as e:
+        logger.exception(e)
 
     # Cleanup Jest coverage directory after coverage is parsed
     import shutil

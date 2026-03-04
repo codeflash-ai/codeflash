@@ -116,7 +116,6 @@ class TestConfig:
     js_project_root: Optional[Path] = None  # JavaScript project root (directory containing package.json)
 
     def __post_init__(self) -> None:
-        self.tests_root = self.tests_root.resolve()
         self.project_root_path = self.project_root_path.resolve()
         self.tests_project_rootdir = self.tests_project_rootdir.resolve()
 
