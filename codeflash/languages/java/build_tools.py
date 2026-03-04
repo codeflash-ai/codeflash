@@ -649,22 +649,25 @@ def add_codeflash_dependency_to_pom(pom_path: Path) -> bool:
             # If a previous run left a system-scope dependency, replace it with test scope.
             # System-scope dependencies cause Maven warnings and are rejected by some projects.
             if "<scope>system</scope>" in content:
-                # Match the codeflash-runtime dependency block regardless of XML element order
-                # within the <dependency> tag, since Maven POMs don't enforce element ordering.
-                content = re.sub(
-                    r"<dependency>\s*"
-                    r"(?=(?:[\s\S]*?<groupId>com\.codeflash</groupId>))"
-                    r"(?=(?:[\s\S]*?<artifactId>codeflash-runtime</artifactId>))"
-                    r"(?=(?:[\s\S]*?<scope>system</scope>))"
-                    r"[\s\S]*?</dependency>",
-                    "<dependency>\n"
-                    "            <groupId>com.codeflash</groupId>\n"
-                    "            <artifactId>codeflash-runtime</artifactId>\n"
-                    "            <version>1.0.0</version>\n"
-                    "            <scope>test</scope>\n"
-                    "        </dependency>",
-                    content,
-                )
+                # Replace ONLY the codeflash-runtime dependency block that has system scope.
+                # We find each <dependency>...</dependency> block individually and only replace
+                # the one containing both "codeflash-runtime" and "<scope>system</scope>".
+                # The previous regex used [\s\S]*? lookaheads that could match across blocks,
+                # accidentally replacing every dependency in the file.
+                def replace_system_dep(match: re.Match) -> str:
+                    block = match.group(0)
+                    if "codeflash-runtime" in block and "<scope>system</scope>" in block:
+                        return (
+                            "<dependency>\n"
+                            "            <groupId>com.codeflash</groupId>\n"
+                            "            <artifactId>codeflash-runtime</artifactId>\n"
+                            "            <version>1.0.0</version>\n"
+                            "            <scope>test</scope>\n"
+                            "        </dependency>"
+                        )
+                    return block
+
+                content = re.sub(r"<dependency>[\s\S]*?</dependency>", replace_system_dep, content)
                 pom_path.write_text(content, encoding="utf-8")
                 logger.info("Replaced system-scope codeflash-runtime dependency with test scope")
                 return True
