@@ -6,17 +6,11 @@ import pytest
 
 from codeflash.languages.base import FunctionFilterCriteria, Language
 from codeflash.languages.java import (
-    JavaSupport,
-    detect_build_tool,
     detect_java_project,
     discover_functions,
     discover_functions_from_source,
     discover_test_methods,
-    discover_tests,
     extract_code_context,
-    find_helper_functions,
-    find_test_root,
-    format_java_code,
     get_java_analyzer,
     get_java_support,
     is_java_project,
@@ -226,9 +220,7 @@ public class StringUtilsTest {
         return new String(chars);
     }"""
 
-        optimized = support.replace_function(
-            src_file.read_text(), functions[0], new_code
-        )
+        optimized = support.replace_function(src_file.read_text(), functions[0], new_code)
 
         assert "Optimized version" in optimized
         assert "StringUtils" in optimized

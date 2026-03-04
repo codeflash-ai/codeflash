@@ -773,8 +773,7 @@ def ensure_jacoco_property_name(pom_path: Path) -> bool:
         # Match <id>prepare-agent</id> ... <goals>...<goal>prepare-agent</goal>...</goals>
         # and check whether a <configuration> block already exists for it.
         prepare_agent_pattern = re.compile(
-            r"(<execution>\s*<id>prepare-agent</id>.*?</goals>)(.*?)(</execution>)",
-            re.DOTALL,
+            r"(<execution>\s*<id>prepare-agent</id>.*?</goals>)(.*?)(</execution>)", re.DOTALL
         )
         match = prepare_agent_pattern.search(content)
         if not match:
@@ -787,10 +786,14 @@ def ensure_jacoco_property_name(pom_path: Path) -> bool:
         between = match.group(2)  # text between </goals> and </execution>
         if "<configuration>" in between:
             # Configuration block exists — inject propertyName inside it
-            content = content[:match.start(2)] + between.replace(
-                "<configuration>",
-                f"<configuration>\n              <propertyName>{JACOCO_PROPERTY_NAME}</propertyName>",
-            ) + content[match.end(2):]
+            content = (
+                content[: match.start(2)]
+                + between.replace(
+                    "<configuration>",
+                    f"<configuration>\n              <propertyName>{JACOCO_PROPERTY_NAME}</propertyName>",
+                )
+                + content[match.end(2) :]
+            )
         else:
             # No configuration block — add one before </execution>
             config_block = (

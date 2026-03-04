@@ -1,24 +1,17 @@
 """Tests for Java test result comparison."""
 
-import json
 import shutil
 import sqlite3
-import tempfile
 from pathlib import Path
 
 import pytest
 
-from codeflash.languages.java.comparator import (
-    compare_invocations_directly,
-    compare_test_results,
-    values_equal,
-)
+from codeflash.languages.java.comparator import compare_invocations_directly, compare_test_results, values_equal
 from codeflash.models.models import TestDiffScope
 
 # Skip tests that require Java runtime if Java is not available
 requires_java = pytest.mark.skipif(
-    shutil.which("java") is None,
-    reason="Java not found - skipping Comparator integration tests",
+    shutil.which("java") is None, reason="Java not found - skipping Comparator integration tests"
 )
 
 # Kryo-serialized bytes for common test values.
@@ -38,7 +31,9 @@ KRYO_STR_RESULT3 = bytes([0x03, 0x01, 0x7B, 0x22, 0x72, 0x65, 0x73, 0x75, 0x6C, 
 KRYO_STR_VALUE1 = bytes([0x03, 0x01, 0x7B, 0x22, 0x76, 0x61, 0x6C, 0x75, 0x65, 0x22, 0x3A, 0x20, 0x31, 0xFD])
 KRYO_STR_VALUE2 = bytes([0x03, 0x01, 0x7B, 0x22, 0x76, 0x61, 0x6C, 0x75, 0x65, 0x22, 0x3A, 0x20, 0x32, 0xFD])
 KRYO_STR_VALUE42 = bytes([0x03, 0x01, 0x7B, 0x22, 0x76, 0x61, 0x6C, 0x75, 0x65, 0x22, 0x3A, 0x20, 0x34, 0x32, 0xFD])
-KRYO_STR_VALUE100 = bytes([0x03, 0x01, 0x7B, 0x22, 0x76, 0x61, 0x6C, 0x75, 0x65, 0x22, 0x3A, 0x20, 0x31, 0x30, 0x30, 0xFD])
+KRYO_STR_VALUE100 = bytes(
+    [0x03, 0x01, 0x7B, 0x22, 0x76, 0x61, 0x6C, 0x75, 0x65, 0x22, 0x3A, 0x20, 0x31, 0x30, 0x30, 0xFD]
+)
 KRYO_DOUBLE_1_0000000001 = bytes([0x0A, 0x38, 0xDF, 0x06, 0x00, 0x00, 0x00, 0xF0, 0x3F])
 KRYO_DOUBLE_1_0000000002 = bytes([0x0A, 0x70, 0xBE, 0x0D, 0x00, 0x00, 0x00, 0xF0, 0x3F])
 KRYO_NAN = bytes([0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0x7F])
@@ -67,12 +62,8 @@ class TestDirectComparison:
 
     def test_different_return_values(self):
         """Test detecting different return values."""
-        original = {
-            "1": {"result_json": '{"value": 42}', "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": '{"value": 99}', "error_json": None},
-        }
+        original = {"1": {"result_json": '{"value": 42}', "error_json": None}}
+        candidate = {"1": {"result_json": '{"value": 99}', "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
 
@@ -89,7 +80,7 @@ class TestDirectComparison:
             "2": {"result_json": '{"value": 100}', "error_json": None},
         }
         candidate = {
-            "1": {"result_json": '{"value": 42}', "error_json": None},
+            "1": {"result_json": '{"value": 42}', "error_json": None}
             # Missing invocation 2
         }
 
@@ -101,9 +92,7 @@ class TestDirectComparison:
 
     def test_extra_invocation_in_candidate(self):
         """Test detecting extra invocation in candidate."""
-        original = {
-            "1": {"result_json": '{"value": 42}', "error_json": None},
-        }
+        original = {"1": {"result_json": '{"value": 42}', "error_json": None}}
         candidate = {
             "1": {"result_json": '{"value": 42}', "error_json": None},
             "2": {"result_json": '{"value": 100}', "error_json": None},  # Extra
@@ -116,11 +105,9 @@ class TestDirectComparison:
 
     def test_exception_differences(self):
         """Test detecting exception differences."""
-        original = {
-            "1": {"result_json": None, "error_json": '{"type": "NullPointerException"}'},
-        }
+        original = {"1": {"result_json": None, "error_json": '{"type": "NullPointerException"}'}}
         candidate = {
-            "1": {"result_json": '{"value": 42}', "error_json": None},  # No exception
+            "1": {"result_json": '{"value": 42}', "error_json": None}  # No exception
         }
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
@@ -176,12 +163,8 @@ class TestNumericValueEquality:
 
     def test_numeric_comparison_in_direct_invocation(self):
         """Test that compare_invocations_directly uses numeric-aware comparison."""
-        original = {
-            "1": {"result_json": "0", "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": "0.0", "error_json": None},
-        }
+        original = {"1": {"result_json": "0", "error_json": None}}
+        candidate = {"1": {"result_json": "0.0", "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is True
@@ -189,12 +172,8 @@ class TestNumericValueEquality:
 
     def test_integer_long_mismatch_resolved(self):
         """Test that Integer(42) vs Long(42) serialized differently are still equal."""
-        original = {
-            "1": {"result_json": "42", "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": "42.0", "error_json": None},
-        }
+        original = {"1": {"result_json": "42", "error_json": None}}
+        candidate = {"1": {"result_json": "42.0", "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is True
@@ -263,46 +242,30 @@ class TestNumericValueEquality:
 
     def test_boolean_invocation_comparison(self):
         """Test boolean return values in full invocation comparison."""
-        original = {
-            "1": {"result_json": "true", "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": "true", "error_json": None},
-        }
+        original = {"1": {"result_json": "true", "error_json": None}}
+        candidate = {"1": {"result_json": "true", "error_json": None}}
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is True
 
     def test_boolean_mismatch_invocation_comparison(self):
         """Test boolean mismatch is correctly detected."""
-        original = {
-            "1": {"result_json": "true", "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": "false", "error_json": None},
-        }
+        original = {"1": {"result_json": "true", "error_json": None}}
+        candidate = {"1": {"result_json": "false", "error_json": None}}
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is False
         assert len(diffs) == 1
 
     def test_array_invocation_comparison(self):
         """Test array return values in full invocation comparison."""
-        original = {
-            "1": {"result_json": "[1, 2, 3]", "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": "[1, 2, 3]", "error_json": None},
-        }
+        original = {"1": {"result_json": "[1, 2, 3]", "error_json": None}}
+        candidate = {"1": {"result_json": "[1, 2, 3]", "error_json": None}}
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is True
 
     def test_array_mismatch_invocation_comparison(self):
         """Test array mismatch is correctly detected."""
-        original = {
-            "1": {"result_json": "[1, 2, 3]", "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": "[1, 2, 4]", "error_json": None},
-        }
+        original = {"1": {"result_json": "[1, 2, 3]", "error_json": None}}
+        candidate = {"1": {"result_json": "[1, 2, 4]", "error_json": None}}
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is False
         assert len(diffs) == 1
@@ -382,35 +345,25 @@ class TestComparisonWithRealData:
 
     def test_string_result_comparison(self):
         """Test comparing string results."""
-        original = {
-            "1": {"result_json": '"Hello World"', "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": '"Hello World"', "error_json": None},
-        }
+        original = {"1": {"result_json": '"Hello World"', "error_json": None}}
+        candidate = {"1": {"result_json": '"Hello World"', "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is True
 
     def test_array_result_comparison(self):
         """Test comparing array results."""
-        original = {
-            "1": {"result_json": "[1, 2, 3, 4, 5]", "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": "[1, 2, 3, 4, 5]", "error_json": None},
-        }
+        original = {"1": {"result_json": "[1, 2, 3, 4, 5]", "error_json": None}}
+        candidate = {"1": {"result_json": "[1, 2, 3, 4, 5]", "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is True
 
     def test_array_order_matters(self):
         """Test that array order matters for comparison."""
-        original = {
-            "1": {"result_json": "[1, 2, 3]", "error_json": None},
-        }
+        original = {"1": {"result_json": "[1, 2, 3]", "error_json": None}}
         candidate = {
-            "1": {"result_json": "[3, 2, 1]", "error_json": None},  # Different order
+            "1": {"result_json": "[3, 2, 1]", "error_json": None}  # Different order
         }
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
@@ -418,24 +371,16 @@ class TestComparisonWithRealData:
 
     def test_object_result_comparison(self):
         """Test comparing object results."""
-        original = {
-            "1": {"result_json": '{"name": "John", "age": 30}', "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": '{"name": "John", "age": 30}', "error_json": None},
-        }
+        original = {"1": {"result_json": '{"name": "John", "age": 30}', "error_json": None}}
+        candidate = {"1": {"result_json": '{"name": "John", "age": 30}', "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is True
 
     def test_null_result(self):
         """Test comparing null results."""
-        original = {
-            "1": {"result_json": "null", "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": "null", "error_json": None},
-        }
+        original = {"1": {"result_json": "null", "error_json": None}}
+        candidate = {"1": {"result_json": "null", "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is True
@@ -462,11 +407,9 @@ class TestEdgeCases:
 
     def test_whitespace_in_json(self):
         """Test that whitespace differences in JSON don't cause issues."""
-        original = {
-            "1": {"result_json": '{"a":1,"b":2}', "error_json": None},
-        }
+        original = {"1": {"result_json": '{"a":1,"b":2}', "error_json": None}}
         candidate = {
-            "1": {"result_json": '{ "a": 1, "b": 2 }', "error_json": None},  # With spaces
+            "1": {"result_json": '{ "a": 1, "b": 2 }', "error_json": None}  # With spaces
         }
 
         # Note: Direct string comparison will see these as different
@@ -486,12 +429,8 @@ class TestEdgeCases:
 
     def test_unicode_in_results(self):
         """Test handling unicode in results."""
-        original = {
-            "1": {"result_json": '"Hello 世界 🌍"', "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": '"Hello 世界 🌍"', "error_json": None},
-        }
+        original = {"1": {"result_json": '"Hello 世界 🌍"', "error_json": None}}
+        candidate = {"1": {"result_json": '"Hello 世界 🌍"', "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is True
@@ -499,12 +438,8 @@ class TestEdgeCases:
     def test_deeply_nested_objects(self):
         """Test handling deeply nested objects."""
         nested = '{"a": {"b": {"c": {"d": {"e": 1}}}}}'
-        original = {
-            "1": {"result_json": nested, "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": nested, "error_json": None},
-        }
+        original = {"1": {"result_json": nested, "error_json": None}}
+        candidate = {"1": {"result_json": nested, "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is True
@@ -573,9 +508,7 @@ class TestTestResultsTableSchema:
 
         return _create
 
-    def test_comparator_reads_test_results_table_identical(
-        self, tmp_path: Path, create_test_results_db
-    ):
+    def test_comparator_reads_test_results_table_identical(self, tmp_path: Path, create_test_results_db):
         """Test that Comparator correctly reads test_results table with identical results."""
         original_path = tmp_path / "original.db"
         candidate_path = tmp_path / "candidate.db"
@@ -607,9 +540,7 @@ class TestTestResultsTableSchema:
         assert equivalent is True
         assert len(diffs) == 0
 
-    def test_comparator_reads_test_results_table_different_values(
-        self, tmp_path: Path, create_test_results_db
-    ):
+    def test_comparator_reads_test_results_table_different_values(self, tmp_path: Path, create_test_results_db):
         """Test that Comparator detects different return values from test_results table."""
         original_path = tmp_path / "original.db"
         candidate_path = tmp_path / "candidate.db"
@@ -621,7 +552,7 @@ class TestTestResultsTableSchema:
                 "loop_index": 1,
                 "iteration_id": "1_0",
                 "return_value": KRYO_STR_OLLEH,
-            },
+            }
         ]
 
         candidate_results = [
@@ -631,7 +562,7 @@ class TestTestResultsTableSchema:
                 "loop_index": 1,
                 "iteration_id": "1_0",
                 "return_value": KRYO_STR_WRONG,  # Different result
-            },
+            }
         ]
 
         create_test_results_db(original_path, original_results)
@@ -644,9 +575,7 @@ class TestTestResultsTableSchema:
         assert len(diffs) == 1
         assert diffs[0].scope == TestDiffScope.RETURN_VALUE
 
-    def test_comparator_handles_multiple_loop_iterations(
-        self, tmp_path: Path, create_test_results_db
-    ):
+    def test_comparator_handles_multiple_loop_iterations(self, tmp_path: Path, create_test_results_db):
         """Test that Comparator correctly handles multiple loop iterations."""
         original_path = tmp_path / "original.db"
         candidate_path = tmp_path / "candidate.db"
@@ -676,9 +605,7 @@ class TestTestResultsTableSchema:
         assert equivalent is True
         assert len(diffs) == 0
 
-    def test_comparator_iteration_id_parsing(
-        self, tmp_path: Path, create_test_results_db
-    ):
+    def test_comparator_iteration_id_parsing(self, tmp_path: Path, create_test_results_db):
         """Test that Comparator correctly parses iteration_id format 'iter_testIteration'."""
         original_path = tmp_path / "original.db"
         candidate_path = tmp_path / "candidate.db"
@@ -711,32 +638,18 @@ class TestTestResultsTableSchema:
         assert equivalent is True
         assert len(diffs) == 0
 
-    def test_comparator_missing_result_in_candidate(
-        self, tmp_path: Path, create_test_results_db
-    ):
+    def test_comparator_missing_result_in_candidate(self, tmp_path: Path, create_test_results_db):
         """Test that Comparator detects missing results in candidate."""
         original_path = tmp_path / "original.db"
         candidate_path = tmp_path / "candidate.db"
 
         original_results = [
-            {
-                "loop_index": 1,
-                "iteration_id": "1_0",
-                "return_value": KRYO_INT_1,
-            },
-            {
-                "loop_index": 1,
-                "iteration_id": "2_0",
-                "return_value": KRYO_INT_2,
-            },
+            {"loop_index": 1, "iteration_id": "1_0", "return_value": KRYO_INT_1},
+            {"loop_index": 1, "iteration_id": "2_0", "return_value": KRYO_INT_2},
         ]
 
         candidate_results = [
-            {
-                "loop_index": 1,
-                "iteration_id": "1_0",
-                "return_value": KRYO_INT_1,
-            },
+            {"loop_index": 1, "iteration_id": "1_0", "return_value": KRYO_INT_1}
             # Missing second iteration
         ]
 
@@ -779,12 +692,8 @@ class TestComparatorEdgeCases:
         For truly different values, the difference must exceed the epsilon threshold.
         """
         # These values differ by ~3e-10, which is within epsilon tolerance (1e-9)
-        original = {
-            "1": {"result_json": "3.14159", "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": "3.141590001", "error_json": None},
-        }
+        original = {"1": {"result_json": "3.14159", "error_json": None}}
+        candidate = {"1": {"result_json": "3.141590001", "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is True  # Within epsilon tolerance
@@ -792,11 +701,9 @@ class TestComparatorEdgeCases:
 
     def test_float_values_significantly_different(self):
         """Float strings outside epsilon tolerance should be detected as different."""
-        original = {
-            "1": {"result_json": "3.14159", "error_json": None},
-        }
+        original = {"1": {"result_json": "3.14159", "error_json": None}}
         candidate = {
-            "1": {"result_json": "3.14160", "error_json": None},  # Differs by ~1e-5
+            "1": {"result_json": "3.14160", "error_json": None}  # Differs by ~1e-5
         }
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
@@ -806,12 +713,8 @@ class TestComparatorEdgeCases:
 
     def test_nan_string_comparison(self):
         """NaN as a string return value should be comparable."""
-        original = {
-            "1": {"result_json": "NaN", "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": "NaN", "error_json": None},
-        }
+        original = {"1": {"result_json": "NaN", "error_json": None}}
+        candidate = {"1": {"result_json": "NaN", "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is True
@@ -819,12 +722,8 @@ class TestComparatorEdgeCases:
 
     def test_nan_vs_number(self):
         """NaN vs a normal number should be detected as different."""
-        original = {
-            "1": {"result_json": "NaN", "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": "0.0", "error_json": None},
-        }
+        original = {"1": {"result_json": "NaN", "error_json": None}}
+        candidate = {"1": {"result_json": "0.0", "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is False
@@ -832,12 +731,8 @@ class TestComparatorEdgeCases:
 
     def test_infinity_string_comparison(self):
         """Infinity as a string return value should be comparable."""
-        original = {
-            "1": {"result_json": "Infinity", "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": "Infinity", "error_json": None},
-        }
+        original = {"1": {"result_json": "Infinity", "error_json": None}}
+        candidate = {"1": {"result_json": "Infinity", "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is True
@@ -845,12 +740,8 @@ class TestComparatorEdgeCases:
 
     def test_negative_infinity(self):
         """-Infinity as a string return value should be comparable."""
-        original = {
-            "1": {"result_json": "-Infinity", "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": "-Infinity", "error_json": None},
-        }
+        original = {"1": {"result_json": "-Infinity", "error_json": None}}
+        candidate = {"1": {"result_json": "-Infinity", "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is True
@@ -858,12 +749,8 @@ class TestComparatorEdgeCases:
 
     def test_infinity_vs_negative_infinity(self):
         """Infinity and -Infinity should be detected as different."""
-        original = {
-            "1": {"result_json": "Infinity", "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": "-Infinity", "error_json": None},
-        }
+        original = {"1": {"result_json": "Infinity", "error_json": None}}
+        candidate = {"1": {"result_json": "-Infinity", "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is False
@@ -871,12 +758,8 @@ class TestComparatorEdgeCases:
 
     def test_empty_collection_results(self):
         """Empty array '[]' as return value should be comparable."""
-        original = {
-            "1": {"result_json": "[]", "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": "[]", "error_json": None},
-        }
+        original = {"1": {"result_json": "[]", "error_json": None}}
+        candidate = {"1": {"result_json": "[]", "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is True
@@ -884,12 +767,8 @@ class TestComparatorEdgeCases:
 
     def test_empty_object_results(self):
         """Empty object '{}' as return value should be comparable."""
-        original = {
-            "1": {"result_json": "{}", "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": "{}", "error_json": None},
-        }
+        original = {"1": {"result_json": "{}", "error_json": None}}
+        candidate = {"1": {"result_json": "{}", "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is True
@@ -917,12 +796,8 @@ class TestComparatorEdgeCases:
         1e+17 as floats due to precision limits, making them indistinguishable.
         This is a known limitation of floating-point comparison for very large integers.
         """
-        original = {
-            "1": {"result_json": "99999999999999999", "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": "99999999999999998", "error_json": None},
-        }
+        original = {"1": {"result_json": "99999999999999999", "error_json": None}}
+        candidate = {"1": {"result_json": "99999999999999998", "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         # Due to float precision limits, these are considered equal
@@ -931,12 +806,8 @@ class TestComparatorEdgeCases:
 
     def test_large_number_significantly_different(self):
         """Large numbers with significant differences should be detected."""
-        original = {
-            "1": {"result_json": "100000000000000000", "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": "200000000000000000", "error_json": None},
-        }
+        original = {"1": {"result_json": "100000000000000000", "error_json": None}}
+        candidate = {"1": {"result_json": "200000000000000000", "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is False
@@ -944,12 +815,8 @@ class TestComparatorEdgeCases:
 
     def test_null_vs_empty_string(self):
         """'null' and '""' should NOT be equivalent."""
-        original = {
-            "1": {"result_json": "null", "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": '""', "error_json": None},
-        }
+        original = {"1": {"result_json": "null", "error_json": None}}
+        candidate = {"1": {"result_json": '""', "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is False
@@ -958,10 +825,7 @@ class TestComparatorEdgeCases:
 
     def test_boolean_string_comparison(self):
         """Boolean strings 'true'/'false' should compare correctly."""
-        original = {
-            "1": {"result_json": "true", "error_json": None},
-            "2": {"result_json": "false", "error_json": None},
-        }
+        original = {"1": {"result_json": "true", "error_json": None}, "2": {"result_json": "false", "error_json": None}}
         candidate = {
             "1": {"result_json": "true", "error_json": None},
             "2": {"result_json": "false", "error_json": None},
@@ -972,12 +836,8 @@ class TestComparatorEdgeCases:
 
     def test_boolean_true_vs_false(self):
         """'true' vs 'false' should be detected as different."""
-        original = {
-            "1": {"result_json": "true", "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": "false", "error_json": None},
-        }
+        original = {"1": {"result_json": "true", "error_json": None}}
+        candidate = {"1": {"result_json": "false", "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is False
@@ -1024,12 +884,8 @@ class TestComparatorErrorHandling:
 
     def test_compare_with_none_return_values_direct(self):
         """Rows where result_json is None should be handled in direct comparison."""
-        original = {
-            "1": {"result_json": None, "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": None, "error_json": None},
-        }
+        original = {"1": {"result_json": None, "error_json": None}}
+        candidate = {"1": {"result_json": None, "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is True
@@ -1037,12 +893,8 @@ class TestComparatorErrorHandling:
 
     def test_compare_one_none_one_value_direct(self):
         """One None result vs a real value should detect the difference."""
-        original = {
-            "1": {"result_json": None, "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": "42", "error_json": None},
-        }
+        original = {"1": {"result_json": None, "error_json": None}}
+        candidate = {"1": {"result_json": "42", "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is False
@@ -1050,12 +902,8 @@ class TestComparatorErrorHandling:
 
     def test_compare_both_errors_identical(self):
         """Identical errors in both original and candidate should be equivalent."""
-        original = {
-            "1": {"result_json": None, "error_json": '{"type": "IOException", "message": "file not found"}'},
-        }
-        candidate = {
-            "1": {"result_json": None, "error_json": '{"type": "IOException", "message": "file not found"}'},
-        }
+        original = {"1": {"result_json": None, "error_json": '{"type": "IOException", "message": "file not found"}'}}
+        candidate = {"1": {"result_json": None, "error_json": '{"type": "IOException", "message": "file not found"}'}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is True
@@ -1063,12 +911,8 @@ class TestComparatorErrorHandling:
 
     def test_compare_different_error_types(self):
         """Different error types should be detected."""
-        original = {
-            "1": {"result_json": None, "error_json": '{"type": "IOException"}'},
-        }
-        candidate = {
-            "1": {"result_json": None, "error_json": '{"type": "NullPointerException"}'},
-        }
+        original = {"1": {"result_json": None, "error_json": '{"type": "IOException"}'}}
+        candidate = {"1": {"result_json": None, "error_json": '{"type": "NullPointerException"}'}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is False
@@ -1083,9 +927,7 @@ class TestComparatorJavaEdgeCases(TestTestResultsTableSchema):
     Extends TestTestResultsTableSchema to reuse the create_test_results_db fixture.
     """
 
-    def test_comparator_float_epsilon_tolerance(
-        self, tmp_path: Path, create_test_results_db
-    ):
+    def test_comparator_float_epsilon_tolerance(self, tmp_path: Path, create_test_results_db):
         """Values differing by less than EPSILON (1e-9) should be treated as equivalent.
 
         The Java Comparator uses EPSILON=1e-9 for float comparison.
@@ -1102,7 +944,7 @@ class TestComparatorJavaEdgeCases(TestTestResultsTableSchema):
                 "loop_index": 1,
                 "iteration_id": "1_0",
                 "return_value": KRYO_DOUBLE_1_0000000001,
-            },
+            }
         ]
 
         candidate_results = [
@@ -1112,7 +954,7 @@ class TestComparatorJavaEdgeCases(TestTestResultsTableSchema):
                 "loop_index": 1,
                 "iteration_id": "1_0",
                 "return_value": KRYO_DOUBLE_1_0000000002,
-            },
+            }
         ]
 
         create_test_results_db(original_path, original_results)
@@ -1124,9 +966,7 @@ class TestComparatorJavaEdgeCases(TestTestResultsTableSchema):
         assert equivalent is True
         assert len(diffs) == 0
 
-    def test_comparator_nan_handling(
-        self, tmp_path: Path, create_test_results_db
-    ):
+    def test_comparator_nan_handling(self, tmp_path: Path, create_test_results_db):
         """Java Comparator should handle NaN return values."""
         original_path = tmp_path / "original.db"
         candidate_path = tmp_path / "candidate.db"
@@ -1138,7 +978,7 @@ class TestComparatorJavaEdgeCases(TestTestResultsTableSchema):
                 "loop_index": 1,
                 "iteration_id": "1_0",
                 "return_value": KRYO_NAN,
-            },
+            }
         ]
 
         create_test_results_db(original_path, results)
@@ -1150,9 +990,7 @@ class TestComparatorJavaEdgeCases(TestTestResultsTableSchema):
         assert equivalent is True
         assert len(diffs) == 0
 
-    def test_comparator_empty_table(
-        self, tmp_path: Path, create_test_results_db
-    ):
+    def test_comparator_empty_table(self, tmp_path: Path, create_test_results_db):
         """Empty test_results tables should result in equivalent=False (vacuous equivalence guard)."""
         original_path = tmp_path / "original.db"
         candidate_path = tmp_path / "candidate.db"
@@ -1167,9 +1005,7 @@ class TestComparatorJavaEdgeCases(TestTestResultsTableSchema):
         assert equivalent is False
         assert len(diffs) == 0
 
-    def test_comparator_infinity_handling(
-        self, tmp_path: Path, create_test_results_db
-    ):
+    def test_comparator_infinity_handling(self, tmp_path: Path, create_test_results_db):
         """Java Comparator should handle Infinity return values correctly."""
         original_path = tmp_path / "original.db"
         candidate_path = tmp_path / "candidate.db"
@@ -1205,12 +1041,8 @@ class TestVoidFunctionComparison:
 
     def test_void_both_null_result_equivalent(self):
         """Both original and candidate have None result_json (void success)."""
-        original = {
-            "1": {"result_json": None, "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": None, "error_json": None},
-        }
+        original = {"1": {"result_json": None, "error_json": None}}
+        candidate = {"1": {"result_json": None, "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
 
@@ -1219,12 +1051,8 @@ class TestVoidFunctionComparison:
 
     def test_void_null_vs_non_null_result(self):
         """Original void (None) vs candidate with return value should differ."""
-        original = {
-            "1": {"result_json": None, "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": "42", "error_json": None},
-        }
+        original = {"1": {"result_json": None, "error_json": None}}
+        candidate = {"1": {"result_json": "42", "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
 
@@ -1234,12 +1062,8 @@ class TestVoidFunctionComparison:
 
     def test_void_non_null_vs_null_result(self):
         """Original with return value vs candidate void (None) should differ."""
-        original = {
-            "1": {"result_json": "42", "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": None, "error_json": None},
-        }
+        original = {"1": {"result_json": "42", "error_json": None}}
+        candidate = {"1": {"result_json": None, "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
 
@@ -1249,12 +1073,8 @@ class TestVoidFunctionComparison:
 
     def test_void_same_serialized_side_effects(self):
         """Identical side-effect serializations (Object[] arrays) should be equivalent."""
-        original = {
-            "1": {"result_json": "[1, 2, 3]", "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": "[1, 2, 3]", "error_json": None},
-        }
+        original = {"1": {"result_json": "[1, 2, 3]", "error_json": None}}
+        candidate = {"1": {"result_json": "[1, 2, 3]", "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
 
@@ -1263,12 +1083,8 @@ class TestVoidFunctionComparison:
 
     def test_void_different_serialized_side_effects(self):
         """Different side-effect serializations should be detected."""
-        original = {
-            "1": {"result_json": "[1, 2, 3]", "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": "[1, 2, 99]", "error_json": None},
-        }
+        original = {"1": {"result_json": "[1, 2, 3]", "error_json": None}}
+        candidate = {"1": {"result_json": "[1, 2, 99]", "error_json": None}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
 
@@ -1280,12 +1096,8 @@ class TestVoidFunctionComparison:
 
     def test_void_exception_in_candidate(self):
         """Void success in original vs exception in candidate should differ."""
-        original = {
-            "1": {"result_json": None, "error_json": None},
-        }
-        candidate = {
-            "1": {"result_json": None, "error_json": '{"type": "NullPointerException"}'},
-        }
+        original = {"1": {"result_json": None, "error_json": None}}
+        candidate = {"1": {"result_json": None, "error_json": '{"type": "NullPointerException"}'}}
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
 
@@ -1375,9 +1187,7 @@ class TestVoidSqliteComparison:
 
         return _create
 
-    def test_void_sqlite_both_null_return_same_stdout(
-        self, tmp_path: Path, create_void_test_results_db
-    ):
+    def test_void_sqlite_both_null_return_same_stdout(self, tmp_path: Path, create_void_test_results_db):
         """Both DBs have NULL return_value and same stdout — equivalent."""
         original_path = tmp_path / "original.db"
         candidate_path = tmp_path / "candidate.db"
@@ -1390,7 +1200,7 @@ class TestVoidSqliteComparison:
                 "iteration_id": "1_0",
                 "return_value": None,
                 "stdout": "Hello World\n",
-            },
+            }
         ]
 
         create_void_test_results_db(original_path, results)
@@ -1401,9 +1211,7 @@ class TestVoidSqliteComparison:
         assert equivalent is True
         assert len(diffs) == 0
 
-    def test_void_sqlite_different_stdout(
-        self, tmp_path: Path, create_void_test_results_db
-    ):
+    def test_void_sqlite_different_stdout(self, tmp_path: Path, create_void_test_results_db):
         """Both DBs have NULL return_value but different stdout — not equivalent."""
         original_path = tmp_path / "original.db"
         candidate_path = tmp_path / "candidate.db"
@@ -1416,7 +1224,7 @@ class TestVoidSqliteComparison:
                 "iteration_id": "1_0",
                 "return_value": None,
                 "stdout": "INFO: Starting\n",
-            },
+            }
         ]
 
         candidate_results = [
@@ -1427,7 +1235,7 @@ class TestVoidSqliteComparison:
                 "iteration_id": "1_0",
                 "return_value": None,
                 "stdout": "DEBUG: Starting\n",
-            },
+            }
         ]
 
         create_void_test_results_db(original_path, original_results)
@@ -1438,9 +1246,7 @@ class TestVoidSqliteComparison:
         assert equivalent is False
         assert len(diffs) == 1
 
-    def test_void_sqlite_null_stdout_both(
-        self, tmp_path: Path, create_void_test_results_db
-    ):
+    def test_void_sqlite_null_stdout_both(self, tmp_path: Path, create_void_test_results_db):
         """Both DBs have NULL return_value and NULL stdout — equivalent."""
         original_path = tmp_path / "original.db"
         candidate_path = tmp_path / "candidate.db"
@@ -1453,7 +1259,7 @@ class TestVoidSqliteComparison:
                 "iteration_id": "1_0",
                 "return_value": None,
                 "stdout": None,
-            },
+            }
         ]
 
         create_void_test_results_db(original_path, results)
