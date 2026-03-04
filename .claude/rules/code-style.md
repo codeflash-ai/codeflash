@@ -9,3 +9,4 @@
 - **Naming**: NEVER use leading underscores (`_function_name`) - Python has no true private functions, use public names
 - **Paths**: Always use absolute paths
 - **Encoding**: Always pass `encoding="utf-8"` to `open()`, `read_text()`, `write_text()`, etc. in new or changed code — Windows defaults to `cp1252` which breaks on non-ASCII content. Don't flag pre-existing code that lacks it unless you're already modifying that line.
+- **Pre-commit**: Run `uv run prek` before committing — fix any issues before creating the commit
