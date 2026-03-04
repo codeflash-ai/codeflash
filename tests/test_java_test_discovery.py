@@ -41,7 +41,7 @@ def make_func(name: str, class_name: str, file_path: Path | None = None) -> Func
 
 
 def make_test_method(
-    name: str, class_name: str, starting_line: int, ending_line: int, file_path: Path | None = None,
+    name: str, class_name: str, starting_line: int, ending_line: int, file_path: Path | None = None
 ) -> FunctionToOptimize:
     return FunctionToOptimize(
         function_name=name,
@@ -329,9 +329,7 @@ class FooTest {
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
         type_map = {"calc": "Calculator"}
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 2, 5, analyzer, type_map, {},
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 2, 5, analyzer, type_map, {})
         assert "Calculator.add" in resolved
 
     def test_static_method_call(self, analyzer):
@@ -344,9 +342,7 @@ class FooTest {
 """
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 2, 4, analyzer, {}, {},
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 2, 4, analyzer, {}, {})
         assert "Calculator.add" in resolved
 
     def test_static_import_call(self, analyzer):
@@ -361,9 +357,7 @@ class FooTest {
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
         static_map = {"add": "Calculator"}
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 3, 5, analyzer, {}, static_map,
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 3, 5, analyzer, {}, static_map)
         assert "Calculator.add" in resolved
 
     def test_new_expression_method_call(self, analyzer):
@@ -376,9 +370,7 @@ class FooTest {
 """
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 2, 4, analyzer, {}, {},
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 2, 4, analyzer, {}, {})
         assert "Calculator.add" in resolved
 
     def test_field_access_via_this(self, analyzer):
@@ -393,9 +385,7 @@ class FooTest {
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
         type_map = {"calculator": "Calculator"}
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 3, 5, analyzer, type_map, {},
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 3, 5, analyzer, type_map, {})
         assert "Calculator.add" in resolved
 
     def test_unresolvable_call_not_included(self, analyzer):
@@ -408,9 +398,7 @@ class FooTest {
 """
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 2, 4, analyzer, {}, {},
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 2, 4, analyzer, {}, {})
         # someUnknown is lowercase and not in type_map → not resolved
         assert len(resolved) == 0
 
@@ -425,9 +413,7 @@ class FooTest {
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
         # assertEquals has no receiver, and not in static_import_map
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 2, 4, analyzer, {}, {},
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 2, 4, analyzer, {}, {})
         assert len(resolved) == 0
 
     def test_multiple_different_receivers(self, analyzer):
@@ -444,9 +430,7 @@ class FooTest {
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
         type_map = {"calc": "Calculator", "buf": "Buffer"}
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 2, 7, analyzer, type_map, {},
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 2, 7, analyzer, type_map, {})
         assert "Calculator.add" in resolved
         assert "Buffer.read" in resolved
 
@@ -466,9 +450,7 @@ class FooTest {
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
         type_map = {"calc": "Calculator"}
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 6, 9, analyzer, type_map, {},
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 6, 9, analyzer, type_map, {})
         assert "Calculator.add" in resolved
         assert "Calculator.init" not in resolved
 
@@ -769,10 +751,7 @@ class CalculatorTest {
     }
 }
 """
-        func_map = {
-            "Calculator.add": make_func("add", "Calculator"),
-            "Buffer.add": make_func("add", "Buffer"),
-        }
+        func_map = {"Calculator.add": make_func("add", "Calculator"), "Buffer.add": make_func("add", "Buffer")}
         test_method = make_test_method("testAdd", "CalculatorTest", 6, 10)
         matched = _match_test_to_functions(test_method, test_source, func_map, analyzer)
         # Local Calculator declaration shadows the Buffer field
@@ -792,7 +771,8 @@ class TestDiscoverTests:
         test_dir.mkdir(parents=True)
 
         test_file = test_dir / "CalculatorTest.java"
-        test_file.write_text("""\
+        test_file.write_text(
+            """\
 package com.example;
 
 import com.example.Calculator;
@@ -814,7 +794,9 @@ class CalculatorTest {
         assertEquals(2, result);
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         source_functions = [
             make_func("add", "Calculator"),
@@ -840,7 +822,8 @@ class CalculatorTest {
         test_dir.mkdir(parents=True)
 
         test_file = test_dir / "MathUtilsTest.java"
-        test_file.write_text("""\
+        test_file.write_text(
+            """\
 package com.example;
 
 import com.example.MathUtils;
@@ -857,7 +840,9 @@ class MathUtilsTest {
         int result = MathUtils.abs(-3);
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         source_functions = [
             make_func("square", "MathUtils"),
@@ -880,7 +865,8 @@ class MathUtilsTest {
         test_dir.mkdir(parents=True)
 
         test_file = test_dir / "CalculatorTest.java"
-        test_file.write_text("""\
+        test_file.write_text(
+            """\
 package com.example;
 
 import com.example.Calculator;
@@ -905,7 +891,9 @@ class CalculatorTest {
         calculator.multiply(3, 4);
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         source_functions = [
             make_func("add", "Calculator"),
@@ -1074,9 +1062,7 @@ class FooTest {
 """
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 2, 5, analyzer, {"obj": "Object"}, {},
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 2, 5, analyzer, {"obj": "Object"}, {})
         assert "Calculator.add" in resolved
 
     def test_method_call_inside_if(self, analyzer):
@@ -1093,9 +1079,7 @@ class FooTest {
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
         type_map = {"calc": "Calculator"}
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 2, 7, analyzer, type_map, {},
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 2, 7, analyzer, type_map, {})
         assert "Calculator.add" in resolved
 
     def test_method_call_inside_try_catch(self, analyzer):
@@ -1114,9 +1098,7 @@ class FooTest {
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
         type_map = {"calc": "Calculator"}
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 2, 9, analyzer, type_map, {},
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 2, 9, analyzer, type_map, {})
         assert "Calculator.add" in resolved
         assert "Calculator.reset" in resolved
 
@@ -1134,9 +1116,7 @@ class FooTest {
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
         type_map = {"calc": "Calculator"}
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 2, 7, analyzer, type_map, {},
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 2, 7, analyzer, type_map, {})
         assert "Calculator.add" in resolved
 
     def test_method_call_inside_lambda(self, analyzer):
@@ -1151,9 +1131,7 @@ class FooTest {
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
         type_map = {"calc": "Calculator"}
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 2, 5, analyzer, type_map, {},
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 2, 5, analyzer, type_map, {})
         assert "Calculator.add" in resolved
 
     def test_duplicate_calls_resolved_once(self, analyzer):
@@ -1170,9 +1148,7 @@ class FooTest {
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
         type_map = {"calc": "Calculator"}
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 2, 7, analyzer, type_map, {},
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 2, 7, analyzer, type_map, {})
         # resolved is a set, so duplicates are naturally deduplicated
         assert resolved == {"Calculator.add", "Calculator.Calculator", "Calculator.<init>"}
 
@@ -1190,9 +1166,7 @@ class FooTest {
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
         type_map = {"calc": "Calculator", "buf": "Buffer"}
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 2, 7, analyzer, type_map, {},
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 2, 7, analyzer, type_map, {})
         assert "Calculator.add" in resolved
         assert "Buffer.add" in resolved
         # Also includes constructor refs: Calculator.Calculator, Calculator.<init>, Buffer.Buffer, Buffer.<init>
@@ -1212,9 +1186,7 @@ class FooTest {
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
         type_map = {"calc": "Calculator"}
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 2, 5, analyzer, type_map, {},
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 2, 5, analyzer, type_map, {})
         # calc.getResult() resolves to Calculator.getResult
         assert "Calculator.getResult" in resolved
         # toString() is called on the return of getResult() which is unresolvable
@@ -1231,9 +1203,7 @@ class FooTest {
 """
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 2, 4, analyzer, {}, {},
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 2, 4, analyzer, {}, {})
         assert len(resolved) == 0
 
     def test_this_method_call_not_resolved(self, analyzer):
@@ -1247,9 +1217,7 @@ class FooTest {
 """
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 2, 4, analyzer, {}, {},
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 2, 4, analyzer, {}, {})
         # this is not a field_access with a field that's in the type map, so not resolved
         assert len(resolved) == 0
 
@@ -1263,9 +1231,7 @@ class FooTest {
 """
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 2, 4, analyzer, {}, {},
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 2, 4, analyzer, {}, {})
         # getCalculator() returns a method_invocation node as object, can't resolve
         assert "Calculator.add" not in resolved
 
@@ -1279,9 +1245,7 @@ class FooTest {
 """
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 2, 4, analyzer, {}, {},
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 2, 4, analyzer, {}, {})
         assert "ArrayList.add" in resolved
 
     def test_assertion_via_static_import_mapped_to_assertions_class(self, analyzer):
@@ -1297,9 +1261,7 @@ class FooTest {
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
         static_map = {"assertEquals": "Assertions"}
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 3, 5, analyzer, {}, static_map,
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 3, 5, analyzer, {}, static_map)
         assert "Assertions.assertEquals" in resolved
         assert len(resolved) == 1
 
@@ -1314,9 +1276,7 @@ class FooTest {
 """
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 2, 4, analyzer, {}, {},
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 2, 4, analyzer, {}, {})
         assert "Calculator.Calculator" in resolved
         assert "Calculator.<init>" in resolved
 
@@ -1334,9 +1294,7 @@ class FooTest {
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
         type_map = {"records": "List"}
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 2, 6, analyzer, type_map, {},
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 2, 6, analyzer, type_map, {})
         assert "BatchRead.BatchRead" in resolved
         assert "BatchRead.<init>" in resolved
         assert "Key.Key" in resolved
@@ -1353,9 +1311,7 @@ class FooTest {
 """
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
-        resolved = _resolve_method_calls_in_range(
-            tree.root_node, source_bytes, 2, 4, analyzer, {}, {},
-        )
+        resolved = _resolve_method_calls_in_range(tree.root_node, source_bytes, 2, 4, analyzer, {}, {})
         assert "HashMap.HashMap" in resolved
         assert "HashMap.<init>" in resolved
 
@@ -1379,10 +1335,7 @@ class MyTest {
     }
 }
 """
-        func_map = {
-            "Calculator.add": make_func("add", "Calculator"),
-            "MathUtils.add": make_func("add", "MathUtils"),
-        }
+        func_map = {"Calculator.add": make_func("add", "Calculator"), "MathUtils.add": make_func("add", "MathUtils")}
         test_method = make_test_method("testAdd", "MyTest", 4, 8)
         matched = _match_test_to_functions(test_method, test_source, func_map, analyzer)
         assert matched == ["Calculator.add"]
@@ -1564,7 +1517,7 @@ class CalculatorTest {
         assert matched == []
 
     def test_constructor_matched(self, analyzer):
-        """new ClassName() should match the constructor in the function map."""
+        """New ClassName() should match the constructor in the function map."""
         test_source = """\
 import org.junit.jupiter.api.Test;
 
@@ -1582,7 +1535,7 @@ class BatchReadTest {
         assert "BatchRead.BatchRead" in matched
 
     def test_constructor_init_convention_matched(self, analyzer):
-        """new ClassName() should also match <init> naming convention."""
+        """New ClassName() should also match <init> naming convention."""
         test_source = """\
 import org.junit.jupiter.api.Test;
 
@@ -1599,7 +1552,7 @@ class BatchReadTest {
         assert "BatchRead.<init>" in matched
 
     def test_constructor_does_not_match_unrelated_methods(self, analyzer):
-        """new BatchRead() should not cause BatchRead.read to match."""
+        """New BatchRead() should not cause BatchRead.read to match."""
         test_source = """\
 import org.junit.jupiter.api.Test;
 
@@ -1660,7 +1613,8 @@ class TestDiscoverTestsExtended:
         test_dir = tmp_path / "test"
         test_dir.mkdir(parents=True)
 
-        (test_dir / "CalculatorTests.java").write_text("""\
+        (test_dir / "CalculatorTests.java").write_text(
+            """\
 package com.example;
 import org.junit.jupiter.api.Test;
 
@@ -1671,7 +1625,9 @@ class CalculatorTests {
         calc.add(1, 2);
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         source_functions = [make_func("add", "Calculator")]
         result = discover_tests(tmp_path, source_functions, analyzer)
@@ -1682,7 +1638,8 @@ class CalculatorTests {
         test_dir = tmp_path / "test"
         test_dir.mkdir(parents=True)
 
-        (test_dir / "TestCalculator.java").write_text("""\
+        (test_dir / "TestCalculator.java").write_text(
+            """\
 package com.example;
 import org.junit.jupiter.api.Test;
 
@@ -1693,7 +1650,9 @@ class TestCalculator {
         calc.add(1, 2);
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         source_functions = [make_func("add", "Calculator")]
         result = discover_tests(tmp_path, source_functions, analyzer)
@@ -1710,7 +1669,8 @@ class TestCalculator {
         test_dir = tmp_path / "test"
         test_dir.mkdir(parents=True)
 
-        (test_dir / "CalculatorTest.java").write_text("""\
+        (test_dir / "CalculatorTest.java").write_text(
+            """\
 package com.example;
 import org.junit.jupiter.api.Test;
 
@@ -1733,12 +1693,11 @@ class CalculatorTest {
         calc.subtract(5, 3);
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
-        source_functions = [
-            make_func("add", "Calculator"),
-            make_func("subtract", "Calculator"),
-        ]
+        source_functions = [make_func("add", "Calculator"), make_func("subtract", "Calculator")]
         result = discover_tests(tmp_path, source_functions, analyzer)
 
         assert "Calculator.add" in result
@@ -1753,7 +1712,8 @@ class CalculatorTest {
         test_dir = tmp_path / "test"
         test_dir.mkdir(parents=True)
 
-        (test_dir / "CalculatorTest.java").write_text("""\
+        (test_dir / "CalculatorTest.java").write_text(
+            """\
 package com.example;
 import org.junit.jupiter.api.Test;
 
@@ -1764,9 +1724,12 @@ class CalculatorTest {
         calc.add(1, 2);
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
-        (test_dir / "IntegrationTest.java").write_text("""\
+        (test_dir / "IntegrationTest.java").write_text(
+            """\
 package com.example;
 import org.junit.jupiter.api.Test;
 
@@ -1777,7 +1740,9 @@ class IntegrationTest {
         calc.add(10, 20);
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         source_functions = [make_func("add", "Calculator")]
         result = discover_tests(tmp_path, source_functions, analyzer)
@@ -1791,7 +1756,8 @@ class IntegrationTest {
         test_dir = tmp_path / "test"
         test_dir.mkdir(parents=True)
 
-        (test_dir / "CalculatorTest.java").write_text("""\
+        (test_dir / "CalculatorTest.java").write_text(
+            """\
 package com.example;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -1804,7 +1770,9 @@ class CalculatorTest {
         calc.add(a, b);
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         source_functions = [make_func("add", "Calculator")]
         result = discover_tests(tmp_path, source_functions, analyzer)
@@ -1815,7 +1783,8 @@ class CalculatorTest {
         deep_dir = tmp_path / "test" / "com" / "example" / "deep"
         deep_dir.mkdir(parents=True)
 
-        (deep_dir / "NestedTest.java").write_text("""\
+        (deep_dir / "NestedTest.java").write_text(
+            """\
 package com.example.deep;
 import org.junit.jupiter.api.Test;
 
@@ -1826,7 +1795,9 @@ class NestedTest {
         calc.add(1, 2);
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         source_functions = [make_func("add", "Calculator")]
         result = discover_tests(tmp_path, source_functions, analyzer)
@@ -1836,7 +1807,8 @@ class NestedTest {
         test_dir = tmp_path / "test"
         test_dir.mkdir(parents=True)
 
-        (test_dir / "CalculatorTest.java").write_text("""\
+        (test_dir / "CalculatorTest.java").write_text(
+            """\
 package com.example;
 import org.junit.jupiter.api.Test;
 
@@ -1847,7 +1819,9 @@ class CalculatorTest {
         calc.add(1, 2);
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         source_functions = [make_func("add", "Calculator")]
         result = discover_tests(tmp_path, source_functions, analyzer)
@@ -1857,7 +1831,8 @@ class CalculatorTest {
         test_dir = tmp_path / "test"
         test_dir.mkdir(parents=True)
 
-        (test_dir / "CalculatorTest.java").write_text("""\
+        (test_dir / "CalculatorTest.java").write_text(
+            """\
 package com.example;
 import org.junit.jupiter.api.Test;
 
@@ -1868,7 +1843,9 @@ class CalculatorTest {
         calc.add(1, 2);
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         result = discover_tests(tmp_path, [], analyzer)
         assert result == {}
@@ -1878,7 +1855,8 @@ class CalculatorTest {
         test_dir = tmp_path / "test"
         test_dir.mkdir(parents=True)
 
-        (test_dir / "BatchReadTest.java").write_text("""\
+        (test_dir / "BatchReadTest.java").write_text(
+            """\
 package com.aerospike.test;
 import com.aerospike.client.BatchRead;
 import com.aerospike.client.Key;
@@ -1892,7 +1870,9 @@ class BatchReadTest {
         records.add(new BatchRead(new Key("ns", "set", "k2"), false));
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         source_functions = [
             make_func("BatchRead", "BatchRead"),
@@ -1988,7 +1968,8 @@ class TestFindTestsForFunction:
         test_dir = tmp_path / "test"
         test_dir.mkdir(parents=True)
 
-        (test_dir / "CalculatorTest.java").write_text("""\
+        (test_dir / "CalculatorTest.java").write_text(
+            """\
 package com.example;
 import org.junit.jupiter.api.Test;
 
@@ -1999,7 +1980,9 @@ class CalculatorTest {
         calc.add(1, 2);
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         func = make_func("add", "Calculator")
         result = find_tests_for_function(func, tmp_path, analyzer)
@@ -2020,7 +2003,8 @@ class TestDiscoverAllTests:
         test_dir = tmp_path / "test"
         test_dir.mkdir(parents=True)
 
-        (test_dir / "CalculatorTest.java").write_text("""\
+        (test_dir / "CalculatorTest.java").write_text(
+            """\
 package com.example;
 import org.junit.jupiter.api.Test;
 
@@ -2031,7 +2015,9 @@ class CalculatorTest {
     @Test
     void testSubtract() {}
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         all_tests = discover_all_tests(tmp_path, analyzer)
         names = {t.function_name for t in all_tests}
@@ -2048,32 +2034,40 @@ class CalculatorTest {
         test_dir = tmp_path / "test"
         test_dir.mkdir(parents=True)
 
-        (test_dir / "ATest.java").write_text("""\
+        (test_dir / "ATest.java").write_text(
+            """\
 import org.junit.jupiter.api.Test;
 class ATest {
     @Test
     void testA() {}
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
-        (test_dir / "BTest.java").write_text("""\
+        (test_dir / "BTest.java").write_text(
+            """\
 import org.junit.jupiter.api.Test;
 class BTest {
     @Test
     void testB() {}
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         all_tests = discover_all_tests(tmp_path, analyzer)
         names = {t.function_name for t in all_tests}
         assert names == {"testA", "testB"}
+
     def test_no_false_positive_import_only_integration(self, tmp_path, analyzer):
         """A test file that imports Calculator but never calls its methods should not match."""
         test_dir = tmp_path / "test"
         test_dir.mkdir(parents=True)
 
         test_file = test_dir / "SomeTest.java"
-        test_file.write_text("""\
+        test_file.write_text(
+            """\
 package com.example;
 
 import com.example.Calculator;
@@ -2085,12 +2079,11 @@ class SomeTest {
         int x = 42;
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
-        source_functions = [
-            make_func("add", "Calculator"),
-            make_func("subtract", "Calculator"),
-        ]
+        source_functions = [make_func("add", "Calculator"), make_func("subtract", "Calculator")]
 
         result = discover_tests(tmp_path, source_functions, analyzer)
         assert result == {}
@@ -2099,7 +2092,8 @@ class SomeTest {
         test_dir = tmp_path / "test"
         test_dir.mkdir(parents=True)
 
-        (test_dir / "CalculatorTest.java").write_text("""\
+        (test_dir / "CalculatorTest.java").write_text(
+            """\
 package com.example;
 import org.junit.jupiter.api.Test;
 
@@ -2110,9 +2104,12 @@ class CalculatorTest {
         calc.add(1, 2);
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
-        (test_dir / "BufferTest.java").write_text("""\
+        (test_dir / "BufferTest.java").write_text(
+            """\
 package com.example;
 import org.junit.jupiter.api.Test;
 
@@ -2123,13 +2120,11 @@ class BufferTest {
         buf.read();
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
-        source_functions = [
-            make_func("add", "Calculator"),
-            make_func("read", "Buffer"),
-            make_func("write", "Buffer"),
-        ]
+        source_functions = [make_func("add", "Calculator"), make_func("read", "Buffer"), make_func("write", "Buffer")]
 
         result = discover_tests(tmp_path, source_functions, analyzer)
 
@@ -2147,7 +2142,8 @@ class BufferTest {
         test_dir.mkdir(parents=True)
 
         # This file matches *Test.java pattern
-        (test_dir / "CalculatorTest.java").write_text("""\
+        (test_dir / "CalculatorTest.java").write_text(
+            """\
 package com.example;
 import org.junit.jupiter.api.Test;
 
@@ -2158,7 +2154,9 @@ class CalculatorTest {
         calc.add(1, 2);
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         source_functions = [make_func("add", "Calculator")]
         result = discover_tests(tmp_path, source_functions, analyzer)
@@ -2171,7 +2169,8 @@ class CalculatorTest {
         test_dir = tmp_path / "test"
         test_dir.mkdir(parents=True)
 
-        (test_dir / "MathUtilsTest.java").write_text("""\
+        (test_dir / "MathUtilsTest.java").write_text(
+            """\
 package com.example;
 import static com.example.MathUtils.square;
 import org.junit.jupiter.api.Test;
@@ -2182,12 +2181,11 @@ class MathUtilsTest {
         int result = square(5);
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
-        source_functions = [
-            make_func("square", "MathUtils"),
-            make_func("cube", "MathUtils"),
-        ]
+        source_functions = [make_func("square", "MathUtils"), make_func("cube", "MathUtils")]
 
         result = discover_tests(tmp_path, source_functions, analyzer)
 
@@ -2198,7 +2196,8 @@ class MathUtilsTest {
         test_dir = tmp_path / "test"
         test_dir.mkdir(parents=True)
 
-        (test_dir / "CalculatorTest.java").write_text("""\
+        (test_dir / "CalculatorTest.java").write_text(
+            """\
 package com.example;
 import org.junit.jupiter.api.Test;
 
@@ -2210,7 +2209,9 @@ class CalculatorTest {
         int b = calc.multiply(a, 3);
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         source_functions = [
             make_func("add", "Calculator"),

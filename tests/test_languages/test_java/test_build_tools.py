@@ -5,6 +5,7 @@ from pathlib import Path
 
 from codeflash.languages.java.build_tools import (
     BuildTool,
+    add_codeflash_dependency_to_pom,
     detect_build_tool,
     find_maven_executable,
     find_source_root,
@@ -277,6 +278,7 @@ version = '1.0.0'
         assert len(info.source_roots) == 1
         assert len(info.test_roots) == 1
 
+
 class TestXmlModuleExtraction:
     """Tests for XML-based module extraction replacing regex."""
 
@@ -373,6 +375,7 @@ class TestMavenProfiles:
         profiles = os.environ.get("CODEFLASH_MAVEN_PROFILES", "").strip()
         assert profiles == "my-profile"
 
+
 class TestMavenExecutableWithProjectRoot:
     """Tests for find_maven_executable with project_root parameter."""
 
@@ -454,3 +457,105 @@ class TestCustomSourceDirectoryDetection:
         info = get_project_info(tmp_path)
         assert info is not None
         assert len(info.source_roots) == 1
+
+
+class TestAddCodeflashDependencyToPom:
+    """Tests for add_codeflash_dependency_to_pom, including stale system-scope replacement."""
+
+    def test_adds_dependency_to_clean_pom(self, tmp_path):
+        pom = tmp_path / "pom.xml"
+        pom.write_text(
+            '<?xml version="1.0"?>\n'
+            "<project>\n"
+            "  <dependencies>\n"
+            "    <dependency>\n"
+            "      <groupId>junit</groupId>\n"
+            "      <artifactId>junit</artifactId>\n"
+            "      <version>4.13.2</version>\n"
+            "    </dependency>\n"
+            "  </dependencies>\n"
+            "</project>\n",
+            encoding="utf-8",
+        )
+        assert add_codeflash_dependency_to_pom(pom) is True
+        content = pom.read_text(encoding="utf-8")
+        assert "codeflash-runtime" in content
+        assert "<scope>test</scope>" in content
+
+    def test_replaces_system_scope_with_test_scope(self, tmp_path):
+        pom = tmp_path / "pom.xml"
+        pom.write_text(
+            '<?xml version="1.0"?>\n'
+            "<project>\n"
+            "  <dependencies>\n"
+            "    <dependency>\n"
+            "      <groupId>com.codeflash</groupId>\n"
+            "      <artifactId>codeflash-runtime</artifactId>\n"
+            "      <version>1.0.0</version>\n"
+            "      <scope>system</scope>\n"
+            "      <systemPath>/some/path/jar.jar</systemPath>\n"
+            "    </dependency>\n"
+            "  </dependencies>\n"
+            "</project>\n",
+            encoding="utf-8",
+        )
+        assert add_codeflash_dependency_to_pom(pom) is True
+        content = pom.read_text(encoding="utf-8")
+        assert "<scope>test</scope>" in content
+        assert "<scope>system</scope>" not in content
+        assert "<systemPath>" not in content
+
+    def test_replaces_system_scope_with_reordered_elements(self, tmp_path):
+        """XML elements inside <dependency> can appear in any order."""
+        pom = tmp_path / "pom.xml"
+        pom.write_text(
+            '<?xml version="1.0"?>\n'
+            "<project>\n"
+            "  <dependencies>\n"
+            "    <dependency>\n"
+            "      <scope>system</scope>\n"
+            "      <groupId>com.codeflash</groupId>\n"
+            "      <systemPath>/some/path/jar.jar</systemPath>\n"
+            "      <version>1.0.0</version>\n"
+            "      <artifactId>codeflash-runtime</artifactId>\n"
+            "    </dependency>\n"
+            "  </dependencies>\n"
+            "</project>\n",
+            encoding="utf-8",
+        )
+        assert add_codeflash_dependency_to_pom(pom) is True
+        content = pom.read_text(encoding="utf-8")
+        assert "<scope>test</scope>" in content
+        assert "<scope>system</scope>" not in content
+        assert "<systemPath>" not in content
+
+    def test_skips_when_test_scope_already_present(self, tmp_path):
+        pom = tmp_path / "pom.xml"
+        pom.write_text(
+            '<?xml version="1.0"?>\n'
+            "<project>\n"
+            "  <dependencies>\n"
+            "    <dependency>\n"
+            "      <groupId>com.codeflash</groupId>\n"
+            "      <artifactId>codeflash-runtime</artifactId>\n"
+            "      <version>1.0.0</version>\n"
+            "      <scope>test</scope>\n"
+            "    </dependency>\n"
+            "  </dependencies>\n"
+            "</project>\n",
+            encoding="utf-8",
+        )
+        assert add_codeflash_dependency_to_pom(pom) is True
+        content = pom.read_text(encoding="utf-8")
+        assert content.count("codeflash-runtime") == 1
+
+    def test_returns_false_for_missing_pom(self, tmp_path):
+        pom = tmp_path / "pom.xml"
+        assert add_codeflash_dependency_to_pom(pom) is False
+
+    def test_returns_false_when_no_dependencies_tag(self, tmp_path):
+        pom = tmp_path / "pom.xml"
+        pom.write_text(
+            '<?xml version="1.0"?>\n<project><modelVersion>4.0.0</modelVersion></project>\n', encoding="utf-8"
+        )
+        assert add_codeflash_dependency_to_pom(pom) is False

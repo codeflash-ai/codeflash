@@ -19,10 +19,7 @@ def make_func(name: str, class_name: str | None = None) -> FunctionToOptimize:
     """Helper to create FunctionToOptimize for testing."""
     parents = [FunctionParent(name=class_name, type="ClassDef")] if class_name else []
     return FunctionToOptimize(
-        function_name=name,
-        file_path=Path("/test/file.js"),
-        parents=parents,
-        language="javascript",
+        function_name=name, file_path=Path("/test/file.js"), parents=parents, language="javascript"
     )
 
 
@@ -386,7 +383,9 @@ test('fibonacci works', () => {
 });
 """
         transformed, counter = transform_expect_calls(
-            code=code, function_to_optimize=make_func("fibonacci", class_name="FibonacciCalculator"), capture_func="capture"
+            code=code,
+            function_to_optimize=make_func("fibonacci", class_name="FibonacciCalculator"),
+            capture_func="capture",
         )
 
         # Should transform expect(calc.fibonacci(10)) to
@@ -433,7 +432,9 @@ class FibonacciCalculator {
 }
 """
         transformed, counter = transform_standalone_calls(
-            code=code, function_to_optimize=make_func("fibonacci", class_name="FibonacciCalculator"), capture_func="capture"
+            code=code,
+            function_to_optimize=make_func("fibonacci", class_name="FibonacciCalculator"),
+            capture_func="capture",
         )
 
         # The method definition should NOT be transformed
@@ -452,7 +453,9 @@ FibonacciCalculator.prototype.fibonacci = function(n) {
 };
 """
         transformed, counter = transform_standalone_calls(
-            code=code, function_to_optimize=make_func("fibonacci", class_name="FibonacciCalculator"), capture_func="capture"
+            code=code,
+            function_to_optimize=make_func("fibonacci", class_name="FibonacciCalculator"),
+            capture_func="capture",
         )
 
         # The prototype assignment should NOT be transformed
@@ -558,7 +561,10 @@ describe('Calculator', () => {
 });
 """
         instrumented = _instrument_js_test_code(
-            code=test_code, function_to_optimize=make_func("add", class_name="Calculator"), test_file_path="test.js", mode="behavior"
+            code=test_code,
+            function_to_optimize=make_func("add", class_name="Calculator"),
+            test_file_path="test.js",
+            mode="behavior",
         )
 
         # describe and test structure should be preserved
@@ -886,15 +892,15 @@ test('should compute fibonacci(20) and fibonacci(30) to known values', () => {
         from codeflash.languages.javascript.instrument import transform_standalone_calls
 
         func = make_func("fibonacci")
-        code = '''
+        code = """
 test("should compute fibonacci(20) correctly", () => {
     const result = fibonacci(10);
 });
-'''
+"""
         transformed, _counter = transform_standalone_calls(code, func, "capture")
 
         # The function call in the test description should NOT be transformed
-        assert 'fibonacci(20)' in transformed
+        assert "fibonacci(20)" in transformed
         # The actual call should be transformed
         assert "codeflash.capture('fibonacci'" in transformed
 

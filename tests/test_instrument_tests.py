@@ -15,8 +15,9 @@ from codeflash.code_utils.instrument_existing_tests import (
     FunctionImportedAsVisitor,
     inject_profiling_into_existing_test,
 )
-from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
+from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports
 from codeflash.models.models import (
     CodeOptimizationContext,
     CodePosition,
@@ -27,7 +28,6 @@ from codeflash.models.models import (
     TestsInFile,
     TestType,
 )
-from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
 codeflash_wrap_string = """def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test_class_name, codeflash_test_name, codeflash_function_name, codeflash_line_id, codeflash_loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
@@ -194,7 +194,7 @@ import dill as pickle"""
         run_cwd = Path(__file__).parent.parent.resolve()
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            code, Path(f.name), [CodePosition(9, 17), CodePosition(13, 17), CodePosition(17, 17)], func, Path(f.name).parent
+            Path(f.name), [CodePosition(9, 17), CodePosition(13, 17), CodePosition(17, 17)], func, Path(f.name).parent
         )
         os.chdir(original_cwd)
     assert success
@@ -293,7 +293,7 @@ def test_prepare_image_for_yolo():
         run_cwd = Path(__file__).parent.parent.resolve()
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            code, Path(f.name), [CodePosition(10, 14)], func, Path(f.name).parent
+            Path(f.name), [CodePosition(10, 14)], func, Path(f.name).parent
         )
         os.chdir(original_cwd)
     assert success
@@ -398,7 +398,7 @@ def test_sort():
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            code, test_path, [CodePosition(8, 14), CodePosition(12, 14)], func, project_root_path, mode=TestingMode.BEHAVIOR
+            test_path, [CodePosition(8, 14), CodePosition(12, 14)], func, project_root_path, mode=TestingMode.BEHAVIOR
         )
         os.chdir(original_cwd)
         assert success
@@ -409,7 +409,7 @@ def test_sort():
         ).replace('"', "'")
 
         success, new_perf_test = inject_profiling_into_existing_test(
-            code, test_path,
+            test_path,
             [CodePosition(8, 14), CodePosition(12, 14)],
             func,
             project_root_path,
@@ -434,7 +434,7 @@ def test_sort():
             test_framework="pytest",
             pytest_cmd="pytest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
@@ -454,8 +454,8 @@ def test_sort():
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -489,8 +489,8 @@ def test_sort():
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
         assert test_results_perf[0].id.function_getting_tested == "sorter"
@@ -541,8 +541,8 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
             line_profiler_output_file=line_profiler_output_file,
         )
@@ -650,11 +650,11 @@ def test_sort_parametrized(input, expected_output):
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            code, test_path, [CodePosition(14, 13)], func, project_root_path, mode=TestingMode.BEHAVIOR
+            test_path, [CodePosition(14, 13)], func, project_root_path, mode=TestingMode.BEHAVIOR
         )
         assert success
         success, new_test_perf = inject_profiling_into_existing_test(
-            code, test_path, [CodePosition(14, 13)], func, project_root_path, mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(14, 13)], func, project_root_path, mode=TestingMode.PERFORMANCE
         )
 
         os.chdir(original_cwd)
@@ -695,14 +695,14 @@ def test_sort_parametrized(input, expected_output):
             test_framework="pytest",
             pytest_cmd="pytest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -755,8 +755,8 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
         assert test_results_perf[0].id.function_getting_tested == "sorter"
@@ -812,8 +812,8 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
             line_profiler_output_file=line_profiler_output_file,
         )
@@ -927,11 +927,11 @@ def test_sort_parametrized_loop(input, expected_output):
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            code, test_path, [CodePosition(15, 17)], func, project_root_path, mode=TestingMode.BEHAVIOR
+            test_path, [CodePosition(15, 17)], func, project_root_path, mode=TestingMode.BEHAVIOR
         )
         assert success
         success, new_test_perf = inject_profiling_into_existing_test(
-            code, test_path, [CodePosition(15, 17)], func, project_root_path, mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(15, 17)], func, project_root_path, mode=TestingMode.PERFORMANCE
         )
 
         os.chdir(original_cwd)
@@ -984,14 +984,14 @@ def test_sort_parametrized_loop(input, expected_output):
             test_framework="pytest",
             pytest_cmd="pytest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -1081,8 +1081,8 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
 
@@ -1171,8 +1171,8 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
             line_profiler_output_file=line_profiler_output_file,
         )
@@ -1287,11 +1287,11 @@ def test_sort():
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(str(run_cwd))
         success, new_test_behavior = inject_profiling_into_existing_test(
-            code, test_path, [CodePosition(11, 17)], func, project_root_path, mode=TestingMode.BEHAVIOR
+            test_path, [CodePosition(11, 17)], func, project_root_path, mode=TestingMode.BEHAVIOR
         )
         assert success
         success, new_test_perf = inject_profiling_into_existing_test(
-            code, test_path, [CodePosition(11, 17)], func, project_root_path, mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(11, 17)], func, project_root_path, mode=TestingMode.PERFORMANCE
         )
         os.chdir(original_cwd)
         assert success
@@ -1341,14 +1341,14 @@ def test_sort():
             test_framework="pytest",
             pytest_cmd="pytest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -1389,8 +1389,8 @@ def test_sort():
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -1453,8 +1453,8 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
             line_profiler_output_file=line_profiler_output_file,
         )
@@ -1661,7 +1661,7 @@ class TestPigLatin(unittest.TestCase):
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test_behavior = inject_profiling_into_existing_test(
-            code, test_path,
+            test_path,
             [CodePosition(9, 17), CodePosition(13, 17), CodePosition(17, 17)],
             func,
             project_root_path,
@@ -1669,7 +1669,7 @@ class TestPigLatin(unittest.TestCase):
         )
         assert success
         success, new_test_perf = inject_profiling_into_existing_test(
-            code, test_path,
+            test_path,
             [CodePosition(9, 17), CodePosition(13, 17), CodePosition(17, 17)],
             func,
             project_root_path,
@@ -1723,14 +1723,14 @@ class TestPigLatin(unittest.TestCase):
             test_framework="unittest",
             pytest_cmd="pytest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -1779,8 +1779,8 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -1917,11 +1917,11 @@ import unittest
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test_behavior = inject_profiling_into_existing_test(
-            code, test_path, [CodePosition(16, 17)], func, project_root_path, mode=TestingMode.BEHAVIOR
+            test_path, [CodePosition(16, 17)], func, project_root_path, mode=TestingMode.BEHAVIOR
         )
         assert success
         success, new_test_perf = inject_profiling_into_existing_test(
-            code, test_path, [CodePosition(16, 17)], func, project_root_path, mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(16, 17)], func, project_root_path, mode=TestingMode.PERFORMANCE
         )
 
         os.chdir(original_cwd)
@@ -1973,14 +1973,14 @@ import unittest
             test_framework="unittest",
             pytest_cmd="pytest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -2034,8 +2034,8 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -2177,11 +2177,11 @@ import unittest
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test_behavior = inject_profiling_into_existing_test(
-            code, test_path, [CodePosition(14, 21)], func, project_root_path, mode=TestingMode.BEHAVIOR
+            test_path, [CodePosition(14, 21)], func, project_root_path, mode=TestingMode.BEHAVIOR
         )
         assert success
         success, new_test_perf = inject_profiling_into_existing_test(
-            code, test_path, [CodePosition(14, 21)], func, project_root_path, mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(14, 21)], func, project_root_path, mode=TestingMode.PERFORMANCE
         )
         os.chdir(original_cwd)
         assert success
@@ -2229,14 +2229,14 @@ import unittest
             test_framework="unittest",
             pytest_cmd="pytest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
             test_env=test_env,
             testing_type=TestingMode.BEHAVIOR,
             test_files=test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -2290,8 +2290,8 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
             testing_type=TestingMode.PERFORMANCE,
             test_files=test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -2428,10 +2428,10 @@ import unittest
         f = FunctionToOptimize(function_name="sorter", file_path=code_path, parents=[])
         os.chdir(run_cwd)
         success, new_test_behavior = inject_profiling_into_existing_test(
-            code, test_path, [CodePosition(17, 21)], f, project_root_path, mode=TestingMode.BEHAVIOR
+            test_path, [CodePosition(17, 21)], f, project_root_path, mode=TestingMode.BEHAVIOR
         )
         success, new_test_perf = inject_profiling_into_existing_test(
-            code, test_path, [CodePosition(17, 21)], f, project_root_path, mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(17, 21)], f, project_root_path, mode=TestingMode.PERFORMANCE
         )
         os.chdir(original_cwd)
         assert success
@@ -2481,14 +2481,14 @@ import unittest
             test_framework="unittest",
             pytest_cmd="pytest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=f, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=f, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -2574,8 +2574,8 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
         assert test_results[0].id.function_getting_tested == "sorter"
@@ -2734,7 +2734,7 @@ def test_class_name_A_function_name():
         )
         os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
-            code, test_path, [CodePosition(4, 23)], func, project_root_path
+            test_path, [CodePosition(4, 23)], func, project_root_path
         )
         os.chdir(original_cwd)
     finally:
@@ -2811,7 +2811,7 @@ def test_common_tags_1():
 
         os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
-            code, test_path, [CodePosition(7, 11), CodePosition(11, 11)], func, project_root_path
+            test_path, [CodePosition(7, 11), CodePosition(11, 11)], func, project_root_path
         )
         os.chdir(original_cwd)
         assert success
@@ -2877,7 +2877,7 @@ def test_sort():
 
         os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
-            code, test_path, [CodePosition(7, 15)], func, project_root_path
+            test_path, [CodePosition(7, 15)], func, project_root_path
         )
         os.chdir(original_cwd)
         assert success
@@ -2960,7 +2960,7 @@ def test_sort():
 
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            code, test_path, [CodePosition(6, 26), CodePosition(10, 26)], function_to_optimize, project_root_path
+            test_path, [CodePosition(6, 26), CodePosition(10, 26)], function_to_optimize, project_root_path
         )
         os.chdir(original_cwd)
         assert success
@@ -3061,7 +3061,7 @@ def test_code_replacement10() -> None:
     run_cwd = Path(__file__).parent.parent.resolve()
     os.chdir(run_cwd)
     success, new_test = inject_profiling_into_existing_test(
-        code, test_file_path, [CodePosition(22, 28), CodePosition(28, 28)], func, test_file_path.parent
+        test_file_path, [CodePosition(22, 28), CodePosition(28, 28)], func, test_file_path.parent
     )
     os.chdir(original_cwd)
     assert success
@@ -3119,7 +3119,7 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
         func = FunctionToOptimize(function_name="accurate_sleepfunc", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            code, test_path, [CodePosition(8, 13)], func, project_root_path, mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(8, 13)], func, project_root_path, mode=TestingMode.PERFORMANCE
         )
         os.chdir(original_cwd)
 
@@ -3144,7 +3144,7 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
             test_framework="pytest",
             pytest_cmd="pytest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_files = TestFiles(
             test_files=[
                 TestFile(
@@ -3160,8 +3160,8 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            min_outer_loops=2,
-            max_outer_loops=2,
+            pytest_min_loops=2,
+            pytest_max_loops=2,
             testing_time=0.1,
         )
 
@@ -3236,7 +3236,7 @@ import unittest
         func = FunctionToOptimize(function_name="accurate_sleepfunc", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            code, test_path, [CodePosition(12, 17)], func, project_root_path, mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(12, 17)], func, project_root_path, mode=TestingMode.PERFORMANCE
         )
         os.chdir(original_cwd)
 
@@ -3279,14 +3279,14 @@ import unittest
             test_framework="unittest",
             pytest_cmd="pytest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
 

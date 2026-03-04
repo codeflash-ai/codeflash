@@ -35,7 +35,6 @@ class ProjectLanguage(Enum):
     PYTHON = auto()
     JAVASCRIPT = auto()
     TYPESCRIPT = auto()
-    JAVA = auto()
 
 
 class JsPackageManager(Enum):
@@ -91,13 +90,6 @@ def detect_project_language(project_root: Path | None = None) -> ProjectLanguage
     has_setup_py = (root / "setup.py").exists()
     has_package_json = (root / "package.json").exists()
     has_tsconfig = (root / "tsconfig.json").exists()
-    has_pom_xml = (root / "pom.xml").exists()
-    has_build_gradle = (root / "build.gradle").exists() or (root / "build.gradle.kts").exists()
-    has_java_src = (root / "src" / "main" / "java").is_dir()
-
-    # Java project (Maven or Gradle)
-    if has_pom_xml or has_build_gradle or has_java_src:
-        return ProjectLanguage.JAVA
 
     # TypeScript project (tsconfig.json is definitive)
     if has_tsconfig:
@@ -216,7 +208,7 @@ def get_package_install_command(project_root: Path, package: str, dev: bool = Tr
     return cmd
 
 
-def init_js_project(language: ProjectLanguage) -> None:
+def init_js_project(language: ProjectLanguage, *, skip_confirm: bool = False, skip_api_key: bool = False) -> None:
     """Initialize Codeflash for a JavaScript/TypeScript project."""
     from codeflash.cli_cmds.cmd_init import install_github_actions, install_github_app, prompt_api_key
 
@@ -234,15 +226,15 @@ def init_js_project(language: ProjectLanguage) -> None:
     console.print(lang_panel)
     console.print()
 
-    did_add_new_key = prompt_api_key()
+    did_add_new_key = False if skip_api_key else prompt_api_key()
 
-    should_modify, _config = should_modify_package_json_config()
+    should_modify, _config = should_modify_package_json_config(skip_confirm=skip_confirm)
 
     # Default git remote
     git_remote = "origin"
 
     if should_modify:
-        setup_info = collect_js_setup_info(language)
+        setup_info = collect_js_setup_info(language, skip_confirm=skip_confirm)
         git_remote = setup_info.git_remote or "origin"
         configured = configure_package_json(setup_info)
         if not configured:
@@ -287,7 +279,7 @@ def init_js_project(language: ProjectLanguage) -> None:
     sys.exit(0)
 
 
-def should_modify_package_json_config() -> tuple[bool, dict[str, Any] | None]:
+def should_modify_package_json_config(*, skip_confirm: bool = False) -> tuple[bool, dict[str, Any] | None]:
     """Check if package.json has valid codeflash config for JS/TS projects."""
     package_json_path = Path("package.json")
 
@@ -313,6 +305,10 @@ def should_modify_package_json_config() -> tuple[bool, dict[str, Any] | None]:
         if tests_root and not Path(tests_root).is_dir():
             return True, None
 
+        # In skip_confirm mode, don't reconfigure a valid config
+        if skip_confirm:
+            return False, config
+
         # Config is valid - ask if user wants to reconfigure
         return Confirm.ask(
             "✅ A valid Codeflash config already exists in package.json. Do you want to re-configure it?",
@@ -323,13 +319,12 @@ def should_modify_package_json_config() -> tuple[bool, dict[str, Any] | None]:
         return True, None
 
 
-def collect_js_setup_info(language: ProjectLanguage) -> JSSetupInfo:
+def collect_js_setup_info(language: ProjectLanguage, *, skip_confirm: bool = False) -> JSSetupInfo:
     """Collect setup information for JavaScript/TypeScript projects.
 
     Uses auto-detection for most settings and only asks for overrides if needed.
+    When skip_confirm is True, uses all auto-detected defaults without prompting.
     """
-    from rich.prompt import Confirm
-
     from codeflash.cli_cmds.cmd_init import ask_for_telemetry, get_valid_subdirs
     from codeflash.code_utils.config_js import (
         detect_formatter,
@@ -354,6 +349,20 @@ def collect_js_setup_info(language: ProjectLanguage) -> JSSetupInfo:
     detected_module_root = detect_module_root(curdir, package_data)
     detected_test_runner = detect_test_runner(curdir, package_data)
     detected_formatter = detect_formatter(curdir, package_data)
+
+    # In skip_confirm mode, use all auto-detected defaults
+    if skip_confirm:
+        git_remote = "origin"
+        try:
+            repo = Repo(Path.cwd(), search_parent_directories=True)
+            git_remotes = get_git_remotes(repo)
+            if git_remotes:
+                git_remote = git_remotes[0]
+        except InvalidGitRepositoryError:
+            pass
+        return JSSetupInfo(git_remote=git_remote)
+
+    from rich.prompt import Confirm
 
     # Build detection summary
     formatter_display = detected_formatter[0] if detected_formatter else "none detected"

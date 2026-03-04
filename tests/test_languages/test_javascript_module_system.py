@@ -1,5 +1,4 @@
-"""Tests for JavaScript module system detection.
-"""
+"""Tests for JavaScript module system detection."""
 
 import json
 import tempfile

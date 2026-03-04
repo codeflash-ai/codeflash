@@ -23,7 +23,8 @@ if TYPE_CHECKING:
 
     from codeflash.languages.base import ReferenceInfo
     from codeflash.languages.javascript.treesitter import TypeDefinition
-    from codeflash.models.models import GeneratedTestsList, InvocationId
+    from codeflash.models.models import GeneratedTestsList, InvocationId, ValidCode
+    from codeflash.verification.verification_utils import TestConfig
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,9 @@ class JavaScriptSupport:
     This class implements the LanguageSupport protocol for JavaScript/JSX files,
     using tree-sitter for code analysis and Jest for test execution.
     """
+
+    def __init__(self) -> None:
+        self._language_version: str | None = None
 
     # === Properties ===
 
@@ -50,8 +54,7 @@ class JavaScriptSupport:
 
     @property
     def default_file_extension(self) -> str:
-        """Default file extension for JavaScript."""
-        return ".js"
+        return self.file_extensions[0]
 
     @property
     def test_framework(self) -> str:
@@ -68,17 +71,62 @@ class JavaScriptSupport:
     def dir_excludes(self) -> frozenset[str]:
         return frozenset({"node_modules", "dist", "build", ".next", ".nuxt", "coverage", ".cache", ".turbo", ".vercel"})
 
+    @property
+    def language_version(self) -> str | None:
+        return self._language_version
+
+    @property
+    def valid_test_frameworks(self) -> tuple[str, ...]:
+        return ("jest", "mocha", "vitest")
+
+    @property
+    def test_result_serialization_format(self) -> str:
+        return "json"
+
+    def parse_test_xml(
+        self, test_xml_file_path: Path, test_files: Any, test_config: Any, run_result: Any = None
+    ) -> Any:
+        from codeflash.languages.javascript.parse import parse_jest_test_xml
+        from codeflash.verification.parse_test_output import parse_func, resolve_test_file_from_class_path
+
+        return parse_jest_test_xml(
+            test_xml_file_path,
+            test_files,
+            test_config,
+            run_result,
+            parse_func=parse_func,
+            resolve_test_file_from_class_path=resolve_test_file_from_class_path,
+        )
+
+    def load_coverage(
+        self,
+        coverage_database_file: Path,
+        function_name: str,
+        code_context: Any,
+        source_file: Path,
+        coverage_config_file: Path | None = None,
+    ) -> Any:
+        from codeflash.verification.coverage_utils import JestCoverageUtils
+
+        return JestCoverageUtils.load_from_jest_json(
+            coverage_json_path=coverage_database_file,
+            function_name=function_name,
+            code_context=code_context,
+            source_code_path=source_file,
+        )
+
     # === Discovery ===
 
     def discover_functions(
-        self, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
+        self, source: str, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
     ) -> list[FunctionToOptimize]:
-        """Find all optimizable functions in a JavaScript file.
+        """Find all optimizable functions in JavaScript/TypeScript source code.
 
-        Uses tree-sitter to parse the file and find functions.
+        Uses tree-sitter to parse the source and find functions.
 
         Args:
-            file_path: Path to the JavaScript file to analyze.
+            source: Source code to analyze.
+            file_path: Path to the source file (used for language detection).
             filter_criteria: Optional criteria to filter functions.
 
         Returns:
@@ -86,12 +134,6 @@ class JavaScriptSupport:
 
         """
         criteria = filter_criteria or FunctionFilterCriteria()
-
-        try:
-            source = file_path.read_text(encoding="utf-8")
-        except Exception as e:
-            logger.warning("Failed to read %s: %s", file_path, e)
-            return []
 
         try:
             analyzer = get_analyzer_for_file(file_path)
@@ -111,7 +153,7 @@ class JavaScriptSupport:
 
                 # Skip non-exported functions (can't be imported in tests)
                 # Exception: nested functions and methods are allowed if their parent is exported
-                if not func.is_exported and not func.parent_function:
+                if criteria.require_export and not func.is_exported and not func.parent_function:
                     logger.debug(f"Skipping non-exported function: {func.name}")  # noqa: G004
                     continue
 
@@ -142,61 +184,6 @@ class JavaScriptSupport:
 
         except Exception as e:
             logger.warning("Failed to parse %s: %s", file_path, e)
-            return []
-
-    def discover_functions_from_source(self, source: str, file_path: Path | None = None) -> list[FunctionToOptimize]:
-        """Find all functions in source code string.
-
-        Uses tree-sitter to parse the source and find functions.
-
-        Args:
-            source: The source code to analyze.
-            file_path: Optional file path for context (used for language detection).
-
-        Returns:
-            List of FunctionToOptimize objects for discovered functions.
-
-        """
-        try:
-            # Use JavaScript analyzer by default, or detect from file path
-            if file_path:
-                analyzer = get_analyzer_for_file(file_path)
-            else:
-                analyzer = TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
-
-            tree_functions = analyzer.find_functions(
-                source, include_methods=True, include_arrow_functions=True, require_name=True
-            )
-
-            functions: list[FunctionToOptimize] = []
-            for func in tree_functions:
-                # Build parents list
-                parents: list[FunctionParent] = []
-                if func.class_name:
-                    parents.append(FunctionParent(name=func.class_name, type="ClassDef"))
-                if func.parent_function:
-                    parents.append(FunctionParent(name=func.parent_function, type="FunctionDef"))
-
-                functions.append(
-                    FunctionToOptimize(
-                        function_name=func.name,
-                        file_path=file_path or Path("unknown"),
-                        parents=parents,
-                        starting_line=func.start_line,
-                        ending_line=func.end_line,
-                        starting_col=func.start_col,
-                        ending_col=func.end_col,
-                        is_async=func.is_async,
-                        is_method=func.is_method,
-                        language=str(self.language),
-                        doc_start_line=func.doc_start_line,
-                    )
-                )
-
-            return functions
-
-        except Exception as e:
-            logger.warning("Failed to parse source: %s", e)
             return []
 
     def _get_test_patterns(self) -> list[str]:
@@ -1508,7 +1495,7 @@ class JavaScriptSupport:
         return "".join(result_lines)
 
     def format_code(self, source: str, file_path: Path | None = None) -> str:
-        """Format JavaScript code using prettier (if available).
+        """Format JavaScript/TypeScript code using prettier (if available).
 
         Args:
             source: Source code to format.
@@ -1519,9 +1506,10 @@ class JavaScriptSupport:
 
         """
         try:
-            # Try to use prettier via npx
+            stdin_filepath = str(file_path.name) if file_path else f"file{self.default_file_extension}"
+
             result = subprocess.run(
-                ["npx", "prettier", "--stdin-filepath", "file.js"],
+                ["npx", "prettier", "--stdin-filepath", stdin_filepath],
                 check=False,
                 input=source,
                 capture_output=True,
@@ -1702,22 +1690,15 @@ class JavaScriptSupport:
 
     # === Validation ===
 
+    @property
+    def treesitter_language(self) -> TreeSitterLanguage:
+        return TreeSitterLanguage.JAVASCRIPT
+
     def validate_syntax(self, source: str) -> bool:
-        """Check if JavaScript source code is syntactically valid.
-
-        Uses tree-sitter to parse and check for errors.
-
-        Args:
-            source: Source code to validate.
-
-        Returns:
-            True if valid, False otherwise.
-
-        """
+        """Check if source code is syntactically valid using tree-sitter."""
         try:
-            analyzer = TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
+            analyzer = TreeSitterAnalyzer(self.treesitter_language)
             tree = analyzer.parse(source)
-            # Check if tree has errors
             return not tree.root_node.has_error
         except Exception:
             return False
@@ -1743,6 +1724,11 @@ class JavaScriptSupport:
             if stripped and not stripped.startswith("//"):
                 normalized_lines.append(stripped)
         return "\n".join(normalized_lines)
+
+    def generate_concolic_tests(
+        self, test_cfg: Any, project_root: Any, function_to_optimize: Any, function_to_optimize_ast: Any
+    ) -> tuple[dict, str]:
+        return {}, ""
 
     # === Test Editing ===
 
@@ -1787,12 +1773,32 @@ class JavaScriptSupport:
             disable_ts_check,
             inject_test_globals,
             normalize_generated_tests_imports,
+            sanitize_mocha_imports,
         )
         from codeflash.languages.javascript.module_system import detect_module_system
+        from codeflash.models.models import GeneratedTests as GeneratedTestsModel
+        from codeflash.models.models import GeneratedTestsList
+
+        # For Mocha, strip vitest/jest/require('mocha') imports the AI may have generated
+        if test_framework == "mocha":
+            sanitized = []
+            for test in generated_tests.generated_tests:
+                sanitized.append(
+                    GeneratedTestsModel(
+                        generated_original_test_source=sanitize_mocha_imports(test.generated_original_test_source),
+                        instrumented_behavior_test_source=sanitize_mocha_imports(
+                            test.instrumented_behavior_test_source
+                        ),
+                        instrumented_perf_test_source=sanitize_mocha_imports(test.instrumented_perf_test_source),
+                        behavior_file_path=test.behavior_file_path,
+                        perf_file_path=test.perf_file_path,
+                    )
+                )
+            generated_tests = GeneratedTestsList(generated_tests=sanitized)
 
         module_system = detect_module_system(project_root, source_file_path)
-        if module_system == "esm":
-            generated_tests = inject_test_globals(generated_tests, test_framework)
+        if module_system == "esm" or test_framework == "mocha":
+            generated_tests = inject_test_globals(generated_tests, test_framework, module_system)
         if self.language == Language.TYPESCRIPT:
             generated_tests = disable_ts_check(generated_tests)
         return normalize_generated_tests_imports(generated_tests)
@@ -1909,6 +1915,99 @@ class JavaScriptSupport:
 
         return compare_test_results(original_results_path, candidate_results_path, project_root=project_root)
 
+    @property
+    def function_optimizer_class(self) -> type:
+        from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
+
+        return JavaScriptFunctionOptimizer
+
+    def prepare_module(
+        self, module_code: str, module_path: Path, project_root: Path
+    ) -> tuple[dict[Path, ValidCode], None]:
+        from codeflash.languages.javascript.optimizer import prepare_javascript_module
+
+        return prepare_javascript_module(module_code, module_path)
+
+    def setup_test_config(self, test_cfg: TestConfig, file_path: Path) -> None:
+        from codeflash.languages.javascript.optimizer import verify_js_requirements
+        from codeflash.languages.javascript.test_runner import find_node_project_root
+
+        test_cfg.js_project_root = find_node_project_root(file_path)
+        verify_js_requirements(test_cfg)
+
+    def adjust_test_config_for_discovery(self, test_cfg: TestConfig) -> None:
+        test_cfg.tests_project_rootdir = test_cfg.tests_root
+
+    def detect_module_system(self, project_root: Path, source_file: Path) -> str | None:
+        from codeflash.languages.javascript.module_system import detect_module_system
+
+        return detect_module_system(project_root, source_file)
+
+    def process_generated_test_strings(
+        self,
+        generated_test_source: str,
+        instrumented_behavior_test_source: str,
+        instrumented_perf_test_source: str,
+        function_to_optimize: Any,
+        test_path: Path,
+        test_cfg: Any,
+        project_module_system: str | None,
+    ) -> tuple[str, str, str]:
+        from codeflash.languages.javascript.instrument import (
+            TestingMode,
+            fix_imports_inside_test_blocks,
+            fix_jest_mock_paths,
+            instrument_generated_js_test,
+            validate_and_fix_import_style,
+        )
+        from codeflash.languages.javascript.module_system import (
+            ensure_module_system_compatibility,
+            ensure_vitest_imports,
+        )
+
+        source_file = Path(function_to_optimize.file_path)
+
+        # Fix import statements that appear inside test blocks (invalid JS syntax)
+        generated_test_source = fix_imports_inside_test_blocks(generated_test_source)
+
+        # Fix relative paths in jest.mock() calls
+        generated_test_source = fix_jest_mock_paths(
+            generated_test_source, test_path, source_file, test_cfg.tests_project_rootdir
+        )
+
+        # Validate and fix import styles (default vs named exports)
+        generated_test_source = validate_and_fix_import_style(
+            generated_test_source, source_file, function_to_optimize.function_name
+        )
+
+        # Convert module system if needed (e.g., CommonJS -> ESM for ESM projects)
+        generated_test_source = ensure_module_system_compatibility(
+            generated_test_source, project_module_system, test_cfg.tests_project_rootdir
+        )
+
+        # Ensure vitest imports are present when using vitest framework
+        generated_test_source = ensure_vitest_imports(generated_test_source, test_cfg.test_framework)
+
+        # For Mocha: convert expect()/test() to assert/it() BEFORE instrumentation
+        # to prevent instrumentation from breaking Chai-style assertion chains
+        if test_cfg.test_framework == "mocha":
+            from codeflash.languages.javascript.edit_tests import sanitize_mocha_imports
+
+            generated_test_source = sanitize_mocha_imports(generated_test_source)
+
+        # Instrument for behavior verification (writes to SQLite)
+        instrumented_behavior_test_source = instrument_generated_js_test(
+            test_code=generated_test_source, function_to_optimize=function_to_optimize, mode=TestingMode.BEHAVIOR
+        )
+
+        # Instrument for performance measurement (prints to stdout)
+        instrumented_perf_test_source = instrument_generated_js_test(
+            test_code=generated_test_source, function_to_optimize=function_to_optimize, mode=TestingMode.PERFORMANCE
+        )
+
+        logger.debug("Instrumented JS/TS tests locally for %s", function_to_optimize.function_name)
+        return generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source
+
     # === Configuration ===
 
     def get_test_file_suffix(self) -> str:
@@ -1919,6 +2018,73 @@ class JavaScriptSupport:
 
         """
         return ".test.js"
+
+    def get_test_dir_for_source(self, test_dir: Path, source_file: Path | None) -> Path | None:
+        """Find the appropriate test directory for a JavaScript/TypeScript package.
+
+        For monorepos, this finds the package's test directory from the source file path.
+        For example: packages/workflow/src/utils.ts -> packages/workflow/test/codeflash-generated/
+
+        Args:
+            test_dir: The root tests directory (may be monorepo packages root).
+            source_file: Path to the source file being tested.
+
+        Returns:
+            The test directory path, or None if not found.
+
+        """
+        if source_file is None:
+            # No source path provided, check if test_dir itself has a test subdirectory
+            for test_subdir_name in ["test", "tests", "__tests__", "src/__tests__"]:
+                test_subdir = test_dir / test_subdir_name
+                if test_subdir.is_dir():
+                    codeflash_test_dir = test_subdir / "codeflash-generated"
+                    codeflash_test_dir.mkdir(parents=True, exist_ok=True)
+                    return codeflash_test_dir
+            return None
+
+        try:
+            # Resolve paths for reliable comparison
+            tests_root = test_dir.resolve()
+            source_path = Path(source_file).resolve()
+
+            # Walk up from the source file to find a directory with package.json or test/ folder
+            package_dir = None
+
+            for parent in source_path.parents:
+                # Stop if we've gone above or reached the tests_root level
+                # For monorepos, tests_root might be /packages/ and we want to search within packages
+                if parent in (tests_root, tests_root.parent):
+                    break
+
+                # Check if this looks like a package root
+                has_package_json = (parent / "package.json").exists()
+                has_test_dir = any((parent / d).is_dir() for d in ["test", "tests", "__tests__"])
+
+                if has_package_json or has_test_dir:
+                    package_dir = parent
+                    break
+
+            if package_dir:
+                # Find the test directory in this package
+                for test_subdir_name in ["test", "tests", "__tests__", "src/__tests__"]:
+                    test_subdir = package_dir / test_subdir_name
+                    if test_subdir.is_dir():
+                        codeflash_test_dir = test_subdir / "codeflash-generated"
+                        codeflash_test_dir.mkdir(parents=True, exist_ok=True)
+                        return codeflash_test_dir
+
+            return None
+        except Exception:
+            return None
+
+    def resolve_test_file_from_class_path(self, test_class_path: str, base_dir: Path) -> Path | None:
+        return None
+
+    def resolve_test_module_path_for_pr(
+        self, test_module_path: str, tests_project_rootdir: Path, non_generated_tests: set[Path]
+    ) -> Path | None:
+        return None
 
     def find_test_root(self, project_root: Path) -> Path | None:
         """Find the test root directory for a JavaScript project.
@@ -2077,6 +2243,15 @@ class JavaScriptSupport:
 
         return len(errors) == 0, errors
 
+    def _detect_node_version(self) -> None:
+        """Detect and cache the Node.js runtime version."""
+        try:
+            result = subprocess.run(["node", "--version"], check=False, capture_output=True, text=True, timeout=10)
+            if result.returncode == 0 and result.stdout.strip():
+                self._language_version = result.stdout.strip().lstrip("v")
+        except Exception:
+            pass
+
     def ensure_runtime_environment(self, project_root: Path) -> bool:
         """Ensure codeflash npm package is installed.
 
@@ -2090,6 +2265,8 @@ class JavaScriptSupport:
 
         """
         from codeflash.cli_cmds.console import logger
+
+        self._detect_node_version()
 
         node_modules_pkg = project_root / "node_modules" / "codeflash"
         if node_modules_pkg.exists():
@@ -2120,12 +2297,11 @@ class JavaScriptSupport:
 
     def instrument_existing_test(
         self,
-        test_string: str,
+        test_path: Path,
         call_positions: Sequence[Any],
         function_to_optimize: Any,
         tests_project_root: Path,
         mode: str,
-        test_path: Path | None,
     ) -> tuple[bool, str | None]:
         """Inject profiling code into an existing JavaScript test file.
 
@@ -2146,7 +2322,6 @@ class JavaScriptSupport:
         from codeflash.languages.javascript.instrument import inject_profiling_into_existing_js_test
 
         return inject_profiling_into_existing_js_test(
-            test_string=test_string,
             test_path=test_path,
             call_positions=list(call_positions),
             function_to_optimize=function_to_optimize,
@@ -2264,6 +2439,23 @@ class JavaScriptSupport:
                 candidate_index=candidate_index,
             )
 
+        if framework == "mocha":
+            from codeflash.languages.javascript.mocha_runner import run_mocha_behavioral_tests
+
+            return run_mocha_behavioral_tests(
+                test_paths=test_paths,
+                test_env=test_env,
+                cwd=cwd,
+                timeout=timeout,
+                project_root=project_root,
+                enable_coverage=enable_coverage,
+                candidate_index=candidate_index,
+            )
+
+        if framework not in ("jest", "vitest", "mocha"):
+            msg = f"Test framework '{framework}' is not yet supported. Supported frameworks: jest, vitest, mocha."
+            raise NotImplementedError(msg)
+
         from codeflash.languages.javascript.test_runner import run_jest_behavioral_tests
 
         return run_jest_behavioral_tests(
@@ -2276,9 +2468,12 @@ class JavaScriptSupport:
             candidate_index=candidate_index,
         )
 
-    # JavaScript/TypeScript benchmarking uses high max_loops like Python (100,000)
-    # The actual loop count is limited by target_duration_seconds, not max_loops
-    JS_BENCHMARKING_MAX_LOOPS = 100_000
+    # Max iterations per capturePerf call site.  Each iteration writes a ~200-byte
+    # timing marker to stdout.  The actual loop count is governed by the 10s time
+    # budget (CODEFLASH_PERF_TARGET_DURATION_MS) — this constant is just a ceiling.
+    # Python uses max_loops=250; JS iterations are lighter (no pytest overhead) so
+    # 1000 gives comparable statistical power while keeping stdout under 200 KB.
+    JS_BENCHMARKING_MAX_LOOPS = 1_000
 
     def run_benchmarking_tests(
         self,
@@ -2288,7 +2483,7 @@ class JavaScriptSupport:
         timeout: int | None = None,
         project_root: Path | None = None,
         min_loops: int = 5,
-        max_loops: int = 100_000,
+        max_loops: int = 1_000,
         target_duration_seconds: float = 10.0,
         test_framework: str | None = None,
     ) -> tuple[Path, Any]:
@@ -2331,6 +2526,25 @@ class JavaScriptSupport:
                 max_loops=effective_max_loops,
                 target_duration_ms=int(target_duration_seconds * 1000),
             )
+
+        if framework == "mocha":
+            from codeflash.languages.javascript.mocha_runner import run_mocha_benchmarking_tests
+
+            logger.debug("Dispatching to run_mocha_benchmarking_tests")
+            return run_mocha_benchmarking_tests(
+                test_paths=test_paths,
+                test_env=test_env,
+                cwd=cwd,
+                timeout=timeout,
+                project_root=project_root,
+                min_loops=min_loops,
+                max_loops=effective_max_loops,
+                target_duration_ms=int(target_duration_seconds * 1000),
+            )
+
+        if framework not in ("jest", "vitest", "mocha"):
+            msg = f"Test framework '{framework}' is not yet supported. Supported frameworks: jest, vitest, mocha."
+            raise NotImplementedError(msg)
 
         from codeflash.languages.javascript.test_runner import run_jest_benchmarking_tests
 
@@ -2386,6 +2600,22 @@ class JavaScriptSupport:
                 line_profile_output_file=line_profile_output_file,
             )
 
+        if framework == "mocha":
+            from codeflash.languages.javascript.mocha_runner import run_mocha_line_profile_tests
+
+            return run_mocha_line_profile_tests(
+                test_paths=test_paths,
+                test_env=test_env,
+                cwd=cwd,
+                timeout=timeout,
+                project_root=project_root,
+                line_profile_output_file=line_profile_output_file,
+            )
+
+        if framework not in ("jest", "vitest", "mocha"):
+            msg = f"Test framework '{framework}' is not yet supported. Supported frameworks: jest, vitest, mocha."
+            raise NotImplementedError(msg)
+
         from codeflash.languages.javascript.test_runner import run_jest_line_profile_tests
 
         return run_jest_line_profile_tests(
@@ -2438,62 +2668,9 @@ class TypeScriptSupport(JavaScriptSupport):
         ]
 
     def get_test_file_suffix(self) -> str:
-        """Get the test file suffix for TypeScript.
-
-        Returns:
-            Jest test file suffix for TypeScript.
-
-        """
+        """Get the test file suffix for TypeScript."""
         return ".test.ts"
 
-    def validate_syntax(self, source: str) -> bool:
-        """Check if TypeScript source code is syntactically valid.
-
-        Uses tree-sitter TypeScript parser to parse and check for errors.
-
-        Args:
-            source: Source code to validate.
-
-        Returns:
-            True if valid, False otherwise.
-
-        """
-        try:
-            analyzer = TreeSitterAnalyzer(TreeSitterLanguage.TYPESCRIPT)
-            tree = analyzer.parse(source)
-            return not tree.root_node.has_error
-        except Exception:
-            return False
-
-    def format_code(self, source: str, file_path: Path | None = None) -> str:
-        """Format TypeScript code using prettier (if available).
-
-        Args:
-            source: Source code to format.
-            file_path: Optional file path for context.
-
-        Returns:
-            Formatted source code.
-
-        """
-        try:
-            # Determine file extension for prettier
-            stdin_filepath = str(file_path.name) if file_path else "file.ts"
-
-            # Try to use prettier via npx
-            result = subprocess.run(
-                ["npx", "prettier", "--stdin-filepath", stdin_filepath],
-                check=False,
-                input=source,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            if result.returncode == 0:
-                return result.stdout
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
-        except Exception as e:
-            logger.debug("Prettier formatting failed: %s", e)
-
-        return source
+    @property
+    def treesitter_language(self) -> TreeSitterLanguage:
+        return TreeSitterLanguage.TYPESCRIPT

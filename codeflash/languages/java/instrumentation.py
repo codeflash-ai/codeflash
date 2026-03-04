@@ -264,6 +264,7 @@ def wrap_target_calls_with_treesitter(
     class_name: str = "",
     test_method_name: str = "",
     body_start_line: int = 0,
+    target_return_type: str = "",
 ) -> tuple[list[str], int]:
     """Replace target method calls in body_lines with capture + serialize using tree-sitter.
 
@@ -337,6 +338,8 @@ def wrap_target_calls_with_treesitter(
 
             var_name = f"_cf_result{iter_id}_{call_counter}"
             cast_type = _infer_array_cast_type(body_line)
+            if not cast_type and target_return_type and target_return_type != "void":
+                cast_type = target_return_type
             var_with_cast = f"({cast_type}){var_name}" if cast_type else var_name
 
             # Use per-call unique variables (with call_counter suffix) for behavior mode
@@ -536,6 +539,26 @@ def _infer_array_cast_type(line: str) -> str | None:
     return None
 
 
+def _extract_return_type(function_to_optimize: Any) -> str:
+    """Extract the return type of a Java function from its source file using tree-sitter."""
+    file_path = getattr(function_to_optimize, "file_path", None)
+    func_name = _get_function_name(function_to_optimize)
+    if not file_path or not file_path.exists():
+        return ""
+    try:
+        from codeflash.languages.java.parser import get_java_analyzer
+
+        analyzer = get_java_analyzer()
+        source_text = file_path.read_text(encoding="utf-8")
+        methods = analyzer.find_methods(source_text)
+        for method in methods:
+            if method.name == func_name and method.return_type:
+                return method.return_type
+    except Exception:
+        logger.debug("Could not extract return type for %s", func_name)
+    return ""
+
+
 def _get_qualified_name(func: Any) -> str:
     """Get the qualified name from FunctionToOptimize."""
     if hasattr(func, "qualified_name"):
@@ -629,6 +652,7 @@ def instrument_existing_test(
     """
     source = test_string
     func_name = _get_function_name(function_to_optimize)
+    target_return_type = _extract_return_type(function_to_optimize)
 
     # Get the original class name from the file name
     if test_path:
@@ -650,6 +674,12 @@ def instrument_existing_test(
     # replacing substrings of other identifiers.
     modified_source = re.sub(rf"\b{re.escape(original_class_name)}\b", new_class_name, source)
 
+    # Add @SuppressWarnings("CheckReturnValue") to the class declaration.
+    # Projects using Error Prone (e.g. Guava) enforce CheckReturnValue as a compiler error.
+    # Applied in both modes: performance mode strips assertions (creating discarded return values),
+    # and behavior mode adds wrapper calls that may also discard return values.
+    modified_source = _add_suppress_warnings_annotation(modified_source, new_class_name)
+
     # Add timing instrumentation to test methods
     # Use the new (instrumented) class name in markers so each test file has a unique
     # _cf_mod/_cf_cls. This is critical for disambiguating existing vs generated tests
@@ -664,14 +694,16 @@ def instrument_existing_test(
         )
     else:
         # Behavior mode: add timing instrumentation that also writes to SQLite
-        modified_source = _add_behavior_instrumentation(modified_source, new_class_name, func_name)
+        modified_source = _add_behavior_instrumentation(
+            modified_source, new_class_name, func_name, target_return_type
+        )
 
     logger.debug("Java %s testing for %s: renamed class %s -> %s", mode, func_name, original_class_name, new_class_name)
     # Why return True here?
     return True, modified_source
 
 
-def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) -> str:
+def _add_behavior_instrumentation(source: str, class_name: str, func_name: str, target_return_type: str = "") -> str:
     """Add behavior instrumentation to test methods.
 
     For behavior mode, this adds:
@@ -814,6 +846,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 class_name=class_name,
                 test_method_name=test_method_name,
                 body_start_line=body_first_line_index,
+                target_return_type=target_return_type,
             )
 
             # Add behavior instrumentation setup code (shared variables for all calls in the method)
@@ -844,6 +877,23 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
             i += 1
 
     return "\n".join(result)
+
+
+def _add_suppress_warnings_annotation(source: str, class_name: str) -> str:
+    """Add @SuppressWarnings("CheckReturnValue") before the class declaration.
+
+    Projects using Error Prone (e.g. Guava) enforce CheckReturnValue as a compiler error.
+    Our instrumented tests intentionally discard return values after assertion stripping,
+    which would fail compilation without this suppression.
+    """
+    class_decl_pattern = re.compile(
+        rf"^((?:(?:public|protected|final|abstract)\s+)*class\s+{re.escape(class_name)}\b)", re.MULTILINE
+    )
+    match = class_decl_pattern.search(source)
+    if not match:
+        return source
+    insert_pos = match.start()
+    return source[:insert_pos] + '@SuppressWarnings("CheckReturnValue")\n' + source[insert_pos:]
 
 
 def _add_timing_instrumentation(source: str, class_name: str, func_name: str) -> str:
@@ -1338,6 +1388,9 @@ def instrument_generated_java_test(
         # Rename all references to the original class name in the source.
         # This includes the class declaration, return types, constructor calls, etc.
         modified_code = re.sub(rf"\b{re.escape(original_class_name)}\b", new_class_name, test_code)
+
+        # Suppress Error Prone's CheckReturnValue for generated performance tests
+        modified_code = _add_suppress_warnings_annotation(modified_code, new_class_name)
 
         modified_code = _add_timing_instrumentation(
             modified_code,

@@ -6,15 +6,15 @@ proceeding to SQLite file comparison (which would crash with FileNotFoundError s
 instrumentation hooks never fired).
 """
 
-from dataclasses import dataclass
 from pathlib import Path
 
-from codeflash.either import Failure
 from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults
 from codeflash.models.test_type import TestType
 
 
-def make_test_invocation(*, did_pass: bool, test_type: TestType = TestType.EXISTING_UNIT_TEST) -> FunctionTestInvocation:
+def make_test_invocation(
+    *, did_pass: bool, test_type: TestType = TestType.EXISTING_UNIT_TEST
+) -> FunctionTestInvocation:
     """Helper to create a FunctionTestInvocation with minimal required fields."""
     return FunctionTestInvocation(
         loop_index=1,
@@ -101,23 +101,25 @@ class TestCandidateBehavioralTestGuard:
         """All test types failing should yield 0 total passed."""
         results = TestResults()
         for tt in [TestType.EXISTING_UNIT_TEST, TestType.GENERATED_REGRESSION, TestType.REPLAY_TEST]:
-            results.add(FunctionTestInvocation(
-                loop_index=1,
-                id=InvocationId(
-                    test_module_path="com.example.FooTest",
-                    test_class_name="FooTest",
-                    test_function_name=f"test_{tt.name}",
-                    function_getting_tested="foo",
-                    iteration_id="0",
-                ),
-                file_name=Path("FooTest.java"),
-                did_pass=False,
-                runtime=1000,
-                test_framework="junit",
-                test_type=tt,
-                return_value=None,
-                timed_out=False,
-            ))
+            results.add(
+                FunctionTestInvocation(
+                    loop_index=1,
+                    id=InvocationId(
+                        test_module_path="com.example.FooTest",
+                        test_class_name="FooTest",
+                        test_function_name=f"test_{tt.name}",
+                        function_getting_tested="foo",
+                        iteration_id="0",
+                    ),
+                    file_name=Path("FooTest.java"),
+                    did_pass=False,
+                    runtime=1000,
+                    test_framework="junit",
+                    test_type=tt,
+                    return_value=None,
+                    timed_out=False,
+                )
+            )
 
         report = results.get_test_pass_fail_report_by_type()
         total_passed = sum(r.get("passed", 0) for r in report.values())
@@ -129,41 +131,45 @@ class TestCandidateBehavioralTestGuard:
         results = TestResults()
         # Many failures
         for i in range(5):
-            results.add(FunctionTestInvocation(
+            results.add(
+                FunctionTestInvocation(
+                    loop_index=1,
+                    id=InvocationId(
+                        test_module_path="com.example.FooTest",
+                        test_class_name="FooTest",
+                        test_function_name=f"testFail{i}",
+                        function_getting_tested="foo",
+                        iteration_id="0",
+                    ),
+                    file_name=Path("FooTest.java"),
+                    did_pass=False,
+                    runtime=1000,
+                    test_framework="junit",
+                    test_type=TestType.GENERATED_REGRESSION,
+                    return_value=None,
+                    timed_out=False,
+                )
+            )
+        # One pass
+        results.add(
+            FunctionTestInvocation(
                 loop_index=1,
                 id=InvocationId(
                     test_module_path="com.example.FooTest",
                     test_class_name="FooTest",
-                    test_function_name=f"testFail{i}",
+                    test_function_name="testPass",
                     function_getting_tested="foo",
                     iteration_id="0",
                 ),
                 file_name=Path("FooTest.java"),
-                did_pass=False,
+                did_pass=True,
                 runtime=1000,
                 test_framework="junit",
-                test_type=TestType.GENERATED_REGRESSION,
+                test_type=TestType.EXISTING_UNIT_TEST,
                 return_value=None,
                 timed_out=False,
-            ))
-        # One pass
-        results.add(FunctionTestInvocation(
-            loop_index=1,
-            id=InvocationId(
-                test_module_path="com.example.FooTest",
-                test_class_name="FooTest",
-                test_function_name="testPass",
-                function_getting_tested="foo",
-                iteration_id="0",
-            ),
-            file_name=Path("FooTest.java"),
-            did_pass=True,
-            runtime=1000,
-            test_framework="junit",
-            test_type=TestType.EXISTING_UNIT_TEST,
-            return_value=None,
-            timed_out=False,
-        ))
+            )
+        )
 
         report = results.get_test_pass_fail_report_by_type()
         total_passed = sum(r.get("passed", 0) for r in report.values())

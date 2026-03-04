@@ -7,25 +7,12 @@ fail with an error to maintain strict correctness guarantees.
 
 import inspect
 import sqlite3
-from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
-from codeflash.languages.java.comparator import (
-    compare_test_results as java_compare_test_results,
-)
-from codeflash.models.models import (
-    FunctionTestInvocation,
-    InvocationId,
-    TestDiffScope,
-    TestResults,
-    TestType,
-    VerificationType,
-)
-from codeflash.verification.equivalence import (
-    compare_test_results as python_compare_test_results,
-)
+from codeflash.languages.java.comparator import compare_test_results as java_compare_test_results
+from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults, TestType, VerificationType
 
 
 def make_invocation(
@@ -142,7 +129,7 @@ class TestSqlitePathSelection:
                 "loop_index": 1,
                 "iteration_id": "1_0",
                 "return_value": '{"value": 42}',
-            },
+            }
         ]
         create_test_results_db(original_path, results)
         create_test_results_db(candidate_path, results)
@@ -207,30 +194,24 @@ class TestDecisionPointDocumentation:
     these tests will alert us so we can update our understanding.
     """
 
-    def test_decision_point_exists_in_function_optimizer(self):
-        """Verify the decision logic pattern exists in function_optimizer.py source.
+    def test_decision_point_exists_in_java_function_optimizer(self):
+        """Verify the comparison decision logic exists in JavaFunctionOptimizer.
 
-        The comparison decision at lines ~2816-2836 checks:
-        1. if not is_python() -> enters non-Python path
-        2. original_sqlite.exists() and candidate_sqlite.exists() -> SQLite path
-        3. else -> fail with error (strict correctness)
+        After refactoring to protocol dispatch, the comparison routing lives in
+        JavaFunctionOptimizer.compare_candidate_results which checks:
+        1. original_sqlite.exists() and candidate_sqlite.exists() -> SQLite path
+        2. else -> fallback to pass/fail comparison
 
         This is a canary test: if the pattern is refactored, this test fails
         to alert that the routing logic has changed.
         """
-        import codeflash.optimization.function_optimizer as fo_module
+        import codeflash.languages.java.function_optimizer as java_fo_module
 
-        source = inspect.getsource(fo_module)
-
-        # Verify the non-Python branch exists
-        assert "if not is_python():" in source, (
-            "Decision point 'if not is_python():' not found in function_optimizer.py. "
-            "The comparison routing logic may have been refactored."
-        )
+        source = inspect.getsource(java_fo_module)
 
         # Verify SQLite file existence check
         assert "original_sqlite.exists()" in source, (
-            "SQLite existence check 'original_sqlite.exists()' not found. "
+            "SQLite existence check 'original_sqlite.exists()' not found in JavaFunctionOptimizer. "
             "The SQLite comparison routing may have been refactored."
         )
 

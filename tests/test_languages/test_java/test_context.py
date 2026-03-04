@@ -2,25 +2,19 @@
 
 from pathlib import Path
 
-import pytest
-
-from codeflash.languages.base import FunctionFilterCriteria, Language, ParentInfo
+from codeflash.languages.base import FunctionFilterCriteria, Language
 from codeflash.languages.java.context import (
     TypeSkeleton,
+    _extract_public_method_signatures,
     _extract_type_skeleton,
+    _format_skeleton_for_context,
     extract_class_context,
     extract_code_context,
     extract_function_source,
-    extract_read_only_context,
-    find_helper_functions,
     get_java_imported_type_skeletons,
-    _extract_public_method_signatures,
-    _format_skeleton_for_context,
 )
 from codeflash.languages.java.discovery import discover_functions_from_source
-from codeflash.languages.java.import_resolver import JavaImportResolver, ResolvedImport
-from codeflash.languages.java.parser import JavaImportInfo, get_java_analyzer
-
+from codeflash.languages.java.parser import get_java_analyzer
 
 # Filter criteria that includes void methods
 NO_RETURN_FILTER = FunctionFilterCriteria(require_return=False)
@@ -1785,12 +1779,15 @@ class TestExtractCodeContextEdgeCases:
     def test_unicode_in_source(self, tmp_path: Path):
         """Test context extraction for method with unicode characters."""
         java_file = tmp_path / "Unicode.java"
-        java_file.write_text("""public class Unicode {
+        java_file.write_text(
+            """public class Unicode {
     public String greet() {
         return "こんにちは世界";
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
         functions = discover_functions_from_source(java_file.read_text(encoding="utf-8"), file_path=java_file)
         assert len(functions) == 1
 

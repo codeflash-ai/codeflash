@@ -89,12 +89,11 @@ class TestJavaCodeContext:
 
     def test_extract_code_context_for_java(self, java_project_dir):
         """Test extracting code context for a Java method."""
-        from codeflash.languages.python.context.code_context_extractor import get_code_optimization_context
-        from codeflash.languages import current as lang_current
+        from codeflash.languages import get_language_support
         from codeflash.languages.base import Language
+        from codeflash.languages.java.function_optimizer import JavaFunctionOptimizer
 
-        # Force set language to Java for proper context extraction routing
-        lang_current._current_language = Language.JAVA
+        lang_support = get_language_support(Language.JAVA)
 
         sort_file = java_project_dir / "src" / "main" / "java" / "com" / "example" / "BubbleSort.java"
         if not sort_file.exists():
@@ -107,8 +106,11 @@ class TestJavaCodeContext:
         bubble_func = next((f for f in func_list if f.function_name == "bubbleSort"), None)
         assert bubble_func is not None
 
-        # Extract code context
-        context = get_code_optimization_context(bubble_func, java_project_dir)
+        # Extract code context via Java language support
+        code_context = lang_support.extract_code_context(bubble_func, java_project_dir, java_project_dir)
+        context = JavaFunctionOptimizer._build_optimization_context(
+            code_context, bubble_func.file_path, bubble_func.language, java_project_dir
+        )
 
         # Verify context structure
         assert context.read_writable_code is not None
@@ -317,12 +319,7 @@ class TestJavaCompilation:
             pytest.skip("Maven not installed")
 
         # Compile the project
-        result = subprocess.run(
-            ["mvn", "compile", "-q"],
-            cwd=java_project_dir,
-            capture_output=True,
-            timeout=120,
-        )
+        result = subprocess.run(["mvn", "compile", "-q"], cwd=java_project_dir, capture_output=True, timeout=120)
 
         assert result.returncode == 0, f"Compilation failed: {result.stderr.decode()}"
 
@@ -340,11 +337,6 @@ class TestJavaCompilation:
             pytest.skip("Maven not installed")
 
         # Run tests
-        result = subprocess.run(
-            ["mvn", "test", "-q"],
-            cwd=java_project_dir,
-            capture_output=True,
-            timeout=180,
-        )
+        result = subprocess.run(["mvn", "test", "-q"], cwd=java_project_dir, capture_output=True, timeout=180)
 
         assert result.returncode == 0, f"Tests failed: {result.stderr.decode()}"

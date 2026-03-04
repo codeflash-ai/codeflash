@@ -27,19 +27,14 @@ class TestIsFirstRun:
 
     def test_returns_false_when_pyproject_config_exists(self, tmp_path):
         """Should return False when codeflash config exists in pyproject.toml."""
-        (tmp_path / "pyproject.toml").write_text(
-            '[tool.codeflash]\nmodule-root = "src"'
-        )
+        (tmp_path / "pyproject.toml").write_text('[tool.codeflash]\nmodule-root = "src"')
 
         result = is_first_run(tmp_path)
         assert result is False
 
     def test_returns_false_when_package_json_config_exists(self, tmp_path):
         """Should return False when codeflash config exists in package.json."""
-        (tmp_path / "package.json").write_text(json.dumps({
-            "name": "test",
-            "codeflash": {"moduleRoot": "src"}
-        }))
+        (tmp_path / "package.json").write_text(json.dumps({"name": "test", "codeflash": {"moduleRoot": "src"}}))
 
         result = is_first_run(tmp_path)
         assert result is False
@@ -109,11 +104,7 @@ class TestHandleFirstRun:
 
         existing_args = Namespace(custom_flag=True, module_root=None)
 
-        result = handle_first_run(
-            args=existing_args,
-            skip_confirm=True,
-            skip_api_key=True,
-        )
+        result = handle_first_run(args=existing_args, skip_confirm=True, skip_api_key=True)
 
         assert result is not None
         assert result.custom_flag is True  # Preserved
@@ -229,9 +220,7 @@ class TestFirstRunIntegration:
     def test_full_python_first_run(self, tmp_path, monkeypatch):
         """Should complete full first-run for Python project."""
         # Create Python project
-        (tmp_path / "pyproject.toml").write_text(
-            '[project]\nname = "myapp"\n\n[tool.ruff]\nline-length = 120'
-        )
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "myapp"\n\n[tool.ruff]\nline-length = 120')
         pkg_dir = tmp_path / "myapp"
         pkg_dir.mkdir()
         (pkg_dir / "__init__.py").write_text("")
@@ -257,10 +246,9 @@ class TestFirstRunIntegration:
     def test_full_javascript_first_run(self, tmp_path, monkeypatch):
         """Should complete full first-run for JavaScript project."""
         # Create JS project
-        (tmp_path / "package.json").write_text(json.dumps({
-            "name": "myapp",
-            "devDependencies": {"jest": "^29.0.0"}
-        }, indent=2))
+        (tmp_path / "package.json").write_text(
+            json.dumps({"name": "myapp", "devDependencies": {"jest": "^29.0.0"}}, indent=2)
+        )
         (tmp_path / "src").mkdir()
         (tmp_path / "tests").mkdir()
 
@@ -277,9 +265,7 @@ class TestFirstRunIntegration:
     def test_subsequent_run_uses_saved_config(self, tmp_path, monkeypatch):
         """After first run, subsequent runs should not trigger first-run."""
         # Create project with existing config
-        (tmp_path / "pyproject.toml").write_text(
-            '[tool.codeflash]\nmodule-root = "src"'
-        )
+        (tmp_path / "pyproject.toml").write_text('[tool.codeflash]\nmodule-root = "src"')
 
         monkeypatch.chdir(tmp_path)
 

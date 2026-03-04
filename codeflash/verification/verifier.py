@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
-from codeflash.languages import is_java, is_javascript
+from codeflash.code_utils.code_utils import module_name_from_file_path
+from codeflash.languages import current_language_support
 from codeflash.verification.verification_utils import ModifyInspiredTests, delete_multiple_if_name_main
 
 if TYPE_CHECKING:
@@ -35,15 +35,13 @@ def generate_tests(
     start_time = time.perf_counter()
     test_module_path = Path(module_name_from_file_path(test_path, test_cfg.tests_project_rootdir))
 
-    # Detect module system for JavaScript/TypeScript before calling aiservice
-    project_module_system = None
-    if is_javascript():
-        from codeflash.languages.javascript.module_system import detect_module_system
+    # Detect module system via language support (non-None for JS/TS, None for Python)
+    lang_support = current_language_support()
+    source_file = Path(function_to_optimize.file_path)
+    project_module_system = lang_support.detect_module_system(test_cfg.tests_project_rootdir, source_file)
 
-        source_file = Path(function_to_optimize.file_path)
-        project_module_system = detect_module_system(test_cfg.tests_project_rootdir, source_file)
-
-        # For JavaScript, calculate the correct import path from the actual test location
+    if project_module_system is not None:
+        # For JavaScript/TypeScript, calculate the correct import path from the actual test location
         # (test_path) to the source file, not from tests_root
         import os
 
@@ -54,6 +52,10 @@ def generate_tests(
         # Ensure path starts with ./ or ../ for JavaScript/TypeScript imports
         if not rel_import_path.startswith("../"):
             rel_import_path = f"./{rel_import_path}"
+        # ESM requires explicit file extensions in import specifiers.
+        # TypeScript ESM also uses .js extensions (TS resolves .js → .ts).
+        if project_module_system == "esm":
+            rel_import_path += ".js"
         # Keep as string since Path() normalizes away the ./ prefix
         module_path = rel_import_path
 
@@ -68,102 +70,24 @@ def generate_tests(
         trace_id=function_trace_id,
         test_index=test_index,
         language=function_to_optimize.language,
+        language_version=current_language_support().language_version,
         module_system=project_module_system,
         is_numerical_code=is_numerical_code,
     )
     if response and isinstance(response, tuple) and len(response) == 3:
         generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source = response
-        temp_run_dir = get_run_tmp_file(Path()).as_posix()
 
-        # For JavaScript/TypeScript, instrumentation is done locally (aiservice returns uninstrumented code)
-        if is_javascript():
-            from codeflash.languages.javascript.instrument import (
-                TestingMode,
-                fix_imports_inside_test_blocks,
-                fix_jest_mock_paths,
-                instrument_generated_js_test,
-                validate_and_fix_import_style,
-            )
-            from codeflash.languages.javascript.module_system import (
-                ensure_module_system_compatibility,
-                ensure_vitest_imports,
-            )
-
-            source_file = Path(function_to_optimize.file_path)
-
-            # Fix import statements that appear inside test blocks (invalid JS syntax)
-            generated_test_source = fix_imports_inside_test_blocks(generated_test_source)
-
-            # Fix relative paths in jest.mock() calls
-            generated_test_source = fix_jest_mock_paths(
-                generated_test_source, test_path, source_file, test_cfg.tests_project_rootdir
-            )
-
-            # Validate and fix import styles (default vs named exports)
-            generated_test_source = validate_and_fix_import_style(
-                generated_test_source, source_file, function_to_optimize.function_name
-            )
-
-            # Convert module system if needed (e.g., CommonJS -> ESM for ESM projects)
-            # Skip conversion if ts-jest is installed (handles interop natively)
-            generated_test_source = ensure_module_system_compatibility(
-                generated_test_source, project_module_system, test_cfg.tests_project_rootdir
-            )
-
-            # Ensure vitest imports are present when using vitest framework
-            generated_test_source = ensure_vitest_imports(generated_test_source, test_cfg.test_framework)
-
-            # Instrument for behavior verification (writes to SQLite)
-            instrumented_behavior_test_source = instrument_generated_js_test(
-                test_code=generated_test_source, function_to_optimize=function_to_optimize, mode=TestingMode.BEHAVIOR
-            )
-
-            # Instrument for performance measurement (prints to stdout)
-            instrumented_perf_test_source = instrument_generated_js_test(
-                test_code=generated_test_source, function_to_optimize=function_to_optimize, mode=TestingMode.PERFORMANCE
-            )
-
-            logger.debug(f"Instrumented JS/TS tests locally for {function_to_optimize.function_name}")
-        elif is_java():
-            from codeflash.languages.java.instrumentation import instrument_generated_java_test
-            from codeflash.languages.java.remove_asserts import strip_java_assertions
-
-            func_name = function_to_optimize.function_name
-            qualified_name = function_to_optimize.qualified_name
-
-            # Strip first so both instrumentation modes and display share the same base
-            stripped_source = strip_java_assertions(generated_test_source, func_name, qualified_name)
-
-            # Instrument for behavior verification (renames class)
-            instrumented_behavior_test_source = instrument_generated_java_test(
-                test_code=stripped_source,
-                function_name=func_name,
-                qualified_name=qualified_name,
-                mode="behavior",
+        generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source = (
+            lang_support.process_generated_test_strings(
+                generated_test_source=generated_test_source,
+                instrumented_behavior_test_source=instrumented_behavior_test_source,
+                instrumented_perf_test_source=instrumented_perf_test_source,
                 function_to_optimize=function_to_optimize,
+                test_path=test_path,
+                test_cfg=test_cfg,
+                project_module_system=project_module_system,
             )
-
-            # Instrument for performance measurement (adds timing markers)
-            instrumented_perf_test_source = instrument_generated_java_test(
-                test_code=stripped_source,
-                function_name=func_name,
-                qualified_name=qualified_name,
-                mode="performance",
-                function_to_optimize=function_to_optimize,
-            )
-
-            # Use stripped source as the clean display version
-            generated_test_source = stripped_source
-
-            logger.debug(f"Instrumented Java tests locally for {func_name}")
-        else:
-            # Python: instrumentation is done by aiservice, just replace temp dir placeholders
-            instrumented_behavior_test_source = instrumented_behavior_test_source.replace(
-                "{codeflash_run_tmp_dir_client_side}", temp_run_dir
-            )
-            instrumented_perf_test_source = instrumented_perf_test_source.replace(
-                "{codeflash_run_tmp_dir_client_side}", temp_run_dir
-            )
+        )
     else:
         logger.warning(f"Failed to generate and instrument tests for {function_to_optimize.function_name}")
         return None

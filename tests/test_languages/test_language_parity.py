@@ -345,8 +345,8 @@ class TestDiscoverFunctionsParity:
         py_file = write_temp_file(SIMPLE_FUNCTION.python, ".py")
         js_file = write_temp_file(SIMPLE_FUNCTION.javascript, ".js")
 
-        py_funcs = python_support.discover_functions(py_file)
-        js_funcs = js_support.discover_functions(js_file)
+        py_funcs = python_support.discover_functions(py_file.read_text(encoding="utf-8"), py_file)
+        js_funcs = js_support.discover_functions(js_file.read_text(encoding="utf-8"), js_file)
 
         # Both should find exactly one function
         assert len(py_funcs) == 1, f"Python found {len(py_funcs)}, expected 1"
@@ -365,8 +365,8 @@ class TestDiscoverFunctionsParity:
         py_file = write_temp_file(MULTIPLE_FUNCTIONS.python, ".py")
         js_file = write_temp_file(MULTIPLE_FUNCTIONS.javascript, ".js")
 
-        py_funcs = python_support.discover_functions(py_file)
-        js_funcs = js_support.discover_functions(js_file)
+        py_funcs = python_support.discover_functions(py_file.read_text(encoding="utf-8"), py_file)
+        js_funcs = js_support.discover_functions(js_file.read_text(encoding="utf-8"), js_file)
 
         # Both should find 3 functions
         assert len(py_funcs) == 3, f"Python found {len(py_funcs)}, expected 3"
@@ -384,8 +384,8 @@ class TestDiscoverFunctionsParity:
         py_file = write_temp_file(WITH_AND_WITHOUT_RETURN.python, ".py")
         js_file = write_temp_file(WITH_AND_WITHOUT_RETURN.javascript, ".js")
 
-        py_funcs = python_support.discover_functions(py_file)
-        js_funcs = js_support.discover_functions(js_file)
+        py_funcs = python_support.discover_functions(py_file.read_text(encoding="utf-8"), py_file)
+        js_funcs = js_support.discover_functions(js_file.read_text(encoding="utf-8"), js_file)
 
         # Both should find only 1 function (the one with return)
         assert len(py_funcs) == 1, f"Python found {len(py_funcs)}, expected 1"
@@ -400,8 +400,8 @@ class TestDiscoverFunctionsParity:
         py_file = write_temp_file(CLASS_METHODS.python, ".py")
         js_file = write_temp_file(CLASS_METHODS.javascript, ".js")
 
-        py_funcs = python_support.discover_functions(py_file)
-        js_funcs = js_support.discover_functions(js_file)
+        py_funcs = python_support.discover_functions(py_file.read_text(encoding="utf-8"), py_file)
+        js_funcs = js_support.discover_functions(js_file.read_text(encoding="utf-8"), js_file)
 
         # Both should find 2 methods
         assert len(py_funcs) == 2, f"Python found {len(py_funcs)}, expected 2"
@@ -421,8 +421,8 @@ class TestDiscoverFunctionsParity:
         py_file = write_temp_file(ASYNC_FUNCTIONS.python, ".py")
         js_file = write_temp_file(ASYNC_FUNCTIONS.javascript, ".js")
 
-        py_funcs = python_support.discover_functions(py_file)
-        js_funcs = js_support.discover_functions(js_file)
+        py_funcs = python_support.discover_functions(py_file.read_text(encoding="utf-8"), py_file)
+        js_funcs = js_support.discover_functions(js_file.read_text(encoding="utf-8"), js_file)
 
         # Both should find 2 functions
         assert len(py_funcs) == 2, f"Python found {len(py_funcs)}, expected 2"
@@ -440,32 +440,23 @@ class TestDiscoverFunctionsParity:
         assert js_sync.is_async is False, "JavaScript sync function should have is_async=False"
 
     def test_nested_functions_discovery(self, python_support, js_support):
-        """Both should discover nested functions with parent info."""
+        """Python skips nested functions; JavaScript discovers them with parent info."""
         py_file = write_temp_file(NESTED_FUNCTIONS.python, ".py")
         js_file = write_temp_file(NESTED_FUNCTIONS.javascript, ".js")
 
-        py_funcs = python_support.discover_functions(py_file)
-        js_funcs = js_support.discover_functions(js_file)
+        py_funcs = python_support.discover_functions(py_file.read_text(encoding="utf-8"), py_file)
+        js_funcs = js_support.discover_functions(js_file.read_text(encoding="utf-8"), js_file)
 
-        # Both should find 2 functions (outer and inner)
-        assert len(py_funcs) == 2, f"Python found {len(py_funcs)}, expected 2"
+        # Python skips nested functions — only outer is discovered
+        assert len(py_funcs) == 1, f"Python found {len(py_funcs)}, expected 1"
+        assert py_funcs[0].function_name == "outer"
+
+        # JavaScript discovers both
         assert len(js_funcs) == 2, f"JavaScript found {len(js_funcs)}, expected 2"
-
-        # Check names
-        py_names = {f.function_name for f in py_funcs}
         js_names = {f.function_name for f in js_funcs}
-
-        assert py_names == {"outer", "inner"}, f"Python found {py_names}"
         assert js_names == {"outer", "inner"}, f"JavaScript found {js_names}"
 
-        # Check parent info for inner function
-        py_inner = next(f for f in py_funcs if f.function_name == "inner")
         js_inner = next(f for f in js_funcs if f.function_name == "inner")
-
-        assert len(py_inner.parents) >= 1, "Python inner should have parent info"
-        assert py_inner.parents[0].name == "outer", "Python inner's parent should be outer"
-
-        # JavaScript nested function parent check
         assert len(js_inner.parents) >= 1, "JavaScript inner should have parent info"
         assert js_inner.parents[0].name == "outer", "JavaScript inner's parent should be outer"
 
@@ -474,8 +465,8 @@ class TestDiscoverFunctionsParity:
         py_file = write_temp_file(STATIC_METHODS.python, ".py")
         js_file = write_temp_file(STATIC_METHODS.javascript, ".js")
 
-        py_funcs = python_support.discover_functions(py_file)
-        js_funcs = js_support.discover_functions(js_file)
+        py_funcs = python_support.discover_functions(py_file.read_text(encoding="utf-8"), py_file)
+        js_funcs = js_support.discover_functions(js_file.read_text(encoding="utf-8"), js_file)
 
         # Both should find 1 function
         assert len(py_funcs) == 1, f"Python found {len(py_funcs)}, expected 1"
@@ -492,8 +483,8 @@ class TestDiscoverFunctionsParity:
         py_file = write_temp_file(COMPLEX_FILE.python, ".py")
         js_file = write_temp_file(COMPLEX_FILE.javascript, ".js")
 
-        py_funcs = python_support.discover_functions(py_file)
-        js_funcs = js_support.discover_functions(js_file)
+        py_funcs = python_support.discover_functions(py_file.read_text(encoding="utf-8"), py_file)
+        js_funcs = js_support.discover_functions(js_file.read_text(encoding="utf-8"), js_file)
 
         # Both should find 4 functions
         assert len(py_funcs) == 4, f"Python found {len(py_funcs)}, expected 4"
@@ -524,8 +515,8 @@ class TestDiscoverFunctionsParity:
 
         criteria = FunctionFilterCriteria(include_async=False)
 
-        py_funcs = python_support.discover_functions(py_file, criteria)
-        js_funcs = js_support.discover_functions(js_file, criteria)
+        py_funcs = python_support.discover_functions(py_file.read_text(encoding="utf-8"), py_file, criteria)
+        js_funcs = js_support.discover_functions(js_file.read_text(encoding="utf-8"), js_file, criteria)
 
         # Both should find only 1 function (the sync one)
         assert len(py_funcs) == 1, f"Python found {len(py_funcs)}, expected 1"
@@ -542,8 +533,8 @@ class TestDiscoverFunctionsParity:
 
         criteria = FunctionFilterCriteria(include_methods=False)
 
-        py_funcs = python_support.discover_functions(py_file, criteria)
-        js_funcs = js_support.discover_functions(js_file, criteria)
+        py_funcs = python_support.discover_functions(py_file.read_text(encoding="utf-8"), py_file, criteria)
+        js_funcs = js_support.discover_functions(js_file.read_text(encoding="utf-8"), js_file, criteria)
 
         # Both should find only 1 function (standalone)
         assert len(py_funcs) == 1, f"Python found {len(py_funcs)}, expected 1"
@@ -554,11 +545,11 @@ class TestDiscoverFunctionsParity:
         assert js_funcs[0].function_name == "standalone"
 
     def test_nonexistent_file_returns_empty(self, python_support, js_support):
-        """Both should return empty list for nonexistent files."""
-        py_funcs = python_support.discover_functions(Path("/nonexistent/file.py"))
-        js_funcs = js_support.discover_functions(Path("/nonexistent/file.js"))
-
+        """Both languages return empty list for empty source."""
+        py_funcs = python_support.discover_functions("", Path("/nonexistent/file.py"))
         assert py_funcs == []
+
+        js_funcs = js_support.discover_functions("", Path("/nonexistent/file.js"))
         assert js_funcs == []
 
     def test_line_numbers_captured(self, python_support, js_support):
@@ -566,8 +557,8 @@ class TestDiscoverFunctionsParity:
         py_file = write_temp_file(SIMPLE_FUNCTION.python, ".py")
         js_file = write_temp_file(SIMPLE_FUNCTION.javascript, ".js")
 
-        py_funcs = python_support.discover_functions(py_file)
-        js_funcs = js_support.discover_functions(js_file)
+        py_funcs = python_support.discover_functions(py_file.read_text(encoding="utf-8"), py_file)
+        js_funcs = js_support.discover_functions(js_file.read_text(encoding="utf-8"), js_file)
 
         # Both should have start_line and end_line
         assert py_funcs[0].starting_line is not None
@@ -917,8 +908,8 @@ class TestIntegrationParity:
         js_file = write_temp_file(js_original, ".js")
 
         # Discover
-        py_funcs = python_support.discover_functions(py_file)
-        js_funcs = js_support.discover_functions(js_file)
+        py_funcs = python_support.discover_functions(py_file.read_text(encoding="utf-8"), py_file)
+        js_funcs = js_support.discover_functions(js_file.read_text(encoding="utf-8"), js_file)
 
         assert len(py_funcs) == 1
         assert len(js_funcs) == 1
@@ -969,8 +960,8 @@ class TestFeatureGaps:
         py_file = write_temp_file(CLASS_METHODS.python, ".py")
         js_file = write_temp_file(CLASS_METHODS.javascript, ".js")
 
-        py_funcs = python_support.discover_functions(py_file)
-        js_funcs = js_support.discover_functions(js_file)
+        py_funcs = python_support.discover_functions(py_file.read_text(encoding="utf-8"), py_file)
+        js_funcs = js_support.discover_functions(js_file.read_text(encoding="utf-8"), js_file)
 
         for py_func in py_funcs:
             # Check all expected fields are populated
@@ -1003,7 +994,7 @@ export const multiply = (x, y) => x * y;
 export const identity = x => x;
 """
         js_file = write_temp_file(js_code, ".js")
-        funcs = js_support.discover_functions(js_file)
+        funcs = js_support.discover_functions(js_file.read_text(encoding="utf-8"), js_file)
 
         # Should find all arrow functions
         names = {f.function_name for f in funcs}
@@ -1030,8 +1021,8 @@ export function* numberGenerator() {
         py_file = write_temp_file(py_code, ".py")
         js_file = write_temp_file(js_code, ".js")
 
-        py_funcs = python_support.discover_functions(py_file)
-        js_funcs = js_support.discover_functions(js_file)
+        py_funcs = python_support.discover_functions(py_file.read_text(encoding="utf-8"), py_file)
+        js_funcs = js_support.discover_functions(js_file.read_text(encoding="utf-8"), js_file)
 
         # Both should find the generator
         assert len(py_funcs) == 1, f"Python found {len(py_funcs)} generators"
@@ -1054,7 +1045,7 @@ def multi_decorated():
     return 3
 """
         py_file = write_temp_file(py_code, ".py")
-        funcs = python_support.discover_functions(py_file)
+        funcs = python_support.discover_functions(py_file.read_text(encoding="utf-8"), py_file)
 
         # Should find all functions regardless of decorators
         names = {f.function_name for f in funcs}
@@ -1074,7 +1065,7 @@ export const namedExpr = function myFunc(x) {
 };
 """
         js_file = write_temp_file(js_code, ".js")
-        funcs = js_support.discover_functions(js_file)
+        funcs = js_support.discover_functions(js_file.read_text(encoding="utf-8"), js_file)
 
         # Should find function expressions
         names = {f.function_name for f in funcs}
@@ -1094,8 +1085,8 @@ class TestEdgeCases:
         py_file = write_temp_file("", ".py")
         js_file = write_temp_file("", ".js")
 
-        py_funcs = python_support.discover_functions(py_file)
-        js_funcs = js_support.discover_functions(js_file)
+        py_funcs = python_support.discover_functions(py_file.read_text(encoding="utf-8"), py_file)
+        js_funcs = js_support.discover_functions(js_file.read_text(encoding="utf-8"), js_file)
 
         assert py_funcs == []
         assert js_funcs == []
@@ -1119,8 +1110,8 @@ Multiline comment
         py_file = write_temp_file(py_code, ".py")
         js_file = write_temp_file(js_code, ".js")
 
-        py_funcs = python_support.discover_functions(py_file)
-        js_funcs = js_support.discover_functions(js_file)
+        py_funcs = python_support.discover_functions(py_file.read_text(encoding="utf-8"), py_file)
+        js_funcs = js_support.discover_functions(js_file.read_text(encoding="utf-8"), js_file)
 
         assert py_funcs == []
         assert js_funcs == []
@@ -1139,8 +1130,8 @@ export function greeting() {
         py_file = write_temp_file(py_code, ".py")
         js_file = write_temp_file(js_code, ".js")
 
-        py_funcs = python_support.discover_functions(py_file)
-        js_funcs = js_support.discover_functions(js_file)
+        py_funcs = python_support.discover_functions(py_file.read_text(encoding="utf-8"), py_file)
+        js_funcs = js_support.discover_functions(js_file.read_text(encoding="utf-8"), js_file)
 
         assert len(py_funcs) == 1
         assert len(js_funcs) == 1

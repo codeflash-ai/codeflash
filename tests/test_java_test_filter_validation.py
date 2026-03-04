@@ -3,9 +3,10 @@
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
+
 import pytest
 
-from codeflash.languages.java.test_runner import _run_maven_tests, _build_test_filter
+from codeflash.languages.java.test_runner import _build_test_filter, _run_maven_tests
 from codeflash.models.models import TestFile, TestFiles, TestType
 
 
@@ -40,15 +41,11 @@ def test_build_test_filter_with_valid_paths():
     test_files = TestFiles(
         test_files=[
             TestFile(
-                instrumented_behavior_file_path=Path(
-                    "/project/src/test/java/com/example/Test1__perfinstrumented.java"
-                ),
-                benchmarking_file_path=Path(
-                    "/project/src/test/java/com/example/Test1__perfonlyinstrumented.java"
-                ),
+                instrumented_behavior_file_path=Path("/project/src/test/java/com/example/Test1__perfinstrumented.java"),
+                benchmarking_file_path=Path("/project/src/test/java/com/example/Test1__perfonlyinstrumented.java"),
                 original_file_path=Path("/project/src/test/java/com/example/Test1.java"),
                 test_type=TestType.EXISTING_UNIT_TEST,
-            ),
+            )
         ]
     )
 
@@ -71,7 +68,7 @@ def test_run_maven_tests_raises_on_empty_filter():
                 benchmarking_file_path=None,  # Will cause empty filter in performance mode
                 original_file_path=Path("/tmp/test.java"),
                 test_type=TestType.EXISTING_UNIT_TEST,
-            ),
+            )
         ]
     )
 
@@ -99,37 +96,26 @@ def test_run_maven_tests_succeeds_with_valid_filter():
     test_files = TestFiles(
         test_files=[
             TestFile(
-                instrumented_behavior_file_path=Path(
-                    "/tmp/src/test/java/com/example/Test__perfinstrumented.java"
-                ),
-                benchmarking_file_path=Path(
-                    "/tmp/src/test/java/com/example/Test__perfonlyinstrumented.java"
-                ),
+                instrumented_behavior_file_path=Path("/tmp/src/test/java/com/example/Test__perfinstrumented.java"),
+                benchmarking_file_path=Path("/tmp/src/test/java/com/example/Test__perfonlyinstrumented.java"),
                 original_file_path=Path("/tmp/src/test/java/com/example/Test.java"),
                 test_type=TestType.EXISTING_UNIT_TEST,
-            ),
+            )
         ]
     )
 
     # Mock Maven executable and _run_cmd_kill_pg_on_timeout (which replaced subprocess.run)
-    with patch("codeflash.languages.java.test_runner.find_maven_executable") as mock_maven, \
-         patch("codeflash.languages.java.test_runner._run_cmd_kill_pg_on_timeout") as mock_run:
+    with (
+        patch("codeflash.languages.java.test_runner.find_maven_executable") as mock_maven,
+        patch("codeflash.languages.java.test_runner._run_cmd_kill_pg_on_timeout") as mock_run,
+    ):
         mock_maven.return_value = "mvn"
         mock_run.return_value = subprocess.CompletedProcess(
-            args=[],
-            returncode=0,
-            stdout="Tests run: 1, Failures: 0, Errors: 0, Skipped: 0",
-            stderr="",
+            args=[], returncode=0, stdout="Tests run: 1, Failures: 0, Errors: 0, Skipped: 0", stderr=""
         )
 
         # Should not raise - filter is valid
-        result = _run_maven_tests(
-            project_root,
-            test_files,
-            env,
-            timeout=60,
-            mode="performance",
-        )
+        result = _run_maven_tests(project_root, test_files, env, timeout=60, mode="performance")
 
         # Verify Maven was called with -Dtest parameter
         assert mock_run.called

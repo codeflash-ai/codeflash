@@ -4,8 +4,8 @@ import pytest
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.either import is_successful
+from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 from codeflash.models.models import FunctionParent
-from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
 
@@ -132,7 +132,7 @@ def test_class_method_dependencies() -> None:
         starting_line=None,
         ending_line=None,
     )
-    func_optimizer = FunctionOptimizer(
+    func_optimizer = PythonFunctionOptimizer(
         function_to_optimize=function_to_optimize,
         test_cfg=TestConfig(
             tests_root=file_path,
@@ -162,6 +162,7 @@ def test_class_method_dependencies() -> None:
         code_context.testgen_context.flat
         == """# file: test_function_dependencies.py
 from collections import defaultdict
+
 
 class Graph:
     def __init__(self, vertices):
@@ -201,7 +202,7 @@ def test_recursive_function_context() -> None:
         starting_line=None,
         ending_line=None,
     )
-    func_optimizer = FunctionOptimizer(
+    func_optimizer = PythonFunctionOptimizer(
         function_to_optimize=function_to_optimize,
         test_cfg=TestConfig(
             tests_root=file_path,

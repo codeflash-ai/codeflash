@@ -346,6 +346,65 @@ def test_filter_files_optimized():
     assert not filter_files_optimized(file_path_above_level, tests_root, ignore_paths, module_root)
 
 
+def test_filter_files_optimized_same_root(tmp_path):
+    """When testsRoot == moduleRoot (collocated tests pattern), use pattern matching instead of directory matching."""
+    src = tmp_path / "src"
+    src.mkdir()
+
+    # Both roots point to the same directory
+    tests_root = src
+    module_root = src
+
+    source_file = src / "utils.ts"
+    source_file.touch()
+    nested_source = src / "lib" / "helpers.ts"
+    nested_source.parent.mkdir(parents=True, exist_ok=True)
+    nested_source.touch()
+
+    # Test files by naming convention
+    test_spec = src / "utils.spec.ts"
+    test_spec.touch()
+    test_dot = src / "utils.test.ts"
+    test_dot.touch()
+
+    # Test files by directory convention
+    tests_dir = src / "__tests__" / "utils.ts"
+    tests_dir.parent.mkdir(parents=True, exist_ok=True)
+    tests_dir.touch()
+
+    ignore_paths: list[Path] = []
+
+    # Source files should pass filter (not excluded)
+    assert filter_files_optimized(source_file, tests_root, ignore_paths, module_root)
+    assert filter_files_optimized(nested_source, tests_root, ignore_paths, module_root)
+
+    # Test files should be excluded by pattern matching
+    assert not filter_files_optimized(test_spec, tests_root, ignore_paths, module_root)
+    assert not filter_files_optimized(test_dot, tests_root, ignore_paths, module_root)
+    assert not filter_files_optimized(tests_dir, tests_root, ignore_paths, module_root)
+
+
+def test_filter_files_optimized_tests_root_contains_module_root(tmp_path):
+    """When tests_root is a parent of module_root, use pattern matching."""
+    project = tmp_path / "project"
+    src = project / "src"
+    src.mkdir(parents=True)
+
+    # testsRoot is parent of moduleRoot
+    tests_root = project
+    module_root = src
+
+    source_file = src / "index.ts"
+    source_file.touch()
+    test_file = src / "index.test.ts"
+    test_file.touch()
+
+    ignore_paths: list[Path] = []
+
+    assert filter_files_optimized(source_file, tests_root, ignore_paths, module_root)
+    assert not filter_files_optimized(test_file, tests_root, ignore_paths, module_root)
+
+
 def test_filter_functions():
     with tempfile.TemporaryDirectory() as temp_dir_str:
         temp_dir = Path(temp_dir_str)
@@ -680,8 +739,14 @@ def test_in_dunder_tests():
 
         # Combine all discovered functions
         all_functions = {}
-        for discovered in [discovered_source, discovered_test, discovered_test_underscore,
-                          discovered_spec, discovered_tests_dir, discovered_dunder_tests]:
+        for discovered in [
+            discovered_source,
+            discovered_test,
+            discovered_test_underscore,
+            discovered_spec,
+            discovered_tests_dir,
+            discovered_dunder_tests,
+        ]:
             all_functions.update(discovered)
 
         # Test Case 1: tests_root == module_root (overlapping case)
@@ -781,9 +846,7 @@ def test_filter_functions_strict_string_matching():
 
         # Strict check: exactly these 3 files should remain (those with 'test' as substring only)
         expected_files = {contest_file, latest_file, attestation_file}
-        assert set(filtered.keys()) == expected_files, (
-            f"Expected files {expected_files}, got {set(filtered.keys())}"
-        )
+        assert set(filtered.keys()) == expected_files, f"Expected files {expected_files}, got {set(filtered.keys())}"
 
         # Strict check: each file should have exactly 1 function with the expected name
         assert [fn.function_name for fn in filtered[contest_file]] == ["run_contest"], (
@@ -871,9 +934,7 @@ def test_filter_functions_test_directory_patterns():
 
         # Strict check: exactly these 2 files should remain (those in non-test directories)
         expected_files = {contest_file, latest_file}
-        assert set(filtered.keys()) == expected_files, (
-            f"Expected files {expected_files}, got {set(filtered.keys())}"
-        )
+        assert set(filtered.keys()) == expected_files, f"Expected files {expected_files}, got {set(filtered.keys())}"
 
         # Strict check: each file should have exactly 1 function with the expected name
         assert [fn.function_name for fn in filtered[contest_file]] == ["get_scores"], (
@@ -936,9 +997,7 @@ def test_filter_functions_non_overlapping_tests_root():
 
         # Strict check: exactly these 2 files should remain (both in src/, not in tests/)
         expected_files = {source_file, test_in_src}
-        assert set(filtered.keys()) == expected_files, (
-            f"Expected files {expected_files}, got {set(filtered.keys())}"
-        )
+        assert set(filtered.keys()) == expected_files, f"Expected files {expected_files}, got {set(filtered.keys())}"
 
         # Strict check: each file should have exactly 1 function with the expected name
         assert [fn.function_name for fn in filtered[source_file]] == ["process"], (
@@ -1047,20 +1106,15 @@ def test_deep_copy():
         )
 
         root_functions = [fn.function_name for fn in filtered.get(root_source_file, [])]
-        assert root_functions == ["main"], (
-            f"Expected ['main'], got {root_functions}"
-        )
+        assert root_functions == ["main"], f"Expected ['main'], got {root_functions}"
 
         # Strict check: exactly 3 functions (2 from utils.py + 1 from main.py)
         assert count == 3, (
-            f"Expected exactly 3 functions, got {count}. "
-            f"Some source files may have been incorrectly filtered."
+            f"Expected exactly 3 functions, got {count}. Some source files may have been incorrectly filtered."
         )
 
         # Verify test file was properly filtered (should not be in results)
-        assert test_file not in filtered, (
-            f"Test file {test_file} should have been filtered but wasn't"
-        )
+        assert test_file not in filtered, f"Test file {test_file} should have been filtered but wasn't"
 
 
 def test_filter_functions_typescript_project_in_tests_folder():
@@ -1214,9 +1268,7 @@ def sample_data():
         # source_file and file_in_test_dir should remain
         # test_prefix_file, conftest_file, and test_in_subdir should be filtered
         expected_files = {source_file, file_in_test_dir}
-        assert set(filtered.keys()) == expected_files, (
-            f"Expected {expected_files}, got {set(filtered.keys())}"
-        )
+        assert set(filtered.keys()) == expected_files, f"Expected {expected_files}, got {set(filtered.keys())}"
         assert count == 2, f"Expected exactly 2 functions, got {count}"
 
 
@@ -1266,7 +1318,8 @@ class TestHelpers:
 """)
 
         support = PythonSupport()
-        functions = support.discover_functions(fixture_file)
+        source = fixture_file.read_text(encoding="utf-8")
+        functions = support.discover_functions(source, fixture_file)
         function_names = [fn.function_name for fn in functions]
 
         assert "regular_function" in function_names

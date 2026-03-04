@@ -7,8 +7,8 @@ from pathlib import Path
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 from codeflash.models.models import FunctionParent, TestFile, TestFiles, TestingMode, TestType, VerificationType
-from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
 from codeflash.verification.test_runner import execute_test_subprocess
@@ -459,7 +459,7 @@ class MyClass:
             file_path=sample_code_path,
             parents=[FunctionParent(name="MyClass", type="ClassDef")],
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=fto, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=fto, test_cfg=test_config)
         func_optimizer.test_files = TestFiles(
             test_files=[
                 TestFile(
@@ -475,8 +475,8 @@ class MyClass:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
         assert len(test_results) == 3
@@ -508,8 +508,8 @@ class MyClass:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
         match, _ = compare_test_results(test_results, test_results2)
@@ -582,7 +582,7 @@ class MyClass(ParentClass):
             file_path=sample_code_path,
             parents=[FunctionParent(name="MyClass", type="ClassDef")],
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=fto, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=fto, test_cfg=test_config)
         func_optimizer.test_files = TestFiles(
             test_files=[
                 TestFile(
@@ -598,8 +598,8 @@ class MyClass(ParentClass):
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
         assert len(test_results) == 3
@@ -632,8 +632,8 @@ class MyClass(ParentClass):
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
 
@@ -709,7 +709,7 @@ class MyClass:
             file_path=sample_code_path,
             parents=[FunctionParent(name="MyClass", type="ClassDef")],
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=fto, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=fto, test_cfg=test_config)
         func_optimizer.test_files = TestFiles(
             test_files=[
                 TestFile(
@@ -725,8 +725,8 @@ class MyClass:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
 
@@ -761,8 +761,8 @@ class MyClass:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
 
@@ -872,7 +872,7 @@ class AnotherHelperClass:
             file_path=fto_file_path,
             parents=[FunctionParent(name="MyClass", type="ClassDef")],
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=fto, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=fto, test_cfg=test_config)
         func_optimizer.test_files = TestFiles(
             test_files=[
                 TestFile(
@@ -889,8 +889,8 @@ class AnotherHelperClass:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
 
@@ -910,8 +910,8 @@ class AnotherHelperClass:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
 
@@ -1021,7 +1021,7 @@ class AnotherHelperClass:
             test_framework="pytest",
             pytest_cmd="pytest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=fto, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=fto, test_cfg=test_config)
         func_optimizer.test_files = TestFiles(
             test_files=[
                 TestFile(
@@ -1049,13 +1049,13 @@ class AnotherHelperClass:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
 
         # Remove instrumentation
-        FunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
+        PythonFunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
 
         assert len(test_results.test_results) == 4
         assert test_results[0].id.test_function_name == "test_helper_classes"
@@ -1101,12 +1101,12 @@ class MyClass:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
         # Remove instrumentation
-        FunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
+        PythonFunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
 
         # Now, this fto_code mutates the instance so it should fail
         mutated_fto_code = """
@@ -1140,12 +1140,12 @@ class MyClass:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
         # Remove instrumentation
-        FunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
+        PythonFunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
         match, _ = compare_test_results(test_results, mutated_test_results)
         assert not match
 
@@ -1179,12 +1179,12 @@ class MyClass:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
         # Remove instrumentation
-        FunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
+        PythonFunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
         match, _ = compare_test_results(test_results, no_helper1_test_results)
         assert match
 
@@ -1446,7 +1446,7 @@ def calculate_portfolio_metrics(
             test_framework="pytest",
             pytest_cmd="pytest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=fto, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=fto, test_cfg=test_config)
         func_optimizer.test_files = TestFiles(
             test_files=[
                 TestFile(
@@ -1471,13 +1471,13 @@ def calculate_portfolio_metrics(
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
 
         # Remove instrumentation
-        FunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
+        PythonFunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
 
         # Now, let's say we optimize the code and make changes.
         new_fto_code = """import math
@@ -1538,12 +1538,12 @@ def calculate_portfolio_metrics(
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
         # Remove instrumentation
-        FunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
+        PythonFunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
         matched, diffs = compare_test_results(test_results, modified_test_results)
 
         assert not matched
@@ -1601,12 +1601,12 @@ def calculate_portfolio_metrics(
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
         # Remove instrumentation
-        FunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
+        PythonFunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
         matched, diffs = compare_test_results(test_results, modified_test_results_2)
         # now the test should match and no diffs should be found
         assert len(diffs) == 0
@@ -1671,7 +1671,7 @@ class SlotsClass:
             file_path=sample_code_path,
             parents=[FunctionParent(name="SlotsClass", type="ClassDef")],
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=fto, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=fto, test_cfg=test_config)
         func_optimizer.test_files = TestFiles(
             test_files=[
                 TestFile(
@@ -1687,8 +1687,8 @@ class SlotsClass:
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
 

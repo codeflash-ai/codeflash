@@ -1,6 +1,5 @@
 """Tests for cleanup of instrumented test files."""
 
-from pathlib import Path
 from codeflash.optimization.optimizer import Optimizer
 
 

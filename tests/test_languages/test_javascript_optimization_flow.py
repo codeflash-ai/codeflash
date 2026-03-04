@@ -71,10 +71,8 @@ module.exports = { add };
         """Verify language is preserved in code context extraction."""
         skip_if_js_not_supported()
         from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
-        from codeflash.languages import current as lang_current
-        from codeflash.languages.python.context.code_context_extractor import get_code_optimization_context
-
-        lang_current._current_language = Language.TYPESCRIPT
+        from codeflash.languages import get_language_support
+        from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
 
         ts_file = tmp_path / "utils.ts"
         ts_file.write_text("""
@@ -86,7 +84,9 @@ export function add(a: number, b: number): number {
         functions = find_all_functions_in_file(ts_file)
         func = functions[ts_file][0]
 
-        context = get_code_optimization_context(func, tmp_path)
+        ts_support = get_language_support(Language.TYPESCRIPT)
+        code_context = ts_support.extract_code_context(func, tmp_path, tmp_path)
+        context = JavaScriptFunctionOptimizer._build_optimization_context(code_context, ts_file, "typescript", tmp_path)
 
         assert context.read_writable_code is not None
         assert context.read_writable_code.language == "typescript"
@@ -191,8 +191,9 @@ export function add(a: number, b: number): number {
             assert mock_request.called, "API request should have been made"
             call_args = mock_request.call_args
             payload = call_args[1].get("payload", call_args[0][1] if len(call_args[0]) > 1 else {})
-            assert payload.get("language") == "typescript", \
+            assert payload.get("language") == "typescript", (
                 f"Expected language='typescript', got language='{payload.get('language')}'"
+            )
 
 
 class TestFunctionOptimizerForJavaScript:
@@ -326,9 +327,7 @@ describe('fibonacci', () => {
         )
 
         optimizer = FunctionOptimizer(
-            function_to_optimize=func_to_optimize,
-            test_cfg=test_config,
-            aiservice_client=MagicMock(),
+            function_to_optimize=func_to_optimize, test_cfg=test_config, aiservice_client=MagicMock()
         )
 
         assert optimizer is not None
@@ -361,9 +360,7 @@ describe('fibonacci', () => {
         )
 
         optimizer = FunctionOptimizer(
-            function_to_optimize=func_to_optimize,
-            test_cfg=test_config,
-            aiservice_client=MagicMock(),
+            function_to_optimize=func_to_optimize, test_cfg=test_config, aiservice_client=MagicMock()
         )
 
         assert optimizer is not None
@@ -373,10 +370,7 @@ describe('fibonacci', () => {
         """Test get_code_optimization_context for JavaScript."""
         skip_if_js_not_supported()
         from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
-        from codeflash.languages import current as lang_current
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
-
-        lang_current._current_language = Language.JAVASCRIPT
+        from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
 
         src_file = js_project / "utils.js"
         functions = find_all_functions_in_file(src_file)
@@ -398,10 +392,8 @@ describe('fibonacci', () => {
             pytest_cmd="jest",
         )
 
-        optimizer = FunctionOptimizer(
-            function_to_optimize=func_to_optimize,
-            test_cfg=test_config,
-            aiservice_client=MagicMock(),
+        optimizer = JavaScriptFunctionOptimizer(
+            function_to_optimize=func_to_optimize, test_cfg=test_config, aiservice_client=MagicMock()
         )
 
         result = optimizer.get_code_optimization_context()
@@ -415,10 +407,7 @@ describe('fibonacci', () => {
         """Test get_code_optimization_context for TypeScript."""
         skip_if_js_not_supported()
         from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
-        from codeflash.languages import current as lang_current
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
-
-        lang_current._current_language = Language.TYPESCRIPT
+        from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
 
         src_file = ts_project / "utils.ts"
         functions = find_all_functions_in_file(src_file)
@@ -440,10 +429,8 @@ describe('fibonacci', () => {
             pytest_cmd="vitest",
         )
 
-        optimizer = FunctionOptimizer(
-            function_to_optimize=func_to_optimize,
-            test_cfg=test_config,
-            aiservice_client=MagicMock(),
+        optimizer = JavaScriptFunctionOptimizer(
+            function_to_optimize=func_to_optimize, test_cfg=test_config, aiservice_client=MagicMock()
         )
 
         result = optimizer.get_code_optimization_context()
@@ -461,10 +448,7 @@ class TestHelperFunctionLanguageAttribute:
         """Verify helper functions have language='javascript' for .js files."""
         skip_if_js_not_supported()
         from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
-        from codeflash.languages import current as lang_current
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
-
-        lang_current._current_language = Language.JAVASCRIPT
+        from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
 
         # Create a file with helper functions
         src_file = tmp_path / "main.js"
@@ -493,16 +477,11 @@ module.exports = { main };
         )
 
         test_config = TestConfig(
-            tests_root=tmp_path,
-            tests_project_rootdir=tmp_path,
-            project_root_path=tmp_path,
-            pytest_cmd="jest",
+            tests_root=tmp_path, tests_project_rootdir=tmp_path, project_root_path=tmp_path, pytest_cmd="jest"
         )
 
-        optimizer = FunctionOptimizer(
-            function_to_optimize=func_to_optimize,
-            test_cfg=test_config,
-            aiservice_client=MagicMock(),
+        optimizer = JavaScriptFunctionOptimizer(
+            function_to_optimize=func_to_optimize, test_cfg=test_config, aiservice_client=MagicMock()
         )
 
         result = optimizer.get_code_optimization_context()
@@ -515,10 +494,7 @@ module.exports = { main };
         """Verify helper functions have language='typescript' for .ts files."""
         skip_if_js_not_supported()
         from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
-        from codeflash.languages import current as lang_current
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
-
-        lang_current._current_language = Language.TYPESCRIPT
+        from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
 
         # Create a file with helper functions
         src_file = tmp_path / "main.ts"
@@ -545,16 +521,11 @@ export function main(): number {
         )
 
         test_config = TestConfig(
-            tests_root=tmp_path,
-            tests_project_rootdir=tmp_path,
-            project_root_path=tmp_path,
-            pytest_cmd="vitest",
+            tests_root=tmp_path, tests_project_rootdir=tmp_path, project_root_path=tmp_path, pytest_cmd="vitest"
         )
 
-        optimizer = FunctionOptimizer(
-            function_to_optimize=func_to_optimize,
-            test_cfg=test_config,
-            aiservice_client=MagicMock(),
+        optimizer = JavaScriptFunctionOptimizer(
+            function_to_optimize=func_to_optimize, test_cfg=test_config, aiservice_client=MagicMock()
         )
 
         result = optimizer.get_code_optimization_context()

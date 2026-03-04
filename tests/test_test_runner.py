@@ -3,9 +3,9 @@ import tempfile
 from pathlib import Path
 
 from codeflash.code_utils.code_utils import ImportErrorPattern
+from codeflash.languages import current_language_support
 from codeflash.models.models import TestFile, TestFiles, TestType
 from codeflash.verification.parse_test_output import parse_test_xml
-from codeflash.verification.test_runner import run_behavioral_tests
 from codeflash.verification.verification_utils import TestConfig
 
 
@@ -48,8 +48,8 @@ class TestUnittestRunnerSorter(unittest.TestCase):
             test_files=[TestFile(instrumented_behavior_file_path=test_file_path, test_type=TestType.EXISTING_UNIT_TEST)]
         )
         test_file_path.write_text(code, encoding="utf-8")
-        result_file, process, _, _ = run_behavioral_tests(
-            test_files, test_framework=config.test_framework, cwd=Path(config.project_root_path), test_env=test_env
+        result_file, process, _, _ = current_language_support().run_behavioral_tests(
+            test_paths=test_files, test_env=test_env, cwd=Path(config.project_root_path)
         )
         results = parse_test_xml(result_file, test_files, config, process)
     assert results[0].did_pass, "Test did not pass as expected"
@@ -89,13 +89,8 @@ def test_sort():
             test_files=[TestFile(instrumented_behavior_file_path=test_file_path, test_type=TestType.EXISTING_UNIT_TEST)]
         )
         test_file_path.write_text(code, encoding="utf-8")
-        result_file, process, _, _ = run_behavioral_tests(
-            test_files,
-            test_framework=config.test_framework,
-            cwd=Path(config.project_root_path),
-            test_env=test_env,
-            pytest_timeout=1,
-            pytest_target_runtime_seconds=1,
+        result_file, process, _, _ = current_language_support().run_behavioral_tests(
+            test_paths=test_files, test_env=test_env, cwd=Path(config.project_root_path), timeout=1
         )
         results = parse_test_xml(
             test_xml_file_path=result_file, test_files=test_files, test_config=config, run_result=process
@@ -136,13 +131,8 @@ def test_sort():
             test_files=[TestFile(instrumented_behavior_file_path=test_file_path, test_type=TestType.EXISTING_UNIT_TEST)]
         )
         test_file_path.write_text(code, encoding="utf-8")
-        result_file, process, _, _ = run_behavioral_tests(
-            test_files,
-            test_framework=config.test_framework,
-            cwd=Path(config.project_root_path),
-            test_env=test_env,
-            pytest_timeout=1,
-            pytest_target_runtime_seconds=1,
+        result_file, process, _, _ = current_language_support().run_behavioral_tests(
+            test_paths=test_files, test_env=test_env, cwd=Path(config.project_root_path), timeout=1
         )
         results = parse_test_xml(
             test_xml_file_path=result_file, test_files=test_files, test_config=config, run_result=process

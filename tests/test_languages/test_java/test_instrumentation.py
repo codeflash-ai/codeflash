@@ -122,10 +122,7 @@ public class CalculatorTest {
         )
 
         success, result = instrument_existing_test(
-            test_string=source,
-            function_to_optimize=func,
-            mode="behavior",
-            test_path=test_file,
+            test_string=source, function_to_optimize=func, mode="behavior", test_path=test_file
         )
 
         expected = """import org.junit.jupiter.api.Test;
@@ -133,6 +130,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 
+@SuppressWarnings("CheckReturnValue")
 public class CalculatorTest__perfinstrumented {
     @Test
     public void testAdd() {
@@ -151,7 +149,7 @@ public class CalculatorTest__perfinstrumented {
         long _cf_end1_1 = -1;
         long _cf_start1_1 = 0;
         byte[] _cf_serializedResult1_1 = null;
-        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":L10_1" + "######$!");
+        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":L11_1" + "######$!");
         try {
             _cf_start1_1 = System.nanoTime();
             _cf_result1_1 = calc.add(2, 2);
@@ -160,7 +158,7 @@ public class CalculatorTest__perfinstrumented {
         } finally {
             long _cf_end1_1_finally = System.nanoTime();
             long _cf_dur1_1 = (_cf_end1_1 != -1 ? _cf_end1_1 : _cf_end1_1_finally) - _cf_start1_1;
-            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + "L10_1" + "######!");
+            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + "L11_1" + "######!");
             // Write to SQLite if output file is set
             if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
                 try {
@@ -179,7 +177,7 @@ public class CalculatorTest__perfinstrumented {
                             _cf_pstmt1_1.setString(3, _cf_test1);
                             _cf_pstmt1_1.setString(4, _cf_fn1);
                             _cf_pstmt1_1.setInt(5, _cf_loop1);
-                            _cf_pstmt1_1.setString(6, "L10_1");
+                            _cf_pstmt1_1.setString(6, "L11_1");
                             _cf_pstmt1_1.setLong(7, _cf_dur1_1);
                             _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
                             _cf_pstmt1_1.setString(9, "function_call");
@@ -221,6 +219,7 @@ public class FibonacciTest {
     }
 }
 """
+
         test_file.write_text(source)
 
         func = FunctionToOptimize(
@@ -234,10 +233,7 @@ public class FibonacciTest {
         )
 
         success, result = instrument_existing_test(
-            test_string=source,
-            function_to_optimize=func,
-            mode="behavior",
-            test_path=test_file,
+            test_string=source, function_to_optimize=func, mode="behavior", test_path=test_file
         )
 
         expected = """import org.junit.jupiter.api.Test;
@@ -246,6 +242,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 
+@SuppressWarnings("CheckReturnValue")
 public class FibonacciTest__perfinstrumented {
     @Test
     void testNegativeInput_ThrowsIllegalArgumentException() {
@@ -278,7 +275,7 @@ public class FibonacciTest__perfinstrumented {
         long _cf_end2_1 = -1;
         long _cf_start2_1 = 0;
         byte[] _cf_serializedResult2_1 = null;
-        System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":L15_1" + "######$!");
+        System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":L16_1" + "######$!");
         try {
             _cf_start2_1 = System.nanoTime();
             _cf_result2_1 = Fibonacci.fibonacci(0);
@@ -287,7 +284,7 @@ public class FibonacciTest__perfinstrumented {
         } finally {
             long _cf_end2_1_finally = System.nanoTime();
             long _cf_dur2_1 = (_cf_end2_1 != -1 ? _cf_end2_1 : _cf_end2_1_finally) - _cf_start2_1;
-            System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + "L15_1" + "######!");
+            System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + "L16_1" + "######!");
             // Write to SQLite if output file is set
             if (_cf_outputFile2 != null && !_cf_outputFile2.isEmpty()) {
                 try {
@@ -306,7 +303,7 @@ public class FibonacciTest__perfinstrumented {
                             _cf_pstmt2_1.setString(3, _cf_test2);
                             _cf_pstmt2_1.setString(4, _cf_fn2);
                             _cf_pstmt2_1.setInt(5, _cf_loop2);
-                            _cf_pstmt2_1.setString(6, "L15_1");
+                            _cf_pstmt2_1.setString(6, "L16_1");
                             _cf_pstmt2_1.setLong(7, _cf_dur2_1);
                             _cf_pstmt2_1.setBytes(8, _cf_serializedResult2_1);
                             _cf_pstmt2_1.setString(9, "function_call");
@@ -362,10 +359,7 @@ public class FibonacciTest {
         )
 
         success, result = instrument_existing_test(
-            test_string=source,
-            function_to_optimize=func,
-            mode="behavior",
-            test_path=test_file,
+            test_string=source, function_to_optimize=func, mode="behavior", test_path=test_file
         )
 
         expected = """import org.junit.jupiter.api.Test;
@@ -374,6 +368,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 
+@SuppressWarnings("CheckReturnValue")
 public class FibonacciTest__perfinstrumented {
     @Test
     void testNegativeInput_ThrowsIllegalArgumentException() {
@@ -408,7 +403,7 @@ public class FibonacciTest__perfinstrumented {
         long _cf_end2_1 = -1;
         long _cf_start2_1 = 0;
         byte[] _cf_serializedResult2_1 = null;
-        System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":L17_1" + "######$!");
+        System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":L18_1" + "######$!");
         try {
             _cf_start2_1 = System.nanoTime();
             _cf_result2_1 = Fibonacci.fibonacci(0);
@@ -417,7 +412,7 @@ public class FibonacciTest__perfinstrumented {
         } finally {
             long _cf_end2_1_finally = System.nanoTime();
             long _cf_dur2_1 = (_cf_end2_1 != -1 ? _cf_end2_1 : _cf_end2_1_finally) - _cf_start2_1;
-            System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + "L17_1" + "######!");
+            System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + "L18_1" + "######!");
             // Write to SQLite if output file is set
             if (_cf_outputFile2 != null && !_cf_outputFile2.isEmpty()) {
                 try {
@@ -436,7 +431,7 @@ public class FibonacciTest__perfinstrumented {
                             _cf_pstmt2_1.setString(3, _cf_test2);
                             _cf_pstmt2_1.setString(4, _cf_fn2);
                             _cf_pstmt2_1.setInt(5, _cf_loop2);
-                            _cf_pstmt2_1.setString(6, "L17_1");
+                            _cf_pstmt2_1.setString(6, "L18_1");
                             _cf_pstmt2_1.setLong(7, _cf_dur2_1);
                             _cf_pstmt2_1.setBytes(8, _cf_serializedResult2_1);
                             _cf_pstmt2_1.setString(9, "function_call");
@@ -481,14 +476,12 @@ public class CalculatorTest {
         )
 
         success, result = instrument_existing_test(
-            test_string=source,
-            function_to_optimize=func,
-            mode="performance",
-            test_path=test_file,
+            test_string=source, function_to_optimize=func, mode="performance", test_path=test_file
         )
 
         expected = """import org.junit.jupiter.api.Test;
 
+@SuppressWarnings("CheckReturnValue")
 public class CalculatorTest__perfonlyinstrumented {
     @Test
     public void testAdd() {
@@ -504,7 +497,7 @@ public class CalculatorTest__perfonlyinstrumented {
         Calculator calc = new Calculator();
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L7_1" + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L8_1" + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -514,7 +507,7 @@ public class CalculatorTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L7_1" + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L8_1" + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -553,14 +546,12 @@ public class MathTest {
         )
 
         success, result = instrument_existing_test(
-            test_string=source,
-            function_to_optimize=func,
-            mode="performance",
-            test_path=test_file,
+            test_string=source, function_to_optimize=func, mode="performance", test_path=test_file
         )
 
         expected = """import org.junit.jupiter.api.Test;
 
+@SuppressWarnings("CheckReturnValue")
 public class MathTest__perfonlyinstrumented {
     @Test
     public void testAdd() {
@@ -575,7 +566,7 @@ public class MathTest__perfonlyinstrumented {
 
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L6_1" + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L7_1" + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -585,7 +576,7 @@ public class MathTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L6_1" + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L7_1" + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -603,7 +594,7 @@ public class MathTest__perfonlyinstrumented {
 
         for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
             int _cf_loopId2 = _cf_outerLoop2 * _cf_maxInnerIterations2 + _cf_i2;
-            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + "L11_2" + "######$!");
+            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + "L12_2" + "######$!");
             long _cf_end2 = -1;
             long _cf_start2 = 0;
             try {
@@ -613,7 +604,7 @@ public class MathTest__perfonlyinstrumented {
             } finally {
                 long _cf_end2_finally = System.nanoTime();
                 long _cf_dur2 = (_cf_end2 != -1 ? _cf_end2 : _cf_end2_finally) - _cf_start2;
-                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + "L11_2" + ":" + _cf_dur2 + "######!");
+                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + "L12_2" + ":" + _cf_dur2 + "######!");
             }
         }
     }
@@ -656,16 +647,14 @@ public class ServiceTest {
         )
 
         success, result = instrument_existing_test(
-            test_string=source,
-            function_to_optimize=func,
-            mode="performance",
-            test_path=test_file,
+            test_string=source, function_to_optimize=func, mode="performance", test_path=test_file
         )
 
         expected = """import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Disabled;
 
+@SuppressWarnings("CheckReturnValue")
 public class ServiceTest__perfonlyinstrumented {
     @Test
     @DisplayName("Test service call")
@@ -681,7 +670,7 @@ public class ServiceTest__perfonlyinstrumented {
 
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L9_1" + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L10_1" + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -691,7 +680,7 @@ public class ServiceTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L9_1" + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L10_1" + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -721,11 +710,7 @@ public class ServiceTest__perfonlyinstrumented {
         )
 
         with pytest.raises(ValueError):
-            instrument_existing_test(
-                test_string="",
-                function_to_optimize=func,
-                mode="behavior",
-            )
+            instrument_existing_test(test_string="", function_to_optimize=func, mode="behavior")
 
 
 class TestKryoSerializerUsage:
@@ -1154,12 +1139,7 @@ public class TargetBenchmark {
             language="java",
         )
 
-        result = create_benchmark_test(
-            func,
-            test_setup_code="",
-            invocation_code="multiply(5, 3)",
-            iterations=5000,
-        )
+        result = create_benchmark_test(func, test_setup_code="", invocation_code="multiply(5, 3)", iterations=5000)
 
         # Note: Empty test_setup_code still has 8-space indentation on its line
         expected = (
@@ -1255,11 +1235,7 @@ public class CalculatorTest {
             language="java",
         )
         result = instrument_generated_java_test(
-            test_code,
-            function_name="add",
-            qualified_name="Calculator.add",
-            mode="behavior",
-            function_to_optimize=func,
+            test_code, function_name="add", qualified_name="Calculator.add", mode="behavior", function_to_optimize=func
         )
 
         expected = """import org.junit.jupiter.api.Test;
@@ -1267,6 +1243,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 
+@SuppressWarnings("CheckReturnValue")
 public class CalculatorTest__perfinstrumented {
     @Test
     public void testAdd() {
@@ -1284,7 +1261,7 @@ public class CalculatorTest__perfinstrumented {
         long _cf_end1_1 = -1;
         long _cf_start1_1 = 0;
         byte[] _cf_serializedResult1_1 = null;
-        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":L9_1" + "######$!");
+        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":L10_1" + "######$!");
         try {
             _cf_start1_1 = System.nanoTime();
             _cf_result1_1 = new Calculator().add(2, 2);
@@ -1293,7 +1270,7 @@ public class CalculatorTest__perfinstrumented {
         } finally {
             long _cf_end1_1_finally = System.nanoTime();
             long _cf_dur1_1 = (_cf_end1_1 != -1 ? _cf_end1_1 : _cf_end1_1_finally) - _cf_start1_1;
-            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + "L9_1" + "######!");
+            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + "L10_1" + "######!");
             // Write to SQLite if output file is set
             if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
                 try {
@@ -1312,7 +1289,7 @@ public class CalculatorTest__perfinstrumented {
                             _cf_pstmt1_1.setString(3, _cf_test1);
                             _cf_pstmt1_1.setString(4, _cf_fn1);
                             _cf_pstmt1_1.setInt(5, _cf_loop1);
-                            _cf_pstmt1_1.setString(6, "L9_1");
+                            _cf_pstmt1_1.setString(6, "L10_1");
                             _cf_pstmt1_1.setLong(7, _cf_dur1_1);
                             _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
                             _cf_pstmt1_1.setString(9, "function_call");
@@ -1360,6 +1337,7 @@ public class GeneratedTest {
 
         expected = """import org.junit.jupiter.api.Test;
 
+@SuppressWarnings("CheckReturnValue")
 public class GeneratedTest__perfonlyinstrumented {
     @Test
     public void testMethod() {
@@ -1374,7 +1352,7 @@ public class GeneratedTest__perfonlyinstrumented {
 
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L6_1" + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L7_1" + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -1384,7 +1362,7 @@ public class GeneratedTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L6_1" + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L7_1" + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -1532,14 +1510,12 @@ public class BraceTest {
         )
 
         success, result = instrument_existing_test(
-            test_string=source,
-            function_to_optimize=func,
-            mode="performance",
-            test_path=test_file,
+            test_string=source, function_to_optimize=func, mode="performance", test_path=test_file
         )
 
         expected = """import org.junit.jupiter.api.Test;
 
+@SuppressWarnings("CheckReturnValue")
 public class BraceTest__perfonlyinstrumented {
     @Test
     public void testOne() {
@@ -1561,7 +1537,7 @@ public class BraceTest__perfonlyinstrumented {
 
         for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
             int _cf_loopId2 = _cf_outerLoop2 * _cf_maxInnerIterations2 + _cf_i2;
-            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + "L14_2" + "######$!");
+            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + "L15_2" + "######$!");
             long _cf_end2 = -1;
             long _cf_start2 = 0;
             try {
@@ -1573,7 +1549,7 @@ public class BraceTest__perfonlyinstrumented {
             } finally {
                 long _cf_end2_finally = System.nanoTime();
                 long _cf_dur2 = (_cf_end2 != -1 ? _cf_end2 : _cf_end2_finally) - _cf_start2;
-                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + "L14_2" + ":" + _cf_dur2 + "######!");
+                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + "L15_2" + ":" + _cf_dur2 + "######!");
             }
         }
     }
@@ -1613,10 +1589,7 @@ public class ImportTest {
         )
 
         success, result = instrument_existing_test(
-            test_string=source,
-            function_to_optimize=func,
-            mode="performance",
-            test_path=test_file,
+            test_string=source, function_to_optimize=func, mode="performance", test_path=test_file
         )
 
         expected = """package com.example;
@@ -1626,6 +1599,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.util.List;
 import java.util.ArrayList;
 
+@SuppressWarnings("CheckReturnValue")
 public class ImportTest__perfonlyinstrumented {
     @Test
     public void testCollections() {
@@ -1641,7 +1615,7 @@ public class ImportTest__perfonlyinstrumented {
         List<String> list = new ArrayList<>();
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L12_1" + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L13_1" + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -1651,7 +1625,7 @@ public class ImportTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L12_1" + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L13_1" + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -1688,14 +1662,12 @@ public class EmptyTest {
         )
 
         success, result = instrument_existing_test(
-            test_string=source,
-            function_to_optimize=func,
-            mode="performance",
-            test_path=test_file,
+            test_string=source, function_to_optimize=func, mode="performance", test_path=test_file
         )
 
         expected = """import org.junit.jupiter.api.Test;
 
+@SuppressWarnings("CheckReturnValue")
 public class EmptyTest__perfonlyinstrumented {
     @Test
     public void testEmpty() {
@@ -1736,14 +1708,12 @@ public class NestedTest {
         )
 
         success, result = instrument_existing_test(
-            test_string=source,
-            function_to_optimize=func,
-            mode="performance",
-            test_path=test_file,
+            test_string=source, function_to_optimize=func, mode="performance", test_path=test_file
         )
 
         expected = """import org.junit.jupiter.api.Test;
 
+@SuppressWarnings("CheckReturnValue")
 public class NestedTest__perfonlyinstrumented {
     @Test
     public void testNested() {
@@ -1758,7 +1728,7 @@ public class NestedTest__perfonlyinstrumented {
 
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L9_1" + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L10_1" + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -1774,7 +1744,7 @@ public class NestedTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L9_1" + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L10_1" + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -1817,15 +1787,13 @@ public class InnerClassTest {
         )
 
         success, result = instrument_existing_test(
-            test_string=source,
-            function_to_optimize=func,
-            mode="performance",
-            test_path=test_file,
+            test_string=source, function_to_optimize=func, mode="performance", test_path=test_file
         )
 
         expected = """import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Nested;
 
+@SuppressWarnings("CheckReturnValue")
 public class InnerClassTest__perfonlyinstrumented {
     @Test
     public void testOuter() {
@@ -1881,22 +1849,20 @@ public class Utf8Test {
         )
 
         success, result = instrument_existing_test(
-            test_string=source,
-            function_to_optimize=func,
-            mode="performance",
-            test_path=test_file,
+            test_string=source, function_to_optimize=func, mode="performance", test_path=test_file
         )
 
         # The blank line between _cf_fn1 and the prefix body has 8 trailing spaces
         # (the indent level) — this is the f"{indent}\n" separator in the instrumentation code.
         expected = (
-            'import org.junit.jupiter.api.Test;\n'
-            'import static org.junit.jupiter.api.Assertions.*;\n'
-            '\n'
-            'public class Utf8Test__perfonlyinstrumented {\n'
-            '    @Test\n'
-            '    public void testWithCjk() {\n'
-            '        // Codeflash timing instrumentation with inner loop for JIT warmup\n'
+            "import org.junit.jupiter.api.Test;\n"
+            "import static org.junit.jupiter.api.Assertions.*;\n"
+            "\n"
+            '@SuppressWarnings("CheckReturnValue")\n'
+            "public class Utf8Test__perfonlyinstrumented {\n"
+            "    @Test\n"
+            "    public void testWithCjk() {\n"
+            "        // Codeflash timing instrumentation with inner loop for JIT warmup\n"
             '        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));\n'
             '        int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));\n'
             '        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));\n'
@@ -1904,11 +1870,11 @@ public class Utf8Test {
             '        String _cf_cls1 = "Utf8Test__perfonlyinstrumented";\n'
             '        String _cf_test1 = "testWithCjk";\n'
             '        String _cf_fn1 = "compute";\n'
-            '        \n'
+            "        \n"
             '        String label = "\u30c6\u30b9\u30c8\u540d\u524d";\n'
             '        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {\n'
             '            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;\n'
-            '            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L8_1" + "######$!");\n'
+            '            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L9_1" + "######$!");\n'
             '            long _cf_end1 = -1;\n'
             '            long _cf_start1 = 0;\n'
             '            try {\n'
@@ -1918,7 +1884,7 @@ public class Utf8Test {
             '            } finally {\n'
             '                long _cf_end1_finally = System.nanoTime();\n'
             '                long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;\n'
-            '                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L8_1" + ":" + _cf_dur1 + "######!");\n'
+            '                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L9_1" + ":" + _cf_dur1 + "######!");\n'
             '            }\n'
             '        }\n'
             '    }\n'
@@ -1955,22 +1921,20 @@ public class AccentTest {
         )
 
         success, result = instrument_existing_test(
-            test_string=source,
-            function_to_optimize=func,
-            mode="performance",
-            test_path=test_file,
+            test_string=source, function_to_optimize=func, mode="performance", test_path=test_file
         )
 
         assert success is True
 
         expected = (
-            'import org.junit.jupiter.api.Test;\n'
-            'import static org.junit.jupiter.api.Assertions.*;\n'
-            '\n'
-            'public class AccentTest__perfonlyinstrumented {\n'
-            '    @Test\n'
-            '    public void testWithAccent() {\n'
-            '        // Codeflash timing instrumentation with inner loop for JIT warmup\n'
+            "import org.junit.jupiter.api.Test;\n"
+            "import static org.junit.jupiter.api.Assertions.*;\n"
+            "\n"
+            '@SuppressWarnings("CheckReturnValue")\n'
+            "public class AccentTest__perfonlyinstrumented {\n"
+            "    @Test\n"
+            "    public void testWithAccent() {\n"
+            "        // Codeflash timing instrumentation with inner loop for JIT warmup\n"
             '        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));\n'
             '        int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));\n'
             '        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));\n'
@@ -1978,12 +1942,12 @@ public class AccentTest {
             '        String _cf_cls1 = "AccentTest__perfonlyinstrumented";\n'
             '        String _cf_test1 = "testWithAccent";\n'
             '        String _cf_fn1 = "calculate";\n'
-            '        \n'
-            '        // R\u00e9sum\u00e9 processing test with accented chars\n'
+            "        \n"
+            "        // R\u00e9sum\u00e9 processing test with accented chars\n"
             '        String name = "caf\u00e9";\n'
             '        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {\n'
             '            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;\n'
-            '            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L9_1" + "######$!");\n'
+            '            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L10_1" + "######$!");\n'
             '            long _cf_end1 = -1;\n'
             '            long _cf_start1 = 0;\n'
             '            try {\n'
@@ -1993,7 +1957,7 @@ public class AccentTest {
             '            } finally {\n'
             '                long _cf_end1_finally = System.nanoTime();\n'
             '                long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;\n'
-            '                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L9_1" + ":" + _cf_dur1 + "######!");\n'
+            '                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L10_1" + ":" + _cf_dur1 + "######!");\n'
             '            }\n'
             '        }\n'
             '    }\n'
@@ -2004,8 +1968,7 @@ public class AccentTest {
 
 # Skip all E2E tests if Maven is not available
 requires_maven = pytest.mark.skipif(
-    find_maven_executable() is None,
-    reason="Maven not found - skipping execution tests",
+    find_maven_executable() is None, reason="Maven not found - skipping execution tests"
 )
 
 
@@ -2080,6 +2043,7 @@ class TestRunAndParseTests:
         """Create a temporary Maven project and set up Java language context."""
         # Force set the language to Java (reset the singleton first)
         import codeflash.languages.current as current_module
+
         current_module._current_language = None
         set_current_language(Language.JAVA)
 
@@ -2107,14 +2071,17 @@ class TestRunAndParseTests:
         project_root, src_dir, test_dir = java_project
 
         # Create source file
-        (src_dir / "Calculator.java").write_text("""package com.example;
+        (src_dir / "Calculator.java").write_text(
+            """package com.example;
 
 public class Calculator {
     public int add(int a, int b) {
         return a + b;
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         # Create and instrument test
         test_source = """package com.example;
@@ -2153,32 +2120,33 @@ public class CalculatorTest {
 
         # Create Optimizer and FunctionOptimizer
         fto = FunctionToOptimize(
-            function_name="add",
-            file_path=src_dir / "Calculator.java",
-            parents=[],
-            language="java",
+            function_name="add", file_path=src_dir / "Calculator.java", parents=[], language="java"
         )
 
-        opt = Optimizer(Namespace(
-            project_root=project_root,
-            disable_telemetry=True,
-            tests_root=test_dir,
-            test_project_root=project_root,
-            pytest_cmd="pytest",
-            experiment_id=None,
-        ))
+        opt = Optimizer(
+            Namespace(
+                project_root=project_root,
+                disable_telemetry=True,
+                tests_root=test_dir,
+                test_project_root=project_root,
+                pytest_cmd="pytest",
+                experiment_id=None,
+            )
+        )
 
         func_optimizer = opt.create_function_optimizer(fto)
         assert func_optimizer is not None
 
-        func_optimizer.test_files = TestFiles(test_files=[
-            TestFile(
-                instrumented_behavior_file_path=instrumented_file,
-                test_type=TestType.EXISTING_UNIT_TEST,
-                original_file_path=test_file,
-                benchmarking_file_path=instrumented_file,  # Use same file for behavior tests
-            )
-        ])
+        func_optimizer.test_files = TestFiles(
+            test_files=[
+                TestFile(
+                    instrumented_behavior_file_path=instrumented_file,
+                    test_type=TestType.EXISTING_UNIT_TEST,
+                    original_file_path=test_file,
+                    benchmarking_file_path=instrumented_file,  # Use same file for behavior tests
+                )
+            ]
+        )
 
         # Run and parse tests
         test_env = os.environ.copy()
@@ -2189,8 +2157,8 @@ public class CalculatorTest {
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
 
@@ -2219,14 +2187,17 @@ public class CalculatorTest {
         project_root, src_dir, test_dir = java_project
 
         # Create source file
-        (src_dir / "MathUtils.java").write_text("""package com.example;
+        (src_dir / "MathUtils.java").write_text(
+            """package com.example;
 
 public class MathUtils {
     public int multiply(int a, int b) {
         return a * b;
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         # Create and instrument test
         test_source = """package com.example;
@@ -2265,6 +2236,7 @@ public class MathUtilsTest {
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
+@SuppressWarnings("CheckReturnValue")
 public class MathUtilsTest__perfonlyinstrumented {
     @Test
     public void testMultiply() {
@@ -2280,7 +2252,7 @@ public class MathUtilsTest__perfonlyinstrumented {
         MathUtils math = new MathUtils();
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L10_1" + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L11_1" + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -2290,7 +2262,7 @@ public class MathUtilsTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L10_1" + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L11_1" + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -2303,32 +2275,33 @@ public class MathUtilsTest__perfonlyinstrumented {
 
         # Create Optimizer and FunctionOptimizer
         fto = FunctionToOptimize(
-            function_name="multiply",
-            file_path=src_dir / "MathUtils.java",
-            parents=[],
-            language="java",
+            function_name="multiply", file_path=src_dir / "MathUtils.java", parents=[], language="java"
         )
 
-        opt = Optimizer(Namespace(
-            project_root=project_root,
-            disable_telemetry=True,
-            tests_root=test_dir,
-            test_project_root=project_root,
-            pytest_cmd="pytest",
-            experiment_id=None,
-        ))
+        opt = Optimizer(
+            Namespace(
+                project_root=project_root,
+                disable_telemetry=True,
+                tests_root=test_dir,
+                test_project_root=project_root,
+                pytest_cmd="pytest",
+                experiment_id=None,
+            )
+        )
 
         func_optimizer = opt.create_function_optimizer(fto)
         assert func_optimizer is not None
 
-        func_optimizer.test_files = TestFiles(test_files=[
-            TestFile(
-                instrumented_behavior_file_path=test_file,
-                test_type=TestType.EXISTING_UNIT_TEST,
-                original_file_path=test_file,
-                benchmarking_file_path=instrumented_file,
-            )
-        ])
+        func_optimizer.test_files = TestFiles(
+            test_files=[
+                TestFile(
+                    instrumented_behavior_file_path=test_file,
+                    test_type=TestType.EXISTING_UNIT_TEST,
+                    original_file_path=test_file,
+                    benchmarking_file_path=instrumented_file,
+                )
+            ]
+        )
 
         # Run performance tests with inner_iterations=2 for fast test
         test_env = os.environ.copy()
@@ -2340,8 +2313,8 @@ public class MathUtilsTest__perfonlyinstrumented {
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,  # Only 1 outer loop (Maven invocation)
+            pytest_min_loops=1,
+            pytest_max_loops=1,  # Only 1 outer loop (Maven invocation)
             testing_time=1.0,
         )
 
@@ -2377,14 +2350,17 @@ public class MathUtilsTest__perfonlyinstrumented {
         project_root, src_dir, test_dir = java_project
 
         # Create source file
-        (src_dir / "StringUtils.java").write_text("""package com.example;
+        (src_dir / "StringUtils.java").write_text(
+            """package com.example;
 
 public class StringUtils {
     public String reverse(String s) {
         return new StringBuilder(s).reverse().toString();
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         # Create test with multiple methods
         test_source = """package com.example;
@@ -2431,30 +2407,31 @@ public class StringUtilsTest {
         instrumented_file.write_text(instrumented, encoding="utf-8")
 
         fto = FunctionToOptimize(
-            function_name="reverse",
-            file_path=src_dir / "StringUtils.java",
-            parents=[],
-            language="java",
+            function_name="reverse", file_path=src_dir / "StringUtils.java", parents=[], language="java"
         )
 
-        opt = Optimizer(Namespace(
-            project_root=project_root,
-            disable_telemetry=True,
-            tests_root=test_dir,
-            test_project_root=project_root,
-            pytest_cmd="pytest",
-            experiment_id=None,
-        ))
+        opt = Optimizer(
+            Namespace(
+                project_root=project_root,
+                disable_telemetry=True,
+                tests_root=test_dir,
+                test_project_root=project_root,
+                pytest_cmd="pytest",
+                experiment_id=None,
+            )
+        )
 
         func_optimizer = opt.create_function_optimizer(fto)
-        func_optimizer.test_files = TestFiles(test_files=[
-            TestFile(
-                instrumented_behavior_file_path=instrumented_file,
-                test_type=TestType.EXISTING_UNIT_TEST,
-                original_file_path=test_file,
-                benchmarking_file_path=instrumented_file,  # Use same file for behavior tests
-            )
-        ])
+        func_optimizer.test_files = TestFiles(
+            test_files=[
+                TestFile(
+                    instrumented_behavior_file_path=instrumented_file,
+                    test_type=TestType.EXISTING_UNIT_TEST,
+                    original_file_path=test_file,
+                    benchmarking_file_path=instrumented_file,  # Use same file for behavior tests
+                )
+            ]
+        )
 
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
@@ -2464,8 +2441,8 @@ public class StringUtilsTest {
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
 
@@ -2488,14 +2465,17 @@ public class StringUtilsTest {
         project_root, src_dir, test_dir = java_project
 
         # Create source file with a bug
-        (src_dir / "BrokenCalc.java").write_text("""package com.example;
+        (src_dir / "BrokenCalc.java").write_text(
+            """package com.example;
 
 public class BrokenCalc {
     public int add(int a, int b) {
         return a + b + 1;  // Bug: adds extra 1
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         # Create test that will fail
         test_source = """package com.example;
@@ -2533,30 +2513,31 @@ public class BrokenCalcTest {
         instrumented_file.write_text(instrumented, encoding="utf-8")
 
         fto = FunctionToOptimize(
-            function_name="add",
-            file_path=src_dir / "BrokenCalc.java",
-            parents=[],
-            language="java",
+            function_name="add", file_path=src_dir / "BrokenCalc.java", parents=[], language="java"
         )
 
-        opt = Optimizer(Namespace(
-            project_root=project_root,
-            disable_telemetry=True,
-            tests_root=test_dir,
-            test_project_root=project_root,
-            pytest_cmd="pytest",
-            experiment_id=None,
-        ))
+        opt = Optimizer(
+            Namespace(
+                project_root=project_root,
+                disable_telemetry=True,
+                tests_root=test_dir,
+                test_project_root=project_root,
+                pytest_cmd="pytest",
+                experiment_id=None,
+            )
+        )
 
         func_optimizer = opt.create_function_optimizer(fto)
-        func_optimizer.test_files = TestFiles(test_files=[
-            TestFile(
-                instrumented_behavior_file_path=instrumented_file,
-                test_type=TestType.EXISTING_UNIT_TEST,
-                original_file_path=test_file,
-                benchmarking_file_path=instrumented_file,  # Use same file for behavior tests
-            )
-        ])
+        func_optimizer.test_files = TestFiles(
+            test_files=[
+                TestFile(
+                    instrumented_behavior_file_path=instrumented_file,
+                    test_type=TestType.EXISTING_UNIT_TEST,
+                    original_file_path=test_file,
+                    benchmarking_file_path=instrumented_file,  # Use same file for behavior tests
+                )
+            ]
+        )
 
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
@@ -2566,8 +2547,8 @@ public class BrokenCalcTest {
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
 
@@ -2594,7 +2575,8 @@ public class BrokenCalcTest {
         project_root, src_dir, test_dir = java_project
 
         # Create source file
-        (src_dir / "Counter.java").write_text("""package com.example;
+        (src_dir / "Counter.java").write_text(
+            """package com.example;
 
 public class Counter {
     private int value = 0;
@@ -2603,7 +2585,9 @@ public class Counter {
         return ++value;
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         # Create test file - single test method for simplicity
         test_source = """package com.example;
@@ -2646,6 +2630,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 
+@SuppressWarnings("CheckReturnValue")
 public class CounterTest__perfinstrumented {
     @Test
     public void testIncrement() {
@@ -2664,7 +2649,7 @@ public class CounterTest__perfinstrumented {
         long _cf_end1_1 = -1;
         long _cf_start1_1 = 0;
         byte[] _cf_serializedResult1_1 = null;
-        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":L13_1" + "######$!");
+        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":L14_1" + "######$!");
         try {
             _cf_start1_1 = System.nanoTime();
             _cf_result1_1 = counter.increment();
@@ -2673,7 +2658,7 @@ public class CounterTest__perfinstrumented {
         } finally {
             long _cf_end1_1_finally = System.nanoTime();
             long _cf_dur1_1 = (_cf_end1_1 != -1 ? _cf_end1_1 : _cf_end1_1_finally) - _cf_start1_1;
-            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + "L13_1" + "######!");
+            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + "L14_1" + "######!");
             // Write to SQLite if output file is set
             if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
                 try {
@@ -2692,7 +2677,7 @@ public class CounterTest__perfinstrumented {
                             _cf_pstmt1_1.setString(3, _cf_test1);
                             _cf_pstmt1_1.setString(4, _cf_fn1);
                             _cf_pstmt1_1.setInt(5, _cf_loop1);
-                            _cf_pstmt1_1.setString(6, "L13_1");
+                            _cf_pstmt1_1.setString(6, "L14_1");
                             _cf_pstmt1_1.setLong(7, _cf_dur1_1);
                             _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
                             _cf_pstmt1_1.setString(9, "function_call");
@@ -2704,7 +2689,7 @@ public class CounterTest__perfinstrumented {
                 }
             }
         }
-        assertEquals(1, _cf_result1_1);
+        assertEquals(1, (int)_cf_result1_1);
     }
 }
 """
@@ -2715,32 +2700,33 @@ public class CounterTest__perfinstrumented {
 
         # Create Optimizer and FunctionOptimizer
         fto = FunctionToOptimize(
-            function_name="increment",
-            file_path=src_dir / "Counter.java",
-            parents=[],
-            language="java",
+            function_name="increment", file_path=src_dir / "Counter.java", parents=[], language="java"
         )
 
-        opt = Optimizer(Namespace(
-            project_root=project_root,
-            disable_telemetry=True,
-            tests_root=test_dir,
-            test_project_root=project_root,
-            pytest_cmd="pytest",
-            experiment_id=None,
-        ))
+        opt = Optimizer(
+            Namespace(
+                project_root=project_root,
+                disable_telemetry=True,
+                tests_root=test_dir,
+                test_project_root=project_root,
+                pytest_cmd="pytest",
+                experiment_id=None,
+            )
+        )
 
         func_optimizer = opt.create_function_optimizer(fto)
         assert func_optimizer is not None
 
-        func_optimizer.test_files = TestFiles(test_files=[
-            TestFile(
-                instrumented_behavior_file_path=instrumented_file,
-                test_type=TestType.EXISTING_UNIT_TEST,
-                original_file_path=test_file,
-                benchmarking_file_path=instrumented_file,
-            )
-        ])
+        func_optimizer.test_files = TestFiles(
+            test_files=[
+                TestFile(
+                    instrumented_behavior_file_path=instrumented_file,
+                    test_type=TestType.EXISTING_UNIT_TEST,
+                    original_file_path=test_file,
+                    benchmarking_file_path=instrumented_file,
+                )
+            ]
+        )
 
         # Run tests
         test_env = os.environ.copy()
@@ -2751,8 +2737,8 @@ public class CounterTest__perfinstrumented {
             test_env=test_env,
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
-            min_outer_loops=1,
-            max_outer_loops=1,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
 
@@ -2766,11 +2752,13 @@ public class CounterTest__perfinstrumented {
         # Find the SQLite file that was created
         # SQLite is created at get_run_tmp_file path
         from codeflash.code_utils.code_utils import get_run_tmp_file
+
         sqlite_file = get_run_tmp_file(Path("test_return_values_0.sqlite"))
 
         if not sqlite_file.exists():
             # Fall back to checking temp directory for any SQLite files
             import tempfile
+
             sqlite_files = list(Path(tempfile.gettempdir()).glob("**/test_return_values_*.sqlite"))
             assert len(sqlite_files) >= 1, f"SQLite file should have been created at {sqlite_file} or in temp dir"
             sqlite_file = max(sqlite_files, key=lambda p: p.stat().st_mtime)
@@ -2789,8 +2777,17 @@ public class CounterTest__perfinstrumented {
         rows = cursor.fetchall()
 
         for row in rows:
-            test_module_path, test_class_name, test_function_name, function_getting_tested, \
-                loop_index, iteration_id, runtime, return_value, verification_type = row
+            (
+                test_module_path,
+                test_class_name,
+                test_function_name,
+                function_getting_tested,
+                loop_index,
+                iteration_id,
+                runtime,
+                return_value,
+                verification_type,
+            ) = row
 
             # Verify fields
             assert test_module_path == "CounterTest__perfinstrumented"
@@ -2819,7 +2816,8 @@ public class CounterTest__perfinstrumented {
         project_root, src_dir, test_dir = java_project
 
         # Create a simple function to optimize
-        (src_dir / "Fibonacci.java").write_text("""package com.example;
+        (src_dir / "Fibonacci.java").write_text(
+            """package com.example;
 
 public class Fibonacci {
     public int fib(int n) {
@@ -2827,7 +2825,9 @@ public class Fibonacci {
         return fib(n - 1) + fib(n - 2);
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         # Create test file
         test_source = """package com.example;
@@ -2867,6 +2867,7 @@ public class FibonacciTest {
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
+@SuppressWarnings("CheckReturnValue")
 public class FibonacciTest__perfonlyinstrumented {
     @Test
     public void testFib() {
@@ -2882,7 +2883,7 @@ public class FibonacciTest__perfonlyinstrumented {
         Fibonacci fib = new Fibonacci();
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L10_1" + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L11_1" + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -2892,7 +2893,7 @@ public class FibonacciTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L10_1" + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L11_1" + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -2947,7 +2948,9 @@ public class FibonacciTest__perfonlyinstrumented {
 
         # Verify invocation IDs are constant (wrapper ID) across all inner iterations
         invocation_ids = [m[4] for m in start_matches]
-        assert all(id == invocation_ids[0] for id in invocation_ids), f"Expected constant invocation IDs, got: {invocation_ids}"
+        assert all(id == invocation_ids[0] for id in invocation_ids), (
+            f"Expected constant invocation IDs, got: {invocation_ids}"
+        )
 
         # Verify loop IDs are 2 and 3 (outerLoop=1, maxInner=2, inner=0,1 → 1*2+0=2, 1*2+1=3)
         loop_ids = [m[3] for m in start_matches]
@@ -2968,14 +2971,17 @@ public class FibonacciTest__perfonlyinstrumented {
         project_root, src_dir, test_dir = java_project
 
         # Create a simple math class
-        (src_dir / "MathOps.java").write_text("""package com.example;
+        (src_dir / "MathOps.java").write_text(
+            """package com.example;
 
 public class MathOps {
     public int add(int a, int b) {
         return a + b;
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         # Create test with multiple test methods
         test_source = """package com.example;
@@ -3079,7 +3085,8 @@ public class MathOpsTest {
         project_root, src_dir, test_dir = java_project
 
         # Create SpinWait class — Java equivalent of Python's accurate_sleepfunc
-        (src_dir / "SpinWait.java").write_text("""package com.example;
+        (src_dir / "SpinWait.java").write_text(
+            """package com.example;
 
 public class SpinWait {
     public static long spinWait(long durationNs) {
@@ -3089,7 +3096,9 @@ public class SpinWait {
         return durationNs;
     }
 }
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         # Two test methods with known durations — mirrors Python's parametrize with
         # (0.01, 0.010) and (0.02, 0.020) which map to 100ms and 200ms
@@ -3125,10 +3134,7 @@ public class SpinWaitTest {
 
         # Instrument for performance mode
         success, instrumented = instrument_existing_test(
-            test_string=test_source,
-            function_to_optimize=func_info,
-            mode="performance",
-            test_path=test_file,
+            test_string=test_source, function_to_optimize=func_info, mode="performance", test_path=test_file
         )
         assert success, "Instrumentation should succeed"
 
@@ -3139,6 +3145,7 @@ public class SpinWaitTest {
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
+@SuppressWarnings("CheckReturnValue")
 public class SpinWaitTest__perfonlyinstrumented {
     @Test
     public void testSpinShort() {
@@ -3153,7 +3160,7 @@ public class SpinWaitTest__perfonlyinstrumented {
 
         for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
             int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;
-            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L9_1" + "######$!");
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L10_1" + "######$!");
             long _cf_end1 = -1;
             long _cf_start1 = 0;
             try {
@@ -3163,7 +3170,7 @@ public class SpinWaitTest__perfonlyinstrumented {
             } finally {
                 long _cf_end1_finally = System.nanoTime();
                 long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;
-                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L9_1" + ":" + _cf_dur1 + "######!");
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L10_1" + ":" + _cf_dur1 + "######!");
             }
         }
     }
@@ -3181,7 +3188,7 @@ public class SpinWaitTest__perfonlyinstrumented {
 
         for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
             int _cf_loopId2 = _cf_outerLoop2 * _cf_maxInnerIterations2 + _cf_i2;
-            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + "L14_2" + "######$!");
+            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + "L15_2" + "######$!");
             long _cf_end2 = -1;
             long _cf_start2 = 0;
             try {
@@ -3191,7 +3198,7 @@ public class SpinWaitTest__perfonlyinstrumented {
             } finally {
                 long _cf_end2_finally = System.nanoTime();
                 long _cf_dur2 = (_cf_end2 != -1 ? _cf_end2 : _cf_end2_finally) - _cf_start2;
-                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + "L14_2" + ":" + _cf_dur2 + "######!");
+                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + "." + _cf_test2 + ":" + _cf_fn2 + ":" + _cf_loopId2 + ":" + "L15_2" + ":" + _cf_dur2 + "######!");
             }
         }
     }

@@ -272,8 +272,8 @@ class TestClearFunctions:
         assert not is_language_supported(Language.PYTHON)
 
         # Re-register all languages by importing
-        from codeflash.languages.python.support import PythonSupport
         from codeflash.languages.javascript.support import JavaScriptSupport, TypeScriptSupport
+        from codeflash.languages.python.support import PythonSupport
 
         # Need to manually register since decorator already ran
         register_language(PythonSupport)

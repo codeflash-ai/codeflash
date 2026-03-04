@@ -1,14 +1,9 @@
 """Tests for Java test path handling in FunctionOptimizer."""
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
-
-from codeflash.languages.java.test_runner import (
-    _extract_source_dirs_from_pom,
-    _path_to_class_name,
-)
+from codeflash.languages.java.test_runner import _extract_source_dirs_from_pom, _path_to_class_name
 
 
 class TestGetJavaSourcesRoot:
@@ -16,15 +11,15 @@ class TestGetJavaSourcesRoot:
 
     def _create_mock_optimizer(self, tests_root: str):
         """Create a mock FunctionOptimizer with the given tests_root."""
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
+        from codeflash.languages.java.function_optimizer import JavaFunctionOptimizer
 
         # Create a minimal mock
-        mock_optimizer = MagicMock(spec=FunctionOptimizer)
+        mock_optimizer = MagicMock(spec=JavaFunctionOptimizer)
         mock_optimizer.test_cfg = MagicMock()
         mock_optimizer.test_cfg.tests_root = Path(tests_root)
 
         # Bind the actual method to the mock
-        mock_optimizer._get_java_sources_root = lambda: FunctionOptimizer._get_java_sources_root(mock_optimizer)
+        mock_optimizer._get_java_sources_root = lambda: JavaFunctionOptimizer._get_java_sources_root(mock_optimizer)
 
         return mock_optimizer
 
@@ -97,15 +92,15 @@ class TestFixJavaTestPathsIntegration:
 
     def _create_mock_optimizer(self, tests_root: str):
         """Create a mock FunctionOptimizer with the given tests_root."""
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
+        from codeflash.languages.java.function_optimizer import JavaFunctionOptimizer
 
-        mock_optimizer = MagicMock(spec=FunctionOptimizer)
+        mock_optimizer = MagicMock(spec=JavaFunctionOptimizer)
         mock_optimizer.test_cfg = MagicMock()
         mock_optimizer.test_cfg.tests_root = Path(tests_root)
 
         # Bind the actual methods
-        mock_optimizer._get_java_sources_root = lambda: FunctionOptimizer._get_java_sources_root(mock_optimizer)
-        mock_optimizer._fix_java_test_paths = lambda behavior_source, perf_source, used_paths, display_source="": FunctionOptimizer._fix_java_test_paths(mock_optimizer, behavior_source, perf_source, used_paths, display_source)
+        mock_optimizer._get_java_sources_root = lambda: JavaFunctionOptimizer._get_java_sources_root(mock_optimizer)
+        mock_optimizer._fix_java_test_paths = lambda behavior_source, perf_source, used_paths, display_source="": JavaFunctionOptimizer._fix_java_test_paths(mock_optimizer, behavior_source, perf_source, used_paths, display_source)
 
         return mock_optimizer
 
@@ -138,8 +133,14 @@ public class UnpackerTest__perfonlyinstrumented {
         # The path should be test/src/com/aerospike/client/util/UnpackerTest__perfinstrumented.java
         # NOT test/src/com/aerospike/test/com/aerospike/client/util/...
         expected_java_root = tmp_path / "test" / "src"
-        assert behavior_path == expected_java_root / "com" / "aerospike" / "client" / "util" / "UnpackerTest__perfinstrumented.java"
-        assert perf_path == expected_java_root / "com" / "aerospike" / "client" / "util" / "UnpackerTest__perfonlyinstrumented.java"
+        assert (
+            behavior_path
+            == expected_java_root / "com" / "aerospike" / "client" / "util" / "UnpackerTest__perfinstrumented.java"
+        )
+        assert (
+            perf_path
+            == expected_java_root / "com" / "aerospike" / "client" / "util" / "UnpackerTest__perfonlyinstrumented.java"
+        )
 
         # Verify there's no duplication in the path
         assert "com/aerospike/test/com" not in str(behavior_path)
@@ -173,6 +174,7 @@ public class CalculatorTest__perfonlyinstrumented {
         # Should be src/test/java/com/example/CalculatorTest__perfinstrumented.java
         assert behavior_path == tests_root / "com" / "example" / "CalculatorTest__perfinstrumented.java"
         assert perf_path == tests_root / "com" / "example" / "CalculatorTest__perfonlyinstrumented.java"
+
 
 class TestPathToClassNameWithCustomDirs:
     """Tests for _path_to_class_name with custom source directories."""

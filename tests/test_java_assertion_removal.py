@@ -776,7 +776,8 @@ public void testFibonacci() {
 
     def test_junit4_message_first_with_string_expected(self):
         """When assertEquals has 3 args and the first is a message but the second is also a string,
-        the type should be inferred from the second arg (the real expected value), not the message."""
+        the type should be inferred from the second arg (the real expected value), not the message.
+        """
         source = """\
 @Test
 public void testGetName() {
@@ -807,7 +808,8 @@ public void testIsValid() {
 
     def test_two_arg_string_expected_not_treated_as_message(self):
         """When assertEquals has only 2 args and the first is a string, it IS the expected value,
-        not a message. This tests that we don't incorrectly skip the first arg."""
+        not a message. This tests that we don't incorrectly skip the first arg.
+        """
         source = """\
 @Test
 public void testGetGreeting() {
@@ -869,8 +871,7 @@ void test() {
 
     def test_qualified_name_support(self):
         transformer = JavaAssertTransformer(
-            function_name="fibonacci",
-            qualified_name="com.example.Calculator.fibonacci",
+            function_name="fibonacci", qualified_name="com.example.Calculator.fibonacci"
         )
         assert transformer.qualified_name == "com.example.Calculator.fibonacci"
 

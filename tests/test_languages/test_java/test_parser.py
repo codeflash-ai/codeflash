@@ -1,15 +1,6 @@
 """Tests for the Java tree-sitter parser utilities."""
 
-import pytest
-
-from codeflash.languages.java.parser import (
-    JavaAnalyzer,
-    JavaClassNode,
-    JavaFieldInfo,
-    JavaImportInfo,
-    JavaMethodNode,
-    get_java_analyzer,
-)
+from codeflash.languages.java.parser import JavaAnalyzer, get_java_analyzer
 
 
 class TestJavaAnalyzerBasic:
