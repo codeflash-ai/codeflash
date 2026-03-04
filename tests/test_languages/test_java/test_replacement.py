@@ -836,7 +836,7 @@ class TestNestedClasses:
     """Tests for nested class scenarios."""
 
     def test_replace_method_in_nested_class(self, tmp_path: Path, java_support: JavaSupport):
-        """Test replacing a method in a nested class."""
+        """Nested class methods are skipped by discovery (PR #1726), so replacement returns False."""
         java_file = tmp_path / "Outer.java"
         original_code = """public class Outer {
     public int outerMethod() {
@@ -876,21 +876,7 @@ public class Outer {{
             lang_support=java_support,
         )
 
-        assert result is True
-        new_code = java_file.read_text(encoding="utf-8")
-        expected = """public class Outer {
-    public int outerMethod() {
-        return 1;
-    }
-
-    public static class Inner {
-        public int innerMethod() {
-            return 2 + 0;
-        }
-    }
-}
-"""
-        assert new_code == expected
+        assert result is False
 
 
 class TestPreservesStructure:
