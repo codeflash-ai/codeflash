@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from functools import lru_cache
+
 from codeflash.result.critic import performance_gain
 
 
@@ -93,6 +95,7 @@ def format_perf(percentage: float) -> str:
     return f"{percentage:.3f}"
 
 
+@lru_cache(maxsize=4096)
 def format_runtime_comment(original_time_ns: int, optimized_time_ns: int, comment_prefix: str = "#") -> str:
     perf_gain = format_perf(
         abs(performance_gain(original_runtime_ns=original_time_ns, optimized_runtime_ns=optimized_time_ns) * 100)
