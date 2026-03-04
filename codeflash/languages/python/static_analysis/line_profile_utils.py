@@ -56,7 +56,6 @@ class JitDecoratorDetector(ast.NodeVisitor):
             local_name = alias.asname if alias.asname else alias.name
             # For from imports, we store (module_name, imported_name)
             self.import_aliases[local_name] = (node.module, alias.name)
-        self.generic_visit(node)
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         """Check function decorators for JIT decorators."""
