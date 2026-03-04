@@ -2277,9 +2277,7 @@ class JavaScriptSupport:
         """
         from codeflash.languages.javascript.instrument import inject_profiling_into_existing_js_test
 
-        test_string = test_path.read_text(encoding="utf-8")
         return inject_profiling_into_existing_js_test(
-            test_string=test_string,
             test_path=test_path,
             call_positions=list(call_positions),
             function_to_optimize=function_to_optimize,
