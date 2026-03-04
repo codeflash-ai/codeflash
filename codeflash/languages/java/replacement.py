@@ -907,7 +907,7 @@ def add_runtime_comments(
         line = lines[idx]
         # Strip trailing newline, append comment, restore newline
         stripped = line.rstrip("\n\r")
-        trailing = line[len(stripped):]
+        trailing = line[len(stripped) :]
         lines[idx] = f"{stripped} {comment}{trailing}"
 
     return "".join(lines)

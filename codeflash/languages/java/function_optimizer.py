@@ -273,23 +273,15 @@ class JavaFunctionOptimizer(FunctionOptimizer):
                     perf_path = new_perf_path
                     # Rename ALL references to the class (not just declaration)
                     modified_behavior_source = re.sub(
-                        rf"\b{re.escape(behavior_class)}\b",
-                        new_behavior_class,
-                        behavior_source,
+                        rf"\b{re.escape(behavior_class)}\b", new_behavior_class, behavior_source
                     )
-                    modified_perf_source = re.sub(
-                        rf"\b{re.escape(perf_class)}\b",
-                        new_perf_class,
-                        perf_source,
-                    )
+                    modified_perf_source = re.sub(rf"\b{re.escape(perf_class)}\b", new_perf_class, perf_source)
                     # Display source has the original (non-instrumented) class name
                     if display_source:
                         original_class = behavior_class.replace("__perfinstrumented", "")
                         new_original_class = f"{original_class}_{index}"
                         modified_display_source = re.sub(
-                            rf"\b{re.escape(original_class)}\b",
-                            new_original_class,
-                            display_source,
+                            rf"\b{re.escape(original_class)}\b", new_original_class, display_source
                         )
                     logger.debug(f"[JAVA] Renamed duplicate test class from {behavior_class} to {new_behavior_class}")
                     break
@@ -308,7 +300,9 @@ class JavaFunctionOptimizer(FunctionOptimizer):
         fixed_tests: list[GeneratedTests] = []
         for test in generated_tests.generated_tests:
             behavior_path, perf_path, behavior_source, perf_source, display_source = self._fix_java_test_paths(
-                test.instrumented_behavior_test_source, test.instrumented_perf_test_source, used_paths,
+                test.instrumented_behavior_test_source,
+                test.instrumented_perf_test_source,
+                used_paths,
                 test.generated_original_test_source,
             )
             used_paths.add(behavior_path)

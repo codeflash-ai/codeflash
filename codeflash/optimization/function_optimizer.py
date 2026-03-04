@@ -66,7 +66,7 @@ from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
 from codeflash.either import Failure, Success, is_successful
 from codeflash.languages.base import Language
-from codeflash.languages.current import current_language_support
+from codeflash.languages.current import current_language_support, is_java
 from codeflash.languages.javascript.test_runner import clear_created_config_files, get_created_config_files
 from codeflash.lsp.helpers import is_LSP_enabled, is_subagent_mode, report_to_markdown_table, tree_to_markdown
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
@@ -647,6 +647,7 @@ class FunctionOptimizer:
         generated_tests = self.fixup_generated_tests(generated_tests)
 
         logger.debug(f"[PIPELINE] Processing {count_tests} generated tests")
+        used_behavior_paths: set[Path] = set()
         for i, generated_test in enumerate(generated_tests.generated_tests):
             logger.debug(
                 f"[PIPELINE] Test {i + 1}: behavior_path={generated_test.behavior_file_path}, perf_path={generated_test.perf_file_path}"
@@ -903,23 +904,15 @@ class FunctionOptimizer:
                     perf_path = new_perf_path
                     # Rename class everywhere (declaration, constructors, type refs)
                     modified_behavior_source = re.sub(
-                        rf"\b{re.escape(behavior_class)}\b",
-                        new_behavior_class,
-                        behavior_source,
+                        rf"\b{re.escape(behavior_class)}\b", new_behavior_class, behavior_source
                     )
-                    modified_perf_source = re.sub(
-                        rf"\b{re.escape(perf_class)}\b",
-                        new_perf_class,
-                        perf_source,
-                    )
+                    modified_perf_source = re.sub(rf"\b{re.escape(perf_class)}\b", new_perf_class, perf_source)
                     if display_source:
                         # Display source has the original (non-instrumented) class name
                         original_class = behavior_class.replace("__perfinstrumented", "")
                         new_original_class = f"{original_class}_{index}"
                         modified_display_source = re.sub(
-                            rf"\b{re.escape(original_class)}\b",
-                            new_original_class,
-                            display_source,
+                            rf"\b{re.escape(original_class)}\b", new_original_class, display_source
                         )
                     logger.debug(f"[JAVA] Renamed duplicate test class from {behavior_class} to {new_behavior_class}")
                     break

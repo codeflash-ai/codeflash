@@ -196,7 +196,12 @@ _TS_BODY_PREFIX_BYTES = _TS_BODY_PREFIX.encode("utf8")
 
 
 def _generate_sqlite_write_code(
-    iter_id: int, call_counter: int, indent: str, class_name: str, func_name: str, test_method_name: str,
+    iter_id: int,
+    call_counter: int,
+    indent: str,
+    class_name: str,
+    func_name: str,
+    test_method_name: str,
     invocation_id: str = "",
 ) -> list[str]:
     """Generate SQLite write code for a single function call.
@@ -390,8 +395,7 @@ def wrap_target_calls_with_treesitter(
                     ]
                     # Finally block with SQLite write
                     finally_block = _generate_sqlite_write_code(
-                        iter_id, call_counter, "", class_name, func_name, test_method_name,
-                        invocation_id=inv_id,
+                        iter_id, call_counter, "", class_name, func_name, test_method_name, invocation_id=inv_id
                     )
 
                     replacement_lines = [*var_decls, start_marker, *try_block, *finally_block]
@@ -432,7 +436,12 @@ def wrap_target_calls_with_treesitter(
                     wrapped.append(f"{line_indent_str}    {serialize_stmt}")
                     # Finally block with SQLite write
                     finally_lines = _generate_sqlite_write_code(
-                        iter_id, call_counter, line_indent_str, class_name, func_name, test_method_name,
+                        iter_id,
+                        call_counter,
+                        line_indent_str,
+                        class_name,
+                        func_name,
+                        test_method_name,
                         invocation_id=inv_id,
                     )
                     wrapped.extend(finally_lines)
@@ -687,16 +696,10 @@ def instrument_existing_test(
     # For existing tests, the __perfinstrumented suffix is later replaced with
     # __existing_perfinstrumented, making markers unique per test file.
     if mode == "performance":
-        modified_source = _add_timing_instrumentation(
-            modified_source,
-            new_class_name,
-            func_name,
-        )
+        modified_source = _add_timing_instrumentation(modified_source, new_class_name, func_name)
     else:
         # Behavior mode: add timing instrumentation that also writes to SQLite
-        modified_source = _add_behavior_instrumentation(
-            modified_source, new_class_name, func_name, target_return_type
-        )
+        modified_source = _add_behavior_instrumentation(modified_source, new_class_name, func_name, target_return_type)
 
     logger.debug("Java %s testing for %s: renamed class %s -> %s", mode, func_name, original_class_name, new_class_name)
     # Why return True here?
@@ -1052,7 +1055,10 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         return hoisted, assignment
 
     def build_instrumented_body(
-        body_text: str, next_wrapper_id: int, base_indent: str, test_method_name: str = "unknown",
+        body_text: str,
+        next_wrapper_id: int,
+        base_indent: str,
+        test_method_name: str = "unknown",
         body_start_line: int = 0,
     ) -> tuple[str, int]:
         body_bytes = body_text.encode("utf8")
@@ -1392,11 +1398,7 @@ def instrument_generated_java_test(
         # Suppress Error Prone's CheckReturnValue for generated performance tests
         modified_code = _add_suppress_warnings_annotation(modified_code, new_class_name)
 
-        modified_code = _add_timing_instrumentation(
-            modified_code,
-            new_class_name,
-            function_name,
-        )
+        modified_code = _add_timing_instrumentation(modified_code, new_class_name, function_name)
     elif mode == "behavior":
         _, behavior_code = instrument_existing_test(
             test_string=test_code,
