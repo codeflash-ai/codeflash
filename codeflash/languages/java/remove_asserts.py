@@ -184,13 +184,18 @@ class JavaAssertTransformer:
     """
 
     def __init__(
-        self, function_name: str, qualified_name: str | None = None, analyzer: JavaAnalyzer | None = None
+        self,
+        function_name: str,
+        qualified_name: str | None = None,
+        analyzer: JavaAnalyzer | None = None,
+        is_void: bool = False,
     ) -> None:
         self.analyzer = analyzer or get_java_analyzer()
         self.func_name = function_name
         self.qualified_name = qualified_name or function_name
         self.invocation_counter = 0
         self._detected_framework: str | None = None
+        self.is_void = is_void
 
         # Precompile the assignment-detection regex to avoid recompiling on each call.
         self._assign_re = re.compile(r"(\w+(?:<[^>]+>)?)\s+(\w+)\s*=\s*$")
@@ -911,9 +916,11 @@ class JavaAssertTransformer:
         """
         method = assertion.assertion_method
 
-        # assertTrue/assertFalse always deal with boolean values
+        # assertTrue/assertFalse: the assertion argument is boolean, but the extracted
+        # target call may return any type (e.g., assertTrue(fibonacci(n) < 0L) where
+        # fibonacci returns long). Use Object to safely capture via autoboxing.
         if method in {"assertTrue", "assertFalse"}:
-            return "boolean"
+            return "Object"
 
         # assertNull/assertNotNull — keep Object (reference type)
         if method in {"assertNull", "assertNotNull"}:
@@ -949,8 +956,29 @@ class JavaAssertTransformer:
         elif args_str.endswith(")"):
             args_str = args_str[:-1]
 
-        # Fast-path: only extract the first top-level argument instead of splitting all arguments.
-        first_arg = self._extract_first_arg(args_str)
+        # Fast-path: try to cheaply obtain the first top-level argument without invoking
+        # the full parser. If the first comma occurs before any special characters that
+        # would affect top-levelness (quotes/parens/braces), we can take the substring
+        # up to that comma as the first argument.
+        if not args_str:
+            return "Object"
+
+        # Find first comma; if none, the entire args_str is the single argument
+        comma_idx = args_str.find(",")
+        if comma_idx == -1:
+            first_arg = args_str
+        else:
+            # If there are no special delimiter characters before this comma, we can
+            # safely take the substring as the first argument.
+            before = args_str[:comma_idx]
+            if not self._special_re.search(before):
+                first_arg = before
+            else:
+                # Fallback: use the full extractor which respects nesting/strings/generics.
+                first_arg = self._extract_first_arg(args_str)
+                if first_arg is None:
+                    return "Object"
+
         if not first_arg:
             return "Object"
 
@@ -1074,14 +1102,20 @@ class JavaAssertTransformer:
         # Handle first call explicitly to avoid a per-iteration branch
         if calls:
             inv += 1
-            var_name = "_cf_result" + str(inv)
-            replacements.append(f"{leading_ws}{return_type} {var_name} = {calls[0].full_call};")
+            if self.is_void:
+                replacements.append(f"{leading_ws}{calls[0].full_call};")
+            else:
+                var_name = "_cf_result" + str(inv)
+                replacements.append(f"{leading_ws}{return_type} {var_name} = {calls[0].full_call};")
 
             # Handle remaining calls
             for call in calls[1:]:
                 inv += 1
-                var_name = "_cf_result" + str(inv)
-                replacements.append(f"{base_indent}{return_type} {var_name} = {call.full_call};")
+                if self.is_void:
+                    replacements.append(f"{base_indent}{call.full_call};")
+                else:
+                    var_name = "_cf_result" + str(inv)
+                    replacements.append(f"{base_indent}{return_type} {var_name} = {call.full_call};")
 
         # Write back the counter
         self.invocation_counter = inv
@@ -1198,7 +1232,9 @@ class JavaAssertTransformer:
         return "".join(cur).rstrip()
 
 
-def transform_java_assertions(source: str, function_name: str, qualified_name: str | None = None) -> str:
+def transform_java_assertions(
+    source: str, function_name: str, qualified_name: str | None = None, is_void: bool = False
+) -> str:
     """Transform Java test code by removing assertions and capturing function calls.
 
     This is the main entry point for Java assertion transformation.
@@ -1207,12 +1243,13 @@ def transform_java_assertions(source: str, function_name: str, qualified_name: s
         source: The Java test source code.
         function_name: Name of the function being tested.
         qualified_name: Optional fully qualified name of the function.
+        is_void: Whether the target function returns void.
 
     Returns:
         Transformed source code with assertions replaced by capture statements.
 
     """
-    transformer = JavaAssertTransformer(function_name=function_name, qualified_name=qualified_name)
+    transformer = JavaAssertTransformer(function_name=function_name, qualified_name=qualified_name, is_void=is_void)
     return transformer.transform(source)
 
 
@@ -1230,6 +1267,10 @@ def remove_assertions_from_test(source: str, target_function: FunctionToOptimize
         Transformed source code.
 
     """
+    is_void = getattr(target_function, "return_type", None) == "void"
     return transform_java_assertions(
-        source=source, function_name=target_function.function_name, qualified_name=target_function.qualified_name
+        source=source,
+        function_name=target_function.function_name,
+        qualified_name=target_function.qualified_name,
+        is_void=is_void,
     )

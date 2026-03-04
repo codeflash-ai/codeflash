@@ -73,8 +73,8 @@ public final class Comparator {
     }
 
     static String compareDatabases(String originalDbPath, String candidateDbPath) throws Exception {
-        Map<String, byte[]> originalResults = readTestResults(originalDbPath);
-        Map<String, byte[]> candidateResults = readTestResults(candidateDbPath);
+        Map<String, TestResult> originalResults = readTestResults(originalDbPath);
+        Map<String, TestResult> candidateResults = readTestResults(candidateDbPath);
 
         Set<String> allKeys = new LinkedHashSet<>();
         allKeys.addAll(originalResults.keySet());
@@ -87,46 +87,50 @@ public final class Comparator {
         int skippedDeserializationErrors = 0;
 
         for (String key : allKeys) {
-            byte[] origBytes = originalResults.get(key);
-            byte[] candBytes = candidateResults.get(key);
+            TestResult origResult = originalResults.get(key);
+            TestResult candResult = candidateResults.get(key);
+
+            byte[] origBytes = origResult != null ? origResult.returnValue : null;
+            byte[] candBytes = candResult != null ? candResult.returnValue : null;
 
             if (origBytes == null && candBytes == null) {
-                // Both null (void methods) — a real comparison (void-to-void match)
-                actualComparisons++;
-                continue;
-            }
-
-            if (origBytes == null) {
+                // Both null (void methods) — check stdout still
+            } else if (origBytes == null) {
                 Object candObj = safeDeserialize(candBytes);
                 diffs.add(formatDiff("missing", key, 0, null, safeToString(candObj)));
                 actualComparisons++;
                 continue;
-            }
-
-            if (candBytes == null) {
+            } else if (candBytes == null) {
                 Object origObj = safeDeserialize(origBytes);
                 diffs.add(formatDiff("missing", key, 0, safeToString(origObj), null));
                 actualComparisons++;
                 continue;
-            }
+            } else {
+                Object origObj = safeDeserialize(origBytes);
+                Object candObj = safeDeserialize(candBytes);
 
-            Object origObj = safeDeserialize(origBytes);
-            Object candObj = safeDeserialize(candBytes);
-
-            if (isDeserializationError(origObj) || isDeserializationError(candObj)) {
-                skippedDeserializationErrors++;
-                continue;
-            }
-
-            try {
-                if (!compare(origObj, candObj)) {
-                    diffs.add(formatDiff("return_value", key, 0, safeToString(origObj), safeToString(candObj)));
+                if (isDeserializationError(origObj) || isDeserializationError(candObj)) {
+                    skippedDeserializationErrors++;
+                    continue;
                 }
-                actualComparisons++;
-            } catch (KryoPlaceholderAccessException e) {
-                skippedPlaceholders++;
-                continue;
+
+                try {
+                    if (!compare(origObj, candObj)) {
+                        diffs.add(formatDiff("return_value", key, 0, safeToString(origObj), safeToString(candObj)));
+                    }
+                } catch (KryoPlaceholderAccessException e) {
+                    skippedPlaceholders++;
+                    continue;
+                }
             }
+
+            // Compare stdout (for void methods and side-effect verification)
+            String origStdout = origResult != null ? origResult.stdout : null;
+            String candStdout = candResult != null ? candResult.stdout : null;
+            if (origStdout != null && candStdout != null && !origStdout.equals(candStdout)) {
+                diffs.add(formatDiff("stdout", key, 0, truncate(origStdout, 200), truncate(candStdout, 200)));
+            }
+            actualComparisons++;
         }
 
         boolean equivalent = diffs.isEmpty() && actualComparisons > 0;
@@ -154,31 +158,53 @@ public final class Comparator {
         return json.toString();
     }
 
-    private static Map<String, byte[]> readTestResults(String dbPath) throws Exception {
-        Map<String, byte[]> results = new LinkedHashMap<>();
+    private static class TestResult {
+        final byte[] returnValue;
+        final String stdout;
+
+        TestResult(byte[] returnValue, String stdout) {
+            this.returnValue = returnValue;
+            this.stdout = stdout;
+        }
+    }
+
+    private static Map<String, TestResult> readTestResults(String dbPath) throws Exception {
+        Map<String, TestResult> results = new LinkedHashMap<>();
         String url = "jdbc:sqlite:" + dbPath;
 
         try (Connection conn = DriverManager.getConnection(url);
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(
-                 "SELECT test_module_path, test_class_name, test_function_name, iteration_id, return_value FROM test_results WHERE loop_index = 1")) {
-            while (rs.next()) {
-                String testModulePath = rs.getString("test_module_path");
-                String testClassName = rs.getString("test_class_name");
-                String testFunctionName = rs.getString("test_function_name");
-                String iterationId = rs.getString("iteration_id");
-                byte[] returnValue = rs.getBytes("return_value");
-                // Strip the CODEFLASH_TEST_ITERATION suffix (e.g. "7_0" -> "7")
-                // Original runs with _0, candidate with _1, but the test iteration
-                // counter before the underscore is what identifies the invocation.
-                int lastUnderscore = iterationId.lastIndexOf('_');
-                if (lastUnderscore > 0) {
-                    iterationId = iterationId.substring(0, lastUnderscore);
+             Statement stmt = conn.createStatement()) {
+
+            // Check if stdout column exists (backward compatibility)
+            boolean hasStdout = false;
+            try (ResultSet columns = conn.getMetaData().getColumns(null, null, "test_results", "stdout")) {
+                hasStdout = columns.next();
+            }
+
+            String query = hasStdout
+                ? "SELECT test_module_path, test_class_name, test_function_name, iteration_id, return_value, stdout FROM test_results WHERE loop_index = 1"
+                : "SELECT test_module_path, test_class_name, test_function_name, iteration_id, return_value FROM test_results WHERE loop_index = 1";
+
+            try (ResultSet rs = stmt.executeQuery(query)) {
+                while (rs.next()) {
+                    String testModulePath = rs.getString("test_module_path");
+                    String testClassName = rs.getString("test_class_name");
+                    String testFunctionName = rs.getString("test_function_name");
+                    String iterationId = rs.getString("iteration_id");
+                    byte[] returnValue = rs.getBytes("return_value");
+                    String stdout = hasStdout ? rs.getString("stdout") : null;
+                    // Strip the CODEFLASH_TEST_ITERATION suffix (e.g. "7_0" -> "7")
+                    // Original runs with _0, candidate with _1, but the test iteration
+                    // counter before the underscore is what identifies the invocation.
+                    int lastUnderscore = iterationId.lastIndexOf('_');
+                    if (lastUnderscore > 0) {
+                        iterationId = iterationId.substring(0, lastUnderscore);
+                    }
+                    // Use module:class:function:iteration as key to uniquely identify
+                    // each invocation across different test files, classes, and methods
+                    String key = testModulePath + ":" + testClassName + ":" + testFunctionName + "::" + iterationId;
+                    results.put(key, new TestResult(returnValue, stdout));
                 }
-                // Use module:class:function:iteration as key to uniquely identify
-                // each invocation across different test files, classes, and methods
-                String key = testModulePath + ":" + testClassName + ":" + testFunctionName + "::" + iterationId;
-                results.put(key, returnValue);
             }
         }
         return results;
@@ -212,6 +238,11 @@ public final class Comparator {
         } catch (Exception e) {
             return "<toString failed: " + e.getMessage() + ">";
         }
+    }
+
+    private static String truncate(String s, int maxLen) {
+        if (s == null || s.length() <= maxLen) return s;
+        return s.substring(0, maxLen) + "...";
     }
 
     private static String formatDiff(String scope, String methodId, int callId,

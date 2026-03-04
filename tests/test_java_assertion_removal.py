@@ -52,7 +52,7 @@ void testIsValid() {
         expected = """\
 @Test
 void testIsValid() {
-    boolean _cf_result1 = validator.isValid("test");
+    Object _cf_result1 = validator.isValid("test");
 }"""
         result = transform_java_assertions(source, "isValid")
         assert result == expected
@@ -66,7 +66,7 @@ void testIsInvalid() {
         expected = """\
 @Test
 void testIsInvalid() {
-    boolean _cf_result1 = validator.isValid("");
+    Object _cf_result1 = validator.isValid("");
 }"""
         result = transform_java_assertions(source, "isValid")
         assert result == expected
@@ -1102,7 +1102,7 @@ void testVolatileRead() {
         expected = """\
 @Test
 void testVolatileRead() {
-    boolean _cf_result1 = buffer.isReady();
+    Object _cf_result1 = buffer.isReady();
 }"""
         result = transform_java_assertions(source, "isReady")
         assert result == expected
@@ -1230,7 +1230,7 @@ void testWaitNotify() {
     synchronized (monitor) {
         monitor.notify();
     }
-    boolean _cf_result1 = listener.wasNotified();
+    Object _cf_result1 = listener.wasNotified();
 }"""
         result = transform_java_assertions(source, "wasNotified")
         assert result == expected
@@ -1292,8 +1292,8 @@ void testTokenBucketAllowRequest() {
 @Test
 void testTokenBucketAllowRequest() {
     TokenBucket bucket = new TokenBucket(10, 1);
-    boolean _cf_result1 = bucket.allowRequest();
-    boolean _cf_result2 = bucket.allowRequest();
+    Object _cf_result1 = bucket.allowRequest();
+    Object _cf_result2 = bucket.allowRequest();
 }"""
         result = transform_java_assertions(source, "allowRequest")
         assert result == expected
@@ -1315,9 +1315,9 @@ void testCircularBufferOperations() {
 @Test
 void testCircularBufferOperations() {
     CircularBuffer<Integer> buffer = new CircularBuffer<>(3);
-    boolean _cf_result1 = buffer.isEmpty();
+    Object _cf_result1 = buffer.isEmpty();
     buffer.put(1);
-    boolean _cf_result2 = buffer.isEmpty();
+    Object _cf_result2 = buffer.isEmpty();
 }"""
         result = transform_java_assertions(source, "isEmpty")
         assert result == expected

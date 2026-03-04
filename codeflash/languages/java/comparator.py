@@ -248,6 +248,8 @@ def compare_test_results(
             scope = TestDiffScope.RETURN_VALUE
             if scope_str in {"exception", "missing"}:
                 scope = TestDiffScope.DID_PASS
+            elif scope_str == "stdout":
+                scope = TestDiffScope.STDOUT
 
             # Build test identifier
             method_id = diff.get("methodId", "unknown")
@@ -287,7 +289,8 @@ def compare_test_results(
                 "(total=%s, skipped_placeholders=%s, skipped_deser_errors=%s). "
                 "Treating as NOT equivalent.",
                 comparison.get("totalInvocations", 0),
-                skipped_placeholders, skipped_deser_errors,
+                skipped_placeholders,
+                skipped_deser_errors,
             )
             return False, []
 
@@ -295,7 +298,10 @@ def compare_test_results(
             "Java comparison: %s (%s invocations, %s compared, %s placeholder skips, %s deser skips, %s diffs)",
             "equivalent" if equivalent else "DIFFERENT",
             comparison.get("totalInvocations", 0),
-            actual_comparisons, skipped_placeholders, skipped_deser_errors, len(test_diffs),
+            actual_comparisons,
+            skipped_placeholders,
+            skipped_deser_errors,
+            len(test_diffs),
         )
 
         return equivalent, test_diffs

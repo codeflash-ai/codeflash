@@ -61,6 +61,7 @@ class FunctionToOptimize:
     is_method: bool = False
     language: str = "python"
     doc_start_line: Optional[int] = None
+    return_type: Optional[str] = None
 
     @property
     def top_level_parent_name(self) -> str:
