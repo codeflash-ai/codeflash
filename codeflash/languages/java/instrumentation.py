@@ -640,8 +640,8 @@ def instrument_existing_test(
 
     # Add @SuppressWarnings("CheckReturnValue") to the class declaration.
     # Projects using Error Prone (e.g. Guava) enforce CheckReturnValue as a compiler error.
-    # Our instrumented tests intentionally discard return values in performance-only mode
-    # (after assertion stripping), which would fail compilation without this suppression.
+    # Applied in both modes: performance mode strips assertions (creating discarded return values),
+    # and behavior mode adds wrapper calls that may also discard return values.
     modified_source = _add_suppress_warnings_annotation(modified_source, new_class_name)
 
     # Add timing instrumentation to test methods
@@ -841,7 +841,9 @@ def _add_suppress_warnings_annotation(source: str, class_name: str) -> str:
     Our instrumented tests intentionally discard return values after assertion stripping,
     which would fail compilation without this suppression.
     """
-    class_decl_pattern = re.compile(rf"^((?:public\s+)?class\s+{re.escape(class_name)}\b)", re.MULTILINE)
+    class_decl_pattern = re.compile(
+        rf"^((?:(?:public|protected|final|abstract)\s+)*class\s+{re.escape(class_name)}\b)", re.MULTILINE
+    )
     match = class_decl_pattern.search(source)
     if not match:
         return source
