@@ -2372,9 +2372,14 @@ class JavaScriptSupport:
             candidate_index=candidate_index,
         )
 
-    # JavaScript/TypeScript benchmarking uses high max_loops like Python (100,000)
-    # The actual loop count is limited by target_duration_seconds, not max_loops
-    JS_BENCHMARKING_MAX_LOOPS = 100_000
+    # Max iterations per capturePerf call site. Each iteration writes a timing
+    # marker to stdout (~200 bytes).  With N perf test cases this produces
+    # N * max_loops markers flowing through Vitest's fork IPC pipe + Python
+    # subprocess pipe.  100k caused 20-200 MB of stdout for micro-functions,
+    # creating pipe backpressure that inflated wall-clock time past the
+    # subprocess timeout.  5000 keeps stdout under 10 MB while still providing
+    # enough data points for stable timing measurements.
+    JS_BENCHMARKING_MAX_LOOPS = 5_000
 
     def run_benchmarking_tests(
         self,
@@ -2384,7 +2389,7 @@ class JavaScriptSupport:
         timeout: int | None = None,
         project_root: Path | None = None,
         min_loops: int = 5,
-        max_loops: int = 100_000,
+        max_loops: int = 5_000,
         target_duration_seconds: float = 10.0,
         test_framework: str | None = None,
     ) -> tuple[Path, Any]:

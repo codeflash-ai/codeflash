@@ -616,8 +616,10 @@ def run_vitest_benchmarking_tests(
         vitest_env["CODEFLASH_TEST_MODULE"] = test_module_path
         logger.debug(f"[VITEST-BENCH] Set CODEFLASH_TEST_MODULE={test_module_path}")
 
-    # Total timeout for the entire benchmark run
-    total_timeout = max(120, (target_duration_ms // 1000) + 60, timeout or 120)
+    # Total timeout: allow headroom for Vitest startup (TS compilation, module resolution)
+    # which can take 30-60s in monorepos.  Behavioral tests use 600s; benchmarking
+    # should be at least as generous.
+    total_timeout = max(120, (target_duration_ms // 1000) + 120, (timeout or 60) * 5)
 
     logger.debug(f"[VITEST-BENCH] Running Vitest benchmarking tests: {' '.join(vitest_cmd)}")
     logger.debug(

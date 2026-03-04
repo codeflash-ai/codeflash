@@ -1025,9 +1025,9 @@ def run_jest_benchmarking_tests(
     if "--max-old-space-size" not in existing_node_options:
         jest_env["NODE_OPTIONS"] = f"{existing_node_options} --max-old-space-size=4096".strip()
 
-    # Total timeout for the entire benchmark run (longer than single-loop timeout)
-    # Account for startup overhead + target duration + buffer
-    total_timeout = max(120, (target_duration_ms // 1000) + 60, timeout or 120)
+    # Total timeout: allow headroom for Jest startup and TS compilation.
+    # Behavioral tests use 600s; benchmarking should be comparably generous.
+    total_timeout = max(120, (target_duration_ms // 1000) + 120, (timeout or 60) * 5)
 
     logger.debug(f"Running Jest benchmarking tests with in-process loop runner: {' '.join(jest_cmd)}")
     logger.debug(
