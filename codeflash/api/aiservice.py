@@ -178,8 +178,8 @@ class AiServiceClient:
 
         # Add language version (canonical for all languages)
         payload["language_version"] = language_version
-        # Backward compat: backend still expects python_version
-        payload["python_version"] = language_version if is_python() else platform.python_version()
+        # Backward compat: Python backend still expects python_version
+        payload["python_version"] = language_version if is_python() else None
 
         if not is_python():
             if module_system:
@@ -257,7 +257,6 @@ class AiServiceClient:
             "source_code": source_code,
             "trace_id": trace_id,
             "dependency_code": "",  # dummy value to please the api endpoint
-            "language_version": platform.python_version(),
             "python_version": platform.python_version(),  # backward compat
             "current_username": get_last_commit_author_if_pr_exists(None),
             "repo_owner": git_repo_owner,
@@ -333,7 +332,7 @@ class AiServiceClient:
             "trace_id": trace_id,
             "language": language,
             "language_version": language_version,
-            "python_version": language_version if is_python() else platform.python_version(),  # backward compat
+            "python_version": language_version if is_python() else None,  # backward compat
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
             "call_sequence": self.get_next_sequence(),
@@ -429,8 +428,8 @@ class AiServiceClient:
 
             # Add language version (canonical for all languages)
             item["language_version"] = opt.language_version
-            # Backward compat: backend still expects python_version
-            item["python_version"] = opt.language_version if is_python() else platform.python_version()
+            # Backward compat: Python backend still expects python_version
+            item["python_version"] = opt.language_version if is_python() else None
 
             # Add multi-file context if provided
             if opt.additional_context_files:
@@ -638,7 +637,6 @@ class AiServiceClient:
             "diffs": diffs,
             "speedups": speedups,
             "optimization_ids": optimization_ids,
-            "language_version": platform.python_version(),
             "python_version": platform.python_version(),  # backward compat
             "function_references": function_references,
         }
@@ -781,8 +779,8 @@ class AiServiceClient:
 
         # Add language version (canonical for all languages)
         payload["language_version"] = language_version
-        # Backward compat: backend still expects python_version
-        payload["python_version"] = language_version if is_python() else platform.python_version()
+        # Backward compat: Python backend still expects python_version
+        payload["python_version"] = language_version if is_python() else None
 
         if not is_python():
             if module_system:
