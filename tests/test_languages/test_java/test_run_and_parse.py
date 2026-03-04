@@ -284,7 +284,7 @@ class TestJavaRunAndParseBehavior:
         assert result.runtime is not None
         assert result.runtime > 0
         assert result.id.test_function_name == "testAdd"
-        assert result.id.test_class_name == "AdderTest"
+        assert result.id.test_class_name == "AdderTest__perfinstrumented"
         assert result.id.function_getting_tested == "add"
 
     def test_behavior_multiple_test_methods(self, java_project):

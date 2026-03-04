@@ -184,13 +184,18 @@ class JavaAssertTransformer:
     """
 
     def __init__(
-        self, function_name: str, qualified_name: str | None = None, analyzer: JavaAnalyzer | None = None
+        self,
+        function_name: str,
+        qualified_name: str | None = None,
+        analyzer: JavaAnalyzer | None = None,
+        mode: str = "capture",
     ) -> None:
         self.analyzer = analyzer or get_java_analyzer()
         self.func_name = function_name
         self.qualified_name = qualified_name or function_name
         self.invocation_counter = 0
         self._detected_framework: str | None = None
+        self.mode = mode  # "capture" (default, instrumentation) or "strip" (clean display)
 
         # Precompile the assignment-detection regex to avoid recompiling on each call.
         self._assign_re = re.compile(r"(\w+(?:<[^>]+>)?)\s+(\w+)\s*=\s*$")
@@ -1057,6 +1062,9 @@ class JavaAssertTransformer:
         if not assertion.target_calls:
             return ""
 
+        if self.mode == "strip":
+            return self._generate_strip_replacement(assertion)
+
         # Infer the return type from assertion context to avoid Object→primitive cast errors
         return_type = self._infer_return_type(assertion)
 
@@ -1088,6 +1096,20 @@ class JavaAssertTransformer:
 
         return "\n".join(replacements)
 
+    def _generate_strip_replacement(self, assertion: AssertionMatch) -> str:
+        """Generate clean replacement for strip mode: bare function calls, no capture variables."""
+        replacements: list[str] = []
+        leading_ws = assertion.leading_whitespace
+        base_indent = leading_ws.lstrip("\n\r")
+
+        calls = assertion.target_calls
+        if calls:
+            replacements.append(f"{leading_ws}{calls[0].full_call};")
+            for call in calls[1:]:
+                replacements.append(f"{base_indent}{call.full_call};")
+
+        return "\n".join(replacements)
+
     def _generate_exception_replacement(self, assertion: AssertionMatch) -> str:
         """Generate replacement for assertThrows/assertDoesNotThrow.
 
@@ -1102,12 +1124,18 @@ class JavaAssertTransformer:
             IllegalArgumentException ex = null;
             try { code(); } catch (IllegalArgumentException _cf_caught1) { ex = _cf_caught1; } catch (Exception _cf_ignored1) {}
 
+        In strip mode, exception assertions emit just the lambda body as a bare call
+        (or try/catch without capture variables).
         """
+        ws = assertion.leading_whitespace
+
+        if self.mode == "strip":
+            return self._generate_strip_exception_replacement(assertion)
+
         # Increment invocation counter once for this exception handling
         inv = self.invocation_counter + 1
         self.invocation_counter = inv
         counter = inv
-        ws = assertion.leading_whitespace
         base_indent = ws.lstrip("\n\r")
 
         # Extract code to run from lambda body or target calls
@@ -1144,6 +1172,24 @@ class JavaAssertTransformer:
 
         # Fallback: comment out the assertion
         return f"{ws}// Removed assertThrows: could not extract callable"
+
+    def _generate_strip_exception_replacement(self, assertion: AssertionMatch) -> str:
+        """Generate clean replacement for exception assertions in strip mode."""
+        ws = assertion.leading_whitespace
+
+        # Extract code to run from lambda body or target calls
+        if assertion.lambda_body:
+            code_to_run = assertion.lambda_body.strip()
+            if code_to_run and code_to_run[-1] != ";":
+                code_to_run += ";"
+            exception_type = assertion.exception_class or "Exception"
+            return f"{ws}try {{ {code_to_run} }} catch ({exception_type} ignored) {{}}"
+
+        if assertion.target_calls:
+            call = assertion.target_calls[0]
+            return f"{ws}try {{ {call.full_call}; }} catch (Exception ignored) {{}}"
+
+        return ""
 
     def _extract_first_arg(self, args_str: str) -> str | None:
         """Extract the first top-level argument from args_str.
@@ -1213,6 +1259,27 @@ def transform_java_assertions(source: str, function_name: str, qualified_name: s
 
     """
     transformer = JavaAssertTransformer(function_name=function_name, qualified_name=qualified_name)
+    return transformer.transform(source)
+
+
+def strip_java_assertions(source: str, function_name: str, qualified_name: str | None = None) -> str:
+    """Strip assertions from Java test code for clean display in PRs.
+
+    Unlike transform_java_assertions (capture mode), this produces clean output:
+    - Assertions with target function calls become bare function calls (no capture variables)
+    - Assertions without target function calls are removed entirely
+    - Exception assertions become simple try/catch without numbered variables
+
+    Args:
+        source: The Java test source code.
+        function_name: Name of the function being tested.
+        qualified_name: Optional fully qualified name of the function.
+
+    Returns:
+        Clean source code suitable for display in PRs.
+
+    """
+    transformer = JavaAssertTransformer(function_name=function_name, qualified_name=qualified_name, mode="strip")
     return transformer.transform(source)
 
 

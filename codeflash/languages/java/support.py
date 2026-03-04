@@ -130,12 +130,16 @@ class JavaSupport(LanguageSupport):
         project_module_system: str | None,
     ) -> tuple[str, str, str]:
         from codeflash.languages.java.instrumentation import instrument_generated_java_test
+        from codeflash.languages.java.remove_asserts import strip_java_assertions
 
         func_name = function_to_optimize.function_name
         qualified_name = function_to_optimize.qualified_name
 
+        # Strip assertions first so both instrumentation modes and display share the same base
+        stripped_source = strip_java_assertions(generated_test_source, func_name, qualified_name)
+
         instrumented_behavior_test_source = instrument_generated_java_test(
-            test_code=generated_test_source,
+            test_code=stripped_source,
             function_name=func_name,
             qualified_name=qualified_name,
             mode="behavior",
@@ -143,7 +147,7 @@ class JavaSupport(LanguageSupport):
         )
 
         instrumented_perf_test_source = instrument_generated_java_test(
-            test_code=generated_test_source,
+            test_code=stripped_source,
             function_name=func_name,
             qualified_name=qualified_name,
             mode="performance",
@@ -151,7 +155,8 @@ class JavaSupport(LanguageSupport):
         )
 
         logger.debug("Instrumented Java tests locally for %s", func_name)
-        return generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source
+        # Return stripped source as the clean display version
+        return stripped_source, instrumented_behavior_test_source, instrumented_perf_test_source
 
     def add_global_declarations(self, optimized_code: str, original_source: str, module_abspath: Path) -> str:
         return original_source

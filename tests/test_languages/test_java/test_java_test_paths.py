@@ -100,8 +100,10 @@ class TestFixJavaTestPathsIntegration:
 
         # Bind the actual methods
         mock_optimizer._get_java_sources_root = lambda: JavaFunctionOptimizer._get_java_sources_root(mock_optimizer)
-        mock_optimizer._fix_java_test_paths = lambda behavior_source, perf_source, used_paths: (
-            JavaFunctionOptimizer._fix_java_test_paths(mock_optimizer, behavior_source, perf_source, used_paths)
+        mock_optimizer._fix_java_test_paths = lambda behavior_source, perf_source, used_paths, display_source="": (
+            JavaFunctionOptimizer._fix_java_test_paths(
+                mock_optimizer, behavior_source, perf_source, used_paths, display_source
+            )
         )
 
         return mock_optimizer
@@ -130,7 +132,7 @@ public class UnpackerTest__perfonlyinstrumented {
     public void testUnpack() {}
 }
 """
-        behavior_path, perf_path, _, _ = optimizer._fix_java_test_paths(behavior_source, perf_source, set())
+        behavior_path, perf_path, _, _, _ = optimizer._fix_java_test_paths(behavior_source, perf_source, set())
 
         # The path should be test/src/com/aerospike/client/util/UnpackerTest__perfinstrumented.java
         # NOT test/src/com/aerospike/test/com/aerospike/client/util/...
@@ -171,7 +173,7 @@ public class CalculatorTest__perfonlyinstrumented {
     public void testAdd() {}
 }
 """
-        behavior_path, perf_path, _, _ = optimizer._fix_java_test_paths(behavior_source, perf_source, set())
+        behavior_path, perf_path, _, _, _ = optimizer._fix_java_test_paths(behavior_source, perf_source, set())
 
         # Should be src/test/java/com/example/CalculatorTest__perfinstrumented.java
         assert behavior_path == tests_root / "com" / "example" / "CalculatorTest__perfinstrumented.java"

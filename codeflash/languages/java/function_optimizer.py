@@ -186,8 +186,8 @@ class JavaFunctionOptimizer(FunctionOptimizer):
         return tests_root
 
     def _fix_java_test_paths(
-        self, behavior_source: str, perf_source: str, used_paths: set[Path]
-    ) -> tuple[Path, Path, str, str]:
+        self, behavior_source: str, perf_source: str, used_paths: set[Path], display_source: str = ""
+    ) -> tuple[Path, Path, str, str, str]:
         """Fix Java test file paths to match package structure.
 
         Java requires test files to be in directories matching their package.
@@ -199,9 +199,10 @@ class JavaFunctionOptimizer(FunctionOptimizer):
             behavior_source: Source code of the behavior test.
             perf_source: Source code of the performance test.
             used_paths: Set of already used behavior file paths.
+            display_source: Clean display version of the test (no instrumentation).
 
         Returns:
-            Tuple of (behavior_path, perf_path, modified_behavior_source, modified_perf_source)
+            Tuple of (behavior_path, perf_path, modified_behavior_source, modified_perf_source, modified_display_source)
             with correct package structure and unique class names.
 
         """
@@ -231,6 +232,8 @@ class JavaFunctionOptimizer(FunctionOptimizer):
                             new_decl = f"package {new_package};"
                             behavior_source = behavior_source.replace(old_decl, new_decl, 1)
                             perf_source = perf_source.replace(old_decl, new_decl, 1)
+                            if display_source:
+                                display_source = display_source.replace(old_decl, new_decl, 1)
                             package_name = new_package
                             logger.debug(f"[JPMS] Remapped package: {old_decl} -> {new_decl}")
 
@@ -253,6 +256,7 @@ class JavaFunctionOptimizer(FunctionOptimizer):
 
         modified_behavior_source = behavior_source
         modified_perf_source = perf_source
+        modified_display_source = display_source
         if behavior_path in used_paths:
             index = 2
             while True:
@@ -267,20 +271,18 @@ class JavaFunctionOptimizer(FunctionOptimizer):
                 if new_behavior_path not in used_paths:
                     behavior_path = new_behavior_path
                     perf_path = new_perf_path
+                    # Rename ALL references to the class (not just declaration)
                     modified_behavior_source = re.sub(
-                        rf"^((?:public\s+)?class\s+){re.escape(behavior_class)}(\b)",
-                        rf"\g<1>{new_behavior_class}\g<2>",
-                        behavior_source,
-                        count=1,
-                        flags=re.MULTILINE,
+                        rf"\b{re.escape(behavior_class)}\b", new_behavior_class, behavior_source
                     )
-                    modified_perf_source = re.sub(
-                        rf"^((?:public\s+)?class\s+){re.escape(perf_class)}(\b)",
-                        rf"\g<1>{new_perf_class}\g<2>",
-                        perf_source,
-                        count=1,
-                        flags=re.MULTILINE,
-                    )
+                    modified_perf_source = re.sub(rf"\b{re.escape(perf_class)}\b", new_perf_class, perf_source)
+                    # Display source has the original (non-instrumented) class name
+                    if display_source:
+                        original_class = behavior_class.replace("__perfinstrumented", "")
+                        new_original_class = f"{original_class}_{index}"
+                        modified_display_source = re.sub(
+                            rf"\b{re.escape(original_class)}\b", new_original_class, display_source
+                        )
                     logger.debug(f"[JAVA] Renamed duplicate test class from {behavior_class} to {new_behavior_class}")
                     break
                 index += 1
@@ -289,7 +291,7 @@ class JavaFunctionOptimizer(FunctionOptimizer):
         perf_path.parent.mkdir(parents=True, exist_ok=True)
 
         logger.debug(f"[JAVA] Fixed paths: behavior={behavior_path}, perf={perf_path}")
-        return behavior_path, perf_path, modified_behavior_source, modified_perf_source
+        return behavior_path, perf_path, modified_behavior_source, modified_perf_source, modified_display_source
 
     def fixup_generated_tests(self, generated_tests: GeneratedTestsList) -> GeneratedTestsList:
         from codeflash.models.models import GeneratedTests, GeneratedTestsList
@@ -297,13 +299,16 @@ class JavaFunctionOptimizer(FunctionOptimizer):
         used_paths: set[Path] = set()
         fixed_tests: list[GeneratedTests] = []
         for test in generated_tests.generated_tests:
-            behavior_path, perf_path, behavior_source, perf_source = self._fix_java_test_paths(
-                test.instrumented_behavior_test_source, test.instrumented_perf_test_source, used_paths
+            behavior_path, perf_path, behavior_source, perf_source, display_source = self._fix_java_test_paths(
+                test.instrumented_behavior_test_source,
+                test.instrumented_perf_test_source,
+                used_paths,
+                test.generated_original_test_source,
             )
             used_paths.add(behavior_path)
             fixed_tests.append(
                 GeneratedTests(
-                    generated_original_test_source=test.generated_original_test_source,
+                    generated_original_test_source=display_source,
                     instrumented_behavior_test_source=behavior_source,
                     instrumented_perf_test_source=perf_source,
                     behavior_file_path=behavior_path,
