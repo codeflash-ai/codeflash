@@ -131,9 +131,12 @@ def generate_tests(
             func_name = function_to_optimize.function_name
             qualified_name = function_to_optimize.qualified_name
 
+            # Strip first so both instrumentation modes and display share the same base
+            stripped_source = strip_java_assertions(generated_test_source, func_name, qualified_name)
+
             # Instrument for behavior verification (renames class)
             instrumented_behavior_test_source = instrument_generated_java_test(
-                test_code=generated_test_source,
+                test_code=stripped_source,
                 function_name=func_name,
                 qualified_name=qualified_name,
                 mode="behavior",
@@ -142,15 +145,15 @@ def generate_tests(
 
             # Instrument for performance measurement (adds timing markers)
             instrumented_perf_test_source = instrument_generated_java_test(
-                test_code=generated_test_source,
+                test_code=stripped_source,
                 function_name=func_name,
                 qualified_name=qualified_name,
                 mode="performance",
                 function_to_optimize=function_to_optimize,
             )
 
-            # Compute clean display version: bare function calls, no capture variables
-            generated_test_source = strip_java_assertions(generated_test_source, func_name, qualified_name)
+            # Use stripped source as the clean display version
+            generated_test_source = stripped_source
 
             logger.debug(f"Instrumented Java tests locally for {func_name}")
         else:

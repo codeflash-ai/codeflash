@@ -867,10 +867,11 @@ def add_runtime_comments(
     optimized_runtimes: dict[str, int],
     analyzer: JavaAnalyzer | None = None,
 ) -> str:
-    """Add runtime performance comments to test source code.
+    """Add inline runtime performance comments next to function calls.
 
-    Adds comments showing the original vs optimized runtime for each
-    function call (e.g., "// 1.5ms -> 0.3ms (80% faster)").
+    Runtime keys have format "ClassName.methodName#L{line}" where the line number
+    refers to the 1-indexed line in the stripped source. For each matching line,
+    an inline comment like "// 2.89ms -> 26.2us (10,948% faster)" is appended.
 
     Args:
         test_source: Test source code to annotate.
@@ -879,40 +880,49 @@ def add_runtime_comments(
         analyzer: Optional JavaAnalyzer instance.
 
     Returns:
-        Test source code with runtime comments added.
+        Test source code with inline runtime comments added.
 
     """
+    from codeflash.code_utils.time_utils import format_runtime_comment
+
     if not original_runtimes or not optimized_runtimes:
         return test_source
 
-    # For now, add a summary comment at the top
-    summary_lines = ["// Performance comparison:"]
+    # Build a map of line_number -> (original_ns, optimized_ns) from runtime keys.
+    # Keys look like "ClassName.methodName#L15" — extract the line number after "#L".
+    line_runtimes: dict[int, tuple[int, int]] = {}
+    for key in original_runtimes:
+        if "#L" not in key:
+            continue
+        line_str = key.split("#L", 1)[1]
+        try:
+            line_num = int(line_str)
+        except ValueError:
+            continue
+        orig_ns = original_runtimes[key]
+        opt_ns = optimized_runtimes.get(key, orig_ns)
+        if orig_ns > 0:
+            if line_num in line_runtimes:
+                # Sum runtimes for multiple invocations on the same line
+                prev_orig, prev_opt = line_runtimes[line_num]
+                line_runtimes[line_num] = (prev_orig + orig_ns, prev_opt + opt_ns)
+            else:
+                line_runtimes[line_num] = (orig_ns, opt_ns)
 
-    for inv_id in original_runtimes:
-        original_ns = original_runtimes[inv_id]
-        optimized_ns = optimized_runtimes.get(inv_id, original_ns)
+    if not line_runtimes:
+        return test_source
 
-        original_ms = original_ns / 1_000_000
-        optimized_ms = optimized_ns / 1_000_000
-
-        if original_ns > 0:
-            speedup = ((original_ns - optimized_ns) / original_ns) * 100
-            summary_lines.append(f"// {inv_id}: {original_ms:.3f}ms -> {optimized_ms:.3f}ms ({speedup:.1f}% faster)")
-
-    # Insert after imports
+    # Annotate lines (1-indexed)
     lines = test_source.splitlines(keepends=True)
-    insert_idx = 0
-
-    for i, line in enumerate(lines):
-        if line.strip().startswith("import "):
-            insert_idx = i + 1
-        elif line.strip() and not line.strip().startswith("//") and not line.strip().startswith("package"):
-            if insert_idx == 0:
-                insert_idx = i
-            break
-
-    # Insert summary
-    summary = "\n".join(summary_lines) + "\n\n"
-    lines.insert(insert_idx, summary)
+    for line_num, (orig_ns, opt_ns) in line_runtimes.items():
+        idx = line_num - 1  # convert to 0-indexed
+        if idx < 0 or idx >= len(lines):
+            continue
+        comment = format_runtime_comment(orig_ns, opt_ns, comment_prefix="//")
+        line = lines[idx]
+        # Strip trailing newline, append comment, restore newline
+        stripped = line.rstrip("\n\r")
+        trailing = line[len(stripped):]
+        lines[idx] = f"{stripped} {comment}{trailing}"
 
     return "".join(lines)

@@ -196,7 +196,8 @@ _TS_BODY_PREFIX_BYTES = _TS_BODY_PREFIX.encode("utf8")
 
 
 def _generate_sqlite_write_code(
-    iter_id: int, call_counter: int, indent: str, class_name: str, func_name: str, test_method_name: str
+    iter_id: int, call_counter: int, indent: str, class_name: str, func_name: str, test_method_name: str,
+    invocation_id: str = "",
 ) -> list[str]:
     """Generate SQLite write code for a single function call.
 
@@ -207,17 +208,20 @@ def _generate_sqlite_write_code(
         class_name: Test class name
         func_name: Function being tested
         test_method_name: Test method name
+        invocation_id: The invocation ID string (e.g. "L15_1") to write into the DB and markers.
+                        Falls back to str(call_counter) if empty.
 
     Returns:
         List of code lines for SQLite write in finally block.
 
     """
+    inv_id_str = invocation_id or str(call_counter)
     inner_indent = indent + "    "
     return [
         f"{indent}}} finally {{",
         f"{inner_indent}long _cf_end{iter_id}_{call_counter}_finally = System.nanoTime();",
         f"{inner_indent}long _cf_dur{iter_id}_{call_counter} = (_cf_end{iter_id}_{call_counter} != -1 ? _cf_end{iter_id}_{call_counter} : _cf_end{iter_id}_{call_counter}_finally) - _cf_start{iter_id}_{call_counter};",
-        f'{inner_indent}System.out.println("!######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + "." + _cf_test{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + "{call_counter}" + "######!");',
+        f'{inner_indent}System.out.println("!######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + "." + _cf_test{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + "{inv_id_str}" + "######!");',
         f"{inner_indent}// Write to SQLite if output file is set",
         f"{inner_indent}if (_cf_outputFile{iter_id} != null && !_cf_outputFile{iter_id}.isEmpty()) {{",
         f"{inner_indent}    try {{",
@@ -236,7 +240,7 @@ def _generate_sqlite_write_code(
         f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(3, _cf_test{iter_id});",
         f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(4, _cf_fn{iter_id});",
         f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setInt(5, _cf_loop{iter_id});",
-        f'{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(6, "{call_counter}");',
+        f'{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(6, "{inv_id_str}");',
         f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setLong(7, _cf_dur{iter_id}_{call_counter});",
         f"{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setBytes(8, _cf_serializedResult{iter_id}_{call_counter});",
         f'{inner_indent}                _cf_pstmt{iter_id}_{call_counter}.setString(9, "function_call");',
@@ -258,6 +262,7 @@ def wrap_target_calls_with_treesitter(
     precise_call_timing: bool = False,
     class_name: str = "",
     test_method_name: str = "",
+    body_start_line: int = 0,
 ) -> tuple[list[str], int]:
     """Replace target method calls in body_lines with capture + serialize using tree-sitter.
 
@@ -325,6 +330,10 @@ def wrap_target_calls_with_treesitter(
 
         for call in line_calls:
             call_counter += 1
+            # Compute absolute line number (1-indexed) for the invocation ID
+            call_absolute_line = body_start_line + line_idx + 1
+            inv_id = f"L{call_absolute_line}_{call_counter}"
+
             var_name = f"_cf_result{iter_id}_{call_counter}"
             cast_type = _infer_array_cast_type(body_line)
             var_with_cast = f"({cast_type}){var_name}" if cast_type else var_name
@@ -366,7 +375,7 @@ def wrap_target_calls_with_treesitter(
                         f"byte[] _cf_serializedResult{iter_id}_{call_counter} = null;",
                     ]
                     # Start marker
-                    start_marker = f'System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + "." + _cf_test{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":{call_counter}" + "######$!");'
+                    start_marker = f'System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + "." + _cf_test{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":{inv_id}" + "######$!");'
                     # Try block with capture (use assignment, not declaration, since variable is declared above)
                     try_block = [
                         "try {",
@@ -377,7 +386,8 @@ def wrap_target_calls_with_treesitter(
                     ]
                     # Finally block with SQLite write
                     finally_block = _generate_sqlite_write_code(
-                        iter_id, call_counter, "", class_name, func_name, test_method_name
+                        iter_id, call_counter, "", class_name, func_name, test_method_name,
+                        invocation_id=inv_id,
                     )
 
                     replacement_lines = [*var_decls, start_marker, *try_block, *finally_block]
@@ -408,7 +418,7 @@ def wrap_target_calls_with_treesitter(
                     wrapped.append(f"{line_indent_str}byte[] _cf_serializedResult{iter_id}_{call_counter} = null;")
                     # Start marker
                     wrapped.append(
-                        f'{line_indent_str}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + "." + _cf_test{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":{call_counter}" + "######$!");'
+                        f'{line_indent_str}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + "." + _cf_test{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":{inv_id}" + "######$!");'
                     )
                     # Try block (use assignment, not declaration, since variable is declared above)
                     wrapped.append(f"{line_indent_str}try {{")
@@ -418,7 +428,8 @@ def wrap_target_calls_with_treesitter(
                     wrapped.append(f"{line_indent_str}    {serialize_stmt}")
                     # Finally block with SQLite write
                     finally_lines = _generate_sqlite_write_code(
-                        iter_id, call_counter, line_indent_str, class_name, func_name, test_method_name
+                        iter_id, call_counter, line_indent_str, class_name, func_name, test_method_name,
+                        invocation_id=inv_id,
                     )
                     wrapped.extend(finally_lines)
                 else:
@@ -639,16 +650,20 @@ def instrument_existing_test(
     modified_source = re.sub(rf"\b{re.escape(original_class_name)}\b", new_class_name, source)
 
     # Add timing instrumentation to test methods
-    # Use original class name (without suffix) in timing markers for consistency with Python
+    # Use the new (instrumented) class name in markers so each test file has a unique
+    # _cf_mod/_cf_cls. This is critical for disambiguating existing vs generated tests
+    # that share the same original class name (e.g., both have "FibonacciTest").
+    # For existing tests, the __perfinstrumented suffix is later replaced with
+    # __existing_perfinstrumented, making markers unique per test file.
     if mode == "performance":
         modified_source = _add_timing_instrumentation(
             modified_source,
-            original_class_name,  # Use original name in markers, not the renamed class
+            new_class_name,
             func_name,
         )
     else:
         # Behavior mode: add timing instrumentation that also writes to SQLite
-        modified_source = _add_behavior_instrumentation(modified_source, original_class_name, func_name)
+        modified_source = _add_behavior_instrumentation(modified_source, new_class_name, func_name)
 
     logger.debug("Java %s testing for %s: renamed class %s -> %s", mode, func_name, original_class_name, new_class_name)
     # Why return True here?
@@ -770,6 +785,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
             # Collect method body until we find matching closing brace
             brace_depth = 1
             body_lines = []
+            body_first_line_index = i  # 0-based line index of first body line in source
 
             while i < len(lines) and brace_depth > 0:
                 body_line = lines[i]
@@ -796,6 +812,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 precise_call_timing=True,
                 class_name=class_name,
                 test_method_name=test_method_name,
+                body_start_line=body_first_line_index,
             )
 
             # Add behavior instrumentation setup code (shared variables for all calls in the method)
@@ -984,7 +1001,8 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         return hoisted, assignment
 
     def build_instrumented_body(
-        body_text: str, next_wrapper_id: int, base_indent: str, test_method_name: str = "unknown"
+        body_text: str, next_wrapper_id: int, base_indent: str, test_method_name: str = "unknown",
+        body_start_line: int = 0,
     ) -> tuple[str, int]:
         body_bytes = body_text.encode("utf8")
         wrapper_bytes = _TS_BODY_PREFIX_BYTES + body_bytes + _TS_BODY_SUFFIX.encode("utf8")
@@ -1012,7 +1030,11 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         if not calls:
             return body_text, next_wrapper_id
 
-        statement_ranges: list[tuple[int, int, Any]] = []  # (char_start, char_end, ast_node)
+        # _TS_BODY_PREFIX is 1 line, so wrapper line 1 = body line 0
+        wrapper_prefix_lines = 1
+
+        # Map each call to its absolute line number and the containing statement range
+        statement_ranges: list[tuple[int, int, Any, int]] = []  # (char_start, char_end, ast_node, call_absolute_line)
         for call in sorted(calls, key=lambda n: n.start_byte):
             stmt_node = find_top_level_statement(call, wrapped_body)
             if stmt_node is None:
@@ -1027,27 +1049,31 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             # slice the str directly with byte offsets.
             stmt_start = len(body_bytes[:stmt_byte_start].decode("utf8"))
             stmt_end = len(body_bytes[:stmt_byte_end].decode("utf8"))
-            statement_ranges.append((stmt_start, stmt_end, stmt_node))
+            # Compute absolute line: call's line in wrapper minus prefix lines, plus body_start_line, 1-indexed
+            call_line_in_wrapper = call.start_point[0]
+            call_absolute_line = body_start_line + (call_line_in_wrapper - wrapper_prefix_lines) + 1
+            statement_ranges.append((stmt_start, stmt_end, stmt_node, call_absolute_line))
 
         # Deduplicate repeated calls within the same top-level statement.
-        unique_ranges: list[tuple[int, int, Any]] = []
+        unique_ranges: list[tuple[int, int, Any, int]] = []
         seen_offsets: set[tuple[int, int]] = set()
-        for stmt_start, stmt_end, stmt_node in statement_ranges:
+        for stmt_start, stmt_end, stmt_node, call_abs_line in statement_ranges:
             key = (stmt_start, stmt_end)
             if key in seen_offsets:
                 continue
             seen_offsets.add(key)
-            unique_ranges.append((stmt_start, stmt_end, stmt_node))
+            unique_ranges.append((stmt_start, stmt_end, stmt_node, call_abs_line))
         if not unique_ranges:
             return body_text, next_wrapper_id
 
         if len(unique_ranges) == 1:
-            stmt_start, stmt_end, stmt_ast_node = unique_ranges[0]
+            stmt_start, stmt_end, stmt_ast_node, call_abs_line = unique_ranges[0]
             prefix = body_text[:stmt_start]
             target_stmt = body_text[stmt_start:stmt_end]
             suffix = body_text[stmt_end:]
 
             current_id = next_wrapper_id + 1
+            inv_id = f"L{call_abs_line}_{current_id}"
             setup_lines = [
                 f"{indent}// Codeflash timing instrumentation with inner loop for JIT warmup",
                 f'{indent}int _cf_outerLoop{current_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
@@ -1073,7 +1099,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             timing_lines = [
                 f"{indent}for (int _cf_i{current_id} = 0; _cf_i{current_id} < _cf_innerIterations{current_id}; _cf_i{current_id}++) {{",
                 f"{inner_indent}int _cf_loopId{current_id} = _cf_outerLoop{current_id} * _cf_maxInnerIterations{current_id} + _cf_i{current_id};",
-                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":" + "{current_id}" + "######$!");',
+                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":" + "{inv_id}" + "######$!");',
                 f"{inner_indent}long _cf_end{current_id} = -1;",
                 f"{inner_indent}long _cf_start{current_id} = 0;",
                 f"{inner_indent}try {{",
@@ -1083,7 +1109,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 f"{inner_indent}}} finally {{",
                 f"{inner_body_indent}long _cf_end{current_id}_finally = System.nanoTime();",
                 f"{inner_body_indent}long _cf_dur{current_id} = (_cf_end{current_id} != -1 ? _cf_end{current_id} : _cf_end{current_id}_finally) - _cf_start{current_id};",
-                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":" + "{current_id}" + ":" + _cf_dur{current_id} + "######!");',
+                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":" + "{inv_id}" + ":" + _cf_dur{current_id} + "######!");',
                 f"{inner_indent}}}",
                 f"{indent}}}",
             ]
@@ -1108,13 +1134,14 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         cursor = 0
         wrapper_id = next_wrapper_id
 
-        for stmt_start, stmt_end, stmt_ast_node in unique_ranges:
+        for stmt_start, stmt_end, stmt_ast_node, call_abs_line in unique_ranges:
             prefix = body_text[cursor:stmt_start]
             target_stmt = body_text[stmt_start:stmt_end]
             multi_result_parts.append(prefix.rstrip(" \t"))
 
             wrapper_id += 1
             current_id = wrapper_id
+            inv_id = f"L{call_abs_line}_{current_id}"
 
             setup_lines = [
                 f"{indent}// Codeflash timing instrumentation with inner loop for JIT warmup",
@@ -1140,7 +1167,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             timing_lines = [
                 f"{indent}for (int _cf_i{current_id} = 0; _cf_i{current_id} < _cf_innerIterations{current_id}; _cf_i{current_id}++) {{",
                 f"{inner_indent}int _cf_loopId{current_id} = _cf_outerLoop{current_id} * _cf_maxInnerIterations{current_id} + _cf_i{current_id};",
-                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":{current_id}" + "######$!");',
+                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":{inv_id}" + "######$!");',
                 f"{inner_indent}long _cf_end{current_id} = -1;",
                 f"{inner_indent}long _cf_start{current_id} = 0;",
                 f"{inner_indent}try {{",
@@ -1150,7 +1177,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 f"{inner_indent}}} finally {{",
                 f"{inner_body_indent}long _cf_end{current_id}_finally = System.nanoTime();",
                 f"{inner_body_indent}long _cf_dur{current_id} = (_cf_end{current_id} != -1 ? _cf_end{current_id} : _cf_end{current_id}_finally) - _cf_start{current_id};",
-                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":{current_id}" + ":" + _cf_dur{current_id} + "######!");',
+                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":{inv_id}" + ":" + _cf_dur{current_id} + "######!");',
                 f"{inner_indent}}}",
                 f"{indent}}}",
             ]
@@ -1178,7 +1205,13 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         name_node = method_node.child_by_field_name("name")
         test_method_name = analyzer.get_node_text(name_node, source_bytes) if name_node else "unknown"
         next_wrapper_id = max(wrapper_id, method_ordinal - 1)
-        new_body, new_wrapper_id = build_instrumented_body(body_text, next_wrapper_id, base_indent, test_method_name)
+        # body_node.start_point[0] is the 0-based line of the opening brace.
+        # The body_text starts after the '{', so its first content line is on that same line or the next.
+        # We pass the 0-based line index so build_instrumented_body can compute 1-indexed absolute lines.
+        body_start_line_0based = body_node.start_point[0]
+        new_body, new_wrapper_id = build_instrumented_body(
+            body_text, next_wrapper_id, base_indent, test_method_name, body_start_line=body_start_line_0based
+        )
         # Reserve one id slot per @Test method even when no instrumentation is added,
         # matching existing deterministic numbering expected by tests.
         wrapper_id = method_ordinal if new_wrapper_id == next_wrapper_id else new_wrapper_id
@@ -1287,9 +1320,7 @@ def instrument_generated_java_test(
     if not test_code or not test_code.strip():
         return test_code
 
-    from codeflash.languages.java.remove_asserts import transform_java_assertions
-
-    test_code = transform_java_assertions(test_code, function_name, qualified_name)
+    # Input is pre-stripped source (assertions already removed by caller)
 
     # Extract class name from the test code
     # Use pattern that starts at beginning of line to avoid matching words in comments
@@ -1309,7 +1340,7 @@ def instrument_generated_java_test(
 
         modified_code = _add_timing_instrumentation(
             modified_code,
-            original_class_name,  # Use original name in markers, not the renamed class
+            new_class_name,
             function_name,
         )
     elif mode == "behavior":
