@@ -1983,7 +1983,7 @@ class FunctionOptimizer:
                 failed_fns = failed_by_file.get(gt.behavior_file_path, [])
                 tests_for_review.append(
                     {
-                        "test_source": gt.generated_original_test_source,
+                        "test_source": gt.raw_generated_test_source or gt.generated_original_test_source,
                         "test_index": i,
                         "failed_test_functions": failed_fns,
                     }
