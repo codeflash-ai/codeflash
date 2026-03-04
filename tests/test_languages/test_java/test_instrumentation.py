@@ -130,6 +130,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 
+@SuppressWarnings("CheckReturnValue")
 public class CalculatorTest__perfinstrumented {
     @Test
     public void testAdd() {
@@ -247,6 +248,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 
+@SuppressWarnings("CheckReturnValue")
 public class FibonacciTest__perfinstrumented {
     @Test
     void testNegativeInput_ThrowsIllegalArgumentException() {
@@ -379,6 +381,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 
+@SuppressWarnings("CheckReturnValue")
 public class FibonacciTest__perfinstrumented {
     @Test
     void testNegativeInput_ThrowsIllegalArgumentException() {
@@ -498,6 +501,7 @@ public class CalculatorTest {
 
         expected = """import org.junit.jupiter.api.Test;
 
+@SuppressWarnings("CheckReturnValue")
 public class CalculatorTest__perfonlyinstrumented {
     @Test
     public void testAdd() {
@@ -567,6 +571,7 @@ public class MathTest {
 
         expected = """import org.junit.jupiter.api.Test;
 
+@SuppressWarnings("CheckReturnValue")
 public class MathTest__perfonlyinstrumented {
     @Test
     public void testAdd() {
@@ -669,6 +674,7 @@ public class ServiceTest {
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Disabled;
 
+@SuppressWarnings("CheckReturnValue")
 public class ServiceTest__perfonlyinstrumented {
     @Test
     @DisplayName("Test service call")
@@ -1264,6 +1270,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 
+@SuppressWarnings("CheckReturnValue")
 public class CalculatorTest__perfinstrumented {
     @Test
     public void testAdd() {
@@ -1364,6 +1371,7 @@ public class GeneratedTest {
 
         expected = """import org.junit.jupiter.api.Test;
 
+@SuppressWarnings("CheckReturnValue")
 public class GeneratedTest__perfonlyinstrumented {
     @Test
     public void testMethod() {
@@ -1541,6 +1549,7 @@ public class BraceTest {
 
         expected = """import org.junit.jupiter.api.Test;
 
+@SuppressWarnings("CheckReturnValue")
 public class BraceTest__perfonlyinstrumented {
     @Test
     public void testOne() {
@@ -1624,6 +1633,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.util.List;
 import java.util.ArrayList;
 
+@SuppressWarnings("CheckReturnValue")
 public class ImportTest__perfonlyinstrumented {
     @Test
     public void testCollections() {
@@ -1691,6 +1701,7 @@ public class EmptyTest {
 
         expected = """import org.junit.jupiter.api.Test;
 
+@SuppressWarnings("CheckReturnValue")
 public class EmptyTest__perfonlyinstrumented {
     @Test
     public void testEmpty() {
@@ -1736,6 +1747,7 @@ public class NestedTest {
 
         expected = """import org.junit.jupiter.api.Test;
 
+@SuppressWarnings("CheckReturnValue")
 public class NestedTest__perfonlyinstrumented {
     @Test
     public void testNested() {
@@ -1815,6 +1827,7 @@ public class InnerClassTest {
         expected = """import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Nested;
 
+@SuppressWarnings("CheckReturnValue")
 public class InnerClassTest__perfonlyinstrumented {
     @Test
     public void testOuter() {
@@ -1879,6 +1892,7 @@ public class Utf8Test {
             "import org.junit.jupiter.api.Test;\n"
             "import static org.junit.jupiter.api.Assertions.*;\n"
             "\n"
+            '@SuppressWarnings("CheckReturnValue")\n'
             "public class Utf8Test__perfonlyinstrumented {\n"
             "    @Test\n"
             "    public void testWithCjk() {\n"
@@ -1892,23 +1906,23 @@ public class Utf8Test {
             '        String _cf_fn1 = "compute";\n'
             "        \n"
             '        String label = "\u30c6\u30b9\u30c8\u540d\u524d";\n'
-            '        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {\n'
-            '            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;\n'
+            "        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {\n"
+            "            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;\n"
             '            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "1" + "######$!");\n'
-            '            long _cf_end1 = -1;\n'
-            '            long _cf_start1 = 0;\n'
-            '            try {\n'
-            '                _cf_start1 = System.nanoTime();\n'
-            '                assertEquals(42, compute(21));\n'
-            '                _cf_end1 = System.nanoTime();\n'
-            '            } finally {\n'
-            '                long _cf_end1_finally = System.nanoTime();\n'
-            '                long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;\n'
+            "            long _cf_end1 = -1;\n"
+            "            long _cf_start1 = 0;\n"
+            "            try {\n"
+            "                _cf_start1 = System.nanoTime();\n"
+            "                assertEquals(42, compute(21));\n"
+            "                _cf_end1 = System.nanoTime();\n"
+            "            } finally {\n"
+            "                long _cf_end1_finally = System.nanoTime();\n"
+            "                long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;\n"
             '                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "1" + ":" + _cf_dur1 + "######!");\n'
-            '            }\n'
-            '        }\n'
-            '    }\n'
-            '}\n'
+            "            }\n"
+            "        }\n"
+            "    }\n"
+            "}\n"
         )
         assert success is True
         assert result == expected
@@ -1950,6 +1964,7 @@ public class AccentTest {
             "import org.junit.jupiter.api.Test;\n"
             "import static org.junit.jupiter.api.Assertions.*;\n"
             "\n"
+            '@SuppressWarnings("CheckReturnValue")\n'
             "public class AccentTest__perfonlyinstrumented {\n"
             "    @Test\n"
             "    public void testWithAccent() {\n"
@@ -1964,23 +1979,23 @@ public class AccentTest {
             "        \n"
             "        // R\u00e9sum\u00e9 processing test with accented chars\n"
             '        String name = "caf\u00e9";\n'
-            '        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {\n'
-            '            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;\n'
+            "        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {\n"
+            "            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;\n"
             '            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "1" + "######$!");\n'
-            '            long _cf_end1 = -1;\n'
-            '            long _cf_start1 = 0;\n'
-            '            try {\n'
-            '                _cf_start1 = System.nanoTime();\n'
-            '                assertEquals(10, calculate(5));\n'
-            '                _cf_end1 = System.nanoTime();\n'
-            '            } finally {\n'
-            '                long _cf_end1_finally = System.nanoTime();\n'
-            '                long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;\n'
+            "            long _cf_end1 = -1;\n"
+            "            long _cf_start1 = 0;\n"
+            "            try {\n"
+            "                _cf_start1 = System.nanoTime();\n"
+            "                assertEquals(10, calculate(5));\n"
+            "                _cf_end1 = System.nanoTime();\n"
+            "            } finally {\n"
+            "                long _cf_end1_finally = System.nanoTime();\n"
+            "                long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;\n"
             '                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "1" + ":" + _cf_dur1 + "######!");\n'
-            '            }\n'
-            '        }\n'
-            '    }\n'
-            '}\n'
+            "            }\n"
+            "        }\n"
+            "    }\n"
+            "}\n"
         )
         assert result == expected
 
@@ -2261,6 +2276,7 @@ public class MathUtilsTest {
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
+@SuppressWarnings("CheckReturnValue")
 public class MathUtilsTest__perfonlyinstrumented {
     @Test
     public void testMultiply() {
@@ -2654,6 +2670,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 
+@SuppressWarnings("CheckReturnValue")
 public class CounterTest__perfinstrumented {
     @Test
     public void testIncrement() {
@@ -2898,6 +2915,7 @@ public class FibonacciTest {
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
+@SuppressWarnings("CheckReturnValue")
 public class FibonacciTest__perfonlyinstrumented {
     @Test
     public void testFib() {
@@ -2978,7 +2996,9 @@ public class FibonacciTest__perfonlyinstrumented {
 
         # Verify invocation IDs are constant (wrapper ID) across all inner iterations
         invocation_ids = [m[4] for m in start_matches]
-        assert all(id == invocation_ids[0] for id in invocation_ids), f"Expected constant invocation IDs, got: {invocation_ids}"
+        assert all(id == invocation_ids[0] for id in invocation_ids), (
+            f"Expected constant invocation IDs, got: {invocation_ids}"
+        )
 
         # Verify loop IDs are 2 and 3 (outerLoop=1, maxInner=2, inner=0,1 → 1*2+0=2, 1*2+1=3)
         loop_ids = [m[3] for m in start_matches]
@@ -3173,6 +3193,7 @@ public class SpinWaitTest {
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
+@SuppressWarnings("CheckReturnValue")
 public class SpinWaitTest__perfonlyinstrumented {
     @Test
     public void testSpinShort() {

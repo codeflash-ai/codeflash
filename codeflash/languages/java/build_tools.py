@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET
@@ -645,6 +646,31 @@ def add_codeflash_dependency_to_pom(pom_path: Path) -> bool:
 
         # Check if already present
         if "codeflash-runtime" in content:
+            # If a previous run left a system-scope dependency, replace it with test scope.
+            # System-scope dependencies cause Maven warnings and are rejected by some projects.
+            if "<scope>system</scope>" in content:
+                # Replace ONLY the codeflash-runtime dependency block that has system scope.
+                # We find each <dependency>...</dependency> block individually and only replace
+                # the one containing both "codeflash-runtime" and "<scope>system</scope>".
+                # The previous regex used [\s\S]*? lookaheads that could match across blocks,
+                # accidentally replacing every dependency in the file.
+                def replace_system_dep(match: re.Match) -> str:
+                    block = match.group(0)
+                    if "codeflash-runtime" in block and "<scope>system</scope>" in block:
+                        return (
+                            "<dependency>\n"
+                            "            <groupId>com.codeflash</groupId>\n"
+                            "            <artifactId>codeflash-runtime</artifactId>\n"
+                            "            <version>1.0.0</version>\n"
+                            "            <scope>test</scope>\n"
+                            "        </dependency>"
+                        )
+                    return block
+
+                content = re.sub(r"<dependency>[\s\S]*?</dependency>", replace_system_dep, content)
+                pom_path.write_text(content, encoding="utf-8")
+                logger.info("Replaced system-scope codeflash-runtime dependency with test scope")
+                return True
             logger.info("codeflash-runtime dependency already present in pom.xml")
             return True
 

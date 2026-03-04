@@ -43,6 +43,10 @@ logger = logging.getLogger(__name__)
 # so we avoid calling `mvn dependency:build-classpath` (~2-3s) repeatedly.
 _classpath_cache: dict[tuple[Path, str | None], str] = {}
 
+# Cache for multi-module dependency installs — keyed on (maven_root, test_module).
+# After pre-installing deps to .m2 once, subsequent Maven invocations can skip -am.
+_multimodule_deps_installed: set[tuple[Path, str]] = set()
+
 # Regex pattern for valid Java class names (package.ClassName format)
 # Allows: letters, digits, underscores, dots, and dollar signs (inner classes)
 _VALID_JAVA_CLASS_NAME = re.compile(r"^[a-zA-Z_$][a-zA-Z0-9_$.]*$")
@@ -248,6 +252,68 @@ def _ensure_codeflash_runtime(maven_root: Path, test_module: str | None) -> bool
         logger.warning("pom.xml not found at %s, cannot add codeflash-runtime dependency", pom_path)
         return False
 
+    return True
+
+
+def ensure_multi_module_deps_installed(maven_root: Path, test_module: str | None, env: dict[str, str]) -> bool:
+    """Pre-install multi-module dependencies to the local Maven repository.
+
+    In multi-module Maven projects (like Guava), Maven compiler plugin 3.15.0's
+    JDK-8318913 workaround patches module-info.class timestamps after compilation.
+    When a subsequent Maven invocation uses -am (also-make), the compiler detects
+    "changed source code" and recompiles dependency modules — which fails because
+    module-path resolution doesn't work in a partial reactor rebuild.
+
+    This function runs `mvn install -DskipTests -pl <module> -am` once to put all
+    dependency JARs into ~/.m2.  After that, test-running commands can use
+    `-pl <module>` without `-am`, resolving deps from .m2 instead.
+
+    Skipped for single-module projects (test_module is None) and cached so it only
+    runs once per (maven_root, test_module) pair within a session.
+    """
+    if not test_module:
+        return True
+
+    cache_key = (maven_root, test_module)
+    if cache_key in _multimodule_deps_installed:
+        logger.debug("Multi-module deps already installed for %s:%s, skipping", maven_root, test_module)
+        return True
+
+    mvn = find_maven_executable()
+    if not mvn:
+        logger.error("Maven not found — cannot pre-install multi-module dependencies")
+        return False
+
+    cmd = [
+        mvn,
+        "install",
+        "-DskipTests",
+        "-B",
+        "-pl",
+        test_module,
+        "-am",
+    ]
+    cmd.extend(_MAVEN_VALIDATION_SKIP_FLAGS)
+
+    logger.info("Pre-installing multi-module dependencies: %s (module: %s)", maven_root, test_module)
+    logger.debug("Running: %s", " ".join(cmd))
+
+    try:
+        result = _run_cmd_kill_pg_on_timeout(cmd, cwd=maven_root, env=env, timeout=300)
+        if result.returncode != 0:
+            logger.error(
+                "Failed to pre-install multi-module deps (exit %d).\nstdout: %s\nstderr: %s",
+                result.returncode,
+                result.stdout[-2000:] if result.stdout else "",
+                result.stderr[-2000:] if result.stderr else "",
+            )
+            return False
+    except Exception:
+        logger.exception("Exception during multi-module dependency install")
+        return False
+
+    _multimodule_deps_installed.add(cache_key)
+    logger.info("Multi-module dependencies installed successfully for %s:%s", maven_root, test_module)
     return True
 
 
@@ -485,6 +551,11 @@ def run_behavioral_tests(
     # Ensure codeflash-runtime is installed and added as dependency before compilation
     _ensure_codeflash_runtime(maven_root, test_module)
 
+    # Pre-install multi-module deps to .m2 so subsequent Maven runs don't need -am
+    base_env = os.environ.copy()
+    base_env.update(test_env)
+    ensure_multi_module_deps_installed(maven_root, test_module, base_env)
+
     # Create SQLite database path for behavior capture - use standard path that parse_test_results expects
     sqlite_db_path = get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite"))
 
@@ -604,7 +675,7 @@ def _compile_tests(
     cmd.extend(_MAVEN_VALIDATION_SKIP_FLAGS)
 
     if test_module:
-        cmd.extend(["-pl", test_module, "-am"])
+        cmd.extend(["-pl", test_module])
 
     logger.debug("Compiling tests: %s in %s", " ".join(cmd), project_root)
 
@@ -1189,6 +1260,11 @@ def run_benchmarking_tests(
     # Ensure codeflash-runtime is installed and added as dependency before compilation
     _ensure_codeflash_runtime(maven_root, test_module)
 
+    # Pre-install multi-module deps to .m2 so subsequent Maven runs don't need -am
+    base_env = os.environ.copy()
+    base_env.update(test_env)
+    ensure_multi_module_deps_installed(maven_root, test_module, base_env)
+
     # Get test class names
     test_classes = _get_test_class_names(test_paths, mode="performance")
     if not test_classes:
@@ -1572,16 +1648,15 @@ def _run_maven_tests(
     if enable_coverage:
         cmd.append("-Dmaven.test.failure.ignore=true")
 
-    # For multi-module projects, specify which module to test
+    # For multi-module projects, specify which module to test.
+    # Dependencies are pre-installed to .m2 by ensure_multi_module_deps_installed(),
+    # so we use -pl without -am to avoid recompiling dependency modules (which fails
+    # on projects like Guava due to Maven compiler plugin's JDK-8318913 workaround).
     if test_module:
-        # -am = also make dependencies
-        # -DfailIfNoTests=false allows dependency modules without tests to pass
-        # -DskipTests=false overrides any skipTests=true in pom.xml
         cmd.extend(
             [
                 "-pl",
                 test_module,
-                "-am",
                 "-DfailIfNoTests=false",
                 "-Dsurefire.failIfNoSpecifiedTests=false",
                 "-DskipTests=false",
@@ -2021,6 +2096,11 @@ def run_line_profile_tests(
 
     # Ensure codeflash-runtime is installed and added as dependency before compilation
     _ensure_codeflash_runtime(maven_root, test_module)
+
+    # Pre-install multi-module deps to .m2 so subsequent Maven runs don't need -am
+    base_env = os.environ.copy()
+    base_env.update(test_env)
+    ensure_multi_module_deps_installed(maven_root, test_module, base_env)
 
     # Set up environment with profiling mode
     run_env = os.environ.copy()

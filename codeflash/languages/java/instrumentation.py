@@ -722,6 +722,12 @@ def instrument_existing_test(
     return_type = getattr(function_to_optimize, "return_type", None)
     is_void = return_type == "void"
 
+    # Add @SuppressWarnings("CheckReturnValue") to the class declaration.
+    # Projects using Error Prone (e.g. Guava) enforce CheckReturnValue as a compiler error.
+    # Applied in both modes: performance mode strips assertions (creating discarded return values),
+    # and behavior mode adds wrapper calls that may also discard return values.
+    modified_source = _add_suppress_warnings_annotation(modified_source, new_class_name)
+
     # Add timing instrumentation to test methods
     # Use original class name (without suffix) in timing markers for consistency with Python
     if mode == "performance":
@@ -916,6 +922,23 @@ def _add_behavior_instrumentation(
             i += 1
 
     return "\n".join(result)
+
+
+def _add_suppress_warnings_annotation(source: str, class_name: str) -> str:
+    """Add @SuppressWarnings("CheckReturnValue") before the class declaration.
+
+    Projects using Error Prone (e.g. Guava) enforce CheckReturnValue as a compiler error.
+    Our instrumented tests intentionally discard return values after assertion stripping,
+    which would fail compilation without this suppression.
+    """
+    class_decl_pattern = re.compile(
+        rf"^((?:(?:public|protected|final|abstract)\s+)*class\s+{re.escape(class_name)}\b)", re.MULTILINE
+    )
+    match = class_decl_pattern.search(source)
+    if not match:
+        return source
+    insert_pos = match.start()
+    return source[:insert_pos] + '@SuppressWarnings("CheckReturnValue")\n' + source[insert_pos:]
 
 
 def _add_timing_instrumentation(source: str, class_name: str, func_name: str) -> str:
@@ -1397,6 +1420,9 @@ def instrument_generated_java_test(
         # Rename all references to the original class name in the source.
         # This includes the class declaration, return types, constructor calls, etc.
         modified_code = re.sub(rf"\b{re.escape(original_class_name)}\b", new_class_name, test_code)
+
+        # Suppress Error Prone's CheckReturnValue for generated performance tests
+        modified_code = _add_suppress_warnings_annotation(modified_code, new_class_name)
 
         modified_code = _add_timing_instrumentation(
             modified_code,
