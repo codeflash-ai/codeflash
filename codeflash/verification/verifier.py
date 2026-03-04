@@ -52,6 +52,10 @@ def generate_tests(
         # Ensure path starts with ./ or ../ for JavaScript/TypeScript imports
         if not rel_import_path.startswith("../"):
             rel_import_path = f"./{rel_import_path}"
+        # ESM requires explicit file extensions in import specifiers.
+        # TypeScript ESM also uses .js extensions (TS resolves .js → .ts).
+        if project_module_system == "esm":
+            rel_import_path += ".js"
         # Keep as string since Path() normalizes away the ./ prefix
         module_path = rel_import_path
 

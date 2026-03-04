@@ -1,27 +1,38 @@
 ---
-title: "Codeflash is an AI performance optimizer for Python code"
+title: "Codeflash is an AI performance optimizer for your code"
 icon: "rocket"
 sidebarTitle: "Overview"
-keywords: ["python", "performance", "optimization", "AI", "code analysis", "benchmarking"]
+keywords: ["python", "javascript", "typescript", "performance", "optimization", "AI", "code analysis", "benchmarking"]
 ---
 
-Codeflash speeds up any Python code by figuring out the best way to rewrite it while verifying that the behavior of the code is unchanged, and verifying real speed
-gains through performance benchmarking.
+Codeflash speeds up your code by figuring out the best way to rewrite it while verifying that the behavior is unchanged, and verifying real speed
+gains through performance benchmarking. It supports **Python**, **JavaScript**, and **TypeScript**.
 
 The optimizations Codeflash finds are generally better algorithms, opportunities to remove wasteful compute, better logic, utilizing caching and utilization of more efficient library methods. Codeflash
 does not modify the system architecture of your code, but it tries to find the most efficient implementation of your current architecture.
+
+### Get Started
+
+<CardGroup cols={2}>
+  <Card title="Python Setup" icon="python" href="/getting-started/local-installation">
+    Install via pip, uv, or poetry
+  </Card>
+  <Card title="JavaScript / TypeScript Setup" icon="js" href="/getting-started/javascript-installation">
+    Install via npm, yarn, pnpm, or bun
+  </Card>
+</CardGroup>
 
 ### How to use Codeflash
 
 <CardGroup cols={1}>
   <Card title="Optimize a Single Function" icon="bullseye" href="/optimizing-with-codeflash/one-function">
-    Target and optimize individual Python functions for maximum performance gains.
+    Target and optimize individual functions for maximum performance gains.
     ```bash
-    codeflash --file path.py --function my_function
+    codeflash --file path/to/file --function my_function
     ```
   </Card>
 
-    <Card title="Optimize Pull Requests" icon="code-pull-request" href="/optimizing-with-codeflash/codeflash-github-actions">
+  <Card title="Optimize Pull Requests" icon="code-pull-request" href="/optimizing-with-codeflash/codeflash-github-actions">
     Automatically find optimizations for Pull Requests with GitHub Actions integration.
     ```bash
     codeflash init-actions
@@ -29,7 +40,7 @@ does not modify the system architecture of your code, but it tries to find the m
   </Card>
 
   <Card title="Optimize Workflows with Tracing" icon="route" href="/optimizing-with-codeflash/trace-and-optimize">
-    End-to-end optimization of entire Python workflows with execution tracing.
+    End-to-end optimization of entire workflows with execution tracing.
     ```bash
     codeflash optimize myscript.py
     ```
@@ -41,7 +52,6 @@ does not modify the system architecture of your code, but it tries to find the m
     codeflash --all
     ```
   </Card>
-
 
 </CardGroup>
 

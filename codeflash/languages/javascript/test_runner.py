@@ -42,6 +42,12 @@ def clear_created_config_files() -> None:
     _created_config_files.clear()
 
 
+# The bundled JUnit reporter path, resolved as "codeflash/jest-reporter"
+# This is shipped inside the codeflash npm runtime package, so it's always
+# available when the codeflash runtime is installed (which is already required).
+CODEFLASH_JEST_REPORTER = "codeflash/jest-reporter"
+
+
 def _detect_bundler_module_resolution(project_root: Path) -> bool:
     """Detect if the project uses moduleResolution: 'bundler' in tsconfig.
 
@@ -698,7 +704,7 @@ def run_jest_behavioral_tests(
         "npx",
         "jest",
         "--reporters=default",
-        "--reporters=jest-junit",
+        f"--reporters={CODEFLASH_JEST_REPORTER}",
         "--runInBand",  # Run tests serially for consistent timing
         "--forceExit",
     ]
@@ -732,7 +738,7 @@ def run_jest_behavioral_tests(
     jest_env["JEST_JUNIT_OUTPUT_FILE"] = str(result_file_path)
     jest_env["JEST_JUNIT_OUTPUT_DIR"] = str(result_file_path.parent)
     jest_env["JEST_JUNIT_OUTPUT_NAME"] = result_file_path.name
-    # Configure jest-junit to use filepath-based classnames for proper parsing
+    # Configure codeflash jest-reporter to use filepath-based classnames for proper parsing
     jest_env["JEST_JUNIT_CLASSNAME"] = "{filepath}"
     jest_env["JEST_JUNIT_SUITE_NAME"] = "{filepath}"
     jest_env["JEST_JUNIT_ADD_FILE_ATTRIBUTE"] = "true"
@@ -797,7 +803,7 @@ def run_jest_behavioral_tests(
     except FileNotFoundError:
         logger.error("Jest not found. Make sure Jest is installed (npm install jest)")
         result = subprocess.CompletedProcess(
-            args=jest_cmd, returncode=-1, stdout="", stderr="Jest not found. Run: npm install jest jest-junit"
+            args=jest_cmd, returncode=-1, stdout="", stderr="Jest not found. Run: npm install jest"
         )
     finally:
         wall_clock_ns = time.perf_counter_ns() - start_time_ns
@@ -947,7 +953,7 @@ def run_jest_benchmarking_tests(
         "npx",
         "jest",
         "--reporters=default",
-        "--reporters=jest-junit",
+        f"--reporters={CODEFLASH_JEST_REPORTER}",
         "--runInBand",  # Ensure serial execution
         "--forceExit",
         "--runner=codeflash/loop-runner",  # Use custom loop runner for in-process looping
@@ -1019,9 +1025,9 @@ def run_jest_benchmarking_tests(
     if "--max-old-space-size" not in existing_node_options:
         jest_env["NODE_OPTIONS"] = f"{existing_node_options} --max-old-space-size=4096".strip()
 
-    # Total timeout for the entire benchmark run (longer than single-loop timeout)
-    # Account for startup overhead + target duration + buffer
-    total_timeout = max(120, (target_duration_ms // 1000) + 60, timeout or 120)
+    # Subprocess timeout: target_duration + 120s headroom for Jest startup
+    # and TS compilation.  capturePerf's time budget governs actual looping.
+    total_timeout = max(120, (target_duration_ms // 1000) + 120)
 
     logger.debug(f"Running Jest benchmarking tests with in-process loop runner: {' '.join(jest_cmd)}")
     logger.debug(
@@ -1113,7 +1119,7 @@ def run_jest_line_profile_tests(
         "npx",
         "jest",
         "--reporters=default",
-        "--reporters=jest-junit",
+        f"--reporters={CODEFLASH_JEST_REPORTER}",
         "--runInBand",  # Run tests serially for consistent line profiling
         "--forceExit",
     ]

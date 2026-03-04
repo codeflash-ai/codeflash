@@ -784,7 +784,13 @@ class InvocationId:
             test_src = test_path.read_text(encoding="utf-8")
             module_node = cst.parse_module(test_src)
         except Exception:
-            return None
+            # libcst can't parse non-Python files (JS/TS) — return a descriptive string
+            # so the code repair API receives a non-None test_src_code.
+            return (
+                f"// Test: {self.test_function_name}\n"
+                f"// File: {test_path.name}\n"
+                f"// Testing function: {self.function_getting_tested}"
+            )
 
         if self.test_class_name:
             for stmt in module_node.body:

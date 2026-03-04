@@ -1,0 +1,220 @@
+---
+title: "JavaScript / TypeScript Configuration"
+description: "Configure Codeflash for JavaScript and TypeScript projects using package.json"
+icon: "js"
+sidebarTitle: "JavaScript / TypeScript"
+keywords:
+  [
+    "configuration",
+    "package.json",
+    "javascript",
+    "typescript",
+    "jest",
+    "vitest",
+    "prettier",
+    "eslint",
+    "monorepo",
+  ]
+---
+
+# JavaScript / TypeScript Configuration
+
+Codeflash stores its configuration in `package.json` under the `"codeflash"` key.
+
+## Full Reference
+
+```json
+{
+  "name": "my-project",
+  "codeflash": {
+    "moduleRoot": "src",
+    "testsRoot": "tests",
+    "testRunner": "jest",
+    "formatterCmds": ["prettier --write $file"],
+    "ignorePaths": ["src/generated/"],
+    "disableTelemetry": false,
+    "gitRemote": "origin"
+  }
+}
+```
+
+All file paths are relative to the directory containing `package.json`.
+
+<Info>
+Codeflash auto-detects most settings from your project structure. Running `codeflash init` will set up the correct config — manual configuration is usually not needed.
+</Info>
+
+## Auto-Detection
+
+When you run `codeflash init`, Codeflash inspects your project and auto-detects:
+
+| Setting | Detection logic |
+|---------|----------------|
+| `moduleRoot` | Looks for `src/`, `lib/`, or the main source directory |
+| `testsRoot` | Looks for `tests/`, `test/`, `__tests__/`, or files matching `*.test.js` / `*.spec.js` |
+| `testRunner` | Checks `devDependencies` for `jest` or `vitest` |
+| `formatterCmds` | Checks for `prettier`, `eslint`, or `biome` in dependencies and config files |
+| Module system | Reads `"type"` field in `package.json` (ESM vs CommonJS) |
+| TypeScript | Detects `tsconfig.json` |
+
+You can always override any auto-detected value in the `"codeflash"` section.
+
+## Required Options
+
+- `moduleRoot`: The source directory to optimize. Only code under this directory will be optimized.
+- `testsRoot`: The directory where your tests are located. Codeflash discovers existing tests and generates new ones here.
+
+## Optional Options
+
+- `testRunner`: Test framework to use. Auto-detected from your dependencies. Supported values: `"jest"`, `"vitest"`.
+- `formatterCmds`: Formatter commands. `$file` refers to the file being optimized. Disable with `["disabled"]`.
+  - **Prettier**: `["prettier --write $file"]`
+  - **ESLint + Prettier**: `["eslint --fix $file", "prettier --write $file"]`
+  - **Biome**: `["biome check --write $file"]`
+- `ignorePaths`: Paths within `moduleRoot` to skip during optimization.
+- `disableTelemetry`: Disable anonymized telemetry. Defaults to `false`.
+- `gitRemote`: Git remote for pull requests. Defaults to `"origin"`.
+
+## Module Systems
+
+Codeflash handles both ES Modules and CommonJS automatically. It detects the module system from your `package.json`:
+
+```json
+{
+  "type": "module"
+}
+```
+
+- `"type": "module"` — Files are treated as ESM (`import`/`export`)
+- `"type": "commonjs"` or omitted — Files are treated as CommonJS (`require`/`module.exports`)
+
+No additional configuration is needed. Codeflash respects `.mjs`/`.cjs` extensions as well.
+
+## TypeScript
+
+TypeScript projects work out of the box. Codeflash detects TypeScript from the presence of `tsconfig.json` and handles `.ts`/`.tsx` files automatically.
+
+No separate configuration is needed for TypeScript vs JavaScript.
+
+## Test Framework Support
+
+| Framework | Auto-detected from | Notes |
+|-----------|-------------------|-------|
+| **Jest** | `jest` in dependencies | Default for most projects |
+| **Vitest** | `vitest` in dependencies | ESM-native support |
+
+<Info>
+**Functions must be exported** to be optimizable. Codeflash uses tree-sitter AST analysis to discover functions and check export status. Supported export patterns:
+
+- `export function foo() {}`
+- `export const foo = () => {}`
+- `export default function foo() {}`
+- `const foo = () => {}; export { foo };`
+- `module.exports = { foo }`
+- `const utils = { foo() {} }; module.exports = utils;`
+</Info>
+
+## Monorepo Configuration
+
+For monorepo projects (Yarn workspaces, pnpm workspaces, Lerna, Nx, Turborepo), configure each package individually:
+
+```text
+my-monorepo/
+|- packages/
+|  |- core/
+|  |  |- src/
+|  |  |- tests/
+|  |  |- package.json    <-- "codeflash" config here
+|  |- utils/
+|  |  |- src/
+|  |  |- __tests__/
+|  |  |- package.json    <-- "codeflash" config here
+|- package.json           <-- workspace root (no codeflash config)
+```
+
+Run `codeflash init` from within each package:
+
+```bash
+cd packages/core
+npx codeflash init
+```
+
+<Warning>
+**Always run codeflash from the package directory**, not the monorepo root. Codeflash needs to find the `package.json` with the `"codeflash"` config in the current working directory.
+</Warning>
+
+### Hoisted dependencies
+
+If your monorepo hoists `node_modules` to the root (Yarn Berry with `nodeLinker: node-modules`, pnpm with `shamefully-hoist`), Codeflash resolves modules using Node.js standard resolution. This works automatically.
+
+For **pnpm strict mode** (non-hoisted), ensure `codeflash` is a direct dependency of the package:
+
+```bash
+pnpm add --filter @my-org/core --save-dev codeflash
+```
+
+## Example
+
+### Standard project
+
+```text
+my-app/
+|- src/
+|  |- utils.js
+|  |- index.js
+|- tests/
+|  |- utils.test.js
+|- package.json
+```
+
+```json
+{
+  "name": "my-app",
+  "codeflash": {
+    "moduleRoot": "src",
+    "testsRoot": "tests"
+  }
+}
+```
+
+### Project with co-located tests
+
+```text
+my-app/
+|- src/
+|  |- utils.js
+|  |- utils.test.js
+|  |- index.js
+|- package.json
+```
+
+```json
+{
+  "name": "my-app",
+  "codeflash": {
+    "moduleRoot": "src",
+    "testsRoot": "src"
+  }
+}
+```
+
+### CommonJS library with no separate test directory
+
+```text
+my-lib/
+|- lib/
+|  |- helpers.js
+|- test/
+|  |- helpers.spec.js
+|- package.json
+```
+
+```json
+{
+  "name": "my-lib",
+  "codeflash": {
+    "moduleRoot": "lib",
+    "testsRoot": "test"
+  }
+}
+```
