@@ -156,7 +156,6 @@ class InitDecorator(ast.NodeTransformer):
                     item.decorator_list.insert(0, decorator)
                     self.inserted_decorator = True
 
-
         if not has_init:
             # Skip dataclasses — their __init__ is auto-generated at class creation time and isn't in the AST.
             # The synthetic __init__ with super().__init__(*args, **kwargs) overrides it and fails because
