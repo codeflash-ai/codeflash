@@ -252,7 +252,6 @@ def _is_js_ts_function_exists_but_not_exported(file_path: Path, function_name: s
     return False
 
 
-
 def _find_all_functions_via_language_support(file_path: Path) -> dict[Path, list[FunctionToOptimize]]:
     """Find all optimizable functions using the language support abstraction.
 

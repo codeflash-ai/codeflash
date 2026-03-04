@@ -337,7 +337,7 @@ class Tracer:
         else:
             resolved = os.path.realpath(co_filename)
             # startswith is cheaper than Path.is_relative_to, os.path.exists avoids Path construction
-            is_valid = resolved.startswith(self.project_root_str) and os.path.exists(resolved)
+            is_valid = resolved.startswith(self.project_root_str) and os.path.exists(resolved)  # noqa: PTH110
             self.path_cache[co_filename] = (resolved, is_valid)
             if not is_valid:
                 return
@@ -435,16 +435,7 @@ class Tracer:
 
             cur.execute(
                 "INSERT INTO function_calls VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    event,
-                    code.co_name,
-                    class_name,
-                    file_name,
-                    frame.f_lineno,
-                    frame.f_back.__hash__(),
-                    t_ns,
-                    local_vars,
-                ),
+                (event, code.co_name, class_name, file_name, frame.f_lineno, frame.f_back.__hash__(), t_ns, local_vars),
             )
             self.trace_count += 1
             self.next_insert -= 1
