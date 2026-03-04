@@ -539,9 +539,6 @@ class FunctionOptimizer:
     ) -> tuple[TestResults | dict, CoverageData | None]:
         return TestResults(test_results=[]), None
 
-    def fixup_generated_tests(self, generated_tests: GeneratedTestsList) -> GeneratedTestsList:
-        return generated_tests
-
     # --- End hooks ---
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
@@ -643,8 +640,6 @@ class FunctionOptimizer:
             project_root=self.project_root,
             source_file_path=self.function_to_optimize.file_path,
         )
-
-        generated_tests = self.fixup_generated_tests(generated_tests)
 
         logger.debug(f"[PIPELINE] Processing {count_tests} generated tests")
         for i, generated_test in enumerate(generated_tests.generated_tests):
@@ -1601,27 +1596,24 @@ class FunctionOptimizer:
 
         for (test_file, test_type), tests_in_file_list in test_file_invocation_positions.items():
             path_obj_test_file = Path(test_file)
-            test_string = path_obj_test_file.read_text(encoding="utf-8")
             # Use language-specific instrumentation
             success, injected_behavior_test = self.language_support.instrument_existing_test(
-                test_string=test_string,
+                test_path=path_obj_test_file,
                 call_positions=[test.position for test in tests_in_file_list],
                 function_to_optimize=self.function_to_optimize,
                 tests_project_root=self.test_cfg.tests_project_rootdir,
                 mode="behavior",
-                test_path=path_obj_test_file,
             )
             if not success:
                 logger.debug(f"Failed to instrument test file {test_file} for behavior testing")
                 continue
 
             success, injected_perf_test = self.language_support.instrument_existing_test(
-                test_string=test_string,
+                test_path=path_obj_test_file,
                 call_positions=[test.position for test in tests_in_file_list],
                 function_to_optimize=self.function_to_optimize,
                 tests_project_root=self.test_cfg.tests_project_rootdir,
                 mode="performance",
-                test_path=path_obj_test_file,
             )
             if not success:
                 logger.debug(f"Failed to instrument test file {test_file} for performance testing")

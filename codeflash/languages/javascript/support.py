@@ -2256,25 +2256,20 @@ class JavaScriptSupport:
 
     def instrument_existing_test(
         self,
-        test_string: str,
+        test_path: Path,
         call_positions: Sequence[Any],
         function_to_optimize: Any,
         tests_project_root: Path,
         mode: str,
-        test_path: Path | None,
     ) -> tuple[bool, str | None]:
         """Inject profiling code into an existing JavaScript test file.
 
-        Wraps function calls with codeflash.capture() or codeflash.capturePerf()
-        for behavioral verification and performance benchmarking.
-
         Args:
-            test_string: The test source code string.
+            test_path: Path to the test file.
             call_positions: List of code positions where the function is called.
             function_to_optimize: The function being optimized.
             tests_project_root: Root directory of tests.
             mode: Testing mode - "behavior" or "performance".
-            test_path: Path to the test file.
 
         Returns:
             Tuple of (success, instrumented_code).
@@ -2282,6 +2277,7 @@ class JavaScriptSupport:
         """
         from codeflash.languages.javascript.instrument import inject_profiling_into_existing_js_test
 
+        test_string = test_path.read_text(encoding="utf-8")
         return inject_profiling_into_existing_js_test(
             test_string=test_string,
             test_path=test_path,

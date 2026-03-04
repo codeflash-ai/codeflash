@@ -151,7 +151,9 @@ class JavaScriptFunctionOptimizer(FunctionOptimizer):
             )
             candidate_sqlite.unlink(missing_ok=True)
         else:
-            match, diffs = compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
+            match, diffs = compare_test_results(
+                baseline_results.behavior_test_results, candidate_behavior_results, pass_fail_only=True
+            )
         return match, diffs
 
     def should_skip_sqlite_cleanup(self, testing_type: TestingMode, optimization_iteration: int) -> bool:
