@@ -1903,15 +1903,20 @@ class FunctionOptimizer:
         import libcst as cst
 
         def extract_functions(source: str, names: set[str]) -> dict[str, str]:
+            """Extract functions by name from top-level and class bodies."""
             try:
                 tree = cst.parse_module(source)
-                return {
-                    node.name.value: tree.code_for_node(node)
-                    for node in tree.body
-                    if isinstance(node, cst.FunctionDef) and node.name.value in names
-                }
             except cst.ParserSyntaxError:
                 return {}
+            result: dict[str, str] = {}
+            for node in tree.body:
+                if isinstance(node, cst.FunctionDef) and node.name.value in names:
+                    result[node.name.value] = tree.code_for_node(node)
+                elif isinstance(node, cst.ClassDef):
+                    for child in node.body.body:
+                        if isinstance(child, cst.FunctionDef) and child.name.value in names:
+                            result[child.name.value] = tree.code_for_node(child)
+            return result
 
         for review in reviews:
             gt = generated_tests.generated_tests[review.test_index]
@@ -2062,7 +2067,7 @@ class FunctionOptimizer:
             console.print(Panel(issues_tree, title=f"Test Review (cycle {cycle + 1})", border_style="yellow"))
 
             any_repaired = False
-            repaired_count = 0
+            repaired_count = 0  # tracks individual repair API successes (one per review, not per function)
             # Snapshot original sources before repair so we can show diffs
             original_sources: dict[int, str] = {
                 r.test_index: generated_tests.generated_tests[r.test_index].generated_original_test_source
@@ -2117,11 +2122,13 @@ class FunctionOptimizer:
                     gt.generated_original_test_source = repaired_source
                     gt.instrumented_behavior_test_source = behavior_source
                     gt.instrumented_perf_test_source = perf_source
+                    # Clear stale LLM output so the next review cycle sends repaired source
+                    gt.raw_generated_test_source = None
 
                     gt.behavior_file_path.write_text(behavior_source, encoding="utf8")
                     gt.perf_file_path.write_text(perf_source, encoding="utf8")
                     any_repaired = True
-                    repaired_count += len(review.functions_to_repair)
+                    repaired_count += 1
 
             if any_repaired:
                 generated_tests = self.language_support.postprocess_generated_tests(
@@ -2130,7 +2137,7 @@ class FunctionOptimizer:
                     project_root=self.project_root,
                     source_file_path=self.function_to_optimize.file_path,
                 )
-                console.print(f"  [green]Repaired {repaired_count} test function(s)[/green]")
+                console.print(f"  [green]Repaired {repaired_count} test file(s)[/green]")
                 self.display_repaired_functions(generated_tests, all_to_repair, original_sources)
                 with progress_bar("Re-validating repaired tests..."):
                     validation = self.run_behavioral_validation(
@@ -2141,6 +2148,8 @@ class FunctionOptimizer:
                 behavioral_results, coverage_results = validation
 
         console.rule()
+        # When all repair API calls failed (any_repaired=False), behavioral_results are from before
+        # the repair attempts. This is correct since no test code actually changed.
         return Success((generated_tests, behavioral_results, coverage_results))
 
     def find_and_process_best_optimization(

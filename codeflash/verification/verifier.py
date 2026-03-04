@@ -74,8 +74,9 @@ def generate_tests(
         is_numerical_code=is_numerical_code,
     )
     if response and isinstance(response, tuple) and len(response) >= 3:
-        generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source, *rest = response
-        raw_generated_tests = rest[0] if rest else None
+        generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source, raw_generated_tests = (
+            response
+        )
 
         generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source = (
             lang_support.process_generated_test_strings(
