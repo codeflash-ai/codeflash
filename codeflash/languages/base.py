@@ -32,7 +32,8 @@ ParentInfo = FunctionParent
 # This allows `from codeflash.languages.base import FunctionInfo` to work at runtime
 def __getattr__(name: str) -> Any:
     if name == "FunctionInfo":
-        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash.discovery.functions_to_optimize import \
+            FunctionToOptimize
 
         return FunctionToOptimize
     msg = f"module {__name__!r} has no attribute {name!r}"
@@ -185,13 +186,21 @@ class FunctionFilterCriteria:
         """Check if name matches any include pattern."""
         if not self._include_regexes:
             return True
-        return any(regex.match(name) for regex in self._include_regexes)
+        # Use an explicit loop to avoid generator allocation overhead.
+        for regex in self._include_regexes:
+            if regex.match(name):
+                return True
+        return False
 
     def matches_exclude_patterns(self, name: str) -> bool:
         """Check if name matches any exclude pattern."""
         if not self._exclude_regexes:
             return False
-        return any(regex.match(name) for regex in self._exclude_regexes)
+        # Use an explicit loop to avoid generator allocation overhead.
+        for regex in self._exclude_regexes:
+            if regex.match(name):
+                return True
+        return False
 
 
 @dataclass
