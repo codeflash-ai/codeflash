@@ -682,11 +682,7 @@ class FunctionOptimizer:
             test_ext = self.language_support.get_test_file_suffix()
             # Show the raw LLM output when available, otherwise the post-processed source
             display_source = generated_test.raw_generated_test_source or generated_test.generated_original_test_source
-            code_print(
-                display_source,
-                file_name=f"test_{i + 1}{test_ext}",
-                language=self.function_to_optimize.language,
-            )
+            code_print(display_source, file_name=f"test_{i + 1}{test_ext}", language=self.function_to_optimize.language)
         if concolic_test_str:
             logger.info(f"Generated test {count_tests}/{count_tests}:")
             code_print(concolic_test_str, language=self.function_to_optimize.language)
@@ -1900,9 +1896,7 @@ class FunctionOptimizer:
             )
         )
 
-    def display_repaired_functions(
-        self, generated_tests: GeneratedTestsList, reviews: list[TestFileReview]
-    ) -> None:
+    def display_repaired_functions(self, generated_tests: GeneratedTestsList, reviews: list[TestFileReview]) -> None:
         """Display only the repaired function bodies, not the full test files."""
         import libcst as cst
 
@@ -2001,9 +1995,7 @@ class FunctionOptimizer:
             tests_for_review = []
             for i, gt in enumerate(generated_tests.generated_tests):
                 failed_fns = failed_by_file.get(gt.behavior_file_path, [])
-                failure_details = {
-                    fn: test_failure_messages[fn] for fn in failed_fns if fn in test_failure_messages
-                }
+                failure_details = {fn: test_failure_messages[fn] for fn in failed_fns if fn in test_failure_messages}
                 tests_for_review.append(
                     {
                         "test_source": gt.raw_generated_test_source or gt.generated_original_test_source,
