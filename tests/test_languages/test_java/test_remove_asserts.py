@@ -41,7 +41,7 @@ import static org.junit.Assert.*;
 public class BitSetTest {
     @Test
     public void testGet_IndexZero_ReturnsFalse() {
-        boolean _cf_result1 = instance.get(0);
+        Object _cf_result1 = instance.get(0);
     }
 }
 """
@@ -67,7 +67,7 @@ import static org.junit.Assert.*;
 public class BitSetTest {
     @Test
     public void testGet_SetBit_DetectedTrue() {
-        boolean _cf_result1 = bs.get(67);
+        Object _cf_result1 = bs.get(67);
     }
 }
 """
@@ -485,7 +485,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class FibonacciTest {
     @Test
     void testIsFibonacci() {
-        boolean _cf_result1 = Fibonacci.isFibonacci(5);
+        Object _cf_result1 = Fibonacci.isFibonacci(5);
     }
 }
 """
@@ -511,7 +511,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class FibonacciTest {
     @Test
     void testIsNotFibonacci() {
-        boolean _cf_result1 = Fibonacci.isFibonacci(4);
+        Object _cf_result1 = Fibonacci.isFibonacci(4);
     }
 }
 """
@@ -709,7 +709,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class FibonacciTest {
     @Test
     void testConsecutive() {
-        boolean _cf_result1 = Fibonacci.areConsecutiveFibonacci(Fibonacci.fibonacci(5), Fibonacci.fibonacci(6));
+        Object _cf_result1 = Fibonacci.areConsecutiveFibonacci(Fibonacci.fibonacci(5), Fibonacci.fibonacci(6));
     }
 }
 """
@@ -1053,24 +1053,24 @@ public class BitSetTest {
 
     @Test
     public void testGet_IndexZero_ReturnsFalse() {
-        boolean _cf_result1 = instance.get(0);
+        Object _cf_result1 = instance.get(0);
     }
 
     @Test
     public void testGet_SpecificIndexWithinRange_ReturnsFalse() {
-        boolean _cf_result2 = instance.get(100);
+        Object _cf_result2 = instance.get(100);
     }
 
     @Test
     public void testGet_LastIndexOfInitialRange_ReturnsFalse() {
         int lastIndex = 16 * BitSet.BITS_PER_WORD - 1;
-        boolean _cf_result3 = instance.get(lastIndex);
+        Object _cf_result3 = instance.get(lastIndex);
     }
 
     @Test
     public void testGet_IndexBeyondAllocated_ReturnsFalse() {
         int beyond = 16 * BitSet.BITS_PER_WORD;
-        boolean _cf_result4 = instance.get(beyond);
+        Object _cf_result4 = instance.get(beyond);
     }
 
     @Test(expected = ArrayIndexOutOfBoundsException.class)
@@ -1086,22 +1086,22 @@ public class BitSetTest {
         long[] words = new long[2];
         words[1] = 1L << 3;
         wordsField.set(bs, words);
-        boolean _cf_result5 = bs.get(64 + 3);
+        Object _cf_result5 = bs.get(64 + 3);
     }
 
     @Test
     public void testGet_LargeIndexDoesNotThrow_ReturnsFalse() {
-        boolean _cf_result6 = instance.get(Integer.MAX_VALUE);
+        Object _cf_result6 = instance.get(Integer.MAX_VALUE);
     }
 
     @Test
     public void testGet_BitBoundaryWordEdge63_ReturnsFalse() {
-        boolean _cf_result7 = instance.get(63);
+        Object _cf_result7 = instance.get(63);
     }
 
     @Test
     public void testGet_BitBoundaryWordEdge64_ReturnsFalse() {
-        boolean _cf_result8 = instance.get(64);
+        Object _cf_result8 = instance.get(64);
     }
 
     @Test
@@ -1109,7 +1109,7 @@ public class BitSetTest {
         int nBits = 1_000_000;
         BitSet big = new BitSet(nBits);
         int last = nBits - 1;
-        boolean _cf_result9 = big.get(last);
+        Object _cf_result9 = big.get(last);
     }
 }
 """

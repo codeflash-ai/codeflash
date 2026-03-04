@@ -916,9 +916,11 @@ class JavaAssertTransformer:
         """
         method = assertion.assertion_method
 
-        # assertTrue/assertFalse always deal with boolean values
+        # assertTrue/assertFalse: the assertion argument is boolean, but the extracted
+        # target call may return any type (e.g., assertTrue(fibonacci(n) < 0L) where
+        # fibonacci returns long). Use Object to safely capture via autoboxing.
         if method in {"assertTrue", "assertFalse"}:
-            return "boolean"
+            return "Object"
 
         # assertNull/assertNotNull — keep Object (reference type)
         if method in {"assertNull", "assertNotNull"}:
