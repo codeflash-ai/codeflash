@@ -38,11 +38,7 @@ class ParsedOptimization:
     modified_constructors: list[str] = field(default_factory=list)  # Constructor sources that need to replace originals
 
 
-def _parse_optimization_source(
-    new_source: str,
-    target_method_name: str,
-    analyzer: JavaAnalyzer,
-) -> ParsedOptimization:
+def _parse_optimization_source(new_source: str, target_method_name: str, analyzer: JavaAnalyzer) -> ParsedOptimization:
     """Parse optimization source to extract method and additional class members.
 
     The new_source may contain:
@@ -91,8 +87,6 @@ def _parse_optimization_source(
             end = target_method.end_line
             target_method_source = "".join(lines[start:end])
         else:
-            # Target method not found in the generated class — the LLM generated
-            # a different method. Signal invalid candidate with empty source.
             logger.warning(
                 "Generated class does not contain target method '%s'. Skipping candidate.", target_method_name
             )
@@ -296,10 +290,7 @@ def _insert_class_members(
 
 
 def _replace_constructors(
-    source: str,
-    class_name: str,
-    new_constructor_sources: list[str],
-    analyzer: JavaAnalyzer,
+    source: str, class_name: str, new_constructor_sources: list[str], analyzer: JavaAnalyzer
 ) -> str:
     """Replace constructors in source with updated versions from the optimization.
 
@@ -347,11 +338,7 @@ def _replace_constructors(
                 break
 
         if not matching:
-            logger.debug(
-                "No matching constructor with params %s found in class %s; skipping.",
-                new_params,
-                class_name,
-            )
+            logger.debug("No matching constructor with params %s found in class %s; skipping.", new_params, class_name)
             continue
 
         # Determine replacement range (include Javadoc if present)
@@ -414,8 +401,6 @@ def replace_function(
     # Parse the optimization to extract components.
     parsed = _parse_optimization_source(new_source, func_name, analyzer)
 
-    # If the parsed optimization has no valid target source (e.g., the LLM generated
-    # a method with a different name), skip this candidate entirely.
     if not parsed.target_method_source.strip():
         logger.warning("No valid replacement found for method '%s'. Returning original source.", func_name)
         return source

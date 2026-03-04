@@ -13,6 +13,7 @@ from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import exit_with_message
 from codeflash.code_utils.formatter import format_code
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config, save_api_key_to_rc
+from codeflash.languages.registry import get_language_support_by_common_formatters
 from codeflash.lsp.helpers import is_LSP_enabled
 
 
@@ -22,11 +23,7 @@ def check_formatter_installed(
     if not formatter_cmds or formatter_cmds[0] == "disabled":
         return True
     first_cmd = formatter_cmds[0]
-    # Fast path: avoid expensive shlex.split for simple strings without quotes
-    if " " not in first_cmd or ('"' not in first_cmd and "'" not in first_cmd):
-        cmd_tokens = first_cmd.split()
-    else:
-        cmd_tokens = shlex.split(first_cmd)
+    cmd_tokens = shlex.split(first_cmd) if isinstance(first_cmd, str) else [first_cmd]
 
     if not cmd_tokens:
         return True
@@ -40,9 +37,6 @@ def check_formatter_installed(
             f"Please install it or update 'formatter-cmds' in your codeflash configuration"
         )
         return False
-
-    # Import here to avoid circular import
-    from codeflash.languages.registry import get_language_support_by_common_formatters
 
     lang_support = get_language_support_by_common_formatters(formatter_cmds)
     if not lang_support:

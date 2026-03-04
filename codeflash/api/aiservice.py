@@ -14,7 +14,8 @@ from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
 from codeflash.code_utils.time_utils import humanize_runtime
-from codeflash.languages import is_java, is_javascript, is_python
+from codeflash.languages import Language, current_language
+from codeflash.languages.current import current_language_support
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     AIServiceRefinerRequest,
@@ -50,6 +51,20 @@ class AiServiceClient:
     def get_next_sequence(self) -> int:
         """Get the next LLM call sequence number."""
         return next(self.llm_call_counter)
+
+    @staticmethod
+    def add_language_metadata(
+        payload: dict[str, Any], language_version: str | None = None, module_system: str | None = None
+    ) -> None:
+        """Add language version and module system metadata to an API payload."""
+        # Canonical for all languages
+        payload["language_version"] = language_version
+        # Backward compat: Python backend still expects python_version
+        payload["python_version"] = language_version if current_language() == Language.PYTHON else None
+
+        if current_language() != Language.PYTHON:
+            if module_system:
+                payload["module_system"] = module_system
 
     def get_aiservice_base_url(self) -> str:
         if os.environ.get("CODEFLASH_AIS_SERVER", default="prod").lower() == "local":
@@ -176,14 +191,7 @@ class AiServiceClient:
             "is_numerical_code": is_numerical_code,
         }
 
-        # Add language version (canonical for all languages)
-        payload["language_version"] = language_version
-        # Backward compat: Python backend still expects python_version
-        payload["python_version"] = language_version if is_python() else None
-
-        if not is_python():
-            if module_system:
-                payload["module_system"] = module_system
+        self.add_language_metadata(payload, language_version, module_system)
 
         # DEBUG: Print payload language field
         logger.debug(
@@ -332,7 +340,7 @@ class AiServiceClient:
             "trace_id": trace_id,
             "language": language,
             "language_version": language_version,
-            "python_version": language_version if is_python() else None,  # backward compat
+            "python_version": language_version if current_language() == Language.PYTHON else None,
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
             "call_sequence": self.get_next_sequence(),
@@ -426,10 +434,7 @@ class AiServiceClient:
                 "language": opt.language,
             }
 
-            # Add language version (canonical for all languages)
-            item["language_version"] = opt.language_version
-            # Backward compat: Python backend still expects python_version
-            item["python_version"] = opt.language_version if is_python() else None
+            self.add_language_metadata(item, opt.language_version)
 
             # Add multi-file context if provided
             if opt.additional_context_files:
@@ -742,21 +747,11 @@ class AiServiceClient:
 
         """
         # Validate test framework based on language
-        python_frameworks = ["pytest", "unittest"]
-        javascript_frameworks = ["jest", "mocha", "vitest"]
-        java_frameworks = ["junit5", "junit4", "testng"]
-        if is_python():
-            assert test_framework in python_frameworks, (
-                f"Invalid test framework for Python, got {test_framework} but expected one of {python_frameworks}"
-            )
-        elif is_javascript():
-            assert test_framework in javascript_frameworks, (
-                f"Invalid test framework for JavaScript, got {test_framework} but expected one of {javascript_frameworks}"
-            )
-        elif is_java():
-            assert test_framework in java_frameworks, (
-                f"Invalid test framework for Java, got {test_framework} but expected one of {java_frameworks}"
-            )
+        lang_support = current_language_support()
+        valid_frameworks = lang_support.valid_test_frameworks
+        assert test_framework in valid_frameworks, (
+            f"Invalid test framework for {current_language()}, got {test_framework} but expected one of {list(valid_frameworks)}"
+        )
 
         payload: dict[str, Any] = {
             "source_code_being_tested": source_code_being_tested,
@@ -777,14 +772,7 @@ class AiServiceClient:
             "qualified_name": function_to_optimize.qualified_name,
         }
 
-        # Add language version (canonical for all languages)
-        payload["language_version"] = language_version
-        # Backward compat: Python backend still expects python_version
-        payload["python_version"] = language_version if is_python() else None
-
-        if not is_python():
-            if module_system:
-                payload["module_system"] = module_system
+        self.add_language_metadata(payload, language_version, module_system)
 
         # DEBUG: Print payload language field
         logger.debug(f"Sending testgen request with language='{payload['language']}', framework='{test_framework}'")
@@ -870,8 +858,8 @@ class AiServiceClient:
             "codeflash_version": codeflash_version,
             "calling_fn_details": calling_fn_details,
             "language": language,
-            "language_version": platform.python_version() if is_python() else None,
-            "python_version": platform.python_version() if is_python() else None,  # backward compat
+            "language_version": platform.python_version() if current_language() == Language.PYTHON else None,
+            "python_version": platform.python_version() if current_language() == Language.PYTHON else None,
             "call_sequence": self.get_next_sequence(),
         }
         console.rule()

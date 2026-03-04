@@ -16,8 +16,6 @@ NOTE: These tests require:
 Tests will be skipped if dependencies are not available.
 """
 
-import os
-import shutil
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -26,7 +24,7 @@ import pytest
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import Language
-from codeflash.models.models import FunctionParent, TestFile, TestFiles, TestType, TestingMode
+from codeflash.models.models import FunctionParent
 from codeflash.verification.verification_utils import TestConfig
 
 
@@ -58,13 +56,7 @@ def install_dependencies(project_dir: Path) -> bool:
     if has_node_modules(project_dir):
         return True
     try:
-        result = subprocess.run(
-            ["npm", "install"],
-            cwd=project_dir,
-            capture_output=True,
-            text=True,
-            timeout=120
-        )
+        result = subprocess.run(["npm", "install"], cwd=project_dir, capture_output=True, text=True, timeout=120)
         return result.returncode == 0
     except Exception:
         return False
@@ -82,6 +74,7 @@ def skip_if_js_not_supported():
     """Skip test if JavaScript/TypeScript languages are not supported."""
     try:
         from codeflash.languages import get_language_support
+
         get_language_support(Language.JAVASCRIPT)
     except Exception as e:
         pytest.skip(f"JavaScript/TypeScript language support not available: {e}")
@@ -157,8 +150,8 @@ module.exports = {
         """Test that JavaScript test instrumentation module can be imported."""
         skip_if_js_not_supported()
         from codeflash.languages import get_language_support
+
         # Verify the instrumentation module can be imported
-        from codeflash.languages.javascript.instrument import inject_profiling_into_existing_js_test
 
         # Get JavaScript support
         js_support = get_language_support(Language.JAVASCRIPT)
@@ -272,8 +265,8 @@ export default defineConfig({
         """Test that TypeScript test instrumentation module can be imported."""
         skip_if_js_not_supported()
         from codeflash.languages import get_language_support
+
         # Verify the instrumentation module can be imported
-        from codeflash.languages.javascript.instrument import inject_profiling_into_existing_js_test
 
         test_file = ts_project_dir / "tests" / "math.test.ts"
 
@@ -356,10 +349,7 @@ class TestRunAndParseJavaScriptTests:
         """
         skip_if_js_not_supported()
         from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
-        from codeflash.languages import current as lang_current
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
-
-        lang_current._current_language = Language.TYPESCRIPT
+        from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
 
         # Find the fibonacci function
         fib_file = vitest_project / "fibonacci.ts"
@@ -389,10 +379,8 @@ class TestRunAndParseJavaScriptTests:
         )
 
         # Create optimizer
-        func_optimizer = FunctionOptimizer(
-            function_to_optimize=func,
-            test_cfg=test_config,
-            aiservice_client=MagicMock(),
+        func_optimizer = JavaScriptFunctionOptimizer(
+            function_to_optimize=func, test_cfg=test_config, aiservice_client=MagicMock()
         )
 
         # Get code context - this should work
@@ -419,8 +407,8 @@ class TestTimingMarkerParsing:
         # The marker format used by codeflash for JavaScript
         # Start marker: !$######{tag}######$!
         # End marker: !######{tag}:{duration}######!
-        start_pattern = r'!\$######(.+?)######\$!'
-        end_pattern = r'!######(.+?):(\d+)######!'
+        start_pattern = r"!\$######(.+?)######\$!"
+        end_pattern = r"!######(.+?):(\d+)######!"
 
         start_marker = "!$######test/math.test.ts:TestMath.test_add:add:1:0_0######$!"
         end_marker = "!######test/math.test.ts:TestMath.test_add:add:1:0_0:12345######!"
@@ -472,6 +460,7 @@ class TestJavaScriptTestResultParsing:
 
         # Parse the XML
         import xml.etree.ElementTree as ET
+
         tree = ET.parse(junit_xml)
         root = tree.getroot()
 
@@ -504,6 +493,7 @@ class TestJavaScriptTestResultParsing:
 
         # Parse the XML
         import xml.etree.ElementTree as ET
+
         tree = ET.parse(junit_xml)
         root = tree.getroot()
 

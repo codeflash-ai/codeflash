@@ -641,20 +641,14 @@ def discover_unit_tests(
     discover_only_these_tests: list[Path] | None = None,
     file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]] | None = None,
 ) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
-    from codeflash.languages import is_java, is_javascript, is_python
+    from codeflash.languages.current import current_language_support
 
     # Detect language from functions being optimized
     language = _detect_language_from_functions(file_to_funcs_to_optimize)
 
     # Route to language-specific test discovery for non-Python languages
-    if not is_python():
-        # For JavaScript/TypeScript and Java, tests_project_rootdir should be tests_root itself
-        # The Jest helper will be configured to NOT include "tests." prefix to match
-        # For Java, this ensures test file resolution works correctly in parse_test_xml
-        if is_javascript():
-            cfg.tests_project_rootdir = cfg.tests_root
-        if is_java():
-            cfg.tests_project_rootdir = cfg.tests_root
+    if current_language_support().test_result_serialization_format != "pickle":
+        current_language_support().adjust_test_config_for_discovery(cfg)
         return discover_tests_for_language(cfg, language, file_to_funcs_to_optimize)
 
     # Existing Python logic
@@ -731,6 +725,10 @@ def discover_tests_pytest(
         logger.debug(f"Pytest collection exit code: {exitcode}")
     if pytest_rootdir is not None:
         cfg.tests_project_rootdir = Path(pytest_rootdir)
+    if discover_only_these_tests:
+        resolved_discover_only = {p.resolve() for p in discover_only_these_tests}
+    else:
+        resolved_discover_only = None
     file_to_test_map: dict[Path, list[FunctionCalledInTest]] = defaultdict(list)
     for test in tests:
         if "__replay_test" in test["test_file"]:
@@ -740,13 +738,14 @@ def discover_tests_pytest(
         else:
             test_type = TestType.EXISTING_UNIT_TEST
 
+        test_file_path = Path(test["test_file"]).resolve()
         test_obj = TestsInFile(
-            test_file=Path(test["test_file"]),
+            test_file=test_file_path,
             test_class=test["test_class"],
             test_function=test["test_function"],
             test_type=test_type,
         )
-        if discover_only_these_tests and test_obj.test_file not in discover_only_these_tests:
+        if resolved_discover_only and test_obj.test_file not in resolved_discover_only:
             continue
         file_to_test_map[test_obj.test_file].append(test_obj)
     # Within these test files, find the project functions they are referring to and return their names/locations

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import contextlib
 import os
 import random
 import warnings
@@ -10,8 +11,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 import git
-import libcst as cst
 from pydantic.dataclasses import dataclass
+from rich.text import Text
 from rich.tree import Tree
 
 from codeflash.api.cfapi import get_blocklisted_functions, is_function_being_optimized_again
@@ -37,14 +38,8 @@ __all__ = ["FunctionParent", "FunctionToOptimize"]
 if TYPE_CHECKING:
     from argparse import Namespace
 
-    from libcst import CSTNode
-    from libcst.metadata import CodeRange
-
     from codeflash.models.models import CodeOptimizationContext
     from codeflash.verification.verification_utils import TestConfig
-import contextlib
-
-from rich.text import Text
 
 
 @dataclass(frozen=True)
@@ -54,70 +49,6 @@ class FunctionProperties:
     is_staticmethod: Optional[bool]
     is_classmethod: Optional[bool]
     staticmethod_class_name: Optional[str]
-
-
-class ReturnStatementVisitor(cst.CSTVisitor):
-    def __init__(self) -> None:
-        super().__init__()
-        self.has_return_statement: bool = False
-
-    def visit_Return(self, node: cst.Return) -> None:
-        self.has_return_statement = True
-
-
-class FunctionVisitor(cst.CSTVisitor):
-    METADATA_DEPENDENCIES = (cst.metadata.PositionProvider, cst.metadata.ParentNodeProvider)
-
-    def __init__(self, file_path: str) -> None:
-        super().__init__()
-        self.file_path: str = file_path
-        self.functions: list[FunctionToOptimize] = []
-
-    @staticmethod
-    def is_pytest_fixture(node: cst.FunctionDef) -> bool:
-        for decorator in node.decorators:
-            dec = decorator.decorator
-            if isinstance(dec, cst.Call):
-                dec = dec.func
-            if isinstance(dec, cst.Attribute) and dec.attr.value == "fixture":
-                if isinstance(dec.value, cst.Name) and dec.value.value == "pytest":
-                    return True
-            if isinstance(dec, cst.Name) and dec.value == "fixture":
-                return True
-        return False
-
-    @staticmethod
-    def is_property(node: cst.FunctionDef) -> bool:
-        for decorator in node.decorators:
-            dec = decorator.decorator
-            if isinstance(dec, cst.Name) and dec.value in ("property", "cached_property"):
-                return True
-        return False
-
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
-        return_visitor: ReturnStatementVisitor = ReturnStatementVisitor()
-        node.visit(return_visitor)
-        if return_visitor.has_return_statement and not self.is_pytest_fixture(node) and not self.is_property(node):
-            pos: CodeRange = self.get_metadata(cst.metadata.PositionProvider, node)
-            parents: CSTNode | None = self.get_metadata(cst.metadata.ParentNodeProvider, node)
-            ast_parents: list[FunctionParent] = []
-            while parents is not None:
-                if isinstance(parents, cst.FunctionDef):
-                    # Skip nested functions — only discover top-level and class-level functions
-                    return
-                if isinstance(parents, cst.ClassDef):
-                    ast_parents.append(FunctionParent(parents.name.value, parents.__class__.__name__))
-                parents = self.get_metadata(cst.metadata.ParentNodeProvider, parents, default=None)
-            self.functions.append(
-                FunctionToOptimize(
-                    function_name=node.name.value,
-                    file_path=self.file_path,
-                    parents=list(reversed(ast_parents)),
-                    starting_line=pos.start.line,
-                    ending_line=pos.end.line,
-                    is_async=bool(node.asynchronous),
-                )
-            )
 
 
 # =============================================================================
@@ -286,7 +217,7 @@ def get_functions_to_optimize(
     assert sum([bool(optimize_all), bool(replay_test), bool(file)]) <= 1, (
         "Only one of optimize_all, replay_test, or file should be provided"
     )
-    functions: dict[str, list[FunctionToOptimize]]
+    functions: dict[Path, list[FunctionToOptimize]]
     trace_file_path: Path | None = None
     is_lsp = is_LSP_enabled()
     with warnings.catch_warnings():
@@ -303,7 +234,7 @@ def get_functions_to_optimize(
             logger.info("!lsp|Finding all functions in the file '%s'…", file)
             console.rule()
             file = Path(file) if isinstance(file, str) else file
-            functions: dict[Path, list[FunctionToOptimize]] = find_all_functions_in_file(file)
+            functions = find_all_functions_in_file(file)
             if only_get_this_function is not None:
                 split_function = only_get_this_function.split(".")
                 if len(split_function) > 2:
@@ -350,6 +281,7 @@ def get_functions_to_optimize(
                         f"Function {only_get_this_function} not found in file {file}\nor the function does not have a 'return' statement or is a property"
                     )
 
+                assert found_function is not None
                 # For JavaScript/TypeScript, verify that the function (or its parent class) is exported
                 # Non-exported functions cannot be imported by tests
                 if found_function.language in ("javascript", "typescript"):
@@ -393,7 +325,7 @@ def get_functions_to_optimize(
         return filtered_modified_functions, functions_count, trace_file_path
 
 
-def get_functions_within_git_diff(uncommitted_changes: bool) -> dict[str, list[FunctionToOptimize]]:
+def get_functions_within_git_diff(uncommitted_changes: bool) -> dict[Path, list[FunctionToOptimize]]:
     modified_lines: dict[str, list[int]] = get_git_diff(uncommitted_changes=uncommitted_changes)
     return get_functions_within_lines(modified_lines)
 
@@ -434,7 +366,7 @@ def closest_matching_file_function_name(
                 closest_match = function
                 closest_file = file_path
 
-    if closest_match is not None:
+    if closest_match is not None and closest_file is not None:
         return closest_file, closest_match
     return None
 
@@ -468,39 +400,31 @@ def levenshtein_distance(s1: str, s2: str) -> int:
     return previous[len1]
 
 
-def get_functions_inside_a_commit(commit_hash: str) -> dict[str, list[FunctionToOptimize]]:
+def get_functions_inside_a_commit(commit_hash: str) -> dict[Path, list[FunctionToOptimize]]:
     modified_lines: dict[str, list[int]] = get_git_diff(only_this_commit=commit_hash)
     return get_functions_within_lines(modified_lines)
 
 
-def get_functions_within_lines(modified_lines: dict[str, list[int]]) -> dict[str, list[FunctionToOptimize]]:
-    functions: dict[str, list[FunctionToOptimize]] = {}
+def get_functions_within_lines(modified_lines: dict[str, list[int]]) -> dict[Path, list[FunctionToOptimize]]:
+    functions: dict[Path, list[FunctionToOptimize]] = {}
     for path_str, lines_in_file in modified_lines.items():
         path = Path(path_str)
         if not path.exists():
             continue
-        with path.open(encoding="utf8") as f:
-            file_content = f.read()
-            try:
-                wrapper = cst.metadata.MetadataWrapper(cst.parse_module(file_content))
-            except Exception as e:
-                logger.exception(e)
-                continue
-            function_lines = FunctionVisitor(file_path=str(path))
-            wrapper.visit(function_lines)
-            functions[str(path)] = [
-                function_to_optimize
-                for function_to_optimize in function_lines.functions
-                if (start_line := function_to_optimize.starting_line) is not None
-                and (end_line := function_to_optimize.ending_line) is not None
-                and any(start_line <= line <= end_line for line in lines_in_file)
-            ]
+        all_functions = find_all_functions_in_file(path)
+        functions[path] = [
+            func
+            for func in all_functions.get(path, [])
+            if func.starting_line is not None
+            and func.ending_line is not None
+            and any(func.starting_line <= line <= func.ending_line for line in lines_in_file)
+        ]
     return functions
 
 
 def get_all_files_and_functions(
     module_root_path: Path, ignore_paths: list[Path], language: Language | None = None
-) -> dict[str, list[FunctionToOptimize]]:
+) -> dict[Path, list[FunctionToOptimize]]:
     """Get all optimizable functions from files in the module root.
 
     Args:
@@ -512,9 +436,8 @@ def get_all_files_and_functions(
         Dictionary mapping file paths to lists of FunctionToOptimize.
 
     """
-    functions: dict[str, list[FunctionToOptimize]] = {}
+    functions: dict[Path, list[FunctionToOptimize]] = {}
     for file_path in get_files_for_language(module_root_path, ignore_paths, language):
-        # Find all the functions in the file
         functions.update(find_all_functions_in_file(file_path).items())
     # Randomize the order of the files to optimize to avoid optimizing the same file in the same order every time.
     # Helpful if an optimize-all run is stuck and we restart it.
@@ -524,24 +447,19 @@ def get_all_files_and_functions(
 
 
 def find_all_functions_in_file(file_path: Path) -> dict[Path, list[FunctionToOptimize]]:
-    """Find all optimizable functions in a file, routing to the appropriate language handler.
-
-    This function checks if the file extension is supported and routes to either
-    the Python-specific implementation (for backward compatibility) or the
-    language support abstraction for other languages.
-
-    Args:
-        file_path: Path to the source file.
-
-    Returns:
-        Dictionary mapping file path to list of FunctionToOptimize.
-
-    """
-    # Check if the file extension is supported
+    """Find all optimizable functions in a file using the language support abstraction."""
     if not is_language_supported(file_path):
         return {}
+    try:
+        from codeflash.languages.base import FunctionFilterCriteria
 
-    return _find_all_functions_via_language_support(file_path)
+        lang_support = get_language_support(file_path)
+        criteria = FunctionFilterCriteria(require_return=True)
+        source = file_path.read_text(encoding="utf-8")
+        return {file_path: lang_support.discover_functions(source, file_path, criteria)}
+    except Exception as e:
+        logger.debug(f"Failed to discover functions in {file_path}: {e}")
+        return {}
 
 
 def get_all_replay_test_functions(
@@ -819,7 +737,7 @@ def filter_functions(
     disable_logs: bool = False,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
     resolved_project_root = project_root.resolve()
-    filtered_modified_functions: dict[str, list[FunctionToOptimize]] = {}
+    filtered_modified_functions: dict[Path, list[FunctionToOptimize]] = {}
     blocklist_funcs = get_blocklisted_functions()
     logger.debug(f"Blocklisted functions: {blocklist_funcs}")
     # Remove any function that we don't want to optimize
@@ -926,7 +844,7 @@ def filter_functions(
                 functions_tmp.append(function)
             _functions = functions_tmp
 
-        filtered_modified_functions[file_path] = _functions
+        filtered_modified_functions[file_path_path] = _functions
         functions_count += len(_functions)
 
     if not disable_logs:
@@ -947,7 +865,7 @@ def filter_functions(
         if len(tree.children) > 0:
             console.print(tree)
             console.rule()
-    return {Path(k): v for k, v in filtered_modified_functions.items() if v}, functions_count
+    return {k: v for k, v in filtered_modified_functions.items() if v}, functions_count
 
 
 def _is_test_file_by_pattern(file_path: Path) -> bool:

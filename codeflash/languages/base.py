@@ -95,9 +95,9 @@ class CodeContext:
     target_file: Path
     helper_functions: list[HelperFunction] = field(default_factory=list)
     read_only_context: str = ""
+    imported_type_skeletons: str = ""
     imports: list[str] = field(default_factory=list)
     language: Language = Language.PYTHON
-    imported_type_skeletons: str = ""
 
 
 @dataclass
@@ -171,6 +171,7 @@ class FunctionFilterCriteria:
     include_patterns: list[str] = field(default_factory=list)
     exclude_patterns: list[str] = field(default_factory=list)
     require_return: bool = True
+    require_export: bool = True
     include_async: bool = True
     include_methods: bool = True
     min_lines: int | None = None
@@ -273,7 +274,7 @@ class LanguageSupport(Protocol):
             def language(self) -> Language:
                 return Language.PYTHON
 
-            def discover_functions(self, file_path: Path, ...) -> list[FunctionInfo]:
+            def discover_functions(self, source: str, file_path: Path, ...) -> list[FunctionInfo]:
                 # Python-specific implementation using LibCST
                 ...
 
@@ -339,6 +340,12 @@ class LanguageSupport(Protocol):
         """How test return values are serialized: "pickle" or "json"."""
         return "pickle"
 
+    def parse_test_xml(
+        self, test_xml_file_path: Path, test_files: Any, test_config: Any, run_result: Any = None
+    ) -> Any:
+        """Parse JUnit XML test results with language-specific timing markers."""
+        ...
+
     def load_coverage(
         self,
         coverage_database_file: Path,
@@ -353,54 +360,16 @@ class LanguageSupport(Protocol):
         """
         ...
 
-    @property
-    def function_optimizer_class(self) -> type:
-        """Return the FunctionOptimizer subclass for this language."""
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
-
-        return FunctionOptimizer
-
-    def prepare_module(
-        self, module_code: str, module_path: Path, project_root: Path
-    ) -> tuple[dict[Path, ValidCode], ast.Module | None] | None:
-        """Parse/validate a module before optimization."""
-        ...
-
-    def setup_test_config(self, test_cfg: TestConfig, file_path: Path) -> None:
-        """One-time project setup after language detection. Default: no-op."""
-
-    def adjust_test_config_for_discovery(self, test_cfg: TestConfig) -> None:
-        """Adjust test config before test discovery. Default: no-op."""
-
-    def detect_module_system(self, project_root: Path, source_file: Path) -> str | None:
-        """Detect the module system used by the project. Default: None (not applicable)."""
-        return None
-
-    def process_generated_test_strings(
-        self,
-        generated_test_source: str,
-        instrumented_behavior_test_source: str,
-        instrumented_perf_test_source: str,
-        function_to_optimize: FunctionToOptimize,
-        test_path: Path,
-        test_cfg: Any,
-        project_module_system: str | None,
-    ) -> tuple[str, str, str]:
-        """Process raw generated test strings (instrumentation, placeholder replacement, etc.).
-
-        Returns (generated_test_source, instrumented_behavior_source, instrumented_perf_source).
-        """
-        ...
-
     # === Discovery ===
 
     def discover_functions(
-        self, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
+        self, source: str, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
     ) -> list[FunctionToOptimize]:
-        """Find all optimizable functions in a file.
+        """Find all optimizable functions in source code.
 
         Args:
-            file_path: Path to the source file to analyze.
+            source: Source code to analyze.
+            file_path: Path to the source file (used for context and language detection).
             filter_criteria: Optional criteria to filter functions.
 
         Returns:
@@ -727,6 +696,45 @@ class LanguageSupport(Protocol):
         """
         ...
 
+    @property
+    def function_optimizer_class(self) -> type:
+        """Return the FunctionOptimizer subclass for this language."""
+        from codeflash.optimization.function_optimizer import FunctionOptimizer
+
+        return FunctionOptimizer
+
+    def prepare_module(
+        self, module_code: str, module_path: Path, project_root: Path
+    ) -> tuple[dict[Path, ValidCode], ast.Module | None] | None:
+        """Parse/validate a module before optimization."""
+        ...
+
+    def setup_test_config(self, test_cfg: TestConfig, file_path: Path) -> None:
+        """One-time project setup after language detection. Default: no-op."""
+
+    def adjust_test_config_for_discovery(self, test_cfg: TestConfig) -> None:
+        """Adjust test config before test discovery. Default: no-op."""
+
+    def detect_module_system(self, project_root: Path, source_file: Path) -> str | None:
+        """Detect the module system used by the project. Default: None (not applicable)."""
+        return None
+
+    def process_generated_test_strings(
+        self,
+        generated_test_source: str,
+        instrumented_behavior_test_source: str,
+        instrumented_perf_test_source: str,
+        function_to_optimize: FunctionToOptimize,
+        test_path: Path,
+        test_cfg: Any,
+        project_module_system: str | None,
+    ) -> tuple[str, str, str]:
+        """Process raw generated test strings (instrumentation, placeholder replacement, etc.).
+
+        Returns (generated_test_source, instrumented_behavior_source, instrumented_perf_source).
+        """
+        ...
+
     # === Configuration ===
 
     def get_test_file_suffix(self) -> str:
@@ -737,6 +745,58 @@ class LanguageSupport(Protocol):
 
         """
         ...
+
+    def get_test_dir_for_source(self, test_dir: Path, source_file: Path | None) -> Path | None:
+        """Find the appropriate test directory for a source file.
+
+        For monorepos (JS), this finds the package's test directory from the source file path.
+        Default implementation returns None (no special directory resolution needed).
+
+        Args:
+            test_dir: The root tests directory.
+            source_file: Path to the source file being tested.
+
+        Returns:
+            The test directory path, or None if no special handling is needed.
+
+        """
+        return None
+
+    def resolve_test_file_from_class_path(self, test_class_path: str, base_dir: Path) -> Path | None:
+        """Resolve a test file path from a class path string.
+
+        Languages with non-Python module systems (e.g., Java package names like
+        "com.example.TestClass") override this to provide custom resolution.
+        Default: returns None (fall through to shared Python/file-path logic).
+
+        Args:
+            test_class_path: The class path string from JUnit XML (e.g., "com.example.TestClass").
+            base_dir: The base directory for tests.
+
+        Returns:
+            Path to the test file if found, None to fall through to default logic.
+
+        """
+        return None
+
+    def resolve_test_module_path_for_pr(
+        self, test_module_path: str, tests_project_rootdir: Path, non_generated_tests: set[Path]
+    ) -> Path | None:
+        """Resolve test module path to an absolute file path for PR creation.
+
+        Languages with non-Python module naming (e.g., Java class names)
+        override this. Default: returns None (fall through to shared logic).
+
+        Args:
+            test_module_path: The test module path string.
+            tests_project_rootdir: The tests project root directory.
+            non_generated_tests: Set of known non-generated test file paths.
+
+        Returns:
+            Resolved absolute path, or None to fall through to default logic.
+
+        """
+        return None
 
     def find_test_root(self, project_root: Path) -> Path | None:
         """Find the test root directory for a project.
@@ -786,12 +846,11 @@ class LanguageSupport(Protocol):
 
     def instrument_existing_test(
         self,
-        test_string: str,
+        test_path: Path,
         call_positions: Sequence[Any],
         function_to_optimize: Any,
         tests_project_root: Path,
         mode: str,
-        test_path: Path | None,
     ) -> tuple[bool, str | None]:
         """Inject profiling code into an existing test file.
 
@@ -799,7 +858,6 @@ class LanguageSupport(Protocol):
         behavioral verification and performance benchmarking.
 
         Args:
-            test_string: String containing the test file contents.
             test_path: Path to the test file.
             call_positions: List of code positions where the function is called.
             function_to_optimize: The function being optimized.

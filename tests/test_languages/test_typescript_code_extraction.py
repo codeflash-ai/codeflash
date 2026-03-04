@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.languages.base import FunctionInfo, Language, ParentInfo
+from codeflash.languages.base import Language
 from codeflash.languages.javascript.support import TypeScriptSupport
 
 
@@ -126,14 +126,13 @@ export function add(a: number, b: number): number {
             f.flush()
             file_path = Path(f.name)
 
-            functions = ts_support.discover_functions(file_path)
+            source = file_path.read_text(encoding="utf-8")
+            functions = ts_support.discover_functions(source, file_path)
             assert len(functions) == 1
             assert functions[0].function_name == "add"
 
             # Extract code context
-            code_context = ts_support.extract_code_context(
-                functions[0], file_path.parent, file_path.parent
-            )
+            code_context = ts_support.extract_code_context(functions[0], file_path.parent, file_path.parent)
 
             # Verify extracted code is valid
             assert ts_support.validate_syntax(code_context.target_code) is True
@@ -164,14 +163,13 @@ export async function execMongoEval(queryExpression, appsmithMongoURI) {
             f.flush()
             file_path = Path(f.name)
 
-            functions = ts_support.discover_functions(file_path)
+            source = file_path.read_text(encoding="utf-8")
+            functions = ts_support.discover_functions(source, file_path)
             assert len(functions) == 1
             assert functions[0].function_name == "execMongoEval"
 
             # Extract code context
-            code_context = ts_support.extract_code_context(
-                functions[0], file_path.parent, file_path.parent
-            )
+            code_context = ts_support.extract_code_context(functions[0], file_path.parent, file_path.parent)
 
             # Verify extracted code is valid
             assert ts_support.validate_syntax(code_context.target_code) is True
@@ -215,14 +213,13 @@ export async function figureOutContentsPath(root: string): Promise<string> {
             f.flush()
             file_path = Path(f.name)
 
-            functions = ts_support.discover_functions(file_path)
+            source = file_path.read_text(encoding="utf-8")
+            functions = ts_support.discover_functions(source, file_path)
             assert len(functions) == 1
             assert functions[0].function_name == "figureOutContentsPath"
 
             # Extract code context
-            code_context = ts_support.extract_code_context(
-                functions[0], file_path.parent, file_path.parent
-            )
+            code_context = ts_support.extract_code_context(functions[0], file_path.parent, file_path.parent)
 
             # Verify extracted code is valid
             assert ts_support.validate_syntax(code_context.target_code) is True
@@ -246,12 +243,11 @@ export function readConfig(filename: string): string {
             f.flush()
             file_path = Path(f.name)
 
-            functions = ts_support.discover_functions(file_path)
+            source = file_path.read_text(encoding="utf-8")
+            functions = ts_support.discover_functions(source, file_path)
             assert len(functions) == 1
 
-            code_context = ts_support.extract_code_context(
-                functions[0], file_path.parent, file_path.parent
-            )
+            code_context = ts_support.extract_code_context(functions[0], file_path.parent, file_path.parent)
 
             # Check that imports are captured
             assert len(code_context.imports) > 0
@@ -278,12 +274,11 @@ export async function fetchWithRetry(url: string): Promise<any> {
             f.flush()
             file_path = Path(f.name)
 
-            functions = ts_support.discover_functions(file_path)
+            source = file_path.read_text(encoding="utf-8")
+            functions = ts_support.discover_functions(source, file_path)
             assert len(functions) == 1
 
-            code_context = ts_support.extract_code_context(
-                functions[0], file_path.parent, file_path.parent
-            )
+            code_context = ts_support.extract_code_context(functions[0], file_path.parent, file_path.parent)
 
             # Verify extracted code is valid
             assert ts_support.validate_syntax(code_context.target_code) is True
@@ -324,7 +319,8 @@ export class EndpointGroup {
             file_path = Path(f.name)
 
             # Discover the 'post' method
-            functions = ts_support.discover_functions(file_path)
+            source = file_path.read_text(encoding="utf-8")
+            functions = ts_support.discover_functions(source, file_path)
             post_method = None
             for func in functions:
                 if func.function_name == "post":
@@ -334,9 +330,7 @@ export class EndpointGroup {
             assert post_method is not None, "post method should be discovered"
 
             # Extract code context
-            code_context = ts_support.extract_code_context(
-                post_method, file_path.parent, file_path.parent
-            )
+            code_context = ts_support.extract_code_context(post_method, file_path.parent, file_path.parent)
 
             # The extracted code should be syntactically valid
             assert ts_support.validate_syntax(code_context.target_code) is True, (
@@ -352,9 +346,7 @@ export class EndpointGroup {
             # Check that addEndpoint appears BEFORE the closing brace of the class
             class_end_index = code_context.target_code.rfind("}")
             add_endpoint_index = code_context.target_code.find("addEndpoint")
-            assert add_endpoint_index < class_end_index, (
-                "addEndpoint should be inside the class wrapper"
-            )
+            assert add_endpoint_index < class_end_index, "addEndpoint should be inside the class wrapper"
 
     def test_multiple_private_helpers_inside_class(self, ts_support):
         """Test that multiple private helpers are all included inside the class."""
@@ -386,7 +378,8 @@ export class Router {
             file_path = Path(f.name)
 
             # Discover the 'addRoute' method
-            functions = ts_support.discover_functions(file_path)
+            source = file_path.read_text(encoding="utf-8")
+            functions = ts_support.discover_functions(source, file_path)
             add_route_method = None
             for func in functions:
                 if func.function_name == "addRoute":
@@ -395,9 +388,7 @@ export class Router {
 
             assert add_route_method is not None
 
-            code_context = ts_support.extract_code_context(
-                add_route_method, file_path.parent, file_path.parent
-            )
+            code_context = ts_support.extract_code_context(add_route_method, file_path.parent, file_path.parent)
 
             # Should be valid TypeScript
             assert ts_support.validate_syntax(code_context.target_code) is True
@@ -424,7 +415,8 @@ export class Calculator {
             f.flush()
             file_path = Path(f.name)
 
-            functions = ts_support.discover_functions(file_path)
+            source = file_path.read_text(encoding="utf-8")
+            functions = ts_support.discover_functions(source, file_path)
             add_method = None
             for func in functions:
                 if func.function_name == "add":
@@ -433,18 +425,14 @@ export class Calculator {
 
             assert add_method is not None
 
-            code_context = ts_support.extract_code_context(
-                add_method, file_path.parent, file_path.parent
-            )
+            code_context = ts_support.extract_code_context(add_method, file_path.parent, file_path.parent)
 
             # 'compute' should be in target_code (inside class)
             assert "compute" in code_context.target_code
 
             # 'compute' should NOT be in helper_functions (would be duplicate)
             helper_names = [h.name for h in code_context.helper_functions]
-            assert "compute" not in helper_names, (
-                "Same-class helper 'compute' should not be in helper_functions list"
-            )
+            assert "compute" not in helper_names, "Same-class helper 'compute' should not be in helper_functions list"
 
 
 class TestTypeScriptLanguageProperties:

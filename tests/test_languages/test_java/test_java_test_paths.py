@@ -1,14 +1,9 @@
 """Tests for Java test path handling in FunctionOptimizer."""
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
-
-from codeflash.languages.java.test_runner import (
-    _extract_source_dirs_from_pom,
-    _path_to_class_name,
-)
+from codeflash.languages.java.test_runner import _extract_source_dirs_from_pom, _path_to_class_name
 
 
 class TestGetJavaSourcesRoot:
@@ -16,15 +11,15 @@ class TestGetJavaSourcesRoot:
 
     def _create_mock_optimizer(self, tests_root: str):
         """Create a mock FunctionOptimizer with the given tests_root."""
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
+        from codeflash.languages.java.function_optimizer import JavaFunctionOptimizer
 
         # Create a minimal mock
-        mock_optimizer = MagicMock(spec=FunctionOptimizer)
+        mock_optimizer = MagicMock(spec=JavaFunctionOptimizer)
         mock_optimizer.test_cfg = MagicMock()
         mock_optimizer.test_cfg.tests_root = Path(tests_root)
 
         # Bind the actual method to the mock
-        mock_optimizer._get_java_sources_root = lambda: FunctionOptimizer._get_java_sources_root(mock_optimizer)
+        mock_optimizer._get_java_sources_root = lambda: JavaFunctionOptimizer._get_java_sources_root(mock_optimizer)
 
         return mock_optimizer
 
@@ -97,15 +92,15 @@ class TestFixJavaTestPathsIntegration:
 
     def _create_mock_optimizer(self, tests_root: str):
         """Create a mock FunctionOptimizer with the given tests_root."""
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
+        from codeflash.languages.java.function_optimizer import JavaFunctionOptimizer
 
-        mock_optimizer = MagicMock(spec=FunctionOptimizer)
+        mock_optimizer = MagicMock(spec=JavaFunctionOptimizer)
         mock_optimizer.test_cfg = MagicMock()
         mock_optimizer.test_cfg.tests_root = Path(tests_root)
 
         # Bind the actual methods
-        mock_optimizer._get_java_sources_root = lambda: FunctionOptimizer._get_java_sources_root(mock_optimizer)
-        mock_optimizer._fix_java_test_paths = lambda behavior_source, perf_source, used_paths: FunctionOptimizer._fix_java_test_paths(mock_optimizer, behavior_source, perf_source, used_paths)
+        mock_optimizer._get_java_sources_root = lambda: JavaFunctionOptimizer._get_java_sources_root(mock_optimizer)
+        mock_optimizer._fix_java_test_paths = lambda behavior_source, perf_source, used_paths: JavaFunctionOptimizer._fix_java_test_paths(mock_optimizer, behavior_source, perf_source, used_paths)
 
         return mock_optimizer
 

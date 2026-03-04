@@ -15,7 +15,7 @@ from codeflash.languages.java.comparator import compare_test_results as _compare
 from codeflash.languages.java.concurrency_analyzer import analyze_function_concurrency
 from codeflash.languages.java.config import detect_java_project
 from codeflash.languages.java.context import extract_code_context, find_helper_functions
-from codeflash.languages.java.discovery import discover_functions, discover_functions_from_source
+from codeflash.languages.java.discovery import discover_functions_from_source
 from codeflash.languages.java.formatter import format_java_code, normalize_java_code
 from codeflash.languages.java.instrumentation import (
     instrument_existing_test,
@@ -98,22 +98,85 @@ class JavaSupport(LanguageSupport):
     def language_version(self) -> str | None:
         return self._language_version
 
+    @property
+    def valid_test_frameworks(self) -> tuple[str, ...]:
+        return ("junit5", "junit4", "testng")
+
+    @property
+    def test_result_serialization_format(self) -> str:
+        return "json"
+
+    def parse_test_xml(
+        self, test_xml_file_path: Path, test_files: Any, test_config: Any, run_result: Any = None
+    ) -> Any:
+        from codeflash.languages.java.parse import parse_java_test_xml
+
+        return parse_java_test_xml(test_xml_file_path, test_files, test_config, run_result)
+
     def postprocess_generated_tests(
         self, generated_tests: GeneratedTestsList, test_framework: str, project_root: Path, source_file_path: Path
     ) -> GeneratedTestsList:
         _ = test_framework, project_root, source_file_path
         return generated_tests
 
+    def process_generated_test_strings(
+        self,
+        generated_test_source: str,
+        instrumented_behavior_test_source: str,
+        instrumented_perf_test_source: str,
+        function_to_optimize: Any,
+        test_path: Path,
+        test_cfg: Any,
+        project_module_system: str | None,
+    ) -> tuple[str, str, str]:
+        from codeflash.languages.java.instrumentation import instrument_generated_java_test
+
+        func_name = function_to_optimize.function_name
+        qualified_name = function_to_optimize.qualified_name
+
+        instrumented_behavior_test_source = instrument_generated_java_test(
+            test_code=generated_test_source,
+            function_name=func_name,
+            qualified_name=qualified_name,
+            mode="behavior",
+            function_to_optimize=function_to_optimize,
+        )
+
+        instrumented_perf_test_source = instrument_generated_java_test(
+            test_code=generated_test_source,
+            function_name=func_name,
+            qualified_name=qualified_name,
+            mode="performance",
+            function_to_optimize=function_to_optimize,
+        )
+
+        logger.debug("Instrumented Java tests locally for %s", func_name)
+        return generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source
+
     def add_global_declarations(self, optimized_code: str, original_source: str, module_abspath: Path) -> str:
         return original_source
+
+    def prepare_module(self, module_code: str, module_path: Path, project_root: Path) -> tuple[dict[Path, Any], None]:
+        from codeflash.models.models import ValidCode
+
+        validated_original_code: dict[Path, ValidCode] = {
+            module_path: ValidCode(source_code=module_code, normalized_code=module_code)
+        }
+        return validated_original_code, None
+
+    @property
+    def function_optimizer_class(self) -> type:
+        from codeflash.languages.java.function_optimizer import JavaFunctionOptimizer
+
+        return JavaFunctionOptimizer
 
     # === Discovery ===
 
     def discover_functions(
-        self, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
+        self, source: str, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
     ) -> list[FunctionToOptimize]:
-        """Find all optimizable functions in a Java file."""
-        return discover_functions(file_path, filter_criteria, self._analyzer)
+        """Find all optimizable functions in Java source code."""
+        return discover_functions_from_source(source, file_path, filter_criteria, self._analyzer)
 
     def discover_functions_from_source(
         self, source: str, file_path: Path | None = None, filter_criteria: FunctionFilterCriteria | None = None
@@ -155,6 +218,26 @@ class JavaSupport(LanguageSupport):
     def replace_function(self, source: str, function: FunctionToOptimize, new_source: str) -> str:
         """Replace a function in source code with new implementation."""
         return replace_function(source, function, new_source, self._analyzer)
+
+    def replace_function_definitions(
+        self,
+        function_names: list[str],
+        optimized_code: Any,
+        module_abspath: Path,
+        project_root_path: Path,
+        function_to_optimize: FunctionToOptimize | None = None,
+    ) -> bool:
+        """Replace function definitions in a Java source file with optimized code."""
+        from codeflash.languages.code_replacer import replace_function_definitions_for_language
+
+        return replace_function_definitions_for_language(
+            function_names=function_names,
+            optimized_code=optimized_code,
+            module_abspath=module_abspath,
+            project_root_path=project_root_path,
+            lang_support=self,
+            function_to_optimize=function_to_optimize,
+        )
 
     def format_code(self, source: str, file_path: Path | None = None) -> str:
         """Format Java code."""
@@ -284,13 +367,60 @@ class JavaSupport(LanguageSupport):
 
     # === Configuration ===
 
+    def adjust_test_config_for_discovery(self, test_cfg: Any) -> None:
+        """Adjust test config before test discovery for Java.
+
+        Ensures test file resolution works correctly in parse_test_xml.
+        """
+        test_cfg.tests_project_rootdir = test_cfg.tests_root
+
     def get_test_file_suffix(self) -> str:
         """Get the test file suffix for Java."""
         return "Test.java"
 
+    def resolve_test_file_from_class_path(self, test_class_path: str, base_dir: Path) -> Path | None:
+        """Resolve Java class path (e.g., "com.example.TestClass") to a test file."""
+        file_ext = self.default_file_extension
+        relative_path = test_class_path.replace(".", "/") + file_ext
+
+        # 1. Directly under base_dir
+        potential_path = base_dir / relative_path
+        if potential_path.exists():
+            return potential_path
+
+        # 2. Under src/test/java relative to project root (Maven structure)
+        project_root = base_dir.parent if base_dir.name == "java" else base_dir
+        while project_root.name not in ("", "/") and not (project_root / "pom.xml").exists():
+            project_root = project_root.parent
+        if (project_root / "pom.xml").exists():
+            potential_path = project_root / "src" / "test" / "java" / relative_path
+            if potential_path.exists():
+                return potential_path
+
+        # 3. Search by filename in base_dir tree
+        file_name = test_class_path.rsplit(".", maxsplit=1)[-1] + file_ext
+        for java_file in base_dir.rglob(file_name):
+            return java_file
+
+        return None
+
+    def resolve_test_module_path_for_pr(
+        self, test_module_path: str, tests_project_rootdir: Path, non_generated_tests: set[Path]
+    ) -> Path | None:
+        """Resolve Java test module path (class name) to absolute file path for PR."""
+        lang_ext = self.default_file_extension
+        abs_path = (tests_project_rootdir / f"{test_module_path}{lang_ext}").resolve()
+        for candidate in non_generated_tests:
+            if candidate.stem == test_module_path:
+                return candidate
+        return abs_path
+
     def get_comment_prefix(self) -> str:
         """Get the comment prefix for Java."""
         return "//"
+
+    def get_test_dir_for_source(self, test_dir: Path, source_file: Path | None) -> Path | None:
+        return None
 
     def find_test_root(self, project_root: Path) -> Path | None:
         """Find the test root directory for a Java project."""
@@ -404,14 +534,14 @@ class JavaSupport(LanguageSupport):
 
     def instrument_existing_test(
         self,
-        test_string: str,
+        test_path: Path,
         call_positions: Sequence[Any],
         function_to_optimize: Any,
         tests_project_root: Path,
         mode: str,
-        test_path: Path | None,
     ) -> tuple[bool, str | None]:
         """Inject profiling code into an existing test file."""
+        test_string = test_path.read_text(encoding="utf-8")
         return instrument_existing_test(
             test_string=test_string, function_to_optimize=function_to_optimize, mode=mode, test_path=test_path
         )

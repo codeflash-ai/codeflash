@@ -755,12 +755,11 @@ def transform_expect_calls(
 
 
 def inject_profiling_into_existing_js_test(
-    test_string: str,
+    test_path: Path,
     call_positions: list[CodePosition],
     function_to_optimize: FunctionToOptimize,
     tests_project_root: Path,
     mode: str = TestingMode.BEHAVIOR,
-    test_path: Path | None = None,
 ) -> tuple[bool, str | None]:
     """Inject profiling code into an existing JavaScript test file.
 
@@ -768,7 +767,6 @@ def inject_profiling_into_existing_js_test(
     to enable behavioral verification and performance benchmarking.
 
     Args:
-        test_string: String contents of the test file.
         test_path: Path to the test file.
         call_positions: List of code positions where the function is called.
         function_to_optimize: The function being optimized.
@@ -779,7 +777,13 @@ def inject_profiling_into_existing_js_test(
         Tuple of (success, instrumented_code).
 
     """
-    test_code = test_string
+    try:
+        with test_path.open(encoding="utf8") as f:
+            test_code = f.read()
+    except Exception as e:
+        logger.error(f"Failed to read test file {test_path}: {e}")
+        return False, None
+
     # Get the relative path for test identification
     try:
         rel_path = test_path.relative_to(tests_project_root)
