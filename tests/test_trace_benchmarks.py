@@ -232,6 +232,7 @@ def test_trace_multithreaded_benchmark() -> None:
     output_file = (benchmarks_root / Path("test_trace_benchmarks.trace")).resolve()
     trace_benchmarks_pytest(benchmarks_root, tests_root, project_root, output_file)
     assert output_file.exists()
+    conn: sqlite3.Connection | None = None
     try:
         # check contents of trace file
         # connect to database
@@ -281,7 +282,8 @@ def test_trace_multithreaded_benchmark() -> None:
             assert actual[5] == expected[5], f"Mismatch at index {idx} for benchmark_module_path"
             assert actual[6] == expected[6], f"Mismatch at index {idx} for benchmark_line_number"
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
         output_file.unlink(missing_ok=True)
 
 
@@ -292,6 +294,7 @@ def test_trace_benchmark_decorator() -> None:
     output_file = (benchmarks_root / Path("test_trace_benchmarks.trace")).resolve()
     trace_benchmarks_pytest(benchmarks_root, tests_root, project_root, output_file)
     assert output_file.exists()
+    conn: sqlite3.Connection | None = None
     try:
         # check contents of trace file
         # connect to database
@@ -349,5 +352,6 @@ def test_trace_benchmark_decorator() -> None:
             assert actual[4] == expected[4], f"Mismatch at index {idx} for benchmark_function_name"
             assert actual[5] == expected[5], f"Mismatch at index {idx} for benchmark_module_path"
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
         output_file.unlink(missing_ok=True)
