@@ -130,6 +130,11 @@ def _should_include_method(
         True if the method should be included.
 
     """
+    # Skip methods that belong to an inner/nested class — they cannot be reliably
+    # instrumented or tested in isolation (see discussion in discovery module).
+    if method.is_class_nested:
+        return False
+
     # Skip abstract methods (no implementation to optimize)
     if method.is_abstract:
         return False

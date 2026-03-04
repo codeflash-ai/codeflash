@@ -1163,7 +1163,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             timing_lines = [
                 f"{indent}for (int _cf_i{current_id} = 0; _cf_i{current_id} < _cf_innerIterations{current_id}; _cf_i{current_id}++) {{",
                 f"{inner_indent}int _cf_loopId{current_id} = _cf_outerLoop{current_id} * _cf_maxInnerIterations{current_id} + _cf_i{current_id};",
-                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":" + _cf_i{current_id} + "######$!");',
+                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":" + "{current_id}" + "######$!");',
                 f"{inner_indent}long _cf_end{current_id} = -1;",
                 f"{inner_indent}long _cf_start{current_id} = 0;",
                 f"{inner_indent}try {{",
@@ -1173,7 +1173,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 f"{inner_indent}}} finally {{",
                 f"{inner_body_indent}long _cf_end{current_id}_finally = System.nanoTime();",
                 f"{inner_body_indent}long _cf_dur{current_id} = (_cf_end{current_id} != -1 ? _cf_end{current_id} : _cf_end{current_id}_finally) - _cf_start{current_id};",
-                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":" + _cf_i{current_id} + ":" + _cf_dur{current_id} + "######!");',
+                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":" + "{current_id}" + ":" + _cf_dur{current_id} + "######!");',
                 f"{inner_indent}}}",
                 f"{indent}}}",
             ]
@@ -1230,7 +1230,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             timing_lines = [
                 f"{indent}for (int _cf_i{current_id} = 0; _cf_i{current_id} < _cf_innerIterations{current_id}; _cf_i{current_id}++) {{",
                 f"{inner_indent}int _cf_loopId{current_id} = _cf_outerLoop{current_id} * _cf_maxInnerIterations{current_id} + _cf_i{current_id};",
-                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":{current_id}_" + _cf_i{current_id} + "######$!");',
+                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":{current_id}" + "######$!");',
                 f"{inner_indent}long _cf_end{current_id} = -1;",
                 f"{inner_indent}long _cf_start{current_id} = 0;",
                 f"{inner_indent}try {{",
@@ -1240,7 +1240,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 f"{inner_indent}}} finally {{",
                 f"{inner_body_indent}long _cf_end{current_id}_finally = System.nanoTime();",
                 f"{inner_body_indent}long _cf_dur{current_id} = (_cf_end{current_id} != -1 ? _cf_end{current_id} : _cf_end{current_id}_finally) - _cf_start{current_id};",
-                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":{current_id}_" + _cf_i{current_id} + ":" + _cf_dur{current_id} + "######!");',
+                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":{current_id}" + ":" + _cf_dur{current_id} + "######!");',
                 f"{inner_indent}}}",
                 f"{indent}}}",
             ]
@@ -1416,32 +1416,3 @@ def instrument_generated_java_test(
 
     logger.debug("Instrumented generated Java test for %s (mode=%s)", function_name, mode)
     return modified_code
-
-
-def _add_import(source: str, import_statement: str) -> str:
-    """Add an import statement to the source.
-
-    Args:
-        source: The source code.
-        import_statement: The import to add.
-
-    Returns:
-        Source with import added.
-
-    """
-    lines = source.splitlines(keepends=True)
-    insert_idx = 0
-
-    # Find the last import or package statement
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped.startswith(("import ", "package ")):
-            insert_idx = i + 1
-        elif stripped and not stripped.startswith("//") and not stripped.startswith("/*"):
-            # First non-import, non-comment line
-            if insert_idx == 0:
-                insert_idx = i
-            break
-
-    lines.insert(insert_idx, import_statement + "\n")
-    return "".join(lines)

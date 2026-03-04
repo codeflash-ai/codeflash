@@ -47,7 +47,7 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: Build and install codeflash-runtime JAR
+      - name: Build codeflash-runtime JAR
         run: |
           cd codeflash-java-runtime
           mvn clean package -q -DskipTests

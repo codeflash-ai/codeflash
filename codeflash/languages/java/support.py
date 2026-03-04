@@ -91,7 +91,7 @@ class JavaSupport(LanguageSupport):
 
     @property
     def dir_excludes(self) -> frozenset[str]:
-        return frozenset({"target", "build", ".gradle", ".mvn", ".idea"})
+        return frozenset({"target", "build", ".gradle", ".mvn", ".idea", "apidocs", "javadoc"})
 
     def postprocess_generated_tests(
         self, generated_tests: GeneratedTestsList, test_framework: str, project_root: Path, source_file_path: Path

@@ -1486,7 +1486,11 @@ class TestExtractCodeContextWithInnerClasses:
     """Tests for extract_code_context with inner/nested classes."""
 
     def test_static_nested_class_method(self, tmp_path: Path):
-        """Test context extraction for static nested class method."""
+        """Inner class methods are excluded from discovery and cannot be context-extracted.
+
+        Methods of static nested classes are skipped in discovery because they
+        cannot be reliably instrumented or tested in isolation.
+        """
         java_file = tmp_path / "Container.java"
         java_file.write_text("""public class Container {
     public static class Nested {
@@ -1498,26 +1502,15 @@ class TestExtractCodeContextWithInnerClasses:
 """)
         functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         compute_func = next((f for f in functions if f.function_name == "compute"), None)
-        assert compute_func is not None
-
-        context = extract_code_context(compute_func, tmp_path)
-
-        # Inner class wrapped in outer class skeleton
-        assert (
-            context.target_code
-            == """public class Container {
-    public static class Nested {
-        public int compute(int x) {
-            return x * 2;
-        }
-    }
-}
-"""
-        )
-        assert context.read_only_context == ""
+        # Inner class method must NOT be discovered
+        assert compute_func is None
 
     def test_inner_class_method(self, tmp_path: Path):
-        """Test context extraction for inner class method."""
+        """Inner class methods are excluded from discovery and cannot be context-extracted.
+
+        Methods of non-static inner classes are skipped in discovery because they
+        require an outer instance and cannot be instrumented independently.
+        """
         java_file = tmp_path / "Outer.java"
         java_file.write_text("""public class Outer {
     private int value = 10;
@@ -1531,23 +1524,8 @@ class TestExtractCodeContextWithInnerClasses:
 """)
         functions = discover_functions_from_source(java_file.read_text(), file_path=java_file)
         get_func = next((f for f in functions if f.function_name == "getValue"), None)
-        assert get_func is not None
-
-        context = extract_code_context(get_func, tmp_path)
-
-        # Inner class wrapped in outer class skeleton
-        assert (
-            context.target_code
-            == """public class Outer {
-    public class Inner {
-        public int getValue() {
-            return value;
-        }
-    }
-}
-"""
-        )
-        assert context.read_only_context == ""
+        # Inner class method must NOT be discovered
+        assert get_func is None
 
 
 class TestExtractCodeContextWithEnumAndInterface:

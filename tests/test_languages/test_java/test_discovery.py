@@ -339,3 +339,122 @@ class TestFileBasedDiscovery:
 
         tests = discover_test_methods(test_file)
         assert len(tests) > 0
+
+
+class TestInnerClassMethodFilter:
+    """Tests that methods of nested/inner classes are excluded from discovery.
+
+    Inner class methods cannot be reliably instrumented or tested in isolation:
+    - Non-static inner classes require an outer instance
+    - Protected methods are inaccessible from external test code
+    - The instrumentation layer is not class-aware (wraps by method name only)
+
+    Discovery must skip all methods whose enclosing class is itself nested inside
+    another class.
+    """
+
+    def test_static_inner_class_methods_are_excluded(self):
+        """Methods in a static nested class must not be discovered."""
+        source = """\
+public abstract class Unpacker<T> {
+    protected abstract T getString(String value);
+
+    public T unpackString() {
+        return getString(null);
+    }
+
+    public static final class ObjectUnpacker extends Unpacker<Object> {
+        public ObjectUnpacker() {}
+
+        @Override
+        protected Object getString(String value) {
+            return value;
+        }
+
+        public Object helper() {
+            return null;
+        }
+    }
+}
+"""
+        functions = discover_functions_from_source(source)
+        # Only the outer class method unpackString() should be discovered.
+        # ObjectUnpacker.getString and ObjectUnpacker.helper are inner-class methods
+        # and must be excluded.
+        function_names = {f.function_name for f in functions}
+        assert "unpackString" in function_names
+        assert "getString" not in function_names
+        assert "helper" not in function_names
+
+    def test_non_static_inner_class_methods_are_excluded(self):
+        """Methods in a non-static inner class must not be discovered."""
+        source = """\
+public class Outer {
+    private int value;
+
+    public int getValue() {
+        return value;
+    }
+
+    public class Inner {
+        public int doubleValue() {
+            return value * 2;
+        }
+    }
+}
+"""
+        functions = discover_functions_from_source(source)
+        function_names = {f.function_name for f in functions}
+        assert "getValue" in function_names
+        assert "doubleValue" not in function_names
+
+    def test_outer_class_methods_are_still_discovered(self):
+        """Outer-class methods must be discovered normally even when inner classes exist."""
+        source = """\
+public class Container {
+    public int size() {
+        return 0;
+    }
+
+    public boolean isEmpty() {
+        return true;
+    }
+
+    private static class InnerHelper {
+        public void doWork() {}
+    }
+}
+"""
+        functions = discover_functions_from_source(source)
+        function_names = {f.function_name for f in functions}
+        assert "size" in function_names
+        assert "isEmpty" in function_names
+        # Inner class method must be excluded
+        assert "doWork" not in function_names
+
+    def test_deeply_nested_class_methods_are_excluded(self):
+        """Methods in classes nested more than two levels deep must also be excluded."""
+        source = """\
+public class Level1 {
+    public int method1() {
+        return 1;
+    }
+
+    public static class Level2 {
+        public int method2() {
+            return 2;
+        }
+
+        public static class Level3 {
+            public int method3() {
+                return 3;
+            }
+        }
+    }
+}
+"""
+        functions = discover_functions_from_source(source)
+        function_names = {f.function_name for f in functions}
+        assert "method1" in function_names
+        assert "method2" not in function_names
+        assert "method3" not in function_names
