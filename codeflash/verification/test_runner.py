@@ -329,6 +329,18 @@ def run_benchmarking_tests(
     # Check if there's a language support for this test framework that implements run_benchmarking_tests
     language_support = get_language_support_by_framework(test_framework)
     if language_support is not None and hasattr(language_support, "run_benchmarking_tests"):
+        # needs_warmup = test_framework == "jest"
+        # if needs_warmup:
+        #     language_support.run_benchmarking_tests(
+        #         test_paths=test_paths,
+        #         test_env=test_env,
+        #         cwd=cwd,
+        #         timeout=pytest_timeout,
+        #         project_root=js_project_root,
+        #         min_loops=1,
+        #         max_loops=1,
+        #         target_duration_seconds=pytest_target_runtime_seconds,
+        #     )
         return language_support.run_benchmarking_tests(
             test_paths=test_paths,
             test_env=test_env,

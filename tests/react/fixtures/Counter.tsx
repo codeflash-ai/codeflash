@@ -10,7 +10,10 @@ export function Counter({ initialCount = 0, label = 'Count' }: CounterProps) {
 
   const increment = () => setCount(c => c + 1);
   const decrement = () => setCount(c => c - 1);
-
+  if (!window.__CODEFLASH_RENDERS__){ 
+    window.__CODEFLASH_RENDERS__ = []
+  }
+  window.__CODEFLASH_RENDERS__.push("hey")
   return (
     <div>
       <span>{label}: {count}</span>

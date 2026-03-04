@@ -842,7 +842,6 @@ def run_jest_behavioral_tests(
         wall_clock_ns = time.perf_counter_ns() - start_time_ns
         logger.debug(f"Jest behavioral tests completed in {wall_clock_ns / 1e9:.2f}s")
 
-    print(result.stdout)
     return result_file_path, result, coverage_json_path, None
 
 
@@ -991,6 +990,7 @@ def run_jest_benchmarking_tests(
         "--runInBand",  # Ensure serial execution
         "--forceExit",
         "--runner=codeflash/loop-runner",  # Use custom loop runner for in-process looping
+        # "--no-cache"
     ]
 
     # Add Jest config if found - needed for TypeScript transformation
@@ -1091,9 +1091,9 @@ def run_jest_benchmarking_tests(
         # Create result with combined stdout
         result = subprocess.CompletedProcess(args=result.args, returncode=result.returncode, stdout=stdout, stderr="")
         if result.returncode != 0:
-            logger.info(f"Jest benchmarking failed with return code {result.returncode}")
-            logger.info(f"Jest benchmarking stdout: {result.stdout}")
-            logger.info(f"Jest benchmarking stderr: {result.stderr}")
+            logger.debug(f"Jest benchmarking failed with return code {result.returncode}")
+            logger.debug(f"Jest benchmarking stdout: {result.stdout}")
+            logger.debug(f"Jest benchmarking stderr: {result.stderr}")
 
     except subprocess.TimeoutExpired:
         logger.warning(f"Jest benchmarking timed out after {total_timeout}s")

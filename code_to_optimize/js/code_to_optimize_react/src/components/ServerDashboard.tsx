@@ -18,13 +18,17 @@ export async function ServerDashboard({ orgId }: { orgId: string }) {
   const response = await fetch(`/api/dashboard/${orgId}`);
   const data: DashboardData = await response.json();
 
+  // Extract derived values once to avoid repeated property access / computations
+  const { totalUsers, activeUsers, revenue } = data;
+  const revenueText = "$" + revenue.toFixed(2);
+
   return (
     <div>
       <h1>Dashboard</h1>
       <div>
-        <p>Total Users: {data.totalUsers}</p>
-        <p>Active Users: {data.activeUsers}</p>
-        <p>Revenue: ${data.revenue.toFixed(2)}</p>
+        <p>Total Users: {totalUsers}</p>
+        <p>Active Users: {activeUsers}</p>
+        <p>Revenue: {revenueText}</p>
       </div>
     </div>
   );
