@@ -15,7 +15,6 @@ from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.languages import Language, current_language
-from codeflash.languages.current import current_language_support
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     AIServiceRefinerRequest,
@@ -59,6 +58,8 @@ class AiServiceClient:
         payload: dict[str, Any], language_version: str | None = None, module_system: str | None = None
     ) -> None:
         """Add language version and module system metadata to an API payload."""
+        from codeflash.languages.current import current_language_support
+
         payload["python_version"] = platform.python_version()
         default_lang_version = current_language_support().default_language_version
         if default_lang_version is not None:
@@ -69,6 +70,8 @@ class AiServiceClient:
     @staticmethod
     def log_error_response(response: requests.Response, action: str, ph_event: str) -> None:
         """Log and report an API error response."""
+        from codeflash.telemetry.posthog_cf import ph
+
         try:
             error = response.json()["error"]
         except Exception:
@@ -721,6 +724,8 @@ class AiServiceClient:
 
         """
         # Validate test framework based on language
+        from codeflash.languages.current import current_language_support
+
         lang_support = current_language_support()
         valid_frameworks = lang_support.valid_test_frameworks
         assert test_framework in valid_frameworks, (
@@ -751,6 +756,8 @@ class AiServiceClient:
         try:
             response = self.make_ai_service_request("/testgen", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
+            from codeflash.telemetry.posthog_cf import ph
+
             logger.exception(f"Error generating tests: {e}")
             ph("cli-testgen-error-caught", {"error": str(e)})
             return None
