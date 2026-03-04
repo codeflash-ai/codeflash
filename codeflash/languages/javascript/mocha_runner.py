@@ -536,7 +536,9 @@ def run_mocha_benchmarking_tests(
         )
         mocha_env["CODEFLASH_TEST_MODULE"] = test_module_path
 
-    total_timeout = max(120, (target_duration_ms // 1000) + 60, timeout or 120)
+    # Subprocess timeout: target_duration + 120s headroom for Mocha startup.
+    # capturePerf's time budget governs actual looping.
+    total_timeout = max(120, (target_duration_ms // 1000) + 120)
 
     logger.debug(f"Running Mocha benchmarking tests: {' '.join(mocha_cmd)}")
     logger.debug(

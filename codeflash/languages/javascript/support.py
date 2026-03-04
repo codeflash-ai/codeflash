@@ -2372,9 +2372,12 @@ class JavaScriptSupport:
             candidate_index=candidate_index,
         )
 
-    # JavaScript/TypeScript benchmarking uses high max_loops like Python (100,000)
-    # The actual loop count is limited by target_duration_seconds, not max_loops
-    JS_BENCHMARKING_MAX_LOOPS = 100_000
+    # Max iterations per capturePerf call site.  Each iteration writes a ~200-byte
+    # timing marker to stdout.  The actual loop count is governed by the 10s time
+    # budget (CODEFLASH_PERF_TARGET_DURATION_MS) — this constant is just a ceiling.
+    # Python uses max_loops=250; JS iterations are lighter (no pytest overhead) so
+    # 1000 gives comparable statistical power while keeping stdout under 200 KB.
+    JS_BENCHMARKING_MAX_LOOPS = 1_000
 
     def run_benchmarking_tests(
         self,
@@ -2384,7 +2387,7 @@ class JavaScriptSupport:
         timeout: int | None = None,
         project_root: Path | None = None,
         min_loops: int = 5,
-        max_loops: int = 100_000,
+        max_loops: int = 1_000,
         target_duration_seconds: float = 10.0,
         test_framework: str | None = None,
     ) -> tuple[Path, Any]:
