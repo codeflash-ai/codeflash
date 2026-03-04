@@ -616,8 +616,10 @@ def run_vitest_benchmarking_tests(
         vitest_env["CODEFLASH_TEST_MODULE"] = test_module_path
         logger.debug(f"[VITEST-BENCH] Set CODEFLASH_TEST_MODULE={test_module_path}")
 
-    # Total timeout for the entire benchmark run
-    total_timeout = max(120, (target_duration_ms // 1000) + 60, timeout or 120)
+    # Subprocess timeout: target_duration + 120s headroom for Vitest startup
+    # (TS compilation, module resolution).  The capturePerf time budget (10s default)
+    # governs actual looping; this is just a safety net for process-level hangs.
+    total_timeout = max(120, (target_duration_ms // 1000) + 120)
 
     logger.debug(f"[VITEST-BENCH] Running Vitest benchmarking tests: {' '.join(vitest_cmd)}")
     logger.debug(

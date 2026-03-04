@@ -2,14 +2,11 @@
 
 import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
-from codeflash.languages.java.test_runner import (
-    _multimodule_deps_installed,
-    ensure_multi_module_deps_installed,
-)
+from codeflash.languages.java.test_runner import _multimodule_deps_installed, ensure_multi_module_deps_installed
 
 
 @pytest.fixture(autouse=True)
@@ -85,9 +82,7 @@ def test_different_modules_not_cached(mock_run, mock_mvn):
 @patch("codeflash.languages.java.test_runner._run_cmd_kill_pg_on_timeout")
 def test_returns_false_on_maven_failure(mock_run, mock_mvn):
     """Non-zero exit code should return False and NOT cache."""
-    mock_run.return_value = subprocess.CompletedProcess(
-        args=["mvn"], returncode=1, stdout="", stderr="BUILD FAILURE"
-    )
+    mock_run.return_value = subprocess.CompletedProcess(args=["mvn"], returncode=1, stdout="", stderr="BUILD FAILURE")
 
     root = Path("/project")
     result = ensure_multi_module_deps_installed(root, "guava-tests", {})

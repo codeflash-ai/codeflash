@@ -100,7 +100,9 @@ class TestFixJavaTestPathsIntegration:
 
         # Bind the actual methods
         mock_optimizer._get_java_sources_root = lambda: JavaFunctionOptimizer._get_java_sources_root(mock_optimizer)
-        mock_optimizer._fix_java_test_paths = lambda behavior_source, perf_source, used_paths: JavaFunctionOptimizer._fix_java_test_paths(mock_optimizer, behavior_source, perf_source, used_paths)
+        mock_optimizer._fix_java_test_paths = lambda behavior_source, perf_source, used_paths: (
+            JavaFunctionOptimizer._fix_java_test_paths(mock_optimizer, behavior_source, perf_source, used_paths)
+        )
 
         return mock_optimizer
 
@@ -133,8 +135,14 @@ public class UnpackerTest__perfonlyinstrumented {
         # The path should be test/src/com/aerospike/client/util/UnpackerTest__perfinstrumented.java
         # NOT test/src/com/aerospike/test/com/aerospike/client/util/...
         expected_java_root = tmp_path / "test" / "src"
-        assert behavior_path == expected_java_root / "com" / "aerospike" / "client" / "util" / "UnpackerTest__perfinstrumented.java"
-        assert perf_path == expected_java_root / "com" / "aerospike" / "client" / "util" / "UnpackerTest__perfonlyinstrumented.java"
+        assert (
+            behavior_path
+            == expected_java_root / "com" / "aerospike" / "client" / "util" / "UnpackerTest__perfinstrumented.java"
+        )
+        assert (
+            perf_path
+            == expected_java_root / "com" / "aerospike" / "client" / "util" / "UnpackerTest__perfonlyinstrumented.java"
+        )
 
         # Verify there's no duplication in the path
         assert "com/aerospike/test/com" not in str(behavior_path)
@@ -168,6 +176,7 @@ public class CalculatorTest__perfonlyinstrumented {
         # Should be src/test/java/com/example/CalculatorTest__perfinstrumented.java
         assert behavior_path == tests_root / "com" / "example" / "CalculatorTest__perfinstrumented.java"
         assert perf_path == tests_root / "com" / "example" / "CalculatorTest__perfonlyinstrumented.java"
+
 
 class TestPathToClassNameWithCustomDirs:
     """Tests for _path_to_class_name with custom source directories."""

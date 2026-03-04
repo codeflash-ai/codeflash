@@ -4,11 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.languages.java.test_runner import (
-    _validate_java_class_name,
-    _validate_test_filter,
-    get_test_run_command,
-)
+from codeflash.languages.java.test_runner import _validate_java_class_name, _validate_test_filter, get_test_run_command
 
 
 class TestInputValidation:
@@ -62,12 +58,7 @@ class TestInputValidation:
 
     def test_validate_test_filter_wildcards(self):
         """Test validation of wildcard patterns."""
-        valid_patterns = [
-            "My*Test",
-            "*Test",
-            "com.example.*Test",
-            "com.example.**",
-        ]
+        valid_patterns = ["My*Test", "*Test", "com.example.*Test", "com.example.**"]
 
         for pattern in valid_patterns:
             result = _validate_test_filter(pattern)
@@ -155,9 +146,9 @@ class TestXMLParsingSecurity:
         # Should handle gracefully and default to 0
         tests_run, failures, errors, skipped = _parse_surefire_reports(surefire_dir)
         assert tests_run == 0  # Invalid "abc" defaulted to 0
-        assert failures == 0   # Invalid "xyz" defaulted to 0
-        assert errors == 0     # Invalid "foo" defaulted to 0
-        assert skipped == 0    # Invalid "bar" defaulted to 0
+        assert failures == 0  # Invalid "xyz" defaulted to 0
+        assert errors == 0  # Invalid "foo" defaulted to 0
+        assert skipped == 0  # Invalid "bar" defaulted to 0
 
     def test_parse_valid_surefire_report(self, tmp_path: Path):
         """Test parsing of valid Surefire report."""
@@ -203,7 +194,7 @@ class TestXMLParsingSecurity:
         for i in range(3):
             xml_file = surefire_dir / f"TEST-Suite{i}.xml"
             xml_file.write_text(f"""<?xml version="1.0" encoding="UTF-8"?>
-<testsuite tests="{i+1}" failures="0" errors="0" skipped="0">
+<testsuite tests="{i + 1}" failures="0" errors="0" skipped="0">
     <testcase name="test1" classname="Suite{i}" time="0.001"/>
 </testsuite>
 """)

@@ -305,9 +305,7 @@ class TestShouldModifySkipConfirm:
         """With skip_confirm and valid config, should return (False, config) — no reconfigure."""
         monkeypatch.chdir(tmp_project)
         codeflash_config = {"moduleRoot": "."}
-        (tmp_project / "package.json").write_text(
-            json.dumps({"name": "test", "codeflash": codeflash_config})
-        )
+        (tmp_project / "package.json").write_text(json.dumps({"name": "test", "codeflash": codeflash_config}))
 
         should_modify, config = should_modify_package_json_config(skip_confirm=True)
 
@@ -320,9 +318,7 @@ class TestShouldModifySkipConfirm:
         """With skip_confirm and invalid config (bad moduleRoot), should return (True, None)."""
         monkeypatch.chdir(tmp_project)
         codeflash_config = {"moduleRoot": "/nonexistent/path/that/does/not/exist"}
-        (tmp_project / "package.json").write_text(
-            json.dumps({"name": "test", "codeflash": codeflash_config})
-        )
+        (tmp_project / "package.json").write_text(json.dumps({"name": "test", "codeflash": codeflash_config}))
 
         should_modify, config = should_modify_package_json_config(skip_confirm=True)
 

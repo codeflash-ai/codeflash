@@ -592,12 +592,10 @@ def test_itertools_permutations_combinations() -> None:
     assert comparator(itertools.combinations("ABCD", 2), itertools.combinations("ABCD", 2))
     assert not comparator(itertools.combinations("ABCD", 2), itertools.combinations("ABCD", 3))
     assert comparator(
-        itertools.combinations_with_replacement("ABC", 2),
-        itertools.combinations_with_replacement("ABC", 2),
+        itertools.combinations_with_replacement("ABC", 2), itertools.combinations_with_replacement("ABC", 2)
     )
     assert not comparator(
-        itertools.combinations_with_replacement("ABC", 2),
-        itertools.combinations_with_replacement("ABD", 2),
+        itertools.combinations_with_replacement("ABC", 2), itertools.combinations_with_replacement("ABD", 2)
     )
 
 
@@ -615,38 +613,31 @@ def test_itertools_filtering() -> None:
 
     # compress
     assert comparator(
-        itertools.compress("ABCDEF", [1, 0, 1, 0, 1, 1]),
-        itertools.compress("ABCDEF", [1, 0, 1, 0, 1, 1]),
+        itertools.compress("ABCDEF", [1, 0, 1, 0, 1, 1]), itertools.compress("ABCDEF", [1, 0, 1, 0, 1, 1])
     )
     assert not comparator(
-        itertools.compress("ABCDEF", [1, 0, 1, 0, 1, 1]),
-        itertools.compress("ABCDEF", [1, 1, 1, 0, 1, 1]),
+        itertools.compress("ABCDEF", [1, 0, 1, 0, 1, 1]), itertools.compress("ABCDEF", [1, 1, 1, 0, 1, 1])
     )
 
     # dropwhile
     assert comparator(
-        itertools.dropwhile(lambda x: x < 5, [1, 4, 6, 4, 1]),
-        itertools.dropwhile(lambda x: x < 5, [1, 4, 6, 4, 1]),
+        itertools.dropwhile(lambda x: x < 5, [1, 4, 6, 4, 1]), itertools.dropwhile(lambda x: x < 5, [1, 4, 6, 4, 1])
     )
     assert not comparator(
-        itertools.dropwhile(lambda x: x < 5, [1, 4, 6, 4, 1]),
-        itertools.dropwhile(lambda x: x < 5, [1, 4, 7, 4, 1]),
+        itertools.dropwhile(lambda x: x < 5, [1, 4, 6, 4, 1]), itertools.dropwhile(lambda x: x < 5, [1, 4, 7, 4, 1])
     )
 
     # takewhile
     assert comparator(
-        itertools.takewhile(lambda x: x < 5, [1, 4, 6, 4, 1]),
-        itertools.takewhile(lambda x: x < 5, [1, 4, 6, 4, 1]),
+        itertools.takewhile(lambda x: x < 5, [1, 4, 6, 4, 1]), itertools.takewhile(lambda x: x < 5, [1, 4, 6, 4, 1])
     )
     assert not comparator(
-        itertools.takewhile(lambda x: x < 5, [1, 4, 6, 4, 1]),
-        itertools.takewhile(lambda x: x < 5, [1, 3, 6, 4, 1]),
+        itertools.takewhile(lambda x: x < 5, [1, 4, 6, 4, 1]), itertools.takewhile(lambda x: x < 5, [1, 3, 6, 4, 1])
     )
 
     # filterfalse
     assert comparator(
-        itertools.filterfalse(lambda x: x % 2, range(10)),
-        itertools.filterfalse(lambda x: x % 2, range(10)),
+        itertools.filterfalse(lambda x: x % 2, range(10)), itertools.filterfalse(lambda x: x % 2, range(10))
     )
 
 
@@ -654,25 +645,19 @@ def test_itertools_starmap() -> None:
     import itertools
 
     assert comparator(
-        itertools.starmap(pow, [(2, 3), (3, 2), (10, 0)]),
-        itertools.starmap(pow, [(2, 3), (3, 2), (10, 0)]),
+        itertools.starmap(pow, [(2, 3), (3, 2), (10, 0)]), itertools.starmap(pow, [(2, 3), (3, 2), (10, 0)])
     )
-    assert not comparator(
-        itertools.starmap(pow, [(2, 3), (3, 2)]),
-        itertools.starmap(pow, [(2, 3), (3, 3)]),
-    )
+    assert not comparator(itertools.starmap(pow, [(2, 3), (3, 2)]), itertools.starmap(pow, [(2, 3), (3, 3)]))
 
 
 def test_itertools_zip_longest() -> None:
     import itertools
 
     assert comparator(
-        itertools.zip_longest("AB", "xyz", fillvalue="-"),
-        itertools.zip_longest("AB", "xyz", fillvalue="-"),
+        itertools.zip_longest("AB", "xyz", fillvalue="-"), itertools.zip_longest("AB", "xyz", fillvalue="-")
     )
     assert not comparator(
-        itertools.zip_longest("AB", "xyz", fillvalue="-"),
-        itertools.zip_longest("AB", "xyz", fillvalue="*"),
+        itertools.zip_longest("AB", "xyz", fillvalue="-"), itertools.zip_longest("AB", "xyz", fillvalue="*")
     )
 
 
@@ -685,8 +670,7 @@ def test_itertools_groupby() -> None:
 
     # With key function
     assert comparator(
-        itertools.groupby([1, 1, 2, 2, 3], key=lambda x: x),
-        itertools.groupby([1, 1, 2, 2, 3], key=lambda x: x),
+        itertools.groupby([1, 1, 2, 2, 3], key=lambda x: x), itertools.groupby([1, 1, 2, 2, 3], key=lambda x: x)
     )
 
 
@@ -714,10 +698,7 @@ def test_itertools_in_containers() -> None:
         {"a": itertools.chain([1], [2]), "b": itertools.islice(range(5), 3)},
         {"a": itertools.chain([1], [2]), "b": itertools.islice(range(5), 3)},
     )
-    assert not comparator(
-        [itertools.product("AB", repeat=2)],
-        [itertools.product("AC", repeat=2)],
-    )
+    assert not comparator([itertools.product("AB", repeat=2)], [itertools.product("AC", repeat=2)])
 
     # Different itertools types should not match
     assert not comparator(itertools.chain([1, 2]), itertools.islice([1, 2], 2))
@@ -2017,59 +1998,30 @@ def test_torch_nn_sequential():
 
     # Test identical Sequential modules
     torch.manual_seed(42)
-    a = nn.Sequential(
-        nn.Linear(10, 20),
-        nn.ReLU(),
-        nn.Linear(20, 5)
-    )
+    a = nn.Sequential(nn.Linear(10, 20), nn.ReLU(), nn.Linear(20, 5))
     torch.manual_seed(42)
-    b = nn.Sequential(
-        nn.Linear(10, 20),
-        nn.ReLU(),
-        nn.Linear(20, 5)
-    )
+    b = nn.Sequential(nn.Linear(10, 20), nn.ReLU(), nn.Linear(20, 5))
     assert comparator(a, b)
 
     # Test Sequential with different weights
     torch.manual_seed(42)
-    c = nn.Sequential(
-        nn.Linear(10, 20),
-        nn.ReLU(),
-        nn.Linear(20, 5)
-    )
+    c = nn.Sequential(nn.Linear(10, 20), nn.ReLU(), nn.Linear(20, 5))
     torch.manual_seed(123)
-    d = nn.Sequential(
-        nn.Linear(10, 20),
-        nn.ReLU(),
-        nn.Linear(20, 5)
-    )
+    d = nn.Sequential(nn.Linear(10, 20), nn.ReLU(), nn.Linear(20, 5))
     assert not comparator(c, d)
 
     # Test Sequential with different number of layers
     torch.manual_seed(42)
-    e = nn.Sequential(
-        nn.Linear(10, 20),
-        nn.ReLU()
-    )
+    e = nn.Sequential(nn.Linear(10, 20), nn.ReLU())
     torch.manual_seed(42)
-    f = nn.Sequential(
-        nn.Linear(10, 20),
-        nn.ReLU(),
-        nn.Linear(20, 5)
-    )
+    f = nn.Sequential(nn.Linear(10, 20), nn.ReLU(), nn.Linear(20, 5))
     assert not comparator(e, f)
 
     # Test Sequential with different layer types
     torch.manual_seed(42)
-    g = nn.Sequential(
-        nn.Linear(10, 20),
-        nn.ReLU()
-    )
+    g = nn.Sequential(nn.Linear(10, 20), nn.ReLU())
     torch.manual_seed(42)
-    h = nn.Sequential(
-        nn.Linear(10, 20),
-        nn.Sigmoid()
-    )
+    h = nn.Sequential(nn.Linear(10, 20), nn.Sigmoid())
     assert not comparator(g, h)
 
 
@@ -2106,28 +2058,16 @@ def test_torch_nn_moduledict():
 
     # Test identical ModuleDict
     torch.manual_seed(42)
-    a = nn.ModuleDict({
-        "fc1": nn.Linear(10, 20),
-        "fc2": nn.Linear(20, 5)
-    })
+    a = nn.ModuleDict({"fc1": nn.Linear(10, 20), "fc2": nn.Linear(20, 5)})
     torch.manual_seed(42)
-    b = nn.ModuleDict({
-        "fc1": nn.Linear(10, 20),
-        "fc2": nn.Linear(20, 5)
-    })
+    b = nn.ModuleDict({"fc1": nn.Linear(10, 20), "fc2": nn.Linear(20, 5)})
     assert comparator(a, b)
 
     # Test ModuleDict with different keys
     torch.manual_seed(42)
-    c = nn.ModuleDict({
-        "fc1": nn.Linear(10, 20),
-        "fc2": nn.Linear(20, 5)
-    })
+    c = nn.ModuleDict({"fc1": nn.Linear(10, 20), "fc2": nn.Linear(20, 5)})
     torch.manual_seed(42)
-    d = nn.ModuleDict({
-        "layer1": nn.Linear(10, 20),
-        "layer2": nn.Linear(20, 5)
-    })
+    d = nn.ModuleDict({"layer1": nn.Linear(10, 20), "layer2": nn.Linear(20, 5)})
     assert not comparator(c, d)
 
 

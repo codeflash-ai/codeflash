@@ -278,6 +278,7 @@ version = '1.0.0'
         assert len(info.source_roots) == 1
         assert len(info.test_roots) == 1
 
+
 class TestXmlModuleExtraction:
     """Tests for XML-based module extraction replacing regex."""
 
@@ -373,6 +374,7 @@ class TestMavenProfiles:
         monkeypatch.setenv("CODEFLASH_MAVEN_PROFILES", "  my-profile  ")
         profiles = os.environ.get("CODEFLASH_MAVEN_PROFILES", "").strip()
         assert profiles == "my-profile"
+
 
 class TestMavenExecutableWithProjectRoot:
     """Tests for find_maven_executable with project_root parameter."""
@@ -554,7 +556,6 @@ class TestAddCodeflashDependencyToPom:
     def test_returns_false_when_no_dependencies_tag(self, tmp_path):
         pom = tmp_path / "pom.xml"
         pom.write_text(
-            '<?xml version="1.0"?>\n<project><modelVersion>4.0.0</modelVersion></project>\n',
-            encoding="utf-8",
+            '<?xml version="1.0"?>\n<project><modelVersion>4.0.0</modelVersion></project>\n', encoding="utf-8"
         )
         assert add_codeflash_dependency_to_pom(pom) is False

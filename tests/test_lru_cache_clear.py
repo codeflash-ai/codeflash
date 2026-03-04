@@ -23,7 +23,13 @@ def pytest_loops_instance(pytestconfig: Config) -> PytestLoops:
 @pytest.fixture
 def mock_item() -> type:
     class MockItem:
-        def __init__(self, function: types.FunctionType, name: str = "test_func", cls: type = None, module: types.ModuleType = None) -> None:
+        def __init__(
+            self,
+            function: types.FunctionType,
+            name: str = "test_func",
+            cls: type = None,
+            module: types.ModuleType = None,
+        ) -> None:
             self.function = function
             self.name = name
             self.cls = cls
@@ -352,7 +358,9 @@ obj.my_method(5)
         item = mock_item(no_cache_func)
         pytest_loops_instance._clear_lru_caches(item)  # noqa: SLF001
 
-    def test_clears_module_level_caches_via_sys_modules(self, pytest_loops_instance: PytestLoops, mock_item: type) -> None:
+    def test_clears_module_level_caches_via_sys_modules(
+        self, pytest_loops_instance: PytestLoops, mock_item: type
+    ) -> None:
         module_name = "_cf_test_module_scan"
         source_code = """
 import functools

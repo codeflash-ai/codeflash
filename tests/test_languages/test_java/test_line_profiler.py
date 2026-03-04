@@ -62,14 +62,7 @@ public class Calculator {
                 "targets": [
                     {
                         "className": "com/example/Calculator",
-                        "methods": [
-                            {
-                                "name": "add",
-                                "startLine": 4,
-                                "endLine": 7,
-                                "sourceFile": file_path.as_posix(),
-                            }
-                        ],
+                        "methods": [{"name": "add", "startLine": 4, "endLine": 7, "sourceFile": file_path.as_posix()}],
                     }
                 ],
                 "lineContents": {
@@ -172,18 +165,8 @@ public class Calculator {
             config = json.loads(config_path.read_text())
 
             assert config["targets"][0]["methods"] == [
-                {
-                    "name": "method1",
-                    "startLine": 2,
-                    "endLine": 4,
-                    "sourceFile": file_path.as_posix(),
-                },
-                {
-                    "name": "method2",
-                    "startLine": 6,
-                    "endLine": 8,
-                    "sourceFile": file_path.as_posix(),
-                },
+                {"name": "method1", "startLine": 2, "endLine": 4, "sourceFile": file_path.as_posix()},
+                {"name": "method2", "startLine": 6, "endLine": 8, "sourceFile": file_path.as_posix()},
             ]
 
     def test_empty_function_list(self):
@@ -403,12 +386,7 @@ class TestAgentConfigBoundaryConditions:
                     {
                         "className": "Test",
                         "methods": [
-                            {
-                                "name": "foo",
-                                "startLine": 100,
-                                "endLine": 200,
-                                "sourceFile": file_path.as_posix(),
-                            }
+                            {"name": "foo", "startLine": 100, "endLine": 200, "sourceFile": file_path.as_posix()}
                         ],
                     }
                 ],
@@ -450,12 +428,7 @@ class TestAgentConfigBoundaryConditions:
                     {
                         "className": "Test",
                         "methods": [
-                            {
-                                "name": "foo",
-                                "startLine": -5,
-                                "endLine": -1,
-                                "sourceFile": file_path.as_posix(),
-                            }
+                            {"name": "foo", "startLine": -5, "endLine": -1, "sourceFile": file_path.as_posix()}
                         ],
                     }
                 ],
@@ -496,9 +469,7 @@ class TestLineProfileResultsParsing:
         results = JavaLineProfiler.parse_results(profile_file)
 
         assert results["unit"] == 1e-9
-        assert results["timings"] == {
-            ("/tmp/Test.java", 10, "Test.java"): [(10, 100, 5000000), (11, 100, 95000000)]
-        }
+        assert results["timings"] == {("/tmp/Test.java", 10, "Test.java"): [(10, 100, 5000000), (11, 100, 95000000)]}
         assert results["line_contents"] == {
             ("/tmp/Test.java", 10): "int x = compute();",
             ("/tmp/Test.java", 11): "result = slowOperation(x);",
@@ -601,9 +572,7 @@ class TestLineProfileResultsParsing:
 
             assert results == {
                 "unit": 1e-9,
-                "timings": {
-                    ("/tmp/Sorter.java", 5, "Sorter.java"): [(5, 10, 2000000), (6, 10, 8000000)]
-                },
+                "timings": {("/tmp/Sorter.java", 5, "Sorter.java"): [(5, 10, 2000000), (6, 10, 8000000)]},
                 "line_contents": {
                     ("/tmp/Sorter.java", 5): "int n = arr.length;",
                     ("/tmp/Sorter.java", 6): "for (int i = 0; i < n; i++) {",

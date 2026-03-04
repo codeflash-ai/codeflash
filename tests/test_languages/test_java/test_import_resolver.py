@@ -2,14 +2,7 @@
 
 from pathlib import Path
 
-import pytest
-
-from codeflash.languages.java.import_resolver import (
-    JavaImportResolver,
-    ResolvedImport,
-    find_helper_files,
-    resolve_imports_for_file,
-)
+from codeflash.languages.java.import_resolver import JavaImportResolver, ResolvedImport, find_helper_files
 from codeflash.languages.java.parser import JavaImportInfo
 
 
@@ -21,11 +14,7 @@ class TestJavaImportResolver:
         resolver = JavaImportResolver(tmp_path)
 
         import_info = JavaImportInfo(
-            import_path="java.util.List",
-            is_static=False,
-            is_wildcard=False,
-            start_line=1,
-            end_line=1,
+            import_path="java.util.List", is_static=False, is_wildcard=False, start_line=1, end_line=1
         )
 
         resolved = resolver.resolve_import(import_info)
@@ -38,11 +27,7 @@ class TestJavaImportResolver:
         resolver = JavaImportResolver(tmp_path)
 
         import_info = JavaImportInfo(
-            import_path="javax.annotation.Nullable",
-            is_static=False,
-            is_wildcard=False,
-            start_line=1,
-            end_line=1,
+            import_path="javax.annotation.Nullable", is_static=False, is_wildcard=False, start_line=1, end_line=1
         )
 
         resolved = resolver.resolve_import(import_info)
@@ -53,11 +38,7 @@ class TestJavaImportResolver:
         resolver = JavaImportResolver(tmp_path)
 
         import_info = JavaImportInfo(
-            import_path="org.junit.jupiter.api.Test",
-            is_static=False,
-            is_wildcard=False,
-            start_line=1,
-            end_line=1,
+            import_path="org.junit.jupiter.api.Test", is_static=False, is_wildcard=False, start_line=1, end_line=1
         )
 
         resolved = resolver.resolve_import(import_info)
@@ -89,11 +70,7 @@ public class StringUtils {
         resolver = JavaImportResolver(tmp_path)
 
         import_info = JavaImportInfo(
-            import_path="com.example.utils.StringUtils",
-            is_static=False,
-            is_wildcard=False,
-            start_line=1,
-            end_line=1,
+            import_path="com.example.utils.StringUtils", is_static=False, is_wildcard=False, start_line=1, end_line=1
         )
 
         resolved = resolver.resolve_import(import_info)
@@ -107,11 +84,7 @@ public class StringUtils {
         resolver = JavaImportResolver(tmp_path)
 
         import_info = JavaImportInfo(
-            import_path="java.util",
-            is_static=False,
-            is_wildcard=True,
-            start_line=1,
-            end_line=1,
+            import_path="java.util", is_static=False, is_wildcard=True, start_line=1, end_line=1
         )
 
         resolved = resolver.resolve_import(import_info)
@@ -123,11 +96,7 @@ public class StringUtils {
         resolver = JavaImportResolver(tmp_path)
 
         import_info = JavaImportInfo(
-            import_path="java.lang.Math.PI",
-            is_static=True,
-            is_wildcard=False,
-            start_line=1,
-            end_line=1,
+            import_path="java.lang.Math.PI", is_static=True, is_wildcard=False, start_line=1, end_line=1
         )
 
         resolved = resolver.resolve_import(import_info)
@@ -286,11 +255,7 @@ class TestResolvedImport:
     def test_resolved_import_external(self):
         """Test ResolvedImport for external dependency."""
         resolved = ResolvedImport(
-            import_path="java.util.List",
-            file_path=None,
-            is_external=True,
-            is_wildcard=False,
-            class_name="List",
+            import_path="java.util.List", file_path=None, is_external=True, is_wildcard=False, class_name="List"
         )
         assert resolved.is_external is True
         assert resolved.file_path is None

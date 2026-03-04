@@ -319,12 +319,7 @@ class TestJavaCompilation:
             pytest.skip("Maven not installed")
 
         # Compile the project
-        result = subprocess.run(
-            ["mvn", "compile", "-q"],
-            cwd=java_project_dir,
-            capture_output=True,
-            timeout=120,
-        )
+        result = subprocess.run(["mvn", "compile", "-q"], cwd=java_project_dir, capture_output=True, timeout=120)
 
         assert result.returncode == 0, f"Compilation failed: {result.stderr.decode()}"
 
@@ -342,11 +337,6 @@ class TestJavaCompilation:
             pytest.skip("Maven not installed")
 
         # Run tests
-        result = subprocess.run(
-            ["mvn", "test", "-q"],
-            cwd=java_project_dir,
-            capture_output=True,
-            timeout=180,
-        )
+        result = subprocess.run(["mvn", "test", "-q"], cwd=java_project_dir, capture_output=True, timeout=180)
 
         assert result.returncode == 0, f"Tests failed: {result.stderr.decode()}"

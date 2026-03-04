@@ -545,7 +545,7 @@ def test_formatting_edge_case_exactly_100_diffs():
     # Create a file with exactly 100 minor formatting issues
     snippet = (
         """import json\n"""
-         """
+        """
 def func_{i}():
     x=1;y=2;z=3
     return x+y+z

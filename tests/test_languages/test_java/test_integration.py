@@ -221,9 +221,7 @@ public class StringUtilsTest {
         return new String(chars);
     }"""
 
-        optimized = support.replace_function(
-            src_file.read_text(), functions[0], new_code
-        )
+        optimized = support.replace_function(src_file.read_text(), functions[0], new_code)
 
         assert "Optimized version" in optimized
         assert "StringUtils" in optimized

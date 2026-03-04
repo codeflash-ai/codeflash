@@ -301,15 +301,7 @@ class TestVitestVsJestDetection:
 
         package_json = tmp_path / "package.json"
         package_json.write_text(
-            json.dumps(
-                {
-                    "name": "test",
-                    "devDependencies": {
-                        "vitest": "^2.0.0",
-                        "jest": "^29.0.0",
-                    },
-                }
-            )
+            json.dumps({"name": "test", "devDependencies": {"vitest": "^2.0.0", "jest": "^29.0.0"}})
         )
         package_data = get_package_json_data(package_json)
 

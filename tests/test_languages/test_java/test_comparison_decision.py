@@ -7,25 +7,12 @@ fail with an error to maintain strict correctness guarantees.
 
 import inspect
 import sqlite3
-from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
-from codeflash.languages.java.comparator import (
-    compare_test_results as java_compare_test_results,
-)
-from codeflash.models.models import (
-    FunctionTestInvocation,
-    InvocationId,
-    TestDiffScope,
-    TestResults,
-    TestType,
-    VerificationType,
-)
-from codeflash.verification.equivalence import (
-    compare_test_results as python_compare_test_results,
-)
+from codeflash.languages.java.comparator import compare_test_results as java_compare_test_results
+from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults, TestType, VerificationType
 
 
 def make_invocation(
@@ -142,7 +129,7 @@ class TestSqlitePathSelection:
                 "loop_index": 1,
                 "iteration_id": "1_0",
                 "return_value": '{"value": 42}',
-            },
+            }
         ]
         create_test_results_db(original_path, results)
         create_test_results_db(candidate_path, results)

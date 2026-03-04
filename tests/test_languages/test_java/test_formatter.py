@@ -4,14 +4,7 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
-from codeflash.languages.java.formatter import (
-    JavaFormatter,
-    format_java_code,
-    format_java_file,
-    normalize_java_code,
-)
+from codeflash.languages.java.formatter import JavaFormatter, format_java_code, format_java_file, normalize_java_code
 from codeflash.setup.detector import _detect_formatter
 
 
@@ -201,12 +194,12 @@ class TestNormalizationEdgeCases:
 
     def test_string_with_comment_chars(self):
         """Test string containing comment characters."""
-        source = '''
+        source = """
 public class Example {
     String s1 = "// not a comment";
     String s2 = "/* also not */";
 }
-'''
+"""
         normalized = normalize_java_code(source)
         # Note: current implementation incorrectly removes content in s2 string
         expected = 'public class Example {\nString s1 = "// not a comment";\nString s2 = "";\n}'
@@ -273,10 +266,7 @@ class TestDetectJavaFormatter:
 
     def test_detect_formatter_returns_empty_when_java_not_available(self, tmp_path: Path):
         """Detector returns empty list with descriptive message when Java is not found."""
-        with (
-            patch.dict(os.environ, {}, clear=True),
-            patch("shutil.which", return_value=None),
-        ):
+        with patch.dict(os.environ, {}, clear=True), patch("shutil.which", return_value=None):
             cmds, description = _detect_formatter(tmp_path, "java")
 
         assert cmds == []

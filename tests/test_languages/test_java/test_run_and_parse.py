@@ -118,12 +118,7 @@ def java_project(tmp_path: Path):
 
 def _make_optimizer(project_root: Path, test_dir: Path, function_name: str, src_file: Path) -> tuple:
     """Create an Optimizer and FunctionOptimizer for the given function."""
-    fto = FunctionToOptimize(
-        function_name=function_name,
-        file_path=src_file,
-        parents=[],
-        language="java",
-    )
+    fto = FunctionToOptimize(function_name=function_name, file_path=src_file, parents=[], language="java")
     opt = Optimizer(
         Namespace(
             project_root=project_root,
@@ -493,11 +488,7 @@ public class PreciseWaiterTest {
         project_root, src_dir, test_dir = self._setup_precise_waiter_project(java_project)
 
         test_results = self._instrument_and_run(
-            project_root,
-            src_dir,
-            test_dir,
-            self.PRECISE_WAITER_TEST,
-            "PreciseWaiterTest.java",
+            project_root, src_dir, test_dir, self.PRECISE_WAITER_TEST, "PreciseWaiterTest.java"
         )
 
         # 2 outer loops × 2 inner iterations = 4 total results
@@ -542,9 +533,7 @@ public class PreciseWaiterTest {
         runtime_by_test = test_results.usable_runtime_data_by_test_case()
 
         # Should have 1 test case (constant iteration_id per call site)
-        assert len(runtime_by_test) == 1, (
-            f"Expected 1 test case (constant iteration_id), got {len(runtime_by_test)}"
-        )
+        assert len(runtime_by_test) == 1, f"Expected 1 test case (constant iteration_id), got {len(runtime_by_test)}"
 
         # The single test case should have 4 runtimes (2 outer loops × 2 inner iterations)
         for test_id, test_runtimes in runtime_by_test.items():
@@ -584,11 +573,7 @@ public class PreciseWaiterMultiTest {
 }
 """
         test_results = self._instrument_and_run(
-            project_root,
-            src_dir,
-            test_dir,
-            multi_test_source,
-            "PreciseWaiterMultiTest.java",
+            project_root, src_dir, test_dir, multi_test_source, "PreciseWaiterMultiTest.java"
         )
 
         # 2 test methods × 2 outer loops × 2 inner iterations = 8 total results
@@ -651,5 +636,3 @@ public class PreciseWaiterMultiTest {
             f"total_passed_runtime {total_runtime / 1_000_000:.3f}ms not close to expected "
             f"{expected_total_ns / 1_000_000:.1f}ms (2 methods × min of 4 runtimes × 10ms, ±3%)"
         )
-
-
