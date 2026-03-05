@@ -123,6 +123,13 @@ def get_code_optimization_context(
         code_context_type=CodeContextType.READ_WRITABLE,
     )
 
+    # Ensure the target file is first in the code blocks so the LLM knows which file to optimize
+    target_relative = function_to_optimize.file_path.resolve().relative_to(project_root_path.resolve())
+    target_blocks = [cs for cs in final_read_writable_code.code_strings if cs.file_path == target_relative]
+    other_blocks = [cs for cs in final_read_writable_code.code_strings if cs.file_path != target_relative]
+    if target_blocks:
+        final_read_writable_code.code_strings = target_blocks + other_blocks
+
     read_only_code_markdown = extract_code_markdown_context_from_files(
         helpers_of_fto_dict,
         helpers_of_helpers_dict,

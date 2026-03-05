@@ -243,6 +243,14 @@ def test_bubble_sort_helper() -> None:
     hashing_context = code_ctx.hashing_code_context
 
     expected_read_write_context = """
+```python:code_to_optimize/code_directories/retriever/bubble_sort_imported.py
+from bubble_sort_with_math import sorter
+
+
+def sort_from_another_file(arr):
+    sorted_arr = sorter(arr)
+    return sorted_arr
+```
 ```python:code_to_optimize/code_directories/retriever/bubble_sort_with_math.py
 import math
 
@@ -252,14 +260,6 @@ def sorter(arr):
     x = math.sqrt(2)
     print(x)
     return arr
-```
-```python:code_to_optimize/code_directories/retriever/bubble_sort_imported.py
-from bubble_sort_with_math import sorter
-
-
-def sort_from_another_file(arr):
-    sorted_arr = sorter(arr)
-    return sorted_arr
 ```
 """
     expected_read_only_context = ""
@@ -1178,6 +1178,26 @@ def test_repo_helper() -> None:
     hashing_context = code_ctx.hashing_code_context
     path_to_globals = project_root / "globals.py"
     expected_read_write_context = f"""
+```python:{path_to_file.relative_to(project_root)}
+import requests
+from globals import API_URL
+from utils import DataProcessor
+
+
+def fetch_and_process_data():
+    # Use the global variable for the request
+    response = requests.get(API_URL)
+    response.raise_for_status()
+
+    raw_data = response.text
+
+    # Use code from another file (utils.py)
+    processor = DataProcessor()
+    processed = processor.process_data(raw_data)
+    processed = processor.add_prefix(processed)
+
+    return processed
+```
 ```python:{path_to_globals.relative_to(project_root)}
 # Define a global variable
 API_URL = "https://api.example.com/data"
@@ -1200,26 +1220,6 @@ class DataProcessor:
     def add_prefix(self, data: str, prefix: str = "PREFIX_") -> str:
         \"\"\"Add a prefix to the processed data.\"\"\"
         return prefix + data
-```
-```python:{path_to_file.relative_to(project_root)}
-import requests
-from globals import API_URL
-from utils import DataProcessor
-
-
-def fetch_and_process_data():
-    # Use the global variable for the request
-    response = requests.get(API_URL)
-    response.raise_for_status()
-
-    raw_data = response.text
-
-    # Use code from another file (utils.py)
-    processor = DataProcessor()
-    processed = processor.process_data(raw_data)
-    processed = processor.add_prefix(processed)
-
-    return processed
 ```
 """
     expected_read_only_context = f"""
@@ -1278,6 +1278,25 @@ def test_repo_helper_of_helper() -> None:
     hashing_context = code_ctx.hashing_code_context
     path_to_globals = project_root / "globals.py"
     expected_read_write_context = f"""
+```python:{path_to_file.relative_to(project_root)}
+import requests
+from globals import API_URL
+from utils import DataProcessor
+
+
+def fetch_and_transform_data():
+    # Use the global variable for the request
+    response = requests.get(API_URL)
+
+    raw_data = response.text
+
+    # Use code from another file (utils.py)
+    processor = DataProcessor()
+    processed = processor.process_data(raw_data)
+    transformed = processor.transform_data(processed)
+
+    return transformed
+```
 ```python:{path_to_globals.relative_to(project_root)}
 # Define a global variable
 API_URL = "https://api.example.com/data"
@@ -1301,25 +1320,6 @@ class DataProcessor:
     def transform_data(self, data: str) -> str:
         \"\"\"Transform the processed data\"\"\"
         return DataTransformer().transform(data)
-```
-```python:{path_to_file.relative_to(project_root)}
-import requests
-from globals import API_URL
-from utils import DataProcessor
-
-
-def fetch_and_transform_data():
-    # Use the global variable for the request
-    response = requests.get(API_URL)
-
-    raw_data = response.text
-
-    # Use code from another file (utils.py)
-    processor = DataProcessor()
-    processed = processor.process_data(raw_data)
-    transformed = processor.transform_data(processed)
-
-    return transformed
 ```
 """
     expected_read_only_context = f"""
@@ -1384,14 +1384,6 @@ def test_repo_helper_of_helper_same_class() -> None:
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     hashing_context = code_ctx.hashing_code_context
     expected_read_write_context = f"""
-```python:{path_to_transform_utils.relative_to(project_root)}
-class DataTransformer:
-    def __init__(self):
-        self.data = None
-
-    def transform_using_own_method(self, data):
-        return self.transform(data)
-```
 ```python:{path_to_utils.relative_to(project_root)}
 import math
 from transform_utils import DataTransformer
@@ -1407,6 +1399,14 @@ class DataProcessor:
     def transform_data_own_method(self, data: str) -> str:
         \"\"\"Transform the processed data using own method\"\"\"
         return DataTransformer().transform_using_own_method(data)
+```
+```python:{path_to_transform_utils.relative_to(project_root)}
+class DataTransformer:
+    def __init__(self):
+        self.data = None
+
+    def transform_using_own_method(self, data):
+        return self.transform(data)
 ```
 """
     expected_read_only_context = f"""
@@ -1465,14 +1465,6 @@ def test_repo_helper_of_helper_same_file() -> None:
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     hashing_context = code_ctx.hashing_code_context
     expected_read_write_context = f"""
-```python:{path_to_transform_utils.relative_to(project_root)}
-class DataTransformer:
-    def __init__(self):
-        self.data = None
-
-    def transform_using_same_file_function(self, data):
-        return update_data(data)
-```
 ```python:{path_to_utils.relative_to(project_root)}
 import math
 from transform_utils import DataTransformer
@@ -1488,6 +1480,14 @@ class DataProcessor:
     def transform_data_same_file_function(self, data: str) -> str:
         \"\"\"Transform the processed data using a function from the same file\"\"\"
         return DataTransformer().transform_using_same_file_function(data)
+```
+```python:{path_to_transform_utils.relative_to(project_root)}
+class DataTransformer:
+    def __init__(self):
+        self.data = None
+
+    def transform_using_same_file_function(self, data):
+        return update_data(data)
 ```
 """
     expected_read_only_context = f"""
@@ -1605,6 +1605,17 @@ def test_repo_helper_circular_dependency() -> None:
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     hashing_context = code_ctx.hashing_code_context
     expected_read_write_context = f"""
+```python:{path_to_transform_utils.relative_to(project_root)}
+from code_to_optimize.code_directories.retriever.utils import DataProcessor
+
+
+class DataTransformer:
+    def __init__(self):
+        self.data = None
+
+    def circular_dependency(self, data):
+        return DataProcessor().circular_dependency(data)
+```
 ```python:{path_to_utils.relative_to(project_root)}
 import math
 from transform_utils import DataTransformer
@@ -1620,17 +1631,6 @@ class DataProcessor:
     def circular_dependency(self, data: str) -> str:
         \"\"\"Test circular dependency\"\"\"
         return DataTransformer().circular_dependency(data)
-```
-```python:{path_to_transform_utils.relative_to(project_root)}
-from code_to_optimize.code_directories.retriever.utils import DataProcessor
-
-
-class DataTransformer:
-    def __init__(self):
-        self.data = None
-
-    def circular_dependency(self, data):
-        return DataProcessor().circular_dependency(data)
 ```
 """
     expected_read_only_context = f"""
@@ -1796,6 +1796,12 @@ def function_to_optimize():
 ```
 """
     expected_read_write_context = f"""
+```python:{path_to_fto.relative_to(project_root)}
+import code_to_optimize.code_directories.retriever.main
+
+def function_to_optimize():
+    return code_to_optimize.code_directories.retriever.main.fetch_and_transform_data()
+```
 ```python:{path_to_main.relative_to(project_root)}
 import requests
 from globals import API_URL
@@ -1814,12 +1820,6 @@ def fetch_and_transform_data():
     transformed = processor.transform_data(processed)
 
     return transformed
-```
-```python:{path_to_fto.relative_to(project_root)}
-import code_to_optimize.code_directories.retriever.main
-
-def function_to_optimize():
-    return code_to_optimize.code_directories.retriever.main.fetch_and_transform_data()
 ```
 """
     assert read_write_context.markdown.strip() == expected_read_write_context.strip()
@@ -2244,6 +2244,20 @@ def get_system_details():
         # The expected contexts
         relative_path = file_path.relative_to(project_root)
         expected_read_write_context = f"""
+```python:{main_file_path.resolve().relative_to(opt.args.project_root.resolve())}
+import utility_module
+
+class Calculator:
+    def __init__(self, precision="high", fallback_precision=None, mode="standard"):
+        # This is where we use the imported module
+        self.precision = utility_module.select_precision(precision, fallback_precision)
+        self.mode = mode
+
+        # Using variables from the utility module
+        self.backend = utility_module.CALCULATION_BACKEND
+        self.system = utility_module.SYSTEM_TYPE
+        self.default_precision = utility_module.DEFAULT_PRECISION
+```
 ```python:utility_module.py
 import sys
 
@@ -2290,20 +2304,6 @@ def select_precision(precision, fallback_precision):
         return precision.lower()
     else:
         return DEFAULT_PRECISION
-```
-```python:{main_file_path.resolve().relative_to(opt.args.project_root.resolve())}
-import utility_module
-
-class Calculator:
-    def __init__(self, precision="high", fallback_precision=None, mode="standard"):
-        # This is where we use the imported module
-        self.precision = utility_module.select_precision(precision, fallback_precision)
-        self.mode = mode
-
-        # Using variables from the utility module
-        self.backend = utility_module.CALCULATION_BACKEND
-        self.system = utility_module.SYSTEM_TYPE
-        self.default_precision = utility_module.DEFAULT_PRECISION
 ```
 """
         expected_read_only_context = """

@@ -6,14 +6,13 @@ via the LanguageSupport protocol.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
 from codeflash.languages.base import FunctionFilterCriteria
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import LanguageSupport
     from codeflash.models.models import CodeStringsMarkdown
@@ -25,20 +24,28 @@ _SOURCE_CRITERIA = FunctionFilterCriteria(require_return=False, require_export=F
 def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStringsMarkdown) -> str:
     file_to_code_context = optimized_code.file_to_path()
     module_optimized_code = file_to_code_context.get(str(relative_path))
-    if module_optimized_code is None:
-        # Fallback: if there's only one code block with None file path,
-        # use it regardless of the expected path (the AI server doesn't always include file paths)
-        if "None" in file_to_code_context and len(file_to_code_context) == 1:
-            module_optimized_code = file_to_code_context["None"]
-            logger.debug(f"Using code block with None file_path for {relative_path}")
-        else:
-            logger.warning(
-                f"Optimized code not found for {relative_path} In the context\n-------\n{optimized_code}\n-------\n"
-                "re-check your 'markdown code structure'"
-                f"existing files are {file_to_code_context.keys()}"
-            )
-            module_optimized_code = ""
-    return module_optimized_code
+    if module_optimized_code is not None:
+        return module_optimized_code
+
+    # Fallback 1: single code block with no file path
+    if "None" in file_to_code_context and len(file_to_code_context) == 1:
+        logger.debug(f"Using code block with None file_path for {relative_path}")
+        return file_to_code_context["None"]
+
+    # Fallback 2: match by filename (basename) — the LLM sometimes returns a different
+    # directory prefix but the correct filename
+    target_name = relative_path.name
+    basename_matches = [
+        code for path, code in file_to_code_context.items() if path != "None" and Path(path).name == target_name
+    ]
+    if len(basename_matches) == 1:
+        logger.debug(f"Using basename-matched code block for {relative_path}")
+        return basename_matches[0]
+
+    logger.warning(
+        f"Optimized code not found for {relative_path}, existing files are {list(file_to_code_context.keys())}"
+    )
+    return ""
 
 
 def replace_function_definitions_for_language(
