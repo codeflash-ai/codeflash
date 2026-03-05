@@ -18,6 +18,53 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+CODEFLASH_RUNTIME_VERSION = "1.0.0"
+CODEFLASH_RUNTIME_JAR_NAME = f"codeflash-runtime-{CODEFLASH_RUNTIME_VERSION}.jar"
+
+_POM_BACKUP_SUFFIX = ".codeflash-backup"
+_pom_backups: set[Path] = set()
+
+
+def backup_pom(pom_path: Path) -> Path | None:
+    """Create a backup of pom.xml before modifying it.
+
+    The backup is stored alongside the original as pom.xml.codeflash-backup.
+    Tracked in a module-level set so all backups can be restored at cleanup.
+    """
+    if not pom_path.exists():
+        return None
+    backup_path = pom_path.with_name(pom_path.name + _POM_BACKUP_SUFFIX)
+    if backup_path.exists():
+        # Already backed up (e.g. from a previous phase in the same optimization)
+        return backup_path
+    shutil.copy2(pom_path, backup_path)
+    _pom_backups.add(backup_path)
+    logger.debug("Backed up %s to %s", pom_path, backup_path)
+    return backup_path
+
+
+def restore_pom(pom_path: Path) -> bool:
+    """Restore pom.xml from its codeflash backup and remove the backup file."""
+    backup_path = pom_path.with_name(pom_path.name + _POM_BACKUP_SUFFIX)
+    if not backup_path.exists():
+        return False
+    shutil.copy2(backup_path, pom_path)
+    backup_path.unlink()
+    _pom_backups.discard(backup_path)
+    logger.debug("Restored %s from backup", pom_path)
+    return True
+
+
+def restore_all_pom_backups() -> None:
+    """Restore all pom.xml files that were backed up during this optimization."""
+    for backup_path in list(_pom_backups):
+        original_path = backup_path.with_name(backup_path.name.removesuffix(_POM_BACKUP_SUFFIX))
+        if backup_path.exists():
+            shutil.copy2(backup_path, original_path)
+            backup_path.unlink()
+            logger.debug("Restored %s from backup", original_path)
+    _pom_backups.clear()
+
 
 def _safe_parse_xml(file_path: Path) -> ET.ElementTree:
     """Safely parse an XML file with protections against XXE attacks.
@@ -595,7 +642,7 @@ def install_codeflash_runtime(project_root: Path, runtime_jar_path: Path) -> boo
         f"-Dfile={runtime_jar_path}",
         "-DgroupId=com.codeflash",
         "-DartifactId=codeflash-runtime",
-        "-Dversion=1.0.0",
+        f"-Dversion={CODEFLASH_RUNTIME_VERSION}",
         "-Dpackaging=jar",
         "-B",
     ]
@@ -614,11 +661,11 @@ def install_codeflash_runtime(project_root: Path, runtime_jar_path: Path) -> boo
         return False
 
 
-CODEFLASH_DEPENDENCY_SNIPPET = """\
+CODEFLASH_DEPENDENCY_SNIPPET = f"""\
         <dependency>
             <groupId>com.codeflash</groupId>
             <artifactId>codeflash-runtime</artifactId>
-            <version>1.0.0</version>
+            <version>{CODEFLASH_RUNTIME_VERSION}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>"""
@@ -661,7 +708,7 @@ def add_codeflash_dependency_to_pom(pom_path: Path) -> bool:
                             "<dependency>\n"
                             "            <groupId>com.codeflash</groupId>\n"
                             "            <artifactId>codeflash-runtime</artifactId>\n"
-                            "            <version>1.0.0</version>\n"
+                            f"            <version>{CODEFLASH_RUNTIME_VERSION}</version>\n"
                             "            <scope>test</scope>\n"
                             "        </dependency>"
                         )

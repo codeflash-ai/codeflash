@@ -24,8 +24,11 @@ from typing import Any
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.languages.base import TestResult
 from codeflash.languages.java.build_tools import (
+    CODEFLASH_RUNTIME_JAR_NAME,
+    CODEFLASH_RUNTIME_VERSION,
     add_codeflash_dependency_to_pom,
     add_jacoco_plugin_to_pom,
+    backup_pom,
     find_maven_executable,
     get_jacoco_xml_path,
     install_codeflash_runtime,
@@ -46,6 +49,10 @@ _classpath_cache: dict[tuple[Path, str | None], str] = {}
 # Cache for multi-module dependency installs — keyed on (maven_root, test_module).
 # After pre-installing deps to .m2 once, subsequent Maven invocations can skip -am.
 _multimodule_deps_installed: set[tuple[Path, str]] = set()
+
+# Cache for runtime setup — keyed on (maven_root, test_module).
+# The setup (install JAR to .m2, add dependency to pom.xml) only needs to happen once per optimization.
+_runtime_ensured: dict[tuple[Path, str | None], bool] = {}
 
 # Regex pattern for valid Java class names (package.ClassName format)
 # Allows: letters, digits, underscores, dots, and dollar signs (inner classes)
@@ -180,20 +187,20 @@ def _find_runtime_jar() -> Path | None:
         / "com"
         / "codeflash"
         / "codeflash-runtime"
-        / "1.0.0"
-        / "codeflash-runtime-1.0.0.jar"
+        / CODEFLASH_RUNTIME_VERSION
+        / CODEFLASH_RUNTIME_JAR_NAME
     )
     if m2_jar.exists():
         return m2_jar
 
     # Check bundled JAR in package resources
-    resources_jar = Path(__file__).parent / "resources" / "codeflash-runtime-1.0.0.jar"
+    resources_jar = Path(__file__).parent / "resources" / CODEFLASH_RUNTIME_JAR_NAME
     if resources_jar.exists():
         return resources_jar
 
     # Check development build directory
     dev_jar = (
-        Path(__file__).parent.parent.parent.parent / "codeflash-java-runtime" / "target" / "codeflash-runtime-1.0.0.jar"
+        Path(__file__).parent.parent.parent.parent / "codeflash-java-runtime" / "target" / CODEFLASH_RUNTIME_JAR_NAME
     )
     if dev_jar.exists():
         return dev_jar
@@ -216,6 +223,10 @@ def _ensure_codeflash_runtime(maven_root: Path, test_module: str | None) -> bool
         True if runtime is available, False otherwise.
 
     """
+    cache_key = (maven_root, test_module)
+    if cache_key in _runtime_ensured:
+        return _runtime_ensured[cache_key]
+
     runtime_jar = _find_runtime_jar()
     if runtime_jar is None:
         logger.error("codeflash-runtime JAR not found. Generated tests will fail to compile.")
@@ -229,8 +240,8 @@ def _ensure_codeflash_runtime(maven_root: Path, test_module: str | None) -> bool
         / "com"
         / "codeflash"
         / "codeflash-runtime"
-        / "1.0.0"
-        / "codeflash-runtime-1.0.0.jar"
+        / CODEFLASH_RUNTIME_VERSION
+        / CODEFLASH_RUNTIME_JAR_NAME
     )
     if not m2_jar.exists():
         logger.info("Installing codeflash-runtime JAR to local Maven repository")
@@ -245,6 +256,7 @@ def _ensure_codeflash_runtime(maven_root: Path, test_module: str | None) -> bool
         pom_path = maven_root / "pom.xml"
 
     if pom_path.exists():
+        backup_pom(pom_path)
         if not add_codeflash_dependency_to_pom(pom_path):
             logger.error("Failed to add codeflash-runtime dependency to %s", pom_path)
             return False
@@ -252,6 +264,7 @@ def _ensure_codeflash_runtime(maven_root: Path, test_module: str | None) -> bool
         logger.warning("pom.xml not found at %s, cannot add codeflash-runtime dependency", pom_path)
         return False
 
+    _runtime_ensured[cache_key] = True
     return True
 
 
@@ -570,6 +583,7 @@ def run_behavioral_tests(
             if test_module_pom.exists():
                 if not is_jacoco_configured(test_module_pom):
                     logger.info("Adding JaCoCo plugin to test module pom.xml: %s", test_module_pom)
+                    backup_pom(test_module_pom)
                     add_jacoco_plugin_to_pom(test_module_pom)
                 coverage_xml_path = get_jacoco_xml_path(maven_root / test_module)
         else:
@@ -578,6 +592,7 @@ def run_behavioral_tests(
             if pom_path.exists():
                 if not is_jacoco_configured(pom_path):
                     logger.info("Adding JaCoCo plugin to pom.xml for coverage collection")
+                    backup_pom(pom_path)
                     add_jacoco_plugin_to_pom(pom_path)
                 coverage_xml_path = get_jacoco_xml_path(project_root)
 

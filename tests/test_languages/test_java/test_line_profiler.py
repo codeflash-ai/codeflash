@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
+from codeflash.languages.java.build_tools import CODEFLASH_RUNTIME_JAR_NAME
 from codeflash.languages.java.line_profiler import (
     DEFAULT_WARMUP_ITERATIONS,
     JavaLineProfiler,
@@ -212,7 +213,7 @@ class TestAgentJarLocator:
         # Should find it in either resources or dev build
         assert jar is not None
         assert jar.exists()
-        assert jar.name == "codeflash-runtime-1.0.0.jar"
+        assert jar.name == CODEFLASH_RUNTIME_JAR_NAME
 
     def test_build_javaagent_arg(self):
         with tempfile.TemporaryDirectory() as tmpdir:

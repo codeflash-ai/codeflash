@@ -67,6 +67,7 @@ from codeflash.discovery.functions_to_optimize import was_function_previously_op
 from codeflash.either import Failure, Success, is_successful
 from codeflash.languages.base import Language
 from codeflash.languages.current import current_language_support
+from codeflash.languages.java.build_tools import restore_all_pom_backups
 from codeflash.languages.javascript.test_runner import clear_created_config_files, get_created_config_files
 from codeflash.lsp.helpers import is_LSP_enabled, is_subagent_mode, report_to_markdown_table, tree_to_markdown
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
@@ -1323,6 +1324,11 @@ class FunctionOptimizer:
                 self.write_code_and_helpers(
                     self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                 )
+                restore_all_pom_backups()
+                # Clear the runtime setup cache so the next optimization re-adds the dependency
+                from codeflash.languages.java.test_runner import _runtime_ensured
+
+                _runtime_ensured.clear()
 
         # Select and return the best optimization
         best_optimization = self.select_best_optimization(

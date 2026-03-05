@@ -17,6 +17,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from codeflash.languages.java.build_tools import CODEFLASH_RUNTIME_JAR_NAME, CODEFLASH_RUNTIME_VERSION
+
 if TYPE_CHECKING:
     from codeflash.models.models import TestDiff
 
@@ -44,10 +46,10 @@ def _find_comparator_jar(project_root: Path | None = None) -> Path | None:
     for base_dir in search_dirs:
         # Check in target directory (after Maven install)
         for jar_path in [
-            base_dir / "target" / "dependency" / "codeflash-runtime-1.0.0.jar",
-            base_dir / "target" / "codeflash-runtime-1.0.0.jar",
-            base_dir / "lib" / "codeflash-runtime-1.0.0.jar",
-            base_dir / ".codeflash" / "codeflash-runtime-1.0.0.jar",
+            base_dir / "target" / "dependency" / CODEFLASH_RUNTIME_JAR_NAME,
+            base_dir / "target" / CODEFLASH_RUNTIME_JAR_NAME,
+            base_dir / "lib" / CODEFLASH_RUNTIME_JAR_NAME,
+            base_dir / ".codeflash" / CODEFLASH_RUNTIME_JAR_NAME,
         ]:
             if jar_path.exists():
                 return jar_path
@@ -60,14 +62,14 @@ def _find_comparator_jar(project_root: Path | None = None) -> Path | None:
             / "com"
             / "codeflash"
             / "codeflash-runtime"
-            / "1.0.0"
-            / "codeflash-runtime-1.0.0.jar"
+            / CODEFLASH_RUNTIME_VERSION
+            / CODEFLASH_RUNTIME_JAR_NAME
         )
         if m2_jar.exists():
             return m2_jar
 
     # Check bundled JAR in package resources
-    resources_jar = Path(__file__).parent / "resources" / "codeflash-runtime-1.0.0.jar"
+    resources_jar = Path(__file__).parent / "resources" / CODEFLASH_RUNTIME_JAR_NAME
     if resources_jar.exists():
         return resources_jar
 
