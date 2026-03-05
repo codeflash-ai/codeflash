@@ -124,7 +124,7 @@ def get_code_optimization_context(
     )
 
     # Ensure the target file is first in the code blocks so the LLM knows which file to optimize
-    target_relative = function_to_optimize.file_path.relative_to(project_root_path)
+    target_relative = function_to_optimize.file_path.resolve().relative_to(project_root_path.resolve())
     target_blocks = [cs for cs in final_read_writable_code.code_strings if cs.file_path == target_relative]
     other_blocks = [cs for cs in final_read_writable_code.code_strings if cs.file_path != target_relative]
     if target_blocks:
