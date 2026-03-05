@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import logging
 from os.path import basename
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
 from codeflash.languages.base import FunctionFilterCriteria
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import LanguageSupport
     from codeflash.models.models import CodeStringsMarkdown
@@ -45,7 +46,7 @@ def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStrin
     for path, code in file_to_code_context.items():
         if path == "None":
             continue
-        if basename(path) == target_name:
+        if basename(path) == target_name:  # noqa: PTH119 — avoids Path object allocation in hot loop
             match_count += 1
             if match_count == 1:
                 match_code = code
