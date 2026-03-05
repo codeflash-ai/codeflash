@@ -6,6 +6,8 @@ via the LanguageSupport protocol.
 
 from __future__ import annotations
 
+import logging
+from os.path import basename
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -29,22 +31,38 @@ def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStrin
 
     # Fallback 1: single code block with no file path
     if "None" in file_to_code_context and len(file_to_code_context) == 1:
-        logger.debug(f"Using code block with None file_path for {relative_path}")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"Using code block with None file_path for {relative_path}")
         return file_to_code_context["None"]
 
     # Fallback 2: match by filename (basename) — the LLM sometimes returns a different
     # directory prefix but the correct filename
     target_name = relative_path.name
-    basename_matches = [
-        code for path, code in file_to_code_context.items() if path != "None" and Path(path).name == target_name
-    ]
-    if len(basename_matches) == 1:
-        logger.debug(f"Using basename-matched code block for {relative_path}")
-        return basename_matches[0]
 
-    logger.warning(
-        f"Optimized code not found for {relative_path}, existing files are {list(file_to_code_context.keys())}"
-    )
+    # Single-pass basename matching to avoid allocating a list and many Path objects.
+    match_count = 0
+    match_code: str | None = None
+    for path, code in file_to_code_context.items():
+        if path == "None":
+            continue
+        if basename(path) == target_name:
+            match_count += 1
+            if match_count == 1:
+                match_code = code
+            else:
+                # More than one match — no unique basename match
+                break
+
+    if match_count == 1:
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"Using basename-matched code block for {relative_path}")
+        # match_code cannot be None here
+        return match_code  # type: ignore[return-value]
+
+    if logger.isEnabledFor(logging.WARNING):
+        logger.warning(
+            f"Optimized code not found for {relative_path}, existing files are {list(file_to_code_context.keys())}"
+        )
     return ""
 
 
