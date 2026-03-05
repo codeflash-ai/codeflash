@@ -255,17 +255,9 @@ def _extract_java_version_from_pom(root: ET.Element, ns: dict[str, str]) -> str 
 def _get_gradle_project_info(project_root: Path) -> JavaProjectInfo | None:
     """Get project info from Gradle build file.
 
-    Note: This is a basic implementation. Full Gradle parsing would require
-    running Gradle with a custom task or using the Gradle tooling API.
-
-    Args:
-        project_root: Root directory of the Gradle project.
-
-    Returns:
-        JavaProjectInfo with basic Gradle project structure.
-
+    Parses build.gradle(.kts) for group/version/java version using regex,
+    and settings.gradle(.kts) for the project name.
     """
-    # Standard Gradle directory structure
     source_roots = []
     test_roots = []
 
@@ -279,17 +271,77 @@ def _get_gradle_project_info(project_root: Path) -> JavaProjectInfo | None:
 
     build_dir = project_root / "build"
 
+    group_id = None
+    artifact_id = None
+    version = None
+    java_version = None
+
+    for gradle_file in ("build.gradle.kts", "build.gradle"):
+        gradle_path = project_root / gradle_file
+        if gradle_path.exists():
+            try:
+                content = gradle_path.read_text(encoding="utf-8")
+                if group_id is None:
+                    m = re.search(r'group\s*=\s*["\']([^"\']+)["\']', content)
+                    if m:
+                        group_id = m.group(1)
+                if version is None:
+                    m = re.search(r'version\s*=\s*["\']([^"\']+)["\']', content)
+                    if m:
+                        version = m.group(1)
+                if java_version is None:
+                    java_version = _extract_java_version_from_gradle(content)
+            except Exception as e:
+                logger.warning("Failed to parse %s: %s", gradle_path, e)
+
+    for settings_file in ("settings.gradle.kts", "settings.gradle"):
+        settings_path = project_root / settings_file
+        if settings_path.exists():
+            try:
+                content = settings_path.read_text(encoding="utf-8")
+                m = re.search(r'rootProject\.name\s*=\s*["\']([^"\']+)["\']', content)
+                if m:
+                    artifact_id = m.group(1)
+            except Exception:
+                pass
+            break
+
+    if artifact_id is None:
+        artifact_id = project_root.name
+
     return JavaProjectInfo(
         project_root=project_root,
         build_tool=BuildTool.GRADLE,
         source_roots=source_roots,
         test_roots=test_roots,
         target_dir=build_dir,
-        group_id=None,  # Would need to parse build.gradle
-        artifact_id=None,
-        version=None,
-        java_version=None,
+        group_id=group_id,
+        artifact_id=artifact_id,
+        version=version,
+        java_version=java_version,
     )
+
+
+def _extract_java_version_from_gradle(content: str) -> str | None:
+    """Extract Java version from Gradle build file content."""
+    m = re.search(r"JavaLanguageVersion\.of\(\s*(\d+)\s*\)", content)
+    if m:
+        return m.group(1)
+
+    m = re.search(r"jvmToolchain\(\s*(\d+)\s*\)", content)
+    if m:
+        return m.group(1)
+
+    m = re.search(r"sourceCompatibility\s*=\s*JavaVersion\.VERSION_(\d+)", content)
+    if m:
+        return m.group(1)
+
+    m = re.search(r"sourceCompatibility\s*=\s*['\"]([^'\"]+)['\"]", content)
+    if m:
+        v = m.group(1)
+        return "8" if v.startswith("1.") else v.split(".")[0]
+
+    return None
 
 
 def find_maven_executable(project_root: Path | None = None) -> str | None:
@@ -1031,10 +1083,350 @@ def _get_maven_classpath(project_root: Path) -> str | None:
     return None
 
 
-def _get_gradle_classpath(project_root: Path) -> str | None:
-    """Get classpath from Gradle.
+def _get_gradle_classpath(project_root: Path, test_module: str | None = None) -> str | None:
+    """Get classpath from Gradle using an init script with a custom task."""
+    gradle = find_gradle_executable(project_root)
+    if not gradle:
+        return None
 
-    Note: This requires a custom task to be added to build.gradle.
-    Returns None for now as Gradle support is not fully implemented.
+    init_script = create_codeflash_gradle_init_script()
+    if not init_script:
+        return None
+
+    task = f":{test_module}:printCfClasspath" if test_module else "printCfClasspath"
+    cmd = [gradle, "--no-daemon", "-q", "--init-script", str(init_script), task]
+
+    try:
+        result = subprocess.run(cmd, check=False, cwd=project_root, capture_output=True, text=True, timeout=120)
+        if result.returncode != 0:
+            logger.warning("Failed to get Gradle classpath: %s", result.stderr[:500])
+            return None
+
+        # Parse classpath between markers
+        stdout = result.stdout
+        start_marker = "CF_CLASSPATH_START"
+        end_marker = "CF_CLASSPATH_END"
+        start_idx = stdout.find(start_marker)
+        end_idx = stdout.find(end_marker)
+        if start_idx == -1 or end_idx == -1:
+            logger.warning("Classpath markers not found in Gradle output")
+            return None
+
+        classpath = stdout[start_idx + len(start_marker) : end_idx].strip()
+        if not classpath:
+            logger.warning("Empty classpath from Gradle")
+            return None
+
+        return classpath
+    except subprocess.TimeoutExpired:
+        logger.warning("Gradle classpath extraction timed out")
+        return None
+    except Exception as e:
+        logger.warning("Failed to get Gradle classpath: %s", e)
+        return None
+    finally:
+        init_script.unlink(missing_ok=True)
+
+
+def create_codeflash_gradle_init_script(enable_jacoco: bool = False) -> Path | None:
+    """Create a Gradle init script that injects CodeFlash configuration.
+
+    The init script adds mavenLocal(), codeflash-runtime dependency,
+    --add-opens JVM args, and a classpath extraction task without
+    modifying any project build files.
     """
-    return None
+    import tempfile
+
+    jacoco_block = ""
+    if enable_jacoco:
+        jacoco_block = """
+        // Apply JaCoCo for coverage
+        plugins.apply('jacoco')
+        tasks.withType(Test) {
+            jacoco {
+                enabled = true
+            }
+        }
+        tasks.register('jacocoTestReportCf', JacocoReport) {
+            dependsOn tasks.named('test')
+            reports {
+                xml.required = true
+                xml.outputLocation = file("${buildDir}/reports/jacoco/test/jacocoTestReport.xml")
+            }
+            sourceSets sourceSets.main
+        }
+"""
+
+    script_content = f"""\
+allprojects {{
+    buildscript {{
+        repositories {{
+            mavenLocal()
+        }}
+    }}
+    repositories {{
+        mavenLocal()
+    }}
+
+    plugins.withId('java') {{
+        dependencies {{
+            testImplementation 'com.codeflash:codeflash-runtime:1.0.0'
+        }}
+
+        tasks.withType(Test) {{
+            jvmArgs '--add-opens', 'java.base/java.util=ALL-UNNAMED',
+                    '--add-opens', 'java.base/java.lang=ALL-UNNAMED',
+                    '--add-opens', 'java.base/java.lang.reflect=ALL-UNNAMED',
+                    '--add-opens', 'java.base/java.io=ALL-UNNAMED',
+                    '--add-opens', 'java.base/java.math=ALL-UNNAMED',
+                    '--add-opens', 'java.base/java.net=ALL-UNNAMED',
+                    '--add-opens', 'java.base/java.util.zip=ALL-UNNAMED'
+        }}
+{jacoco_block}
+        tasks.register('printCfClasspath') {{
+            doLast {{
+                println "CF_CLASSPATH_START"
+                println configurations.testRuntimeClasspath.asPath
+                println "CF_CLASSPATH_END"
+            }}
+        }}
+    }}
+}}
+"""
+
+    try:
+        fd, path = tempfile.mkstemp(prefix="codeflash_gradle_init_", suffix=".gradle")
+        os.close(fd)
+        script_path = Path(path)
+        script_path.write_text(script_content, encoding="utf-8")
+        return script_path
+    except Exception as e:
+        logger.warning("Failed to create Gradle init script: %s", e)
+        return None
+
+
+def compile_gradle_project(
+    project_root: Path,
+    include_tests: bool = True,
+    env: dict[str, str] | None = None,
+    timeout: int = 300,
+    test_module: str | None = None,
+) -> tuple[bool, str, str]:
+    """Compile a Gradle project."""
+    gradle = find_gradle_executable(project_root)
+    if not gradle:
+        return False, "", "Gradle not found"
+
+    init_script = create_codeflash_gradle_init_script()
+    if not init_script:
+        return False, "", "Failed to create init script"
+
+    task = "testClasses" if include_tests else "classes"
+    if test_module:
+        task = f":{test_module}:{task}"
+
+    cmd = [gradle, task, "--no-daemon", "-q", "--init-script", str(init_script)]
+
+    run_env = os.environ.copy()
+    if env:
+        run_env.update(env)
+
+    try:
+        result = subprocess.run(
+            cmd, check=False, cwd=project_root, env=run_env, capture_output=True, text=True, timeout=timeout
+        )
+        return result.returncode == 0, result.stdout, result.stderr
+    except subprocess.TimeoutExpired:
+        return False, "", f"Compilation timed out after {timeout} seconds"
+    except Exception as e:
+        return False, "", str(e)
+    finally:
+        init_script.unlink(missing_ok=True)
+
+
+def run_gradle_tests(
+    project_root: Path,
+    test_classes: list[str] | None = None,
+    env: dict[str, str] | None = None,
+    timeout: int = 300,
+    test_module: str | None = None,
+) -> MavenTestResult:
+    """Run Gradle tests. Returns MavenTestResult for compatibility with existing code."""
+    gradle = find_gradle_executable(project_root)
+    if not gradle:
+        return MavenTestResult(
+            success=False,
+            tests_run=0,
+            failures=0,
+            errors=0,
+            skipped=0,
+            surefire_reports_dir=None,
+            stdout="",
+            stderr="Gradle not found",
+            returncode=-1,
+        )
+
+    init_script = create_codeflash_gradle_init_script()
+    if not init_script:
+        return MavenTestResult(
+            success=False,
+            tests_run=0,
+            failures=0,
+            errors=0,
+            skipped=0,
+            surefire_reports_dir=None,
+            stdout="",
+            stderr="Failed to create init script",
+            returncode=-1,
+        )
+
+    task = f":{test_module}:test" if test_module else "test"
+    cmd = [gradle, task, "--no-daemon", "--init-script", str(init_script)]
+
+    if test_classes:
+        for tc in test_classes:
+            cmd.extend(["--tests", tc])
+
+    run_env = os.environ.copy()
+    if env:
+        run_env.update(env)
+
+    try:
+        result = subprocess.run(
+            cmd, check=False, cwd=project_root, env=run_env, capture_output=True, text=True, timeout=timeout
+        )
+
+        # Gradle test reports are at build/test-results/test/
+        if test_module:
+            reports_dir = project_root / test_module / "build" / "test-results" / "test"
+        else:
+            reports_dir = project_root / "build" / "test-results" / "test"
+
+        tests_run, failures, errors, skipped = _parse_surefire_reports(reports_dir)
+
+        return MavenTestResult(
+            success=result.returncode == 0,
+            tests_run=tests_run,
+            failures=failures,
+            errors=errors,
+            skipped=skipped,
+            surefire_reports_dir=reports_dir if reports_dir.exists() else None,
+            stdout=result.stdout,
+            stderr=result.stderr,
+            returncode=result.returncode,
+        )
+    except subprocess.TimeoutExpired:
+        return MavenTestResult(
+            success=False,
+            tests_run=0,
+            failures=0,
+            errors=0,
+            skipped=0,
+            surefire_reports_dir=None,
+            stdout="",
+            stderr=f"Timed out after {timeout}s",
+            returncode=-2,
+        )
+    except Exception as e:
+        return MavenTestResult(
+            success=False,
+            tests_run=0,
+            failures=0,
+            errors=0,
+            skipped=0,
+            surefire_reports_dir=None,
+            stdout="",
+            stderr=str(e),
+            returncode=-1,
+        )
+    finally:
+        init_script.unlink(missing_ok=True)
+
+
+def install_codeflash_runtime_to_m2(runtime_jar_path: Path) -> bool:
+    """Install codeflash-runtime JAR to ~/.m2 manually (no Maven needed).
+
+    Copies the JAR and creates a minimal POM in the standard Maven repo layout
+    so Gradle's mavenLocal() can resolve it.
+    """
+    m2_dir = Path.home() / ".m2" / "repository" / "com" / "codeflash" / "codeflash-runtime" / "1.0.0"
+    m2_jar = m2_dir / "codeflash-runtime-1.0.0.jar"
+    m2_pom = m2_dir / "codeflash-runtime-1.0.0.pom"
+
+    if m2_jar.exists():
+        return True
+
+    try:
+        m2_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(runtime_jar_path, m2_jar)
+
+        # Minimal POM so Gradle/Maven can resolve the artifact
+        pom_content = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd"
+         xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.codeflash</groupId>
+  <artifactId>codeflash-runtime</artifactId>
+  <version>1.0.0</version>
+</project>
+"""
+        m2_pom.write_text(pom_content, encoding="utf-8")
+        logger.info("Installed codeflash-runtime to %s", m2_dir)
+        return True
+    except Exception as e:
+        logger.exception("Failed to install codeflash-runtime to ~/.m2: %s", e)
+        return False
+
+
+def get_gradle_test_reports_dir(project_root: Path, test_module: str | None = None) -> Path:
+    """Get the directory containing Gradle test XML reports."""
+    if test_module:
+        return project_root / test_module / "build" / "test-results" / "test"
+    return project_root / "build" / "test-results" / "test"
+
+
+def get_gradle_test_classes_dir(project_root: Path, test_module: str | None = None) -> Path:
+    """Get directory containing compiled test classes for Gradle."""
+    base = project_root / test_module if test_module else project_root
+    return base / "build" / "classes" / "java" / "test"
+
+
+def get_gradle_main_classes_dir(project_root: Path, test_module: str | None = None) -> Path:
+    """Get directory containing compiled main classes for Gradle."""
+    base = project_root / test_module if test_module else project_root
+    return base / "build" / "classes" / "java" / "main"
+
+
+def get_jacoco_xml_path_gradle(project_root: Path, test_module: str | None = None) -> Path:
+    """Get the expected path to the JaCoCo XML report for Gradle projects."""
+    base = project_root / test_module if test_module else project_root
+    return base / "build" / "reports" / "jacoco" / "test" / "jacocoTestReport.xml"
+
+
+def extract_modules_from_settings_gradle(project_root: Path) -> list[str]:
+    """Parse settings.gradle(.kts) to extract included submodule names."""
+    for settings_file in ("settings.gradle.kts", "settings.gradle"):
+        settings_path = project_root / settings_file
+        if settings_path.exists():
+            try:
+                content = settings_path.read_text(encoding="utf-8")
+                # Extract all quoted strings that appear in include() calls or
+                # in listOf() / arrayOf() blocks used with include().
+                # This catches patterns like:
+                #   include("mod1", "mod2")
+                #   include ':mod1', ':mod2'
+                #   val allProjects = listOf("mod1", "mod2") ... include(*allProjects.toTypedArray())
+                modules: list[str] = []
+                # Find all quoted strings in the file that look like module names
+                for m in re.finditer(r"""["'](:?[a-zA-Z][\w\-.:]*?)["']""", content):
+                    name = m.group(1).strip().lstrip(":")
+                    # Filter to valid module-like names (not URLs, plugin IDs with dots, etc.)
+                    if name and "/" not in name and not name.startswith("http") and "." not in name.split(":")[0]:
+                        if name not in modules:
+                            modules.append(name)
+                return modules
+            except Exception:
+                pass
+    return []

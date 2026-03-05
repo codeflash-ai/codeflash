@@ -1,7 +1,7 @@
-"""Java test runner for JUnit 5 with Maven.
+"""Java test runner for JUnit 5 with Maven and Gradle.
 
-This module provides functionality to run JUnit 5 tests using Maven Surefire,
-supporting both behavioral testing and benchmarking modes.
+This module provides functionality to run JUnit 5 tests using Maven Surefire
+or Gradle, supporting both behavioral testing and benchmarking modes.
 """
 
 from __future__ import annotations
@@ -24,11 +24,19 @@ from typing import Any
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.languages.base import TestResult
 from codeflash.languages.java.build_tools import (
+    BuildTool,
     add_codeflash_dependency_to_pom,
     add_jacoco_plugin_to_pom,
+    create_codeflash_gradle_init_script,
+    detect_build_tool,
+    extract_modules_from_settings_gradle,
+    find_gradle_executable,
     find_maven_executable,
+    get_gradle_test_reports_dir,
     get_jacoco_xml_path,
+    get_jacoco_xml_path_gradle,
     install_codeflash_runtime,
+    install_codeflash_runtime_to_m2,
     is_jacoco_configured,
 )
 
@@ -412,82 +420,83 @@ def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, 
 
     if not test_outside_project:
         # Check if project_root itself is a multi-module project
-        # and the test file is in a submodule (e.g., test/src/...)
-        pom_path = project_root / "pom.xml"
-        if pom_path.exists():
-            try:
-                content = pom_path.read_text(encoding="utf-8")
-                if "<modules>" in content:
-                    # This is a multi-module project root
-                    # Extract modules from pom.xml
-                    import re
-
-                    modules = re.findall(r"<module>([^<]+)</module>", content)
-                    # Check if test file is in one of the modules
-                    for test_path in test_file_paths:
-                        try:
-                            rel_path = test_path.relative_to(project_root)
-                            # Get the first component of the relative path
-                            first_component = rel_path.parts[0] if rel_path.parts else None
-                            if first_component and first_component in modules:
-                                logger.debug(
-                                    "Detected multi-module Maven project. Root: %s, Test module: %s",
-                                    project_root,
-                                    first_component,
-                                )
-                                return project_root, first_component
-                        except ValueError:
-                            pass
-            except Exception:
-                pass
+        # and the test file is in a submodule
+        modules = _get_project_modules(project_root)
+        if modules:
+            for test_path in test_file_paths:
+                try:
+                    rel_path = test_path.relative_to(project_root)
+                    first_component = rel_path.parts[0] if rel_path.parts else None
+                    if first_component and first_component in modules:
+                        logger.debug(
+                            "Detected multi-module project. Root: %s, Test module: %s", project_root, first_component
+                        )
+                        return project_root, first_component
+                except ValueError:
+                    pass
         return project_root, None
 
     # Find common parent that contains both project_root and test files
-    # and has a pom.xml with <modules> section
     current = project_root.parent
     while current != current.parent:
-        pom_path = current / "pom.xml"
-        if pom_path.exists():
-            # Check if this is a multi-module pom
-            try:
-                content = pom_path.read_text(encoding="utf-8")
-                if "<modules>" in content:
-                    # Found multi-module parent
-                    # Get the relative module name for the test directory
-                    if test_dir:
-                        try:
-                            test_module = test_dir.relative_to(current)
-                            # Get the top-level module name (first component)
-                            test_module_name = test_module.parts[0] if test_module.parts else None
-                            logger.debug(
-                                "Detected multi-module Maven project. Root: %s, Test module: %s",
-                                current,
-                                test_module_name,
-                            )
-                            return current, test_module_name
-                        except ValueError:
-                            pass
-            except Exception:
-                pass
+        modules = _get_project_modules(current)
+        if modules:
+            if test_dir:
+                try:
+                    test_module = test_dir.relative_to(current)
+                    test_module_name = test_module.parts[0] if test_module.parts else None
+                    logger.debug("Detected multi-module project. Root: %s, Test module: %s", current, test_module_name)
+                    return current, test_module_name
+                except ValueError:
+                    pass
         current = current.parent
 
     return project_root, None
 
 
-def _get_test_module_target_dir(maven_root: Path, test_module: str | None) -> Path:
-    """Get the target directory for the test module.
+def _get_project_modules(project_root: Path) -> list[str]:
+    """Get submodule names from Maven pom.xml or Gradle settings."""
+    # Try Maven first
+    pom_path = project_root / "pom.xml"
+    if pom_path.exists():
+        try:
+            content = pom_path.read_text(encoding="utf-8")
+            if "<modules>" in content:
+                return _extract_modules_from_pom_content(content)
+        except Exception:
+            pass
 
-    Args:
-        maven_root: The Maven project root.
-        test_module: The test module name, or None if not a multi-module project.
+    # Try Gradle settings
+    gradle_modules = extract_modules_from_settings_gradle(project_root)
+    if gradle_modules:
+        return gradle_modules
 
-    Returns:
-        Path to the target directory where surefire reports will be.
+    return []
 
+
+def _get_test_module_target_dir(build_root: Path, test_module: str | None) -> Path:
+    """Get the target/build output directory for the test module.
+
+    Returns the correct directory based on build tool (Maven=target, Gradle=build).
     """
+    build_tool = detect_build_tool(build_root)
+    if build_tool == BuildTool.GRADLE:
+        base = build_root / test_module if test_module else build_root
+        return base / "build"
+    # Maven
     if test_module:
-        return maven_root / test_module / "target"
-    return maven_root / "target"
+        return build_root / test_module / "target"
+    return build_root / "target"
+
+
+def _get_test_reports_dir(build_root: Path, test_module: str | None) -> Path:
+    """Get the directory containing test XML reports (Surefire or Gradle test-results)."""
+    build_tool = detect_build_tool(build_root)
+    if build_tool == BuildTool.GRADLE:
+        return get_gradle_test_reports_dir(build_root, test_module)
+    # Maven surefire reports
+    target_dir = _get_test_module_target_dir(build_root, test_module)
+    return target_dir / "surefire-reports"
 
 
 @dataclass
@@ -536,44 +545,48 @@ def run_behavioral_tests(
 
     """
     project_root = project_root or cwd
+    build_tool = detect_build_tool(project_root)
 
-    # Detect multi-module Maven projects where tests are in a different module
-    maven_root, test_module = _find_multi_module_root(project_root, test_paths)
+    # Detect multi-module projects where tests are in a different module
+    build_root, test_module = _find_multi_module_root(project_root, test_paths)
 
-    # Ensure codeflash-runtime is installed and added as dependency before compilation
-    _ensure_codeflash_runtime(maven_root, test_module)
+    # Ensure codeflash-runtime is installed
+    if build_tool == BuildTool.GRADLE:
+        _ensure_codeflash_runtime_gradle(build_root)
+    else:
+        _ensure_codeflash_runtime(build_root, test_module)
 
-    # Pre-install multi-module deps to .m2 so subsequent Maven runs don't need -am
+    # Pre-install multi-module deps
     base_env = os.environ.copy()
     base_env.update(test_env)
-    ensure_multi_module_deps_installed(maven_root, test_module, base_env)
+    if build_tool != BuildTool.GRADLE:
+        ensure_multi_module_deps_installed(build_root, test_module, base_env)
 
-    # Create SQLite database path for behavior capture - use standard path that parse_test_results expects
+    # Create SQLite database path for behavior capture
     sqlite_db_path = get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite"))
 
     # Set environment variables for timing instrumentation and behavior capture
     run_env = os.environ.copy()
     run_env.update(test_env)
-    run_env["CODEFLASH_LOOP_INDEX"] = "1"  # Single loop for behavior tests
+    run_env["CODEFLASH_LOOP_INDEX"] = "1"
     run_env["CODEFLASH_MODE"] = "behavior"
     run_env["CODEFLASH_TEST_ITERATION"] = str(candidate_index)
-    run_env["CODEFLASH_OUTPUT_FILE"] = str(sqlite_db_path)  # SQLite output path
+    run_env["CODEFLASH_OUTPUT_FILE"] = str(sqlite_db_path)
 
-    # If coverage is enabled, ensure JaCoCo is configured
-    # For multi-module projects, add JaCoCo to the test module's pom.xml (where tests run)
+    # Configure coverage (JaCoCo)
     coverage_xml_path: Path | None = None
     if enable_coverage:
-        # Determine which pom.xml to configure JaCoCo in
-        if test_module:
-            # Multi-module project: add JaCoCo to test module
-            test_module_pom = maven_root / test_module / "pom.xml"
+        if build_tool == BuildTool.GRADLE:
+            coverage_xml_path = get_jacoco_xml_path_gradle(build_root, test_module)
+        # Maven coverage setup
+        elif test_module:
+            test_module_pom = build_root / test_module / "pom.xml"
             if test_module_pom.exists():
                 if not is_jacoco_configured(test_module_pom):
                     logger.info("Adding JaCoCo plugin to test module pom.xml: %s", test_module_pom)
                     add_jacoco_plugin_to_pom(test_module_pom)
-                coverage_xml_path = get_jacoco_xml_path(maven_root / test_module)
+                coverage_xml_path = get_jacoco_xml_path(build_root / test_module)
         else:
-            # Single module project
             pom_path = project_root / "pom.xml"
             if pom_path.exists():
                 if not is_jacoco_configured(pom_path):
@@ -581,15 +594,29 @@ def run_behavioral_tests(
                     add_jacoco_plugin_to_pom(pom_path)
                 coverage_xml_path = get_jacoco_xml_path(project_root)
 
-    # Use a minimum timeout of 60s for Java builds (300s when coverage is enabled due to verify phase
-    # which runs full compilation + instrumentation + test execution in multi-module projects)
     min_timeout = 300 if enable_coverage else 60
     effective_timeout = max(timeout or 300, min_timeout)
 
-    if enable_coverage:
-        # Coverage MUST use Maven — JaCoCo runs as a Maven plugin during the verify phase
+    if build_tool == BuildTool.GRADLE:
+        # Gradle path
+        if enable_coverage:
+            result, result_xml_path = _run_gradle_tests_coverage(
+                build_root, test_module, test_paths, run_env, effective_timeout, candidate_index
+            )
+        else:
+            result, result_xml_path = _run_direct_or_fallback_gradle(
+                build_root,
+                test_module,
+                test_paths,
+                run_env,
+                effective_timeout,
+                mode="behavior",
+                candidate_index=candidate_index,
+            )
+    elif enable_coverage:
+        # Maven coverage path
         result = _run_maven_tests(
-            maven_root,
+            build_root,
             test_paths,
             run_env,
             timeout=effective_timeout,
@@ -597,13 +624,12 @@ def run_behavioral_tests(
             enable_coverage=True,
             test_module=test_module,
         )
-        target_dir = _get_test_module_target_dir(maven_root, test_module)
-        surefire_dir = target_dir / "surefire-reports"
-        result_xml_path = _get_combined_junit_xml(surefire_dir, candidate_index)
+        reports_dir = _get_test_reports_dir(build_root, test_module)
+        result_xml_path = _get_combined_junit_xml(reports_dir, candidate_index)
     else:
-        # Direct JVM execution (fast path — bypasses Maven overhead)
+        # Maven fast path
         result, result_xml_path = _run_direct_or_fallback_maven(
-            maven_root,
+            build_root,
             test_module,
             test_paths,
             run_env,
@@ -612,16 +638,13 @@ def run_behavioral_tests(
             candidate_index=candidate_index,
         )
 
-    # Debug: Log Maven result and coverage file status
     if enable_coverage:
-        logger.info("Maven verify completed with return code: %s", result.returncode)
+        logger.info("Build verify completed with return code: %s", result.returncode)
         if result.returncode != 0:
-            logger.warning(
-                "Maven verify had non-zero return code: %s. Coverage data may be incomplete.", result.returncode
-            )
+            logger.warning("Verify had non-zero return code: %s. Coverage data may be incomplete.", result.returncode)
 
-    # Log coverage file status after Maven verify
     if enable_coverage and coverage_xml_path:
+        target_dir = _get_test_module_target_dir(build_root, test_module)
         jacoco_exec_path = target_dir / "jacoco.exec"
         logger.info("Coverage paths - target_dir: %s, coverage_xml_path: %s", target_dir, coverage_xml_path)
         if jacoco_exec_path.exists():
@@ -1243,31 +1266,39 @@ def run_benchmarking_tests(
     import time
 
     project_root = project_root or cwd
+    build_tool = detect_build_tool(project_root)
 
-    # Detect multi-module Maven projects where tests are in a different module
-    maven_root, test_module = _find_multi_module_root(project_root, test_paths)
+    # Detect multi-module projects where tests are in a different module
+    build_root, test_module = _find_multi_module_root(project_root, test_paths)
 
-    # Ensure codeflash-runtime is installed and added as dependency before compilation
-    _ensure_codeflash_runtime(maven_root, test_module)
+    # Ensure codeflash-runtime is installed
+    if build_tool == BuildTool.GRADLE:
+        _ensure_codeflash_runtime_gradle(build_root)
+    else:
+        _ensure_codeflash_runtime(build_root, test_module)
 
-    # Pre-install multi-module deps to .m2 so subsequent Maven runs don't need -am
+    # Pre-install multi-module deps (Maven only)
     base_env = os.environ.copy()
     base_env.update(test_env)
-    ensure_multi_module_deps_installed(maven_root, test_module, base_env)
+    if build_tool != BuildTool.GRADLE:
+        ensure_multi_module_deps_installed(build_root, test_module, base_env)
 
     # Get test class names
     test_classes = _get_test_class_names(test_paths, mode="performance")
     if not test_classes:
         logger.error("No test classes found")
-        return _get_empty_result(maven_root, test_module)
+        return _get_empty_result(build_root, test_module)
 
-    # Step 1: Compile tests once using Maven
+    # Step 1: Compile tests once
     compile_env = os.environ.copy()
     compile_env.update(test_env)
 
-    logger.debug("Step 1: Compiling tests (one-time Maven overhead)")
+    logger.debug("Step 1: Compiling tests (one-time build overhead)")
     compile_start = time.time()
-    compile_result = _compile_tests(maven_root, compile_env, test_module, timeout=120)
+    if build_tool == BuildTool.GRADLE:
+        compile_result = _compile_tests_gradle(build_root, compile_env, test_module, timeout=120)
+    else:
+        compile_result = _compile_tests(build_root, compile_env, test_module, timeout=120)
     compile_time = time.time() - compile_start
 
     if compile_result.returncode != 0:
@@ -1277,7 +1308,19 @@ def run_benchmarking_tests(
             compile_result.stdout,
             compile_result.stderr,
         )
-        # Fall back to Maven-based execution
+        if build_tool == BuildTool.GRADLE:
+            logger.warning("Falling back to Gradle-based test execution")
+            return _run_benchmarking_tests_gradle(
+                test_paths,
+                test_env,
+                cwd,
+                timeout,
+                project_root,
+                min_loops,
+                max_loops,
+                target_duration_seconds,
+                inner_iterations,
+            )
         logger.warning("Falling back to Maven-based test execution")
         return _run_benchmarking_tests_maven(
             test_paths,
@@ -1293,11 +1336,27 @@ def run_benchmarking_tests(
 
     logger.debug("Compilation completed in %.2fs", compile_time)
 
-    # Step 2: Get classpath from Maven
+    # Step 2: Get classpath
     logger.debug("Step 2: Getting classpath")
-    classpath = _get_test_classpath_cached(maven_root, compile_env, test_module, timeout=60)
+    if build_tool == BuildTool.GRADLE:
+        classpath = _get_test_classpath_gradle_cached(build_root, compile_env, test_module, timeout=60)
+    else:
+        classpath = _get_test_classpath_cached(build_root, compile_env, test_module, timeout=60)
 
     if not classpath:
+        if build_tool == BuildTool.GRADLE:
+            logger.warning("Failed to get classpath, falling back to Gradle-based execution")
+            return _run_benchmarking_tests_gradle(
+                test_paths,
+                test_env,
+                cwd,
+                timeout,
+                project_root,
+                min_loops,
+                max_loops,
+                target_duration_seconds,
+                inner_iterations,
+            )
         logger.warning("Failed to get classpath, falling back to Maven-based execution")
         return _run_benchmarking_tests_maven(
             test_paths,
@@ -1312,7 +1371,7 @@ def run_benchmarking_tests(
         )
 
     # Step 3: Run tests multiple times directly via JVM
-    logger.debug("Step 3: Running tests directly (bypassing Maven)")
+    logger.debug("Step 3: Running tests directly (bypassing build tool)")
 
     all_stdout = []
     all_stderr = []
@@ -1320,22 +1379,17 @@ def run_benchmarking_tests(
     loop_count = 0
     last_result = None
 
-    # Calculate timeout per loop
     per_loop_timeout = timeout or max(60, 30 + inner_iterations // 10)
 
-    # Determine working directory for test execution
     if test_module:
-        working_dir = maven_root / test_module
+        working_dir = build_root / test_module
     else:
-        working_dir = maven_root
+        working_dir = build_root
 
-    # Create reports directory for JUnit XML output (in Surefire-compatible location)
-    target_dir = _get_test_module_target_dir(maven_root, test_module)
-    reports_dir = target_dir / "surefire-reports"
+    reports_dir = _get_test_reports_dir(build_root, test_module)
     reports_dir.mkdir(parents=True, exist_ok=True)
 
     for loop_idx in range(1, max_loops + 1):
-        # Set environment variables for this loop
         run_env = os.environ.copy()
         run_env.update(test_env)
         run_env["CODEFLASH_LOOP_INDEX"] = str(loop_idx)
@@ -1344,7 +1398,6 @@ def run_benchmarking_tests(
         if "CODEFLASH_INNER_ITERATIONS" not in run_env:
             run_env["CODEFLASH_INNER_ITERATIONS"] = str(inner_iterations)
 
-        # Run tests directly with XML report generation
         loop_start = time.time()
         result = _run_tests_direct(
             classpath, test_classes, run_env, working_dir, timeout=per_loop_timeout, reports_dir=reports_dir
@@ -1354,7 +1407,6 @@ def run_benchmarking_tests(
         last_result = result
         loop_count = loop_idx
 
-        # Collect stdout/stderr
         if result.stdout:
             all_stdout.append(result.stdout)
         if result.stderr:
@@ -1362,15 +1414,9 @@ def run_benchmarking_tests(
 
         logger.debug("Loop %d completed in %.2fs (returncode=%d)", loop_idx, loop_time, result.returncode)
 
-        # Log stderr if direct JVM execution failed (for debugging)
         if result.returncode != 0 and result.stderr:
             logger.debug("Direct JVM stderr: %s", result.stderr[:500])
 
-        # Check if direct JVM execution failed on the first loop.
-        # Fall back to Maven-based execution for:
-        # - JUnit 4 projects (ConsoleLauncher not on classpath or no tests discovered)
-        # - Class not found errors
-        # - No tests executed (JUnit 4 tests invisible to JUnit 5 launcher)
         should_fallback = False
         if loop_idx == 1 and result.returncode != 0:
             combined_output = (result.stderr or "") + (result.stdout or "")
@@ -1382,7 +1428,6 @@ def run_benchmarking_tests(
                 "No tests found",
             ]
             should_fallback = any(indicator in combined_output for indicator in fallback_indicators)
-            # Also fallback if no timing markers AND no tests actually ran
             if not should_fallback:
                 import re as _re
 
@@ -1392,6 +1437,19 @@ def run_benchmarking_tests(
                     logger.debug("Direct execution failed with no timing markers, likely JUnit version mismatch")
 
         if should_fallback:
+            if build_tool == BuildTool.GRADLE:
+                logger.debug("Direct JVM execution failed, falling back to Gradle-based execution")
+                return _run_benchmarking_tests_gradle(
+                    test_paths,
+                    test_env,
+                    cwd,
+                    timeout,
+                    project_root,
+                    min_loops,
+                    max_loops,
+                    target_duration_seconds,
+                    inner_iterations,
+                )
             logger.debug("Direct JVM execution failed, falling back to Maven-based execution")
             return _run_benchmarking_tests_maven(
                 test_paths,
@@ -1405,7 +1463,6 @@ def run_benchmarking_tests(
                 inner_iterations,
             )
 
-        # Check if we've hit the target duration
         elapsed = time.time() - total_start_time
         if loop_idx >= min_loops and elapsed >= target_duration_seconds:
             logger.debug(
@@ -1417,7 +1474,6 @@ def run_benchmarking_tests(
             )
             break
 
-        # Check if tests failed - continue looping if we have timing markers
         if result.returncode != 0:
             import re
 
@@ -1428,7 +1484,6 @@ def run_benchmarking_tests(
                 break
             logger.debug("Some tests failed in loop %d but timing markers present, continuing", loop_idx)
 
-    # Create a combined result with all stdout
     combined_stdout = "\n".join(all_stdout)
     combined_stderr = "\n".join(all_stderr)
 
@@ -1443,25 +1498,22 @@ def run_benchmarking_tests(
         compile_time,
     )
 
-    # Create a combined subprocess result
     combined_result = subprocess.CompletedProcess(
-        args=last_result.args if last_result else ["mvn", "test"],
+        args=last_result.args if last_result else ["build", "test"],
         returncode=last_result.returncode if last_result else -1,
         stdout=combined_stdout,
         stderr=combined_stderr,
     )
 
     # Find or create the JUnit XML results file (from last run)
-    # For multi-module projects, look in the test module's target directory
-    target_dir = _get_test_module_target_dir(maven_root, test_module)
-    surefire_dir = target_dir / "surefire-reports"
-    result_xml_path = _get_combined_junit_xml(surefire_dir, -1)  # Use -1 for benchmark
+    reports_dir_final = _get_test_reports_dir(build_root, test_module)
+    result_xml_path = _get_combined_junit_xml(reports_dir_final, -1)  # Use -1 for benchmark
 
     return result_xml_path, combined_result
 
 
 def _get_combined_junit_xml(surefire_dir: Path, candidate_index: int) -> Path:
-    """Get or create a combined JUnit XML file from Surefire reports.
+    """Get or create a combined JUnit XML file from test reports (Surefire or Gradle).
 
     Args:
         surefire_dir: Directory containing Surefire reports.
@@ -2081,47 +2133,377 @@ def run_line_profile_tests(
 
     """
     project_root = project_root or cwd
+    build_tool = detect_build_tool(project_root)
 
-    # Detect multi-module Maven projects
-    maven_root, test_module = _find_multi_module_root(project_root, test_paths)
+    # Detect multi-module projects
+    build_root, test_module = _find_multi_module_root(project_root, test_paths)
 
-    # Ensure codeflash-runtime is installed and added as dependency before compilation
-    _ensure_codeflash_runtime(maven_root, test_module)
+    # Ensure codeflash-runtime is installed
+    if build_tool == BuildTool.GRADLE:
+        _ensure_codeflash_runtime_gradle(build_root)
+    else:
+        _ensure_codeflash_runtime(build_root, test_module)
 
-    # Pre-install multi-module deps to .m2 so subsequent Maven runs don't need -am
+    # Pre-install multi-module deps (Maven only)
     base_env = os.environ.copy()
     base_env.update(test_env)
-    ensure_multi_module_deps_installed(maven_root, test_module, base_env)
+    if build_tool != BuildTool.GRADLE:
+        ensure_multi_module_deps_installed(build_root, test_module, base_env)
 
-    # Set up environment with profiling mode
     run_env = os.environ.copy()
     run_env.update(test_env)
     run_env["CODEFLASH_MODE"] = "line_profile"
     if line_profile_output_file:
         run_env["CODEFLASH_LINE_PROFILE_OUTPUT"] = str(line_profile_output_file)
 
-    # Run tests once with profiling
-    # Maven needs substantial timeout for JVM startup + test execution
-    # Use minimum of 120s to account for Maven overhead, or larger if specified
     min_timeout = 120
     effective_timeout = max(timeout or min_timeout, min_timeout)
     logger.debug("Running line profiling tests (single run) with timeout=%ds", effective_timeout)
-    result = _run_maven_tests(
-        maven_root,
-        test_paths,
-        run_env,
-        timeout=effective_timeout,
-        mode="line_profile",
-        test_module=test_module,
-        javaagent_arg=javaagent_arg,
-    )
 
-    # Get result XML path
-    target_dir = _get_test_module_target_dir(maven_root, test_module)
-    surefire_dir = target_dir / "surefire-reports"
-    result_xml_path = _get_combined_junit_xml(surefire_dir, -1)
+    if build_tool == BuildTool.GRADLE:
+        result, result_xml_path = _run_direct_or_fallback_gradle(
+            build_root, test_module, test_paths, run_env, effective_timeout, mode="line_profile", candidate_index=-1
+        )
+    else:
+        result = _run_maven_tests(
+            build_root,
+            test_paths,
+            run_env,
+            timeout=effective_timeout,
+            mode="line_profile",
+            test_module=test_module,
+            javaagent_arg=javaagent_arg,
+        )
+        reports_dir = _get_test_reports_dir(build_root, test_module)
+        result_xml_path = _get_combined_junit_xml(reports_dir, -1)
 
     return result_xml_path, result
+
+
+## ---- Gradle-specific functions ----
+
+
+def _ensure_codeflash_runtime_gradle(build_root: Path) -> bool:
+    """Ensure codeflash-runtime JAR is installed for Gradle (via mavenLocal)."""
+    runtime_jar = _find_runtime_jar()
+    if runtime_jar is None:
+        logger.error("codeflash-runtime JAR not found. Generated tests will fail to compile.")
+        return False
+
+    return install_codeflash_runtime_to_m2(runtime_jar)
+
+
+def _compile_tests_gradle(
+    project_root: Path, env: dict[str, str], test_module: str | None = None, timeout: int = 120
+) -> subprocess.CompletedProcess:
+    """Compile test code using Gradle."""
+    gradle = find_gradle_executable(project_root)
+    if not gradle:
+        logger.error("Gradle not found")
+        return subprocess.CompletedProcess(args=["gradle"], returncode=-1, stdout="", stderr="Gradle not found")
+
+    init_script = create_codeflash_gradle_init_script()
+    if not init_script:
+        return subprocess.CompletedProcess(
+            args=["gradle"], returncode=-1, stdout="", stderr="Failed to create init script"
+        )
+
+    task = f":{test_module}:testClasses" if test_module else "testClasses"
+    cmd = [gradle, task, "--no-daemon", "-q", "--init-script", str(init_script)]
+
+    logger.debug("Compiling tests (Gradle): %s in %s", " ".join(cmd), project_root)
+
+    try:
+        return _run_cmd_kill_pg_on_timeout(cmd, cwd=project_root, env=env, timeout=timeout)
+    except Exception as e:
+        logger.exception("Gradle compilation failed: %s", e)
+        return subprocess.CompletedProcess(args=cmd, returncode=-1, stdout="", stderr=str(e))
+    finally:
+        init_script.unlink(missing_ok=True)
+
+
+def _get_test_classpath_gradle(
+    project_root: Path, env: dict[str, str], test_module: str | None = None, timeout: int = 60
+) -> str | None:
+    """Get the test classpath from Gradle using init script."""
+    from codeflash.languages.java.build_tools import _get_gradle_classpath
+
+    classpath = _get_gradle_classpath(project_root, test_module)
+    if not classpath:
+        return None
+
+    # Append compiled class dirs and JUnit console standalone
+    cp_parts = [classpath]
+
+    if test_module:
+        module_path = project_root / test_module
+    else:
+        module_path = project_root
+
+    test_classes_dir = module_path / "build" / "classes" / "java" / "test"
+    main_classes_dir = module_path / "build" / "classes" / "java" / "main"
+
+    if test_classes_dir.exists():
+        cp_parts.append(str(test_classes_dir))
+    if main_classes_dir.exists():
+        cp_parts.append(str(main_classes_dir))
+
+    # For multi-module, include sibling module classes
+    if test_module:
+        for module_dir in project_root.iterdir():
+            if module_dir.is_dir() and module_dir.name != test_module:
+                module_classes = module_dir / "build" / "classes" / "java" / "main"
+                if module_classes.exists():
+                    cp_parts.append(str(module_classes))
+
+    if "console-standalone" not in classpath and "ConsoleLauncher" not in classpath:
+        console_jar = _find_junit_console_standalone()
+        if console_jar:
+            cp_parts.append(str(console_jar))
+
+    return os.pathsep.join(cp_parts)
+
+
+def _get_test_classpath_gradle_cached(
+    project_root: Path, env: dict[str, str], test_module: str | None = None, timeout: int = 60
+) -> str | None:
+    key = (project_root, test_module)
+    cached = _classpath_cache.get(key)
+    if cached is not None:
+        logger.debug("Using cached Gradle classpath for (%s, %s)", project_root, test_module)
+        return cached
+    result = _get_test_classpath_gradle(project_root, env, test_module, timeout)
+    if result is not None:
+        _classpath_cache[key] = result
+    return result
+
+
+def _run_gradle_tests(
+    project_root: Path,
+    test_paths: Any,
+    env: dict[str, str],
+    timeout: int = 300,
+    mode: str = "behavior",
+    test_module: str | None = None,
+) -> subprocess.CompletedProcess:
+    """Run Gradle tests."""
+    gradle = find_gradle_executable(project_root)
+    if not gradle:
+        logger.error("Gradle not found")
+        return subprocess.CompletedProcess(args=["gradle"], returncode=-1, stdout="", stderr="Gradle not found")
+
+    init_script = create_codeflash_gradle_init_script()
+    if not init_script:
+        return subprocess.CompletedProcess(
+            args=["gradle"], returncode=-1, stdout="", stderr="Failed to create init script"
+        )
+
+    test_filter = _build_test_filter(test_paths, mode=mode)
+    task = f":{test_module}:test" if test_module else "test"
+    cmd = [gradle, task, "--no-daemon", "--init-script", str(init_script)]
+
+    if test_filter:
+        # Gradle uses --tests filter; each comma-separated class becomes a separate --tests
+        for cls in test_filter.split(","):
+            cls = cls.strip()
+            if cls:
+                cmd.extend(["--tests", cls])
+
+    logger.debug("Running Gradle command: %s in %s", " ".join(cmd), project_root)
+
+    try:
+        return _run_cmd_kill_pg_on_timeout(cmd, cwd=project_root, env=env, timeout=timeout)
+    except Exception as e:
+        logger.exception("Gradle test execution failed: %s", e)
+        return subprocess.CompletedProcess(args=cmd, returncode=-1, stdout="", stderr=str(e))
+    finally:
+        init_script.unlink(missing_ok=True)
+
+
+def _run_direct_or_fallback_gradle(
+    build_root: Path,
+    test_module: str | None,
+    test_paths: Any,
+    run_env: dict[str, str],
+    timeout: int,
+    mode: str,
+    candidate_index: int = -1,
+) -> tuple[subprocess.CompletedProcess, Path]:
+    """Compile once, then run tests directly via JVM. Falls back to Gradle on failure."""
+    test_classes = _get_test_class_names(test_paths, mode=mode)
+    if not test_classes:
+        logger.warning("No test classes found for mode=%s, returning empty result", mode)
+        result_xml_path, empty_result = _get_empty_result(build_root, test_module)
+        return empty_result, result_xml_path
+
+    # Step 1: Compile tests
+    logger.debug("Step 1: Compiling tests for %s mode (Gradle)", mode)
+    compile_result = _compile_tests_gradle(build_root, run_env, test_module, timeout=120)
+    if compile_result.returncode != 0:
+        logger.warning("Compilation failed (rc=%d), falling back to Gradle-based execution", compile_result.returncode)
+        result = _run_gradle_tests(build_root, test_paths, run_env, timeout=timeout, mode=mode, test_module=test_module)
+        reports_dir = _get_test_reports_dir(build_root, test_module)
+        result_xml_path = _get_combined_junit_xml(reports_dir, candidate_index)
+        return result, result_xml_path
+
+    # Step 2: Get classpath
+    logger.debug("Step 2: Getting classpath (Gradle)")
+    classpath = _get_test_classpath_gradle_cached(build_root, run_env, test_module, timeout=60)
+    if not classpath:
+        logger.warning("Failed to get classpath, falling back to Gradle-based execution")
+        result = _run_gradle_tests(build_root, test_paths, run_env, timeout=timeout, mode=mode, test_module=test_module)
+        reports_dir = _get_test_reports_dir(build_root, test_module)
+        result_xml_path = _get_combined_junit_xml(reports_dir, candidate_index)
+        return result, result_xml_path
+
+    # Step 3: Run tests directly via JVM
+    working_dir = build_root / test_module if test_module else build_root
+    reports_dir = _get_test_reports_dir(build_root, test_module)
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    logger.debug("Step 3: Running %s tests directly (bypassing Gradle)", mode)
+    result = _run_tests_direct(classpath, test_classes, run_env, working_dir, timeout=timeout, reports_dir=reports_dir)
+
+    # Check for fallback indicators on failure
+    if result.returncode != 0:
+        combined_output = (result.stderr or "") + (result.stdout or "")
+        fallback_indicators = [
+            "ConsoleLauncher",
+            "ClassNotFoundException",
+            "No tests were executed",
+            "Unable to locate a Java Runtime",
+            "No tests found",
+        ]
+        if any(indicator in combined_output for indicator in fallback_indicators):
+            logger.debug("Direct JVM execution failed, falling back to Gradle-based execution")
+            result = _run_gradle_tests(
+                build_root, test_paths, run_env, timeout=timeout, mode=mode, test_module=test_module
+            )
+
+    result_xml_path = _get_combined_junit_xml(reports_dir, candidate_index)
+    return result, result_xml_path
+
+
+def _run_gradle_tests_coverage(
+    build_root: Path,
+    test_module: str | None,
+    test_paths: Any,
+    run_env: dict[str, str],
+    timeout: int,
+    candidate_index: int,
+) -> tuple[subprocess.CompletedProcess, Path]:
+    """Run Gradle tests with JaCoCo coverage enabled."""
+    gradle = find_gradle_executable(build_root)
+    if not gradle:
+        return (
+            subprocess.CompletedProcess(args=["gradle"], returncode=-1, stdout="", stderr="Gradle not found"),
+            _get_combined_junit_xml(_get_test_reports_dir(build_root, test_module), candidate_index),
+        )
+
+    init_script = create_codeflash_gradle_init_script(enable_jacoco=True)
+    if not init_script:
+        return (
+            subprocess.CompletedProcess(args=["gradle"], returncode=-1, stdout="", stderr="No init script"),
+            _get_combined_junit_xml(_get_test_reports_dir(build_root, test_module), candidate_index),
+        )
+
+    test_filter = _build_test_filter(test_paths, mode="behavior")
+    test_task = f":{test_module}:test" if test_module else "test"
+    jacoco_task = f":{test_module}:jacocoTestReportCf" if test_module else "jacocoTestReportCf"
+    cmd = [gradle, test_task, jacoco_task, "--no-daemon", "--init-script", str(init_script)]
+
+    if test_filter:
+        for cls in test_filter.split(","):
+            cls = cls.strip()
+            if cls:
+                cmd.extend(["--tests", cls])
+
+    try:
+        result = _run_cmd_kill_pg_on_timeout(cmd, cwd=build_root, env=run_env, timeout=timeout)
+    except Exception as e:
+        result = subprocess.CompletedProcess(args=cmd, returncode=-1, stdout="", stderr=str(e))
+    finally:
+        init_script.unlink(missing_ok=True)
+
+    reports_dir = _get_test_reports_dir(build_root, test_module)
+    result_xml_path = _get_combined_junit_xml(reports_dir, candidate_index)
+    return result, result_xml_path
+
+
+def _run_benchmarking_tests_gradle(
+    test_paths: Any,
+    test_env: dict[str, str],
+    cwd: Path,
+    timeout: int | None,
+    project_root: Path | None,
+    min_loops: int,
+    max_loops: int,
+    target_duration_seconds: float,
+    inner_iterations: int,
+) -> tuple[Path, Any]:
+    """Fallback: Run benchmarking tests using Gradle (slower but more reliable)."""
+    import time
+
+    project_root = project_root or cwd
+    build_root, test_module = _find_multi_module_root(project_root, test_paths)
+
+    all_stdout: list[str] = []
+    all_stderr: list[str] = []
+    total_start_time = time.time()
+    loop_count = 0
+    last_result = None
+
+    per_loop_timeout = max(timeout or 0, 120, 60 + inner_iterations)
+
+    logger.debug("Using Gradle-based benchmarking (fallback mode)")
+
+    for loop_idx in range(1, max_loops + 1):
+        run_env = os.environ.copy()
+        run_env.update(test_env)
+        run_env["CODEFLASH_LOOP_INDEX"] = str(loop_idx)
+        run_env["CODEFLASH_MODE"] = "performance"
+        run_env["CODEFLASH_TEST_ITERATION"] = "0"
+        if "CODEFLASH_INNER_ITERATIONS" not in run_env:
+            run_env["CODEFLASH_INNER_ITERATIONS"] = str(inner_iterations)
+
+        result = _run_gradle_tests(
+            build_root, test_paths, run_env, timeout=per_loop_timeout, mode="performance", test_module=test_module
+        )
+
+        last_result = result
+        loop_count = loop_idx
+
+        if result.stdout:
+            all_stdout.append(result.stdout)
+        if result.stderr:
+            all_stderr.append(result.stderr)
+
+        elapsed = time.time() - total_start_time
+        if loop_idx >= min_loops and elapsed >= target_duration_seconds:
+            logger.debug("Stopping Gradle benchmark after %d loops (%.2fs elapsed)", loop_idx, elapsed)
+            break
+
+        if result.returncode != 0:
+            timing_pattern = re.compile(r"!######[^:]*:[^:]*:[^:]*:[^:]*:[^:]+:[^:]+######!")
+            has_timing_markers = bool(timing_pattern.search(result.stdout or ""))
+            if not has_timing_markers:
+                logger.warning("Tests failed in Gradle loop %d with no timing markers, stopping", loop_idx)
+                break
+
+    combined_result = subprocess.CompletedProcess(
+        args=last_result.args if last_result else ["gradle", "test"],
+        returncode=last_result.returncode if last_result else -1,
+        stdout="\n".join(all_stdout),
+        stderr="\n".join(all_stderr),
+    )
+
+    reports_dir = _get_test_reports_dir(build_root, test_module)
+    result_xml_path = _get_combined_junit_xml(reports_dir, -1)
+
+    return result_xml_path, combined_result
+
+
+## ---- End of Gradle-specific functions ----
 
 
 def get_test_run_command(project_root: Path, test_classes: list[str] | None = None) -> list[str]:
