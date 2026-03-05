@@ -27,8 +27,9 @@ from codeflash.languages.java.build_tools import (
     CODEFLASH_RUNTIME_JAR_NAME,
     CODEFLASH_RUNTIME_VERSION,
     add_codeflash_dependency_to_pom,
-    add_jacoco_plugin_to_pom,
     backup_pom,
+    find_jacoco_agent_jar,
+    find_jacoco_cli_jar,
     find_maven_executable,
     get_jacoco_xml_path,
     install_codeflash_runtime,
@@ -172,6 +173,59 @@ def _validate_java_class_name(class_name: str) -> bool:
 
     """
     return bool(_VALID_JAVA_CLASS_NAME.match(class_name))
+
+
+def build_jacoco_agent_arg(exec_dest: Path) -> str | None:
+    """Build the -javaagent arg for standalone JaCoCo coverage collection.
+
+    Returns None if the bundled JaCoCo agent JAR is not found.
+    """
+    agent_jar = find_jacoco_agent_jar()
+    if agent_jar is None:
+        logger.warning("Bundled JaCoCo agent JAR not found — coverage will not be collected")
+        return None
+    return f"-javaagent:{agent_jar}=destfile={exec_dest}"
+
+
+def generate_jacoco_report(exec_file: Path, classfiles_dir: Path, sourcefiles_dir: Path, xml_output: Path) -> bool:
+    """Generate a JaCoCo XML report from a .exec file using the bundled CLI JAR.
+
+    Returns True if the report was generated successfully.
+    """
+    cli_jar = find_jacoco_cli_jar()
+    if cli_jar is None:
+        logger.error("Bundled JaCoCo CLI JAR not found — cannot generate coverage report")
+        return False
+
+    if not exec_file.exists():
+        logger.warning("JaCoCo exec file not found: %s — agent may not have run", exec_file)
+        return False
+
+    xml_output.parent.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        shutil.which("java") or "java",
+        "-jar",
+        str(cli_jar),
+        "report",
+        str(exec_file),
+        "--classfiles",
+        str(classfiles_dir),
+        "--sourcefiles",
+        str(sourcefiles_dir),
+        "--xml",
+        str(xml_output),
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)
+        if result.returncode == 0:
+            logger.info("Generated JaCoCo XML report: %s", xml_output)
+            return True
+        logger.error("JaCoCo CLI report failed (rc=%d): %s", result.returncode, result.stderr)
+        return False
+    except Exception as e:
+        logger.exception("Failed to generate JaCoCo report: %s", e)
+        return False
 
 
 def _find_runtime_jar() -> Path | None:
@@ -572,37 +626,36 @@ def run_behavioral_tests(
     run_env["CODEFLASH_TEST_ITERATION"] = str(candidate_index)
     run_env["CODEFLASH_OUTPUT_FILE"] = str(sqlite_db_path)  # SQLite output path
 
-    # If coverage is enabled, ensure JaCoCo is configured
-    # For multi-module projects, add JaCoCo to the test module's pom.xml (where tests run)
+    # Coverage setup: determine strategy based on whether user already has JaCoCo configured
     coverage_xml_path: Path | None = None
-    if enable_coverage:
-        # Determine which pom.xml to configure JaCoCo in
-        if test_module:
-            # Multi-module project: add JaCoCo to test module
-            test_module_pom = maven_root / test_module / "pom.xml"
-            if test_module_pom.exists():
-                if not is_jacoco_configured(test_module_pom):
-                    logger.info("Adding JaCoCo plugin to test module pom.xml: %s", test_module_pom)
-                    backup_pom(test_module_pom)
-                    add_jacoco_plugin_to_pom(test_module_pom)
-                coverage_xml_path = get_jacoco_xml_path(maven_root / test_module)
-        else:
-            # Single module project
-            pom_path = project_root / "pom.xml"
-            if pom_path.exists():
-                if not is_jacoco_configured(pom_path):
-                    logger.info("Adding JaCoCo plugin to pom.xml for coverage collection")
-                    backup_pom(pom_path)
-                    add_jacoco_plugin_to_pom(pom_path)
-                coverage_xml_path = get_jacoco_xml_path(project_root)
+    user_has_jacoco = False
+    jacoco_agent_arg: str | None = None
 
-    # Use a minimum timeout of 60s for Java builds (300s when coverage is enabled due to verify phase
-    # which runs full compilation + instrumentation + test execution in multi-module projects)
-    min_timeout = 300 if enable_coverage else 60
+    if enable_coverage:
+        target_dir = _get_test_module_target_dir(maven_root, test_module)
+        coverage_xml_path = get_jacoco_xml_path(target_dir.parent)
+
+        # Check if user already has JaCoCo configured in their pom.xml
+        check_pom = (maven_root / test_module / "pom.xml") if test_module else (project_root / "pom.xml")
+        if check_pom.exists() and is_jacoco_configured(check_pom):
+            user_has_jacoco = True
+            logger.info("User's pom.xml already has JaCoCo configured — using mvn verify")
+        else:
+            # Use standalone JaCoCo agent (no pom.xml modification needed)
+            jacoco_exec_path = target_dir / "jacoco.exec"
+            jacoco_agent_arg = build_jacoco_agent_arg(jacoco_exec_path)
+            if jacoco_agent_arg:
+                logger.info("Using standalone JaCoCo agent for coverage collection")
+            else:
+                logger.warning("Could not set up JaCoCo agent — coverage will not be collected")
+                enable_coverage = False
+
+    # Use a minimum timeout of 60s for Java builds (300s when coverage uses mvn verify)
+    min_timeout = 300 if (enable_coverage and user_has_jacoco) else 60
     effective_timeout = max(timeout or 300, min_timeout)
 
-    if enable_coverage:
-        # Coverage MUST use Maven — JaCoCo runs as a Maven plugin during the verify phase
+    if enable_coverage and user_has_jacoco:
+        # User has JaCoCo plugin: run mvn verify so their plugin generates the report
         result = _run_maven_tests(
             maven_root,
             test_paths,
@@ -615,8 +668,32 @@ def run_behavioral_tests(
         target_dir = _get_test_module_target_dir(maven_root, test_module)
         surefire_dir = target_dir / "surefire-reports"
         result_xml_path = _get_combined_junit_xml(surefire_dir, candidate_index)
+    elif enable_coverage and jacoco_agent_arg:
+        # Standalone JaCoCo agent: run mvn test with agent injected via argLine
+        result = _run_maven_tests(
+            maven_root,
+            test_paths,
+            run_env,
+            timeout=effective_timeout,
+            mode="behavior",
+            enable_coverage=False,
+            test_module=test_module,
+            javaagent_arg=jacoco_agent_arg,
+        )
+        target_dir = _get_test_module_target_dir(maven_root, test_module)
+        surefire_dir = target_dir / "surefire-reports"
+        result_xml_path = _get_combined_junit_xml(surefire_dir, candidate_index)
+
+        # Generate XML report from the .exec file using JaCoCo CLI
+        jacoco_exec_path = target_dir / "jacoco.exec"
+        classfiles_dir = target_dir / "classes"
+        module_base = (maven_root / test_module) if test_module else project_root
+        sourcefiles_dir = module_base / "src" / "main" / "java"
+        if not generate_jacoco_report(jacoco_exec_path, classfiles_dir, sourcefiles_dir, coverage_xml_path):
+            logger.warning("JaCoCo report generation failed — coverage data will be unavailable")
+            coverage_xml_path = None
     else:
-        # Direct JVM execution (fast path — bypasses Maven overhead)
+        # No coverage — direct JVM execution (fast path, bypasses Maven overhead)
         result, result_xml_path = _run_direct_or_fallback_maven(
             maven_root,
             test_module,
@@ -627,29 +704,16 @@ def run_behavioral_tests(
             candidate_index=candidate_index,
         )
 
-    # Debug: Log Maven result and coverage file status
-    if enable_coverage:
-        logger.info("Maven verify completed with return code: %s", result.returncode)
-        if result.returncode != 0:
-            logger.warning(
-                "Maven verify had non-zero return code: %s. Coverage data may be incomplete.", result.returncode
-            )
-
-    # Log coverage file status after Maven verify
+    # Log coverage file status
     if enable_coverage and coverage_xml_path:
-        jacoco_exec_path = target_dir / "jacoco.exec"
-        logger.info("Coverage paths - target_dir: %s, coverage_xml_path: %s", target_dir, coverage_xml_path)
-        if jacoco_exec_path.exists():
-            logger.info("JaCoCo exec file exists: %s (%s bytes)", jacoco_exec_path, jacoco_exec_path.stat().st_size)
-        else:
-            logger.warning("JaCoCo exec file not found: %s - JaCoCo agent may not have run", jacoco_exec_path)
+        logger.info("Coverage paths - coverage_xml_path: %s", coverage_xml_path)
         if coverage_xml_path.exists():
             file_size = coverage_xml_path.stat().st_size
             logger.info("JaCoCo XML report exists: %s (%s bytes)", coverage_xml_path, file_size)
             if file_size == 0:
-                logger.warning("JaCoCo XML report is empty - report generation may have failed")
+                logger.warning("JaCoCo XML report is empty — report generation may have failed")
         else:
-            logger.warning("JaCoCo XML report not found: %s - verify phase may not have completed", coverage_xml_path)
+            logger.warning("JaCoCo XML report not found: %s", coverage_xml_path)
 
     # Return tuple matching the expected signature:
     # (result_xml_path, run_result, coverage_database_file, coverage_config_file)
@@ -1618,8 +1682,8 @@ def _run_maven_tests(
             )
 
     # Build Maven command
-    # When coverage is enabled, use 'verify' phase to ensure JaCoCo report runs after tests
-    # JaCoCo's report goal is bound to the verify phase to get post-test execution data
+    # enable_coverage=True means user has JaCoCo plugin in pom.xml — use 'verify' so their
+    # report goal runs. Standalone JaCoCo uses javaagent_arg + 'test' instead.
     maven_goal = "verify" if enable_coverage else "test"
     cmd = [mvn, maven_goal, "-fae", "-B"]  # Fail at end to run all tests; -B for batch mode (no ANSI colors)
     cmd.extend(_MAVEN_VALIDATION_SKIP_FLAGS)
@@ -1628,8 +1692,6 @@ def _run_maven_tests(
     # The codeflash-runtime Serializer uses Kryo which needs reflective access to
     # java.base internals for serializing test inputs/outputs to SQLite.
     # These flags are safe no-ops on older Java versions.
-    # Note: This overrides JaCoCo's argLine for the forked JVM, but JaCoCo coverage
-    # is handled separately via enable_coverage and the verify phase.
     add_opens_flags = (
         "--add-opens java.base/java.util=ALL-UNNAMED"
         " --add-opens java.base/java.lang=ALL-UNNAMED"
