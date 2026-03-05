@@ -34,6 +34,7 @@ from codeflash.languages.java.build_tools import (
     get_jacoco_xml_path,
     install_codeflash_runtime,
     is_jacoco_configured,
+    restore_pom,
 )
 
 _MAVEN_NS = "http://maven.apache.org/POM/4.0.0"
@@ -312,7 +313,8 @@ def _ensure_codeflash_runtime(maven_root: Path, test_module: str | None) -> bool
     if pom_path.exists():
         backup_pom(pom_path)
         if not add_codeflash_dependency_to_pom(pom_path):
-            logger.error("Failed to add codeflash-runtime dependency to %s", pom_path)
+            logger.error("Failed to add codeflash-runtime dependency to %s, restoring backup", pom_path)
+            restore_pom(pom_path)
             return False
     else:
         logger.warning("pom.xml not found at %s, cannot add codeflash-runtime dependency", pom_path)
