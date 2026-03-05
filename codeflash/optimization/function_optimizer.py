@@ -765,7 +765,7 @@ class FunctionOptimizer:
         optimizations_set, function_references = optimization_result.unwrap()
 
         precomputed_behavioral: tuple[TestResults, CoverageData | None] | None = None
-        if generated_tests.generated_tests:
+        if generated_tests.generated_tests and self.args.testgen_review:
             review_result = self.review_and_repair_tests(
                 generated_tests=generated_tests, code_context=code_context, original_helper_code=original_helper_code
             )

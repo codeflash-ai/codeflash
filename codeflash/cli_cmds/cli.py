@@ -107,6 +107,9 @@ def parse_args() -> Namespace:
     parser.add_argument("--no-draft", default=False, action="store_true", help="Skip optimization for draft PRs")
     parser.add_argument("--worktree", default=False, action="store_true", help="Use worktree for optimization")
     parser.add_argument(
+        "--testgen-review", default=False, action="store_true", help="Enable AI review and repair of generated tests"
+    )
+    parser.add_argument(
         "--async",
         default=False,
         action="store_true",
