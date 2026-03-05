@@ -102,6 +102,7 @@ class PythonFunctionOptimizer(FunctionOptimizer):
             try:
                 tree = cst.parse_module(source)
             except cst.ParserSyntaxError:
+                logger.debug("Failed to parse source for diff display", exc_info=True)
                 return {}
             result: dict[str, str] = {}
             for node in tree.body:

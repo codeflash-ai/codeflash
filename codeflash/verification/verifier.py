@@ -73,7 +73,7 @@ def generate_tests(
         module_system=project_module_system,
         is_numerical_code=is_numerical_code,
     )
-    if response and isinstance(response, tuple) and len(response) >= 3:
+    if response and isinstance(response, tuple) and len(response) == 4:
         generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source, raw_generated_tests = (
             response
         )

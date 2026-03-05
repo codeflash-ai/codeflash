@@ -2027,7 +2027,7 @@ class FunctionOptimizer:
             console.print(Panel(issues_tree, title=f"Test Review (cycle {cycle + 1})", border_style="yellow"))
 
             any_repaired = False
-            repaired_count = 0  # tracks individual repair API successes (one per review, not per function)
+            repaired_files = 0
             # Snapshot all sources before repair so we can show diffs and revert on failure
             original_sources: dict[int, str] = {
                 r.test_index: generated_tests.generated_tests[r.test_index].generated_original_test_source
@@ -2097,7 +2097,7 @@ class FunctionOptimizer:
                     gt.behavior_file_path.write_text(behavior_source, encoding="utf8")
                     gt.perf_file_path.write_text(perf_source, encoding="utf8")
                     any_repaired = True
-                    repaired_count += 1
+                    repaired_files += 1
                     repaired_indices.add(review.test_index)
 
             if any_repaired:
@@ -2107,8 +2107,7 @@ class FunctionOptimizer:
                     project_root=self.project_root,
                     source_file_path=self.function_to_optimize.file_path,
                 )
-                console.print(f"  [green]Repaired {repaired_count} test file(s)[/green]")
-                self.display_repaired_functions(generated_tests, all_to_repair, original_sources)
+                console.print(f"  [green]Repaired {repaired_files} test file(s)[/green]")
                 with progress_bar("Re-validating repaired tests..."):
                     validation = self.run_behavioral_validation(
                         code_context, original_helper_code, file_path_to_helper_classes
@@ -2135,6 +2134,11 @@ class FunctionOptimizer:
                         gt.behavior_file_path.write_text(orig_behavior, encoding="utf8")
                         gt.perf_file_path.write_text(orig_perf, encoding="utf8")
                         reverted_indices.add(idx)
+
+                # Show diffs only for repairs that survived re-validation
+                successful_repairs = [r for r in all_to_repair if r.test_index not in reverted_indices]
+                if successful_repairs:
+                    self.display_repaired_functions(generated_tests, successful_repairs, original_sources)
 
                 if reverted_indices:
                     console.print(

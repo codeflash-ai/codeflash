@@ -796,6 +796,7 @@ class AiServiceClient:
         }
         if coverage_summary:
             payload["coverage_summary"] = coverage_summary
+        self.add_language_metadata(payload)
         try:
             response = self.make_ai_service_request("/testgen_review", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
