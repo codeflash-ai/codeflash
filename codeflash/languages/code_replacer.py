@@ -35,7 +35,9 @@ def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStrin
     # Fallback 2: match by filename (basename) — the LLM sometimes returns a different
     # directory prefix but the correct filename
     target_name = relative_path.name
-    basename_matches = [code for path, code in file_to_code_context.items() if Path(path).name == target_name]
+    basename_matches = [
+        code for path, code in file_to_code_context.items() if path != "None" and Path(path).name == target_name
+    ]
     if len(basename_matches) == 1:
         logger.debug(f"Using basename-matched code block for {relative_path}")
         return basename_matches[0]
