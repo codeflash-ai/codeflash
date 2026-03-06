@@ -2449,6 +2449,9 @@ class FunctionOptimizer:
         if not diffs:
             logger.debug("No diffs found, skipping repair")
             return
+        if test_results_count == 0:
+            logger.debug("No test results, skipping repair")
+            return
         result_unmatched_perc = len(diffs) / test_results_count
         if result_unmatched_perc > get_effort_value(EffortKeys.REPAIR_UNMATCHED_PERCENTAGE_LIMIT, self.effort):
             logger.debug(f"Result unmatched percentage is {result_unmatched_perc * 100}%, skipping repair")
