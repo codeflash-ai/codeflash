@@ -2138,74 +2138,82 @@ class FunctionOptimizer:
                     repaired_files += 1
                     repaired_indices.add(review.test_index)
 
-            if any_repaired:
-                generated_tests = self.language_support.postprocess_generated_tests(
-                    generated_tests,
-                    test_framework=self.test_cfg.test_framework,
-                    project_root=self.project_root,
-                    source_file_path=self.function_to_optimize.file_path,
+            if not any_repaired:
+                break
+
+            generated_tests = self.language_support.postprocess_generated_tests(
+                generated_tests,
+                test_framework=self.test_cfg.test_framework,
+                project_root=self.project_root,
+                source_file_path=self.function_to_optimize.file_path,
+            )
+            console.print(f"  [green]Repaired {repaired_files} test file(s)[/green]")
+            with progress_bar("Re-validating repaired tests..."):
+                validation = self.run_behavioral_validation(
+                    code_context, original_helper_code, file_path_to_helper_classes
                 )
-                console.print(f"  [green]Repaired {repaired_files} test file(s)[/green]")
-                with progress_bar("Re-validating repaired tests..."):
-                    validation = self.run_behavioral_validation(
-                        code_context, original_helper_code, file_path_to_helper_classes
-                    )
-                if validation is None:
-                    return Failure("Repaired tests failed behavioral validation.")
-                behavioral_results, coverage_results = validation
-
-                # Check which repaired test files still have failures and revert them
-                still_failing_files: set[Path] = set()
-                for result in behavioral_results.test_results:
-                    if result.test_type == TestType.GENERATED_REGRESSION and not result.did_pass:
-                        still_failing_files.add(result.file_name)
-
-                reverted_indices = set()
+            if validation is None:
                 for idx in repaired_indices:
                     gt = generated_tests.generated_tests[idx]
-                    if gt.behavior_file_path in still_failing_files:
-                        orig_source, orig_behavior, orig_perf, orig_raw = pre_repair_snapshots[idx]
-                        gt.generated_original_test_source = orig_source
-                        gt.instrumented_behavior_test_source = orig_behavior
-                        gt.instrumented_perf_test_source = orig_perf
-                        gt.raw_generated_test_source = orig_raw
-                        gt.behavior_file_path.write_text(orig_behavior, encoding="utf8")
-                        gt.perf_file_path.write_text(orig_perf, encoding="utf8")
-                        reverted_indices.add(idx)
+                    orig_source, orig_behavior, orig_perf, orig_raw = pre_repair_snapshots[idx]
+                    gt.generated_original_test_source = orig_source
+                    gt.instrumented_behavior_test_source = orig_behavior
+                    gt.instrumented_perf_test_source = orig_perf
+                    gt.raw_generated_test_source = orig_raw
+                    gt.behavior_file_path.write_text(orig_behavior, encoding="utf8")
+                    gt.perf_file_path.write_text(orig_perf, encoding="utf8")
+                return Failure("Repaired tests failed behavioral validation.")
+            behavioral_results, coverage_results = validation
 
-                # Show diffs only for repairs that survived re-validation
-                successful_repairs = [r for r in all_to_repair if r.test_index not in reverted_indices]
-                if successful_repairs:
-                    self.display_repaired_functions(generated_tests, successful_repairs, original_sources)
+            # Check which repaired test files still have failures and revert them
+            still_failing_files: set[Path] = set()
+            for result in behavioral_results.test_results:
+                if result.test_type == TestType.GENERATED_REGRESSION and not result.did_pass:
+                    still_failing_files.add(result.file_name)
 
-                if reverted_indices:
-                    console.print(
-                        f"  [yellow]Reverted {len(reverted_indices)} test file(s) "
-                        f"that still failed after repair[/yellow]"
-                    )
-                    # Collect error messages from failed repairs so the next cycle can learn from them
-                    revalidation_failures = behavioral_results.test_failures or {}
-                    for idx in reverted_indices:
-                        gt = generated_tests.generated_tests[idx]
-                        errors_for_file: dict[str, str] = {}
-                        for result in behavioral_results.test_results:
-                            if (
-                                result.file_name == gt.behavior_file_path
-                                and result.test_type == TestType.GENERATED_REGRESSION
-                                and not result.did_pass
-                                and result.id.test_function_name
-                            ):
-                                fn_name = result.id.test_fn_qualified_name()
-                                errors_for_file[fn_name] = revalidation_failures.get(fn_name, "Test failed")
-                        if errors_for_file:
-                            previous_repair_errors[idx] = errors_for_file
-                    # Invalidate behavioral results since we reverted some files
-                    behavioral_results = None
-                    coverage_results = None
+            reverted_indices = set()
+            for idx in repaired_indices:
+                gt = generated_tests.generated_tests[idx]
+                if gt.behavior_file_path in still_failing_files:
+                    orig_source, orig_behavior, orig_perf, orig_raw = pre_repair_snapshots[idx]
+                    gt.generated_original_test_source = orig_source
+                    gt.instrumented_behavior_test_source = orig_behavior
+                    gt.instrumented_perf_test_source = orig_perf
+                    gt.raw_generated_test_source = orig_raw
+                    gt.behavior_file_path.write_text(orig_behavior, encoding="utf8")
+                    gt.perf_file_path.write_text(orig_perf, encoding="utf8")
+                    reverted_indices.add(idx)
+
+            # Show diffs only for repairs that survived re-validation
+            successful_repairs = [r for r in all_to_repair if r.test_index not in reverted_indices]
+            if successful_repairs:
+                self.display_repaired_functions(generated_tests, successful_repairs, original_sources)
+
+            if reverted_indices:
+                console.print(
+                    f"  [yellow]Reverted {len(reverted_indices)} test file(s) that still failed after repair[/yellow]"
+                )
+                # Collect error messages from failed repairs so the next cycle can learn from them
+                revalidation_failures = behavioral_results.test_failures or {}
+                for idx in reverted_indices:
+                    gt = generated_tests.generated_tests[idx]
+                    errors_for_file: dict[str, str] = {}
+                    for result in behavioral_results.test_results:
+                        if (
+                            result.file_name == gt.behavior_file_path
+                            and result.test_type == TestType.GENERATED_REGRESSION
+                            and not result.did_pass
+                            and result.id.test_function_name
+                        ):
+                            fn_name = result.id.test_fn_qualified_name()
+                            errors_for_file[fn_name] = revalidation_failures.get(fn_name, "Test failed")
+                    if errors_for_file:
+                        previous_repair_errors[idx] = errors_for_file
+                # Invalidate behavioral results since we reverted some files
+                behavioral_results = None
+                coverage_results = None
 
         console.rule()
-        # When all repair API calls failed (any_repaired=False), behavioral_results are from before
-        # the repair attempts. This is correct since no test code actually changed.
         return Success((generated_tests, behavioral_results, coverage_results))
 
     def find_and_process_best_optimization(
