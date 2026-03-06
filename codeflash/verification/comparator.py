@@ -637,8 +637,7 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
             orig,
             (
                 _thread.LockType,
-                threading.Lock,
-                threading.RLock,
+                _thread.RLock,
                 threading.Event,
                 threading.Condition,
                 sqlite3.Connection,
