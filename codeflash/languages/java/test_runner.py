@@ -877,6 +877,7 @@ def _run_tests_direct(
     working_dir: Path,
     timeout: int = 60,
     reports_dir: Path | None = None,
+    javaagent_arg: str | None = None,
 ) -> subprocess.CompletedProcess:
     """Run JUnit tests directly using java command (bypassing Maven).
 
@@ -918,6 +919,11 @@ def _run_tests_direct(
     else:
         logger.debug("JUnit 4 project, using ConsoleLauncher (via vintage engine)")
 
+    # Collect extra JVM flags (e.g. -javaagent for line profiler)
+    extra_jvm_flags: list[str] = []
+    if javaagent_arg:
+        extra_jvm_flags.append(javaagent_arg)
+
     if is_junit4:
         if reports_dir:
             logger.debug(
@@ -928,6 +934,7 @@ def _run_tests_direct(
         # Use JUnit 4's JUnitCore runner
         cmd = [
             str(java),
+            *extra_jvm_flags,
             # Java 16+ module system: Kryo needs reflective access to internal JDK classes
             "--add-opens",
             "java.base/java.util=ALL-UNNAMED",
@@ -954,6 +961,7 @@ def _run_tests_direct(
         # The launcher is included in junit-platform-console-standalone or junit-jupiter
         cmd = [
             str(java),
+            *extra_jvm_flags,
             # Java 16+ module system: Kryo needs reflective access to internal JDK classes
             "--add-opens",
             "java.base/java.util=ALL-UNNAMED",
@@ -2178,7 +2186,14 @@ def run_line_profile_tests(
 
     if build_tool == BuildTool.GRADLE:
         result, result_xml_path = _run_direct_or_fallback_gradle(
-            build_root, test_module, test_paths, run_env, effective_timeout, mode="line_profile", candidate_index=-1
+            build_root,
+            test_module,
+            test_paths,
+            run_env,
+            effective_timeout,
+            mode="line_profile",
+            candidate_index=-1,
+            javaagent_arg=javaagent_arg,
         )
     else:
         result = _run_maven_tests(
@@ -2409,6 +2424,7 @@ def _run_direct_or_fallback_gradle(
     timeout: int,
     mode: str,
     candidate_index: int = -1,
+    javaagent_arg: str | None = None,
 ) -> tuple[subprocess.CompletedProcess, Path]:
     """Compile once, then run tests directly via JVM. Falls back to Gradle on failure."""
     test_classes = _get_test_class_names(test_paths, mode=mode)
@@ -2443,7 +2459,15 @@ def _run_direct_or_fallback_gradle(
     reports_dir.mkdir(parents=True, exist_ok=True)
 
     logger.debug("Step 3: Running %s tests directly (bypassing Gradle)", mode)
-    result = _run_tests_direct(classpath, test_classes, run_env, working_dir, timeout=timeout, reports_dir=reports_dir)
+    result = _run_tests_direct(
+        classpath,
+        test_classes,
+        run_env,
+        working_dir,
+        timeout=timeout,
+        reports_dir=reports_dir,
+        javaagent_arg=javaagent_arg,
+    )
 
     # Check for fallback indicators on failure
     if result.returncode != 0:
