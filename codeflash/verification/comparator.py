@@ -1,11 +1,15 @@
+import _thread
 import array
 import ast
 import datetime
 import decimal
 import enum
+import io
 import itertools
 import math
 import re
+import sqlite3
+import threading
 import types
 import warnings
 import weakref
@@ -629,6 +633,20 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
 
         if type(orig) in {types.BuiltinFunctionType, types.BuiltinMethodType}:
             return new == orig
+        if isinstance(
+            orig,
+            (
+                _thread.LockType,
+                threading.Lock,
+                threading.RLock,
+                threading.Event,
+                threading.Condition,
+                sqlite3.Connection,
+                sqlite3.Cursor,
+                io.IOBase,
+            ),
+        ):
+            return type(orig) is type(new)
         if str(type(orig)) == "<class 'object'>":
             return True
         # TODO : Add other types here
