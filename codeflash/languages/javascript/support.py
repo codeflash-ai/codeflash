@@ -17,7 +17,6 @@ from codeflash.languages.base import CodeContext, FunctionFilterCriteria, Helper
 from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
 from codeflash.languages.registry import register_language
 from codeflash.models.models import FunctionParent
-from codeflash.cli_cmds.console import logger
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -1201,12 +1200,7 @@ class JavaScriptSupport:
         target_name_bytes = function_name.encode("utf8")
 
         func_node = None
-        func_types = (
-            "function_declaration",
-            "function",
-            "generator_function_declaration",
-            "generator_function",
-        )
+        func_types = ("function_declaration", "function", "generator_function_declaration", "generator_function")
         decl_types = ("lexical_declaration", "variable_declaration")
         value_fn_types = ("arrow_function", "function_expression", "generator_function")
 
@@ -1236,11 +1230,7 @@ class JavaScriptSupport:
                     if child.type == "variable_declarator":
                         name_node = child.child_by_field_name("name")
                         value_node = child.child_by_field_name("value")
-                        if (
-                            name_node
-                            and value_node
-                            and value_node.type in value_fn_types
-                        ):
+                        if name_node and value_node and value_node.type in value_fn_types:
                             if mv[name_node.start_byte : name_node.end_byte] == target_name_bytes:
                                 func_node = value_node
                                 break
