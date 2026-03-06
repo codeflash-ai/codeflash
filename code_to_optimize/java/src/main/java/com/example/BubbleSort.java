@@ -17,21 +17,24 @@ public class BubbleSort {
         }
 
         int[] result = new int[arr.length];
-        for (int i = 0; i < arr.length; i++) {
-            result[i] = arr[i];
-        }
+        System.arraycopy(arr, 0, result, 0, arr.length);
 
         int n = result.length;
-
-        for (int i = 0; i < n; i++) {
-            for (int j = 0; j < n - 1; j++) {
-                if (result[j] > result[j + 1]) {
-                    int temp = result[j];
-                    result[j] = result[j + 1];
-                    result[j + 1] = temp;
+        // Optimized bubble sort: stop early if no swaps and reduce inner loop range
+        boolean swapped;
+        do {
+            swapped = false;
+            for (int j = 1; j < n; j++) {
+                int prev = result[j - 1];
+                int cur = result[j];
+                if (prev > cur) {
+                    result[j - 1] = cur;
+                    result[j] = prev;
+                    swapped = true;
                 }
             }
-        }
+            n--;
+        } while (swapped && n > 0);
 
         return result;
     }
