@@ -907,9 +907,8 @@ class TestBundledJestReporter:
 
             # Create a Node.js script that exercises the reporter with mock data
             test_script = Path(tmpdir) / "test_reporter.js"
-            # Use POSIX-style paths in JS strings to avoid backslash escape issues on Windows
-            output_file_js = output_file.as_posix()
             reporter_path_js = reporter_path.as_posix()
+            output_file_js = output_file.as_posix()
             test_script.write_text(f"""
 // Set env vars BEFORE requiring reporter (matches real Jest behavior)
 process.env.JEST_JUNIT_OUTPUT_FILE = '{output_file_js}';
@@ -963,7 +962,7 @@ reporter.onTestFileResult(null, results.testResults[0], null);
 reporter.onRunComplete([], results);
 
 console.log('OK');
-""")
+""", encoding="utf-8")
 
             result = subprocess.run(
                 ["node", str(test_script)],

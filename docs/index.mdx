@@ -13,46 +13,56 @@ does not modify the system architecture of your code, but it tries to find the m
 
 ### Get Started
 
+Pick your language to install and configure Codeflash:
+
 <CardGroup cols={2}>
-  <Card title="Python Setup" icon="python" href="/getting-started/local-installation">
-    Install via pip, uv, or poetry
+  <Card title="Python" icon="python" href="/getting-started/local-installation">
+    Install via pip, uv, or poetry. Configure in `pyproject.toml`.
   </Card>
-  <Card title="JavaScript / TypeScript Setup" icon="js" href="/getting-started/javascript-installation">
-    Install via npm, yarn, pnpm, or bun
+  <Card title="JavaScript / TypeScript" icon="js" href="/getting-started/javascript-installation">
+    Install via npm, yarn, pnpm, or bun. Configure in `package.json`. Supports Jest, Vitest, and Mocha.
   </Card>
 </CardGroup>
 
 ### How to use Codeflash
 
-<CardGroup cols={1}>
-  <Card title="Optimize a Single Function" icon="bullseye" href="/optimizing-with-codeflash/one-function">
-    Target and optimize individual functions for maximum performance gains.
+These commands work for both Python and JS/TS projects:
+
+<CardGroup cols={2}>
+  <Card title="Optimize a Function" icon="bullseye" href="/optimizing-with-codeflash/one-function">
     ```bash
     codeflash --file path/to/file --function my_function
     ```
   </Card>
 
-  <Card title="Optimize Pull Requests" icon="code-pull-request" href="/optimizing-with-codeflash/codeflash-github-actions">
-    Automatically find optimizations for Pull Requests with GitHub Actions integration.
-    ```bash
-    codeflash init-actions
-    ```
-  </Card>
-
-  <Card title="Optimize Workflows with Tracing" icon="route" href="/optimizing-with-codeflash/trace-and-optimize">
-    End-to-end optimization of entire workflows with execution tracing.
-    ```bash
-    codeflash optimize myscript.py
-    ```
-  </Card>
-
-  <Card title="Optimize Your Entire Codebase" icon="globe" href="/optimizing-with-codeflash/codeflash-all">
-    Automatically optimize all functions in your project with comprehensive analysis.
+  <Card title="Optimize Entire Codebase" icon="globe" href="/optimizing-with-codeflash/codeflash-all">
     ```bash
     codeflash --all
     ```
   </Card>
 
+  <Card title="Trace & Optimize Workflows" icon="route" href="/optimizing-with-codeflash/trace-and-optimize">
+    ```bash
+    codeflash optimize myscript.py
+    ```
+  </Card>
+
+  <Card title="Auto-Optimize Pull Requests" icon="code-pull-request" href="/optimizing-with-codeflash/codeflash-github-actions">
+    ```bash
+    codeflash init-actions
+    ```
+  </Card>
+</CardGroup>
+
+### Configuration Reference
+
+<CardGroup cols={2}>
+  <Card title="Python Config" icon="python" href="/configuration/python">
+    `pyproject.toml` reference
+  </Card>
+  <Card title="JS / TS Config" icon="js" href="/configuration/javascript">
+    `package.json` reference — includes monorepo, scattered tests, manual setup
+  </Card>
 </CardGroup>
 
 ### How does Codeflash verify correctness?

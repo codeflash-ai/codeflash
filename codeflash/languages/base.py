@@ -313,7 +313,7 @@ class LanguageSupport(Protocol):
         Returns None for languages where the runtime version is auto-detected (e.g. Python).
         Returns a version string (e.g. "ES2022") for languages that need an explicit default.
         """
-        return None
+        ...
 
     @property
     def valid_test_frameworks(self) -> tuple[str, ...]:

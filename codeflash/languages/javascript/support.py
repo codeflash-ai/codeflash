@@ -1755,12 +1755,32 @@ class JavaScriptSupport:
             disable_ts_check,
             inject_test_globals,
             normalize_generated_tests_imports,
+            sanitize_mocha_imports,
         )
         from codeflash.languages.javascript.module_system import detect_module_system
+        from codeflash.models.models import GeneratedTests as GeneratedTestsModel
+        from codeflash.models.models import GeneratedTestsList
+
+        # For Mocha, strip vitest/jest/require('mocha') imports the AI may have generated
+        if test_framework == "mocha":
+            sanitized = []
+            for test in generated_tests.generated_tests:
+                sanitized.append(
+                    GeneratedTestsModel(
+                        generated_original_test_source=sanitize_mocha_imports(test.generated_original_test_source),
+                        instrumented_behavior_test_source=sanitize_mocha_imports(
+                            test.instrumented_behavior_test_source
+                        ),
+                        instrumented_perf_test_source=sanitize_mocha_imports(test.instrumented_perf_test_source),
+                        behavior_file_path=test.behavior_file_path,
+                        perf_file_path=test.perf_file_path,
+                    )
+                )
+            generated_tests = GeneratedTestsList(generated_tests=sanitized)
 
         module_system = detect_module_system(project_root, source_file_path)
-        if module_system == "esm":
-            generated_tests = inject_test_globals(generated_tests, test_framework)
+        if module_system == "esm" or test_framework == "mocha":
+            generated_tests = inject_test_globals(generated_tests, test_framework, module_system)
         if self.language == Language.TYPESCRIPT:
             generated_tests = disable_ts_check(generated_tests)
         return normalize_generated_tests_imports(generated_tests)
@@ -1949,6 +1969,13 @@ class JavaScriptSupport:
 
         # Ensure vitest imports are present when using vitest framework
         generated_test_source = ensure_vitest_imports(generated_test_source, test_cfg.test_framework)
+
+        # For Mocha: convert expect()/test() to assert/it() BEFORE instrumentation
+        # to prevent instrumentation from breaking Chai-style assertion chains
+        if test_cfg.test_framework == "mocha":
+            from codeflash.languages.javascript.edit_tests import sanitize_mocha_imports
+
+            generated_test_source = sanitize_mocha_imports(generated_test_source)
 
         # Instrument for behavior verification (writes to SQLite)
         instrumented_behavior_test_source = instrument_generated_js_test(
@@ -2345,9 +2372,12 @@ class JavaScriptSupport:
             candidate_index=candidate_index,
         )
 
-    # JavaScript/TypeScript benchmarking uses high max_loops like Python (100,000)
-    # The actual loop count is limited by target_duration_seconds, not max_loops
-    JS_BENCHMARKING_MAX_LOOPS = 100_000
+    # Max iterations per capturePerf call site.  Each iteration writes a ~200-byte
+    # timing marker to stdout.  The actual loop count is governed by the 10s time
+    # budget (CODEFLASH_PERF_TARGET_DURATION_MS) — this constant is just a ceiling.
+    # Python uses max_loops=250; JS iterations are lighter (no pytest overhead) so
+    # 1000 gives comparable statistical power while keeping stdout under 200 KB.
+    JS_BENCHMARKING_MAX_LOOPS = 1_000
 
     def run_benchmarking_tests(
         self,
@@ -2357,7 +2387,7 @@ class JavaScriptSupport:
         timeout: int | None = None,
         project_root: Path | None = None,
         min_loops: int = 5,
-        max_loops: int = 100_000,
+        max_loops: int = 1_000,
         target_duration_seconds: float = 10.0,
         test_framework: str | None = None,
     ) -> tuple[Path, Any]:
