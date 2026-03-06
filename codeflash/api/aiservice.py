@@ -826,6 +826,7 @@ class AiServiceClient:
         trace_id: str,
         language: str = "python",
         coverage_details: dict[str, Any] | None = None,
+        previous_repair_errors: dict[str, str] | None = None,
     ) -> tuple[str, str, str] | None:
         payload: dict[str, Any] = {
             "test_source": test_source,
@@ -846,6 +847,8 @@ class AiServiceClient:
         }
         if coverage_details:
             payload["coverage_details"] = coverage_details
+        if previous_repair_errors:
+            payload["previous_repair_errors"] = previous_repair_errors
         self.add_language_metadata(payload)
         try:
             response = self.make_ai_service_request("/testgen_repair", payload=payload, timeout=self.timeout)

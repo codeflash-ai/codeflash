@@ -1962,6 +1962,7 @@ class FunctionOptimizer:
         file_path_to_helper_classes = self.build_helper_classes_map(code_context)
         behavioral_results: TestResults | None = None
         coverage_results: CoverageData | None = None
+        previous_repair_errors: dict[int, dict[str, str]] = {}
         max_cycles = getattr(self.args, "testgen_review_turns", None) or MAX_TEST_REPAIR_CYCLES
         for cycle in range(max_cycles):
             with progress_bar("Running generated tests to validate quality..."):
@@ -2098,6 +2099,7 @@ class FunctionOptimizer:
                         trace_id=self.function_trace_id,
                         language=self.function_to_optimize.language,
                         coverage_details=coverage_details,
+                        previous_repair_errors=previous_repair_errors.get(review.test_index),
                     )
 
                     if repair_result is None:
@@ -2174,6 +2176,22 @@ class FunctionOptimizer:
                         f"  [yellow]Reverted {len(reverted_indices)} test file(s) "
                         f"that still failed after repair[/yellow]"
                     )
+                    # Collect error messages from failed repairs so the next cycle can learn from them
+                    revalidation_failures = behavioral_results.test_failures or {}
+                    for idx in reverted_indices:
+                        gt = generated_tests.generated_tests[idx]
+                        errors_for_file: dict[str, str] = {}
+                        for result in behavioral_results.test_results:
+                            if (
+                                result.file_name == gt.behavior_file_path
+                                and result.test_type == TestType.GENERATED_REGRESSION
+                                and not result.did_pass
+                                and result.id.test_function_name
+                            ):
+                                fn_name = result.id.test_fn_qualified_name()
+                                errors_for_file[fn_name] = revalidation_failures.get(fn_name, "Test failed")
+                        if errors_for_file:
+                            previous_repair_errors[idx] = errors_for_file
                     # Invalidate behavioral results since we reverted some files
                     behavioral_results = None
                     coverage_results = None
