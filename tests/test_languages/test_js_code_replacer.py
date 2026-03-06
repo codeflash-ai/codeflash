@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.languages.base import Language
+from codeflash.languages.base import FunctionFilterCriteria, Language
 from codeflash.languages.code_replacer import replace_function_definitions_for_language
 from codeflash.languages.current import set_current_language
 from codeflash.languages.javascript.module_system import (
@@ -2264,3 +2264,150 @@ export function processNode(node: TreeNode, space: NodeSpace): number {
         assert "// Optimized" in result
 
         assert ts_support.validate_syntax(result) is True
+
+
+class TestVariableAssignedFunctionReplacement:
+    """Tests for replacing functions assigned to variables (function expressions, var declarations, etc.)."""
+
+    NO_EXPORT_FILTER = FunctionFilterCriteria(require_export=False, require_return=False)
+
+    def test_replace_function_expression_body(self, js_support, temp_project):
+        """Test replacing an exported const-assigned function expression."""
+        original_source = """\
+export const foo = function(x) {
+    return x + 1;
+};
+"""
+        file_path = temp_project / "funcs.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
+        assert len(functions) == 1
+        func = functions[0]
+        assert func.function_name == "foo"
+
+        optimized_code = """\
+export const foo = function(x) {
+    return (x + 1) | 0;
+};
+"""
+
+        result = js_support.replace_function(original_source, func, optimized_code)
+
+        assert "return (x + 1) | 0;" in result
+        assert js_support.validate_syntax(result) is True
+
+    def test_replace_function_expression_with_var(self, js_support, temp_project):
+        """Test replacing a var-assigned function expression (non-exported, e.g. CommonJS)."""
+        original_source = """\
+var foo = function(x) {
+    return x * 2;
+};
+"""
+        file_path = temp_project / "funcs.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path, filter_criteria=self.NO_EXPORT_FILTER)
+        assert len(functions) == 1
+        func = functions[0]
+        assert func.function_name == "foo"
+
+        optimized_code = """\
+var foo = function(x) {
+    return x << 1;
+};
+"""
+
+        result = js_support.replace_function(original_source, func, optimized_code)
+
+        assert "return x << 1;" in result
+        assert js_support.validate_syntax(result) is True
+
+    def test_replace_generator_function_expression(self, js_support, temp_project):
+        """Test replacing an exported const-assigned generator function expression."""
+        original_source = """\
+export const gen = function*(n) {
+    for (let i = 0; i < n; i++) {
+        yield i;
+    }
+};
+"""
+        file_path = temp_project / "generators.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path, filter_criteria=self.NO_EXPORT_FILTER)
+        assert len(functions) == 1
+        func = functions[0]
+        assert func.function_name == "gen"
+
+        optimized_code = """\
+export const gen = function*(n) {
+    let i = 0;
+    while (i < n) yield i++;
+};
+"""
+
+        result = js_support.replace_function(original_source, func, optimized_code)
+
+        assert "while (i < n) yield i++;" in result
+        assert js_support.validate_syntax(result) is True
+
+    def test_replace_arrow_function_multiline_declaration(self, js_support, temp_project):
+        """Test replacing an arrow function where the arrow is on a different line than const."""
+        original_source = """\
+export const calculate =
+    (a, b) => {
+        return a + b;
+    };
+"""
+        file_path = temp_project / "calc.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
+        assert len(functions) == 1
+        func = functions[0]
+        assert func.function_name == "calculate"
+
+        optimized_code = """\
+export const calculate =
+    (a, b) => {
+        return (a + b) | 0;
+    };
+"""
+
+        result = js_support.replace_function(original_source, func, optimized_code)
+
+        assert "return (a + b) | 0;" in result
+        assert js_support.validate_syntax(result) is True
+
+    def test_replace_async_arrow_function(self, js_support, temp_project):
+        """Test replacing an exported const-assigned async arrow function."""
+        original_source = """\
+export const fetchData = async (url) => {
+    const response = await fetch(url);
+    return response.json();
+};
+"""
+        file_path = temp_project / "api.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
+        assert len(functions) == 1
+        func = functions[0]
+        assert func.function_name == "fetchData"
+
+        optimized_code = """\
+export const fetchData = async (url) => {
+    return (await fetch(url)).json();
+};
+"""
+
+        result = js_support.replace_function(original_source, func, optimized_code)
+
+        assert "return (await fetch(url)).json();" in result
+        assert js_support.validate_syntax(result) is True
