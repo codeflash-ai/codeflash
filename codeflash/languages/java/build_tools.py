@@ -20,9 +20,7 @@ _RE_JAVA_LANG = re.compile(r"JavaLanguageVersion\.of\(\s*(\d+)\s*\)")
 
 _RE_JVM_TOOLCHAIN = re.compile(r"jvmToolchain\(\s*(\d+)\s*\)")
 
-_RE_SOURCE_COMPAT_VERSION = re.compile(
-    r"sourceCompatibility\s*=\s*JavaVersion\.VERSION_(\d+)"
-)
+_RE_SOURCE_COMPAT_VERSION = re.compile(r"sourceCompatibility\s*=\s*JavaVersion\.VERSION_(\d+)")
 
 _RE_SOURCE_COMPAT_QUOTED = re.compile(r"sourceCompatibility\s*=\s*['\"]([^'\"]+)['\"]")
 
