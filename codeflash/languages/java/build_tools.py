@@ -387,14 +387,17 @@ def find_gradle_executable(project_root: Path | None = None) -> str | None:
         Path to gradle executable, or None if not found.
 
     """
-    # Check for Gradle wrapper in project root first
+    # Check for Gradle wrapper in project root and parent directories
     if project_root is not None:
-        gradlew_path = project_root / "gradlew"
-        if gradlew_path.exists():
-            return str(gradlew_path)
-        gradlew_bat_path = project_root / "gradlew.bat"
-        if gradlew_bat_path.exists():
-            return str(gradlew_bat_path)
+        current = project_root.resolve()
+        while current != current.parent:
+            gradlew_path = current / "gradlew"
+            if gradlew_path.exists():
+                return str(gradlew_path)
+            gradlew_bat_path = current / "gradlew.bat"
+            if gradlew_bat_path.exists():
+                return str(gradlew_bat_path)
+            current = current.parent
 
     # Check for Gradle wrapper in current directory
     if Path("gradlew").exists():
@@ -1089,7 +1092,7 @@ def _get_gradle_classpath(project_root: Path, test_module: str | None = None) ->
     if not gradle:
         return None
 
-    init_script = create_codeflash_gradle_init_script()
+    init_script = create_codeflash_gradle_init_script(target_module=test_module)
     if not init_script:
         return None
 
@@ -1128,7 +1131,7 @@ def _get_gradle_classpath(project_root: Path, test_module: str | None = None) ->
         init_script.unlink(missing_ok=True)
 
 
-def create_codeflash_gradle_init_script(enable_jacoco: bool = False) -> Path | None:
+def create_codeflash_gradle_init_script(enable_jacoco: bool = False, target_module: str | None = None) -> Path | None:
     """Create a Gradle init script that injects CodeFlash configuration.
 
     The init script adds mavenLocal(), codeflash-runtime dependency,
@@ -1157,8 +1160,46 @@ def create_codeflash_gradle_init_script(enable_jacoco: bool = False) -> Path | N
         }
 """
 
-    script_content = f"""\
-allprojects {{
+    # Use projectsEvaluated to avoid triggering configuration of all subprojects.
+    # Only apply codeflash config to projects that have the java plugin applied.
+    if target_module:
+        project_selector = f"""
+projectsEvaluated {{
+    def targetProject = gradle.rootProject.allprojects.find {{ it.name == '{target_module}' || it.path == ':{target_module}' }}
+    if (targetProject != null) {{
+        targetProject.with {{
+            repositories {{
+                mavenLocal()
+            }}
+            if (plugins.hasPlugin('java')) {{
+                dependencies {{
+                    testImplementation 'com.codeflash:codeflash-runtime:1.0.0'
+                }}
+                tasks.withType(Test) {{
+                    jvmArgs '--add-opens', 'java.base/java.util=ALL-UNNAMED',
+                            '--add-opens', 'java.base/java.lang=ALL-UNNAMED',
+                            '--add-opens', 'java.base/java.lang.reflect=ALL-UNNAMED',
+                            '--add-opens', 'java.base/java.io=ALL-UNNAMED',
+                            '--add-opens', 'java.base/java.math=ALL-UNNAMED',
+                            '--add-opens', 'java.base/java.net=ALL-UNNAMED',
+                            '--add-opens', 'java.base/java.util.zip=ALL-UNNAMED'
+                }}
+{jacoco_block}
+                tasks.register('printCfClasspath') {{
+                    doLast {{
+                        println "CF_CLASSPATH_START"
+                        println configurations.testRuntimeClasspath.asPath
+                        println "CF_CLASSPATH_END"
+                    }}
+                }}
+            }}
+        }}
+    }}
+}}
+"""
+    else:
+        project_selector = f"""\
+gradle.allprojects {{
     buildscript {{
         repositories {{
             mavenLocal()
@@ -1194,6 +1235,8 @@ allprojects {{
 }}
 """
 
+    script_content = project_selector
+
     try:
         fd, path = tempfile.mkstemp(prefix="codeflash_gradle_init_", suffix=".gradle")
         os.close(fd)
@@ -1217,7 +1260,7 @@ def compile_gradle_project(
     if not gradle:
         return False, "", "Gradle not found"
 
-    init_script = create_codeflash_gradle_init_script()
+    init_script = create_codeflash_gradle_init_script(target_module=test_module)
     if not init_script:
         return False, "", "Failed to create init script"
 
@@ -1266,7 +1309,7 @@ def run_gradle_tests(
             returncode=-1,
         )
 
-    init_script = create_codeflash_gradle_init_script()
+    init_script = create_codeflash_gradle_init_script(target_module=test_module)
     if not init_script:
         return MavenTestResult(
             success=False,

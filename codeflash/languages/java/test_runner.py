@@ -434,6 +434,22 @@ def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, 
                         return project_root, first_component
                 except ValueError:
                     pass
+
+        # For Gradle projects, walk up to find the actual root with settings.gradle/gradlew
+        current = project_root.parent
+        while current != current.parent:
+            settings_gradle = current / "settings.gradle.kts"
+            if not settings_gradle.exists():
+                settings_gradle = current / "settings.gradle"
+            if settings_gradle.exists():
+                try:
+                    module_name = project_root.relative_to(current).parts[0]
+                    logger.debug("Detected Gradle multi-module project. Root: %s, Module: %s", current, module_name)
+                    return current, module_name
+                except (ValueError, IndexError):
+                    pass
+            current = current.parent
+
         return project_root, None
 
     # Find common parent that contains both project_root and test files
@@ -2202,7 +2218,7 @@ def _compile_tests_gradle(
         logger.error("Gradle not found")
         return subprocess.CompletedProcess(args=["gradle"], returncode=-1, stdout="", stderr="Gradle not found")
 
-    init_script = create_codeflash_gradle_init_script()
+    init_script = create_codeflash_gradle_init_script(target_module=test_module)
     if not init_script:
         return subprocess.CompletedProcess(
             args=["gradle"], returncode=-1, stdout="", stderr="Failed to create init script"
@@ -2292,7 +2308,7 @@ def _run_gradle_tests(
         logger.error("Gradle not found")
         return subprocess.CompletedProcess(args=["gradle"], returncode=-1, stdout="", stderr="Gradle not found")
 
-    init_script = create_codeflash_gradle_init_script()
+    init_script = create_codeflash_gradle_init_script(target_module=test_module)
     if not init_script:
         return subprocess.CompletedProcess(
             args=["gradle"], returncode=-1, stdout="", stderr="Failed to create init script"
@@ -2400,7 +2416,7 @@ def _run_gradle_tests_coverage(
             _get_combined_junit_xml(_get_test_reports_dir(build_root, test_module), candidate_index),
         )
 
-    init_script = create_codeflash_gradle_init_script(enable_jacoco=True)
+    init_script = create_codeflash_gradle_init_script(enable_jacoco=True, target_module=test_module)
     if not init_script:
         return (
             subprocess.CompletedProcess(args=["gradle"], returncode=-1, stdout="", stderr="No init script"),
@@ -2410,13 +2426,15 @@ def _run_gradle_tests_coverage(
     test_filter = _build_test_filter(test_paths, mode="behavior")
     test_task = f":{test_module}:test" if test_module else "test"
     jacoco_task = f":{test_module}:jacocoTestReportCf" if test_module else "jacocoTestReportCf"
-    cmd = [gradle, test_task, jacoco_task, "--no-daemon", "--init-script", str(init_script)]
+    cmd = [gradle, test_task]
 
     if test_filter:
         for cls in test_filter.split(","):
             cls = cls.strip()
             if cls:
                 cmd.extend(["--tests", cls])
+
+    cmd.extend([jacoco_task, "--no-daemon", "--init-script", str(init_script)])
 
     try:
         result = _run_cmd_kill_pg_on_timeout(cmd, cwd=build_root, env=run_env, timeout=timeout)
