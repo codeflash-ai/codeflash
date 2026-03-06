@@ -2004,6 +2004,7 @@ class FunctionOptimizer:
                 coverage_details = {
                     "coverage_percentage": coverage_results.coverage,
                     "threshold_percentage": COVERAGE_THRESHOLD,
+                    "function_start_line": self.function_to_optimize.starting_line,
                     "main_function": {
                         "name": mc.name,
                         "coverage": mc.coverage,
