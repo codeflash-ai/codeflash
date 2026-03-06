@@ -17,6 +17,7 @@ from codeflash.languages.base import CodeContext, FunctionFilterCriteria, Helper
 from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
 from codeflash.languages.registry import register_language
 from codeflash.models.models import FunctionParent
+from codeflash.cli_cmds.console import logger
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -1196,31 +1197,41 @@ class JavaScriptSupport:
         source_bytes = source.encode("utf8")
         tree = analyzer.parse(source_bytes)
 
-        def find_function_node(node, target_name: str):
-            """Recursively find a function/method with the given name."""
+        mv = memoryview(source_bytes)
+        target_name_bytes = function_name.encode("utf8")
+
+        func_node = None
+        func_types = (
+            "function_declaration",
+            "function",
+            "generator_function_declaration",
+            "generator_function",
+        )
+        decl_types = ("lexical_declaration", "variable_declaration")
+        value_fn_types = ("arrow_function", "function_expression", "generator_function")
+
+        stack = [tree.root_node]
+        while stack:
+            node = stack.pop()
+
             # Check method definitions
             if node.type == "method_definition":
                 name_node = node.child_by_field_name("name")
                 if name_node:
-                    name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf8")
-                    if name == target_name:
-                        return node
+                    if mv[name_node.start_byte : name_node.end_byte] == target_name_bytes:
+                        func_node = node
+                        break
 
             # Check function declarations
-            if node.type in (
-                "function_declaration",
-                "function",
-                "generator_function_declaration",
-                "generator_function",
-            ):
+            if node.type in func_types:
                 name_node = node.child_by_field_name("name")
                 if name_node:
-                    name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf8")
-                    if name == target_name:
-                        return node
+                    if mv[name_node.start_byte : name_node.end_byte] == target_name_bytes:
+                        func_node = node
+                        break
 
             # Check arrow functions and function expressions assigned to variables
-            if node.type in ("lexical_declaration", "variable_declaration"):
+            if node.type in decl_types:
                 for child in node.children:
                     if child.type == "variable_declarator":
                         name_node = child.child_by_field_name("name")
@@ -1228,21 +1239,17 @@ class JavaScriptSupport:
                         if (
                             name_node
                             and value_node
-                            and value_node.type in ("arrow_function", "function_expression", "generator_function")
+                            and value_node.type in value_fn_types
                         ):
-                            name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf8")
-                            if name == target_name:
-                                return value_node
+                            if mv[name_node.start_byte : name_node.end_byte] == target_name_bytes:
+                                func_node = value_node
+                                break
+                if func_node:
+                    break
 
-            # Recurse into children
-            for child in node.children:
-                result = find_function_node(child, target_name)
-                if result:
-                    return result
+            if node.children:
+                stack.extend(node.children)
 
-            return None
-
-        func_node = find_function_node(tree.root_node, function_name)
         if not func_node:
             logger.debug("Could not find function '%s' in optimized code for body extraction", function_name)
             return None
