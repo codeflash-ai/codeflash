@@ -443,10 +443,10 @@ function add(a, b {
 
 
 class TestNormalizeCode:
-    """Tests for normalize_code method."""
+    """Tests for normalize_code method using tree-sitter normalizer."""
 
     def test_removes_comments(self, js_support):
-        """Test that single-line comments are removed."""
+        """Test that comments are absent from normalized output."""
         code = """
 function add(a, b) {
     // Add two numbers
@@ -455,19 +455,43 @@ function add(a, b) {
 """
         normalized = js_support.normalize_code(code)
         assert "// Add two numbers" not in normalized
-        assert "return a + b" in normalized
+        assert "Add two numbers" not in normalized
 
-    def test_preserves_functionality(self, js_support):
-        """Test that code functionality is preserved."""
-        code = """
-function add(a, b) {
-    // Comment
-    return a + b;
+    def test_same_logic_different_vars_are_equal(self, js_support):
+        """Test that two functions with same logic but different variable names normalize identically."""
+        code1 = """
+function process(items) {
+    const result = [];
+    for (const item of items) {
+        result.push(item * 2);
+    }
+    return result;
 }
 """
-        normalized = js_support.normalize_code(code)
-        assert "function add" in normalized
-        assert "return" in normalized
+        code2 = """
+function process(items) {
+    const output = [];
+    for (const val of items) {
+        output.push(val * 2);
+    }
+    return output;
+}
+"""
+        assert js_support.normalize_code(code1) == js_support.normalize_code(code2)
+
+    def test_different_logic_not_equal(self, js_support):
+        """Test that two functions with different logic produce different normalized forms."""
+        code1 = """
+function compute(x) {
+    return x + 1;
+}
+"""
+        code2 = """
+function compute(x) {
+    return x * 2;
+}
+"""
+        assert js_support.normalize_code(code1) != js_support.normalize_code(code2)
 
 
 class TestExtractCodeContext:

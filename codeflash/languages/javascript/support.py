@@ -1207,20 +1207,29 @@ class JavaScriptSupport:
                         return node
 
             # Check function declarations
-            if node.type in ("function_declaration", "function"):
+            if node.type in (
+                "function_declaration",
+                "function",
+                "generator_function_declaration",
+                "generator_function",
+            ):
                 name_node = node.child_by_field_name("name")
                 if name_node:
                     name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf8")
                     if name == target_name:
                         return node
 
-            # Check arrow functions assigned to variables
-            if node.type == "lexical_declaration":
+            # Check arrow functions and function expressions assigned to variables
+            if node.type in ("lexical_declaration", "variable_declaration"):
                 for child in node.children:
                     if child.type == "variable_declarator":
                         name_node = child.child_by_field_name("name")
                         value_node = child.child_by_field_name("value")
-                        if name_node and value_node and value_node.type == "arrow_function":
+                        if (
+                            name_node
+                            and value_node
+                            and value_node.type in ("arrow_function", "function_expression", "generator_function")
+                        ):
                             name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf8")
                             if name == target_name:
                                 return value_node
@@ -1235,6 +1244,7 @@ class JavaScriptSupport:
 
         func_node = find_function_node(tree.root_node, function_name)
         if not func_node:
+            logger.debug("Could not find function '%s' in optimized code for body extraction", function_name)
             return None
 
         # Find the body node
@@ -1295,14 +1305,21 @@ class JavaScriptSupport:
                     if name == target_name and (node.start_point[0] + 1) == target_line:
                         return node
 
-            if node.type == "lexical_declaration":
+            if node.type in ("lexical_declaration", "variable_declaration"):
                 for child in node.children:
                     if child.type == "variable_declarator":
                         name_node = child.child_by_field_name("name")
                         value_node = child.child_by_field_name("value")
-                        if name_node and value_node and value_node.type == "arrow_function":
+                        if (
+                            name_node
+                            and value_node
+                            and value_node.type in ("arrow_function", "function_expression", "generator_function")
+                        ):
                             name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf8")
-                            if name == target_name and (node.start_point[0] + 1) == target_line:
+                            if name == target_name and (
+                                (node.start_point[0] + 1) == target_line
+                                or (value_node.start_point[0] + 1) == target_line
+                            ):
                                 return value_node
 
             for child in node.children:
@@ -1686,26 +1703,14 @@ class JavaScriptSupport:
             return False
 
     def normalize_code(self, source: str) -> str:
-        """Normalize JavaScript code for deduplication.
+        """Normalize JavaScript code for deduplication using tree-sitter."""
+        from codeflash.languages.javascript.normalizer import normalize_js_code
 
-        Removes comments and normalizes whitespace.
-
-        Args:
-            source: Source code to normalize.
-
-        Returns:
-            Normalized source code.
-
-        """
-        # Simple normalization: remove extra whitespace
-        # A full implementation would use tree-sitter to strip comments
-        lines = source.splitlines()
-        normalized_lines = []
-        for line in lines:
-            stripped = line.strip()
-            if stripped and not stripped.startswith("//"):
-                normalized_lines.append(stripped)
-        return "\n".join(normalized_lines)
+        try:
+            is_ts = self.treesitter_language == TreeSitterLanguage.TYPESCRIPT
+            return normalize_js_code(source, typescript=is_ts)
+        except Exception:
+            return source
 
     def generate_concolic_tests(
         self, test_cfg: Any, project_root: Any, function_to_optimize: Any, function_to_optimize_ast: Any
