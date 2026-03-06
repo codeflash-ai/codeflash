@@ -1978,7 +1978,7 @@ class FunctionOptimizer:
                     and not result.did_pass
                     and result.id.test_function_name
                 ):
-                    failed_by_file[result.file_name].append(result.id.test_function_name)
+                    failed_by_file[result.file_name].append(result.id.test_fn_qualified_name())
 
             test_failure_messages = behavioral_results.test_failures or {}
 
@@ -2062,7 +2062,7 @@ class FunctionOptimizer:
                         functions_to_repair=review.functions_to_repair,
                         function_source_code=self.function_to_optimize_source_code,
                         function_to_optimize=self.function_to_optimize,
-                        helper_function_names=[],
+                        helper_function_names=[f.fully_qualified_name for f in code_context.helper_functions],
                         module_path=Path(self.original_module_path),
                         test_module_path=test_module_path,
                         test_framework=self.test_cfg.test_framework,

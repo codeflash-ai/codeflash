@@ -70,8 +70,6 @@ class AiServiceClient:
     @staticmethod
     def log_error_response(response: requests.Response, action: str, ph_event: str) -> None:
         """Log and report an API error response."""
-        from codeflash.telemetry.posthog_cf import ph
-
         try:
             error = response.json()["error"]
         except Exception:
