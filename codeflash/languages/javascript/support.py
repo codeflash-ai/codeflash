@@ -17,6 +17,8 @@ from codeflash.languages.base import CodeContext, FunctionFilterCriteria, Helper
 from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
 from codeflash.languages.registry import register_language
 from codeflash.models.models import FunctionParent
+from codeflash.languages.javascript.normalizer import normalize_js_code
+from functools import lru_cache
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -25,6 +27,8 @@ if TYPE_CHECKING:
     from codeflash.languages.javascript.treesitter import TypeDefinition
     from codeflash.models.models import GeneratedTestsList, InvocationId, ValidCode
     from codeflash.verification.verification_utils import TestConfig
+
+_cached_normalize_js_code = lru_cache(maxsize=128)(normalize_js_code)
 
 logger = logging.getLogger(__name__)
 
@@ -1704,11 +1708,9 @@ class JavaScriptSupport:
 
     def normalize_code(self, source: str) -> str:
         """Normalize JavaScript code for deduplication using tree-sitter."""
-        from codeflash.languages.javascript.normalizer import normalize_js_code
-
         try:
             is_ts = self.treesitter_language == TreeSitterLanguage.TYPESCRIPT
-            return normalize_js_code(source, typescript=is_ts)
+            return _cached_normalize_js_code(source, typescript=is_ts)
         except Exception:
             return source
 
