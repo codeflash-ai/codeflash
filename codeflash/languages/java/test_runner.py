@@ -2210,7 +2210,7 @@ def _ensure_codeflash_runtime_gradle(build_root: Path) -> bool:
 
 
 def _delete_broken_generated_test_files(
-    compile_result: subprocess.CompletedProcess, project_root: Path, test_module: str | None
+    compile_result: subprocess.CompletedProcess, project_root: Path, test_module: str | None, *, sweep_all: bool = True
 ) -> int:
     """Delete codeflash-generated test files that caused compilation errors.
 
@@ -2218,7 +2218,16 @@ def _delete_broken_generated_test_files(
     module build. This extracts failing file paths from the error output and deletes only
     codeflash-generated ones (matching __perfinstrumented/__perfonlyinstrumented patterns).
 
+    Args:
+        compile_result: The failed compilation result.
+        project_root: Root directory of the project.
+        test_module: For multi-module projects, the module containing tests.
+        sweep_all: If True, also scan the test source dir for any leftover generated files
+            not mentioned in the error output. Set to False when the caller will retry the
+            same command with a --tests filter that references still-needed generated files.
+
     Returns the number of files deleted.
+
     """
     import re
 
@@ -2232,17 +2241,19 @@ def _delete_broken_generated_test_files(
         if file_path.exists():
             files_to_delete.add(file_path)
 
-    # Also scan test source dir for any leftover generated files not in error output
-    if test_module:
-        test_src_dir = project_root / test_module / "src" / "test" / "java"
-    else:
-        test_src_dir = project_root / "src" / "test" / "java"
+    # Optionally scan test source dir for any leftover generated files not in error output.
+    # Only safe when the caller does NOT need these files for a subsequent --tests filter.
+    if sweep_all:
+        if test_module:
+            test_src_dir = project_root / test_module / "src" / "test" / "java"
+        else:
+            test_src_dir = project_root / "src" / "test" / "java"
 
-    if test_src_dir.exists():
-        generated_pattern = re.compile(r".*__perf(?:only)?instrumented(?:_\d+)?\.java$")
-        for f in test_src_dir.rglob("*.java"):
-            if generated_pattern.match(f.name):
-                files_to_delete.add(f)
+        if test_src_dir.exists():
+            generated_pattern = re.compile(r".*__perf(?:only)?instrumented(?:_\d+)?\.java$")
+            for f in test_src_dir.rglob("*.java"):
+                if generated_pattern.match(f.name):
+                    files_to_delete.add(f)
 
     for f in files_to_delete:
         logger.debug("Deleting broken generated test file: %s", f)
@@ -2378,7 +2389,7 @@ def _run_gradle_tests(
     try:
         result = _run_cmd_kill_pg_on_timeout(cmd, cwd=project_root, env=env, timeout=timeout)
         if result.returncode != 0 and "compileTestJava" in (result.stdout or "") + (result.stderr or ""):
-            deleted = _delete_broken_generated_test_files(result, project_root, test_module)
+            deleted = _delete_broken_generated_test_files(result, project_root, test_module, sweep_all=False)
             if deleted:
                 logger.info("Deleted %d broken generated test file(s), retrying Gradle test", deleted)
                 result = _run_cmd_kill_pg_on_timeout(cmd, cwd=project_root, env=env, timeout=timeout)
@@ -2493,7 +2504,7 @@ def _run_gradle_tests_coverage(
     try:
         result = _run_cmd_kill_pg_on_timeout(cmd, cwd=build_root, env=run_env, timeout=timeout)
         if result.returncode != 0 and "compileTestJava" in (result.stdout or "") + (result.stderr or ""):
-            deleted = _delete_broken_generated_test_files(result, build_root, test_module)
+            deleted = _delete_broken_generated_test_files(result, build_root, test_module, sweep_all=False)
             if deleted:
                 logger.info("Deleted %d broken generated test file(s), retrying Gradle coverage test", deleted)
                 result = _run_cmd_kill_pg_on_timeout(cmd, cwd=build_root, env=run_env, timeout=timeout)
