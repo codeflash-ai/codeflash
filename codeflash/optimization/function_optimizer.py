@@ -2096,7 +2096,7 @@ class FunctionOptimizer:
                     repair_result = self.aiservice_client.repair_generated_tests(
                         test_source=gt.generated_original_test_source,
                         functions_to_repair=review.functions_to_repair,
-                        function_source_code=function_only_source,
+                        function_source_code=self.function_to_optimize_source_code,
                         function_to_optimize=self.function_to_optimize,
                         helper_function_names=[f.fully_qualified_name for f in code_context.helper_functions],
                         module_path=Path(self.original_module_path),
