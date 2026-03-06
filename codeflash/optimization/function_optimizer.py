@@ -47,6 +47,7 @@ from codeflash.code_utils.code_utils import (
     unified_diff_strings,
 )
 from codeflash.code_utils.config_consts import (
+    BEHAVIORAL_SLOWDOWN_SKIP_THRESHOLD,
     COVERAGE_THRESHOLD,
     INDIVIDUAL_TESTCASE_TIMEOUT,
     MIN_CORRECT_CANDIDATES,
@@ -2528,6 +2529,25 @@ class FunctionOptimizer:
                     candidate, diffs, eval_ctx, code_context, len(candidate_behavior_results), exp_type
                 )
                 return self.get_results_not_matched_error()
+
+            candidate_behavior_runtime = candidate_behavior_results.total_passed_runtime()
+            baseline_behavior_runtime = baseline_results.behavior_test_results.total_passed_runtime()
+            if (
+                baseline_behavior_runtime > 0
+                and candidate_behavior_runtime > 0
+                and candidate_behavior_runtime > baseline_behavior_runtime * BEHAVIORAL_SLOWDOWN_SKIP_THRESHOLD
+            ):
+                slowdown = candidate_behavior_runtime / baseline_behavior_runtime
+                logger.info(
+                    "h4|Candidate %d is %.1fx slower than baseline in behavioral tests, skipping benchmarking ⏭️",
+                    optimization_candidate_index,
+                    slowdown,
+                )
+                console.rule()
+                return Failure(
+                    f"Candidate behavioral runtime ({candidate_behavior_runtime}ns) "
+                    f"exceeds {BEHAVIORAL_SLOWDOWN_SKIP_THRESHOLD:.0f}x baseline ({baseline_behavior_runtime}ns)."
+                )
 
             logger.info(f"loading|Running performance tests for candidate {optimization_candidate_index}...")
             console.rule()
