@@ -32,7 +32,7 @@ def is_valid_concolic_test(test_code: str, project_root: Optional[str] = None) -
 
     try:
         result = subprocess.run(
-            [SAFE_SYS_EXECUTABLE, "-m", "pytest", "--collect-only", "-q", temp_path.as_posix()],
+            [SAFE_SYS_EXECUTABLE, "-m", "pytest", "-x", "-q", temp_path.as_posix()],
             check=False,
             capture_output=True,
             text=True,
