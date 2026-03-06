@@ -981,7 +981,7 @@ class TestAddTimingInstrumentation:
         assert result == expected
 
     def test_timing_markers_format(self):
-        """Test that no instrumentation is added when target method is absent."""
+        """Test that no instrumentation is added when target method is absent (without whole_body_fallback)."""
         source = """public class MarkerTest {
     @Test
     public void testMarkers() {
@@ -993,6 +993,47 @@ class TestAddTimingInstrumentation:
 
         expected = source
         assert result == expected
+
+    def test_whole_body_fallback_when_target_absent(self):
+        """Test that whole-body fallback wraps the entire body when target is not directly called."""
+        source = """public class IndirectTest {
+    @Test
+    public void testIndirect() {
+        wrapper.invoke("target");
+    }
+}
+"""
+        result = _add_timing_instrumentation(source, "IndirectTest", "targetMethod", whole_body_fallback=True)
+
+        assert "!$######" in result
+        assert "!######" in result
+        assert "CODEFLASH_LOOP_INDEX" in result
+        assert "whole-body fallback" in result
+        assert 'wrapper.invoke("target");' in result
+
+    def test_whole_body_fallback_disabled_test_skipped(self):
+        """Test that @Disabled test methods are not instrumented even with whole_body_fallback."""
+        source = """public class DisabledTest {
+    @Disabled
+    @Test
+    public void testSkipped() {
+        action();
+    }
+
+    @Test
+    public void testActive() {
+        action();
+    }
+}
+"""
+        result = _add_timing_instrumentation(source, "DisabledTest", "targetMethod", whole_body_fallback=True)
+
+        # The @Disabled test should be unchanged
+        assert "testSkipped" in result
+        # The active test should get the whole-body fallback
+        assert "whole-body fallback" in result
+        # Only one set of timing markers (for the active test)
+        assert result.count("whole-body fallback") == 1
 
     def test_multiple_target_calls_in_single_test_method(self):
         """Test each target call gets an independent timing wrapper with unique iteration IDs."""
