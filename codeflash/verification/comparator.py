@@ -13,6 +13,7 @@ import threading
 import types
 import warnings
 import weakref
+import xml.etree.ElementTree as ET
 from collections import ChainMap, OrderedDict, deque
 from importlib.util import find_spec
 from typing import Any, Optional
@@ -633,6 +634,8 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
 
         if type(orig) in {types.BuiltinFunctionType, types.BuiltinMethodType}:
             return new == orig
+        if isinstance(orig, ET.Element):
+            return isinstance(new, ET.Element) and ET.tostring(orig) == ET.tostring(new)
         if isinstance(
             orig,
             (
