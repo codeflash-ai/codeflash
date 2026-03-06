@@ -1183,6 +1183,9 @@ projectsEvaluated {{
                             '--add-opens', 'java.base/java.math=ALL-UNNAMED',
                             '--add-opens', 'java.base/java.net=ALL-UNNAMED',
                             '--add-opens', 'java.base/java.util.zip=ALL-UNNAMED'
+                    testLogging {{
+                        showStandardStreams = true
+                    }}
                 }}
 {jacoco_block}
                 tasks.register('printCfClasspath') {{
@@ -1222,6 +1225,9 @@ gradle.allprojects {{
                     '--add-opens', 'java.base/java.math=ALL-UNNAMED',
                     '--add-opens', 'java.base/java.net=ALL-UNNAMED',
                     '--add-opens', 'java.base/java.util.zip=ALL-UNNAMED'
+            testLogging {{
+                showStandardStreams = true
+            }}
         }}
 {jacoco_block}
         tasks.register('printCfClasspath') {{
