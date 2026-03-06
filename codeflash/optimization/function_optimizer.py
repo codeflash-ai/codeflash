@@ -1962,7 +1962,8 @@ class FunctionOptimizer:
         file_path_to_helper_classes = self.build_helper_classes_map(code_context)
         behavioral_results: TestResults | None = None
         coverage_results: CoverageData | None = None
-        for cycle in range(MAX_TEST_REPAIR_CYCLES):
+        max_cycles = getattr(self.args, "testgen_review_turns", None) or MAX_TEST_REPAIR_CYCLES
+        for cycle in range(max_cycles):
             with progress_bar("Running generated tests to validate quality..."):
                 validation = self.run_behavioral_validation(
                     code_context, original_helper_code, file_path_to_helper_classes

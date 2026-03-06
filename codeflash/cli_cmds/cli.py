@@ -110,6 +110,9 @@ def parse_args() -> Namespace:
         "--testgen-review", default=False, action="store_true", help="Enable AI review and repair of generated tests"
     )
     parser.add_argument(
+        "--testgen-review-turns", type=int, default=None, help="Number of review/repair cycles (default: 1)"
+    )
+    parser.add_argument(
         "--async",
         default=False,
         action="store_true",
