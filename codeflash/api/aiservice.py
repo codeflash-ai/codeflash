@@ -773,6 +773,7 @@ class AiServiceClient:
         function_name: str,
         trace_id: str,
         coverage_summary: str = "",
+        coverage_details: dict[str, Any] | None = None,
         language: str = "python",
     ) -> list[TestFileReview]:
         payload: dict[str, Any] = {
@@ -786,6 +787,8 @@ class AiServiceClient:
         }
         if coverage_summary:
             payload["coverage_summary"] = coverage_summary
+        if coverage_details:
+            payload["coverage_details"] = coverage_details
         self.add_language_metadata(payload)
         try:
             response = self.make_ai_service_request("/testgen_review", payload=payload, timeout=self.timeout)
@@ -822,6 +825,7 @@ class AiServiceClient:
         test_timeout: int,
         trace_id: str,
         language: str = "python",
+        coverage_details: dict[str, Any] | None = None,
     ) -> tuple[str, str, str] | None:
         payload: dict[str, Any] = {
             "test_source": test_source,
@@ -840,6 +844,8 @@ class AiServiceClient:
             "codeflash_version": codeflash_version,
             "call_sequence": self.get_next_sequence(),
         }
+        if coverage_details:
+            payload["coverage_details"] = coverage_details
         self.add_language_metadata(payload)
         try:
             response = self.make_ai_service_request("/testgen_repair", payload=payload, timeout=self.timeout)

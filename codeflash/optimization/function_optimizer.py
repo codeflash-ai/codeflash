@@ -1997,8 +1997,32 @@ class FunctionOptimizer:
                 )
 
             coverage_summary = ""
+            coverage_details: dict[str, Any] | None = None
             if coverage_results and coverage_results.coverage is not None:
                 coverage_summary = f"{coverage_results.coverage:.1f}%"
+                mc = coverage_results.main_func_coverage
+                coverage_details = {
+                    "coverage_percentage": coverage_results.coverage,
+                    "threshold_percentage": COVERAGE_THRESHOLD,
+                    "main_function": {
+                        "name": mc.name,
+                        "coverage": mc.coverage,
+                        "executed_lines": sorted(mc.executed_lines),
+                        "unexecuted_lines": sorted(mc.unexecuted_lines),
+                        "executed_branches": mc.executed_branches,
+                        "unexecuted_branches": mc.unexecuted_branches,
+                    },
+                }
+                dc = coverage_results.dependent_func_coverage
+                if dc:
+                    coverage_details["dependent_function"] = {
+                        "name": dc.name,
+                        "coverage": dc.coverage,
+                        "executed_lines": sorted(dc.executed_lines),
+                        "unexecuted_lines": sorted(dc.unexecuted_lines),
+                        "executed_branches": dc.executed_branches,
+                        "unexecuted_branches": dc.unexecuted_branches,
+                    }
 
             console.rule()
             with progress_bar("Reviewing generated tests for quality issues..."):
@@ -2008,6 +2032,7 @@ class FunctionOptimizer:
                     function_name=self.function_to_optimize.function_name,
                     trace_id=self.function_trace_id,
                     coverage_summary=coverage_summary,
+                    coverage_details=coverage_details,
                     language=self.function_to_optimize.language,
                 )
 
@@ -2071,6 +2096,7 @@ class FunctionOptimizer:
                         test_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
                         trace_id=self.function_trace_id,
                         language=self.function_to_optimize.language,
+                        coverage_details=coverage_details,
                     )
 
                     if repair_result is None:
