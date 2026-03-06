@@ -1548,7 +1548,7 @@ class FunctionOptimizer:
         functions_by_file: dict[Path, set[str]] = defaultdict(set)
         functions_by_file[self.function_to_optimize.file_path].add(self.function_to_optimize.qualified_name)
         for helper in code_context.helper_functions:
-            if helper.definition_type != "class":
+            if helper.definition_type in ("function", None):
                 functions_by_file[helper.file_path].add(helper.qualified_name)
         return functions_by_file
 
