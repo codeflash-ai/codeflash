@@ -102,7 +102,6 @@ class InitDecorator(ast.NodeTransformer):
         self._init_kwarg = ast.arg(arg="kwargs")
         self._init_self_arg = ast.arg(arg="self", annotation=None)
 
-
         # Precreate commonly reused AST fragments for classes that lack __init__
         # Create the super().__init__(*args, **kwargs) Expr (reuse prebuilt pieces)
         self._super_call_expr = ast.Expr(
@@ -204,11 +203,6 @@ class InitDecorator(ast.NodeTransformer):
         return node
 
     def _expr_name(self, node: ast.AST) -> str | None:
-        """
-        Helper to extract a simple name from a decorator/base expression.
-        Returns the identifier for ast.Name, the function name for ast.Call with ast.Name func,
-        or the attribute name for ast.Attribute. Returns None otherwise.
-        """
         if isinstance(node, ast.Name):
             return node.id
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
