@@ -9,7 +9,7 @@ from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.python.context.unused_definition_remover import detect_unused_helper_functions
 from codeflash.models.function_types import FunctionParent
 from codeflash.models.models import CodeStringsMarkdown
-from codeflash.optimization.function_optimizer import FunctionOptimizer
+from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
 ORIGINAL_SOURCE = '''\
@@ -649,7 +649,7 @@ def run_replacement(temp_project):
         parents=[FunctionParent(name="PSBaseParser", type="ClassDef")],
     )
 
-    optimizer = FunctionOptimizer(
+    optimizer = PythonFunctionOptimizer(
         function_to_optimize=function_to_optimize,
         test_cfg=test_cfg,
         function_to_optimize_source_code=source_file.read_text(encoding="utf-8"),
@@ -715,7 +715,7 @@ def test_detect_unused_helpers_handles_attribute_refs(temp_project):
         parents=[FunctionParent(name="PSBaseParser", type="ClassDef")],
     )
 
-    optimizer = FunctionOptimizer(
+    optimizer = PythonFunctionOptimizer(
         function_to_optimize=function_to_optimize,
         test_cfg=test_cfg,
         function_to_optimize_source_code=source_file.read_text(encoding="utf-8"),
