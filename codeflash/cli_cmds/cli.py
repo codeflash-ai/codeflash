@@ -207,12 +207,6 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
         if env_utils.is_ci():
             args.no_pr = True
 
-    if getattr(args, "async", False):
-        logger.warning(
-            "The --async flag is deprecated and will be removed in a future version. "
-            "Async function optimization is now enabled by default."
-        )
-
     return args
 
 
