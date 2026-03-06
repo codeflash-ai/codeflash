@@ -2169,16 +2169,27 @@ class FunctionOptimizer:
                 return Failure("Repaired tests failed behavioral validation.")
             behavioral_results, coverage_results = validation
 
-            # Check which repaired test files still have failures and revert them
-            still_failing_files: set[Path] = set()
+            # Collect failing and all test function names per file
+            still_failing_by_file: dict[Path, set[str]] = defaultdict(set)
+            all_fns_by_file: dict[Path, set[str]] = defaultdict(set)
             for result in behavioral_results.test_results:
-                if result.test_type == TestType.GENERATED_REGRESSION and not result.did_pass:
-                    still_failing_files.add(result.file_name)
+                if result.test_type == TestType.GENERATED_REGRESSION and result.id.test_function_name:
+                    fn_name = result.id.test_fn_qualified_name()
+                    all_fns_by_file[result.file_name].add(fn_name)
+                    if not result.did_pass:
+                        still_failing_by_file[result.file_name].add(fn_name)
 
             reverted_indices = set()
+            partially_fixed_indices = set()
             for idx in repaired_indices:
                 gt = generated_tests.generated_tests[idx]
-                if gt.behavior_file_path in still_failing_files:
+                failing_fns = still_failing_by_file.get(gt.behavior_file_path)
+                if not failing_fns:
+                    continue
+
+                all_fns_in_file = all_fns_by_file.get(gt.behavior_file_path, set())
+                if failing_fns >= all_fns_in_file:
+                    # ALL functions fail → full revert to pre-repair state
                     orig_source, orig_behavior, orig_perf, orig_raw = pre_repair_snapshots[idx]
                     gt.generated_original_test_source = orig_source
                     gt.instrumented_behavior_test_source = orig_behavior
@@ -2187,19 +2198,42 @@ class FunctionOptimizer:
                     gt.behavior_file_path.write_text(orig_behavior, encoding="utf8")
                     gt.perf_file_path.write_text(orig_perf, encoding="utf8")
                     reverted_indices.add(idx)
+                else:
+                    # Partial failure → remove only failing functions, keep passing ones
+                    fns_to_remove = list(failing_fns)
+                    gt.generated_original_test_source = self.language_support.remove_test_functions(
+                        gt.generated_original_test_source, fns_to_remove
+                    )
+                    gt.instrumented_behavior_test_source = self.language_support.remove_test_functions(
+                        gt.instrumented_behavior_test_source, fns_to_remove
+                    )
+                    gt.instrumented_perf_test_source = self.language_support.remove_test_functions(
+                        gt.instrumented_perf_test_source, fns_to_remove
+                    )
+                    if gt.raw_generated_test_source is not None:
+                        gt.raw_generated_test_source = self.language_support.remove_test_functions(
+                            gt.raw_generated_test_source, fns_to_remove
+                        )
+                    gt.behavior_file_path.write_text(gt.instrumented_behavior_test_source, encoding="utf8")
+                    gt.perf_file_path.write_text(gt.instrumented_perf_test_source, encoding="utf8")
+                    partially_fixed_indices.add(idx)
 
             # Show diffs only for repairs that survived re-validation
             successful_repairs = [r for r in all_to_repair if r.test_index not in reverted_indices]
             if successful_repairs:
                 self.display_repaired_functions(generated_tests, successful_repairs, original_sources)
 
-            if reverted_indices:
-                console.print(
-                    f"  [yellow]Reverted {len(reverted_indices)} test file(s) that still failed after repair[/yellow]"
-                )
-                # Collect error messages from failed repairs so the next cycle can learn from them
+            modified_indices = reverted_indices | partially_fixed_indices
+            if modified_indices:
+                messages = []
+                if reverted_indices:
+                    messages.append(f"reverted {len(reverted_indices)} test file(s)")
+                if partially_fixed_indices:
+                    messages.append(f"removed failing functions from {len(partially_fixed_indices)} test file(s)")
+                console.print(f"  [yellow]{', '.join(messages).capitalize()} after repair[/yellow]")
+                # Collect error messages from failed functions so the next cycle can learn
                 revalidation_failures = behavioral_results.test_failures or {}
-                for idx in reverted_indices:
+                for idx in modified_indices:
                     gt = generated_tests.generated_tests[idx]
                     errors_for_file: dict[str, str] = {}
                     for result in behavioral_results.test_results:
@@ -2213,7 +2247,7 @@ class FunctionOptimizer:
                             errors_for_file[fn_name] = revalidation_failures.get(fn_name, "Test failed")
                     if errors_for_file:
                         previous_repair_errors[idx] = errors_for_file
-                # Invalidate behavioral results since we reverted some files
+                # Invalidate behavioral results since files were modified
                 behavioral_results = None
                 coverage_results = None
 
