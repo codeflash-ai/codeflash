@@ -2376,7 +2376,13 @@ def _run_gradle_tests(
     logger.debug("Running Gradle command: %s in %s", " ".join(cmd), project_root)
 
     try:
-        return _run_cmd_kill_pg_on_timeout(cmd, cwd=project_root, env=env, timeout=timeout)
+        result = _run_cmd_kill_pg_on_timeout(cmd, cwd=project_root, env=env, timeout=timeout)
+        if result.returncode != 0 and "compileTestJava" in (result.stdout or "") + (result.stderr or ""):
+            deleted = _delete_broken_generated_test_files(result, project_root, test_module)
+            if deleted:
+                logger.info("Deleted %d broken generated test file(s), retrying Gradle test", deleted)
+                result = _run_cmd_kill_pg_on_timeout(cmd, cwd=project_root, env=env, timeout=timeout)
+        return result
     except Exception as e:
         logger.exception("Gradle test execution failed: %s", e)
         return subprocess.CompletedProcess(args=cmd, returncode=-1, stdout="", stderr=str(e))
@@ -2486,6 +2492,11 @@ def _run_gradle_tests_coverage(
 
     try:
         result = _run_cmd_kill_pg_on_timeout(cmd, cwd=build_root, env=run_env, timeout=timeout)
+        if result.returncode != 0 and "compileTestJava" in (result.stdout or "") + (result.stderr or ""):
+            deleted = _delete_broken_generated_test_files(result, build_root, test_module)
+            if deleted:
+                logger.info("Deleted %d broken generated test file(s), retrying Gradle coverage test", deleted)
+                result = _run_cmd_kill_pg_on_timeout(cmd, cwd=build_root, env=run_env, timeout=timeout)
     except Exception as e:
         result = subprocess.CompletedProcess(args=cmd, returncode=-1, stdout="", stderr=str(e))
     finally:
