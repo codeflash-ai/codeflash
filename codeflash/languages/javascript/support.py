@@ -9,16 +9,16 @@ from __future__ import annotations
 import logging
 import subprocess
 import xml.etree.ElementTree as ET
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, Language, TestInfo, TestResult
+from codeflash.languages.javascript.normalizer import normalize_js_code
 from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
 from codeflash.languages.registry import register_language
 from codeflash.models.models import FunctionParent
-from codeflash.languages.javascript.normalizer import normalize_js_code
-from functools import lru_cache
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
