@@ -2034,11 +2034,12 @@ class FunctionOptimizer:
                 r.test_index: generated_tests.generated_tests[r.test_index].generated_original_test_source
                 for r in all_to_repair
             }
-            pre_repair_snapshots: dict[int, tuple[str, str, str]] = {
+            pre_repair_snapshots: dict[int, tuple[str, str, str, str | None]] = {
                 r.test_index: (
                     generated_tests.generated_tests[r.test_index].generated_original_test_source,
                     generated_tests.generated_tests[r.test_index].instrumented_behavior_test_source,
                     generated_tests.generated_tests[r.test_index].instrumented_perf_test_source,
+                    generated_tests.generated_tests[r.test_index].raw_generated_test_source,
                 )
                 for r in all_to_repair
             }
@@ -2077,6 +2078,7 @@ class FunctionOptimizer:
                         continue
 
                     repaired_source, behavior_source, perf_source = repair_result
+                    raw_repaired_source = repaired_source
                     repaired_source, behavior_source, perf_source = (
                         self.language_support.process_generated_test_strings(
                             generated_test_source=repaired_source,
@@ -2092,8 +2094,7 @@ class FunctionOptimizer:
                     gt.generated_original_test_source = repaired_source
                     gt.instrumented_behavior_test_source = behavior_source
                     gt.instrumented_perf_test_source = perf_source
-                    # Clear stale LLM output so the next review cycle sends repaired source
-                    gt.raw_generated_test_source = None
+                    gt.raw_generated_test_source = raw_repaired_source
 
                     gt.behavior_file_path.write_text(behavior_source, encoding="utf8")
                     gt.perf_file_path.write_text(perf_source, encoding="utf8")
@@ -2127,11 +2128,11 @@ class FunctionOptimizer:
                 for idx in repaired_indices:
                     gt = generated_tests.generated_tests[idx]
                     if gt.behavior_file_path in still_failing_files:
-                        orig_source, orig_behavior, orig_perf = pre_repair_snapshots[idx]
+                        orig_source, orig_behavior, orig_perf, orig_raw = pre_repair_snapshots[idx]
                         gt.generated_original_test_source = orig_source
                         gt.instrumented_behavior_test_source = orig_behavior
                         gt.instrumented_perf_test_source = orig_perf
-                        gt.raw_generated_test_source = None
+                        gt.raw_generated_test_source = orig_raw
                         gt.behavior_file_path.write_text(orig_behavior, encoding="utf8")
                         gt.perf_file_path.write_text(orig_perf, encoding="utf8")
                         reverted_indices.add(idx)
