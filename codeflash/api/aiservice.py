@@ -827,6 +827,7 @@ class AiServiceClient:
         language: str = "python",
         coverage_details: dict[str, Any] | None = None,
         previous_repair_errors: dict[str, str] | None = None,
+        module_source_code: str = "",
     ) -> tuple[str, str, str] | None:
         payload: dict[str, Any] = {
             "test_source": test_source,
@@ -845,6 +846,8 @@ class AiServiceClient:
             "codeflash_version": codeflash_version,
             "call_sequence": self.get_next_sequence(),
         }
+        if module_source_code:
+            payload["module_source_code"] = module_source_code
         if coverage_details:
             payload["coverage_details"] = coverage_details
         if previous_repair_errors:

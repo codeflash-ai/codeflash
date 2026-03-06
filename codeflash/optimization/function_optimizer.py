@@ -2026,18 +2026,21 @@ class FunctionOptimizer:
                         "unexecuted_branches": dc.unexecuted_branches,
                     }
 
-            # Extract just the function source (not the entire module) for the review prompt
-            func = self.function_to_optimize
-            source_lines = self.function_to_optimize_source_code.splitlines(keepends=True)
-            func_start = (func.doc_start_line or func.starting_line or 1) - 1
-            func_end = func.ending_line or len(source_lines)
-            function_only_source = "".join(source_lines[func_start:func_end])
+            # Apply token limit to function source (same progressive fallback as optimization/testgen context)
+            function_source_for_prompt = self.function_to_optimize_source_code
+            if encoded_tokens_len(function_source_for_prompt) > OPTIMIZATION_CONTEXT_TOKEN_LIMIT:
+                logger.debug("Function source exceeds token limit for review, extracting function only")
+                func = self.function_to_optimize
+                source_lines = self.function_to_optimize_source_code.splitlines(keepends=True)
+                func_start = (func.doc_start_line or func.starting_line or 1) - 1
+                func_end = func.ending_line or len(source_lines)
+                function_source_for_prompt = "".join(source_lines[func_start:func_end])
 
             console.rule()
             with progress_bar("Reviewing generated tests for quality issues..."):
                 review_results = self.aiservice_client.review_generated_tests(
                     tests=tests_for_review,
-                    function_source_code=function_only_source,
+                    function_source_code=function_source_for_prompt,
                     function_name=self.function_to_optimize.function_name,
                     trace_id=self.function_trace_id,
                     coverage_summary=coverage_summary,
@@ -2096,7 +2099,8 @@ class FunctionOptimizer:
                     repair_result = self.aiservice_client.repair_generated_tests(
                         test_source=gt.generated_original_test_source,
                         functions_to_repair=review.functions_to_repair,
-                        function_source_code=self.function_to_optimize_source_code,
+                        function_source_code=function_source_for_prompt,
+                        module_source_code=self.function_to_optimize_source_code,
                         function_to_optimize=self.function_to_optimize,
                         helper_function_names=[f.fully_qualified_name for f in code_context.helper_functions],
                         module_path=Path(self.original_module_path),
