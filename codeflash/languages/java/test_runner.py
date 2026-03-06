@@ -2209,6 +2209,48 @@ def _ensure_codeflash_runtime_gradle(build_root: Path) -> bool:
     return install_codeflash_runtime_to_m2(runtime_jar)
 
 
+def _delete_broken_generated_test_files(
+    compile_result: subprocess.CompletedProcess, project_root: Path, test_module: str | None
+) -> int:
+    """Delete codeflash-generated test files that caused compilation errors.
+
+    When compileTestJava fails, generated test files with bad imports/syntax poison the entire
+    module build. This extracts failing file paths from the error output and deletes only
+    codeflash-generated ones (matching __perfinstrumented/__perfonlyinstrumented patterns).
+
+    Returns the number of files deleted.
+    """
+    import re
+
+    output = (compile_result.stdout or "") + (compile_result.stderr or "")
+    # Match file paths from javac error output like:
+    # /path/to/ofTest__perfinstrumented.java:10: error: cannot find symbol
+    error_file_pattern = re.compile(r"(/\S+__perf(?:only)?instrumented\S*\.java):\d+:")
+    files_to_delete = set()
+    for match in error_file_pattern.finditer(output):
+        file_path = Path(match.group(1))
+        if file_path.exists():
+            files_to_delete.add(file_path)
+
+    # Also scan test source dir for any leftover generated files not in error output
+    if test_module:
+        test_src_dir = project_root / test_module / "src" / "test" / "java"
+    else:
+        test_src_dir = project_root / "src" / "test" / "java"
+
+    if test_src_dir.exists():
+        generated_pattern = re.compile(r".*__perf(?:only)?instrumented(?:_\d+)?\.java$")
+        for f in test_src_dir.rglob("*.java"):
+            if generated_pattern.match(f.name):
+                files_to_delete.add(f)
+
+    for f in files_to_delete:
+        logger.debug("Deleting broken generated test file: %s", f)
+        f.unlink(missing_ok=True)
+
+    return len(files_to_delete)
+
+
 def _compile_tests_gradle(
     project_root: Path, env: dict[str, str], test_module: str | None = None, timeout: int = 120
 ) -> subprocess.CompletedProcess:
@@ -2230,7 +2272,13 @@ def _compile_tests_gradle(
     logger.debug("Compiling tests (Gradle): %s in %s", " ".join(cmd), project_root)
 
     try:
-        return _run_cmd_kill_pg_on_timeout(cmd, cwd=project_root, env=env, timeout=timeout)
+        result = _run_cmd_kill_pg_on_timeout(cmd, cwd=project_root, env=env, timeout=timeout)
+        if result.returncode != 0:
+            deleted = _delete_broken_generated_test_files(result, project_root, test_module)
+            if deleted:
+                logger.info("Deleted %d broken generated test file(s), retrying compilation", deleted)
+                result = _run_cmd_kill_pg_on_timeout(cmd, cwd=project_root, env=env, timeout=timeout)
+        return result
     except Exception as e:
         logger.exception("Gradle compilation failed: %s", e)
         return subprocess.CompletedProcess(args=cmd, returncode=-1, stdout="", stderr=str(e))
