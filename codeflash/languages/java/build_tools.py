@@ -16,6 +16,16 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+_RE_JAVA_LANG = re.compile(r"JavaLanguageVersion\.of\(\s*(\d+)\s*\)")
+
+_RE_JVM_TOOLCHAIN = re.compile(r"jvmToolchain\(\s*(\d+)\s*\)")
+
+_RE_SOURCE_COMPAT_VERSION = re.compile(
+    r"sourceCompatibility\s*=\s*JavaVersion\.VERSION_(\d+)"
+)
+
+_RE_SOURCE_COMPAT_QUOTED = re.compile(r"sourceCompatibility\s*=\s*['\"]([^'\"]+)['\"]")
+
 logger = logging.getLogger(__name__)
 
 
@@ -324,19 +334,19 @@ def _get_gradle_project_info(project_root: Path) -> JavaProjectInfo | None:
 
 def _extract_java_version_from_gradle(content: str) -> str | None:
     """Extract Java version from Gradle build file content."""
-    m = re.search(r"JavaLanguageVersion\.of\(\s*(\d+)\s*\)", content)
+    m = _RE_JAVA_LANG.search(content)
     if m:
         return m.group(1)
 
-    m = re.search(r"jvmToolchain\(\s*(\d+)\s*\)", content)
+    m = _RE_JVM_TOOLCHAIN.search(content)
     if m:
         return m.group(1)
 
-    m = re.search(r"sourceCompatibility\s*=\s*JavaVersion\.VERSION_(\d+)", content)
+    m = _RE_SOURCE_COMPAT_VERSION.search(content)
     if m:
         return m.group(1)
 
-    m = re.search(r"sourceCompatibility\s*=\s*['\"]([^'\"]+)['\"]", content)
+    m = _RE_SOURCE_COMPAT_QUOTED.search(content)
     if m:
         v = m.group(1)
         return "8" if v.startswith("1.") else v.split(".")[0]
