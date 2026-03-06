@@ -24,10 +24,13 @@ from typing import Any
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.languages.base import TestResult
 from codeflash.languages.java.build_tools import (
+    CODEFLASH_JAR_CACHE_DIR,
     CODEFLASH_RUNTIME_JAR_NAME,
     CODEFLASH_RUNTIME_VERSION,
+    MAVEN_CENTRAL_RUNTIME_URL,
     add_codeflash_dependency_to_pom,
     backup_pom,
+    download_jar_to_cache,
     find_jacoco_agent_jar,
     find_jacoco_cli_jar,
     find_maven_executable,
@@ -232,9 +235,17 @@ def generate_jacoco_report(exec_file: Path, classfiles_dir: Path, sourcefiles_di
 def _find_runtime_jar() -> Path | None:
     """Find the codeflash-runtime JAR file.
 
-    Checks local Maven repo, package resources, and development build directory.
+    Resolution order:
+      1. Local Maven cache (~/.m2) — fastest, already resolved by Maven or previous install
+      2. Bundled in Python package (resources/) — available after pip install codeflash
+      3. Local download cache (~/.codeflash/java/) — downloaded on a previous first run
+      4. Download from Maven Central — first-run download, cached for next time
+      5. Development build directory — only when running from source checkout
+
+    Once codeflash-runtime is published to Maven Central, step 4 will succeed
+    and steps 2-3 can be removed (Maven Central becomes the primary source).
     """
-    # Check local Maven repository first (fastest)
+    # 1. Check local Maven repository (fastest — already installed by Maven or install:install-file)
     m2_jar = (
         Path.home()
         / ".m2"
@@ -248,12 +259,25 @@ def _find_runtime_jar() -> Path | None:
     if m2_jar.exists():
         return m2_jar
 
-    # Check bundled JAR in package resources
+    # 2. Check bundled JAR in package resources (available when JAR is shipped with pip package)
     resources_jar = Path(__file__).parent / "resources" / CODEFLASH_RUNTIME_JAR_NAME
     if resources_jar.exists():
         return resources_jar
 
-    # Check development build directory
+    # 3. Check local download cache (downloaded on a previous first run)
+    cached_jar = CODEFLASH_JAR_CACHE_DIR / CODEFLASH_RUNTIME_JAR_NAME
+    if cached_jar.exists():
+        return cached_jar
+
+    # 4. Download from Maven Central to local cache (~/.codeflash/java/).
+    #    This enables "pip install codeflash" without bundling the 15MB JAR — the JAR
+    #    is fetched on first Java optimization and cached locally for subsequent runs.
+    #    Will only succeed once codeflash-runtime is published to Maven Central.
+    downloaded = download_jar_to_cache(MAVEN_CENTRAL_RUNTIME_URL, CODEFLASH_RUNTIME_JAR_NAME)
+    if downloaded is not None:
+        return downloaded
+
+    # 5. Check development build directory (only when running from source checkout)
     dev_jar = (
         Path(__file__).parent.parent.parent.parent / "codeflash-java-runtime" / "target" / CODEFLASH_RUNTIME_JAR_NAME
     )
@@ -287,7 +311,27 @@ def _ensure_codeflash_runtime(maven_root: Path, test_module: str | None) -> bool
         logger.error("codeflash-runtime JAR not found. Generated tests will fail to compile.")
         return False
 
-    # Install to local Maven repo if not already there
+    # Install to local Maven repo if not already there.
+    #
+    # --------------------------------------------------------------------------
+    # Maven Central resolution (ready to use once codeflash-runtime is published)
+    #
+    # Once published, uncomment the block below and remove the install:install-file
+    # fallback. Maven will download the JAR from Central automatically when it sees
+    # the <dependency> in pom.xml, so we only need to verify it's resolvable:
+    #
+    # from codeflash.languages.java.build_tools import resolve_from_maven_central
+    # if resolve_from_maven_central(maven_root):
+    #     # Maven resolved the JAR from Central to ~/.m2 — no manual install needed.
+    #     # The download_jar_to_cache() path in _find_runtime_jar() also becomes
+    #     # deprecated at this point since Maven handles caching natively in ~/.m2.
+    #     pass
+    # else:
+    #     # Fallback: manually install the JAR we found (bundled/downloaded/dev build)
+    #     if not install_codeflash_runtime(maven_root, runtime_jar):
+    #         logger.error("Failed to install codeflash-runtime to local Maven repository")
+    #         return False
+    # --------------------------------------------------------------------------
     m2_jar = (
         Path.home()
         / ".m2"

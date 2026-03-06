@@ -21,6 +21,19 @@ logger = logging.getLogger(__name__)
 CODEFLASH_RUNTIME_VERSION = "1.0.0"
 CODEFLASH_RUNTIME_JAR_NAME = f"codeflash-runtime-{CODEFLASH_RUNTIME_VERSION}.jar"
 
+# Maven Central URL for downloading the runtime JAR on first run.
+# This is the standard Maven Central repository path pattern: /groupId/artifactId/version/artifactId-version.jar
+# where groupId dots are replaced with slashes (com.codeflash → com/codeflash).
+MAVEN_CENTRAL_RUNTIME_URL = (
+    f"https://repo1.maven.org/maven2/com/codeflash/codeflash-runtime"
+    f"/{CODEFLASH_RUNTIME_VERSION}/{CODEFLASH_RUNTIME_JAR_NAME}"
+)
+
+# Local cache directory for JARs downloaded on first run.
+# This avoids re-downloading on every optimization. Located in ~/.codeflash/java/
+# so it persists across projects but doesn't pollute the user's Maven repository.
+CODEFLASH_JAR_CACHE_DIR = Path.home() / ".codeflash" / "java"
+
 JACOCO_PLUGIN_VERSION = "0.8.13"
 JACOCO_AGENT_JAR = f"org.jacoco.agent-{JACOCO_PLUGIN_VERSION}-runtime.jar"
 JACOCO_CLI_JAR = f"org.jacoco.cli-{JACOCO_PLUGIN_VERSION}-nodeps.jar"
@@ -86,6 +99,96 @@ def find_jacoco_cli_jar() -> Path | None:
     if jar.exists():
         return jar
     return None
+
+
+def download_jar_to_cache(url: str, jar_name: str) -> Path | None:
+    """Download a JAR from a URL to the local cache directory (~/.codeflash/java/).
+
+    This is used for "download on first run" — when the JAR isn't bundled in the
+    Python package, we fetch it from Maven Central and cache it locally so subsequent
+    runs don't need internet access.
+
+    Returns the path to the cached JAR, or None if download failed.
+    """
+    import urllib.error
+    import urllib.request
+    from urllib.parse import urlparse
+
+    # S310: validate URL scheme to prevent file:// or custom scheme abuse
+    parsed = urlparse(url)
+    if parsed.scheme not in ("https", "http"):
+        logger.warning("Refusing to download from non-HTTP URL: %s", url)
+        return None
+
+    cache_dir = CODEFLASH_JAR_CACHE_DIR
+    cached_jar = cache_dir / jar_name
+    if cached_jar.exists():
+        return cached_jar
+
+    try:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        logger.info("Downloading %s to %s", jar_name, cache_dir)
+        urllib.request.urlretrieve(url, cached_jar)  # noqa: S310
+        if cached_jar.exists() and cached_jar.stat().st_size > 0:
+            logger.info("Successfully downloaded %s (%d bytes)", jar_name, cached_jar.stat().st_size)
+            return cached_jar
+        logger.warning("Downloaded file is empty or missing: %s", cached_jar)
+        cached_jar.unlink(missing_ok=True)
+        return None
+    except urllib.error.URLError as e:
+        logger.warning("Failed to download %s: %s", url, e)
+        cached_jar.unlink(missing_ok=True)
+        return None
+    except Exception as e:
+        logger.warning("Unexpected error downloading %s: %s", url, e)
+        cached_jar.unlink(missing_ok=True)
+        return None
+
+
+# --------------------------------------------------------------------------
+# Maven Central resolution (ready to use once codeflash-runtime is published)
+#
+# Once codeflash-runtime is published to Maven Central, uncomment the function
+# below and use it in _ensure_codeflash_runtime() to let Maven resolve the JAR
+# automatically — no manual install:install-file needed.
+#
+# When this is enabled:
+#   1. The download_jar_to_cache() approach (Option B) becomes deprecated
+#      because Maven handles downloading and caching in ~/.m2 natively.
+#   2. The install_codeflash_runtime() call can be skipped when this succeeds.
+#   3. The pom.xml <dependency> addition is still needed (Maven Compiler needs it).
+#
+# def resolve_from_maven_central(maven_root: Path) -> bool:
+#     """Ask Maven to resolve codeflash-runtime from Maven Central.
+#
+#     This downloads the JAR to ~/.m2/repository/ automatically.
+#     Only works once the JAR is published to Maven Central.
+#
+#     Returns True if Maven successfully resolved the artifact.
+#     """
+#     mvn = find_maven_executable()
+#     if not mvn:
+#         return False
+#     cmd = [
+#         mvn,
+#         "dependency:resolve",
+#         f"-Dartifact=com.codeflash:codeflash-runtime:{CODEFLASH_RUNTIME_VERSION}",
+#         "-B",
+#         "-q",
+#     ]
+#     try:
+#         result = subprocess.run(
+#             cmd, check=False, cwd=maven_root, capture_output=True, text=True, timeout=60
+#         )
+#         if result.returncode == 0:
+#             logger.info("Resolved codeflash-runtime %s from Maven Central", CODEFLASH_RUNTIME_VERSION)
+#             return True
+#         logger.debug("Maven Central resolution failed: %s", result.stderr)
+#         return False
+#     except Exception as e:
+#         logger.debug("Maven Central resolution error: %s", e)
+#         return False
+# --------------------------------------------------------------------------
 
 
 def _safe_parse_xml(file_path: Path) -> ET.ElementTree:
