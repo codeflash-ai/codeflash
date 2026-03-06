@@ -109,14 +109,6 @@ class AiServiceClient:
             requests.exceptions.RequestException: If the request fails
 
         """
-        """Make an API request to the given endpoint on the AI service.
-
-        :param endpoint: The endpoint to call, e.g., "/optimize".
-        :param method: The HTTP method to use ('GET' or 'POST').
-        :param payload: Optional JSON payload to include in the POST request body.
-        :param timeout: The timeout for the request.
-        :return: The response object from the API.
-        """
         url = f"{self.base_url}/ai{endpoint}"
         if method.upper() == "POST":
             json_payload = json.dumps(payload, indent=None, default=pydantic_encoder)

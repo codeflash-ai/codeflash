@@ -172,6 +172,16 @@ class InitDecorator(ast.NodeTransformer):
                 if dec_name == "dataclass":
                     return node
 
+            # Skip NamedTuples — their __init__ is synthesized and cannot be overwritten.
+            for base in node.bases:
+                base_name = None
+                if isinstance(base, ast.Name):
+                    base_name = base.id
+                elif isinstance(base, ast.Attribute):
+                    base_name = base.attr
+                if base_name == "NamedTuple":
+                    return node
+
             # Create super().__init__(*args, **kwargs) call (use prebuilt AST fragments)
             super_call = ast.Expr(
                 value=ast.Call(func=self._super_func, args=[self._super_starred], keywords=[self._super_kwarg])
