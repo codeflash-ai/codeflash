@@ -915,4 +915,4 @@ def convert_parents_to_tuple(parents: list[Any] | tuple[Any, ...]) -> tuple[Func
         Tuple of FunctionParent objects.
 
     """
-    return tuple(FunctionParent(name=p.name, type=p.type) for p in parents)
+    return tuple([FunctionParent(p.name, p.type) for p in parents])
