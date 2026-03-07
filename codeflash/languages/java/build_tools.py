@@ -25,50 +25,6 @@ JACOCO_PLUGIN_VERSION = "0.8.13"
 
 _JAVA_RESOURCES_DIR = Path(__file__).parent / "resources"
 
-_POM_BACKUP_SUFFIX = ".codeflash-backup"
-_pom_backups: set[Path] = set()
-
-
-def backup_pom(pom_path: Path) -> Path | None:
-    """Create a backup of pom.xml before modifying it.
-
-    The backup is stored alongside the original as pom.xml.codeflash-backup.
-    Tracked in a module-level set so all backups can be restored at cleanup.
-    """
-    if not pom_path.exists():
-        return None
-    backup_path = pom_path.with_name(pom_path.name + _POM_BACKUP_SUFFIX)
-    if backup_path.exists():
-        # Already backed up (e.g. from a previous phase in the same optimization)
-        return backup_path
-    shutil.copy2(pom_path, backup_path)
-    _pom_backups.add(backup_path)
-    logger.debug("Backed up %s to %s", pom_path, backup_path)
-    return backup_path
-
-
-def restore_pom(pom_path: Path) -> bool:
-    """Restore pom.xml from its codeflash backup and remove the backup file."""
-    backup_path = pom_path.with_name(pom_path.name + _POM_BACKUP_SUFFIX)
-    if not backup_path.exists():
-        return False
-    shutil.copy2(backup_path, pom_path)
-    backup_path.unlink()
-    _pom_backups.discard(backup_path)
-    logger.debug("Restored %s from backup", pom_path)
-    return True
-
-
-def restore_all_pom_backups() -> None:
-    """Restore all pom.xml files that were backed up during this optimization."""
-    for backup_path in list(_pom_backups):
-        original_path = backup_path.with_name(backup_path.name.removesuffix(_POM_BACKUP_SUFFIX))
-        if backup_path.exists():
-            shutil.copy2(backup_path, original_path)
-            backup_path.unlink()
-            logger.debug("Restored %s from backup", original_path)
-    _pom_backups.clear()
-
 
 # MVN_CENTRAL_TODO: Uncomment once codeflash-runtime is published to Maven Central.
 # Steps:
