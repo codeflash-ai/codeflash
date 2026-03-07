@@ -24,6 +24,8 @@ from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_current_branch, get_repo_owner_and_name
 from codeflash.code_utils.github_utils import get_github_secrets_page_url
 from codeflash.telemetry.posthog_cf import ph
+import os
+from functools import lru_cache
 
 
 class DependencyManager(Enum):
@@ -473,10 +475,11 @@ def install_github_actions(override_formatter_check: bool = False) -> None:
 
 def determine_dependency_manager(pyproject_data: dict[str, Any]) -> DependencyManager:
     """Determine which dependency manager is being used based on pyproject.toml contents."""
-    cwd = Path.cwd()
-    if (cwd / "poetry.lock").exists():
+    cwd_str = os.getcwd()
+    poetry_exists, uv_exists = _lock_files_exist_for_cwd(cwd_str)
+    if poetry_exists:
         return DependencyManager.POETRY
-    if (cwd / "uv.lock").exists():
+    if uv_exists:
         return DependencyManager.UV
     if "tool" not in pyproject_data:
         return DependencyManager.PIP
@@ -904,3 +907,32 @@ def _customize_js_workflow_content(optimize_yml_content: str, git_root: Path, be
     if benchmark_mode:
         codeflash_cmd += " --benchmark"
     return optimize_yml_content.replace("{{ codeflash_command }}", codeflash_cmd)
+
+
+
+
+
+@lru_cache(maxsize=None)
+def _lock_files_exist_for_cwd(cwd_str: str) -> tuple[bool, bool]:
+    """Return (poetry_lock_exists, uv_lock_exists) for the given cwd string.
+
+    This is cached per cwd so repeated calls to determine_dependency_manager()
+    in the same working directory avoid repeated expensive filesystem ops.
+    """
+    poetry_path = os.path.join(cwd_str, "poetry.lock")
+    uv_path = os.path.join(cwd_str, "uv.lock")
+    return (os.path.exists(poetry_path), os.path.exists(uv_path))
+
+
+
+
+@lru_cache(maxsize=None)
+def _lock_files_exist_for_cwd(cwd_str: str) -> tuple[bool, bool]:
+    """Return (poetry_lock_exists, uv_lock_exists) for the given cwd string.
+
+    This is cached per cwd so repeated calls to determine_dependency_manager()
+    in the same working directory avoid repeated expensive filesystem ops.
+    """
+    poetry_path = os.path.join(cwd_str, "poetry.lock")
+    uv_path = os.path.join(cwd_str, "uv.lock")
+    return (os.path.exists(poetry_path), os.path.exists(uv_path))
