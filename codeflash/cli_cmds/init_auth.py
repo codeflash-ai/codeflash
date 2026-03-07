@@ -17,6 +17,10 @@ from codeflash.code_utils.git_utils import get_git_remotes, get_repo_owner_and_n
 from codeflash.code_utils.shell_utils import get_shell_rc_path, save_api_key_to_rc
 from codeflash.either import is_successful
 from codeflash.telemetry.posthog_cf import ph
+from rich.panel import Panel
+from rich.text import Text
+
+_THEME_SINGLETON = CodeflashTheme()
 
 
 class CFAPIKeyType(click.ParamType):
@@ -36,8 +40,6 @@ class CFAPIKeyType(click.ParamType):
 # Returns True if the user entered a new API key, False if they used an existing one
 def prompt_api_key() -> bool:
     """Prompt user for API key via OAuth or manual entry."""
-    from rich.panel import Panel
-    from rich.text import Text
 
     # Check for existing API key
     try:
@@ -74,7 +76,7 @@ def prompt_api_key() -> bool:
         )
     ]
 
-    answers = inquirer.prompt(questions, theme=CodeflashTheme())
+    answers = inquirer.prompt(questions, theme=_THEME_SINGLETON)
     if not answers:
         apologize_and_exit()
 
