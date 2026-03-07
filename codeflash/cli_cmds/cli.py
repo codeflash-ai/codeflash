@@ -5,10 +5,7 @@ from argparse import SUPPRESS, ArgumentParser, Namespace
 from pathlib import Path
 
 from codeflash.cli_cmds import logging_config
-from codeflash.cli_cmds.cli_common import apologize_and_exit
-from codeflash.cli_cmds.cmd_init import init_codeflash, install_github_actions
 from codeflash.cli_cmds.console import logger
-from codeflash.cli_cmds.extension import install_vscode_extension
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import exit_with_message, normalize_ignore_paths
 from codeflash.code_utils.config_parser import parse_config_file
@@ -21,19 +18,11 @@ def parse_args() -> Namespace:
     parser = ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", help="Sub-commands")
 
-    init_parser = subparsers.add_parser("init", help="Initialize Codeflash for your project.")
-    init_parser.set_defaults(func=init_codeflash)
-
+    subparsers.add_parser("init", help="Initialize Codeflash for your project.")
     subparsers.add_parser("vscode-install", help="Install the Codeflash VSCode extension")
-
-    init_actions_parser = subparsers.add_parser("init-actions", help="Initialize GitHub Actions workflow")
-    init_actions_parser.set_defaults(func=install_github_actions)
+    subparsers.add_parser("init-actions", help="Initialize GitHub Actions workflow")
 
     trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize your project.")
-
-    from codeflash.tracer import main as tracer_main
-
-    trace_optimize.set_defaults(func=tracer_main)
 
     trace_optimize.add_argument(
         "--max-function-count",
@@ -180,10 +169,6 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
     # Handle --reset-config
     if getattr(args, "reset_config", False):
         _handle_reset_config(confirm=not getattr(args, "yes", False))
-        sys.exit()
-
-    if args.command == "vscode-install":
-        install_vscode_extension()
         sys.exit()
 
     if not check_running_in_git_repo(module_root=args.module_root):
@@ -337,6 +322,8 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
                     f"I couldn't find a git repository in the current directory. "
                     f"I need a git repository to run {mode} and open PRs for optimizations. Exiting..."
                 )
+                from codeflash.cli_cmds.cli_common import apologize_and_exit
+
                 apologize_and_exit()
             git_remote = getattr(args, "git_remote", None)
             if not check_and_push_branch(git_repo, git_remote=git_remote):
