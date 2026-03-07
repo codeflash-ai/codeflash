@@ -100,7 +100,8 @@ def get_suggestions(section: CommonSections) -> tuple[list[str], Optional[str]]:
         return valid_subdirs, default
     if section == CommonSections.formatter_cmds:
         return ["disabled", "ruff", "black"], "disabled"
-    raise ValueError(f"Unknown section: {section}")
+    msg = f"Unknown section: {section}"
+    raise ValueError(msg)
 
 
 def config_found(pyproject_toml_path: Union[str, Path]) -> tuple[bool, str]:
