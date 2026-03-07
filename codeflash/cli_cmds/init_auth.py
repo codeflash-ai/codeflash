@@ -5,6 +5,8 @@ import os
 import click
 import git
 import inquirer
+from rich.panel import Panel
+from rich.text import Text
 
 from codeflash.api.cfapi import get_user_id, is_github_app_installed_on_repo
 from codeflash.cli_cmds.cli_common import apologize_and_exit
@@ -17,8 +19,6 @@ from codeflash.code_utils.git_utils import get_git_remotes, get_repo_owner_and_n
 from codeflash.code_utils.shell_utils import get_shell_rc_path, save_api_key_to_rc
 from codeflash.either import is_successful
 from codeflash.telemetry.posthog_cf import ph
-from rich.panel import Panel
-from rich.text import Text
 
 _THEME_SINGLETON = CodeflashTheme()
 
@@ -40,7 +40,6 @@ class CFAPIKeyType(click.ParamType):
 # Returns True if the user entered a new API key, False if they used an existing one
 def prompt_api_key() -> bool:
     """Prompt user for API key via OAuth or manual entry."""
-
     # Check for existing API key
     try:
         existing_api_key = get_codeflash_api_key()
