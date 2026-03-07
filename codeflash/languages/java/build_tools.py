@@ -23,8 +23,6 @@ CODEFLASH_RUNTIME_JAR_NAME = f"codeflash-runtime-{CODEFLASH_RUNTIME_VERSION}.jar
 
 JACOCO_PLUGIN_VERSION = "0.8.13"
 
-_JAVA_RESOURCES_DIR = Path(__file__).parent / "resources"
-
 
 # MVN_CENTRAL_TODO: Uncomment once codeflash-runtime is published to Maven Central.
 # Steps:

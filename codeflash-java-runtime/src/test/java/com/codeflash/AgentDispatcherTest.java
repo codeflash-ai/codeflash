@@ -13,12 +13,17 @@ class AgentDispatcherTest {
 
     @Test
     void profilerModeWithMultipleArgs() {
-        assertTrue(AgentDispatcher.isProfilerMode("config=/tmp/config.json,output=results"));
+        assertTrue(AgentDispatcher.isProfilerMode("output=results,config=/tmp/config.json"));
     }
 
     @Test
     void jacocoModeWhenDestfilePresent() {
         assertFalse(AgentDispatcher.isProfilerMode("destfile=/tmp/jacoco.exec"));
+    }
+
+    @Test
+    void jacocoModeWhenPathContainsConfigSubstring() {
+        assertFalse(AgentDispatcher.isProfilerMode("destfile=/home/config=/jacoco.exec"));
     }
 
     @Test

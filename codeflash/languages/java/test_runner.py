@@ -228,7 +228,7 @@ def generate_jacoco_report(exec_file: Path, classfiles_dir: Path, sourcefiles_di
         logger.error("JaCoCo CLI report failed (rc=%d): %s", result.returncode, result.stderr)
         return False
     except Exception as e:
-        logger.exception("Failed to generate JaCoCo report: %s", e)
+        logger.exception("Failed to generate JaCoCo report")
         return False
 
 
@@ -710,6 +710,7 @@ def run_behavioral_tests(
         classfiles_dir = target_dir / "classes"
         module_base = (maven_root / test_module) if test_module else project_root
         sourcefiles_dir = module_base / "src" / "main" / "java"
+        assert coverage_xml_path is not None
         if not generate_jacoco_report(jacoco_exec_path, classfiles_dir, sourcefiles_dir, coverage_xml_path):
             logger.warning("JaCoCo report generation failed — coverage data will be unavailable")
             coverage_xml_path = None

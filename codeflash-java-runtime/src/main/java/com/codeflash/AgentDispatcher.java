@@ -20,7 +20,8 @@ import java.lang.instrument.Instrumentation;
 public class AgentDispatcher {
 
     static boolean isProfilerMode(String agentArgs) {
-        return agentArgs != null && agentArgs.contains("config=");
+        return agentArgs != null
+                && (agentArgs.startsWith("config=") || agentArgs.contains(",config="));
     }
 
     public static void premain(String agentArgs, Instrumentation inst) throws Exception {
