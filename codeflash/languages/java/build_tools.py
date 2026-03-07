@@ -1432,8 +1432,8 @@ def install_codeflash_runtime_to_m2(runtime_jar_path: Path) -> bool:
 def get_gradle_test_reports_dir(project_root: Path, test_module: str | None = None) -> Path:
     """Get the directory containing Gradle test XML reports."""
     if test_module:
-        return project_root / test_module / "build" / "test-results" / "test"
-    return project_root / "build" / "test-results" / "test"
+        return project_root.joinpath(test_module, "build", "test-results", "test")
+    return project_root.joinpath("build", "test-results", "test")
 
 
 def get_gradle_test_classes_dir(project_root: Path, test_module: str | None = None) -> Path:
