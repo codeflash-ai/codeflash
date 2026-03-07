@@ -25,6 +25,18 @@ from codeflash.code_utils.git_utils import get_current_branch, get_repo_owner_an
 from codeflash.code_utils.github_utils import get_github_secrets_page_url
 from codeflash.telemetry.posthog_cf import ph
 
+_PYTHON_VERSION_STRING = f"'{sys.version_info.major}.{sys.version_info.minor}'"
+
+_UV_INSTALLATION_STRING = """name: 🐍 Setup UV
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true"""
+
+_PYTHON_INSTALLATION_STRING = f"""name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: {_PYTHON_VERSION_STRING}"""
+
 
 class DependencyManager(Enum):
     """Python dependency managers."""
@@ -529,17 +541,9 @@ def get_dependency_installation_commands(dep_manager: DependencyManager) -> tupl
 
 
 def get_dependency_manager_installation_string(dep_manager: DependencyManager) -> str:
-    py_version = sys.version_info
-    python_version_string = f"'{py_version.major}.{py_version.minor}'"
     if dep_manager == DependencyManager.UV:
-        return """name: 🐍 Setup UV
-        uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true"""
-    return f"""name: 🐍 Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: {python_version_string}"""
+        return _UV_INSTALLATION_STRING
+    return _PYTHON_INSTALLATION_STRING
 
 
 def get_github_action_working_directory(toml_path: Path, git_root: Path) -> str:
