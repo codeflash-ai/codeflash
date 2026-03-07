@@ -2181,6 +2181,7 @@ class FunctionOptimizer:
 
             reverted_indices = set()
             partially_fixed_indices = set()
+            removed_fns_by_index: dict[int, set[str]] = {}
             for idx in repaired_indices:
                 gt = generated_tests.generated_tests[idx]
                 failing_fns = still_failing_by_file.get(gt.behavior_file_path)
@@ -2201,6 +2202,7 @@ class FunctionOptimizer:
                 else:
                     # Partial failure → remove only failing functions, keep passing ones
                     fns_to_remove = list(failing_fns)
+                    removed_fns_by_index[idx] = set(fns_to_remove)
                     gt.generated_original_test_source = self.language_support.remove_test_functions(
                         gt.generated_original_test_source, fns_to_remove
                     )
@@ -2235,6 +2237,7 @@ class FunctionOptimizer:
                 revalidation_failures = behavioral_results.test_failures or {}
                 for idx in modified_indices:
                     gt = generated_tests.generated_tests[idx]
+                    removed_fns = removed_fns_by_index.get(idx, set())
                     errors_for_file: dict[str, str] = {}
                     for result in behavioral_results.test_results:
                         if (
@@ -2244,7 +2247,8 @@ class FunctionOptimizer:
                             and result.id.test_function_name
                         ):
                             fn_name = result.id.test_fn_qualified_name()
-                            errors_for_file[fn_name] = revalidation_failures.get(fn_name, "Test failed")
+                            if fn_name not in removed_fns:
+                                errors_for_file[fn_name] = revalidation_failures.get(fn_name, "Test failed")
                     if errors_for_file:
                         previous_repair_errors[idx] = errors_for_file
                 # Invalidate behavioral results since files were modified
