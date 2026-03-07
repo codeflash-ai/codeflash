@@ -1439,7 +1439,7 @@ def get_gradle_test_reports_dir(project_root: Path, test_module: str | None = No
 def get_gradle_test_classes_dir(project_root: Path, test_module: str | None = None) -> Path:
     """Get directory containing compiled test classes for Gradle."""
     base = project_root / test_module if test_module else project_root
-    return base / "build" / "classes" / "java" / "test"
+    return base.joinpath("build", "classes", "java", "test")
 
 
 def get_gradle_main_classes_dir(project_root: Path, test_module: str | None = None) -> Path:
