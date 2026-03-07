@@ -28,8 +28,6 @@ from codeflash.languages.java.build_tools import (
     CODEFLASH_RUNTIME_VERSION,
     add_codeflash_dependency_to_pom,
     backup_pom,
-    find_jacoco_agent_jar,
-    find_jacoco_cli_jar,
     find_maven_executable,
     get_jacoco_xml_path,
     install_codeflash_runtime,
@@ -179,23 +177,29 @@ def _validate_java_class_name(class_name: str) -> bool:
 def build_jacoco_agent_arg(exec_dest: Path) -> str | None:
     """Build the -javaagent arg for standalone JaCoCo coverage collection.
 
-    Returns None if the bundled JaCoCo agent JAR is not found.
+    The codeflash-runtime JAR includes the shaded JaCoCo agent. The AgentDispatcher
+    routes to JaCoCo when the args contain ``destfile=`` (no ``config=``).
+
+    Returns None if the runtime JAR is not found.
     """
-    agent_jar = find_jacoco_agent_jar()
-    if agent_jar is None:
-        logger.warning("Bundled JaCoCo agent JAR not found — coverage will not be collected")
+    runtime_jar = _find_runtime_jar()
+    if runtime_jar is None:
+        logger.warning("codeflash-runtime JAR not found — coverage will not be collected")
         return None
-    return f"-javaagent:{agent_jar}=destfile={exec_dest}"
+    return f"-javaagent:{runtime_jar}=destfile={exec_dest}"
 
 
 def generate_jacoco_report(exec_file: Path, classfiles_dir: Path, sourcefiles_dir: Path, xml_output: Path) -> bool:
-    """Generate a JaCoCo XML report from a .exec file using the bundled CLI JAR.
+    """Generate a JaCoCo XML report from a .exec file.
+
+    Uses the JaCoCo CLI classes shaded into the codeflash-runtime JAR
+    (invoked via ``java -cp <runtime_jar> org.jacoco.cli.internal.Main``).
 
     Returns True if the report was generated successfully.
     """
-    cli_jar = find_jacoco_cli_jar()
-    if cli_jar is None:
-        logger.error("Bundled JaCoCo CLI JAR not found — cannot generate coverage report")
+    runtime_jar = _find_runtime_jar()
+    if runtime_jar is None:
+        logger.error("codeflash-runtime JAR not found — cannot generate coverage report")
         return False
 
     if not exec_file.exists():
@@ -206,8 +210,9 @@ def generate_jacoco_report(exec_file: Path, classfiles_dir: Path, sourcefiles_di
 
     cmd = [
         shutil.which("java") or "java",
-        "-jar",
-        str(cli_jar),
+        "-cp",
+        str(runtime_jar),
+        "org.jacoco.cli.internal.Main",
         "report",
         str(exec_file),
         "--classfiles",

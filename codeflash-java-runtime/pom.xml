@@ -40,6 +40,7 @@
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <jacoco.version>0.8.13</jacoco.version>
     </properties>
 
     <dependencies>
@@ -81,6 +82,22 @@
             <groupId>org.ow2.asm</groupId>
             <artifactId>asm-commons</artifactId>
             <version>9.7.1</version>
+        </dependency>
+
+        <!-- JaCoCo agent (coverage instrumentation at runtime) -->
+        <dependency>
+            <groupId>org.jacoco</groupId>
+            <artifactId>org.jacoco.agent</artifactId>
+            <version>${jacoco.version}</version>
+            <classifier>runtime</classifier>
+        </dependency>
+
+        <!-- JaCoCo CLI (report generation from .exec files) -->
+        <dependency>
+            <groupId>org.jacoco</groupId>
+            <artifactId>org.jacoco.cli</artifactId>
+            <version>${jacoco.version}</version>
+            <classifier>nodeps</classifier>
         </dependency>
 
         <!-- JUnit 5 for testing -->
@@ -145,9 +162,13 @@
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>com.codeflash.Comparator</mainClass>
                                     <manifestEntries>
-                                        <Premain-Class>com.codeflash.profiler.ProfilerAgent</Premain-Class>
+                                        <Premain-Class>com.codeflash.AgentDispatcher</Premain-Class>
                                         <Can-Retransform-Classes>true</Can-Retransform-Classes>
                                     </manifestEntries>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.DontIncludeResourceTransformer">
+                                    <resource>about.html</resource>
                                 </transformer>
                             </transformers>
                             <filters>

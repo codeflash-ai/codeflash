@@ -22,8 +22,6 @@ CODEFLASH_RUNTIME_VERSION = "1.0.0"
 CODEFLASH_RUNTIME_JAR_NAME = f"codeflash-runtime-{CODEFLASH_RUNTIME_VERSION}.jar"
 
 JACOCO_PLUGIN_VERSION = "0.8.13"
-JACOCO_AGENT_JAR = f"org.jacoco.agent-{JACOCO_PLUGIN_VERSION}-runtime.jar"
-JACOCO_CLI_JAR = f"org.jacoco.cli-{JACOCO_PLUGIN_VERSION}-nodeps.jar"
 
 _JAVA_RESOURCES_DIR = Path(__file__).parent / "resources"
 
@@ -71,21 +69,6 @@ def restore_all_pom_backups() -> None:
             logger.debug("Restored %s from backup", original_path)
     _pom_backups.clear()
 
-
-def find_jacoco_agent_jar() -> Path | None:
-    """Find the bundled JaCoCo agent JAR in package resources."""
-    jar = _JAVA_RESOURCES_DIR / JACOCO_AGENT_JAR
-    if jar.exists():
-        return jar
-    return None
-
-
-def find_jacoco_cli_jar() -> Path | None:
-    """Find the bundled JaCoCo CLI JAR in package resources."""
-    jar = _JAVA_RESOURCES_DIR / JACOCO_CLI_JAR
-    if jar.exists():
-        return jar
-    return None
 
 
 # MVN_CENTRAL_TODO: Uncomment once codeflash-runtime is published to Maven Central.
