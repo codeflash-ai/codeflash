@@ -906,7 +906,5 @@ def _customize_js_workflow_content(optimize_yml_content: str, git_root: Path, be
         codeflash_cmd += " --benchmark"
     return optimize_yml_content.replace("{{ codeflash_command }}", codeflash_cmd)
 
-_DEP_MANAGER_TO_COMMANDS = {
-    DependencyManager.POETRY: _POETRY_COMMANDS,
-    DependencyManager.UV: _UV_COMMANDS,
-}
+
+_DEP_MANAGER_TO_COMMANDS = {DependencyManager.POETRY: _POETRY_COMMANDS, DependencyManager.UV: _UV_COMMANDS}
