@@ -1481,7 +1481,7 @@ def belongs_to_function(name: Name, function_name: str) -> bool:
     if name.name == function_name:  # Handles function definition and recursive function calls
         return False
     if (name := name.parent()) and name.type == "function":
-        return name.name == function_name
+        return bool(name.name == function_name)
     return False
 
 
@@ -1489,7 +1489,7 @@ def belongs_to_class(name: Name, class_name: str) -> bool:
     """Check if given jedi Name is a direct child of the specified class."""
     while name := name.parent():
         if name.type == "class":
-            return name.name == class_name
+            return bool(name.name == class_name)
     return False
 
 
