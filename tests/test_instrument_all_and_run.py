@@ -12,7 +12,7 @@ from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodePosition, FunctionParent, TestFile, TestFiles, TestingMode, TestType
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.equivalence import compare_test_results
-from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
+from codeflash.languages.python.instrument_codeflash_capture import instrument_codeflash_capture
 
 # Used by cli instrumentation
 codeflash_wrap_string = """def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test_class_name, codeflash_test_name, codeflash_function_name, codeflash_line_id, codeflash_loop_index, codeflash_cur, codeflash_con, *args, **kwargs):

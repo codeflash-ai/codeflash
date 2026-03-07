@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.cli_cmds.cmd_init import (
+from codeflash.cli_cmds.init_config import (
     CLISetupInfo,
     VsCodeSetupInfo,
     configure_pyproject_toml,

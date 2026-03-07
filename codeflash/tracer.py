@@ -199,8 +199,8 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                     result_pickle_file_path.unlink(missing_ok=True)
             if not parsed_args.trace_only and replay_test_paths:
                 from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
-                from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
                 from codeflash.cli_cmds.console import paneled_text
+                from codeflash.cli_cmds.console_constants import CODEFLASH_LOGO
                 from codeflash.languages import set_current_language
                 from codeflash.languages.base import Language
                 from codeflash.telemetry import posthog_cf

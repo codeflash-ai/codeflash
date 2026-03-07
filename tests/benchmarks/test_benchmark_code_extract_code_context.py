@@ -22,7 +22,7 @@ def test_benchmark_extract(benchmark) -> None:
     )
     function_to_optimize = FunctionToOptimize(
         function_name="replace_function_and_helpers_with_optimized_code",
-        file_path=file_path / "optimization" / "function_optimizer.py",
+        file_path=file_path / "languages" / "function_optimizer.py",
         parents=[FunctionParent(name="FunctionOptimizer", type="ClassDef")],
         starting_line=None,
         ending_line=None,
