@@ -393,14 +393,17 @@ class JavaSupport(LanguageSupport):
         if potential_path.exists():
             return potential_path
 
-        # 2. Under src/test/java relative to project root (Maven structure)
+        # 2. Under src/test/java relative to project root (Maven or Gradle structure)
         project_root = base_dir.parent if base_dir.name == "java" else base_dir
-        while project_root.name not in ("", "/") and not (project_root / "pom.xml").exists():
+        while project_root.name not in ("", "/") and not (
+            (project_root / "pom.xml").exists()
+            or (project_root / "build.gradle").exists()
+            or (project_root / "build.gradle.kts").exists()
+        ):
             project_root = project_root.parent
-        if (project_root / "pom.xml").exists():
-            potential_path = project_root / "src" / "test" / "java" / relative_path
-            if potential_path.exists():
-                return potential_path
+        potential_path = project_root / "src" / "test" / "java" / relative_path
+        if potential_path.exists():
+            return potential_path
 
         # 3. Search by filename in base_dir tree
         file_name = test_class_path.rsplit(".", maxsplit=1)[-1] + file_ext

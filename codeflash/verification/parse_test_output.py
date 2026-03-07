@@ -452,8 +452,16 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
             # For Jest tests, test_module_path could be:
             # - A module-style path: "tests.fibonacci.test.ts" (dots as separators)
             # - A file path: "tests/fibonacci.test.ts" (slashes as separators)
+            # For Java, it's a class name (e.g., "StreamUtilsTest__perfinstrumented_2")
             # For Python, it's a module path (e.g., "tests.test_foo") that needs conversion
-            if is_json_format:
+            if is_json_format and current_language_support().language.value == "java":
+                # Java: resolve class name to file path using language-specific resolution
+                resolved = resolve_test_file_from_class_path(test_module_path, test_config.tests_project_rootdir)
+                if resolved is not None:
+                    test_file_path = resolved
+                else:
+                    test_file_path = test_config.tests_project_rootdir / test_module_path
+            elif is_json_format:
                 # Jest test file extensions (including .test.ts, .spec.ts patterns)
                 jest_test_extensions = (
                     ".test.ts",

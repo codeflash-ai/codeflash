@@ -899,7 +899,7 @@ def _add_suppress_warnings_annotation(source: str, class_name: str) -> str:
     return source[:insert_pos] + '@SuppressWarnings("CheckReturnValue")\n' + source[insert_pos:]
 
 
-def _add_timing_instrumentation(source: str, class_name: str, func_name: str) -> str:
+def _add_timing_instrumentation(source: str, class_name: str, func_name: str, whole_body_fallback: bool = False) -> str:
     """Add timing instrumentation to test methods with inner loop for JIT warmup.
 
     For each @Test method, this adds:
@@ -1054,12 +1054,31 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         assignment = f"{name_text} = {value_text};"
         return hoisted, assignment
 
+    def has_disabled_annotation(method_node: Any) -> bool:
+        modifiers = None
+        for child in method_node.children:
+            if child.type == "modifiers":
+                modifiers = child
+                break
+        if not modifiers:
+            return False
+        for child in modifiers.children:
+            if child.type not in {"annotation", "marker_annotation"}:
+                continue
+            annotation_text = analyzer.get_node_text(child, source_bytes).strip()
+            if annotation_text.startswith("@"):
+                name = annotation_text[1:].split("(", 1)[0].strip()
+                if name == "Disabled" or name.endswith(".Disabled"):
+                    return True
+        return False
+
     def build_instrumented_body(
         body_text: str,
         next_wrapper_id: int,
         base_indent: str,
         test_method_name: str = "unknown",
         body_start_line: int = 0,
+        allow_whole_body_fallback: bool = True,
     ) -> tuple[str, int]:
         body_bytes = body_text.encode("utf8")
         wrapper_bytes = _TS_BODY_PREFIX_BYTES + body_bytes + _TS_BODY_SUFFIX.encode("utf8")
@@ -1085,7 +1104,44 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         inner_body_indent = f"{inner_indent}    "
 
         if not calls:
-            return body_text, next_wrapper_id
+            if not allow_whole_body_fallback:
+                return body_text, next_wrapper_id
+            # No direct calls to the target function found. The test may invoke it
+            # indirectly (e.g. via reflection, ClassValue.get(), wrapper methods).
+            # Wrap the entire body in a timing block so we still capture runtime.
+            current_id = next_wrapper_id + 1
+            inv_id = f"L{body_start_line + 1}_{current_id}"
+            setup_lines = [
+                f"{indent}// Codeflash timing instrumentation (whole-body fallback)",
+                f'{indent}int _cf_outerLoop{current_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
+                f'{indent}int _cf_maxInnerIterations{current_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));',
+                f'{indent}int _cf_innerIterations{current_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));',
+                f'{indent}String _cf_mod{current_id} = "{class_name}";',
+                f'{indent}String _cf_cls{current_id} = "{class_name}";',
+                f'{indent}String _cf_test{current_id} = "{test_method_name}";',
+                f'{indent}String _cf_fn{current_id} = "{func_name}";',
+                "",
+            ]
+            stmt_in_try = reindent_block(body_text.strip(), inner_body_indent)
+            timing_lines = [
+                f"{indent}for (int _cf_i{current_id} = 0; _cf_i{current_id} < _cf_innerIterations{current_id}; _cf_i{current_id}++) {{",
+                f"{inner_indent}int _cf_loopId{current_id} = _cf_outerLoop{current_id} * _cf_maxInnerIterations{current_id} + _cf_i{current_id};",
+                f'{inner_indent}System.out.println("!$######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":" + "{inv_id}" + "######$!");',
+                f"{inner_indent}long _cf_end{current_id} = -1;",
+                f"{inner_indent}long _cf_start{current_id} = 0;",
+                f"{inner_indent}try {{",
+                f"{inner_body_indent}_cf_start{current_id} = System.nanoTime();",
+                stmt_in_try,
+                f"{inner_body_indent}_cf_end{current_id} = System.nanoTime();",
+                f"{inner_indent}}} finally {{",
+                f"{inner_body_indent}long _cf_end{current_id}_finally = System.nanoTime();",
+                f"{inner_body_indent}long _cf_dur{current_id} = (_cf_end{current_id} != -1 ? _cf_end{current_id} : _cf_end{current_id}_finally) - _cf_start{current_id};",
+                f'{inner_body_indent}System.out.println("!######" + _cf_mod{current_id} + ":" + _cf_cls{current_id} + "." + _cf_test{current_id} + ":" + _cf_fn{current_id} + ":" + _cf_loopId{current_id} + ":" + "{inv_id}" + ":" + _cf_dur{current_id} + "######!");',
+                f"{inner_indent}}}",
+                f"{indent}}}",
+            ]
+            result = "\n" + "\n".join(setup_lines) + "\n" + "\n".join(timing_lines) + "\n"
+            return result, current_id
 
         # _TS_BODY_PREFIX is 1 line, so wrapper line 1 = body line 0
         wrapper_prefix_lines = 1
@@ -1266,8 +1322,14 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         # The body_text starts after the '{', so its first content line is on that same line or the next.
         # We pass the 0-based line index so build_instrumented_body can compute 1-indexed absolute lines.
         body_start_line_0based = body_node.start_point[0]
+        is_disabled = has_disabled_annotation(method_node)
         new_body, new_wrapper_id = build_instrumented_body(
-            body_text, next_wrapper_id, base_indent, test_method_name, body_start_line=body_start_line_0based
+            body_text,
+            next_wrapper_id,
+            base_indent,
+            test_method_name,
+            body_start_line=body_start_line_0based,
+            allow_whole_body_fallback=whole_body_fallback and not is_disabled,
         )
         # Reserve one id slot per @Test method even when no instrumentation is added,
         # matching existing deterministic numbering expected by tests.
@@ -1398,7 +1460,9 @@ def instrument_generated_java_test(
         # Suppress Error Prone's CheckReturnValue for generated performance tests
         modified_code = _add_suppress_warnings_annotation(modified_code, new_class_name)
 
-        modified_code = _add_timing_instrumentation(modified_code, new_class_name, function_name)
+        modified_code = _add_timing_instrumentation(
+            modified_code, new_class_name, function_name, whole_body_fallback=True
+        )
     elif mode == "behavior":
         _, behavior_code = instrument_existing_test(
             test_string=test_code,

@@ -330,6 +330,9 @@ def _get_compiler_settings(project_root: Path, build_tool: BuildTool) -> tuple[s
         Tuple of (source_version, target_version).
 
     """
+    if build_tool == BuildTool.GRADLE:
+        return _get_gradle_compiler_settings(project_root)
+
     if build_tool != BuildTool.MAVEN:
         return None, None
 
@@ -452,3 +455,30 @@ def get_test_class_pattern(config: JavaProjectConfig) -> str:
 
     """
     return r".*Test(s)?$|^Test.*"
+
+
+def _get_gradle_compiler_settings(project_root: Path) -> tuple[str | None, str | None]:
+    """Get compiler source/target from Gradle build files."""
+    import re
+
+    for gradle_file in ("build.gradle.kts", "build.gradle"):
+        gradle_path = project_root / gradle_file
+        if gradle_path.exists():
+            try:
+                content = gradle_path.read_text(encoding="utf-8")
+                source = None
+                target = None
+
+                m = re.search(r"sourceCompatibility\s*=\s*['\"]?([^'\"\s\n]+)", content)
+                if m:
+                    source = m.group(1).replace("JavaVersion.VERSION_", "")
+                m = re.search(r"targetCompatibility\s*=\s*['\"]?([^'\"\s\n]+)", content)
+                if m:
+                    target = m.group(1).replace("JavaVersion.VERSION_", "")
+
+                if source or target:
+                    return source, target
+            except Exception:
+                pass
+
+    return None, None
