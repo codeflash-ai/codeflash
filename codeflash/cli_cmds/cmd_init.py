@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 import sys
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -38,7 +39,6 @@ from codeflash.code_utils.git_utils import get_git_remotes
 from codeflash.code_utils.shell_utils import get_shell_rc_path, is_powershell
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.telemetry.posthog_cf import ph
-from functools import lru_cache
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -638,12 +638,6 @@ def run_end_to_end_test(args: Namespace, find_common_tags_path: Path) -> None:
         logger.info("🧹 Cleaning up…")
         find_common_tags_path.unlink(missing_ok=True)
         logger.info(f"🗑️  Deleted {find_common_tags_path}")
-
-
-
-@lru_cache(maxsize=1)
-def _get_codeflash_theme() -> CodeflashTheme:
-    return CodeflashTheme()
 
 
 @lru_cache(maxsize=1)
