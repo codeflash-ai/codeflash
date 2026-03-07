@@ -38,6 +38,7 @@ from codeflash.code_utils.git_utils import get_git_remotes
 from codeflash.code_utils.shell_utils import get_shell_rc_path, is_powershell
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.telemetry.posthog_cf import ph
+from functools import lru_cache
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -184,7 +185,7 @@ def collect_setup_info() -> CLISetupInfo:
         )
     ]
 
-    answers = inquirer.prompt(questions, theme=CodeflashTheme())
+    answers = inquirer.prompt(questions, theme=_get_codeflash_theme())
     if not answers:
         apologize_and_exit()
     module_root_answer = answers["module_root"]
@@ -214,7 +215,7 @@ def collect_setup_info() -> CLISetupInfo:
                 )
             ]
 
-            custom_answers = inquirer.prompt(custom_questions, theme=CodeflashTheme())
+            custom_answers = inquirer.prompt(custom_questions, theme=_get_codeflash_theme())
             if not custom_answers:
                 apologize_and_exit()
 
@@ -264,7 +265,7 @@ def collect_setup_info() -> CLISetupInfo:
         )
     ]
 
-    tests_answers = inquirer.prompt(tests_questions, theme=CodeflashTheme())
+    tests_answers = inquirer.prompt(tests_questions, theme=_get_codeflash_theme())
     if not tests_answers:
         apologize_and_exit()
     tests_root_answer = tests_answers["tests_root"]
@@ -297,7 +298,7 @@ def collect_setup_info() -> CLISetupInfo:
                 )
             ]
 
-            custom_tests_answers = inquirer.prompt(custom_tests_questions, theme=CodeflashTheme())
+            custom_tests_answers = inquirer.prompt(custom_tests_questions, theme=_get_codeflash_theme())
             if not custom_tests_answers:
                 apologize_and_exit()
 
@@ -355,7 +356,7 @@ def collect_setup_info() -> CLISetupInfo:
         )
     ]
 
-    formatter_answers = inquirer.prompt(formatter_questions, theme=CodeflashTheme())
+    formatter_answers = inquirer.prompt(formatter_questions, theme=_get_codeflash_theme())
     if not formatter_answers:
         apologize_and_exit()
     formatter = formatter_answers["formatter"]
@@ -388,7 +389,7 @@ def collect_setup_info() -> CLISetupInfo:
                     )
                 ]
 
-                git_answers = inquirer.prompt(git_questions, theme=CodeflashTheme())
+                git_answers = inquirer.prompt(git_questions, theme=_get_codeflash_theme())
                 git_remote = git_answers["git_remote"] if git_answers else git_remotes[0]
             else:
                 git_remote = git_remotes[0]
@@ -502,7 +503,7 @@ def check_for_toml_or_setup_file() -> str | None:
             inquirer.Confirm("create_toml", message="Create pyproject.toml in the current directory?", default=True)
         ]
 
-        toml_answers = inquirer.prompt(toml_questions, theme=CodeflashTheme())
+        toml_answers = inquirer.prompt(toml_questions, theme=_get_codeflash_theme())
         if not toml_answers:
             apologize_and_exit()
         create_toml = toml_answers["create_toml"]
@@ -637,3 +638,14 @@ def run_end_to_end_test(args: Namespace, find_common_tags_path: Path) -> None:
         logger.info("🧹 Cleaning up…")
         find_common_tags_path.unlink(missing_ok=True)
         logger.info(f"🗑️  Deleted {find_common_tags_path}")
+
+
+
+@lru_cache(maxsize=1)
+def _get_codeflash_theme() -> CodeflashTheme:
+    return CodeflashTheme()
+
+
+@lru_cache(maxsize=1)
+def _get_codeflash_theme() -> CodeflashTheme:
+    return CodeflashTheme()
