@@ -25,6 +25,20 @@ from codeflash.code_utils.git_utils import get_current_branch, get_repo_owner_an
 from codeflash.code_utils.github_utils import get_github_secrets_page_url
 from codeflash.telemetry.posthog_cf import ph
 
+_POETRY_COMMANDS: str = """|
+          python -m pip install --upgrade pip
+          pip install poetry
+          poetry install --all-extras"""
+
+_UV_COMMANDS: str = """|
+          uv sync --all-extras
+          uv pip install --upgrade codeflash"""
+
+_DEFAULT_COMMANDS: str = """|
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install codeflash"""
+
 
 class DependencyManager(Enum):
     """Python dependency managers."""
@@ -512,20 +526,7 @@ def get_codeflash_github_action_command(dep_manager: DependencyManager) -> str:
 
 def get_dependency_installation_commands(dep_manager: DependencyManager) -> str:
     """Generate commands to install the dependency manager and project dependencies."""
-    if dep_manager == DependencyManager.POETRY:
-        return """|
-          python -m pip install --upgrade pip
-          pip install poetry
-          poetry install --all-extras"""
-    if dep_manager == DependencyManager.UV:
-        return """|
-          uv sync --all-extras
-          uv pip install --upgrade codeflash"""
-    # PIP or UNKNOWN
-    return """|
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install codeflash"""
+    return _DEP_MANAGER_TO_COMMANDS.get(dep_manager, _DEFAULT_COMMANDS)
 
 
 def get_dependency_manager_installation_string(dep_manager: DependencyManager) -> str:
@@ -904,3 +905,8 @@ def _customize_js_workflow_content(optimize_yml_content: str, git_root: Path, be
     if benchmark_mode:
         codeflash_cmd += " --benchmark"
     return optimize_yml_content.replace("{{ codeflash_command }}", codeflash_cmd)
+
+_DEP_MANAGER_TO_COMMANDS = {
+    DependencyManager.POETRY: _POETRY_COMMANDS,
+    DependencyManager.UV: _UV_COMMANDS,
+}
