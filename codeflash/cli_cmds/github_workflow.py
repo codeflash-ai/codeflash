@@ -66,7 +66,9 @@ def install_github_actions(override_formatter_check: bool = False) -> None:
             console.print(already_exists_panel)
             console.print()
 
-            logger.info("[github_workflow.py:install_github_actions] Workflow file already exists locally, skipping setup")
+            logger.info(
+                "[github_workflow.py:install_github_actions] Workflow file already exists locally, skipping setup"
+            )
             return
 
         # Get repository information for API call
@@ -635,7 +637,9 @@ def collect_repo_files_for_workflow(git_root: Path) -> dict[str, Any]:
                     content = content[:max_file_size] + "\n... (truncated)"
                 files_dict[file_path_str] = content
             except Exception as e:
-                logger.warning(f"[github_workflow.py:collect_repo_files_for_workflow] Failed to read {file_path_str}: {e}")
+                logger.warning(
+                    f"[github_workflow.py:collect_repo_files_for_workflow] Failed to read {file_path_str}: {e}"
+                )
 
     # Collect 2-level directory structure
     directory_structure: dict[str, Any] = {}
@@ -662,7 +666,9 @@ def collect_repo_files_for_workflow(git_root: Path) -> dict[str, Any]:
             elif item.is_file():
                 directory_structure[item.name] = {"type": "file"}
     except Exception as e:
-        logger.warning(f"[github_workflow.py:collect_repo_files_for_workflow] Error collecting directory structure: {e}")
+        logger.warning(
+            f"[github_workflow.py:collect_repo_files_for_workflow] Error collecting directory structure: {e}"
+        )
 
     return {"files": files_dict, "directory_structure": directory_structure}
 
@@ -777,7 +783,9 @@ def generate_dynamic_workflow_content(
 
                 # Reconstruct the workflow
                 return "\n".join([*lines[:steps_start_line], "    steps:", *indented_steps, *lines[steps_end_line:]])
-            logger.warning("[github_workflow.py:generate_dynamic_workflow_content] Could not find steps section in template")
+            logger.warning(
+                "[github_workflow.py:generate_dynamic_workflow_content] Could not find steps section in template"
+            )
         else:
             logger.debug(
                 "[github_workflow.py:generate_dynamic_workflow_content] AI service returned no steps, falling back to static"
