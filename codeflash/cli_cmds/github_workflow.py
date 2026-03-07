@@ -510,7 +510,7 @@ def get_codeflash_github_action_command(dep_manager: DependencyManager) -> str:
     return "codeflash"
 
 
-def get_dependency_installation_commands(dep_manager: DependencyManager) -> tuple[str, str]:
+def get_dependency_installation_commands(dep_manager: DependencyManager) -> str:
     """Generate commands to install the dependency manager and project dependencies."""
     if dep_manager == DependencyManager.POETRY:
         return """|
@@ -674,7 +674,7 @@ def collect_repo_files_for_workflow(git_root: Path) -> dict[str, Any]:
 
 
 def generate_dynamic_workflow_content(
-    optimize_yml_content: str, config: tuple[dict[str, Any], Path], git_root: Path, benchmark_mode: bool = False
+    optimize_yml_content: str, config: dict[str, Any], git_root: Path, benchmark_mode: bool = False
 ) -> str:
     """Generate workflow content with dynamic steps from AI service, falling back to static template."""
     # First, do the basic replacements that are always needed
@@ -801,7 +801,7 @@ def generate_dynamic_workflow_content(
 
 
 def customize_codeflash_yaml_content(
-    optimize_yml_content: str, config: tuple[dict[str, Any], Path], git_root: Path, benchmark_mode: bool = False
+    optimize_yml_content: str, config: dict[str, Any], git_root: Path, benchmark_mode: bool = False
 ) -> str:
     module_path = str(Path(config["module_root"]).relative_to(git_root) / "**")
     optimize_yml_content = optimize_yml_content.replace("{{ codeflash_module_path }}", module_path)

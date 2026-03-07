@@ -203,8 +203,8 @@ def collect_setup_info() -> CLISetupInfo:
         console.print()
 
         # Retry loop for custom module root path
-        module_root = None
-        while module_root is None:
+        custom_module_root: Path | None = None
+        while custom_module_root is None:
             custom_questions = [
                 inquirer.Path(
                     "custom_path",
@@ -217,7 +217,6 @@ def collect_setup_info() -> CLISetupInfo:
             custom_answers = inquirer.prompt(custom_questions, theme=CodeflashTheme())
             if not custom_answers:
                 apologize_and_exit()
-                return None  # unreachable but satisfies type checker
 
             custom_path_str = str(custom_answers["custom_path"])
             # Validate the path is safe
@@ -227,7 +226,8 @@ def collect_setup_info() -> CLISetupInfo:
                 click.echo("Please enter a valid relative directory path.")
                 console.print()  # Add spacing before retry
                 continue  # Retry the prompt
-            module_root = Path(custom_path_str)
+            custom_module_root = Path(custom_path_str)
+        module_root = str(custom_module_root)
     else:
         module_root = module_root_answer
     ph("cli-project-root-provided")
@@ -286,8 +286,8 @@ def collect_setup_info() -> CLISetupInfo:
         console.print()
 
         # Retry loop for custom tests root path
-        tests_root = None
-        while tests_root is None:
+        custom_tests_root: Path | None = None
+        while custom_tests_root is None:
             custom_tests_questions = [
                 inquirer.Path(
                     "custom_tests_path",
@@ -300,7 +300,6 @@ def collect_setup_info() -> CLISetupInfo:
             custom_tests_answers = inquirer.prompt(custom_tests_questions, theme=CodeflashTheme())
             if not custom_tests_answers:
                 apologize_and_exit()
-                return None  # unreachable but satisfies type checker
 
             custom_tests_path_str = str(custom_tests_answers["custom_tests_path"])
             # Validate the path is safe
@@ -310,7 +309,8 @@ def collect_setup_info() -> CLISetupInfo:
                 click.echo("Please enter a valid relative directory path.")
                 console.print()  # Add spacing before retry
                 continue  # Retry the prompt
-            tests_root = Path(curdir) / Path(custom_tests_path_str)
+            custom_tests_root = Path(curdir) / Path(custom_tests_path_str)
+        tests_root = custom_tests_root
     else:
         tests_root = Path(curdir) / Path(cast("str", tests_root_answer))
 
@@ -450,7 +450,7 @@ def check_for_toml_or_setup_file() -> str | None:
     if pyproject_toml_path.exists():
         try:
             pyproject_toml_content = pyproject_toml_path.read_text(encoding="utf8")
-            project_name = tomlkit.parse(pyproject_toml_content)["tool"]["poetry"]["name"]
+            project_name = tomlkit.parse(pyproject_toml_content)["tool"]["poetry"]["name"]  # type: ignore[index]
             click.echo(f"✅ I found a pyproject.toml for your project {project_name}.")
             ph("cli-pyproject-toml-found-name")
         except Exception:

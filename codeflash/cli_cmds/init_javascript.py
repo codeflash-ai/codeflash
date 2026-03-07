@@ -9,7 +9,10 @@ import sys
 from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
-from typing import Any, Union
+from typing import TYPE_CHECKING, Any, Union
+
+if TYPE_CHECKING:
+    from codeflash.cli_cmds.init_config import CodeflashTheme
 
 import click
 import inquirer
@@ -67,7 +70,7 @@ class JSSetupInfo:
 
 
 # Import theme from cmd_init to avoid duplication
-def _get_theme():
+def _get_theme() -> CodeflashTheme:
     """Get the CodeflashTheme - imported lazily to avoid circular imports."""
     from codeflash.cli_cmds.init_config import CodeflashTheme
 

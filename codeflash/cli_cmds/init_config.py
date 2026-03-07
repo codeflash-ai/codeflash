@@ -44,7 +44,7 @@ class VsCodeSetupInfo:
 
 
 # Custom theme for better UX
-class CodeflashTheme(inquirer.themes.Default):
+class CodeflashTheme(inquirer.themes.Default):  # type: ignore[misc]
     def __init__(self) -> None:
         super().__init__()
         self.Question.mark_color = inquirer.themes.term.yellow
@@ -91,7 +91,7 @@ def get_valid_subdirs(current_dir: Optional[Path] = None) -> list[str]:
     ]
 
 
-def get_suggestions(section: str) -> tuple[list[str], Optional[str]]:
+def get_suggestions(section: CommonSections) -> tuple[list[str], Optional[str]]:
     valid_subdirs = get_valid_subdirs()
     if section == CommonSections.module_root:
         return [d for d in valid_subdirs if d != "tests"], None
@@ -100,8 +100,7 @@ def get_suggestions(section: str) -> tuple[list[str], Optional[str]]:
         return valid_subdirs, default
     if section == CommonSections.formatter_cmds:
         return ["disabled", "ruff", "black"], "disabled"
-    msg = f"Unknown section: {section}"
-    raise ValueError(msg)
+    raise ValueError(f"Unknown section: {section}")
 
 
 def config_found(pyproject_toml_path: Union[str, Path]) -> tuple[bool, str]:
@@ -208,7 +207,7 @@ def configure_pyproject_toml(
         for section in CommonSections:
             if hasattr(setup_info, section.value):
                 codeflash_section[section.get_toml_key()] = getattr(setup_info, section.value)
-    else:
+    elif isinstance(setup_info, CLISetupInfo):
         codeflash_section["module-root"] = setup_info.module_root
         codeflash_section["tests-root"] = setup_info.tests_root
         codeflash_section["ignore-paths"] = setup_info.ignore_paths
