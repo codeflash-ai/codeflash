@@ -20,7 +20,7 @@ from codeflash.code_utils.shell_utils import get_shell_rc_path, save_api_key_to_
 from codeflash.either import is_successful
 from codeflash.telemetry.posthog_cf import ph
 
-_THEME_SINGLETON = CodeflashTheme()
+CF_THEME = CodeflashTheme()
 
 
 class CFAPIKeyType(click.ParamType):
@@ -75,7 +75,7 @@ def prompt_api_key() -> bool:
         )
     ]
 
-    answers = inquirer.prompt(questions, theme=_THEME_SINGLETON)
+    answers = inquirer.prompt(questions, theme=CF_THEME)
     if not answers:
         apologize_and_exit()
 

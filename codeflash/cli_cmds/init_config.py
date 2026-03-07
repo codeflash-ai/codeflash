@@ -66,20 +66,23 @@ class CommonSections(Enum):
         return self.value.replace("_", "-")
 
 
+ignore_subdirs = {
+    "venv",
+    "node_modules",
+    "dist",
+    "build",
+    "build_temp",
+    "build_scripts",
+    "env",
+    "logs",
+    "tmp",
+    "__pycache__",
+}
+
+
 @lru_cache(maxsize=1)
 def get_valid_subdirs(current_dir: Optional[Path] = None) -> list[str]:
-    ignore_subdirs = {
-        "venv",
-        "node_modules",
-        "dist",
-        "build",
-        "build_temp",
-        "build_scripts",
-        "env",
-        "logs",
-        "tmp",
-        "__pycache__",
-    }
+
     path_str = str(current_dir) if current_dir else "."
     return [
         entry.name
