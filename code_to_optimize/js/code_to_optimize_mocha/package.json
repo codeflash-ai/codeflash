@@ -8,6 +8,6 @@
   },
   "devDependencies": {
     "codeflash": "file:../../../packages/codeflash",
-    "mocha": "^10.7.0"
+    "mocha": "^10.8.2"
   }
 }
