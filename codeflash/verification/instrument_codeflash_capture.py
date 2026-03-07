@@ -205,8 +205,8 @@ class InitDecorator(ast.NodeTransformer):
     def _expr_name(self, node: ast.AST) -> str | None:
         if isinstance(node, ast.Name):
             return node.id
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-            return node.func.id
+        if isinstance(node, ast.Call):
+            return self._expr_name(node.func)
         if isinstance(node, ast.Attribute):
             return node.attr
         return None

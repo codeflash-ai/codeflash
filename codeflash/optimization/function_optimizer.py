@@ -2188,7 +2188,7 @@ class FunctionOptimizer:
                     continue
 
                 all_fns_in_file = all_fns_by_file.get(gt.behavior_file_path, set())
-                if failing_fns >= all_fns_in_file:
+                if failing_fns >= all_fns_in_file and all_fns_in_file:
                     # ALL functions fail → full revert to pre-repair state
                     orig_source, orig_behavior, orig_perf, orig_raw = pre_repair_snapshots[idx]
                     gt.generated_original_test_source = orig_source
