@@ -68,7 +68,7 @@ class CommonSections(Enum):
 
 @lru_cache(maxsize=1)
 def get_valid_subdirs(current_dir: Optional[Path] = None) -> list[str]:
-    ignore_subdirs = [
+    ignore_subdirs = {
         "venv",
         "node_modules",
         "dist",
@@ -79,12 +79,12 @@ def get_valid_subdirs(current_dir: Optional[Path] = None) -> list[str]:
         "logs",
         "tmp",
         "__pycache__",
-    ]
+    }
     path_str = str(current_dir) if current_dir else "."
     return [
-        d
-        for d in next(os.walk(path_str))[1]
-        if not d.startswith(".") and not d.startswith("__") and d not in ignore_subdirs
+        entry.name
+        for entry in os.scandir(path_str)
+        if entry.is_dir() and not entry.name.startswith((".", "__")) and entry.name not in ignore_subdirs
     ]
 
 
