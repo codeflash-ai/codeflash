@@ -39,6 +39,9 @@ TOTAL_LOOPING_TIME_LSP = 10.0  # Kept same timing for LSP mode to avoid in incre
 # setting this value to 1 will disable repair if there is at least one correct candidate
 MIN_CORRECT_CANDIDATES = 2
 
+# Skip benchmarking if candidate behavioral runtime exceeds this multiple of baseline behavioral runtime
+BEHAVIORAL_SLOWDOWN_SKIP_THRESHOLD = 10.0
+
 try:
     from codeflash.lsp.helpers import is_LSP_enabled
 
