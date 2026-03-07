@@ -442,6 +442,35 @@ class MyTuple(NamedTuple):
         test_path.unlink(missing_ok=True)
 
 
+def test_module_qualified_dataclass_with_call_syntax_skipped():
+    """@dataclasses.dataclass(frozen=True) — module-qualified call-style decorator — should be skipped."""
+    original_code = """
+import dataclasses
+
+@dataclasses.dataclass(frozen=True)
+class FrozenPoint:
+    x: int
+    y: int
+
+    def magnitude(self):
+        return (self.x ** 2 + self.y ** 2) ** 0.5
+"""
+    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
+    test_path.write_text(original_code)
+
+    function = FunctionToOptimize(
+        function_name="magnitude", file_path=test_path, parents=[FunctionParent(type="ClassDef", name="FrozenPoint")]
+    )
+
+    try:
+        instrument_codeflash_capture(function, {}, test_path.parent)
+        modified_code = test_path.read_text()
+        assert "super().__init__" not in modified_code
+        assert "codeflash_capture" not in modified_code
+    finally:
+        test_path.unlink(missing_ok=True)
+
+
 def test_dataclass_with_explicit_init_still_instrumented():
     """A dataclass that defines its own __init__ should still be instrumented normally."""
     original_code = """
