@@ -714,7 +714,14 @@ def add_needed_imports_from_module(
         )
     )
     try:
-        cst.parse_module(src_module_code).visit(gatherer)
+        src_module = cst.parse_module(src_module_code)
+        # Exclude function/class bodies so GatherImportsVisitor only sees module-level imports.
+        # Nested imports (inside functions) are part of function logic and must not be
+        # scheduled for add/remove — RemoveImportsVisitor would strip them as "unused".
+        module_level_only = src_module.with_changes(
+            body=[stmt for stmt in src_module.body if not isinstance(stmt, (cst.FunctionDef, cst.ClassDef))]
+        )
+        module_level_only.visit(gatherer)
     except Exception as e:
         logger.error(f"Error parsing source module code: {e}")
         return dst_code_fallback
