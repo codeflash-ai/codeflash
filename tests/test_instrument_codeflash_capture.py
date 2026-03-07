@@ -471,6 +471,34 @@ class FrozenPoint:
         test_path.unlink(missing_ok=True)
 
 
+def test_module_qualified_namedtuple_skipped():
+    """typing.NamedTuple — module-qualified base class — should be skipped."""
+    original_code = """
+import typing
+
+class MyTuple(typing.NamedTuple):
+    x: int
+    y: str
+
+    def display(self):
+        return f"{self.x}: {self.y}"
+"""
+    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
+    test_path.write_text(original_code)
+
+    function = FunctionToOptimize(
+        function_name="display", file_path=test_path, parents=[FunctionParent(type="ClassDef", name="MyTuple")]
+    )
+
+    try:
+        instrument_codeflash_capture(function, {}, test_path.parent)
+        modified_code = test_path.read_text()
+        assert "super().__init__" not in modified_code
+        assert "codeflash_capture" not in modified_code
+    finally:
+        test_path.unlink(missing_ok=True)
+
+
 def test_dataclass_with_explicit_init_still_instrumented():
     """A dataclass that defines its own __init__ should still be instrumented normally."""
     original_code = """

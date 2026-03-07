@@ -179,13 +179,13 @@ class InitDecorator(ast.NodeTransformer):
             # _orig_init = ClassName.__init__; then calling _orig_init(self, *args, **kwargs) in the wrapper
             for dec in node.decorator_list:
                 dec_name = self._expr_name(dec)
-                if dec_name == "dataclass":
+                if dec_name is not None and dec_name.endswith("dataclass"):
                     return node
 
             # Skip NamedTuples — their __init__ is synthesized and cannot be overwritten.
             for base in node.bases:
                 base_name = self._expr_name(base)
-                if base_name == "NamedTuple":
+                if base_name is not None and base_name.endswith("NamedTuple"):
                     return node
 
             # Create super().__init__(*args, **kwargs) call (use prebuilt AST fragments)
@@ -208,5 +208,6 @@ class InitDecorator(ast.NodeTransformer):
         if isinstance(node, ast.Call):
             return self._expr_name(node.func)
         if isinstance(node, ast.Attribute):
-            return node.attr
+            parent = self._expr_name(node.value)
+            return f"{parent}.{node.attr}" if parent else node.attr
         return None
