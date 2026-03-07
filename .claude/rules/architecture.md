@@ -6,10 +6,15 @@ When adding, moving, or deleting source files, update this doc to match.
 codeflash/
 ├── main.py                 # CLI entry point
 ├── cli_cmds/               # Command handling, console output (Rich)
+│   ├── cmd_init.py         # Init orchestrator + Python-specific setup
+│   ├── init_config.py      # Config types, validation, writing, shared UI helpers
+│   ├── init_auth.py        # API key management + GitHub app installation
+│   ├── github_workflow.py  # GitHub Actions workflow generation
+│   ├── init_javascript.py  # JavaScript/TypeScript project initialization
+│   └── oauth_handler.py    # OAuth PKCE flow for CodeFlash authentication
 ├── discovery/              # Find optimizable functions
 ├── optimization/           # Generate optimized code via AI
-│   ├── optimizer.py        # Main optimization orchestration
-│   └── function_optimizer.py  # Per-function optimization logic
+│   └── optimizer.py        # Main optimization orchestration
 ├── verification/           # Run deterministic tests (pytest plugin)
 ├── benchmarking/           # Performance measurement
 ├── github/                 # PR creation
@@ -20,12 +25,16 @@ codeflash/
 │   ├── base.py                    # LanguageSupport protocol and shared data types
 │   ├── registry.py                # Language registration and lookup by extension/enum
 │   ├── current.py                 # Current language singleton (set_current_language / current_language_support)
+│   ├── function_optimizer.py       # FunctionOptimizer base class for per-function optimization
 │   ├── code_replacer.py           # Language-agnostic code replacement
 │   ├── python/
 │   │   ├── support.py             # PythonSupport (LanguageSupport implementation)
 │   │   ├── function_optimizer.py  # PythonFunctionOptimizer subclass
 │   │   ├── optimizer.py           # Python module preparation & AST resolution
-│   │   └── normalizer.py          # Python code normalization for deduplication
+│   │   ├── normalizer.py          # Python code normalization for deduplication
+│   │   ├── test_runner.py         # Test subprocess execution for Python
+│   │   ├── instrument_codeflash_capture.py  # Instrument __init__ with capture decorators
+│   │   └── parse_line_profile_test_output.py  # Parse line profiler output
 │   └── javascript/
 │       ├── support.py             # JavaScriptSupport (LanguageSupport implementation)
 │       ├── function_optimizer.py  # JavaScriptFunctionOptimizer subclass
@@ -46,9 +55,9 @@ codeflash/
 
 | Task | Start here |
 |------|------------|
-| CLI arguments & commands | `cli_cmds/cli.py` |
+| CLI arguments & commands | `cli_cmds/cli.py` (parsing), `main.py` (subcommand dispatch) |
 | Optimization orchestration | `optimization/optimizer.py` → `run()` |
-| Per-function optimization | `optimization/function_optimizer.py` (base), `languages/python/function_optimizer.py`, `languages/javascript/function_optimizer.py` |
+| Per-function optimization | `languages/function_optimizer.py` (base), `languages/python/function_optimizer.py`, `languages/javascript/function_optimizer.py` |
 | Function discovery | `discovery/functions_to_optimize.py` |
 | Context extraction | `languages/<lang>/context/code_context_extractor.py` |
 | Test execution | `languages/<lang>/support.py` (`run_behavioral_tests`, etc.), `verification/pytest_plugin.py` |

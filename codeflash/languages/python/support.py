@@ -1051,8 +1051,8 @@ class PythonSupport:
         from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
         from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
         from codeflash.languages.python.static_analysis.coverage_utils import prepare_coverage_files
+        from codeflash.languages.python.test_runner import execute_test_subprocess
         from codeflash.models.models import TestType
-        from codeflash.verification.test_runner import execute_test_subprocess
 
         blocklisted_plugins = ["benchmark", "codspeed", "xdist", "sugar"]
 
@@ -1156,7 +1156,7 @@ class PythonSupport:
 
         from codeflash.code_utils.code_utils import get_run_tmp_file
         from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
-        from codeflash.verification.test_runner import execute_test_subprocess
+        from codeflash.languages.python.test_runner import execute_test_subprocess
 
         blocklisted_plugins = ["codspeed", "cov", "benchmark", "profiling", "xdist", "sugar"]
 
@@ -1200,7 +1200,7 @@ class PythonSupport:
         from codeflash.code_utils.code_utils import get_run_tmp_file
         from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
         from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
-        from codeflash.verification.test_runner import execute_test_subprocess
+        from codeflash.languages.python.test_runner import execute_test_subprocess
 
         blocklisted_plugins = ["codspeed", "cov", "benchmark", "profiling", "xdist", "sugar"]
 

@@ -678,7 +678,7 @@ class LanguageSupport(Protocol):
     @property
     def function_optimizer_class(self) -> type:
         """Return the FunctionOptimizer subclass for this language."""
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
+        from codeflash.languages.function_optimizer import FunctionOptimizer
 
         return FunctionOptimizer
 

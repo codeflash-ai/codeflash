@@ -3,7 +3,7 @@ from pathlib import Path
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent
-from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
+from codeflash.languages.python.instrument_codeflash_capture import instrument_codeflash_capture
 
 
 def test_add_codeflash_capture():
