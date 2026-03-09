@@ -2675,12 +2675,15 @@ class FunctionOptimizer:
                         logger.debug(
                             f"[PIPELINE] Test file {idx}: behavior={tf.instrumented_behavior_file_path}, perf={tf.benchmarking_file_path}"
                         )
+                    total_looping_time = (
+                        TOTAL_LOOPING_TIME_EFFECTIVE / 2 if is_subagent_mode() else TOTAL_LOOPING_TIME_EFFECTIVE
+                    )
                     behavioral_results, coverage_results = self.run_and_parse_tests(
                         testing_type=TestingMode.BEHAVIOR,
                         test_env=test_env,
                         test_files=self.test_files,
                         optimization_iteration=0,
-                        testing_time=TOTAL_LOOPING_TIME_EFFECTIVE,
+                        testing_time=total_looping_time,
                         enable_coverage=True,
                         code_context=code_context,
                     )
@@ -2689,33 +2692,6 @@ class FunctionOptimizer:
                     self.write_code_and_helpers(
                         self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                     )
-        # Instrument codeflash capture
-        with progress_bar("Running tests to establish original code behavior..."):
-            try:
-                self.instrument_capture(file_path_to_helper_classes)
-
-                total_looping_time = (
-                    TOTAL_LOOPING_TIME_EFFECTIVE / 2 if is_subagent_mode() else TOTAL_LOOPING_TIME_EFFECTIVE
-                )
-                logger.debug(f"[PIPELINE] Establishing baseline with {len(self.test_files)} test files")
-                for idx, tf in enumerate(self.test_files):
-                    logger.debug(
-                        f"[PIPELINE] Test file {idx}: behavior={tf.instrumented_behavior_file_path}, perf={tf.benchmarking_file_path}"
-                    )
-                behavioral_results, coverage_results = self.run_and_parse_tests(
-                    testing_type=TestingMode.BEHAVIOR,
-                    test_env=test_env,
-                    test_files=self.test_files,
-                    optimization_iteration=0,
-                    testing_time=total_looping_time,
-                    enable_coverage=True,
-                    code_context=code_context,
-                )
-            finally:
-                # Remove codeflash capture
-                self.write_code_and_helpers(
-                    self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
-                )
         if not behavioral_results:
             logger.warning(
                 f"force_lsp|Couldn't run any tests for original function {self.function_to_optimize.function_name}. Skipping optimization."
