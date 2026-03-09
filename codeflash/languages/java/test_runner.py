@@ -2847,6 +2847,7 @@ def get_test_run_command(project_root: Path, test_classes: list[str] | None = No
 
     return cmd
 
+
 _MAVEN_STRATEGY = MavenStrategy()
 
 _GRADLE_STRATEGY = GradleStrategy()
