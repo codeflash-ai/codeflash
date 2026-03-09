@@ -1272,18 +1272,6 @@ def get_test_run_command(project_root: Path, test_classes: list[str] | None = No
     return cmd
 
 
-
-
-
-# Cache wrapper for repeated path -> class name conversions.
-# Using POSIX path string as cache key to make caching stable across Path objects.
-@lru_cache(maxsize=2048)
-def _cached_path_to_class_name(path_posix: str) -> str | None:
-    return _path_to_class_name(Path(path_posix))
-
-
-
-
 # Cache wrapper for repeated path -> class name conversions.
 # Using POSIX path string as cache key to make caching stable across Path objects.
 @lru_cache(maxsize=2048)
