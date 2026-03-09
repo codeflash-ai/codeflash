@@ -107,6 +107,12 @@ def parse_args() -> Namespace:
     parser.add_argument("--no-draft", default=False, action="store_true", help="Skip optimization for draft PRs")
     parser.add_argument("--worktree", default=False, action="store_true", help="Use worktree for optimization")
     parser.add_argument(
+        "--testgen-review", default=False, action="store_true", help="Enable AI review and repair of generated tests"
+    )
+    parser.add_argument(
+        "--testgen-review-turns", type=int, default=None, help="Number of review/repair cycles (default: 2)"
+    )
+    parser.add_argument(
         "--async",
         default=False,
         action="store_true",
@@ -201,12 +207,6 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
         args.replay_test = [Path(replay_test).resolve() for replay_test in args.replay_test]
         if env_utils.is_ci():
             args.no_pr = True
-
-    if getattr(args, "async", False):
-        logger.warning(
-            "The --async flag is deprecated and will be removed in a future version. "
-            "Async function optimization is now enabled by default."
-        )
 
     return args
 

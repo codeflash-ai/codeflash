@@ -690,22 +690,9 @@ def get_js_codeflash_install_step(pkg_manager: JsPackageManager, *, is_dependenc
         # Codeflash will be installed with other dependencies
         return ""
 
-    # Need to install codeflash separately
-    if pkg_manager == JsPackageManager.BUN:
-        return """- name: 📥 Install Codeflash
-        run: bun add -g codeflash"""
-
-    if pkg_manager == JsPackageManager.PNPM:
-        return """- name: 📥 Install Codeflash
-        run: pnpm add -g codeflash"""
-
-    if pkg_manager == JsPackageManager.YARN:
-        return """- name: 📥 Install Codeflash
-        run: yarn global add codeflash"""
-
-    # NPM or UNKNOWN
+    # Install codeflash via uv (Python + uv are set up in the workflow)
     return """- name: 📥 Install Codeflash
-        run: npm install -g codeflash"""
+        run: uv tool install codeflash"""
 
 
 def get_js_codeflash_run_command(pkg_manager: JsPackageManager, *, is_dependency: bool) -> str:
