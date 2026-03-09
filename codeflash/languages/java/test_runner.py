@@ -325,8 +325,8 @@ class GradleStrategy(BuildToolStrategy):
 
 def _get_strategy(build_tool: BuildTool) -> BuildToolStrategy:
     if build_tool == BuildTool.GRADLE:
-        return GradleStrategy()
-    return MavenStrategy()
+        return _GRADLE_STRATEGY
+    return _MAVEN_STRATEGY
 
 
 def _run_cmd_kill_pg_on_timeout(
@@ -2846,3 +2846,7 @@ def get_test_run_command(project_root: Path, test_classes: list[str] | None = No
         cmd.append(f"-Dtest={','.join(validated_classes)}")
 
     return cmd
+
+_MAVEN_STRATEGY = MavenStrategy()
+
+_GRADLE_STRATEGY = GradleStrategy()
