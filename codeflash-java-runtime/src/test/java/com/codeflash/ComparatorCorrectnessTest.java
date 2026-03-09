@@ -54,8 +54,8 @@ class ComparatorCorrectnessTest {
             KryoPlaceholder.create(new Object(), "unserializable", "root")
         );
 
-        insertRow(originalDb, "iter_1_0", 1, placeholderBytes);
-        insertRow(candidateDb, "iter_1_1", 1, placeholderBytes);
+        insertRow(originalDb, 1, 1, placeholderBytes);
+        insertRow(candidateDb, 1, 1, placeholderBytes);
 
         String json = Comparator.compareDatabases(originalDb.toString(), candidateDb.toString());
         Map<String, Object> result = parseJson(json);
@@ -74,8 +74,8 @@ class ComparatorCorrectnessTest {
         // Insert corrupted byte data that will fail Kryo deserialization
         byte[] corruptedBytes = new byte[]{0x01, 0x02, 0x03, (byte) 0xFF, (byte) 0xFE};
 
-        insertRow(originalDb, "iter_1_0", 1, corruptedBytes);
-        insertRow(candidateDb, "iter_1_1", 1, corruptedBytes);
+        insertRow(originalDb, 1, 1, corruptedBytes);
+        insertRow(candidateDb, 1, 1, corruptedBytes);
 
         String json = Comparator.compareDatabases(originalDb.toString(), candidateDb.toString());
         Map<String, Object> result = parseJson(json);
@@ -97,12 +97,12 @@ class ComparatorCorrectnessTest {
             KryoPlaceholder.create(new Object(), "unserializable", "root")
         );
 
-        insertRow(originalDb, "iter_1_0", 1, realBytes1);
-        insertRow(candidateDb, "iter_1_1", 1, realBytes1);
-        insertRow(originalDb, "iter_2_0", 1, realBytes2);
-        insertRow(candidateDb, "iter_2_1", 1, realBytes2);
-        insertRow(originalDb, "iter_3_0", 1, placeholderBytes);
-        insertRow(candidateDb, "iter_3_1", 1, placeholderBytes);
+        insertRow(originalDb, 1, 1, realBytes1);
+        insertRow(candidateDb, 1, 1, realBytes1);
+        insertRow(originalDb, 2, 1, realBytes2);
+        insertRow(candidateDb, 2, 1, realBytes2);
+        insertRow(originalDb, 3, 1, placeholderBytes);
+        insertRow(candidateDb, 3, 1, placeholderBytes);
 
         String json = Comparator.compareDatabases(originalDb.toString(), candidateDb.toString());
         Map<String, Object> result = parseJson(json);
@@ -121,10 +121,10 @@ class ComparatorCorrectnessTest {
         byte[] bytes1 = Serializer.serialize(100);
         byte[] bytes2 = Serializer.serialize("world");
 
-        insertRow(originalDb, "iter_1_0", 1, bytes1);
-        insertRow(candidateDb, "iter_1_1", 1, bytes1);
-        insertRow(originalDb, "iter_2_0", 1, bytes2);
-        insertRow(candidateDb, "iter_2_1", 1, bytes2);
+        insertRow(originalDb, 1, 1, bytes1);
+        insertRow(candidateDb, 1, 1, bytes1);
+        insertRow(originalDb, 2, 1, bytes2);
+        insertRow(candidateDb, 2, 1, bytes2);
 
         String json = Comparator.compareDatabases(originalDb.toString(), candidateDb.toString());
         Map<String, Object> result = parseJson(json);
@@ -144,8 +144,8 @@ class ComparatorCorrectnessTest {
         byte[] origBytes = Serializer.serialize(42);
         byte[] candBytes = Serializer.serialize(99);
 
-        insertRow(originalDb, "iter_1_0", 1, origBytes);
-        insertRow(candidateDb, "iter_1_1", 1, candBytes);
+        insertRow(originalDb, 1, 1, origBytes);
+        insertRow(candidateDb, 1, 1, candBytes);
 
         String json = Comparator.compareDatabases(originalDb.toString(), candidateDb.toString());
         Map<String, Object> result = parseJson(json);
@@ -161,8 +161,8 @@ class ComparatorCorrectnessTest {
         createTestDb(candidateDb);
 
         // Insert rows with NULL return_value (void methods)
-        insertRow(originalDb, "iter_1_0", 1, null);
-        insertRow(candidateDb, "iter_1_1", 1, null);
+        insertRow(originalDb, 1, 1, null);
+        insertRow(candidateDb, 1, 1, null);
 
         String json = Comparator.compareDatabases(originalDb.toString(), candidateDb.toString());
         Map<String, Object> result = parseJson(json);
@@ -178,7 +178,7 @@ class ComparatorCorrectnessTest {
         createTestDb(candidateDb);
 
         byte[] bytes = Serializer.serialize(42);
-        insertRow(originalDb, "iter_1_0", 1, bytes);
+        insertRow(originalDb, 1, 1, bytes);
         // candidateDb has no rows
 
         String json = Comparator.compareDatabases(originalDb.toString(), candidateDb.toString());
@@ -216,21 +216,29 @@ class ComparatorCorrectnessTest {
         try (Connection conn = DriverManager.getConnection(url);
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE IF NOT EXISTS test_results ("
-                + "iteration_id TEXT NOT NULL, "
-                + "loop_index INTEGER NOT NULL, "
+                + "test_module_path TEXT, "
+                + "test_class_name TEXT, "
+                + "test_function_name TEXT, "
+                + "function_getting_tested TEXT, "
+                + "loop_index INTEGER, "
+                + "iteration_id INTEGER, "
+                + "runtime INTEGER, "
                 + "return_value BLOB, "
-                + "PRIMARY KEY (iteration_id, loop_index))");
+                + "verification_type TEXT)");
         }
     }
 
-    private void insertRow(Path dbPath, String iterationId, int loopIndex, byte[] returnValue) throws Exception {
+    private void insertRow(Path dbPath, int iterationId, int loopIndex, byte[] returnValue) throws Exception {
         String url = "jdbc:sqlite:" + dbPath;
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement ps = conn.prepareStatement(
-                 "INSERT INTO test_results (iteration_id, loop_index, return_value) VALUES (?, ?, ?)")) {
-            ps.setString(1, iterationId);
-            ps.setInt(2, loopIndex);
-            ps.setBytes(3, returnValue);
+                 "INSERT INTO test_results (test_module_path, test_class_name, test_function_name, iteration_id, loop_index, return_value) VALUES (?, ?, ?, ?, ?, ?)")) {
+            ps.setString(1, "com.example");
+            ps.setString(2, "TestClass");
+            ps.setString(3, "testMethod");
+            ps.setInt(4, iterationId);
+            ps.setInt(5, loopIndex);
+            ps.setBytes(6, returnValue);
             ps.executeUpdate();
         }
     }
