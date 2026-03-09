@@ -19,6 +19,7 @@ import tempfile
 import uuid
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -890,17 +891,23 @@ def _get_test_class_names(test_paths: Any, mode: str = "performance") -> list[st
         for test_file in test_paths.test_files:
             if mode == "performance":
                 if hasattr(test_file, "benchmarking_file_path") and test_file.benchmarking_file_path:
-                    class_name = _path_to_class_name(test_file.benchmarking_file_path)
+                    # Normalize key for caching: prefer Path.as_posix() when possible.
+                    bp = test_file.benchmarking_file_path
+                    key = bp.as_posix() if isinstance(bp, Path) else str(bp)
+                    class_name = _cached_path_to_class_name(key)
                     if class_name:
                         class_names.append(class_name)
             elif hasattr(test_file, "instrumented_behavior_file_path") and test_file.instrumented_behavior_file_path:
-                class_name = _path_to_class_name(test_file.instrumented_behavior_file_path)
+                ibp = test_file.instrumented_behavior_file_path
+                key = ibp.as_posix() if isinstance(ibp, Path) else str(ibp)
+                class_name = _cached_path_to_class_name(key)
                 if class_name:
                     class_names.append(class_name)
     elif isinstance(test_paths, (list, tuple)):
         for path in test_paths:
             if isinstance(path, Path):
-                class_name = _path_to_class_name(path)
+                key = path.as_posix()
+                class_name = _cached_path_to_class_name(key)
                 if class_name:
                     class_names.append(class_name)
             elif isinstance(path, str):
@@ -1263,3 +1270,22 @@ def get_test_run_command(project_root: Path, test_classes: list[str] | None = No
         cmd.append(f"-Dtest={','.join(validated_classes)}")
 
     return cmd
+
+
+
+
+
+# Cache wrapper for repeated path -> class name conversions.
+# Using POSIX path string as cache key to make caching stable across Path objects.
+@lru_cache(maxsize=2048)
+def _cached_path_to_class_name(path_posix: str) -> str | None:
+    return _path_to_class_name(Path(path_posix))
+
+
+
+
+# Cache wrapper for repeated path -> class name conversions.
+# Using POSIX path string as cache key to make caching stable across Path objects.
+@lru_cache(maxsize=2048)
+def _cached_path_to_class_name(path_posix: str) -> str | None:
+    return _path_to_class_name(Path(path_posix))
