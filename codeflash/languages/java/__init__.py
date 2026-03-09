@@ -5,21 +5,19 @@ test execution, and optimization using tree-sitter for parsing and
 Maven/Gradle for build operations.
 """
 
+from codeflash.languages.java.build_tool_strategy import BuildToolStrategy, get_strategy
 from codeflash.languages.java.build_tools import (
     BuildTool,
     JavaProjectInfo,
     MavenTestResult,
     add_codeflash_dependency_to_pom,
-    compile_maven_project,
     detect_build_tool,
     find_gradle_executable,
     find_maven_executable,
     find_source_root,
     find_test_root,
-    get_classpath,
     get_project_info,
     install_codeflash_runtime,
-    run_maven_tests,
 )
 from codeflash.languages.java.comparator import compare_invocations_directly, compare_test_results
 from codeflash.languages.java.config import (
@@ -103,6 +101,7 @@ from codeflash.languages.java.test_runner import (
 __all__ = [
     # Build tools
     "BuildTool",
+    "BuildToolStrategy",
     # Parser
     "JavaAnalyzer",
     # Assertion removal
@@ -132,7 +131,6 @@ __all__ = [
     # Comparator
     "compare_invocations_directly",
     "compare_test_results",
-    "compile_maven_project",
     # Instrumentation
     "create_benchmark_test",
     "detect_build_tool",
@@ -158,11 +156,11 @@ __all__ = [
     "format_java_code",
     "format_java_file",
     "get_class_methods",
-    "get_classpath",
     "get_java_analyzer",
     "get_java_support",
     "get_method_by_name",
     "get_project_info",
+    "get_strategy",
     "get_test_class_for_source_class",
     "get_test_class_pattern",
     "get_test_file_pattern",
@@ -189,7 +187,6 @@ __all__ = [
     "resolve_imports_for_file",
     "run_behavioral_tests",
     "run_benchmarking_tests",
-    "run_maven_tests",
     "run_tests",
     "transform_java_assertions",
 ]

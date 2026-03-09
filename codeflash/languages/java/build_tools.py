@@ -7,7 +7,6 @@ This module provides functionality to detect and work with Java build tools
 from __future__ import annotations
 
 import logging
-import os
 import re
 import shutil
 import subprocess
@@ -358,124 +357,8 @@ def find_gradle_executable(project_root: Path | None = None) -> str | None:
     return None
 
 
-def run_maven_tests(
-    project_root: Path,
-    test_classes: list[str] | None = None,
-    test_methods: list[str] | None = None,
-    env: dict[str, str] | None = None,
-    timeout: int = 300,
-    skip_compilation: bool = False,
-) -> MavenTestResult:
-    """Run Maven tests using Surefire.
-
-    Args:
-        project_root: Root directory of the Maven project.
-        test_classes: Optional list of test class names to run.
-        test_methods: Optional list of specific test methods (format: ClassName#methodName).
-        env: Optional environment variables.
-        timeout: Maximum time in seconds for test execution.
-        skip_compilation: Whether to skip compilation (useful when only running tests).
-
-    Returns:
-        MavenTestResult with test execution results.
-
-    """
-    mvn = find_maven_executable()
-    if not mvn:
-        logger.error("Maven not found. Please install Maven or use Maven wrapper.")
-        return MavenTestResult(
-            success=False,
-            tests_run=0,
-            failures=0,
-            errors=0,
-            skipped=0,
-            surefire_reports_dir=None,
-            stdout="",
-            stderr="Maven not found",
-            returncode=-1,
-        )
-
-    # Build Maven command
-    cmd = [mvn]
-
-    if skip_compilation:
-        cmd.append("-Dmaven.test.skip=false")
-        cmd.append("-DskipTests=false")
-        cmd.append("surefire:test")
-    else:
-        cmd.append("test")
-
-    # Add test filtering
-    if test_classes or test_methods:
-        if test_methods:
-            # Format: -Dtest=ClassName#method1+method2,OtherClass#method3
-            tests = ",".join(test_methods)
-        elif test_classes:
-            tests = ",".join(test_classes)
-        cmd.extend(["-Dtest=" + tests])
-
-    # Fail at end to run all tests; -B for batch mode (no ANSI colors)
-    cmd.extend(["-fae", "-B"])
-
-    # Use full environment with optional overrides
-    run_env = os.environ.copy()
-    if env:
-        run_env.update(env)
-
-    try:
-        result = subprocess.run(
-            cmd, check=False, cwd=project_root, env=run_env, capture_output=True, text=True, timeout=timeout
-        )
-
-        # Parse test results from Surefire reports
-        surefire_dir = project_root / "target" / "surefire-reports"
-        tests_run, failures, errors, skipped = _parse_surefire_reports(surefire_dir)
-
-        return MavenTestResult(
-            success=result.returncode == 0,
-            tests_run=tests_run,
-            failures=failures,
-            errors=errors,
-            skipped=skipped,
-            surefire_reports_dir=surefire_dir if surefire_dir.exists() else None,
-            stdout=result.stdout,
-            stderr=result.stderr,
-            returncode=result.returncode,
-        )
-
-    except subprocess.TimeoutExpired:
-        logger.exception("Maven test execution timed out after %d seconds", timeout)
-        return MavenTestResult(
-            success=False,
-            tests_run=0,
-            failures=0,
-            errors=0,
-            skipped=0,
-            surefire_reports_dir=None,
-            stdout="",
-            stderr=f"Test execution timed out after {timeout} seconds",
-            returncode=-2,
-        )
-    except Exception as e:
-        logger.exception("Maven test execution failed: %s", e)
-        return MavenTestResult(
-            success=False,
-            tests_run=0,
-            failures=0,
-            errors=0,
-            skipped=0,
-            surefire_reports_dir=None,
-            stdout="",
-            stderr=str(e),
-            returncode=-1,
-        )
-
-
 def _parse_surefire_reports(surefire_dir: Path) -> tuple[int, int, int, int]:
     """Parse Surefire XML reports to get test counts.
-
-    Args:
-        surefire_dir: Directory containing Surefire XML reports.
 
     Returns:
         Tuple of (tests_run, failures, errors, skipped).
@@ -494,7 +377,6 @@ def _parse_surefire_reports(surefire_dir: Path) -> tuple[int, int, int, int]:
             tree = _safe_parse_xml(xml_file)
             root = tree.getroot()
 
-            # Safely parse numeric attributes with validation
             try:
                 tests_run += int(root.get("tests", "0"))
             except (ValueError, TypeError):
@@ -521,52 +403,6 @@ def _parse_surefire_reports(surefire_dir: Path) -> tuple[int, int, int, int]:
             logger.warning("Unexpected error parsing Surefire report %s: %s", xml_file, e)
 
     return tests_run, failures, errors, skipped
-
-
-def compile_maven_project(
-    project_root: Path, include_tests: bool = True, env: dict[str, str] | None = None, timeout: int = 300
-) -> tuple[bool, str, str]:
-    """Compile a Maven project.
-
-    Args:
-        project_root: Root directory of the Maven project.
-        include_tests: Whether to compile test classes as well.
-        env: Optional environment variables.
-        timeout: Maximum time in seconds for compilation.
-
-    Returns:
-        Tuple of (success, stdout, stderr).
-
-    """
-    mvn = find_maven_executable()
-    if not mvn:
-        return False, "", "Maven not found"
-
-    cmd = [mvn]
-
-    if include_tests:
-        cmd.append("test-compile")
-    else:
-        cmd.append("compile")
-
-    # Skip test execution; -B for batch mode (no ANSI colors)
-    cmd.extend(["-DskipTests", "-B"])
-
-    run_env = os.environ.copy()
-    if env:
-        run_env.update(env)
-
-    try:
-        result = subprocess.run(
-            cmd, check=False, cwd=project_root, env=run_env, capture_output=True, text=True, timeout=timeout
-        )
-
-        return result.returncode == 0, result.stdout, result.stderr
-
-    except subprocess.TimeoutExpired:
-        return False, "", f"Compilation timed out after {timeout} seconds"
-    except Exception as e:
-        return False, "", str(e)
 
 
 def install_codeflash_runtime(project_root: Path, runtime_jar_path: Path) -> bool:
@@ -980,61 +816,4 @@ def find_source_root(project_root: Path) -> Path | None:
         if src_path.exists() and any(src_path.rglob("*.java")):
             return src_path
 
-    return None
-
-
-def get_classpath(project_root: Path) -> str | None:
-    """Get the classpath for a Java project.
-
-    For Maven projects, this runs 'mvn dependency:build-classpath'.
-
-    Args:
-        project_root: Root directory of the Java project.
-
-    Returns:
-        Classpath string, or None if unable to determine.
-
-    """
-    build_tool = detect_build_tool(project_root)
-
-    if build_tool == BuildTool.MAVEN:
-        return _get_maven_classpath(project_root)
-    if build_tool == BuildTool.GRADLE:
-        return _get_gradle_classpath(project_root)
-
-    return None
-
-
-def _get_maven_classpath(project_root: Path) -> str | None:
-    """Get classpath from Maven."""
-    mvn = find_maven_executable()
-    if not mvn:
-        return None
-
-    try:
-        result = subprocess.run(
-            [mvn, "dependency:build-classpath", "-q", "-DincludeScope=test", "-B"],
-            check=False,
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-
-        if result.returncode == 0:
-            # The classpath is in stdout
-            return result.stdout.strip()
-
-    except Exception as e:
-        logger.warning("Failed to get Maven classpath: %s", e)
-
-    return None
-
-
-def _get_gradle_classpath(project_root: Path) -> str | None:
-    """Get classpath from Gradle.
-
-    Note: This requires a custom task to be added to build.gradle.
-    Returns None for now as Gradle support is not fully implemented.
-    """
     return None
