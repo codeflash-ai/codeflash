@@ -1018,16 +1018,18 @@ class FunctionOptimizer:
             runtimes_list.append(new_best_opt.runtime)
 
         if len(optimization_ids) > 1:
-            future_ranking = self.executor.submit(
-                ai_service_client.generate_ranking,
-                diffs=diff_strs,
-                optimization_ids=optimization_ids,
-                speedups=speedups_list,
-                trace_id=self.get_trace_id(exp_type),
-                function_references=function_references,
-            )
-            concurrent.futures.wait([future_ranking])
-            ranking = future_ranking.result()
+            ranking = None
+            if not is_subagent_mode():
+                future_ranking = self.executor.submit(
+                    ai_service_client.generate_ranking,
+                    diffs=diff_strs,
+                    optimization_ids=optimization_ids,
+                    speedups=speedups_list,
+                    trace_id=self.get_trace_id(exp_type),
+                    function_references=function_references,
+                )
+                concurrent.futures.wait([future_ranking])
+                ranking = future_ranking.result()
             if ranking:
                 min_key = ranking[0]
             else:
@@ -2390,6 +2392,25 @@ class FunctionOptimizer:
         code_context: CodeOptimizationContext,
         function_references: str,
     ) -> None:
+        if is_subagent_mode():
+            subagent_log_optimization_result(
+                function_name=explanation.function_name,
+                file_path=explanation.file_path,
+                perf_improvement_line=explanation.perf_improvement_line,
+                original_runtime_ns=explanation.original_runtime_ns,
+                best_runtime_ns=explanation.best_runtime_ns,
+                raw_explanation=explanation.raw_explanation_message,
+                original_code=original_code_combined,
+                new_code=new_code_combined,
+                review="",
+                test_results=explanation.winning_behavior_test_results,
+                project_root=self.project_root,
+            )
+            mark_optimization_success(
+                trace_id=self.function_trace_id, is_optimization_found=best_optimization is not None
+            )
+            return
+
         coverage_message = (
             original_code_baseline.coverage_results.build_message()
             if original_code_baseline.coverage_results
@@ -2537,20 +2558,7 @@ class FunctionOptimizer:
         self.optimization_review = opt_review_result.review
 
         # Display the reviewer result to the user
-        if is_subagent_mode():
-            subagent_log_optimization_result(
-                function_name=new_explanation.function_name,
-                file_path=new_explanation.file_path,
-                perf_improvement_line=new_explanation.perf_improvement_line,
-                original_runtime_ns=new_explanation.original_runtime_ns,
-                best_runtime_ns=new_explanation.best_runtime_ns,
-                raw_explanation=new_explanation.raw_explanation_message,
-                original_code=original_code_combined,
-                new_code=new_code_combined,
-                review=opt_review_result.review,
-                test_results=new_explanation.winning_behavior_test_results,
-            )
-        elif opt_review_result.review:
+        if opt_review_result.review:
             review_display = {
                 "high": ("[bold green]High[/bold green]", "green", "Recommended to merge"),
                 "medium": ("[bold yellow]Medium[/bold yellow]", "yellow", "Review recommended before merging"),
@@ -2667,12 +2675,15 @@ class FunctionOptimizer:
                         logger.debug(
                             f"[PIPELINE] Test file {idx}: behavior={tf.instrumented_behavior_file_path}, perf={tf.benchmarking_file_path}"
                         )
+                    total_looping_time = (
+                        TOTAL_LOOPING_TIME_EFFECTIVE / 2 if is_subagent_mode() else TOTAL_LOOPING_TIME_EFFECTIVE
+                    )
                     behavioral_results, coverage_results = self.run_and_parse_tests(
                         testing_type=TestingMode.BEHAVIOR,
                         test_env=test_env,
                         test_files=self.test_files,
                         optimization_iteration=0,
-                        testing_time=TOTAL_LOOPING_TIME_EFFECTIVE,
+                        testing_time=total_looping_time,
                         enable_coverage=True,
                         code_context=code_context,
                     )
@@ -2713,6 +2724,7 @@ class FunctionOptimizer:
                 self.instrument_async_for_mode(TestingMode.PERFORMANCE)
 
             try:
+                subagent = is_subagent_mode()
                 benchmarking_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.PERFORMANCE,
                     test_env=test_env,
@@ -2721,6 +2733,7 @@ class FunctionOptimizer:
                     testing_time=TOTAL_LOOPING_TIME_EFFECTIVE,
                     enable_coverage=False,
                     code_context=code_context,
+                    **({"pytest_min_loops": 3, "pytest_max_loops": 100} if subagent else {}),
                 )
                 logger.debug(f"[BENCHMARK-DONE] Got {len(benchmarking_results.test_results)} benchmark results")
             finally:
@@ -2871,6 +2884,10 @@ class FunctionOptimizer:
 
             try:
                 self.instrument_capture(file_path_to_helper_classes)
+
+                total_looping_time = (
+                    TOTAL_LOOPING_TIME_EFFECTIVE / 2 if is_subagent_mode() else TOTAL_LOOPING_TIME_EFFECTIVE
+                )
                 candidate_behavior_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.BEHAVIOR,
                     test_env=test_env,
@@ -2911,6 +2928,7 @@ class FunctionOptimizer:
                 self.instrument_async_for_mode(TestingMode.PERFORMANCE)
 
             try:
+                subagent = is_subagent_mode()
                 candidate_benchmarking_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.PERFORMANCE,
                     test_env=test_env,
@@ -2918,6 +2936,7 @@ class FunctionOptimizer:
                     optimization_iteration=optimization_candidate_index,
                     testing_time=TOTAL_LOOPING_TIME_EFFECTIVE,
                     enable_coverage=False,
+                    **({"pytest_min_loops": 3, "pytest_max_loops": 100} if subagent else {}),
                 )
             finally:
                 if self.function_to_optimize.is_async:
