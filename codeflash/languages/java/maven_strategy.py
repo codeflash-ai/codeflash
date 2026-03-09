@@ -22,6 +22,8 @@ from codeflash.languages.java.build_tools import (
     is_jacoco_configured,
 )
 
+_TARGET = "target"
+
 logger = logging.getLogger(__name__)
 
 # Skip validation/analysis plugins that reject generated instrumented files
@@ -238,8 +240,8 @@ class MavenStrategy(BuildToolStrategy):
 
     def get_build_output_dir(self, build_root: Path, test_module: str | None) -> Path:
         if test_module:
-            return build_root / test_module / "target"
-        return build_root / "target"
+            return build_root.joinpath(test_module, _TARGET)
+        return build_root.joinpath(_TARGET)
 
     def run_tests_via_build_tool(
         self,
