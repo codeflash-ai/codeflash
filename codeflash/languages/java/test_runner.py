@@ -169,12 +169,17 @@ def _validate_test_filter(test_filter: str) -> str:
     Test filters can contain commas (multiple classes) and wildcards (*).
     This function validates the format to prevent command injection.
     """
-    patterns = [p.strip() for p in test_filter.split(",")]
+    # Iterate over comma-separated parts without building an intermediate list.
+    for raw in test_filter.split(","):
+        pattern = raw.strip()
 
-    for pattern in patterns:
-        name_to_validate = pattern.replace("*", "A")
+        # Avoid allocating a new string if there is no wildcard.
+        if "*" in pattern:
+            name_to_validate = pattern.replace("*", "A")
+        else:
+            name_to_validate = pattern
 
-        if not _validate_java_class_name(name_to_validate):
+        if _VALID_JAVA_CLASS_NAME.match(name_to_validate) is None:
             msg = (
                 f"Invalid test class name or pattern: '{pattern}'. "
                 f"Test names must follow Java identifier rules (letters, digits, underscores, dots, dollar signs)."
