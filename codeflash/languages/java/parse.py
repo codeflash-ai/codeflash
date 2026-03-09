@@ -128,13 +128,17 @@ def parse_java_test_xml(
             if class_name is not None and class_name.startswith(test_module_path):
                 test_class = class_name[len(test_module_path) + 1 :]
 
-            loop_index = int(testcase.name.split("[ ")[-1][:-2]) if testcase.name and "[" in testcase.name else 1
+            loop_index = 1
+            if testcase.name and "[" in testcase.name:
+                bracket_match = re.search(r"\[(\d+)\]", testcase.name)
+                if bracket_match:
+                    loop_index = int(bracket_match.group(1))
 
             timed_out = False
             if len(testcase.result) > 1:
                 logger.debug(f"!!!!!Multiple results for {testcase.name or '<None>'} in {test_xml_file_path}!!!")
             if len(testcase.result) == 1:
-                message = testcase.result[0].message.lower()
+                message = testcase.result[0]._elem.get("message", "").lower()
                 if "failed: timeout >" in message or "timed out" in message:
                     timed_out = True
 

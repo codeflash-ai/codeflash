@@ -17,6 +17,7 @@ import sys
 import tempfile
 import uuid
 import xml.etree.ElementTree as ET
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -69,6 +70,255 @@ _MAVEN_VALIDATION_SKIP_FLAGS = [
     "-Denforcer.skip=true",
     "-Djapicmp.skip=true",
 ]
+
+
+class BuildToolStrategy(ABC):
+    """Strategy interface for build-tool-specific operations (Maven vs Gradle)."""
+
+    @abstractmethod
+    def ensure_runtime(self, build_root: Path, test_module: str | None) -> bool:
+        ...
+
+    @abstractmethod
+    def install_multi_module_deps(self, build_root: Path, test_module: str | None, env: dict[str, str]) -> None:
+        ...
+
+    @abstractmethod
+    def compile_tests(
+        self, build_root: Path, env: dict[str, str], test_module: str | None, timeout: int = 120
+    ) -> subprocess.CompletedProcess:
+        ...
+
+    @abstractmethod
+    def get_classpath_cached(
+        self, build_root: Path, env: dict[str, str], test_module: str | None, timeout: int = 60
+    ) -> str | None:
+        ...
+
+    @abstractmethod
+    def get_reports_dir(self, build_root: Path, test_module: str | None) -> Path:
+        ...
+
+    @abstractmethod
+    def run_tests_fallback(
+        self,
+        build_root: Path,
+        test_paths: Any,
+        env: dict[str, str],
+        timeout: int,
+        mode: str,
+        test_module: str | None,
+        javaagent_arg: str | None = None,
+    ) -> subprocess.CompletedProcess:
+        ...
+
+    @abstractmethod
+    def run_benchmarking_fallback(
+        self,
+        test_paths: Any,
+        test_env: dict[str, str],
+        cwd: Path,
+        timeout: int | None,
+        project_root: Path | None,
+        min_loops: int,
+        max_loops: int,
+        target_duration_seconds: float,
+        inner_iterations: int,
+    ) -> tuple[Path, Any]:
+        ...
+
+    @abstractmethod
+    def run_tests_coverage(
+        self,
+        build_root: Path,
+        test_module: str | None,
+        test_paths: Any,
+        run_env: dict[str, str],
+        timeout: int,
+        candidate_index: int,
+    ) -> tuple[subprocess.CompletedProcess, Path]:
+        ...
+
+    @abstractmethod
+    def setup_coverage(
+        self, build_root: Path, test_module: str | None, project_root: Path
+    ) -> Path | None:
+        ...
+
+    @property
+    @abstractmethod
+    def default_cmd_name(self) -> str:
+        ...
+
+
+class MavenStrategy(BuildToolStrategy):
+    def ensure_runtime(self, build_root: Path, test_module: str | None) -> bool:
+        return _ensure_codeflash_runtime(build_root, test_module)
+
+    def install_multi_module_deps(self, build_root: Path, test_module: str | None, env: dict[str, str]) -> None:
+        ensure_multi_module_deps_installed(build_root, test_module, env)
+
+    def compile_tests(
+        self, build_root: Path, env: dict[str, str], test_module: str | None, timeout: int = 120
+    ) -> subprocess.CompletedProcess:
+        return _compile_tests(build_root, env, test_module, timeout)
+
+    def get_classpath_cached(
+        self, build_root: Path, env: dict[str, str], test_module: str | None, timeout: int = 60
+    ) -> str | None:
+        return _get_test_classpath_cached(build_root, env, test_module, timeout)
+
+    def get_reports_dir(self, build_root: Path, test_module: str | None) -> Path:
+        target_dir = _get_test_module_target_dir(build_root, test_module)
+        return target_dir / "surefire-reports"
+
+    def run_tests_fallback(
+        self,
+        build_root: Path,
+        test_paths: Any,
+        env: dict[str, str],
+        timeout: int,
+        mode: str,
+        test_module: str | None,
+        javaagent_arg: str | None = None,
+    ) -> subprocess.CompletedProcess:
+        return _run_maven_tests(
+            build_root, test_paths, env, timeout=timeout, mode=mode,
+            test_module=test_module, javaagent_arg=javaagent_arg,
+        )
+
+    def run_benchmarking_fallback(
+        self,
+        test_paths: Any,
+        test_env: dict[str, str],
+        cwd: Path,
+        timeout: int | None,
+        project_root: Path | None,
+        min_loops: int,
+        max_loops: int,
+        target_duration_seconds: float,
+        inner_iterations: int,
+    ) -> tuple[Path, Any]:
+        return _run_benchmarking_tests_maven(
+            test_paths, test_env, cwd, timeout, project_root,
+            min_loops, max_loops, target_duration_seconds, inner_iterations,
+        )
+
+    def run_tests_coverage(
+        self,
+        build_root: Path,
+        test_module: str | None,
+        test_paths: Any,
+        run_env: dict[str, str],
+        timeout: int,
+        candidate_index: int,
+    ) -> tuple[subprocess.CompletedProcess, Path]:
+        result = _run_maven_tests(
+            build_root, test_paths, run_env, timeout=timeout,
+            mode="behavior", enable_coverage=True, test_module=test_module,
+        )
+        reports_dir = self.get_reports_dir(build_root, test_module)
+        result_xml_path = _get_combined_junit_xml(reports_dir, candidate_index)
+        return result, result_xml_path
+
+    def setup_coverage(
+        self, build_root: Path, test_module: str | None, project_root: Path
+    ) -> Path | None:
+        if test_module:
+            test_module_pom = build_root / test_module / "pom.xml"
+            if test_module_pom.exists():
+                if not is_jacoco_configured(test_module_pom):
+                    logger.info("Adding JaCoCo plugin to test module pom.xml: %s", test_module_pom)
+                    add_jacoco_plugin_to_pom(test_module_pom)
+                return get_jacoco_xml_path(build_root / test_module)
+        else:
+            pom_path = project_root / "pom.xml"
+            if pom_path.exists():
+                if not is_jacoco_configured(pom_path):
+                    logger.info("Adding JaCoCo plugin to pom.xml for coverage collection")
+                    add_jacoco_plugin_to_pom(pom_path)
+                return get_jacoco_xml_path(project_root)
+        return None
+
+    @property
+    def default_cmd_name(self) -> str:
+        return "mvn"
+
+
+class GradleStrategy(BuildToolStrategy):
+    def ensure_runtime(self, build_root: Path, test_module: str | None) -> bool:
+        return _ensure_codeflash_runtime_gradle(build_root)
+
+    def install_multi_module_deps(self, build_root: Path, test_module: str | None, env: dict[str, str]) -> None:
+        pass  # Gradle handles dependencies via its own resolution
+
+    def compile_tests(
+        self, build_root: Path, env: dict[str, str], test_module: str | None, timeout: int = 120
+    ) -> subprocess.CompletedProcess:
+        return _compile_tests_gradle(build_root, env, test_module, timeout)
+
+    def get_classpath_cached(
+        self, build_root: Path, env: dict[str, str], test_module: str | None, timeout: int = 60
+    ) -> str | None:
+        return _get_test_classpath_gradle_cached(build_root, env, test_module, timeout)
+
+    def get_reports_dir(self, build_root: Path, test_module: str | None) -> Path:
+        return get_gradle_test_reports_dir(build_root, test_module)
+
+    def run_tests_fallback(
+        self,
+        build_root: Path,
+        test_paths: Any,
+        env: dict[str, str],
+        timeout: int,
+        mode: str,
+        test_module: str | None,
+        javaagent_arg: str | None = None,
+    ) -> subprocess.CompletedProcess:
+        return _run_gradle_tests(build_root, test_paths, env, timeout=timeout, mode=mode, test_module=test_module)
+
+    def run_benchmarking_fallback(
+        self,
+        test_paths: Any,
+        test_env: dict[str, str],
+        cwd: Path,
+        timeout: int | None,
+        project_root: Path | None,
+        min_loops: int,
+        max_loops: int,
+        target_duration_seconds: float,
+        inner_iterations: int,
+    ) -> tuple[Path, Any]:
+        return _run_benchmarking_tests_gradle(
+            test_paths, test_env, cwd, timeout, project_root,
+            min_loops, max_loops, target_duration_seconds, inner_iterations,
+        )
+
+    def run_tests_coverage(
+        self,
+        build_root: Path,
+        test_module: str | None,
+        test_paths: Any,
+        run_env: dict[str, str],
+        timeout: int,
+        candidate_index: int,
+    ) -> tuple[subprocess.CompletedProcess, Path]:
+        return _run_gradle_tests_coverage(build_root, test_module, test_paths, run_env, timeout, candidate_index)
+
+    def setup_coverage(
+        self, build_root: Path, test_module: str | None, project_root: Path
+    ) -> Path | None:
+        return get_jacoco_xml_path_gradle(build_root, test_module)
+
+    @property
+    def default_cmd_name(self) -> str:
+        return "gradle"
+
+
+def _get_strategy(build_tool: BuildTool) -> BuildToolStrategy:
+    if build_tool == BuildTool.GRADLE:
+        return GradleStrategy()
+    return MavenStrategy()
 
 
 def _run_cmd_kill_pg_on_timeout(
@@ -562,21 +812,16 @@ def run_behavioral_tests(
     """
     project_root = project_root or cwd
     build_tool = detect_build_tool(project_root)
+    strategy = _get_strategy(build_tool)
 
     # Detect multi-module projects where tests are in a different module
     build_root, test_module = _find_multi_module_root(project_root, test_paths)
 
-    # Ensure codeflash-runtime is installed
-    if build_tool == BuildTool.GRADLE:
-        _ensure_codeflash_runtime_gradle(build_root)
-    else:
-        _ensure_codeflash_runtime(build_root, test_module)
-
-    # Pre-install multi-module deps
+    # Ensure codeflash-runtime is installed and multi-module deps are available
+    strategy.ensure_runtime(build_root, test_module)
     base_env = os.environ.copy()
     base_env.update(test_env)
-    if build_tool != BuildTool.GRADLE:
-        ensure_multi_module_deps_installed(build_root, test_module, base_env)
+    strategy.install_multi_module_deps(build_root, test_module, base_env)
 
     # Create SQLite database path for behavior capture
     sqlite_db_path = get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite"))
@@ -592,66 +837,19 @@ def run_behavioral_tests(
     # Configure coverage (JaCoCo)
     coverage_xml_path: Path | None = None
     if enable_coverage:
-        if build_tool == BuildTool.GRADLE:
-            coverage_xml_path = get_jacoco_xml_path_gradle(build_root, test_module)
-        # Maven coverage setup
-        elif test_module:
-            test_module_pom = build_root / test_module / "pom.xml"
-            if test_module_pom.exists():
-                if not is_jacoco_configured(test_module_pom):
-                    logger.info("Adding JaCoCo plugin to test module pom.xml: %s", test_module_pom)
-                    add_jacoco_plugin_to_pom(test_module_pom)
-                coverage_xml_path = get_jacoco_xml_path(build_root / test_module)
-        else:
-            pom_path = project_root / "pom.xml"
-            if pom_path.exists():
-                if not is_jacoco_configured(pom_path):
-                    logger.info("Adding JaCoCo plugin to pom.xml for coverage collection")
-                    add_jacoco_plugin_to_pom(pom_path)
-                coverage_xml_path = get_jacoco_xml_path(project_root)
+        coverage_xml_path = strategy.setup_coverage(build_root, test_module, project_root)
 
     min_timeout = 300 if enable_coverage else 60
     effective_timeout = max(timeout or 300, min_timeout)
 
-    if build_tool == BuildTool.GRADLE:
-        # Gradle path
-        if enable_coverage:
-            result, result_xml_path = _run_gradle_tests_coverage(
-                build_root, test_module, test_paths, run_env, effective_timeout, candidate_index
-            )
-        else:
-            result, result_xml_path = _run_direct_or_fallback_gradle(
-                build_root,
-                test_module,
-                test_paths,
-                run_env,
-                effective_timeout,
-                mode="behavior",
-                candidate_index=candidate_index,
-            )
-    elif enable_coverage:
-        # Maven coverage path
-        result = _run_maven_tests(
-            build_root,
-            test_paths,
-            run_env,
-            timeout=effective_timeout,
-            mode="behavior",
-            enable_coverage=True,
-            test_module=test_module,
+    if enable_coverage:
+        result, result_xml_path = strategy.run_tests_coverage(
+            build_root, test_module, test_paths, run_env, effective_timeout, candidate_index
         )
-        reports_dir = _get_test_reports_dir(build_root, test_module)
-        result_xml_path = _get_combined_junit_xml(reports_dir, candidate_index)
     else:
-        # Maven fast path
-        result, result_xml_path = _run_direct_or_fallback_maven(
-            build_root,
-            test_module,
-            test_paths,
-            run_env,
-            effective_timeout,
-            mode="behavior",
-            candidate_index=candidate_index,
+        result, result_xml_path = _run_direct_or_fallback(
+            strategy, build_root, test_module, test_paths, run_env,
+            effective_timeout, mode="behavior", candidate_index=candidate_index,
         )
 
     if enable_coverage:
@@ -675,10 +873,6 @@ def run_behavioral_tests(
         else:
             logger.warning("JaCoCo XML report not found: %s - verify phase may not have completed", coverage_xml_path)
 
-    # Return tuple matching the expected signature:
-    # (result_xml_path, run_result, coverage_database_file, coverage_config_file)
-    # For Java: coverage_database_file is the jacoco.xml path, coverage_config_file is not used (None)
-    # The sqlite_db_path is used internally for behavior capture but doesn't need to be returned
     return result_xml_path, result, coverage_xml_path, None
 
 
@@ -1069,6 +1263,73 @@ def _get_empty_result(maven_root: Path, test_module: str | None) -> tuple[Path, 
     return result_xml_path, empty_result
 
 
+def _run_direct_or_fallback(
+    strategy: BuildToolStrategy,
+    build_root: Path,
+    test_module: str | None,
+    test_paths: Any,
+    run_env: dict[str, str],
+    timeout: int,
+    mode: str,
+    candidate_index: int = -1,
+    javaagent_arg: str | None = None,
+) -> tuple[subprocess.CompletedProcess, Path]:
+    """Compile once, then run tests directly via JVM. Falls back to build tool on failure."""
+    test_classes = _get_test_class_names(test_paths, mode=mode)
+    if not test_classes:
+        logger.warning("No test classes found for mode=%s, returning empty result", mode)
+        result_xml_path, empty_result = _get_empty_result(build_root, test_module)
+        return empty_result, result_xml_path
+
+    # Step 1: Compile tests
+    logger.debug("Step 1: Compiling tests for %s mode", mode)
+    compile_result = strategy.compile_tests(build_root, run_env, test_module, timeout=120)
+    if compile_result.returncode != 0:
+        logger.warning("Compilation failed (rc=%d), falling back to build-tool execution", compile_result.returncode)
+        result = strategy.run_tests_fallback(build_root, test_paths, run_env, timeout, mode, test_module)
+        reports_dir = strategy.get_reports_dir(build_root, test_module)
+        result_xml_path = _get_combined_junit_xml(reports_dir, candidate_index)
+        return result, result_xml_path
+
+    # Step 2: Get classpath
+    logger.debug("Step 2: Getting classpath")
+    classpath = strategy.get_classpath_cached(build_root, run_env, test_module, timeout=60)
+    if not classpath:
+        logger.warning("Failed to get classpath, falling back to build-tool execution")
+        result = strategy.run_tests_fallback(build_root, test_paths, run_env, timeout, mode, test_module)
+        reports_dir = strategy.get_reports_dir(build_root, test_module)
+        result_xml_path = _get_combined_junit_xml(reports_dir, candidate_index)
+        return result, result_xml_path
+
+    # Step 3: Run tests directly via JVM
+    working_dir = build_root / test_module if test_module else build_root
+    reports_dir = strategy.get_reports_dir(build_root, test_module)
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    logger.debug("Step 3: Running %s tests directly (bypassing build tool)", mode)
+    result = _run_tests_direct(
+        classpath, test_classes, run_env, working_dir,
+        timeout=timeout, reports_dir=reports_dir, javaagent_arg=javaagent_arg,
+    )
+
+    # Check for fallback indicators on failure
+    if result.returncode != 0:
+        combined_output = (result.stderr or "") + (result.stdout or "")
+        fallback_indicators = [
+            "ConsoleLauncher",
+            "ClassNotFoundException",
+            "No tests were executed",
+            "Unable to locate a Java Runtime",
+            "No tests found",
+        ]
+        if any(indicator in combined_output for indicator in fallback_indicators):
+            logger.debug("Direct JVM execution failed, falling back to build-tool execution")
+            result = strategy.run_tests_fallback(build_root, test_paths, run_env, timeout, mode, test_module)
+
+    result_xml_path = _get_combined_junit_xml(reports_dir, candidate_index)
+    return result, result_xml_path
+
+
 def _run_direct_or_fallback_maven(
     maven_root: Path,
     test_module: str | None,
@@ -1291,23 +1552,15 @@ def run_benchmarking_tests(
 
     project_root = project_root or cwd
     build_tool = detect_build_tool(project_root)
+    strategy = _get_strategy(build_tool)
 
-    # Detect multi-module projects where tests are in a different module
     build_root, test_module = _find_multi_module_root(project_root, test_paths)
 
-    # Ensure codeflash-runtime is installed
-    if build_tool == BuildTool.GRADLE:
-        _ensure_codeflash_runtime_gradle(build_root)
-    else:
-        _ensure_codeflash_runtime(build_root, test_module)
-
-    # Pre-install multi-module deps (Maven only)
+    strategy.ensure_runtime(build_root, test_module)
     base_env = os.environ.copy()
     base_env.update(test_env)
-    if build_tool != BuildTool.GRADLE:
-        ensure_multi_module_deps_installed(build_root, test_module, base_env)
+    strategy.install_multi_module_deps(build_root, test_module, base_env)
 
-    # Get test class names
     test_classes = _get_test_class_names(test_paths, mode="performance")
     if not test_classes:
         logger.error("No test classes found")
@@ -1319,10 +1572,7 @@ def run_benchmarking_tests(
 
     logger.debug("Step 1: Compiling tests (one-time build overhead)")
     compile_start = time.time()
-    if build_tool == BuildTool.GRADLE:
-        compile_result = _compile_tests_gradle(build_root, compile_env, test_module, timeout=120)
-    else:
-        compile_result = _compile_tests(build_root, compile_env, test_module, timeout=120)
+    compile_result = strategy.compile_tests(build_root, compile_env, test_module, timeout=120)
     compile_time = time.time() - compile_start
 
     if compile_result.returncode != 0:
@@ -1332,66 +1582,23 @@ def run_benchmarking_tests(
             compile_result.stdout,
             compile_result.stderr,
         )
-        if build_tool == BuildTool.GRADLE:
-            logger.warning("Falling back to Gradle-based test execution")
-            return _run_benchmarking_tests_gradle(
-                test_paths,
-                test_env,
-                cwd,
-                timeout,
-                project_root,
-                min_loops,
-                max_loops,
-                target_duration_seconds,
-                inner_iterations,
-            )
-        logger.warning("Falling back to Maven-based test execution")
-        return _run_benchmarking_tests_maven(
-            test_paths,
-            test_env,
-            cwd,
-            timeout,
-            project_root,
-            min_loops,
-            max_loops,
-            target_duration_seconds,
-            inner_iterations,
+        logger.warning("Falling back to build-tool-based test execution")
+        return strategy.run_benchmarking_fallback(
+            test_paths, test_env, cwd, timeout, project_root,
+            min_loops, max_loops, target_duration_seconds, inner_iterations,
         )
 
     logger.debug("Compilation completed in %.2fs", compile_time)
 
     # Step 2: Get classpath
     logger.debug("Step 2: Getting classpath")
-    if build_tool == BuildTool.GRADLE:
-        classpath = _get_test_classpath_gradle_cached(build_root, compile_env, test_module, timeout=60)
-    else:
-        classpath = _get_test_classpath_cached(build_root, compile_env, test_module, timeout=60)
+    classpath = strategy.get_classpath_cached(build_root, compile_env, test_module, timeout=60)
 
     if not classpath:
-        if build_tool == BuildTool.GRADLE:
-            logger.warning("Failed to get classpath, falling back to Gradle-based execution")
-            return _run_benchmarking_tests_gradle(
-                test_paths,
-                test_env,
-                cwd,
-                timeout,
-                project_root,
-                min_loops,
-                max_loops,
-                target_duration_seconds,
-                inner_iterations,
-            )
-        logger.warning("Failed to get classpath, falling back to Maven-based execution")
-        return _run_benchmarking_tests_maven(
-            test_paths,
-            test_env,
-            cwd,
-            timeout,
-            project_root,
-            min_loops,
-            max_loops,
-            target_duration_seconds,
-            inner_iterations,
+        logger.warning("Failed to get classpath, falling back to build-tool execution")
+        return strategy.run_benchmarking_fallback(
+            test_paths, test_env, cwd, timeout, project_root,
+            min_loops, max_loops, target_duration_seconds, inner_iterations,
         )
 
     # Step 3: Run tests multiple times directly via JVM
@@ -1405,12 +1612,8 @@ def run_benchmarking_tests(
 
     per_loop_timeout = timeout or max(60, 30 + inner_iterations // 10)
 
-    if test_module:
-        working_dir = build_root / test_module
-    else:
-        working_dir = build_root
-
-    reports_dir = _get_test_reports_dir(build_root, test_module)
+    working_dir = build_root / test_module if test_module else build_root
+    reports_dir = strategy.get_reports_dir(build_root, test_module)
     reports_dir.mkdir(parents=True, exist_ok=True)
 
     for loop_idx in range(1, max_loops + 1):
@@ -1461,30 +1664,10 @@ def run_benchmarking_tests(
                     logger.debug("Direct execution failed with no timing markers, likely JUnit version mismatch")
 
         if should_fallback:
-            if build_tool == BuildTool.GRADLE:
-                logger.debug("Direct JVM execution failed, falling back to Gradle-based execution")
-                return _run_benchmarking_tests_gradle(
-                    test_paths,
-                    test_env,
-                    cwd,
-                    timeout,
-                    project_root,
-                    min_loops,
-                    max_loops,
-                    target_duration_seconds,
-                    inner_iterations,
-                )
-            logger.debug("Direct JVM execution failed, falling back to Maven-based execution")
-            return _run_benchmarking_tests_maven(
-                test_paths,
-                test_env,
-                cwd,
-                timeout,
-                project_root,
-                min_loops,
-                max_loops,
-                target_duration_seconds,
-                inner_iterations,
+            logger.debug("Direct JVM execution failed, falling back to build-tool execution")
+            return strategy.run_benchmarking_fallback(
+                test_paths, test_env, cwd, timeout, project_root,
+                min_loops, max_loops, target_duration_seconds, inner_iterations,
             )
 
         elapsed = time.time() - total_start_time
@@ -1499,8 +1682,6 @@ def run_benchmarking_tests(
             break
 
         if result.returncode != 0:
-            import re
-
             timing_pattern = re.compile(r"!######[^:]*:[^:]*:[^:]*:[^:]*:[^:]+:[^:]+######!")
             has_timing_markers = bool(timing_pattern.search(result.stdout or ""))
             if not has_timing_markers:
@@ -1523,15 +1704,14 @@ def run_benchmarking_tests(
     )
 
     combined_result = subprocess.CompletedProcess(
-        args=last_result.args if last_result else ["build", "test"],
+        args=last_result.args if last_result else [strategy.default_cmd_name, "test"],
         returncode=last_result.returncode if last_result else -1,
         stdout=combined_stdout,
         stderr=combined_stderr,
     )
 
-    # Find or create the JUnit XML results file (from last run)
-    reports_dir_final = _get_test_reports_dir(build_root, test_module)
-    result_xml_path = _get_combined_junit_xml(reports_dir_final, -1)  # Use -1 for benchmark
+    reports_dir_final = strategy.get_reports_dir(build_root, test_module)
+    result_xml_path = _get_combined_junit_xml(reports_dir_final, -1)
 
     return result_xml_path, combined_result
 
@@ -2158,21 +2338,14 @@ def run_line_profile_tests(
     """
     project_root = project_root or cwd
     build_tool = detect_build_tool(project_root)
+    strategy = _get_strategy(build_tool)
 
-    # Detect multi-module projects
     build_root, test_module = _find_multi_module_root(project_root, test_paths)
 
-    # Ensure codeflash-runtime is installed
-    if build_tool == BuildTool.GRADLE:
-        _ensure_codeflash_runtime_gradle(build_root)
-    else:
-        _ensure_codeflash_runtime(build_root, test_module)
-
-    # Pre-install multi-module deps (Maven only)
+    strategy.ensure_runtime(build_root, test_module)
     base_env = os.environ.copy()
     base_env.update(test_env)
-    if build_tool != BuildTool.GRADLE:
-        ensure_multi_module_deps_installed(build_root, test_module, base_env)
+    strategy.install_multi_module_deps(build_root, test_module, base_env)
 
     run_env = os.environ.copy()
     run_env.update(test_env)
@@ -2184,29 +2357,11 @@ def run_line_profile_tests(
     effective_timeout = max(timeout or min_timeout, min_timeout)
     logger.debug("Running line profiling tests (single run) with timeout=%ds", effective_timeout)
 
-    if build_tool == BuildTool.GRADLE:
-        result, result_xml_path = _run_direct_or_fallback_gradle(
-            build_root,
-            test_module,
-            test_paths,
-            run_env,
-            effective_timeout,
-            mode="line_profile",
-            candidate_index=-1,
-            javaagent_arg=javaagent_arg,
-        )
-    else:
-        result = _run_maven_tests(
-            build_root,
-            test_paths,
-            run_env,
-            timeout=effective_timeout,
-            mode="line_profile",
-            test_module=test_module,
-            javaagent_arg=javaagent_arg,
-        )
-        reports_dir = _get_test_reports_dir(build_root, test_module)
-        result_xml_path = _get_combined_junit_xml(reports_dir, -1)
+    result, result_xml_path = _run_direct_or_fallback(
+        strategy, build_root, test_module, test_paths, run_env,
+        effective_timeout, mode="line_profile", candidate_index=-1,
+        javaagent_arg=javaagent_arg,
+    )
 
     return result_xml_path, result
 

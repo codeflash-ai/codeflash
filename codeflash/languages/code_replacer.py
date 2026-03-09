@@ -52,10 +52,19 @@ def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStrin
             if module_optimized_code is None:
                 # Also try matching if there's only one code file, but ONLY for non-Python
                 # languages where path matching is less strict.
+                # Guard: only use the single block if its filename matches the target
+                # (or has no path at all).  Applying code from a completely different
+                # file (e.g. ReflectionUtils.java → StringUtils.java) causes duplicate
+                # method compilation errors.
                 if len(file_to_code_context) == 1 and not is_python():
                     only_key = next(iter(file_to_code_context.keys()))
-                    module_optimized_code = file_to_code_context[only_key]
-                    logger.debug(f"Using only code block {only_key} for {relative_path}")
+                    only_filename = only_key.rsplit("/", 1)[-1].rsplit("\\", 1)[-1] if only_key else None
+                    if only_filename is None or only_filename == target_filename:
+                        module_optimized_code = file_to_code_context[only_key]
+                        logger.debug(f"Using only code block {only_key} for {relative_path}")
+                    else:
+                        logger.debug(f"Skipping single code block {only_key} for {relative_path} (filename mismatch)")
+                        module_optimized_code = ""
                 else:
                     if logger.isEnabledFor(logger.level):
                         logger.warning(
