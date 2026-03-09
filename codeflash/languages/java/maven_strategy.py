@@ -129,7 +129,7 @@ class MavenStrategy(BuildToolStrategy):
 
     def compile_tests(
         self, build_root: Path, env: dict[str, str], test_module: str | None, timeout: int = 120
-    ) -> subprocess.CompletedProcess:
+    ) -> subprocess.CompletedProcess[str]:
         from codeflash.languages.java.test_runner import _run_cmd_kill_pg_on_timeout
 
         mvn = find_maven_executable()
@@ -251,7 +251,7 @@ class MavenStrategy(BuildToolStrategy):
         test_module: str | None,
         javaagent_arg: str | None = None,
         enable_coverage: bool = False,
-    ) -> subprocess.CompletedProcess:
+    ) -> subprocess.CompletedProcess[str]:
         from codeflash.languages.java.test_runner import (
             _build_test_filter,
             _run_cmd_kill_pg_on_timeout,
@@ -445,7 +445,7 @@ class MavenStrategy(BuildToolStrategy):
         run_env: dict[str, str],
         timeout: int,
         candidate_index: int,
-    ) -> tuple[subprocess.CompletedProcess, Path, Path | None]:
+    ) -> tuple[subprocess.CompletedProcess[str], Path, Path | None]:
         from codeflash.languages.java.test_runner import _get_combined_junit_xml
 
         coverage_xml_path = self.setup_coverage(build_root, test_module, build_root)

@@ -41,7 +41,7 @@ class BuildToolStrategy(ABC):
     @abstractmethod
     def compile_tests(
         self, build_root: Path, env: dict[str, str], test_module: str | None, timeout: int = 120
-    ) -> subprocess.CompletedProcess:
+    ) -> subprocess.CompletedProcess[str]:
         """Compile test code without running tests."""
         ...
 
@@ -73,7 +73,7 @@ class BuildToolStrategy(ABC):
         test_module: str | None,
         javaagent_arg: str | None = None,
         enable_coverage: bool = False,
-    ) -> subprocess.CompletedProcess:
+    ) -> subprocess.CompletedProcess[str]:
         """Run tests via the build tool (e.g. Maven Surefire). Used as fallback when direct JVM fails."""
         ...
 
@@ -102,7 +102,7 @@ class BuildToolStrategy(ABC):
         run_env: dict[str, str],
         timeout: int,
         candidate_index: int,
-    ) -> tuple[subprocess.CompletedProcess, Path, Path | None]:
+    ) -> tuple[subprocess.CompletedProcess[str], Path, Path | None]:
         """Run tests with coverage enabled. Returns (result, junit_xml_path, coverage_xml_path)."""
         ...
 

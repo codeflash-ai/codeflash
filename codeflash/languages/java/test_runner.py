@@ -43,7 +43,7 @@ def _run_cmd_kill_pg_on_timeout(
     env: dict[str, str] | None = None,
     timeout: int | None = None,
     text: bool = True,
-) -> subprocess.CompletedProcess:
+) -> subprocess.CompletedProcess[str]:
     """Run a command, killing its entire process group on timeout (POSIX only).
 
     On POSIX systems this function uses start_new_session=True so the child
@@ -677,7 +677,7 @@ def _run_direct_or_fallback(
     timeout: int,
     mode: str,
     candidate_index: int = -1,
-) -> tuple[subprocess.CompletedProcess, Path]:
+) -> tuple[subprocess.CompletedProcess[str], Path]:
     """Compile once, then run tests directly via JVM. Falls back to build tool on failure."""
     test_classes = _get_test_class_names(test_paths, mode=mode)
     if not test_classes:
@@ -803,7 +803,7 @@ def _run_tests_direct(
     working_dir: Path,
     timeout: int = 60,
     reports_dir: Path | None = None,
-) -> subprocess.CompletedProcess:
+) -> subprocess.CompletedProcess[str]:
     """Run JUnit tests directly using java command (bypassing build tool).
 
     This is much faster than build tool invocation (~500ms vs ~5-10s overhead).
