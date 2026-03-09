@@ -14,8 +14,8 @@ import subprocess
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
 from functools import lru_cache
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
