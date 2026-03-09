@@ -17,7 +17,6 @@ import signal
 import subprocess
 import sys
 import tempfile
-import uuid
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -926,7 +925,6 @@ def _get_combined_junit_xml(surefire_dir: Path, candidate_index: int) -> Path:
     # Use a fast counter-based id instead of uuid for per-process uniqueness
     result_id = next(_result_counter)
     result_xml_path = _TMPDIR / f"codeflash_java_results_{candidate_index}_{result_id}.xml"
-
 
     if not surefire_dir.exists():
         # Ensure the shared empty template exists (create once)
