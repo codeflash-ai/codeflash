@@ -1073,13 +1073,13 @@ def _build_test_filter(test_paths: Any, mode: str = "behavior") -> str:
 
 def _path_to_class_name(path: Path, source_dirs: list[str] | None = None) -> str | None:
     """Convert a test file path to a Java class name."""
-    if path.suffix != ".java":
+    # Fast check using the filename to avoid creating suffix objects on Path
+    name = path.name
+    if not name.endswith(".java"):
         return None
 
-    path_str = path.as_posix()
-    parts = list(path.parts)
-
     if source_dirs:
+        path_str = path.as_posix()
         for src_dir in source_dirs:
             normalized = src_dir.rstrip("/")
             if normalized in path_str:
@@ -1087,6 +1087,11 @@ def _path_to_class_name(path: Path, source_dirs: list[str] | None = None) -> str
                 remainder = path_str[idx:].lstrip("/")
                 if remainder:
                     return remainder.replace("/", ".").removesuffix(".java")
+
+    # Look for standard Maven/Gradle source directories
+
+    # Delay constructing parts as a list; use the tuple returned by Path.parts
+    parts = path.parts
 
     # Look for standard Maven/Gradle source directories
     java_idx = None
@@ -1103,8 +1108,14 @@ def _path_to_class_name(path: Path, source_dirs: list[str] | None = None) -> str
 
     if java_idx is not None:
         class_parts = parts[java_idx + 1 :]
-        class_parts[-1] = class_parts[-1].replace(".java", "")
-        return ".".join(class_parts)
+        # Preserve original behavior of removing all occurrences of ".java" in the last part
+        last = class_parts[-1].replace(".java", "")
+        # Build the dotted class name without creating intermediate mutable lists
+        if len(class_parts) == 1:
+            return last
+        return ".".join((*class_parts[:-1], last))
+
+    # For non-standard source directories, read the package declaration
 
     # For non-standard source directories, read the package declaration
     try:
