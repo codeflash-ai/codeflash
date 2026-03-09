@@ -76,28 +76,23 @@ class BuildToolStrategy(ABC):
     """Strategy interface for build-tool-specific operations (Maven vs Gradle)."""
 
     @abstractmethod
-    def ensure_runtime(self, build_root: Path, test_module: str | None) -> bool:
-        ...
+    def ensure_runtime(self, build_root: Path, test_module: str | None) -> bool: ...
 
     @abstractmethod
-    def install_multi_module_deps(self, build_root: Path, test_module: str | None, env: dict[str, str]) -> None:
-        ...
+    def install_multi_module_deps(self, build_root: Path, test_module: str | None, env: dict[str, str]) -> None: ...
 
     @abstractmethod
     def compile_tests(
         self, build_root: Path, env: dict[str, str], test_module: str | None, timeout: int = 120
-    ) -> subprocess.CompletedProcess:
-        ...
+    ) -> subprocess.CompletedProcess: ...
 
     @abstractmethod
     def get_classpath_cached(
         self, build_root: Path, env: dict[str, str], test_module: str | None, timeout: int = 60
-    ) -> str | None:
-        ...
+    ) -> str | None: ...
 
     @abstractmethod
-    def get_reports_dir(self, build_root: Path, test_module: str | None) -> Path:
-        ...
+    def get_reports_dir(self, build_root: Path, test_module: str | None) -> Path: ...
 
     @abstractmethod
     def run_tests_fallback(
@@ -109,8 +104,7 @@ class BuildToolStrategy(ABC):
         mode: str,
         test_module: str | None,
         javaagent_arg: str | None = None,
-    ) -> subprocess.CompletedProcess:
-        ...
+    ) -> subprocess.CompletedProcess: ...
 
     @abstractmethod
     def run_benchmarking_fallback(
@@ -124,8 +118,7 @@ class BuildToolStrategy(ABC):
         max_loops: int,
         target_duration_seconds: float,
         inner_iterations: int,
-    ) -> tuple[Path, Any]:
-        ...
+    ) -> tuple[Path, Any]: ...
 
     @abstractmethod
     def run_tests_coverage(
@@ -136,19 +129,14 @@ class BuildToolStrategy(ABC):
         run_env: dict[str, str],
         timeout: int,
         candidate_index: int,
-    ) -> tuple[subprocess.CompletedProcess, Path]:
-        ...
+    ) -> tuple[subprocess.CompletedProcess, Path]: ...
 
     @abstractmethod
-    def setup_coverage(
-        self, build_root: Path, test_module: str | None, project_root: Path
-    ) -> Path | None:
-        ...
+    def setup_coverage(self, build_root: Path, test_module: str | None, project_root: Path) -> Path | None: ...
 
     @property
     @abstractmethod
-    def default_cmd_name(self) -> str:
-        ...
+    def default_cmd_name(self) -> str: ...
 
 
 class MavenStrategy(BuildToolStrategy):
@@ -183,8 +171,13 @@ class MavenStrategy(BuildToolStrategy):
         javaagent_arg: str | None = None,
     ) -> subprocess.CompletedProcess:
         return _run_maven_tests(
-            build_root, test_paths, env, timeout=timeout, mode=mode,
-            test_module=test_module, javaagent_arg=javaagent_arg,
+            build_root,
+            test_paths,
+            env,
+            timeout=timeout,
+            mode=mode,
+            test_module=test_module,
+            javaagent_arg=javaagent_arg,
         )
 
     def run_benchmarking_fallback(
@@ -200,8 +193,15 @@ class MavenStrategy(BuildToolStrategy):
         inner_iterations: int,
     ) -> tuple[Path, Any]:
         return _run_benchmarking_tests_maven(
-            test_paths, test_env, cwd, timeout, project_root,
-            min_loops, max_loops, target_duration_seconds, inner_iterations,
+            test_paths,
+            test_env,
+            cwd,
+            timeout,
+            project_root,
+            min_loops,
+            max_loops,
+            target_duration_seconds,
+            inner_iterations,
         )
 
     def run_tests_coverage(
@@ -214,16 +214,19 @@ class MavenStrategy(BuildToolStrategy):
         candidate_index: int,
     ) -> tuple[subprocess.CompletedProcess, Path]:
         result = _run_maven_tests(
-            build_root, test_paths, run_env, timeout=timeout,
-            mode="behavior", enable_coverage=True, test_module=test_module,
+            build_root,
+            test_paths,
+            run_env,
+            timeout=timeout,
+            mode="behavior",
+            enable_coverage=True,
+            test_module=test_module,
         )
         reports_dir = self.get_reports_dir(build_root, test_module)
         result_xml_path = _get_combined_junit_xml(reports_dir, candidate_index)
         return result, result_xml_path
 
-    def setup_coverage(
-        self, build_root: Path, test_module: str | None, project_root: Path
-    ) -> Path | None:
+    def setup_coverage(self, build_root: Path, test_module: str | None, project_root: Path) -> Path | None:
         if test_module:
             test_module_pom = build_root / test_module / "pom.xml"
             if test_module_pom.exists():
@@ -290,8 +293,15 @@ class GradleStrategy(BuildToolStrategy):
         inner_iterations: int,
     ) -> tuple[Path, Any]:
         return _run_benchmarking_tests_gradle(
-            test_paths, test_env, cwd, timeout, project_root,
-            min_loops, max_loops, target_duration_seconds, inner_iterations,
+            test_paths,
+            test_env,
+            cwd,
+            timeout,
+            project_root,
+            min_loops,
+            max_loops,
+            target_duration_seconds,
+            inner_iterations,
         )
 
     def run_tests_coverage(
@@ -305,9 +315,7 @@ class GradleStrategy(BuildToolStrategy):
     ) -> tuple[subprocess.CompletedProcess, Path]:
         return _run_gradle_tests_coverage(build_root, test_module, test_paths, run_env, timeout, candidate_index)
 
-    def setup_coverage(
-        self, build_root: Path, test_module: str | None, project_root: Path
-    ) -> Path | None:
+    def setup_coverage(self, build_root: Path, test_module: str | None, project_root: Path) -> Path | None:
         return get_jacoco_xml_path_gradle(build_root, test_module)
 
     @property
@@ -848,8 +856,14 @@ def run_behavioral_tests(
         )
     else:
         result, result_xml_path = _run_direct_or_fallback(
-            strategy, build_root, test_module, test_paths, run_env,
-            effective_timeout, mode="behavior", candidate_index=candidate_index,
+            strategy,
+            build_root,
+            test_module,
+            test_paths,
+            run_env,
+            effective_timeout,
+            mode="behavior",
+            candidate_index=candidate_index,
         )
 
     if enable_coverage:
@@ -1308,8 +1322,13 @@ def _run_direct_or_fallback(
 
     logger.debug("Step 3: Running %s tests directly (bypassing build tool)", mode)
     result = _run_tests_direct(
-        classpath, test_classes, run_env, working_dir,
-        timeout=timeout, reports_dir=reports_dir, javaagent_arg=javaagent_arg,
+        classpath,
+        test_classes,
+        run_env,
+        working_dir,
+        timeout=timeout,
+        reports_dir=reports_dir,
+        javaagent_arg=javaagent_arg,
     )
 
     # Check for fallback indicators on failure
@@ -1584,8 +1603,15 @@ def run_benchmarking_tests(
         )
         logger.warning("Falling back to build-tool-based test execution")
         return strategy.run_benchmarking_fallback(
-            test_paths, test_env, cwd, timeout, project_root,
-            min_loops, max_loops, target_duration_seconds, inner_iterations,
+            test_paths,
+            test_env,
+            cwd,
+            timeout,
+            project_root,
+            min_loops,
+            max_loops,
+            target_duration_seconds,
+            inner_iterations,
         )
 
     logger.debug("Compilation completed in %.2fs", compile_time)
@@ -1597,8 +1623,15 @@ def run_benchmarking_tests(
     if not classpath:
         logger.warning("Failed to get classpath, falling back to build-tool execution")
         return strategy.run_benchmarking_fallback(
-            test_paths, test_env, cwd, timeout, project_root,
-            min_loops, max_loops, target_duration_seconds, inner_iterations,
+            test_paths,
+            test_env,
+            cwd,
+            timeout,
+            project_root,
+            min_loops,
+            max_loops,
+            target_duration_seconds,
+            inner_iterations,
         )
 
     # Step 3: Run tests multiple times directly via JVM
@@ -1666,8 +1699,15 @@ def run_benchmarking_tests(
         if should_fallback:
             logger.debug("Direct JVM execution failed, falling back to build-tool execution")
             return strategy.run_benchmarking_fallback(
-                test_paths, test_env, cwd, timeout, project_root,
-                min_loops, max_loops, target_duration_seconds, inner_iterations,
+                test_paths,
+                test_env,
+                cwd,
+                timeout,
+                project_root,
+                min_loops,
+                max_loops,
+                target_duration_seconds,
+                inner_iterations,
             )
 
         elapsed = time.time() - total_start_time
@@ -2358,8 +2398,14 @@ def run_line_profile_tests(
     logger.debug("Running line profiling tests (single run) with timeout=%ds", effective_timeout)
 
     result, result_xml_path = _run_direct_or_fallback(
-        strategy, build_root, test_module, test_paths, run_env,
-        effective_timeout, mode="line_profile", candidate_index=-1,
+        strategy,
+        build_root,
+        test_module,
+        test_paths,
+        run_env,
+        effective_timeout,
+        mode="line_profile",
+        candidate_index=-1,
         javaagent_arg=javaagent_arg,
     )
 
