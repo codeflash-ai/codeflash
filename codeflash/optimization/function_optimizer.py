@@ -2733,8 +2733,7 @@ class FunctionOptimizer:
                     testing_time=TOTAL_LOOPING_TIME_EFFECTIVE,
                     enable_coverage=False,
                     code_context=code_context,
-                    pytest_min_loops=3 if subagent else 5,
-                    pytest_max_loops=100 if subagent else 250,
+                    **({"pytest_min_loops": 3, "pytest_max_loops": 100} if subagent else {}),
                 )
                 logger.debug(f"[BENCHMARK-DONE] Got {len(benchmarking_results.test_results)} benchmark results")
             finally:
@@ -2937,8 +2936,7 @@ class FunctionOptimizer:
                     optimization_iteration=optimization_candidate_index,
                     testing_time=TOTAL_LOOPING_TIME_EFFECTIVE,
                     enable_coverage=False,
-                    pytest_min_loops=3 if subagent else 5,
-                    pytest_max_loops=100 if subagent else 250,
+                    **({"pytest_min_loops": 3, "pytest_max_loops": 100} if subagent else {}),
                 )
             finally:
                 if self.function_to_optimize.is_async:
