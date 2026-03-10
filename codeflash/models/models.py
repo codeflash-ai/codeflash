@@ -174,6 +174,7 @@ class BestOptimization(BaseModel):
     line_profiler_test_results: dict[Any, Any]
     async_throughput: Optional[int] = None
     concurrency_metrics: Optional[ConcurrencyMetrics] = None
+    render_benchmark: Optional[Any] = None
 
 
 @dataclass(frozen=True)
@@ -400,6 +401,7 @@ class OptimizedCandidateResult(BaseModel):
     total_candidate_timing: int
     async_throughput: Optional[int] = None
     concurrency_metrics: Optional[ConcurrencyMetrics] = None
+    render_profiles: Optional[list[Any]] = None
 
 
 class GeneratedTests(BaseModel):
@@ -633,6 +635,7 @@ class OriginalCodeBaseline(BaseModel):
     coverage_results: Optional[CoverageData]
     async_throughput: Optional[int] = None
     concurrency_metrics: Optional[ConcurrencyMetrics] = None
+    render_profiles: Optional[list[Any]] = None
 
 
 class CoverageStatus(Enum):

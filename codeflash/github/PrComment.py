@@ -24,6 +24,7 @@ class PrComment:
     original_async_throughput: Optional[int] = None
     best_async_throughput: Optional[int] = None
     language: str = "python"
+    render_benchmark_markdown: Optional[str] = None
 
     def to_json(self) -> dict[str, Union[str, int, dict[str, dict[str, int]], list[BenchmarkDetail], None]]:
         report_table: dict[str, dict[str, int]] = {}
@@ -49,6 +50,9 @@ class PrComment:
         if self.original_async_throughput is not None and self.best_async_throughput is not None:
             result["original_async_throughput"] = self.original_async_throughput
             result["best_async_throughput"] = self.best_async_throughput
+
+        if self.render_benchmark_markdown:
+            result["render_benchmark_markdown"] = self.render_benchmark_markdown
 
         return result
 

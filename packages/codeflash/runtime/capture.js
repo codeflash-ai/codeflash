@@ -1068,6 +1068,11 @@ function captureRender(funcName, lineId, renderFn, Component, ...createElementAr
  * Between loop iterations the previous render result is unmounted to keep
  * the DOM clean and ensure each iteration starts from the same state.
  *
+ * When CODEFLASH_REACT_PROFILER_MODE is enabled, skips the Benchmark.jsx
+ * mount/unmount cycling and renders once normally. The React.Profiler
+ * instrumentation in the source code emits timing data automatically via
+ * stdout markers, so no additional benchmarking is needed.
+ *
  * @param {string} funcName - Name of the component being tested (static)
  * @param {string} lineId - Line number identifier in test file (static)
  * @param {Function} renderFn - The render function from @testing-library/react
@@ -1077,6 +1082,15 @@ function captureRender(funcName, lineId, renderFn, Component, ...createElementAr
  * @throws {Error} - Re-throws any error from rendering
  */
 function captureRenderPerf(funcName, lineId, renderFn, Component, ...createElementArgs) {
+    // In Profiler mode, skip Benchmark.jsx cycling. The React.Profiler wrapper
+    // in the source code emits render markers automatically on every render.
+    // Just render once normally so test assertions pass.
+    if (process.env.CODEFLASH_REACT_PROFILER_MODE === 'true') {
+        const React = _getReact();
+        const element = React.createElement(Component, ...createElementArgs);
+        return Promise.resolve(renderFn(element));
+    }
+
     const runBenchmark = require('./react-benchmark/run');
 
     const { testClassName, safeModulePath, safeTestFunctionName } = _getTestContext();

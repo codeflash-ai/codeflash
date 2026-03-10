@@ -72,10 +72,11 @@ def speedup_critic(
     best_throughput_until_now: int | None = None,
     original_concurrency_metrics: ConcurrencyMetrics | None = None,
     best_concurrency_ratio_until_now: float | None = None,
+    original_render_profiles: list | None = None,
 ) -> bool:
     """Take in a correct optimized Test Result and decide if the optimization should actually be surfaced to the user.
 
-    Evaluates runtime performance, async throughput, and concurrency improvements.
+    Evaluates runtime performance, async throughput, concurrency improvements, and React render efficiency.
 
     For runtime performance:
     - Ensures the optimization is actually faster than the original code, above the noise floor.
@@ -90,6 +91,10 @@ def speedup_critic(
     For concurrency (when available):
     - Evaluates concurrency ratio improvements using MIN_CONCURRENCY_IMPROVEMENT_THRESHOLD
     - Concurrency improvements detect when blocking calls are replaced with non-blocking equivalents
+
+    For React render efficiency (when available):
+    - Evaluates render count reduction and render duration improvements
+    - Accepts if render count reduced by >= 20% or render duration improved significantly
     """
     # Runtime performance evaluation
     noise_floor = 3 * MIN_IMPROVEMENT_THRESHOLD if original_code_runtime < 10000 else MIN_IMPROVEMENT_THRESHOLD
@@ -103,6 +108,20 @@ def speedup_critic(
 
     # Check runtime comparison with best so far
     runtime_is_best = best_runtime_until_now is None or candidate_result.best_test_runtime < best_runtime_until_now
+
+    # React render efficiency evaluation
+    render_efficiency_improved = False
+    if original_render_profiles and candidate_result.render_profiles:
+        from codeflash.languages.javascript.frameworks.react.benchmarking import compare_render_benchmarks
+
+        benchmark = compare_render_benchmarks(original_render_profiles, candidate_result.render_profiles)
+        if benchmark:
+            render_efficiency_improved = render_efficiency_critic(
+                benchmark.original_render_count,
+                benchmark.optimized_render_count,
+                benchmark.original_avg_duration_ms,
+                benchmark.optimized_avg_duration_ms,
+            )
 
     throughput_improved = True  # Default to True if no throughput data
     throughput_is_best = True  # Default to True if no throughput data
@@ -129,7 +148,10 @@ def speedup_critic(
             or candidate_result.concurrency_metrics.concurrency_ratio > best_concurrency_ratio_until_now
         )
 
-    # Accept if ANY of: runtime, throughput, or concurrency improves significantly
+    # Accept if ANY of: render efficiency, runtime, throughput, or concurrency improves significantly
+    if render_efficiency_improved:
+        return True
+
     if original_async_throughput is not None and candidate_result.async_throughput is not None:
         throughput_acceptance = throughput_improved and throughput_is_best
         runtime_acceptance = runtime_improved and runtime_is_best
@@ -146,11 +168,15 @@ def get_acceptance_reason(
     optimized_async_throughput: int | None = None,
     original_concurrency_metrics: ConcurrencyMetrics | None = None,
     optimized_concurrency_metrics: ConcurrencyMetrics | None = None,
+    original_render_count: int | None = None,
+    optimized_render_count: int | None = None,
+    original_render_duration: float | None = None,
+    optimized_render_duration: float | None = None,
 ) -> AcceptanceReason:
     """Determine why an optimization was accepted.
 
     Returns the primary reason for acceptance, with priority:
-    concurrency > throughput > runtime (for async code).
+    render_count > concurrency > throughput > runtime.
     """
     noise_floor = 3 * MIN_IMPROVEMENT_THRESHOLD if original_runtime_ns < 10000 else MIN_IMPROVEMENT_THRESHOLD
     if env_utils.is_ci():
@@ -158,6 +184,18 @@ def get_acceptance_reason(
 
     perf_gain = performance_gain(original_runtime_ns=original_runtime_ns, optimized_runtime_ns=optimized_runtime_ns)
     runtime_improved = perf_gain > noise_floor
+
+    # Check React render efficiency
+    render_improved = False
+    if (
+        original_render_count is not None
+        and optimized_render_count is not None
+        and original_render_duration is not None
+        and optimized_render_duration is not None
+    ):
+        render_improved = render_efficiency_critic(
+            original_render_count, optimized_render_count, original_render_duration, optimized_render_duration
+        )
 
     throughput_improved = False
     if (
@@ -175,7 +213,10 @@ def get_acceptance_reason(
         conc_gain = concurrency_gain(original_concurrency_metrics, optimized_concurrency_metrics)
         concurrency_improved = conc_gain > MIN_CONCURRENCY_IMPROVEMENT_THRESHOLD
 
-    # Return reason with priority: concurrency > throughput > runtime
+    # Return reason with priority: render_count > concurrency > throughput > runtime
+    if render_improved:
+        return AcceptanceReason.RENDER_COUNT
+
     if original_async_throughput is not None and optimized_async_throughput is not None:
         if concurrency_improved:
             return AcceptanceReason.CONCURRENCY

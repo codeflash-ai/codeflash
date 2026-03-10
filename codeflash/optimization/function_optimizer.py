@@ -496,6 +496,56 @@ class FunctionOptimizer:
         self.is_numerical_code: bool | None = None
         self.code_already_exists: bool = False
 
+    @property
+    def is_react_component(self) -> bool:
+        metadata = self.function_to_optimize.metadata or {}
+        return bool(metadata.get("is_react_component", False))
+
+    def instrument_source_with_react_profiler(self) -> str | None:
+        """Instrument the source file with React.Profiler if this is a React component.
+
+        Returns the original source code (for restoration) if instrumentation succeeded, None otherwise.
+        """
+        if not self.is_react_component:
+            return None
+        try:
+            from codeflash.languages.javascript.frameworks.react.profiler import instrument_component_with_profiler
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
+
+            file_path = self.function_to_optimize.file_path
+            original_source = file_path.read_text("utf-8")
+            analyzer = get_analyzer_for_file(file_path)
+            instrumented = instrument_component_with_profiler(
+                original_source, self.function_to_optimize.function_name, analyzer
+            )
+            if instrumented != original_source:
+                file_path.write_text(instrumented, encoding="utf-8")
+                logger.debug(f"Instrumented {self.function_to_optimize.function_name} with React.Profiler")
+                return original_source
+        except Exception:
+            logger.debug("Failed to instrument source with React.Profiler", exc_info=True)
+        return None
+
+    def restore_source_after_profiler(self, original_source: str | None) -> None:
+        """Restore the source file after React.Profiler instrumentation."""
+        if original_source is not None:
+            self.function_to_optimize.file_path.write_text(original_source, encoding="utf-8")
+
+    def parse_render_profiles_from_results(self, test_results: TestResults) -> list | None:
+        """Parse React Profiler render markers from test stdout."""
+        if not self.is_react_component or not test_results.perf_stdout:
+            return None
+        try:
+            from codeflash.languages.javascript.parse import parse_react_render_markers
+
+            profiles = parse_react_render_markers(test_results.perf_stdout)
+            if profiles:
+                logger.debug(f"Parsed {len(profiles)} React render profiles from test output")
+                return profiles
+        except Exception:
+            logger.debug("Failed to parse React render markers", exc_info=True)
+        return None
+
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
         logger.info(f"!lsp|Function Trace ID: {self.function_trace_id}")
@@ -885,6 +935,15 @@ class FunctionOptimizer:
                 )
                 benchmark_tree.add(f"{benchmark_key}: {replay_perf_gain[benchmark_key] * 100:.1f}%")
 
+        # Compute React render benchmark if profiler data is available
+        render_benchmark = None
+        if original_code_baseline.render_profiles and candidate_result.render_profiles:
+            from codeflash.languages.javascript.frameworks.react.benchmarking import compare_render_benchmarks
+
+            render_benchmark = compare_render_benchmarks(
+                original_code_baseline.render_profiles, candidate_result.render_profiles
+            )
+
         best_optimization = BestOptimization(
             candidate=candidate,
             helper_functions=code_context.helper_functions,
@@ -897,6 +956,7 @@ class FunctionOptimizer:
             winning_replay_benchmarking_test_results=candidate_result.benchmarking_test_results,
             async_throughput=candidate_result.async_throughput,
             concurrency_metrics=candidate_result.concurrency_metrics,
+            render_benchmark=render_benchmark,
         )
 
         return best_optimization, benchmark_tree
@@ -1096,6 +1156,7 @@ class FunctionOptimizer:
             best_throughput_until_now=None,
             original_concurrency_metrics=original_code_baseline.concurrency_metrics,
             best_concurrency_ratio_until_now=None,
+            original_render_profiles=original_code_baseline.render_profiles,
         ) and quantity_of_tests_critic(candidate_result)
 
         tree = self.build_runtime_info_tree(
@@ -1982,6 +2043,8 @@ class FunctionOptimizer:
                         fto_benchmark_timings=self.function_benchmark_timings,
                         total_benchmark_timings=self.total_benchmark_timings,
                     )
+                # Extract render metrics for acceptance reason
+                rb = best_optimization.render_benchmark
                 acceptance_reason = get_acceptance_reason(
                     original_runtime_ns=original_code_baseline.runtime,
                     optimized_runtime_ns=best_optimization.runtime,
@@ -1989,7 +2052,21 @@ class FunctionOptimizer:
                     optimized_async_throughput=best_optimization.async_throughput,
                     original_concurrency_metrics=original_code_baseline.concurrency_metrics,
                     optimized_concurrency_metrics=best_optimization.concurrency_metrics,
+                    original_render_count=rb.original_render_count if rb else None,
+                    optimized_render_count=rb.optimized_render_count if rb else None,
+                    original_render_duration=rb.original_avg_duration_ms if rb else None,
+                    optimized_render_duration=rb.optimized_avg_duration_ms if rb else None,
                 )
+
+                # Format render benchmark markdown for PR/explanation
+                render_benchmark_md = None
+                if rb:
+                    from codeflash.languages.javascript.frameworks.react.benchmarking import (
+                        format_render_benchmark_for_pr,
+                    )
+
+                    render_benchmark_md = format_render_benchmark_for_pr(rb)
+
                 explanation = Explanation(
                     raw_explanation_message=best_optimization.candidate.explanation,
                     winning_behavior_test_results=best_optimization.winning_behavior_test_results,
@@ -2004,6 +2081,7 @@ class FunctionOptimizer:
                     original_concurrency_metrics=original_code_baseline.concurrency_metrics,
                     best_concurrency_metrics=best_optimization.concurrency_metrics,
                     acceptance_reason=acceptance_reason,
+                    render_benchmark_markdown=render_benchmark_md,
                 )
 
                 self.replace_function_and_helpers_with_optimized_code(
@@ -2168,6 +2246,7 @@ class FunctionOptimizer:
             original_concurrency_metrics=explanation.original_concurrency_metrics,
             best_concurrency_metrics=explanation.best_concurrency_metrics,
             acceptance_reason=explanation.acceptance_reason,
+            render_benchmark_markdown=explanation.render_benchmark_markdown,
         )
         self.log_successful_optimization(new_explanation, generated_tests, exp_type)
 
@@ -2379,6 +2458,11 @@ class FunctionOptimizer:
                     project_root=self.project_root,
                 )
 
+            # Instrument source with React.Profiler for render measurement
+            pre_profiler_source = self.instrument_source_with_react_profiler()
+            if pre_profiler_source is not None:
+                test_env["CODEFLASH_REACT_PROFILER_MODE"] = "true"
+
             try:
                 benchmarking_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.PERFORMANCE,
@@ -2391,10 +2475,15 @@ class FunctionOptimizer:
                 )
                 logger.debug(f"[BENCHMARK-DONE] Got {len(benchmarking_results.test_results)} benchmark results")
             finally:
+                self.restore_source_after_profiler(pre_profiler_source)
+                test_env.pop("CODEFLASH_REACT_PROFILER_MODE", None)
                 if self.function_to_optimize.is_async:
                     self.write_code_and_helpers(
                         self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                     )
+
+        # Parse React render profiles from performance test stdout
+        original_render_profiles = self.parse_render_profiles_from_results(benchmarking_results)
 
         console.print(
             TestResults.report_to_tree(
@@ -2461,6 +2550,7 @@ class FunctionOptimizer:
                     line_profile_results=line_profile_results,
                     async_throughput=async_throughput,
                     concurrency_metrics=concurrency_metrics,
+                    render_profiles=original_render_profiles,
                 ),
                 functions_to_remove,
             )
@@ -2635,6 +2725,11 @@ class FunctionOptimizer:
                     project_root=self.project_root,
                 )
 
+            # Instrument candidate source with React.Profiler for render measurement
+            pre_profiler_source = self.instrument_source_with_react_profiler()
+            if pre_profiler_source is not None:
+                test_env["CODEFLASH_REACT_PROFILER_MODE"] = "true"
+
             try:
                 candidate_benchmarking_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.PERFORMANCE,
@@ -2645,11 +2740,16 @@ class FunctionOptimizer:
                     enable_coverage=False,
                 )
             finally:
+                self.restore_source_after_profiler(pre_profiler_source)
+                test_env.pop("CODEFLASH_REACT_PROFILER_MODE", None)
                 # Restore original source if we instrumented it
                 if self.function_to_optimize.is_async and is_python():
                     self.write_code_and_helpers(
                         candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
                     )
+
+            # Parse React render profiles from candidate performance test stdout
+            candidate_render_profiles = self.parse_render_profiles_from_results(candidate_benchmarking_results)
             # Use effective_loop_count which represents the minimum number of timing samples
             # across all test cases. This is more accurate for JavaScript tests where
             # capturePerf does internal looping with potentially different iteration counts per test.
@@ -2700,6 +2800,7 @@ class FunctionOptimizer:
                     total_candidate_timing=total_candidate_timing,
                     async_throughput=candidate_async_throughput,
                     concurrency_metrics=candidate_concurrency_metrics,
+                    render_profiles=candidate_render_profiles,
                 )
             )
 
