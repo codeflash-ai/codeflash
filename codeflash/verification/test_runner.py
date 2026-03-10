@@ -126,6 +126,7 @@ def run_behavioral_tests(
     enable_coverage: bool = False,
     js_project_root: Path | None = None,
     candidate_index: int = 0,
+    is_react_component: bool = False,
 ) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
     """Run behavioral tests with optional coverage."""
     # Check if there's a language support for this test framework that implements run_behavioral_tests
@@ -139,6 +140,7 @@ def run_behavioral_tests(
             project_root=js_project_root,
             enable_coverage=enable_coverage,
             candidate_index=candidate_index,
+            is_react_component=is_react_component,
         )
     if is_python():
         test_files: list[str] = []
@@ -262,6 +264,7 @@ def run_line_profile_tests(
     pytest_max_loops: int = 100_000,
     js_project_root: Path | None = None,
     line_profiler_output_file: Path | None = None,
+    is_react_component: bool = False,
 ) -> tuple[Path, subprocess.CompletedProcess]:
     # Check if there's a language support for this test framework that implements run_line_profile_tests
     language_support = get_language_support_by_framework(test_framework)
@@ -273,6 +276,7 @@ def run_line_profile_tests(
             timeout=pytest_timeout,
             project_root=js_project_root,
             line_profile_output_file=line_profiler_output_file,
+            is_react_component=is_react_component,
         )
     if is_python():  # pytest runs both pytest and unittest tests
         pytest_cmd_list = (
@@ -324,23 +328,12 @@ def run_benchmarking_tests(
     pytest_min_loops: int = 5,
     pytest_max_loops: int = 100_000,
     js_project_root: Path | None = None,
+    is_react_component: bool = False,
 ) -> tuple[Path, subprocess.CompletedProcess]:
     logger.debug(f"run_benchmarking_tests called: framework={test_framework}, num_files={len(test_paths.test_files)}")
     # Check if there's a language support for this test framework that implements run_benchmarking_tests
     language_support = get_language_support_by_framework(test_framework)
     if language_support is not None and hasattr(language_support, "run_benchmarking_tests"):
-        # needs_warmup = test_framework == "jest"
-        # if needs_warmup:
-        #     language_support.run_benchmarking_tests(
-        #         test_paths=test_paths,
-        #         test_env=test_env,
-        #         cwd=cwd,
-        #         timeout=pytest_timeout,
-        #         project_root=js_project_root,
-        #         min_loops=1,
-        #         max_loops=1,
-        #         target_duration_seconds=pytest_target_runtime_seconds,
-        #     )
         return language_support.run_benchmarking_tests(
             test_paths=test_paths,
             test_env=test_env,
@@ -350,6 +343,7 @@ def run_benchmarking_tests(
             min_loops=pytest_min_loops,
             max_loops=pytest_max_loops,
             target_duration_seconds=pytest_target_runtime_seconds,
+            is_react_component=is_react_component,
         )
     if is_python():  # pytest runs both pytest and unittest tests
         pytest_cmd_list = (

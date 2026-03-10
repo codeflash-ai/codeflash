@@ -191,6 +191,44 @@ def _create_codeflash_tsconfig(project_root: Path) -> Path:
     return codeflash_tsconfig_path
 
 
+def _has_jsdom_dependency(project_root: Path) -> bool:
+    """Check if jest-environment-jsdom is available in the project."""
+    package_json = project_root / "package.json"
+    if not package_json.exists():
+        return False
+
+    try:
+        content = json.loads(package_json.read_text())
+        deps = {**content.get("dependencies", {}), **content.get("devDependencies", {})}
+        return "jest-environment-jsdom" in deps
+    except (json.JSONDecodeError, OSError):
+        return False
+
+
+def _ensure_jsdom_for_react(project_root: Path) -> None:
+    """Ensure jest-environment-jsdom is installed for React component testing."""
+    if _has_jsdom_dependency(project_root):
+        return
+
+    # Also check if it's installed in node_modules even without being in package.json
+    if (project_root / "node_modules" / "jest-environment-jsdom").exists():
+        return
+
+    logger.warning(
+        "jest-environment-jsdom is required for React component testing but was not found. "
+        "Install it with: npm install --save-dev jest-environment-jsdom"
+    )
+    install_cmd = get_package_install_command(project_root, "jest-environment-jsdom", dev=True)
+    try:
+        result = subprocess.run(install_cmd, check=False, cwd=project_root, capture_output=True, text=True, timeout=120)
+        if result.returncode == 0:
+            logger.debug("Installed jest-environment-jsdom")
+            return
+        logger.warning(f"Failed to install jest-environment-jsdom: {result.stderr}")
+    except Exception as e:
+        logger.warning(f"Error installing jest-environment-jsdom: {e}")
+
+
 def _has_ts_jest_dependency(project_root: Path) -> bool:
     """Check if the project has ts-jest as a dependency.
 
@@ -770,6 +808,7 @@ def run_jest_behavioral_tests(
     project_root: Path | None = None,
     enable_coverage: bool = False,
     candidate_index: int = 0,
+    is_react_component: bool = False,
 ) -> tuple[Path, subprocess.CompletedProcess[str], Path | None, Path | None]:
     """Run Jest tests and return results in a format compatible with pytest output.
 
@@ -802,6 +841,10 @@ def run_jest_behavioral_tests(
     # Ensure the codeflash npm package is installed
     _ensure_runtime_files(effective_cwd)
 
+    # Ensure jsdom is available for React component testing
+    if is_react_component:
+        _ensure_jsdom_for_react(effective_cwd)
+
     # Coverage output directory
     coverage_dir = get_run_tmp_file(Path("jest_coverage"))
     coverage_json_path = coverage_dir / "coverage-final.json" if enable_coverage else None
@@ -821,6 +864,10 @@ def run_jest_behavioral_tests(
     jest_config = _get_jest_config_for_project(effective_cwd)
     if jest_config:
         jest_cmd.append(f"--config={jest_config}")
+
+    # React components need jsdom for DOM APIs used by @testing-library/react
+    if is_react_component:
+        jest_cmd.append("--testEnvironment=jsdom")
 
     # Add coverage flags if enabled
     if enable_coverage:
@@ -1016,6 +1063,7 @@ def run_jest_benchmarking_tests(
     max_loops: int = 100,
     target_duration_ms: int = 10_000,  # 10 seconds for benchmarking tests
     stability_check: bool = True,
+    is_react_component: bool = False,
 ) -> tuple[Path, subprocess.CompletedProcess[str]]:
     """Run Jest benchmarking tests with in-process session-level looping.
 
@@ -1056,6 +1104,10 @@ def run_jest_benchmarking_tests(
     # Ensure the codeflash npm package is installed
     _ensure_runtime_files(effective_cwd)
 
+    # Ensure jsdom is available for React component testing
+    if is_react_component:
+        _ensure_jsdom_for_react(effective_cwd)
+
     # Detect Jest version for logging
     jest_major_version = _get_jest_major_version(effective_cwd)
     if jest_major_version:
@@ -1078,6 +1130,10 @@ def run_jest_benchmarking_tests(
     jest_config = _get_jest_config_for_project(effective_cwd)
     if jest_config:
         jest_cmd.append(f"--config={jest_config}")
+
+    # React components need jsdom for DOM APIs used by @testing-library/react
+    if is_react_component:
+        jest_cmd.append("--testEnvironment=jsdom")
 
     if test_files:
         jest_cmd.append("--runTestsByPath")
@@ -1195,6 +1251,7 @@ def run_jest_line_profile_tests(
     timeout: int | None = None,
     project_root: Path | None = None,
     line_profile_output_file: Path | None = None,
+    is_react_component: bool = False,
 ) -> tuple[Path, subprocess.CompletedProcess[str]]:
     """Run Jest tests for line profiling.
 
@@ -1234,6 +1291,10 @@ def run_jest_line_profile_tests(
     # Ensure the codeflash npm package is installed
     _ensure_runtime_files(effective_cwd)
 
+    # Ensure jsdom is available for React component testing
+    if is_react_component:
+        _ensure_jsdom_for_react(effective_cwd)
+
     # Build Jest command for line profiling - simple run without benchmarking loops
     jest_cmd = [
         "npx",
@@ -1249,6 +1310,10 @@ def run_jest_line_profile_tests(
     jest_config = _get_jest_config_for_project(effective_cwd)
     if jest_config:
         jest_cmd.append(f"--config={jest_config}")
+
+    # React components need jsdom for DOM APIs used by @testing-library/react
+    if is_react_component:
+        jest_cmd.append("--testEnvironment=jsdom")
 
     if test_files:
         jest_cmd.append("--runTestsByPath")

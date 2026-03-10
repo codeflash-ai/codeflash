@@ -402,6 +402,7 @@ class OptimizedCandidateResult(BaseModel):
     async_throughput: Optional[int] = None
     concurrency_metrics: Optional[ConcurrencyMetrics] = None
     render_profiles: Optional[list[Any]] = None
+    dom_mutations: Optional[list[Any]] = None
 
 
 class GeneratedTests(BaseModel):
@@ -636,6 +637,7 @@ class OriginalCodeBaseline(BaseModel):
     async_throughput: Optional[int] = None
     concurrency_metrics: Optional[ConcurrencyMetrics] = None
     render_profiles: Optional[list[Any]] = None
+    dom_mutations: Optional[list[Any]] = None
 
 
 class CoverageStatus(Enum):

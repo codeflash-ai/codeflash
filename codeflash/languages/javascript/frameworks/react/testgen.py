@@ -89,7 +89,9 @@ def post_process_react_tests(test_source: str, component_info: ReactComponentInf
     Ensures:
     - @testing-library/react imports are present
     - act() wrapping for state updates
-    - Proper cleanup
+    - cleanup import when unmount is used
+    - Fake timers for debounce/throttle tests
+    - user-event import for interaction tests
     """
     result = test_source
 
@@ -97,15 +99,61 @@ def post_process_react_tests(test_source: str, component_info: ReactComponentInf
     if "@testing-library/react" not in result:
         result = "import { render, screen, act } from '@testing-library/react';\n" + result
 
-    # Ensure act import if state updates are detected
-    if "act(" in result and "import" in result and "act" not in result.split("from '@testing-library/react'")[0]:
-        result = result.replace("from '@testing-library/react'", "act, " + "from '@testing-library/react'", 1)
+    # Ensure act is in the @testing-library/react import if act() is used in the test
+    if "act(" in result:
+        match = re.search(r"import\s*\{([^}]+)\}\s*from\s*['\"]@testing-library/react['\"]", result)
+        if match:
+            imports = match.group(1)
+            if "act" not in imports:
+                result = result.replace(match.group(0), match.group(0).replace("{" + imports + "}", "{" + imports + ", act}"))
+
+    # Ensure cleanup import if unmount is called
+    if "unmount" in result:
+        match = re.search(r"import\s*\{([^}]+)\}\s*from\s*['\"]@testing-library/react['\"]", result)
+        if match:
+            imports = match.group(1)
+            if "cleanup" not in imports:
+                result = result.replace(match.group(0), match.group(0).replace("{" + imports + "}", "{" + imports + ", cleanup}"))
+
+    # Ensure fake timers for debounce/throttle tests
+    if re.search(r"jest\.advanceTimersByTime|jest\.runAllTimers|jest\.runOnlyPendingTimers|vi\.advanceTimersByTime", result):
+        if "useFakeTimers" not in result:
+            # Inject jest.useFakeTimers() at the start of beforeEach or before first describe
+            before_each_match = re.search(r"(beforeEach\s*\(\s*(?:async\s*)?\(\)\s*=>\s*\{)", result)
+            if before_each_match:
+                result = result.replace(
+                    before_each_match.group(0),
+                    before_each_match.group(0) + "\n    jest.useFakeTimers();",
+                )
+                # Also add afterEach to restore real timers if not present
+                if "useRealTimers" not in result:
+                    after_each_match = re.search(r"(afterEach\s*\(\s*(?:async\s*)?\(\)\s*=>\s*\{)", result)
+                    if after_each_match:
+                        result = result.replace(
+                            after_each_match.group(0),
+                            after_each_match.group(0) + "\n    jest.useRealTimers();",
+                        )
+                    else:
+                        # Add afterEach block after the beforeEach block
+                        result = re.sub(
+                            r"(beforeEach\s*\([^)]*\)\s*=>\s*\{[^}]*\}\s*\);?\s*\n)",
+                            r"\1\n  afterEach(() => {\n    jest.useRealTimers();\n  });\n",
+                            result,
+                            count=1,
+                        )
+            else:
+                # No beforeEach — inject before first describe/it block
+                result = re.sub(
+                    r"(describe\s*\()",
+                    "beforeEach(() => {\n  jest.useFakeTimers();\n});\n\nafterEach(() => {\n  jest.useRealTimers();\n});\n\n\\1",
+                    result,
+                    count=1,
+                )
 
     # Ensure user-event import if user interactions are tested
     if (
-        "click" in result.lower() or "type" in result.lower() or "userEvent" in result
+        "userEvent" in result or "user-event" in result
     ) and "@testing-library/user-event" not in result:
-        # Add user-event import after testing-library import
         result = re.sub(
             r"(import .+ from '@testing-library/react';?\n)",
             r"\1import userEvent from '@testing-library/user-event';\n",

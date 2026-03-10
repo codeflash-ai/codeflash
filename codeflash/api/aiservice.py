@@ -737,6 +737,8 @@ class AiServiceClient:
         language_version: str | None = None,
         module_system: str | None = None,
         is_numerical_code: bool | None = None,
+        is_react_component: bool = False,
+        react_context: str | None = None,
     ) -> tuple[str, str, str] | None:
         """Generate regression tests for the given function by making a request to the Django endpoint.
 
@@ -786,6 +788,8 @@ class AiServiceClient:
             "is_async": function_to_optimize.is_async,
             "call_sequence": self.get_next_sequence(),
             "is_numerical_code": is_numerical_code,
+            "is_react_component": is_react_component,
+            "react_context": react_context,
         }
 
         # Add language-specific version fields

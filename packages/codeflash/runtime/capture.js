@@ -283,6 +283,9 @@ if (RANDOM_SEED !== 0) {
 let currentTestName = null;
 let currentTestPath = null;  // Test file path from Jest
 
+// Track active DOM MutationObservers for automatic cleanup/emission in afterEach
+let _activeMutationObservers = [];
+
 // Invocation counter map: tracks how many times each testId has been seen
 // Key: testId (testModule:testClass:testFunction:lineId:loopIndex)
 // Value: count (starts at 0, increments each time same key is seen)
@@ -665,6 +668,28 @@ function capture(funcName, lineId, fn, ...args) {
  * @throws {Error} - Re-throws any error from the function
  */
 function capturePerf(funcName, lineId, fn, ...args) {
+    // In React Profiler mode, skip the benchmarking loop. Just call the function
+    // once and let React.Profiler instrumentation in the source capture render metrics.
+    if (process.env.CODEFLASH_REACT_PROFILER_MODE === 'true') {
+        const result = fn(...args);
+
+        // Set up DOM mutation counting for React profiler mode
+        const MutationObserverCls = globalThis.MutationObserver;
+        if (MutationObserverCls && result && result.container) {
+            let mutationCount = 0;
+            const observer = new MutationObserverCls((mutations) => {
+                mutationCount += mutations.length;
+            });
+            observer.observe(result.container, {
+                childList: true, subtree: true, attributes: true
+            });
+            const entry = { funcName, observer, getMutationCount: () => mutationCount };
+            _activeMutationObservers.push(entry);
+        }
+
+        return result;
+    }
+
     // Check if we should skip looping entirely (shared time budget exceeded)
     const shouldLoop = getPerfLoopCount() > 1 && !checkSharedTimeLimit();
 
@@ -1088,7 +1113,34 @@ function captureRenderPerf(funcName, lineId, renderFn, Component, ...createEleme
     if (process.env.CODEFLASH_REACT_PROFILER_MODE === 'true') {
         const React = _getReact();
         const element = React.createElement(Component, ...createElementArgs);
-        return Promise.resolve(renderFn(element));
+
+        const result = renderFn(element);
+
+        // Set up DOM mutation counting after initial render
+        const MutationObserverCls = globalThis.MutationObserver;
+        if (MutationObserverCls && result && result.container) {
+            let mutationCount = 0;
+            const observer = new MutationObserverCls((mutations) => {
+                mutationCount += mutations.length;
+            });
+            observer.observe(result.container, {
+                childList: true, subtree: true, attributes: true
+            });
+
+            // Track for automatic emission in afterEach
+            const entry = { funcName, observer, getMutationCount: () => mutationCount };
+            _activeMutationObservers.push(entry);
+
+            // Attach cleanup helper so tests can also emit manually if needed
+            result._codeflashMutationObserver = observer;
+            result._codeflashGetMutationCount = () => {
+                observer.disconnect();
+                console.log(`!######DOM_MUTATIONS:${funcName}:${mutationCount}######!`);
+                return mutationCount;
+            };
+        }
+
+        return Promise.resolve(result);
     }
 
     const runBenchmark = require('./react-benchmark/run');
@@ -1253,6 +1305,22 @@ if (typeof beforeEach !== 'undefined') {
             // Also reset invocation loop counts so each test starts fresh
             sharedPerfState.invocationLoopCounts = {};
         }
+    });
+}
+
+if (typeof afterEach !== 'undefined') {
+    afterEach(() => {
+        // Emit DOM mutation markers for any active observers from this test
+        for (const entry of _activeMutationObservers) {
+            try {
+                entry.observer.disconnect();
+                const count = entry.getMutationCount();
+                console.log(`!######DOM_MUTATIONS:${entry.funcName}:${count}######!`);
+            } catch (e) {
+                // Ignore errors from already-disconnected observers
+            }
+        }
+        _activeMutationObservers = [];
     });
 }
 

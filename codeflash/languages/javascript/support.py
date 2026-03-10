@@ -2372,6 +2372,7 @@ class JavaScriptSupport:
         enable_coverage: bool = False,
         candidate_index: int = 0,
         test_framework: str | None = None,
+        is_react_component: bool = False,
     ) -> tuple[Path, Any, Path | None, Path | None]:
         """Run behavioral tests using the detected test framework.
 
@@ -2416,6 +2417,7 @@ class JavaScriptSupport:
             project_root=project_root,
             enable_coverage=enable_coverage,
             candidate_index=candidate_index,
+            is_react_component=is_react_component,
         )
 
     def run_benchmarking_tests(
@@ -2429,6 +2431,7 @@ class JavaScriptSupport:
         max_loops: int = 100_000,
         target_duration_seconds: float = 10.0,
         test_framework: str | None = None,
+        is_react_component: bool = False,
     ) -> tuple[Path, Any]:
         """Run benchmarking tests using the detected test framework.
 
@@ -2478,6 +2481,7 @@ class JavaScriptSupport:
             min_loops=min_loops,
             max_loops=max_loops,
             target_duration_ms=int(target_duration_seconds * 1000),
+            is_react_component=is_react_component,
         )
 
     def run_line_profile_tests(
@@ -2489,6 +2493,7 @@ class JavaScriptSupport:
         project_root: Path | None = None,
         line_profile_output_file: Path | None = None,
         test_framework: str | None = None,
+        is_react_component: bool = False,
     ) -> tuple[Path, Any]:
         """Run tests for line profiling using the detected test framework.
 
@@ -2530,6 +2535,7 @@ class JavaScriptSupport:
             timeout=timeout,
             project_root=project_root,
             line_profile_output_file=line_profile_output_file,
+            is_react_component=is_react_component,
         )
 
 

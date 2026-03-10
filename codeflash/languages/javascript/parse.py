@@ -37,6 +37,10 @@ jest_end_pattern = re.compile(r"!######([^:]+):([^:]+):([^:]+):([^:]+):([^:]+):(
 # Format: !######REACT_RENDER:{component}:{phase}:{actualDuration}:{baseDuration}:{renderCount}######!
 REACT_RENDER_MARKER_PATTERN = re.compile(r"!######REACT_RENDER:([^:]+):([^:]+):([^:]+):([^:]+):(\d+)######!")
 
+# DOM mutation marker pattern
+# Format: !######DOM_MUTATIONS:{component}:{mutationCount}######!
+DOM_MUTATION_MARKER_PATTERN = re.compile(r"!######DOM_MUTATIONS:([^:]+):(\d+)######!")
+
 
 @dataclass(frozen=True)
 class RenderProfile:
@@ -68,6 +72,33 @@ def parse_react_render_markers(stdout: str) -> list[RenderProfile]:
             )
         except (ValueError, IndexError) as e:
             logger.debug("Failed to parse React render marker: %s", e)
+    return profiles
+
+
+@dataclass(frozen=True)
+class DomMutationProfile:
+    """Parsed DOM mutation count from a single marker."""
+
+    component_name: str
+    mutation_count: int
+
+
+def parse_dom_mutation_markers(stdout: str) -> list[DomMutationProfile]:
+    """Parse DOM mutation markers from test output.
+
+    Returns a list of DomMutationProfile instances, one per marker found.
+    """
+    profiles: list[DomMutationProfile] = []
+    for match in DOM_MUTATION_MARKER_PATTERN.finditer(stdout):
+        try:
+            profiles.append(
+                DomMutationProfile(
+                    component_name=match.group(1),
+                    mutation_count=int(match.group(2)),
+                )
+            )
+        except (ValueError, IndexError) as e:
+            logger.debug("Failed to parse DOM mutation marker: %s", e)
     return profiles
 
 

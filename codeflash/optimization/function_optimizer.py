@@ -546,6 +546,21 @@ class FunctionOptimizer:
             logger.debug("Failed to parse React render markers", exc_info=True)
         return None
 
+    def parse_dom_mutations_from_results(self, test_results: TestResults) -> list | None:
+        """Parse DOM mutation markers from test stdout."""
+        if not self.is_react_component or not test_results.perf_stdout:
+            return None
+        try:
+            from codeflash.languages.javascript.parse import parse_dom_mutation_markers
+
+            profiles = parse_dom_mutation_markers(test_results.perf_stdout)
+            if profiles:
+                logger.debug(f"Parsed {len(profiles)} DOM mutation profiles from test output")
+                return profiles
+        except Exception:
+            logger.debug("Failed to parse DOM mutation markers", exc_info=True)
+        return None
+
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
         logger.info(f"!lsp|Function Trace ID: {self.function_trace_id}")
@@ -941,7 +956,10 @@ class FunctionOptimizer:
             from codeflash.languages.javascript.frameworks.react.benchmarking import compare_render_benchmarks
 
             render_benchmark = compare_render_benchmarks(
-                original_code_baseline.render_profiles, candidate_result.render_profiles
+                original_code_baseline.render_profiles,
+                candidate_result.render_profiles,
+                original_dom_mutations=original_code_baseline.dom_mutations,
+                optimized_dom_mutations=candidate_result.dom_mutations,
             )
 
         best_optimization = BestOptimization(
@@ -2056,6 +2074,8 @@ class FunctionOptimizer:
                     optimized_render_count=rb.optimized_render_count if rb else None,
                     original_render_duration=rb.original_avg_duration_ms if rb else None,
                     optimized_render_duration=rb.optimized_avg_duration_ms if rb else None,
+                    original_dom_mutations=rb.original_dom_mutations if rb else 0,
+                    optimized_dom_mutations=rb.optimized_dom_mutations if rb else 0,
                 )
 
                 # Format render benchmark markdown for PR/explanation
@@ -2414,6 +2434,7 @@ class FunctionOptimizer:
                     testing_time=total_looping_time,
                     enable_coverage=True,
                     code_context=code_context,
+                    is_react_component=self.is_react_component,
                 )
             finally:
                 # Remove codeflash capture
@@ -2472,6 +2493,7 @@ class FunctionOptimizer:
                     testing_time=total_looping_time,
                     enable_coverage=False,
                     code_context=code_context,
+                    is_react_component=self.is_react_component,
                 )
                 logger.debug(f"[BENCHMARK-DONE] Got {len(benchmarking_results.test_results)} benchmark results")
             finally:
@@ -2482,8 +2504,9 @@ class FunctionOptimizer:
                         self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                     )
 
-        # Parse React render profiles from performance test stdout
+        # Parse React render profiles and DOM mutation data from performance test stdout
         original_render_profiles = self.parse_render_profiles_from_results(benchmarking_results)
+        original_dom_mutations = self.parse_dom_mutations_from_results(benchmarking_results)
 
         console.print(
             TestResults.report_to_tree(
@@ -2551,6 +2574,7 @@ class FunctionOptimizer:
                     async_throughput=async_throughput,
                     concurrency_metrics=concurrency_metrics,
                     render_profiles=original_render_profiles,
+                    dom_mutations=original_dom_mutations,
                 ),
                 functions_to_remove,
             )
@@ -2661,6 +2685,7 @@ class FunctionOptimizer:
                     optimization_iteration=optimization_candidate_index,
                     testing_time=total_looping_time,
                     enable_coverage=False,
+                    is_react_component=self.is_react_component,
                 )
             # Remove instrumentation
             finally:
@@ -2738,6 +2763,7 @@ class FunctionOptimizer:
                     optimization_iteration=optimization_candidate_index,
                     testing_time=total_looping_time,
                     enable_coverage=False,
+                    is_react_component=self.is_react_component,
                 )
             finally:
                 self.restore_source_after_profiler(pre_profiler_source)
@@ -2748,8 +2774,9 @@ class FunctionOptimizer:
                         candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
                     )
 
-            # Parse React render profiles from candidate performance test stdout
+            # Parse React render profiles and DOM mutation data from candidate performance test stdout
             candidate_render_profiles = self.parse_render_profiles_from_results(candidate_benchmarking_results)
+            candidate_dom_mutations = self.parse_dom_mutations_from_results(candidate_benchmarking_results)
             # Use effective_loop_count which represents the minimum number of timing samples
             # across all test cases. This is more accurate for JavaScript tests where
             # capturePerf does internal looping with potentially different iteration counts per test.
@@ -2801,6 +2828,7 @@ class FunctionOptimizer:
                     async_throughput=candidate_async_throughput,
                     concurrency_metrics=candidate_concurrency_metrics,
                     render_profiles=candidate_render_profiles,
+                    dom_mutations=candidate_dom_mutations,
                 )
             )
 
@@ -2817,6 +2845,7 @@ class FunctionOptimizer:
         pytest_max_loops: int = 250,
         code_context: CodeOptimizationContext | None = None,
         line_profiler_output_file: Path | None = None,
+        is_react_component: bool = False,
     ) -> tuple[TestResults | dict, CoverageData | None]:
         coverage_database_file = None
         coverage_config_file = None
@@ -2831,6 +2860,7 @@ class FunctionOptimizer:
                     enable_coverage=enable_coverage,
                     js_project_root=self.test_cfg.js_project_root,
                     candidate_index=optimization_iteration,
+                    is_react_component=is_react_component,
                 )
             elif testing_type == TestingMode.LINE_PROFILE:
                 result_file_path, run_result = run_line_profile_tests(
@@ -2843,6 +2873,7 @@ class FunctionOptimizer:
                     test_framework=self.test_cfg.test_framework,
                     js_project_root=self.test_cfg.js_project_root,
                     line_profiler_output_file=line_profiler_output_file,
+                    is_react_component=is_react_component,
                 )
             elif testing_type == TestingMode.PERFORMANCE:
                 result_file_path, run_result = run_benchmarking_tests(
@@ -2856,6 +2887,7 @@ class FunctionOptimizer:
                     pytest_max_loops=pytest_max_loops,
                     test_framework=self.test_cfg.test_framework,
                     js_project_root=self.test_cfg.js_project_root,
+                    is_react_component=is_react_component,
                 )
             else:
                 msg = f"Unexpected testing type: {testing_type}"
@@ -2923,6 +2955,13 @@ class FunctionOptimizer:
         generated_test_paths: list[Path],
         generated_perf_test_paths: list[Path],
     ) -> list[concurrent.futures.Future]:
+        metadata = self.function_to_optimize.metadata or {}
+        react_context = metadata.get("react_context")
+        if react_context and not isinstance(react_context, str):
+            import json as _json
+
+            react_context = _json.dumps(react_context)
+
         return [
             executor.submit(
                 generate_tests,
@@ -2938,6 +2977,8 @@ class FunctionOptimizer:
                 test_path,
                 test_perf_path,
                 self.is_numerical_code,
+                self.is_react_component,
+                react_context,
             )
             for test_index, (test_path, test_perf_path) in enumerate(
                 zip(generated_test_paths, generated_perf_test_paths)

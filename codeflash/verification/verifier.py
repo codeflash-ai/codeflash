@@ -29,6 +29,8 @@ def generate_tests(
     test_path: Path,
     test_perf_path: Path,
     is_numerical_code: bool | None = None,
+    is_react_component: bool = False,
+    react_context: str | None = None,
 ) -> tuple[str, str, str, Path, Path] | None:
     # TODO: Sometimes this recreates the original Class definition. This overrides and messes up the original
     #  class import. Remove the recreation of the class definition
@@ -70,6 +72,8 @@ def generate_tests(
         language=function_to_optimize.language,
         module_system=project_module_system,
         is_numerical_code=is_numerical_code,
+        is_react_component=is_react_component,
+        react_context=react_context,
     )
     if response and isinstance(response, tuple) and len(response) == 3:
         generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source = response
