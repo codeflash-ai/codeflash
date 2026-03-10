@@ -13,7 +13,6 @@ import os
 import platform
 import shutil
 import subprocess
-from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -72,6 +71,64 @@ def _find_comparator_jar(project_root: Path | None = None) -> Path | None:
         return resources_jar
 
     return None
+
+
+def _compute_java_executable() -> str | None:
+    """Find the Java executable.
+
+    Returns:
+        Path to java executable, or None if not found.
+
+    """
+    # Check JAVA_HOME
+    java_home = os.environ.get("JAVA_HOME")
+    if java_home:
+        java_path = Path(java_home) / "bin" / "java"
+        if java_path.exists():
+            return str(java_path)
+
+    # On macOS, try to get JAVA_HOME from the system helper or Maven
+    if _IS_DARWIN:
+        # Try to extract Java home from Maven (which always finds it)
+        if shutil.which("mvn"):
+            try:
+                result = subprocess.run(["mvn", "--version"], capture_output=True, text=True, timeout=10, check=False)
+                if result.returncode == 0:
+                    for line in result.stdout.split("\n"):
+                        if "runtime:" in line:
+                            runtime_path = line.split("runtime:")[-1].strip()
+                            java_path = Path(runtime_path) / "bin" / "java"
+                            if java_path.exists():
+                                return str(java_path)
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                pass
+
+        # Check common Homebrew locations
+        for homebrew_java in [
+            "/opt/homebrew/opt/openjdk/bin/java",
+            "/opt/homebrew/opt/openjdk@25/bin/java",
+            "/opt/homebrew/opt/openjdk@21/bin/java",
+            "/opt/homebrew/opt/openjdk@17/bin/java",
+            "/usr/local/opt/openjdk/bin/java",
+        ]:
+            if Path(homebrew_java).exists():
+                return homebrew_java
+
+    # Check PATH (on macOS, /usr/bin/java may be a stub that fails)
+    java_which = shutil.which("java")
+    if java_which:
+        # Verify it's a real Java, not a macOS stub
+        try:
+            result = subprocess.run([java_which, "--version"], capture_output=True, text=True, timeout=5, check=False)
+            if result.returncode == 0:
+                return java_which
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+
+    return None
+
+
+_JAVA_EXECUTABLE: str | None = _compute_java_executable()
 
 
 def _find_java_executable() -> str | None:
@@ -390,120 +447,3 @@ def compare_invocations_directly(original_results: dict, candidate_results: dict
     )
 
     return equivalent, test_diffs
-
-
-
-def _compute_java_executable() -> str | None:
-    """Find the Java executable.
-
-    Returns:
-        Path to java executable, or None if not found.
-
-    """
-    # Check JAVA_HOME
-    java_home = os.environ.get("JAVA_HOME")
-    if java_home:
-        java_path = Path(java_home) / "bin" / "java"
-        if java_path.exists():
-            return str(java_path)
-
-    # On macOS, try to get JAVA_HOME from the system helper or Maven
-    if _IS_DARWIN:
-        # Try to extract Java home from Maven (which always finds it)
-        if shutil.which("mvn"):
-            try:
-                result = subprocess.run(
-                    ["mvn", "--version"], capture_output=True, text=True, timeout=10, check=False
-                )
-                if result.returncode == 0:
-                    for line in result.stdout.split("\n"):
-                        if "runtime:" in line:
-                            runtime_path = line.split("runtime:")[-1].strip()
-                            java_path = Path(runtime_path) / "bin" / "java"
-                            if java_path.exists():
-                                return str(java_path)
-            except (subprocess.TimeoutExpired, FileNotFoundError):
-                pass
-
-        # Check common Homebrew locations
-        for homebrew_java in [
-            "/opt/homebrew/opt/openjdk/bin/java",
-            "/opt/homebrew/opt/openjdk@25/bin/java",
-            "/opt/homebrew/opt/openjdk@21/bin/java",
-            "/opt/homebrew/opt/openjdk@17/bin/java",
-            "/usr/local/opt/openjdk/bin/java",
-        ]:
-            if Path(homebrew_java).exists():
-                return homebrew_java
-
-    # Check PATH (on macOS, /usr/bin/java may be a stub that fails)
-    java_which = shutil.which("java")
-    if java_which:
-        # Verify it's a real Java, not a macOS stub
-        try:
-            result = subprocess.run([java_which, "--version"], capture_output=True, text=True, timeout=5, check=False)
-            if result.returncode == 0:
-                return java_which
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
-
-    return None
-
-
-def _compute_java_executable() -> str | None:
-    """Find the Java executable.
-
-    Returns:
-        Path to java executable, or None if not found.
-
-    """
-    # Check JAVA_HOME
-    java_home = os.environ.get("JAVA_HOME")
-    if java_home:
-        java_path = Path(java_home) / "bin" / "java"
-        if java_path.exists():
-            return str(java_path)
-
-    # On macOS, try to get JAVA_HOME from the system helper or Maven
-    if _IS_DARWIN:
-        # Try to extract Java home from Maven (which always finds it)
-        if shutil.which("mvn"):
-            try:
-                result = subprocess.run(
-                    ["mvn", "--version"], capture_output=True, text=True, timeout=10, check=False
-                )
-                if result.returncode == 0:
-                    for line in result.stdout.split("\n"):
-                        if "runtime:" in line:
-                            runtime_path = line.split("runtime:")[-1].strip()
-                            java_path = Path(runtime_path) / "bin" / "java"
-                            if java_path.exists():
-                                return str(java_path)
-            except (subprocess.TimeoutExpired, FileNotFoundError):
-                pass
-
-        # Check common Homebrew locations
-        for homebrew_java in [
-            "/opt/homebrew/opt/openjdk/bin/java",
-            "/opt/homebrew/opt/openjdk@25/bin/java",
-            "/opt/homebrew/opt/openjdk@21/bin/java",
-            "/opt/homebrew/opt/openjdk@17/bin/java",
-            "/usr/local/opt/openjdk/bin/java",
-        ]:
-            if Path(homebrew_java).exists():
-                return homebrew_java
-
-    # Check PATH (on macOS, /usr/bin/java may be a stub that fails)
-    java_which = shutil.which("java")
-    if java_which:
-        # Verify it's a real Java, not a macOS stub
-        try:
-            result = subprocess.run([java_which, "--version"], capture_output=True, text=True, timeout=5, check=False)
-            if result.returncode == 0:
-                return java_which
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
-
-    return None
-
-_JAVA_EXECUTABLE: str | None = _compute_java_executable()
