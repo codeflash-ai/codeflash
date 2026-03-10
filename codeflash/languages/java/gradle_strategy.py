@@ -352,39 +352,39 @@ class GradleStrategy(BuildToolStrategy):
         else:
             task = "test"
 
-        cmd = [gradle, task, "--no-daemon", "--rerun"]
-
-        if enable_coverage:
-            cmd.append("jacocoTestReport")
-
-        add_opens_args = [
-            "--add-opens",
-            "java.base/java.util=ALL-UNNAMED",
-            "--add-opens",
-            "java.base/java.lang=ALL-UNNAMED",
-            "--add-opens",
-            "java.base/java.lang.reflect=ALL-UNNAMED",
-            "--add-opens",
-            "java.base/java.io=ALL-UNNAMED",
-            "--add-opens",
-            "java.base/java.math=ALL-UNNAMED",
-            "--add-opens",
-            "java.base/java.net=ALL-UNNAMED",
-            "--add-opens",
-            "java.base/java.util.zip=ALL-UNNAMED",
+        # Write an init script that configures JVM args for the test task.
+        # -Dorg.gradle.jvmargs only affects the Gradle daemon, NOT the forked test JVM.
+        add_opens = [
+            "--add-opens", "java.base/java.util=ALL-UNNAMED",
+            "--add-opens", "java.base/java.lang=ALL-UNNAMED",
+            "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens", "java.base/java.io=ALL-UNNAMED",
+            "--add-opens", "java.base/java.math=ALL-UNNAMED",
+            "--add-opens", "java.base/java.net=ALL-UNNAMED",
+            "--add-opens", "java.base/java.util.zip=ALL-UNNAMED",
         ]
-
-        jvm_args_parts = []
+        all_jvm_args = list(add_opens)
         if javaagent_arg:
-            jvm_args_parts.append(javaagent_arg)
-        for i in range(0, len(add_opens_args), 2):
-            jvm_args_parts.append(f"{add_opens_args[i]} {add_opens_args[i + 1]}")
+            all_jvm_args.insert(0, javaagent_arg)
 
-        if jvm_args_parts:
-            cmd.append(f"-Dorg.gradle.jvmargs={' '.join(jvm_args_parts)}")
+        per_test_timeout = max(timeout // 3, 10)
+        quoted_args = ", ".join(f'"{a}"' for a in all_jvm_args)
+        init_script_content = (
+            f"allprojects {{\n"
+            f"    tasks.withType(Test) {{\n"
+            f"        jvmArgs({quoted_args})\n"
+            f'        systemProperty "junit.jupiter.execution.timeout.default", "{per_test_timeout}s"\n'
+            f"    }}\n"
+            f"}}\n"
+        )
+
+        init_fd, init_path = tempfile.mkstemp(suffix=".gradle", prefix="codeflash_jvmargs_")
+        with os.fdopen(init_fd, "w", encoding="utf-8") as f:
+            f.write(init_script_content)
+
+        cmd = [gradle, task, "--no-daemon", "--rerun", "--init-script", init_path]
 
         if test_filter:
-            # Gradle uses --tests with each class name separately
             for class_filter in test_filter.split(","):
                 class_filter = class_filter.strip()
                 if class_filter:
@@ -398,6 +398,10 @@ class GradleStrategy(BuildToolStrategy):
             )
             logger.error(error_msg)
             raise ValueError(error_msg)
+
+        # Append jacocoTestReport AFTER --tests so Gradle doesn't try to apply --tests to it
+        if enable_coverage:
+            cmd.append("jacocoTestReport")
 
         logger.debug("Running Gradle command: %s in %s", " ".join(cmd), build_root)
 
@@ -432,6 +436,8 @@ class GradleStrategy(BuildToolStrategy):
         except Exception as e:
             logger.exception("Gradle test execution failed: %s", e)
             return subprocess.CompletedProcess(args=cmd, returncode=-1, stdout="", stderr=str(e))
+        finally:
+            Path(init_path).unlink(missing_ok=True)
 
     def run_benchmarking_via_build_tool(
         self,
