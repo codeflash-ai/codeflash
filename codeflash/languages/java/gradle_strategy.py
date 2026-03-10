@@ -410,19 +410,7 @@ class GradleStrategy(BuildToolStrategy):
             f"}}\n"
         )
 
-        init_fd, init_path = tempfile.mkstemp(suffix=".gradle", prefix="codeflash_jvmargs_")
-        with os.fdopen(init_fd, "w", encoding="utf-8") as f:
-            f.write(init_script_content)
-
-        cmd = [gradle, task, "--no-daemon", "--rerun", "--init-script", init_path]
-
-        if test_filter:
-            for class_filter in test_filter.split(","):
-                class_filter = class_filter.strip()
-                if class_filter:
-                    cmd.extend(["--tests", class_filter])
-            logger.debug("Added --tests filters to Gradle command")
-        else:
+        if not test_filter:
             error_msg = (
                 f"Test filter is EMPTY for mode={mode}! "
                 f"Gradle will run ALL tests instead of the specified tests. "
@@ -431,13 +419,25 @@ class GradleStrategy(BuildToolStrategy):
             logger.error(error_msg)
             raise ValueError(error_msg)
 
-        # Append jacocoTestReport AFTER --tests so Gradle doesn't try to apply --tests to it
-        if enable_coverage:
-            cmd.append("jacocoTestReport")
-
-        logger.debug("Running Gradle command: %s in %s", " ".join(cmd), build_root)
-
+        init_fd, init_path = tempfile.mkstemp(suffix=".gradle", prefix="codeflash_jvmargs_")
         try:
+            with os.fdopen(init_fd, "w", encoding="utf-8") as f:
+                f.write(init_script_content)
+
+            cmd = [gradle, task, "--no-daemon", "--rerun", "--init-script", init_path]
+
+            for class_filter in test_filter.split(","):
+                class_filter = class_filter.strip()
+                if class_filter:
+                    cmd.extend(["--tests", class_filter])
+            logger.debug("Added --tests filters to Gradle command")
+
+            # Append jacocoTestReport AFTER --tests so Gradle doesn't try to apply --tests to it
+            if enable_coverage:
+                cmd.append("jacocoTestReport")
+
+            logger.debug("Running Gradle command: %s in %s", " ".join(cmd), build_root)
+
             result = _run_cmd_kill_pg_on_timeout(cmd, cwd=build_root, env=env, timeout=timeout)
 
             if result.returncode != 0:

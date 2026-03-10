@@ -307,6 +307,8 @@ def _parse_surefire_reports(surefire_dir: Path) -> tuple[int, int, int, int]:
         try:
             tree = _safe_parse_xml(xml_file)
             root = tree.getroot()
+            if root is None:
+                continue
 
             try:
                 tests_run += int(root.get("tests", "0"))
