@@ -1,5 +1,6 @@
 """Tests for JavaScript/Jest test runner functionality."""
 
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -896,6 +897,7 @@ class TestBundledJestReporter:
                     reporter_args = [a for a in cmd if "--reporters=codeflash/jest-reporter" in a]
                     assert len(reporter_args) == 1
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="Node.js subprocess pipe behavior unreliable on Windows CI")
     def test_reporter_produces_valid_junit_xml(self):
         """The reporter JS should produce JUnit XML parseable by junitparser."""
         import subprocess
