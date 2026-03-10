@@ -8,6 +8,7 @@ behavioral testing and benchmarking modes. Build-tool-specific operations
 from __future__ import annotations
 
 import contextlib
+import itertools
 import logging
 import os
 import re
@@ -16,7 +17,6 @@ import signal
 import subprocess
 import sys
 import tempfile
-import uuid
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,6 +24,12 @@ from typing import Any
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.languages.base import TestResult
+
+_TMPDIR = Path(tempfile.gettempdir())
+
+_result_counter = itertools.count(1)
+
+_EMPTY_JUNIT_TEMPLATE = _TMPDIR / "codeflash_java_empty_results_template.xml"
 
 _MAVEN_NS = "http://maven.apache.org/POM/4.0.0"
 
@@ -917,17 +923,34 @@ def _get_test_class_names(test_paths: Any, mode: str = "performance") -> list[st
 
 def _get_combined_junit_xml(surefire_dir: Path, candidate_index: int) -> Path:
     """Get or create a combined JUnit XML file from test reports."""
-    result_id = uuid.uuid4().hex[:8]
-    result_xml_path = Path(tempfile.gettempdir()) / f"codeflash_java_results_{candidate_index}_{result_id}.xml"
+    # Use a fast counter-based id instead of uuid for per-process uniqueness
+    result_id = next(_result_counter)
+    result_xml_path = _TMPDIR / f"codeflash_java_results_{candidate_index}_{result_id}.xml"
 
     if not surefire_dir.exists():
-        _write_empty_junit_xml(result_xml_path)
+        # Ensure the shared empty template exists (create once)
+        if not _EMPTY_JUNIT_TEMPLATE.exists():
+            # Create parent directory implicitly exists (tmpdir), write template
+            _write_empty_junit_xml(_EMPTY_JUNIT_TEMPLATE)
+
+        # Create a new filesystem entry for the caller-specific result path that refers to the template content.
+        # Prefer hard link (cheap) but fall back to copy when not supported.
+        try:
+            os.link(_EMPTY_JUNIT_TEMPLATE, result_xml_path)
+        except Exception:
+            shutil.copyfile(_EMPTY_JUNIT_TEMPLATE, result_xml_path)
         return result_xml_path
 
     xml_files = list(surefire_dir.glob("TEST-*.xml"))
 
     if not xml_files:
-        _write_empty_junit_xml(result_xml_path)
+        # Same as missing surefire_dir: produce a new file that refers to the template
+        if not _EMPTY_JUNIT_TEMPLATE.exists():
+            _write_empty_junit_xml(_EMPTY_JUNIT_TEMPLATE)
+        try:
+            os.link(_EMPTY_JUNIT_TEMPLATE, result_xml_path)
+        except Exception:
+            shutil.copyfile(_EMPTY_JUNIT_TEMPLATE, result_xml_path)
         return result_xml_path
 
     if len(xml_files) == 1:
