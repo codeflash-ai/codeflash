@@ -29,7 +29,7 @@ def test_skipped_for_single_module(strategy):
     assert len(_multimodule_deps_installed) == 0
 
 
-@patch("codeflash.languages.java.maven_strategy.find_maven_executable", return_value="mvn")
+@patch.object(MavenStrategy, "find_executable", return_value="mvn")
 @patch("codeflash.languages.java.test_runner._run_cmd_kill_pg_on_timeout")
 def test_runs_install_command_with_correct_args(mock_run, mock_mvn, strategy):
     """Should run mvn install -DskipTests -pl <module> -am with validation skip flags."""
@@ -53,7 +53,7 @@ def test_runs_install_command_with_correct_args(mock_run, mock_mvn, strategy):
     assert mock_run.call_args[1]["cwd"] == root
 
 
-@patch("codeflash.languages.java.maven_strategy.find_maven_executable", return_value="mvn")
+@patch.object(MavenStrategy, "find_executable", return_value="mvn")
 @patch("codeflash.languages.java.test_runner._run_cmd_kill_pg_on_timeout")
 def test_caches_and_does_not_rerun(mock_run, mock_mvn, strategy):
     """Second call with same (root, module) should be cached — no Maven invocation."""
@@ -68,7 +68,7 @@ def test_caches_and_does_not_rerun(mock_run, mock_mvn, strategy):
     assert mock_run.call_count == 1
 
 
-@patch("codeflash.languages.java.maven_strategy.find_maven_executable", return_value="mvn")
+@patch.object(MavenStrategy, "find_executable", return_value="mvn")
 @patch("codeflash.languages.java.test_runner._run_cmd_kill_pg_on_timeout")
 def test_different_modules_not_cached(mock_run, mock_mvn, strategy):
     """Different test modules should each trigger their own install."""
@@ -80,7 +80,7 @@ def test_different_modules_not_cached(mock_run, mock_mvn, strategy):
     assert mock_run.call_count == 2
 
 
-@patch("codeflash.languages.java.maven_strategy.find_maven_executable", return_value="mvn")
+@patch.object(MavenStrategy, "find_executable", return_value="mvn")
 @patch("codeflash.languages.java.test_runner._run_cmd_kill_pg_on_timeout")
 def test_returns_false_on_maven_failure(mock_run, mock_mvn, strategy):
     """Non-zero exit code should return False and NOT cache."""
@@ -92,7 +92,7 @@ def test_returns_false_on_maven_failure(mock_run, mock_mvn, strategy):
     assert len(_multimodule_deps_installed) == 0
 
 
-@patch("codeflash.languages.java.maven_strategy.find_maven_executable", return_value=None)
+@patch.object(MavenStrategy, "find_executable", return_value=None)
 def test_returns_false_when_maven_not_found(mock_mvn, strategy):
     """Should return False if Maven executable is not found."""
     result = strategy.install_multi_module_deps(Path("/fake"), "module", {})

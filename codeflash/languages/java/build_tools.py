@@ -7,11 +7,10 @@ This module provides functionality to detect and work with Java build tools
 from __future__ import annotations
 
 import logging
-import shutil
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
+from pathlib import Path  # noqa: TC003 — used at runtime
 
 logger = logging.getLogger(__name__)
 
@@ -287,72 +286,6 @@ def _get_gradle_project_info(project_root: Path) -> JavaProjectInfo | None:
         version=None,
         java_version=None,
     )
-
-
-def find_maven_executable(project_root: Path | None = None) -> str | None:
-    """Find the Maven executable.
-
-    Returns:
-        Path to mvn executable, or None if not found.
-
-    """
-    # Check for Maven wrapper in project root first
-    if project_root is not None:
-        mvnw_path = project_root / "mvnw"
-        if mvnw_path.exists():
-            return str(mvnw_path)
-        mvnw_cmd_path = project_root / "mvnw.cmd"
-        if mvnw_cmd_path.exists():
-            return str(mvnw_cmd_path)
-
-    # Check for Maven wrapper in current directory
-    if Path("mvnw").exists():
-        return "./mvnw"
-    if Path("mvnw.cmd").exists():
-        return "mvnw.cmd"
-
-    # Check system Maven
-    mvn_path = shutil.which("mvn")
-    if mvn_path:
-        return mvn_path
-
-    return None
-
-
-def find_gradle_executable(project_root: Path | None = None) -> str | None:
-    """Find the Gradle executable.
-
-    Checks for Gradle wrapper in the project root and current directory,
-    then falls back to system Gradle.
-
-    Args:
-        project_root: Optional project root directory to search for Gradle wrapper.
-
-    Returns:
-        Path to gradle executable, or None if not found.
-
-    """
-    # Check for Gradle wrapper in project root first
-    if project_root is not None:
-        gradlew_path = project_root / "gradlew"
-        if gradlew_path.exists():
-            return str(gradlew_path)
-        gradlew_bat_path = project_root / "gradlew.bat"
-        if gradlew_bat_path.exists():
-            return str(gradlew_bat_path)
-
-    # Check for Gradle wrapper in current directory
-    if Path("gradlew").exists():
-        return "./gradlew"
-    if Path("gradlew.bat").exists():
-        return "gradlew.bat"
-
-    # Check system Gradle
-    gradle_path = shutil.which("gradle")
-    if gradle_path:
-        return gradle_path
-
-    return None
 
 
 def _parse_surefire_reports(surefire_dir: Path) -> tuple[int, int, int, int]:

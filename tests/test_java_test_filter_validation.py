@@ -69,9 +69,7 @@ def test_run_tests_via_build_tool_raises_on_empty_filter():
         ]
     )
 
-    with patch("codeflash.languages.java.maven_strategy.find_maven_executable") as mock_maven:
-        mock_maven.return_value = "mvn"
-
+    with patch.object(MavenStrategy, "find_executable", return_value="mvn"):
         with pytest.raises(ValueError, match="Test filter is EMPTY"):
             strategy.run_tests_via_build_tool(
                 project_root,
@@ -101,10 +99,9 @@ def test_run_tests_via_build_tool_succeeds_with_valid_filter():
     )
 
     with (
-        patch("codeflash.languages.java.maven_strategy.find_maven_executable") as mock_maven,
+        patch.object(MavenStrategy, "find_executable", return_value="mvn"),
         patch("codeflash.languages.java.test_runner._run_cmd_kill_pg_on_timeout") as mock_run,
     ):
-        mock_maven.return_value = "mvn"
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="Tests run: 1, Failures: 0, Errors: 0, Skipped: 0", stderr=""
         )

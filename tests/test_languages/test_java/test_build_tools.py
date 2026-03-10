@@ -6,12 +6,11 @@ from pathlib import Path
 from codeflash.languages.java.build_tools import (
     BuildTool,
     detect_build_tool,
-    find_maven_executable,
     find_source_root,
     find_test_root,
     get_project_info,
 )
-from codeflash.languages.java.maven_strategy import add_codeflash_dependency
+from codeflash.languages.java.maven_strategy import MavenStrategy, add_codeflash_dependency
 from codeflash.languages.java.test_runner import _extract_modules_from_pom_content
 
 
@@ -175,8 +174,8 @@ class TestMavenExecutable:
 
     def test_find_maven_executable_system(self):
         """Test finding system Maven."""
-        # This test may pass or fail depending on whether Maven is installed
-        mvn = find_maven_executable()
+        strategy = MavenStrategy()
+        mvn = strategy.find_executable(Path("."))
         # We can't assert it exists, just that the function doesn't crash
         if mvn:
             assert "mvn" in mvn.lower() or "maven" in mvn.lower()
@@ -188,10 +187,8 @@ class TestMavenExecutable:
         mvnw_path.write_text("#!/bin/bash\necho 'Maven Wrapper'")
         mvnw_path.chmod(0o755)
 
-        # Change to tmp_path
-        monkeypatch.chdir(tmp_path)
-
-        mvn = find_maven_executable()
+        strategy = MavenStrategy()
+        mvn = strategy.find_executable(tmp_path)
         # Should find the wrapper
         assert mvn is not None
 
@@ -377,24 +374,27 @@ class TestMavenProfiles:
 
 
 class TestMavenExecutableWithProjectRoot:
-    """Tests for find_maven_executable with project_root parameter."""
+    """Tests for MavenStrategy.find_executable with project_root parameter."""
 
     def test_find_wrapper_in_project_root(self, tmp_path):
         mvnw_path = tmp_path / "mvnw"
         mvnw_path.write_text("#!/bin/bash\necho Maven Wrapper")
         mvnw_path.chmod(0o755)
 
-        result = find_maven_executable(project_root=tmp_path)
+        strategy = MavenStrategy()
+        result = strategy.find_executable(tmp_path)
         assert result is not None
         assert str(tmp_path / "mvnw") in result
 
-    def test_fallback_to_cwd_when_no_project_root(self):
-        result = find_maven_executable()
-        # Should not crash even without project_root
+    def test_fallback_to_cwd(self, tmp_path):
+        strategy = MavenStrategy()
+        result = strategy.find_executable(tmp_path)
+        # Should not crash even with a dir that has no wrapper
 
-    def test_project_root_none_uses_cwd(self):
-        result = find_maven_executable(project_root=None)
-        # Should not crash
+    def test_with_nonexistent_wrapper(self, tmp_path):
+        strategy = MavenStrategy()
+        result = strategy.find_executable(tmp_path)
+        # Should not crash, may return system mvn or None
 
 
 class TestCustomSourceDirectoryDetection:

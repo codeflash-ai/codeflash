@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Any
 
 from codeflash.languages.java.build_tool_strategy import BuildToolStrategy
-from codeflash.languages.java.build_tools import find_gradle_executable
 
 _BUILD = "build"
 
@@ -128,6 +127,24 @@ class GradleStrategy(BuildToolStrategy):
     def name(self) -> str:
         return "Gradle"
 
+    def find_executable(self, build_root: Path) -> str | None:
+        # Walk up from build_root to find gradlew — for multi-module projects
+        # the wrapper lives at the repo root, which may be a parent of build_root.
+        current = build_root.resolve()
+        while True:
+            gradlew_path = current / "gradlew"
+            if gradlew_path.exists():
+                return str(gradlew_path)
+            gradlew_bat_path = current / "gradlew.bat"
+            if gradlew_bat_path.exists():
+                return str(gradlew_bat_path)
+            parent = current.parent
+            if parent == current:
+                break
+            current = parent
+        # Fall back to system Gradle
+        return shutil.which("gradle")
+
     def ensure_runtime(self, build_root: Path, test_module: str | None) -> bool:
         runtime_jar = self.find_runtime_jar()
         if runtime_jar is None:
@@ -169,7 +186,7 @@ class GradleStrategy(BuildToolStrategy):
             logger.debug("Multi-module deps already installed for %s:%s, skipping", build_root, test_module)
             return True
 
-        gradle = find_gradle_executable(build_root)
+        gradle = self.find_executable(build_root)
         if not gradle:
             logger.error("Gradle not found — cannot pre-install multi-module dependencies")
             return False
@@ -202,7 +219,7 @@ class GradleStrategy(BuildToolStrategy):
     ) -> subprocess.CompletedProcess[str]:
         from codeflash.languages.java.test_runner import _run_cmd_kill_pg_on_timeout
 
-        gradle = find_gradle_executable(build_root)
+        gradle = self.find_executable(build_root)
         if not gradle:
             logger.error("Gradle not found")
             return subprocess.CompletedProcess(args=["gradle"], returncode=-1, stdout="", stderr="Gradle not found")
@@ -238,7 +255,7 @@ class GradleStrategy(BuildToolStrategy):
     ) -> str | None:
         from codeflash.languages.java.test_runner import _find_junit_console_standalone, _run_cmd_kill_pg_on_timeout
 
-        gradle = find_gradle_executable(build_root)
+        gradle = self.find_executable(build_root)
         if not gradle:
             return None
 
@@ -339,7 +356,7 @@ class GradleStrategy(BuildToolStrategy):
     ) -> subprocess.CompletedProcess[str]:
         from codeflash.languages.java.test_runner import _build_test_filter, _run_cmd_kill_pg_on_timeout
 
-        gradle = find_gradle_executable(build_root)
+        gradle = self.find_executable(build_root)
         if not gradle:
             logger.error("Gradle not found")
             return subprocess.CompletedProcess(args=["gradle"], returncode=-1, stdout="", stderr="Gradle not found")
@@ -610,7 +627,7 @@ class GradleStrategy(BuildToolStrategy):
                     msg = f"Invalid test class name: '{test_class}'. Test names must follow Java identifier rules."
                     raise ValueError(msg)
 
-        gradle = find_gradle_executable(project_root) or "gradle"
+        gradle = self.find_executable(project_root) or "gradle"
         cmd = [gradle, "test", "--no-daemon"]
         if test_classes:
             for cls in test_classes:

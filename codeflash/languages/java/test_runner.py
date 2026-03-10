@@ -767,11 +767,9 @@ def _find_junit_console_standalone() -> Path | None:
     This JAR contains ConsoleLauncher which is required for direct JVM test execution
     with JUnit 5.
     """
-    from codeflash.languages.java.build_tools import find_maven_executable
-
     m2_base = Path.home() / ".m2" / "repository" / "org" / "junit" / "platform" / "junit-platform-console-standalone"
     if not m2_base.exists():
-        mvn = find_maven_executable()
+        mvn = shutil.which("mvn")
         if mvn:
             logger.debug("Console standalone not found in cache, downloading via Maven")
             with contextlib.suppress(subprocess.TimeoutExpired, Exception):

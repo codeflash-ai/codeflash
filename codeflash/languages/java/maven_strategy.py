@@ -9,13 +9,13 @@ from __future__ import annotations
 import logging
 import os
 import re
+import shutil
 import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
 from codeflash.languages.java.build_tool_strategy import BuildToolStrategy
-from codeflash.languages.java.build_tools import find_maven_executable
 
 _TARGET = "target"
 
@@ -55,8 +55,9 @@ def _safe_parse_xml(file_path: Path) -> ET.ElementTree:
     return ET.ElementTree(root)
 
 
-def install_codeflash_runtime(project_root: Path, runtime_jar_path: Path) -> bool:
-    mvn = find_maven_executable()
+def install_codeflash_runtime(project_root: Path, runtime_jar_path: Path, mvn: str | None = None) -> bool:
+    if not mvn:
+        mvn = shutil.which("mvn")
     if not mvn:
         logger.error("Maven not found")
         return False
@@ -314,6 +315,19 @@ class MavenStrategy(BuildToolStrategy):
     def name(self) -> str:
         return "Maven"
 
+    def find_executable(self, build_root: Path) -> str | None:
+        mvnw_path = build_root / "mvnw"
+        if mvnw_path.exists():
+            return str(mvnw_path)
+        mvnw_cmd_path = build_root / "mvnw.cmd"
+        if mvnw_cmd_path.exists():
+            return str(mvnw_cmd_path)
+        if Path("mvnw").exists():
+            return "./mvnw"
+        if Path("mvnw.cmd").exists():
+            return "mvnw.cmd"
+        return shutil.which("mvn")
+
     def find_runtime_jar(self) -> Path | None:
         if self._M2_JAR.exists():
             return self._M2_JAR
@@ -327,7 +341,7 @@ class MavenStrategy(BuildToolStrategy):
 
         if not self._M2_JAR.exists():
             logger.info("Installing codeflash-runtime JAR to local Maven repository")
-            if not install_codeflash_runtime(build_root, runtime_jar):
+            if not install_codeflash_runtime(build_root, runtime_jar, mvn=self.find_executable(build_root)):
                 logger.error("Failed to install codeflash-runtime to local Maven repository")
                 return False
 
@@ -357,7 +371,7 @@ class MavenStrategy(BuildToolStrategy):
             logger.debug("Multi-module deps already installed for %s:%s, skipping", build_root, test_module)
             return True
 
-        mvn = find_maven_executable()
+        mvn = self.find_executable(build_root)
         if not mvn:
             logger.error("Maven not found — cannot pre-install multi-module dependencies")
             return False
@@ -391,7 +405,7 @@ class MavenStrategy(BuildToolStrategy):
     ) -> subprocess.CompletedProcess[str]:
         from codeflash.languages.java.test_runner import _run_cmd_kill_pg_on_timeout
 
-        mvn = find_maven_executable()
+        mvn = self.find_executable(build_root)
         if not mvn:
             logger.error("Maven not found")
             return subprocess.CompletedProcess(args=["mvn"], returncode=-1, stdout="", stderr="Maven not found")
@@ -428,7 +442,7 @@ class MavenStrategy(BuildToolStrategy):
     ) -> str | None:
         from codeflash.languages.java.test_runner import _find_junit_console_standalone, _run_cmd_kill_pg_on_timeout
 
-        mvn = find_maven_executable()
+        mvn = self.find_executable(build_root)
         if not mvn:
             return None
 
@@ -517,7 +531,7 @@ class MavenStrategy(BuildToolStrategy):
             _validate_test_filter,
         )
 
-        mvn = find_maven_executable()
+        mvn = self.find_executable(build_root)
         if not mvn:
             logger.error("Maven not found")
             return subprocess.CompletedProcess(args=["mvn"], returncode=-1, stdout="", stderr="Maven not found")
@@ -749,7 +763,7 @@ class MavenStrategy(BuildToolStrategy):
                     msg = f"Invalid test class name: '{test_class}'. Test names must follow Java identifier rules."
                     raise ValueError(msg)
 
-        mvn = find_maven_executable(project_root) or "mvn"
+        mvn = self.find_executable(project_root) or "mvn"
         cmd = [mvn, "test", "-B"]
         if test_classes:
             cmd.append(f"-Dtest={','.join(test_classes)}")

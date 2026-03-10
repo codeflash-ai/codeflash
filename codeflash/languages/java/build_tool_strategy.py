@@ -56,6 +56,11 @@ class BuildToolStrategy(ABC):
         return None
 
     @abstractmethod
+    def find_executable(self, build_root: Path) -> str | None:
+        """Find the build tool executable, searching up parent directories if needed."""
+        ...
+
+    @abstractmethod
     def ensure_runtime(self, build_root: Path, test_module: str | None) -> bool:
         """Install codeflash-runtime JAR and register it as a project dependency."""
         ...
