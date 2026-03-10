@@ -98,8 +98,8 @@ def add_codeflash_dependency(pom_path: Path) -> bool:
         if "codeflash-runtime" in content:
             if "<scope>system</scope>" in content:
 
-                def replace_system_dep(match: re.Match) -> str:
-                    block = match.group(0)
+                def replace_system_dep(match: re.Match[str]) -> str:
+                    block: str = match.group(0)
                     if "codeflash-runtime" in block and "<scope>system</scope>" in block:
                         return (
                             "<dependency>\n"
@@ -143,6 +143,8 @@ def is_jacoco_configured(pom_path: Path) -> bool:
     try:
         tree = _safe_parse_xml(pom_path)
         root = tree.getroot()
+        if root is None:
+            return False
 
         ns_prefix = "{http://maven.apache.org/POM/4.0.0}"
         use_ns = root.tag.startswith("{")

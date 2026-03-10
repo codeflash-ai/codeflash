@@ -108,7 +108,6 @@ def _validate_java_class_name(class_name: str) -> bool:
     return bool(_VALID_JAVA_CLASS_NAME.match(class_name))
 
 
-
 def _extract_modules_from_pom_content(content: str) -> list[str]:
     """Extract module names from Maven POM XML content using proper XML parsing.
 
@@ -252,9 +251,7 @@ def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, 
                     first_component = rel_path.parts[0] if rel_path.parts else None
                     if first_component and first_component in modules:
                         logger.debug(
-                            "Detected multi-module project. Root: %s, Test module: %s",
-                            project_root,
-                            first_component,
+                            "Detected multi-module project. Root: %s, Test module: %s", project_root, first_component
                         )
                         return project_root, first_component
                 except ValueError:
@@ -269,11 +266,7 @@ def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, 
                 try:
                     test_module = test_dir.relative_to(current)
                     test_module_name = test_module.parts[0] if test_module.parts else None
-                    logger.debug(
-                        "Detected multi-module project. Root: %s, Test module: %s",
-                        current,
-                        test_module_name,
-                    )
+                    logger.debug("Detected multi-module project. Root: %s, Test module: %s", current, test_module_name)
                     return current, test_module_name
                 except ValueError:
                     pass

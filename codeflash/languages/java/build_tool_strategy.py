@@ -149,10 +149,7 @@ def _build_strategy_registry() -> dict[str, type[BuildToolStrategy]]:
     from codeflash.languages.java.gradle_strategy import GradleStrategy
     from codeflash.languages.java.maven_strategy import MavenStrategy
 
-    return {
-        "maven": MavenStrategy,
-        "gradle": GradleStrategy,
-    }
+    return {"maven": MavenStrategy, "gradle": GradleStrategy}
 
 
 def get_strategy(project_root: Path) -> BuildToolStrategy:
