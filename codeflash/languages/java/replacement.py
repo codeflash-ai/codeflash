@@ -163,6 +163,12 @@ def _dedent_member(source: str) -> str:
     return textwrap.dedent(source).strip()
 
 
+def _method_name_from_source(method_source: str, analyzer: JavaAnalyzer) -> str | None:
+    """Extract the method name from a raw method source snippet using tree-sitter."""
+    methods = analyzer.find_methods(method_source)
+    return methods[0].name if methods else None
+
+
 def _lines_to_insert_byte(source_lines: list[str], end_line_1indexed: int) -> int:
     """Return the byte offset immediately after the given 1-indexed line."""
     return sum(len(ln.encode("utf8")) for ln in source_lines[:end_line_1indexed])
@@ -232,6 +238,19 @@ def _insert_class_members(
         if indented and not indented.endswith("\n"):
             indented += "\n"
         return indented
+
+    # Filter out helpers that already exist in the original source to avoid duplicates.
+    # The AI often copies existing methods verbatim alongside the optimized target.
+    existing_method_names = {m.name for m in analyzer.find_methods(source)}
+    helpers_before_target = [
+        h for h in helpers_before_target if _method_name_from_source(h, analyzer) not in existing_method_names
+    ]
+    helpers_after_target = [
+        h for h in helpers_after_target if _method_name_from_source(h, analyzer) not in existing_method_names
+    ]
+
+    if not fields and not helpers_before_target and not helpers_after_target:
+        return source
 
     result = source
 
