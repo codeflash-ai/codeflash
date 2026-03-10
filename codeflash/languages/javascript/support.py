@@ -37,6 +37,9 @@ class JavaScriptSupport:
     using tree-sitter for code analysis and Jest for test execution.
     """
 
+    def __init__(self) -> None:
+        self._language_version: str | None = None
+
     # === Properties ===
 
     @property
@@ -51,8 +54,7 @@ class JavaScriptSupport:
 
     @property
     def default_file_extension(self) -> str:
-        """Default file extension for JavaScript."""
-        return ".js"
+        return self.file_extensions[0]
 
     @property
     def test_framework(self) -> str:
@@ -69,17 +71,62 @@ class JavaScriptSupport:
     def dir_excludes(self) -> frozenset[str]:
         return frozenset({"node_modules", "dist", "build", ".next", ".nuxt", "coverage", ".cache", ".turbo", ".vercel"})
 
+    @property
+    def language_version(self) -> str | None:
+        return self._language_version
+
+    @property
+    def valid_test_frameworks(self) -> tuple[str, ...]:
+        return ("jest", "mocha", "vitest")
+
+    @property
+    def test_result_serialization_format(self) -> str:
+        return "json"
+
+    def parse_test_xml(
+        self, test_xml_file_path: Path, test_files: Any, test_config: Any, run_result: Any = None
+    ) -> Any:
+        from codeflash.languages.javascript.parse import parse_jest_test_xml
+        from codeflash.verification.parse_test_output import parse_func, resolve_test_file_from_class_path
+
+        return parse_jest_test_xml(
+            test_xml_file_path,
+            test_files,
+            test_config,
+            run_result,
+            parse_func=parse_func,
+            resolve_test_file_from_class_path=resolve_test_file_from_class_path,
+        )
+
+    def load_coverage(
+        self,
+        coverage_database_file: Path,
+        function_name: str,
+        code_context: Any,
+        source_file: Path,
+        coverage_config_file: Path | None = None,
+    ) -> Any:
+        from codeflash.verification.coverage_utils import JestCoverageUtils
+
+        return JestCoverageUtils.load_from_jest_json(
+            coverage_json_path=coverage_database_file,
+            function_name=function_name,
+            code_context=code_context,
+            source_code_path=source_file,
+        )
+
     # === Discovery ===
 
     def discover_functions(
-        self, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
+        self, source: str, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
     ) -> list[FunctionToOptimize]:
-        """Find all optimizable functions in a JavaScript file.
+        """Find all optimizable functions in JavaScript/TypeScript source code.
 
-        Uses tree-sitter to parse the file and find functions.
+        Uses tree-sitter to parse the source and find functions.
 
         Args:
-            file_path: Path to the JavaScript file to analyze.
+            source: Source code to analyze.
+            file_path: Path to the source file (used for language detection).
             filter_criteria: Optional criteria to filter functions.
 
         Returns:
@@ -87,12 +134,6 @@ class JavaScriptSupport:
 
         """
         criteria = filter_criteria or FunctionFilterCriteria()
-
-        try:
-            source = file_path.read_text(encoding="utf-8")
-        except Exception as e:
-            logger.warning("Failed to read %s: %s", file_path, e)
-            return []
 
         try:
             analyzer = get_analyzer_for_file(file_path)
@@ -112,7 +153,7 @@ class JavaScriptSupport:
 
                 # Skip non-exported functions (can't be imported in tests)
                 # Exception: nested functions and methods are allowed if their parent is exported
-                if not func.is_exported and not func.parent_function:
+                if criteria.require_export and not func.is_exported and not func.parent_function:
                     logger.debug(f"Skipping non-exported function: {func.name}")  # noqa: G004
                     continue
 
@@ -143,61 +184,6 @@ class JavaScriptSupport:
 
         except Exception as e:
             logger.warning("Failed to parse %s: %s", file_path, e)
-            return []
-
-    def discover_functions_from_source(self, source: str, file_path: Path | None = None) -> list[FunctionToOptimize]:
-        """Find all functions in source code string.
-
-        Uses tree-sitter to parse the source and find functions.
-
-        Args:
-            source: The source code to analyze.
-            file_path: Optional file path for context (used for language detection).
-
-        Returns:
-            List of FunctionToOptimize objects for discovered functions.
-
-        """
-        try:
-            # Use JavaScript analyzer by default, or detect from file path
-            if file_path:
-                analyzer = get_analyzer_for_file(file_path)
-            else:
-                analyzer = TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
-
-            tree_functions = analyzer.find_functions(
-                source, include_methods=True, include_arrow_functions=True, require_name=True
-            )
-
-            functions: list[FunctionToOptimize] = []
-            for func in tree_functions:
-                # Build parents list
-                parents: list[FunctionParent] = []
-                if func.class_name:
-                    parents.append(FunctionParent(name=func.class_name, type="ClassDef"))
-                if func.parent_function:
-                    parents.append(FunctionParent(name=func.parent_function, type="FunctionDef"))
-
-                functions.append(
-                    FunctionToOptimize(
-                        function_name=func.name,
-                        file_path=file_path or Path("unknown"),
-                        parents=parents,
-                        starting_line=func.start_line,
-                        ending_line=func.end_line,
-                        starting_col=func.start_col,
-                        ending_col=func.end_col,
-                        is_async=func.is_async,
-                        is_method=func.is_method,
-                        language=str(self.language),
-                        doc_start_line=func.doc_start_line,
-                    )
-                )
-
-            return functions
-
-        except Exception as e:
-            logger.warning("Failed to parse source: %s", e)
             return []
 
     def _get_test_patterns(self) -> list[str]:
@@ -1509,7 +1495,7 @@ class JavaScriptSupport:
         return "".join(result_lines)
 
     def format_code(self, source: str, file_path: Path | None = None) -> str:
-        """Format JavaScript code using prettier (if available).
+        """Format JavaScript/TypeScript code using prettier (if available).
 
         Args:
             source: Source code to format.
@@ -1520,9 +1506,10 @@ class JavaScriptSupport:
 
         """
         try:
-            # Try to use prettier via npx
+            stdin_filepath = str(file_path.name) if file_path else f"file{self.default_file_extension}"
+
             result = subprocess.run(
-                ["npx", "prettier", "--stdin-filepath", "file.js"],
+                ["npx", "prettier", "--stdin-filepath", stdin_filepath],
                 check=False,
                 input=source,
                 capture_output=True,
@@ -1703,22 +1690,15 @@ class JavaScriptSupport:
 
     # === Validation ===
 
+    @property
+    def treesitter_language(self) -> TreeSitterLanguage:
+        return TreeSitterLanguage.JAVASCRIPT
+
     def validate_syntax(self, source: str) -> bool:
-        """Check if JavaScript source code is syntactically valid.
-
-        Uses tree-sitter to parse and check for errors.
-
-        Args:
-            source: Source code to validate.
-
-        Returns:
-            True if valid, False otherwise.
-
-        """
+        """Check if source code is syntactically valid using tree-sitter."""
         try:
-            analyzer = TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
+            analyzer = TreeSitterAnalyzer(self.treesitter_language)
             tree = analyzer.parse(source)
-            # Check if tree has errors
             return not tree.root_node.has_error
         except Exception:
             return False
@@ -1744,6 +1724,11 @@ class JavaScriptSupport:
             if stripped and not stripped.startswith("//"):
                 normalized_lines.append(stripped)
         return "\n".join(normalized_lines)
+
+    def generate_concolic_tests(
+        self, test_cfg: Any, project_root: Any, function_to_optimize: Any, function_to_optimize_ast: Any
+    ) -> tuple[dict, str]:
+        return {}, ""
 
     # === Test Editing ===
 
@@ -2034,6 +2019,73 @@ class JavaScriptSupport:
         """
         return ".test.js"
 
+    def get_test_dir_for_source(self, test_dir: Path, source_file: Path | None) -> Path | None:
+        """Find the appropriate test directory for a JavaScript/TypeScript package.
+
+        For monorepos, this finds the package's test directory from the source file path.
+        For example: packages/workflow/src/utils.ts -> packages/workflow/test/codeflash-generated/
+
+        Args:
+            test_dir: The root tests directory (may be monorepo packages root).
+            source_file: Path to the source file being tested.
+
+        Returns:
+            The test directory path, or None if not found.
+
+        """
+        if source_file is None:
+            # No source path provided, check if test_dir itself has a test subdirectory
+            for test_subdir_name in ["test", "tests", "__tests__", "src/__tests__"]:
+                test_subdir = test_dir / test_subdir_name
+                if test_subdir.is_dir():
+                    codeflash_test_dir = test_subdir / "codeflash-generated"
+                    codeflash_test_dir.mkdir(parents=True, exist_ok=True)
+                    return codeflash_test_dir
+            return None
+
+        try:
+            # Resolve paths for reliable comparison
+            tests_root = test_dir.resolve()
+            source_path = Path(source_file).resolve()
+
+            # Walk up from the source file to find a directory with package.json or test/ folder
+            package_dir = None
+
+            for parent in source_path.parents:
+                # Stop if we've gone above or reached the tests_root level
+                # For monorepos, tests_root might be /packages/ and we want to search within packages
+                if parent in (tests_root, tests_root.parent):
+                    break
+
+                # Check if this looks like a package root
+                has_package_json = (parent / "package.json").exists()
+                has_test_dir = any((parent / d).is_dir() for d in ["test", "tests", "__tests__"])
+
+                if has_package_json or has_test_dir:
+                    package_dir = parent
+                    break
+
+            if package_dir:
+                # Find the test directory in this package
+                for test_subdir_name in ["test", "tests", "__tests__", "src/__tests__"]:
+                    test_subdir = package_dir / test_subdir_name
+                    if test_subdir.is_dir():
+                        codeflash_test_dir = test_subdir / "codeflash-generated"
+                        codeflash_test_dir.mkdir(parents=True, exist_ok=True)
+                        return codeflash_test_dir
+
+            return None
+        except Exception:
+            return None
+
+    def resolve_test_file_from_class_path(self, test_class_path: str, base_dir: Path) -> Path | None:
+        return None
+
+    def resolve_test_module_path_for_pr(
+        self, test_module_path: str, tests_project_rootdir: Path, non_generated_tests: set[Path]
+    ) -> Path | None:
+        return None
+
     def find_test_root(self, project_root: Path) -> Path | None:
         """Find the test root directory for a JavaScript project.
 
@@ -2191,6 +2243,15 @@ class JavaScriptSupport:
 
         return len(errors) == 0, errors
 
+    def _detect_node_version(self) -> None:
+        """Detect and cache the Node.js runtime version."""
+        try:
+            result = subprocess.run(["node", "--version"], check=False, capture_output=True, text=True, timeout=10)
+            if result.returncode == 0 and result.stdout.strip():
+                self._language_version = result.stdout.strip().lstrip("v")
+        except Exception:
+            pass
+
     def ensure_runtime_environment(self, project_root: Path) -> bool:
         """Ensure codeflash npm package is installed.
 
@@ -2204,6 +2265,8 @@ class JavaScriptSupport:
 
         """
         from codeflash.cli_cmds.console import logger
+
+        self._detect_node_version()
 
         node_modules_pkg = project_root / "node_modules" / "codeflash"
         if node_modules_pkg.exists():
@@ -2234,12 +2297,11 @@ class JavaScriptSupport:
 
     def instrument_existing_test(
         self,
-        test_string: str,
+        test_path: Path,
         call_positions: Sequence[Any],
         function_to_optimize: Any,
         tests_project_root: Path,
         mode: str,
-        test_path: Path | None,
     ) -> tuple[bool, str | None]:
         """Inject profiling code into an existing JavaScript test file.
 
@@ -2260,7 +2322,6 @@ class JavaScriptSupport:
         from codeflash.languages.javascript.instrument import inject_profiling_into_existing_js_test
 
         return inject_profiling_into_existing_js_test(
-            test_string=test_string,
             test_path=test_path,
             call_positions=list(call_positions),
             function_to_optimize=function_to_optimize,
@@ -2407,9 +2468,12 @@ class JavaScriptSupport:
             candidate_index=candidate_index,
         )
 
-    # JavaScript/TypeScript benchmarking uses high max_loops like Python (100,000)
-    # The actual loop count is limited by target_duration_seconds, not max_loops
-    JS_BENCHMARKING_MAX_LOOPS = 100_000
+    # Max iterations per capturePerf call site.  Each iteration writes a ~200-byte
+    # timing marker to stdout.  The actual loop count is governed by the 10s time
+    # budget (CODEFLASH_PERF_TARGET_DURATION_MS) — this constant is just a ceiling.
+    # Python uses max_loops=250; JS iterations are lighter (no pytest overhead) so
+    # 1000 gives comparable statistical power while keeping stdout under 200 KB.
+    JS_BENCHMARKING_MAX_LOOPS = 1_000
 
     def run_benchmarking_tests(
         self,
@@ -2419,7 +2483,7 @@ class JavaScriptSupport:
         timeout: int | None = None,
         project_root: Path | None = None,
         min_loops: int = 5,
-        max_loops: int = 100_000,
+        max_loops: int = 1_000,
         target_duration_seconds: float = 10.0,
         test_framework: str | None = None,
     ) -> tuple[Path, Any]:
@@ -2604,62 +2668,9 @@ class TypeScriptSupport(JavaScriptSupport):
         ]
 
     def get_test_file_suffix(self) -> str:
-        """Get the test file suffix for TypeScript.
-
-        Returns:
-            Jest test file suffix for TypeScript.
-
-        """
+        """Get the test file suffix for TypeScript."""
         return ".test.ts"
 
-    def validate_syntax(self, source: str) -> bool:
-        """Check if TypeScript source code is syntactically valid.
-
-        Uses tree-sitter TypeScript parser to parse and check for errors.
-
-        Args:
-            source: Source code to validate.
-
-        Returns:
-            True if valid, False otherwise.
-
-        """
-        try:
-            analyzer = TreeSitterAnalyzer(TreeSitterLanguage.TYPESCRIPT)
-            tree = analyzer.parse(source)
-            return not tree.root_node.has_error
-        except Exception:
-            return False
-
-    def format_code(self, source: str, file_path: Path | None = None) -> str:
-        """Format TypeScript code using prettier (if available).
-
-        Args:
-            source: Source code to format.
-            file_path: Optional file path for context.
-
-        Returns:
-            Formatted source code.
-
-        """
-        try:
-            # Determine file extension for prettier
-            stdin_filepath = str(file_path.name) if file_path else "file.ts"
-
-            # Try to use prettier via npx
-            result = subprocess.run(
-                ["npx", "prettier", "--stdin-filepath", stdin_filepath],
-                check=False,
-                input=source,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            if result.returncode == 0:
-                return result.stdout
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
-        except Exception as e:
-            logger.debug("Prettier formatting failed: %s", e)
-
-        return source
+    @property
+    def treesitter_language(self) -> TreeSitterLanguage:
+        return TreeSitterLanguage.TYPESCRIPT

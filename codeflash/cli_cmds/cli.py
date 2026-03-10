@@ -130,9 +130,18 @@ def parse_args() -> Namespace:
         "--reset-config", action="store_true", help="Remove codeflash configuration from project config file."
     )
     parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompts (useful for CI/scripts).")
+    parser.add_argument(
+        "--subagent",
+        action="store_true",
+        help="Subagent mode: skip all interactive prompts with sensible defaults. Designed for AI agent integrations.",
+    )
 
     args, unknown_args = parser.parse_known_args()
     sys.argv[:] = [sys.argv[0], *unknown_args]
+    if args.subagent:
+        args.yes = True
+        args.no_pr = True
+        args.worktree = True
     return process_and_validate_cmd_args(args)
 
 
@@ -237,7 +246,18 @@ def process_pyproject_config(args: Namespace) -> Namespace:
         set_current_test_framework(pyproject_config["test_framework"])
 
     if args.tests_root is None:
-        if is_js_ts_project:
+        if is_java_project:
+            # Try standard Maven/Gradle test directories
+            for test_dir in ["src/test/java", "test", "tests"]:
+                test_path = Path(args.module_root).parent / test_dir if "/" in test_dir else Path(test_dir)
+                if not test_path.is_absolute():
+                    test_path = Path.cwd() / test_path
+                if test_path.is_dir():
+                    args.tests_root = str(test_path)
+                    break
+            if args.tests_root is None:
+                args.tests_root = str(Path.cwd() / "src" / "test" / "java")
+        elif is_js_ts_project:
             # Try common JS test directories at project root first
             for test_dir in ["test", "tests", "__tests__"]:
                 if Path(test_dir).is_dir():
@@ -256,17 +276,6 @@ def process_pyproject_config(args: Namespace) -> Namespace:
             # In such cases, the user should explicitly configure testsRoot in package.json
             if args.tests_root is None:
                 args.tests_root = args.module_root
-        elif is_java_project:
-            # Try standard Maven/Gradle test directories
-            for test_dir in ["src/test/java", "test", "tests"]:
-                test_path = Path(args.module_root).parent / test_dir if "/" in test_dir else Path(test_dir)
-                if not test_path.is_absolute():
-                    test_path = Path.cwd() / test_path
-                if test_path.is_dir():
-                    args.tests_root = str(test_path)
-                    break
-            if args.tests_root is None:
-                args.tests_root = str(Path.cwd() / "src" / "test" / "java")
         else:
             raise AssertionError("--tests-root must be specified")
     assert Path(args.tests_root).is_dir(), f"--tests-root {args.tests_root} must be a valid directory"
@@ -327,7 +336,6 @@ def project_root_from_module_root(module_root: Path, pyproject_file_path: Path) 
             return current.resolve()
         if (current / "build.gradle").exists() or (current / "build.gradle.kts").exists():
             return current.resolve()
-        # Check for config file (pyproject.toml for Python, codeflash.toml for other languages)
         if (current / "codeflash.toml").exists():
             return current.resolve()
         current = current.parent
@@ -378,32 +386,52 @@ def _handle_show_config() -> None:
     from codeflash.setup.detector import detect_project, has_existing_config
 
     project_root = Path.cwd()
-    detected = detect_project(project_root)
+    config_exists, _ = has_existing_config(project_root)
 
-    # Check if config exists or is auto-detected
-    config_exists, config_file = has_existing_config(project_root)
-    status = "Saved config" if config_exists else "Auto-detected (not saved)"
+    if config_exists:
+        from codeflash.code_utils.config_parser import parse_config_file
 
-    console.print()
-    console.print(f"[bold]Codeflash Configuration[/bold] ({status})")
-    if config_exists and config_file:
-        console.print(f"[dim]Config file: {project_root / config_file}[/dim]")
-    console.print()
+        config, config_file_path = parse_config_file()
+        status = "Saved config"
 
-    table = Table(show_header=True, header_style="bold cyan")
-    table.add_column("Setting", style="dim")
-    table.add_column("Value")
+        console.print()
+        console.print(f"[bold]Codeflash Configuration[/bold] ({status})")
+        console.print(f"[dim]Config file: {config_file_path}[/dim]")
+        console.print()
 
-    table.add_row("Language", detected.language)
-    table.add_row("Project root", str(detected.project_root))
-    table.add_row("Module root", str(detected.module_root))
-    table.add_row("Tests root", str(detected.tests_root) if detected.tests_root else "(not detected)")
-    table.add_row("Test runner", detected.test_runner or "(not detected)")
-    table.add_row("Formatter", ", ".join(detected.formatter_cmds) if detected.formatter_cmds else "(not detected)")
-    table.add_row(
-        "Ignore paths", ", ".join(str(p) for p in detected.ignore_paths) if detected.ignore_paths else "(none)"
-    )
-    table.add_row("Confidence", f"{detected.confidence:.0%}")
+        table = Table(show_header=True, header_style="bold cyan")
+        table.add_column("Setting", style="dim")
+        table.add_column("Value")
+
+        table.add_row("Project root", str(project_root))
+        table.add_row("Module root", config.get("module_root", "(not set)"))
+        table.add_row("Tests root", config.get("tests_root", "(not set)"))
+        table.add_row("Test runner", config.get("test_framework", config.get("pytest_cmd", "(not set)")))
+        table.add_row("Formatter", ", ".join(config["formatter_cmds"]) if config.get("formatter_cmds") else "(not set)")
+        ignore_paths = config.get("ignore_paths", [])
+        table.add_row("Ignore paths", ", ".join(str(p) for p in ignore_paths) if ignore_paths else "(none)")
+    else:
+        detected = detect_project(project_root)
+        status = "Auto-detected (not saved)"
+
+        console.print()
+        console.print(f"[bold]Codeflash Configuration[/bold] ({status})")
+        console.print()
+
+        table = Table(show_header=True, header_style="bold cyan")
+        table.add_column("Setting", style="dim")
+        table.add_column("Value")
+
+        table.add_row("Language", detected.language)
+        table.add_row("Project root", str(detected.project_root))
+        table.add_row("Module root", str(detected.module_root))
+        table.add_row("Tests root", str(detected.tests_root) if detected.tests_root else "(not detected)")
+        table.add_row("Test runner", detected.test_runner or "(not detected)")
+        table.add_row("Formatter", ", ".join(detected.formatter_cmds) if detected.formatter_cmds else "(not detected)")
+        table.add_row(
+            "Ignore paths", ", ".join(str(p) for p in detected.ignore_paths) if detected.ignore_paths else "(none)"
+        )
+        table.add_row("Confidence", f"{detected.confidence:.0%}")
 
     console.print(table)
     console.print()
@@ -436,7 +464,7 @@ def _handle_reset_config(confirm: bool = True) -> None:
         console.print("[bold]This will remove Codeflash configuration from your project.[/bold]")
         console.print()
 
-        config_file = {"python": "pyproject.toml", "java": "codeflash.toml"}.get(detected.language, "package.json")
+        config_file = "pyproject.toml" if detected.language == "python" else "package.json"
         console.print(f"  Config file: {project_root / config_file}")
         console.print()
 

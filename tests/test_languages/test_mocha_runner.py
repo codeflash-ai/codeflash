@@ -5,7 +5,6 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from junitparser import JUnitXml
 
 
@@ -19,12 +18,7 @@ class TestMochaJsonToJunitXml:
             {
                 "stats": {"tests": 2, "passes": 2, "failures": 0, "duration": 50},
                 "tests": [
-                    {
-                        "title": "should add numbers",
-                        "fullTitle": "math should add numbers",
-                        "duration": 20,
-                        "err": {},
-                    },
+                    {"title": "should add numbers", "fullTitle": "math should add numbers", "duration": 20, "err": {}},
                     {
                         "title": "should subtract numbers",
                         "fullTitle": "math should subtract numbers",
@@ -62,7 +56,7 @@ class TestMochaJsonToJunitXml:
                             "message": "expected 1 to equal 2",
                             "stack": "AssertionError: expected 1 to equal 2\n    at Context.<anonymous>",
                         },
-                    },
+                    }
                 ],
                 "passes": [],
                 "failures": [],
@@ -92,7 +86,7 @@ class TestMochaJsonToJunitXml:
                         "duration": 0,
                         "pending": True,
                         "err": {},
-                    },
+                    }
                 ],
                 "passes": [],
                 "failures": [],
@@ -198,9 +192,7 @@ class TestMochaJsonToJunitXml:
         mocha_json = json.dumps(
             {
                 "stats": {"tests": 1, "passes": 1, "failures": 0, "duration": 10},
-                "tests": [
-                    {"title": "test1", "fullTitle": "someOtherSuite test1", "duration": 10, "err": {}},
-                ],
+                "tests": [{"title": "test1", "fullTitle": "someOtherSuite test1", "duration": 10, "err": {}}],
                 "passes": [],
                 "failures": [],
                 "pending": [],
@@ -229,9 +221,7 @@ class TestMochaJsonToJunitXml:
         mocha_json = json.dumps(
             {
                 "stats": {"tests": 1, "passes": 1, "failures": 0, "duration": 10},
-                "tests": [
-                    {"title": "test1", "fullTitle": "suite test1", "duration": 10, "err": {}},
-                ],
+                "tests": [{"title": "test1", "fullTitle": "suite test1", "duration": 10, "err": {}}],
                 "passes": [],
                 "failures": [],
                 "pending": [],
@@ -435,7 +425,13 @@ class TestRunMochaBehavioralTests:
         from codeflash.models.test_type import TestType
 
         mocha_output = json.dumps(
-            {"stats": {"tests": 1, "passes": 1, "failures": 0, "duration": 10}, "tests": [{"title": "t", "fullTitle": "s t", "duration": 10, "err": {}}], "passes": [], "failures": [], "pending": []}
+            {
+                "stats": {"tests": 1, "passes": 1, "failures": 0, "duration": 10},
+                "tests": [{"title": "t", "fullTitle": "s t", "duration": 10, "err": {}}],
+                "passes": [],
+                "failures": [],
+                "pending": [],
+            }
         )
         mock_run.return_value = MagicMock(returncode=0, stdout=mocha_output, stderr="", args=[])
 
@@ -457,10 +453,7 @@ class TestRunMochaBehavioralTests:
             )
 
             result_file, result, cov, _ = run_mocha_behavioral_tests(
-                test_paths=test_paths,
-                test_env={},
-                cwd=tmpdir_path,
-                candidate_index=3,
+                test_paths=test_paths, test_env={}, cwd=tmpdir_path, candidate_index=3
             )
 
             # Verify env vars were passed
@@ -478,7 +471,13 @@ class TestRunMochaBehavioralTests:
         from codeflash.models.test_type import TestType
 
         mocha_output = json.dumps(
-            {"stats": {"tests": 0, "passes": 0, "failures": 0, "duration": 0}, "tests": [], "passes": [], "failures": [], "pending": []}
+            {
+                "stats": {"tests": 0, "passes": 0, "failures": 0, "duration": 0},
+                "tests": [],
+                "passes": [],
+                "failures": [],
+                "pending": [],
+            }
         )
         mock_run.return_value = MagicMock(returncode=0, stdout=mocha_output, stderr="", args=[])
 
@@ -499,11 +498,7 @@ class TestRunMochaBehavioralTests:
                 ]
             )
 
-            _, _, coverage_path, _ = run_mocha_behavioral_tests(
-                test_paths=test_paths,
-                test_env={},
-                cwd=tmpdir_path,
-            )
+            _, _, coverage_path, _ = run_mocha_behavioral_tests(test_paths=test_paths, test_env={}, cwd=tmpdir_path)
             assert coverage_path is None
 
 
@@ -518,7 +513,13 @@ class TestRunMochaBenchmarkingTests:
         from codeflash.models.test_type import TestType
 
         mocha_output = json.dumps(
-            {"stats": {"tests": 1, "passes": 1, "failures": 0, "duration": 100}, "tests": [{"title": "perf", "fullTitle": "bench perf", "duration": 100, "err": {}}], "passes": [], "failures": [], "pending": []}
+            {
+                "stats": {"tests": 1, "passes": 1, "failures": 0, "duration": 100},
+                "tests": [{"title": "perf", "fullTitle": "bench perf", "duration": 100, "err": {}}],
+                "passes": [],
+                "failures": [],
+                "pending": [],
+            }
         )
         mock_run.return_value = MagicMock(returncode=0, stdout=mocha_output, stderr="", args=[])
 
@@ -729,7 +730,13 @@ class TestRunMochaLineProfileTests:
         from codeflash.models.test_type import TestType
 
         mocha_output = json.dumps(
-            {"stats": {"tests": 0, "passes": 0, "failures": 0, "duration": 0}, "tests": [], "passes": [], "failures": [], "pending": []}
+            {
+                "stats": {"tests": 0, "passes": 0, "failures": 0, "duration": 0},
+                "tests": [],
+                "passes": [],
+                "failures": [],
+                "pending": [],
+            }
         )
         mock_run.return_value = MagicMock(returncode=0, stdout=mocha_output, stderr="", args=[])
 
@@ -752,13 +759,75 @@ class TestRunMochaLineProfileTests:
             )
 
             run_mocha_line_profile_tests(
-                test_paths=test_paths,
-                test_env={},
-                cwd=tmpdir_path,
-                line_profile_output_file=profile_output,
+                test_paths=test_paths, test_env={}, cwd=tmpdir_path, line_profile_output_file=profile_output
             )
 
             call_kwargs = mock_run.call_args
             env = call_kwargs.kwargs.get("env") or call_kwargs[1].get("env", {})
             assert env.get("CODEFLASH_MODE") == "line_profile"
             assert env.get("CODEFLASH_LINE_PROFILE_OUTPUT") == str(profile_output)
+
+
+class TestParserUnknownTestNameFallback:
+    """Tests for the parser's fallback when perf markers have 'unknown' test name."""
+
+    def test_unknown_markers_matched_to_first_testcase(self):
+        """When capturePerf markers have 'unknown' test name (Vitest beforeEach not firing),
+        the parser should still match them to testcases via the fallback logic.
+        """
+        from codeflash.languages.javascript.parse import parse_jest_test_xml
+        from codeflash.models.models import TestFile, TestFiles
+        from codeflash.models.test_type import TestType
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+
+            # Create a JUnit XML with one test suite and one testcase
+            xml_content = """<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="src/test_func__perf_test_0.test.ts" tests="1" failures="0" time="10.5">
+    <testcase name="should compute correctly" classname="src/test_func__perf_test_0.test.ts" time="10.5">
+    </testcase>
+  </testsuite>
+</testsuites>"""
+            xml_path = tmpdir_path / "results.xml"
+            xml_path.write_text(xml_content, encoding="utf-8")
+
+            # Create test files
+            test_file = tmpdir_path / "test_func__perf_test_0.test.ts"
+            test_file.write_text("// perf test", encoding="utf-8")
+
+            test_files = TestFiles(
+                test_files=[
+                    TestFile(
+                        instrumented_behavior_file_path=test_file,
+                        benchmarking_file_path=test_file,
+                        test_type=TestType.GENERATED_REGRESSION,
+                    )
+                ]
+            )
+
+            # Create a mock subprocess result with perf markers using "unknown" test name
+            # This simulates what happens when Vitest's beforeEach doesn't fire
+            markers = []
+            for i in range(1, 6):
+                markers.append(f"!######test_mod:unknown:computeFunc:{i}:1_0:{1000 + i * 100}######!")
+            stdout = "\n".join(markers)
+
+            mock_result = MagicMock()
+            mock_result.stdout = stdout
+
+            test_config = MagicMock()
+            test_config.tests_project_rootdir = tmpdir_path
+            test_config.test_framework = "vitest"
+
+            results = parse_jest_test_xml(
+                test_xml_file_path=xml_path, test_files=test_files, test_config=test_config, run_result=mock_result
+            )
+
+            # The "unknown" fallback should assign all 5 markers to the testcase
+            assert len(results.test_results) == 5
+            # Verify runtimes were extracted (not the 10.5s XML fallback)
+            runtimes = [r.runtime for r in results.test_results if r.runtime is not None]
+            assert len(runtimes) == 5
+            assert all(r < 100_000 for r in runtimes)  # All under 100 microseconds (nanoseconds)

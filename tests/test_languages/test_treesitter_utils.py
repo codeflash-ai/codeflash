@@ -839,7 +839,7 @@ class TestNamedExportConstArrow:
         return TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
 
     def test_named_export_const_arrow(self, ts_analyzer):
-        """const arrow function exported via separate export { } clause."""
+        """Const arrow function exported via separate export { } clause."""
         code = """const joinBy = (arr: string[], separator: string) => {
     return arr.join(separator);
 };
@@ -852,7 +852,7 @@ export { joinBy };"""
         assert joinBy.is_exported is True
 
     def test_named_export_alias(self, ts_analyzer):
-        """export { foo as bar } — foo should be marked as exported."""
+        """Export { foo as bar } — foo should be marked as exported."""
         code = """const foo = (x: number) => {
     return x * 2;
 };

@@ -6,9 +6,7 @@ from end_to_end_test_utilities import TestConfig, run_codeflash_command, run_wit
 
 def run_test(expected_improvement_pct: int) -> bool:
     config = TestConfig(
-        file_path="src/main/java/com/example/Fibonacci.java",
-        function_name="fibonacci",
-        min_improvement_x=0.70,
+        file_path="src/main/java/com/example/Fibonacci.java", function_name="fibonacci", min_improvement_x=0.70
     )
     cwd = (pathlib.Path(__file__).parent.parent.parent / "code_to_optimize" / "java").resolve()
     return run_codeflash_command(cwd, config, expected_improvement_pct)

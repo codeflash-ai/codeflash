@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.languages.base import Language
-from codeflash.languages.current import set_current_language
+from codeflash.languages.current import reset_current_language, set_current_language
 from codeflash.verification.verification_utils import TestConfig
 
 
@@ -32,20 +32,22 @@ def test_java_tests_project_rootdir_set_to_tests_root(tmp_path):
     mock_java_function.language = "java"
     file_to_funcs = {Path("dummy.java"): [mock_java_function]}
 
-    # Mock is_python() to return False and is_java() to return True
-    # These are imported from codeflash.languages
-    with patch("codeflash.languages.is_python", return_value=False), \
-         patch("codeflash.languages.is_java", return_value=True), \
-         patch("codeflash.discovery.discover_unit_tests.discover_tests_for_language") as mock_discover:
-        mock_discover.return_value = ({}, 0, 0)
+    # Set current language to Java so is_python() returns False and
+    # current_language_support() returns JavaSupport with its
+    # adjust_test_config_for_discovery implementation
+    set_current_language(Language.JAVA)
+    try:
+        with patch("codeflash.discovery.discover_unit_tests.discover_tests_for_language") as mock_discover:
+            mock_discover.return_value = ({}, 0, 0)
 
-        # Call discover_unit_tests
-        discover_unit_tests(test_cfg, file_to_funcs_to_optimize=file_to_funcs)
+            # Call discover_unit_tests
+            discover_unit_tests(test_cfg, file_to_funcs_to_optimize=file_to_funcs)
+    finally:
+        reset_current_language()
 
     # Verify that tests_project_rootdir was updated to tests_root
     assert test_cfg.tests_project_rootdir == tests_root, (
-        f"Expected tests_project_rootdir to be {tests_root}, "
-        f"but got {test_cfg.tests_project_rootdir}"
+        f"Expected tests_project_rootdir to be {tests_root}, but got {test_cfg.tests_project_rootdir}"
     )
 
 
@@ -65,9 +67,7 @@ def test_python_tests_project_rootdir_unchanged(tmp_path):
     # Create test config
     original_tests_project_rootdir = project_root / "some" / "other" / "dir"
     test_cfg = TestConfig(
-        tests_root=tests_root,
-        project_root_path=project_root,
-        tests_project_rootdir=original_tests_project_rootdir,
+        tests_root=tests_root, project_root_path=project_root, tests_project_rootdir=original_tests_project_rootdir
     )
 
     # Mock pytest discovery

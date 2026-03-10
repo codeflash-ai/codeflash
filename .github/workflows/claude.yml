@@ -192,12 +192,6 @@ jobs:
             *Last updated: <timestamp>*
             </step>
 
-            <step name="simplify">
-            Run /simplify to review recently changed code for reuse, quality, and efficiency opportunities.
-            If improvements are found, commit with "refactor: simplify <description>" and push.
-            Only make behavior-preserving changes.
-            </step>
-
             <step name="merge_optimization_prs">
             Check for open PRs from codeflash-ai[bot]:
             `gh pr list --author "codeflash-ai[bot]" --state open --json number,title,headRefName,createdAt,mergeable`
@@ -219,7 +213,7 @@ jobs:
             - All findings are in a single summary comment (no inline review comments were created)
             - If fixes were made, they were verified with prek
             </verification>
-          claude_args: '--model us.anthropic.claude-sonnet-4-6 --max-turns 25 --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr checks:*),Bash(gh pr merge:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh api:*),Bash(uv run prek *),Bash(uv run mypy *),Bash(uv run coverage *),Bash(uv run pytest *),Bash(git status*),Bash(git add *),Bash(git commit *),Bash(git push*),Bash(git diff *),Bash(git checkout *),Read,Glob,Grep,Edit,Skill"'
+          claude_args: '--model us.anthropic.claude-sonnet-4-6 --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr checks:*),Bash(gh pr merge:*),Bash(gh pr close:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh api:*),Bash(uv run prek *),Bash(uv run mypy *),Bash(uv run coverage *),Bash(uv run pytest *),Bash(git status*),Bash(git add *),Bash(git commit *),Bash(git push*),Bash(git diff *),Bash(git checkout *),Read,Glob,Grep,Edit"'
           additional_permissions: |
             actions: read
 

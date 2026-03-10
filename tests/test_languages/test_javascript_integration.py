@@ -8,13 +8,11 @@ These tests call the actual backend /testgen API endpoint and verify:
 Similar to test_validate_python_code.py but for JavaScript/TypeScript.
 """
 
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from codeflash.api.aiservice import AiServiceClient
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import Language
 from codeflash.models.models import CodeString, OptimizedCandidateSource
 
@@ -23,6 +21,7 @@ def skip_if_js_not_supported():
     """Skip test if JavaScript/TypeScript languages are not supported."""
     try:
         from codeflash.languages import get_language_support
+
         get_language_support(Language.JAVASCRIPT)
     except Exception as e:
         pytest.skip(f"JavaScript/TypeScript language support not available: {e}")
@@ -218,12 +217,13 @@ export function add(a: number, b: number): number {
 
         def capture_request(*args, **kwargs):
             nonlocal captured_payload
-            if 'payload' in kwargs:
-                captured_payload = kwargs['payload']
+            if "payload" in kwargs:
+                captured_payload = kwargs["payload"]
             elif len(args) > 1:
                 captured_payload = args[1]
             # Return a mock response to avoid actual API call
             from unittest.mock import MagicMock
+
             mock_response = MagicMock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
@@ -233,7 +233,7 @@ export function add(a: number, b: number): number {
             }
             return mock_response
 
-        with patch.object(ai_client, 'make_ai_service_request', side_effect=capture_request):
+        with patch.object(ai_client, "make_ai_service_request", side_effect=capture_request):
             ai_client.generate_regression_tests(
                 source_code_being_tested=ts_file.read_text(),
                 function_to_optimize=func,
@@ -248,8 +248,9 @@ export function add(a: number, b: number): number {
             )
 
         assert captured_payload is not None
-        assert captured_payload.get('language') == 'typescript', \
+        assert captured_payload.get("language") == "typescript", (
             f"Expected language='typescript', got: {captured_payload.get('language')}"
+        )
 
     def test_testgen_request_includes_javascript_language(self, tmp_path):
         """Verify the language parameter is sent as 'javascript' for .js files."""
@@ -279,11 +280,12 @@ module.exports = { add };
 
         def capture_request(*args, **kwargs):
             nonlocal captured_payload
-            if 'payload' in kwargs:
-                captured_payload = kwargs['payload']
+            if "payload" in kwargs:
+                captured_payload = kwargs["payload"]
             elif len(args) > 1:
                 captured_payload = args[1]
             from unittest.mock import MagicMock
+
             mock_response = MagicMock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
@@ -293,7 +295,7 @@ module.exports = { add };
             }
             return mock_response
 
-        with patch.object(ai_client, 'make_ai_service_request', side_effect=capture_request):
+        with patch.object(ai_client, "make_ai_service_request", side_effect=capture_request):
             ai_client.generate_regression_tests(
                 source_code_being_tested=js_file.read_text(),
                 function_to_optimize=func,
@@ -308,5 +310,6 @@ module.exports = { add };
             )
 
         assert captured_payload is not None
-        assert captured_payload.get('language') == 'javascript', \
+        assert captured_payload.get("language") == "javascript", (
             f"Expected language='javascript', got: {captured_payload.get('language')}"
+        )

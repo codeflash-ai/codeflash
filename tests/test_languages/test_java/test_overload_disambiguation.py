@@ -3,13 +3,8 @@
 import logging
 from pathlib import Path
 
-import pytest
-
 from codeflash.languages.java.discovery import discover_functions_from_source
-from codeflash.languages.java.test_discovery import (
-    disambiguate_overloads,
-    discover_tests,
-)
+from codeflash.languages.java.test_discovery import disambiguate_overloads, discover_tests
 
 
 class TestOverloadDisambiguation:
@@ -109,9 +104,7 @@ public class CalculatorTest {
         """When overloaded methods are detected, info log fires."""
         matched_names = ["Calculator.add", "StringUtils.add"]
         with caplog.at_level(logging.INFO):
-            result = disambiguate_overloads(
-                matched_names, "testAdd", "some test source code"
-            )
+            result = disambiguate_overloads(matched_names, "testAdd", "some test source code")
 
         assert result == matched_names
         info_messages = [r.message for r in caplog.records if r.levelno == logging.INFO]

@@ -31,7 +31,8 @@ from codeflash.setup import (
 def python_src_layout(tmp_path):
     """Create a Python project with src/ layout."""
     # pyproject.toml with poetry
-    (tmp_path / "pyproject.toml").write_text("""
+    (tmp_path / "pyproject.toml").write_text(
+        """
 [tool.poetry]
 name = "myapp"
 version = "0.1.0"
@@ -41,7 +42,8 @@ line-length = 120
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-""".strip())
+""".strip()
+    )
 
     # src/myapp package
     src_dir = tmp_path / "src" / "myapp"
@@ -66,14 +68,16 @@ testpaths = ["tests"]
 @pytest.fixture
 def python_flat_layout(tmp_path):
     """Create a Python project with flat layout (package at root)."""
-    (tmp_path / "pyproject.toml").write_text("""
+    (tmp_path / "pyproject.toml").write_text(
+        """
 [project]
 name = "myapp"
 version = "0.1.0"
 
 [tool.black]
 line-length = 88
-""".strip())
+""".strip()
+    )
 
     # Package at root
     pkg_dir = tmp_path / "myapp"
@@ -93,14 +97,16 @@ line-length = 88
 @pytest.fixture
 def python_setup_py_project(tmp_path):
     """Create a Python project with setup.py (legacy)."""
-    (tmp_path / "setup.py").write_text("""
+    (tmp_path / "setup.py").write_text(
+        """
 from setuptools import setup, find_packages
 setup(
     name="legacyapp",
     version="1.0.0",
     packages=find_packages(),
 )
-""".strip())
+""".strip()
+    )
 
     pkg_dir = tmp_path / "legacyapp"
     pkg_dir.mkdir()
@@ -114,19 +120,18 @@ setup(
 @pytest.fixture
 def javascript_npm_project(tmp_path):
     """Create a JavaScript project with npm."""
-    (tmp_path / "package.json").write_text(json.dumps({
-        "name": "my-js-app",
-        "version": "1.0.0",
-        "main": "src/index.js",
-        "scripts": {
-            "test": "jest",
-            "lint": "eslint src/"
-        },
-        "devDependencies": {
-            "jest": "^29.7.0",
-            "prettier": "^3.0.0"
-        }
-    }, indent=2))
+    (tmp_path / "package.json").write_text(
+        json.dumps(
+            {
+                "name": "my-js-app",
+                "version": "1.0.0",
+                "main": "src/index.js",
+                "scripts": {"test": "jest", "lint": "eslint src/"},
+                "devDependencies": {"jest": "^29.7.0", "prettier": "^3.0.0"},
+            },
+            indent=2,
+        )
+    )
 
     (tmp_path / "package-lock.json").write_text("{}")
 
@@ -147,15 +152,17 @@ def javascript_npm_project(tmp_path):
 @pytest.fixture
 def javascript_yarn_project(tmp_path):
     """Create a JavaScript project with yarn."""
-    (tmp_path / "package.json").write_text(json.dumps({
-        "name": "yarn-app",
-        "version": "1.0.0",
-        "main": "lib/index.js",
-        "devDependencies": {
-            "jest": "^29.0.0",
-            "eslint": "^8.0.0"
-        }
-    }, indent=2))
+    (tmp_path / "package.json").write_text(
+        json.dumps(
+            {
+                "name": "yarn-app",
+                "version": "1.0.0",
+                "main": "lib/index.js",
+                "devDependencies": {"jest": "^29.0.0", "eslint": "^8.0.0"},
+            },
+            indent=2,
+        )
+    )
 
     (tmp_path / "yarn.lock").write_text("# yarn lockfile")
 
@@ -171,16 +178,17 @@ def javascript_yarn_project(tmp_path):
 @pytest.fixture
 def javascript_pnpm_project(tmp_path):
     """Create a JavaScript project with pnpm."""
-    (tmp_path / "package.json").write_text(json.dumps({
-        "name": "pnpm-app",
-        "version": "1.0.0",
-        "exports": {
-            ".": "./dist/index.js"
-        },
-        "devDependencies": {
-            "vitest": "^1.0.0"
-        }
-    }, indent=2))
+    (tmp_path / "package.json").write_text(
+        json.dumps(
+            {
+                "name": "pnpm-app",
+                "version": "1.0.0",
+                "exports": {".": "./dist/index.js"},
+                "devDependencies": {"vitest": "^1.0.0"},
+            },
+            indent=2,
+        )
+    )
 
     (tmp_path / "pnpm-lock.yaml").write_text("lockfileVersion: 5.4")
 
@@ -193,14 +201,17 @@ def javascript_pnpm_project(tmp_path):
 @pytest.fixture
 def javascript_bun_project(tmp_path):
     """Create a JavaScript project with bun."""
-    (tmp_path / "package.json").write_text(json.dumps({
-        "name": "bun-app",
-        "version": "1.0.0",
-        "module": "src/index.ts",
-        "devDependencies": {
-            "bun-types": "latest"
-        }
-    }, indent=2))
+    (tmp_path / "package.json").write_text(
+        json.dumps(
+            {
+                "name": "bun-app",
+                "version": "1.0.0",
+                "module": "src/index.ts",
+                "devDependencies": {"bun-types": "latest"},
+            },
+            indent=2,
+        )
+    )
 
     (tmp_path / "bun.lockb").write_bytes(b"bun lockfile")
 
@@ -212,32 +223,35 @@ def javascript_bun_project(tmp_path):
 @pytest.fixture
 def typescript_project(tmp_path):
     """Create a TypeScript project."""
-    (tmp_path / "package.json").write_text(json.dumps({
-        "name": "ts-app",
-        "version": "1.0.0",
-        "main": "dist/index.js",
-        "types": "dist/index.d.ts",
-        "scripts": {
-            "build": "tsc",
-            "test": "vitest"
-        },
-        "devDependencies": {
-            "typescript": "^5.0.0",
-            "vitest": "^1.0.0",
-            "@types/node": "^20.0.0"
-        }
-    }, indent=2))
+    (tmp_path / "package.json").write_text(
+        json.dumps(
+            {
+                "name": "ts-app",
+                "version": "1.0.0",
+                "main": "dist/index.js",
+                "types": "dist/index.d.ts",
+                "scripts": {"build": "tsc", "test": "vitest"},
+                "devDependencies": {"typescript": "^5.0.0", "vitest": "^1.0.0", "@types/node": "^20.0.0"},
+            },
+            indent=2,
+        )
+    )
 
-    (tmp_path / "tsconfig.json").write_text(json.dumps({
-        "compilerOptions": {
-            "target": "ES2020",
-            "module": "commonjs",
-            "outDir": "./dist",
-            "rootDir": "./src",
-            "strict": True
-        },
-        "include": ["src/**/*"]
-    }, indent=2))
+    (tmp_path / "tsconfig.json").write_text(
+        json.dumps(
+            {
+                "compilerOptions": {
+                    "target": "ES2020",
+                    "module": "commonjs",
+                    "outDir": "./dist",
+                    "rootDir": "./src",
+                    "strict": True,
+                },
+                "include": ["src/**/*"],
+            },
+            indent=2,
+        )
+    )
 
     src_dir = tmp_path / "src"
     src_dir.mkdir()
@@ -255,35 +269,36 @@ def typescript_project(tmp_path):
 @pytest.fixture
 def typescript_react_project(tmp_path):
     """Create a TypeScript React project (like Create React App)."""
-    (tmp_path / "package.json").write_text(json.dumps({
-        "name": "react-app",
-        "version": "0.1.0",
-        "private": True,
-        "dependencies": {
-            "react": "^18.2.0",
-            "react-dom": "^18.2.0",
-            "react-scripts": "5.0.1",
-            "jest": "^29.0.0"
-        },
-        "devDependencies": {
-            "@types/react": "^18.0.0",
-            "@testing-library/react": "^14.0.0",
-            "typescript": "^5.0.0"
-        },
-        "scripts": {
-            "start": "react-scripts start",
-            "build": "react-scripts build",
-            "test": "react-scripts test"
-        }
-    }, indent=2))
+    (tmp_path / "package.json").write_text(
+        json.dumps(
+            {
+                "name": "react-app",
+                "version": "0.1.0",
+                "private": True,
+                "dependencies": {
+                    "react": "^18.2.0",
+                    "react-dom": "^18.2.0",
+                    "react-scripts": "5.0.1",
+                    "jest": "^29.0.0",
+                },
+                "devDependencies": {
+                    "@types/react": "^18.0.0",
+                    "@testing-library/react": "^14.0.0",
+                    "typescript": "^5.0.0",
+                },
+                "scripts": {
+                    "start": "react-scripts start",
+                    "build": "react-scripts build",
+                    "test": "react-scripts test",
+                },
+            },
+            indent=2,
+        )
+    )
 
-    (tmp_path / "tsconfig.json").write_text(json.dumps({
-        "compilerOptions": {
-            "target": "es5",
-            "lib": ["dom", "es2015"],
-            "jsx": "react-jsx"
-        }
-    }, indent=2))
+    (tmp_path / "tsconfig.json").write_text(
+        json.dumps({"compilerOptions": {"target": "es5", "lib": ["dom", "es2015"], "jsx": "react-jsx"}}, indent=2)
+    )
 
     src_dir = tmp_path / "src"
     src_dir.mkdir()
@@ -299,7 +314,8 @@ def typescript_react_project(tmp_path):
 @pytest.fixture
 def project_with_existing_config(tmp_path):
     """Create a project with existing codeflash config."""
-    (tmp_path / "pyproject.toml").write_text("""
+    (tmp_path / "pyproject.toml").write_text(
+        """
 [project]
 name = "configured-app"
 
@@ -307,7 +323,8 @@ name = "configured-app"
 module-root = "src"
 tests-root = "tests"
 formatter-cmds = ["black $file"]
-""".strip())
+""".strip()
+    )
 
     (tmp_path / "src").mkdir()
     (tmp_path / "tests").mkdir()
@@ -319,13 +336,15 @@ formatter-cmds = ["black $file"]
 def mixed_python_js_project(tmp_path):
     """Create a project with both Python and JS files (monorepo-like)."""
     # Python backend
-    (tmp_path / "pyproject.toml").write_text("""
+    (tmp_path / "pyproject.toml").write_text(
+        """
 [project]
 name = "fullstack-app"
 
 [tool.codeflash]
 module-root = "backend"
-""".strip())
+""".strip()
+    )
 
     backend_dir = tmp_path / "backend"
     backend_dir.mkdir()
@@ -335,10 +354,7 @@ module-root = "backend"
     # JS frontend
     frontend_dir = tmp_path / "frontend"
     frontend_dir.mkdir()
-    (frontend_dir / "package.json").write_text(json.dumps({
-        "name": "frontend",
-        "devDependencies": {"jest": "^29.0.0"}
-    }))
+    (frontend_dir / "package.json").write_text(json.dumps({"name": "frontend", "devDependencies": {"jest": "^29.0.0"}}))
     (frontend_dir / "src").mkdir()
     (frontend_dir / "src" / "app.js").write_text("")
 
@@ -458,10 +474,7 @@ class TestE2EFirstRunCheck:
 
     def test_has_existing_config_js(self, tmp_path):
         """Should find existing config in package.json."""
-        (tmp_path / "package.json").write_text(json.dumps({
-            "name": "test",
-            "codeflash": {"moduleRoot": "src"}
-        }))
+        (tmp_path / "package.json").write_text(json.dumps({"name": "test", "codeflash": {"moduleRoot": "src"}}))
 
         has_config, config_type = has_existing_config(tmp_path)
         assert has_config is True
@@ -610,17 +623,9 @@ class TestE2EFirstRunExperience:
         monkeypatch.chdir(python_flat_layout)
         monkeypatch.setenv("CODEFLASH_API_KEY", "cf-test-key-12345")
 
-        existing_args = Namespace(
-            file="myapp/core.py",
-            function="process",
-            custom_flag=True,
-        )
+        existing_args = Namespace(file="myapp/core.py", function="process", custom_flag=True)
 
-        result = handle_first_run(
-            args=existing_args,
-            skip_confirm=True,
-            skip_api_key=True,
-        )
+        result = handle_first_run(args=existing_args, skip_confirm=True, skip_api_key=True)
 
         assert result is not None
         assert result.custom_flag is True  # Preserved
@@ -681,10 +686,9 @@ class TestE2EEdgeCases:
 
     def test_project_without_formatter(self, tmp_path):
         """Should handle project without detectable formatter."""
-        (tmp_path / "package.json").write_text(json.dumps({
-            "name": "no-formatter",
-            "devDependencies": {"jest": "^29.0.0"}
-        }))
+        (tmp_path / "package.json").write_text(
+            json.dumps({"name": "no-formatter", "devDependencies": {"jest": "^29.0.0"}})
+        )
 
         detected = detect_project(tmp_path)
 
@@ -868,9 +872,11 @@ class TestE2ECLIFlags:
             printed_messages.append(str(msg))
 
         from codeflash.cli_cmds import console
+
         monkeypatch.setattr(console.console, "print", mock_print)
 
         from codeflash.cli_cmds.cli import _handle_show_config
+
         _handle_show_config()
 
         # Verify config path is displayed
@@ -889,9 +895,11 @@ class TestE2ECLIFlags:
             printed_messages.append(str(msg))
 
         from codeflash.cli_cmds import console
+
         monkeypatch.setattr(console.console, "print", mock_print)
 
         from codeflash.cli_cmds.cli import _handle_show_config
+
         _handle_show_config()
 
         # Verify no config path line is displayed

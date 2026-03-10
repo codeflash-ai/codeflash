@@ -11,27 +11,8 @@ import re
 from pathlib import Path
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.time_utils import format_perf, format_time
+from codeflash.code_utils.time_utils import format_runtime_comment
 from codeflash.models.models import GeneratedTests, GeneratedTestsList
-from codeflash.result.critic import performance_gain
-
-
-def format_runtime_comment(original_time: int, optimized_time: int) -> str:
-    """Format a runtime comparison comment for JavaScript.
-
-    Args:
-        original_time: Original runtime in nanoseconds.
-        optimized_time: Optimized runtime in nanoseconds.
-
-    Returns:
-        Formatted comment string with // prefix.
-
-    """
-    perf_gain = format_perf(
-        abs(performance_gain(original_runtime_ns=original_time, optimized_runtime_ns=optimized_time) * 100)
-    )
-    status = "slower" if optimized_time > original_time else "faster"
-    return f"// {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain}% {status})"
 
 
 def add_runtime_comments(source: str, original_runtimes: dict[str, int], optimized_runtimes: dict[str, int]) -> str:
@@ -120,7 +101,7 @@ def add_runtime_comments(source: str, original_runtimes: dict[str, int], optimiz
             # Only add comment if line has a function call and doesn't already have a comment
             if func_call_pattern.search(line) and "//" not in line and "expect(" in line:
                 orig_time, opt_time = timing_by_full_name[current_matched_full_name]
-                comment = format_runtime_comment(orig_time, opt_time)
+                comment = format_runtime_comment(orig_time, opt_time, comment_prefix="//")
                 logger.debug(f"[js-annotations] Adding comment to test '{current_test_name}': {comment}")
                 # Add comment at end of line
                 line = f"{line.rstrip()}  {comment}"

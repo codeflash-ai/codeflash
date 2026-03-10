@@ -369,7 +369,7 @@ def _get_jest_config_for_project(project_root: Path) -> Path | None:
     return original_jest_config
 
 
-def _find_node_project_root(file_path: Path) -> Path | None:
+def find_node_project_root(file_path: Path) -> Path | None:
     """Find the Node.js project root by looking for package.json.
 
     Traverses up from the given file path to find the nearest directory
@@ -686,7 +686,7 @@ def run_jest_behavioral_tests(
     # Use provided project_root, or detect it as fallback
     if project_root is None and test_files:
         first_test_file = Path(test_files[0])
-        project_root = _find_node_project_root(first_test_file)
+        project_root = find_node_project_root(first_test_file)
 
     # Use the project root, or fall back to provided cwd
     effective_cwd = project_root if project_root else cwd
@@ -936,7 +936,7 @@ def run_jest_benchmarking_tests(
     # Use provided project_root, or detect it as fallback
     if project_root is None and test_files:
         first_test_file = Path(test_files[0])
-        project_root = _find_node_project_root(first_test_file)
+        project_root = find_node_project_root(first_test_file)
 
     effective_cwd = project_root if project_root else cwd
 
@@ -1025,9 +1025,9 @@ def run_jest_benchmarking_tests(
     if "--max-old-space-size" not in existing_node_options:
         jest_env["NODE_OPTIONS"] = f"{existing_node_options} --max-old-space-size=4096".strip()
 
-    # Total timeout for the entire benchmark run (longer than single-loop timeout)
-    # Account for startup overhead + target duration + buffer
-    total_timeout = max(120, (target_duration_ms // 1000) + 60, timeout or 120)
+    # Subprocess timeout: target_duration + 120s headroom for Jest startup
+    # and TS compilation.  capturePerf's time budget governs actual looping.
+    total_timeout = max(120, (target_duration_ms // 1000) + 120)
 
     logger.debug(f"Running Jest benchmarking tests with in-process loop runner: {' '.join(jest_cmd)}")
     logger.debug(
@@ -1106,7 +1106,7 @@ def run_jest_line_profile_tests(
     # Use provided project_root, or detect it as fallback
     if project_root is None and test_files:
         first_test_file = Path(test_files[0])
-        project_root = _find_node_project_root(first_test_file)
+        project_root = find_node_project_root(first_test_file)
 
     effective_cwd = project_root if project_root else cwd
     logger.debug(f"Jest line profiling working directory: {effective_cwd}")

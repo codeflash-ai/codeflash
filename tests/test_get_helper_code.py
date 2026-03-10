@@ -6,8 +6,8 @@ import pytest
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.either import is_successful
+from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 from codeflash.models.models import FunctionParent, get_code_block_splitter
-from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.verification_utils import TestConfig
 
@@ -233,7 +233,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
             test_framework="pytest",
             pytest_cmd="pytest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=function_to_optimize, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=function_to_optimize, test_cfg=test_config)
         with open(file_path) as f:
             original_code = f.read()
         ctx_result = func_optimizer.get_code_optimization_context()
@@ -404,7 +404,7 @@ def test_bubble_sort_deps() -> None:
         test_framework="pytest",
         pytest_cmd="pytest",
     )
-    func_optimizer = FunctionOptimizer(function_to_optimize=function_to_optimize, test_cfg=test_config)
+    func_optimizer = PythonFunctionOptimizer(function_to_optimize=function_to_optimize, test_cfg=test_config)
     with open(file_path) as f:
         original_code = f.read()
     ctx_result = func_optimizer.get_code_optimization_context()

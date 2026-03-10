@@ -108,9 +108,7 @@ public class CalculatorTest {
 """)
 
         # Get source functions
-        source_functions = discover_functions_from_source(
-            src_file.read_text(), file_path=src_file
-        )
+        source_functions = discover_functions_from_source(src_file.read_text(), file_path=src_file)
 
         # Discover tests
         result = discover_tests(test_dir, source_functions)
@@ -168,7 +166,6 @@ public class StringUtilsTest {
 
         # Create source function
         from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-        from codeflash.languages.base import Language
 
         func = FunctionToOptimize(
             function_name="reverse",
@@ -242,9 +239,7 @@ public class TestQueryBlob {
 """)
 
         # Get source functions
-        source_functions = discover_functions_from_source(
-            src_file.read_text(), file_path=src_file
-        )
+        source_functions = discover_functions_from_source(src_file.read_text(), file_path=src_file)
 
         # Filter to just bytesToHexString
         target_functions = [f for f in source_functions if f.function_name == "bytesToHexString"]
@@ -288,9 +283,7 @@ public class IntegrationTest {
 """)
 
         # Get source functions
-        source_functions = discover_functions_from_source(
-            src_file.read_text(), file_path=src_file
-        )
+        source_functions = discover_functions_from_source(src_file.read_text(), file_path=src_file)
 
         # Discover tests
         result = discover_tests(test_dir, source_functions)
@@ -325,8 +318,8 @@ class TestImportExtraction:
 
     def test_basic_import(self):
         """Test extraction of basic import statement."""
-        from codeflash.languages.java.test_discovery import _extract_imports
         from codeflash.languages.java.parser import get_java_analyzer
+        from codeflash.languages.java.test_discovery import _extract_imports
 
         analyzer = get_java_analyzer()
         source = """
@@ -341,8 +334,8 @@ public class Test {}
 
     def test_multiple_imports(self):
         """Test extraction of multiple imports."""
-        from codeflash.languages.java.test_discovery import _extract_imports
         from codeflash.languages.java.parser import get_java_analyzer
+        from codeflash.languages.java.test_discovery import _extract_imports
 
         analyzer = get_java_analyzer()
         source = """
@@ -358,8 +351,8 @@ public class Test {}
 
     def test_wildcard_import_returns_empty(self):
         """Test that wildcard imports don't add specific classes."""
-        from codeflash.languages.java.test_discovery import _extract_imports
         from codeflash.languages.java.parser import get_java_analyzer
+        from codeflash.languages.java.test_discovery import _extract_imports
 
         analyzer = get_java_analyzer()
         source = """
@@ -374,8 +367,8 @@ public class Test {}
 
     def test_static_import_extracts_class(self):
         """Test that static imports extract the class name, not the method."""
-        from codeflash.languages.java.test_discovery import _extract_imports
         from codeflash.languages.java.parser import get_java_analyzer
+        from codeflash.languages.java.test_discovery import _extract_imports
 
         analyzer = get_java_analyzer()
         source = """
@@ -390,8 +383,8 @@ public class Test {}
 
     def test_static_wildcard_import_extracts_class(self):
         """Test that static wildcard imports extract the class name."""
-        from codeflash.languages.java.test_discovery import _extract_imports
         from codeflash.languages.java.parser import get_java_analyzer
+        from codeflash.languages.java.test_discovery import _extract_imports
 
         analyzer = get_java_analyzer()
         source = """
@@ -406,8 +399,8 @@ public class Test {}
 
     def test_deeply_nested_package(self):
         """Test extraction from deeply nested package."""
-        from codeflash.languages.java.test_discovery import _extract_imports
         from codeflash.languages.java.parser import get_java_analyzer
+        from codeflash.languages.java.test_discovery import _extract_imports
 
         analyzer = get_java_analyzer()
         source = """
@@ -422,8 +415,8 @@ public class Test {}
 
     def test_mixed_imports(self):
         """Test extraction with mix of regular, static, and wildcard imports."""
-        from codeflash.languages.java.test_discovery import _extract_imports
         from codeflash.languages.java.parser import get_java_analyzer
+        from codeflash.languages.java.test_discovery import _extract_imports
 
         analyzer = get_java_analyzer()
         source = """
@@ -448,8 +441,8 @@ class TestMethodCallDetection:
 
     def test_find_method_calls(self):
         """Test detection of method calls within a code range."""
-        from codeflash.languages.java.test_discovery import _find_method_calls_in_range
         from codeflash.languages.java.parser import get_java_analyzer
+        from codeflash.languages.java.test_discovery import _find_method_calls_in_range
 
         analyzer = get_java_analyzer()
         source = """

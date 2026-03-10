@@ -3,14 +3,9 @@
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from codeflash.languages.base import FunctionInfo
+from codeflash.languages.java.concurrency_analyzer import JavaConcurrencyAnalyzer, analyze_function_concurrency
 from codeflash.languages.language_enum import Language
-from codeflash.languages.java.concurrency_analyzer import (
-    JavaConcurrencyAnalyzer,
-    analyze_function_concurrency,
-)
 
 
 class TestCompletableFutureDetection:

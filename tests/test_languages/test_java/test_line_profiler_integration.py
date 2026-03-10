@@ -1,5 +1,4 @@
-"""Integration tests for Java line profiler with JavaSupport.
-"""
+"""Integration tests for Java line profiler with JavaSupport."""
 
 import json
 import math
@@ -16,12 +15,10 @@ from codeflash.languages.java.support import get_java_support
 
 
 class TestLineProfilerInstrumentation:
-    """Integration tests for line profiler instrumentation through JavaSupport.
-    """
+    """Integration tests for line profiler instrumentation through JavaSupport."""
 
     def test_instrument_with_package(self):
-        """Test instrumentation for a class with a package declaration.
-        """
+        """Test instrumentation for a class with a package declaration."""
         source = """package com.example;
 
 public class Calculator {
@@ -70,14 +67,7 @@ public class Calculator {
                 "targets": [
                     {
                         "className": "com/example/Calculator",
-                        "methods": [
-                            {
-                                "name": "add",
-                                "startLine": 4,
-                                "endLine": 7,
-                                "sourceFile": java_file.as_posix(),
-                            }
-                        ],
+                        "methods": [{"name": "add", "startLine": 4, "endLine": 7, "sourceFile": java_file.as_posix()}],
                     }
                 ],
                 "lineContents": {
@@ -155,12 +145,7 @@ public class Calculator {
                     {
                         "className": "Sorter",
                         "methods": [
-                            {
-                                "name": "sort",
-                                "startLine": 2,
-                                "endLine": 14,
-                                "sourceFile": java_file.as_posix(),
-                            }
+                            {"name": "sort", "startLine": 2, "endLine": 14, "sourceFile": java_file.as_posix()}
                         ],
                     }
                 ],
@@ -254,9 +239,7 @@ public class Calculator {
 
             # Both methods should appear as targets when generated together
             profiler = JavaLineProfiler(output_file=profile_output)
-            profiler.generate_agent_config(
-                source, java_file, [func_reverse, func_palindrome], config_path
-            )
+            profiler.generate_agent_config(source, java_file, [func_reverse, func_palindrome], config_path)
             config = json.loads(config_path.read_text(encoding="utf-8"))
 
             assert config == {
@@ -266,12 +249,7 @@ public class Calculator {
                     {
                         "className": "StringProcessor",
                         "methods": [
-                            {
-                                "name": "reverse",
-                                "startLine": 2,
-                                "endLine": 14,
-                                "sourceFile": java_file.as_posix(),
-                            },
+                            {"name": "reverse", "startLine": 2, "endLine": 14, "sourceFile": java_file.as_posix()},
                             {
                                 "name": "isPalindrome",
                                 "startLine": 16,
@@ -355,12 +333,7 @@ public class StringUtils {
                     {
                         "className": "org/apache/commons/lang3/StringUtils",
                         "methods": [
-                            {
-                                "name": "isEmpty",
-                                "startLine": 4,
-                                "endLine": 6,
-                                "sourceFile": java_file.as_posix(),
-                            }
+                            {"name": "isEmpty", "startLine": 4, "endLine": 6, "sourceFile": java_file.as_posix()}
                         ],
                     }
                 ],
@@ -484,10 +457,7 @@ def run_spin_timer_profiled(tmppath: Path, spin_durations_ns: list[int]) -> dict
     agent_arg = profiler.build_javaagent_arg(config_path)
 
     result = subprocess.run(
-        ["javac", str(java_file)],
-        capture_output=True,
-        text=True,
-        cwd=str(tmppath),
+        ["javac", "--release", "11", str(java_file)], capture_output=True, text=True, cwd=str(tmppath)
     )
     assert result.returncode == 0, f"javac failed: {result.stderr}"
 
@@ -512,13 +482,7 @@ class TestSpinTimerProfiling:
     profiler-reported total time matches the expected sum of all spin durations.
     """
 
-    @pytest.mark.parametrize(
-        "spin_durations_ns",
-        [
-            [50_000_000, 100_000_000],
-            [30_000_000, 40_000_000, 80_000_000],
-        ],
-    )
+    @pytest.mark.parametrize("spin_durations_ns", [[50_000_000, 100_000_000], [30_000_000, 40_000_000, 80_000_000]])
     def test_total_time_matches_expected(self, spin_durations_ns):
         """Profiler total time should match the sum of all spin durations."""
         expected_ns = sum(spin_durations_ns)

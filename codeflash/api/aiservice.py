@@ -14,7 +14,8 @@ from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
 from codeflash.code_utils.time_utils import humanize_runtime
-from codeflash.languages import is_java, is_javascript, is_python
+from codeflash.languages import Language, current_language
+from codeflash.languages.current import current_language_support
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     AIServiceRefinerRequest,
@@ -50,6 +51,20 @@ class AiServiceClient:
     def get_next_sequence(self) -> int:
         """Get the next LLM call sequence number."""
         return next(self.llm_call_counter)
+
+    @staticmethod
+    def add_language_metadata(
+        payload: dict[str, Any], language_version: str | None = None, module_system: str | None = None
+    ) -> None:
+        """Add language version and module system metadata to an API payload."""
+        # Canonical for all languages
+        payload["language_version"] = language_version
+        # Backward compat: Python backend still expects python_version
+        payload["python_version"] = language_version if current_language() == Language.PYTHON else None
+
+        if current_language() != Language.PYTHON:
+            if module_system:
+                payload["module_system"] = module_system
 
     def get_aiservice_base_url(self) -> str:
         if os.environ.get("CODEFLASH_AIS_SERVER", default="prod").lower() == "local":
@@ -129,8 +144,7 @@ class AiServiceClient:
         experiment_metadata: ExperimentMetadata | None = None,
         *,
         language: str = "python",
-        language_version: str
-        | None = None,  # TODO:{claude} add language version to the language support and it should be cached
+        language_version: str | None = None,
         module_system: str | None = None,
         is_async: bool = False,
         n_candidates: int = 5,
@@ -177,18 +191,7 @@ class AiServiceClient:
             "is_numerical_code": is_numerical_code,
         }
 
-        # Add language-specific version fields
-        # Always include python_version for backward compatibility with older backend
-        payload["python_version"] = platform.python_version()
-        if is_python():
-            pass  # python_version already set
-        elif is_java():
-            payload["language_version"] = language_version or "17"  # Default Java version
-        else:
-            payload["language_version"] = language_version or "ES2022"
-            # Add module system for JavaScript/TypeScript (esm or commonjs)
-            if module_system:
-                payload["module_system"] = module_system
+        self.add_language_metadata(payload, language_version, module_system)
 
         # DEBUG: Print payload language field
         logger.debug(
@@ -262,7 +265,7 @@ class AiServiceClient:
             "source_code": source_code,
             "trace_id": trace_id,
             "dependency_code": "",  # dummy value to please the api endpoint
-            "python_version": "3.12.1",  # dummy value to please the api endpoint
+            "python_version": platform.python_version(),  # backward compat
             "current_username": get_last_commit_author_if_pr_exists(None),
             "repo_owner": git_repo_owner,
             "repo_name": git_repo_name,
@@ -329,18 +332,15 @@ class AiServiceClient:
         logger.info("Generating optimized candidates with line profiler…")
         console.rule()
 
-        # Set python_version for backward compatibility with Python, or use language_version
-        python_version = language_version if language_version else platform.python_version()
-
         payload = {
             "source_code": source_code,
             "dependency_code": dependency_code,
             "n_candidates": n_candidates,
             "line_profiler_results": line_profiler_results,
             "trace_id": trace_id,
-            "python_version": python_version,
             "language": language,
             "language_version": language_version,
+            "python_version": language_version if current_language() == Language.PYTHON else None,
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
             "call_sequence": self.get_next_sequence(),
@@ -434,14 +434,7 @@ class AiServiceClient:
                 "language": opt.language,
             }
 
-            # Add language version - always include python_version for backward compatibility
-            item["python_version"] = platform.python_version()
-            if is_python():
-                pass  # python_version already set
-            elif opt.language_version:
-                item["language_version"] = opt.language_version
-            else:
-                item["language_version"] = "ES2022"  # Default for JS/TS
+            self.add_language_metadata(item, opt.language_version)
 
             # Add multi-file context if provided
             if opt.additional_context_files:
@@ -649,7 +642,7 @@ class AiServiceClient:
             "diffs": diffs,
             "speedups": speedups,
             "optimization_ids": optimization_ids,
-            "python_version": platform.python_version(),
+            "python_version": platform.python_version(),  # backward compat
             "function_references": function_references,
         }
         logger.info("loading|Generating ranking")
@@ -754,21 +747,11 @@ class AiServiceClient:
 
         """
         # Validate test framework based on language
-        python_frameworks = ["pytest", "unittest"]
-        javascript_frameworks = ["jest", "mocha", "vitest"]
-        java_frameworks = ["junit5", "junit4", "testng"]
-        if is_python():
-            assert test_framework in python_frameworks, (
-                f"Invalid test framework for Python, got {test_framework} but expected one of {python_frameworks}"
-            )
-        elif is_javascript():
-            assert test_framework in javascript_frameworks, (
-                f"Invalid test framework for JavaScript, got {test_framework} but expected one of {javascript_frameworks}"
-            )
-        elif is_java():
-            assert test_framework in java_frameworks, (
-                f"Invalid test framework for Java, got {test_framework} but expected one of {java_frameworks}"
-            )
+        lang_support = current_language_support()
+        valid_frameworks = lang_support.valid_test_frameworks
+        assert test_framework in valid_frameworks, (
+            f"Invalid test framework for {current_language()}, got {test_framework} but expected one of {list(valid_frameworks)}"
+        )
 
         payload: dict[str, Any] = {
             "source_code_being_tested": source_code_being_tested,
@@ -785,20 +768,11 @@ class AiServiceClient:
             "is_async": function_to_optimize.is_async,
             "call_sequence": self.get_next_sequence(),
             "is_numerical_code": is_numerical_code,
+            "class_name": function_to_optimize.class_name,
+            "qualified_name": function_to_optimize.qualified_name,
         }
 
-        # Add language-specific version fields
-        # Always include python_version for backward compatibility with older backend
-        payload["python_version"] = platform.python_version()
-        if is_python():
-            pass  # python_version already set
-        elif is_java():
-            payload["language_version"] = language_version or "17"  # Default Java version
-        else:
-            payload["language_version"] = language_version or "ES2022"
-            # Add module system for JavaScript/TypeScript (esm or commonjs)
-            if module_system:
-                payload["module_system"] = module_system
+        self.add_language_metadata(payload, language_version, module_system)
 
         # DEBUG: Print payload language field
         logger.debug(f"Sending testgen request with language='{payload['language']}', framework='{test_framework}'")
@@ -884,7 +858,8 @@ class AiServiceClient:
             "codeflash_version": codeflash_version,
             "calling_fn_details": calling_fn_details,
             "language": language,
-            "python_version": platform.python_version() if is_python() else None,
+            "language_version": platform.python_version() if current_language() == Language.PYTHON else None,
+            "python_version": platform.python_version() if current_language() == Language.PYTHON else None,
             "call_sequence": self.get_next_sequence(),
         }
         console.rule()
