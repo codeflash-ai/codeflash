@@ -22,7 +22,9 @@ if TYPE_CHECKING:
 _SOURCE_CRITERIA = FunctionFilterCriteria(require_return=False, require_export=False)
 
 
-def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStringsMarkdown) -> str:
+def get_optimized_code_for_module(
+    relative_path: Path, optimized_code: CodeStringsMarkdown, allow_fallback: bool = True
+) -> str:
     from codeflash.languages.current import is_python
 
     file_to_code_context = optimized_code.file_to_path()
@@ -31,7 +33,7 @@ def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStrin
     if module_optimized_code is None:
         # Fallback: if there's only one code block with None file path,
         # use it regardless of the expected path (the AI server doesn't always include file paths)
-        if "None" in file_to_code_context and len(file_to_code_context) == 1:
+        if allow_fallback and "None" in file_to_code_context and len(file_to_code_context) == 1:
             module_optimized_code = file_to_code_context["None"]
             logger.debug(f"Using code block with None file_path for {relative_path}")
         else:
@@ -51,13 +53,15 @@ def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStrin
 
             if module_optimized_code is None:
                 # Also try matching if there's only one code file, but ONLY for non-Python
-                # languages where path matching is less strict.
-                if len(file_to_code_context) == 1 and not is_python():
+                # languages where path matching is less strict. Only use this fallback for
+                # the target file, not helper files — the AI typically only generates code
+                # for the target class and helpers that aren't modified should be left alone.
+                if allow_fallback and len(file_to_code_context) == 1 and not is_python():
                     only_key = next(iter(file_to_code_context.keys()))
                     module_optimized_code = file_to_code_context[only_key]
                     logger.debug(f"Using only code block {only_key} for {relative_path}")
                 else:
-                    if logger.isEnabledFor(logger.level):
+                    if allow_fallback and logger.isEnabledFor(logger.level):
                         logger.warning(
                             f"Optimized code not found for {relative_path} In the context\n-------\n{optimized_code}\n-------\n"
                             "re-check your 'markdown code structure'"
@@ -81,7 +85,10 @@ def replace_function_definitions_for_language(
     and LanguageSupport.discover_functions.
     """
     original_source_code: str = module_abspath.read_text(encoding="utf8")
-    code_to_apply = get_optimized_code_for_module(module_abspath.relative_to(project_root_path), optimized_code)
+    is_target_file = function_to_optimize is not None and function_to_optimize.file_path == module_abspath
+    code_to_apply = get_optimized_code_for_module(
+        module_abspath.relative_to(project_root_path), optimized_code, allow_fallback=is_target_file
+    )
 
     if not code_to_apply.strip():
         return False
