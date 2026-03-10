@@ -355,13 +355,20 @@ class GradleStrategy(BuildToolStrategy):
         # Write an init script that configures JVM args for the test task.
         # -Dorg.gradle.jvmargs only affects the Gradle daemon, NOT the forked test JVM.
         add_opens = [
-            "--add-opens", "java.base/java.util=ALL-UNNAMED",
-            "--add-opens", "java.base/java.lang=ALL-UNNAMED",
-            "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED",
-            "--add-opens", "java.base/java.io=ALL-UNNAMED",
-            "--add-opens", "java.base/java.math=ALL-UNNAMED",
-            "--add-opens", "java.base/java.net=ALL-UNNAMED",
-            "--add-opens", "java.base/java.util.zip=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.util=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.lang=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.io=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.math=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.net=ALL-UNNAMED",
+            "--add-opens",
+            "java.base/java.util.zip=ALL-UNNAMED",
         ]
         all_jvm_args = list(add_opens)
         if javaagent_arg:
