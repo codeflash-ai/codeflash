@@ -10,6 +10,7 @@ from codeflash.cli_cmds.console import code_print, console, logger
 from codeflash.code_utils.code_utils import unified_diff_strings
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
 from codeflash.either import Failure, Success
+from codeflash.languages.function_optimizer import FunctionOptimizer
 from codeflash.languages.python.context.unused_definition_remover import (
     detect_unused_helper_functions,
     revert_unused_helper_functions,
@@ -22,7 +23,6 @@ from codeflash.languages.python.static_analysis.code_replacer import (
 )
 from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports, contains_jit_decorator
 from codeflash.models.models import TestingMode, TestResults
-from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.parse_test_output import calculate_function_throughput_from_test_results
 
 if TYPE_CHECKING:
@@ -87,7 +87,7 @@ class PythonFunctionOptimizer(FunctionOptimizer):
         return original_conftest_content
 
     def instrument_capture(self, file_path_to_helper_classes: dict[Path, set[str]]) -> None:
-        from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
+        from codeflash.languages.python.instrument_codeflash_capture import instrument_codeflash_capture
 
         instrument_codeflash_capture(self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root)
 
@@ -181,7 +181,7 @@ class PythonFunctionOptimizer(FunctionOptimizer):
     def parse_line_profile_test_results(
         self, line_profiler_output_file: Path | None
     ) -> tuple[TestResults | dict, CoverageData | None]:
-        from codeflash.verification.parse_line_profile_test_output import parse_line_profile_results
+        from codeflash.languages.python.parse_line_profile_test_output import parse_line_profile_results
 
         return parse_line_profile_results(line_profiler_output_file=line_profiler_output_file)
 

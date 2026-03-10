@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import shutil
 import sys
-from typing import Callable, cast
+from typing import Callable, NoReturn, cast
 
 import click
 import inquirer
@@ -10,7 +10,7 @@ import inquirer
 from codeflash.cli_cmds.console import console, logger
 
 
-def apologize_and_exit() -> None:
+def apologize_and_exit() -> NoReturn:
     console.rule()
     logger.info(
         "💡 If you're having trouble, see https://docs.codeflash.ai/getting-started/local-installation for further help getting started with Codeflash!"

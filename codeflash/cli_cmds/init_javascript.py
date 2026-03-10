@@ -9,7 +9,10 @@ import sys
 from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
-from typing import Any, Union
+from typing import TYPE_CHECKING, Any, Union
+
+if TYPE_CHECKING:
+    from codeflash.cli_cmds.init_config import CodeflashTheme
 
 import click
 import inquirer
@@ -67,9 +70,9 @@ class JSSetupInfo:
 
 
 # Import theme from cmd_init to avoid duplication
-def _get_theme():
+def _get_theme() -> CodeflashTheme:
     """Get the CodeflashTheme - imported lazily to avoid circular imports."""
-    from codeflash.cli_cmds.cmd_init import CodeflashTheme
+    from codeflash.cli_cmds.init_config import CodeflashTheme
 
     return CodeflashTheme()
 
@@ -210,7 +213,8 @@ def get_package_install_command(project_root: Path, package: str, dev: bool = Tr
 
 def init_js_project(language: ProjectLanguage, *, skip_confirm: bool = False, skip_api_key: bool = False) -> None:
     """Initialize Codeflash for a JavaScript/TypeScript project."""
-    from codeflash.cli_cmds.cmd_init import install_github_actions, install_github_app, prompt_api_key
+    from codeflash.cli_cmds.github_workflow import install_github_actions
+    from codeflash.cli_cmds.init_auth import install_github_app, prompt_api_key
 
     lang_name = "TypeScript" if language == ProjectLanguage.TYPESCRIPT else "JavaScript"
 
@@ -325,7 +329,7 @@ def collect_js_setup_info(language: ProjectLanguage, *, skip_confirm: bool = Fal
     Uses auto-detection for most settings and only asks for overrides if needed.
     When skip_confirm is True, uses all auto-detected defaults without prompting.
     """
-    from codeflash.cli_cmds.cmd_init import ask_for_telemetry, get_valid_subdirs
+    from codeflash.cli_cmds.init_config import ask_for_telemetry, get_valid_subdirs
     from codeflash.code_utils.config_js import (
         detect_formatter,
         detect_module_root,

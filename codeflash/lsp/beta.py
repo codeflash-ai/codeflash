@@ -11,13 +11,13 @@ from typing import TYPE_CHECKING, Optional, Union
 
 from codeflash.api.cfapi import get_codeflash_api_key, get_user_id
 from codeflash.cli_cmds.cli import process_pyproject_config
-from codeflash.cli_cmds.cmd_init import (
+from codeflash.cli_cmds.cmd_init import create_find_common_tags_file
+from codeflash.cli_cmds.init_config import (
     CommonSections,
     VsCodeSetupInfo,
     config_found,
     configure_pyproject_toml,
     create_empty_pyproject_toml,
-    create_find_common_tags_file,
     get_formatter_cmds,
     get_suggestions,
     get_valid_subdirs,
