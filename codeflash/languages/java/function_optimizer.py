@@ -326,6 +326,9 @@ class JavaFunctionOptimizer(FunctionOptimizer):
         original_sqlite = get_run_tmp_file(Path("test_return_values_0.sqlite"))
         candidate_sqlite = get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite"))
 
+        if len(baseline_results.behavior_test_results) == 0 or len(candidate_behavior_results) == 0:
+            return False, []
+
         if original_sqlite.exists() and candidate_sqlite.exists():
             match, diffs = self.language_support.compare_test_results(
                 original_sqlite, candidate_sqlite, project_root=self.project_root
