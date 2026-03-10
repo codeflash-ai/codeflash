@@ -22,6 +22,8 @@ from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.java.parser import get_java_analyzer
 
 if TYPE_CHECKING:
+    from tree_sitter import Node
+
     from codeflash.languages.java.parser import JavaAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -308,6 +310,33 @@ def _insert_class_members(
     return result
 
 
+def _extract_field_assignments(constructor_source: str, analyzer: JavaAnalyzer) -> set[str]:
+    """Extract field names assigned via ``this.X = ...`` in a constructor body.
+
+    Walks the tree-sitter AST looking for assignment expressions where the
+    left-hand side is a ``field_access`` on ``this``.
+
+    """
+    dummy = f"class __Dummy__ {{\n{constructor_source}\n}}"
+    tree = analyzer.parse(dummy.encode("utf8"))
+    source_bytes = dummy.encode("utf8")
+    fields: set[str] = set()
+
+    def walk(node: Node) -> None:
+        if node.type == "assignment_expression":
+            lhs = node.child_by_field_name("left")
+            if lhs and lhs.type == "field_access":
+                obj = lhs.child_by_field_name("object")
+                field_node = lhs.child_by_field_name("field")
+                if obj and field_node and source_bytes[obj.start_byte : obj.end_byte] == b"this":
+                    fields.add(source_bytes[field_node.start_byte : field_node.end_byte].decode("utf8"))
+        for child in node.children:
+            walk(child)
+
+    walk(tree.root_node)
+    return fields
+
+
 def _replace_constructors(
     source: str, class_name: str, new_constructor_sources: list[str], analyzer: JavaAnalyzer
 ) -> str:
@@ -358,6 +387,21 @@ def _replace_constructors(
 
         if not matching:
             logger.debug("No matching constructor with params %s found in class %s; skipping.", new_params, class_name)
+            continue
+
+        # Only allow additive constructor replacements: the new constructor must
+        # still assign every field that the original one assigned.  If the AI
+        # dropped a field assignment, replacing the constructor would break
+        # other methods that depend on that field being initialized.
+        original_fields = _extract_field_assignments(matching.source_text, analyzer)
+        new_fields = _extract_field_assignments(new_ctor_src, analyzer)
+        dropped_fields = original_fields - new_fields
+        if dropped_fields:
+            logger.debug(
+                "New constructor for %s drops field assignments %s; skipping replacement to avoid breaking other methods.",
+                class_name,
+                dropped_fields,
+            )
             continue
 
         # Determine replacement range (include Javadoc if present)
