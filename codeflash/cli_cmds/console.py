@@ -478,13 +478,9 @@ def subagent_log_optimization_result(
     xml.append("       - Whether the optimization is correct and preserves behavior")
     xml.append("       - What technique was used (e.g. algorithmic improvement, caching, vectorization)")
     xml.append("       - Any risks or trade-offs (e.g. increased memory usage, reduced readability)")
-    xml.append("    2. Present this optimization to the user using AskUserQuestion.")
-    xml.append("       Show the function name, performance improvement, and your review as the question text.")
-    xml.append("       Provide two options: 'Apply' (write the optimized code to the file) and 'Reject' (do nothing).")
-    xml.append(
-        "       Put the full diff in the 'Apply' option's markdown preview so the user can review the exact changes."
-    )
-    xml.append("    3. If the user chooses 'Apply', write the content from optimized-code to the corresponding file.")
+    xml.append("    2. Present a summary to the user: function name, performance improvement, and your review.")
+    xml.append("    3. Apply the optimized code by writing the content from optimized-code to the corresponding file")
+    xml.append("       using the Edit tool so the user sees the native inline diff in their editor.")
     xml.append("  </action>")
     xml.append("</codeflash-optimization>")
 
