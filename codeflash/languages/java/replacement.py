@@ -12,7 +12,6 @@ Supports optimizations that add:
 from __future__ import annotations
 
 import logging
-import re
 import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -214,8 +213,36 @@ def _insert_class_members(
     if not fields and not helpers_before_target and not helpers_after_target:
         return source
 
+
+    # Small per-call caches to avoid repeated expensive parser invocations
+    find_methods_cache: dict[str, list] = {}
+    find_classes_cache: dict[str, list] = {}
+    find_fields_cache: dict[tuple[str, str | None], list] = {}
+
+    def cached_find_methods(src: str):
+        v = find_methods_cache.get(src)
+        if v is None:
+            v = analyzer.find_methods(src)
+            find_methods_cache[src] = v
+        return v
+
+    def cached_find_classes(src: str):
+        v = find_classes_cache.get(src)
+        if v is None:
+            v = analyzer.find_classes(src)
+            find_classes_cache[src] = v
+        return v
+
+    def cached_find_fields(src: str, class_name_arg: str | None = None):
+        key = (src, class_name_arg)
+        v = find_fields_cache.get(key)
+        if v is None:
+            v = analyzer.find_fields(src, class_name=class_name_arg)
+            find_fields_cache[key] = v
+        return v
+
     def get_target_class_and_body(src: str):  # type: ignore[return]
-        for cls in analyzer.find_classes(src):
+        for cls in cached_find_classes(src):
             if cls.name == class_name:
                 body = cls.node.child_by_field_name("body")
                 return cls, body
@@ -241,13 +268,25 @@ def _insert_class_members(
 
     # Filter out helpers that already exist in the original source to avoid duplicates.
     # The AI often copies existing methods verbatim alongside the optimized target.
-    existing_method_names = {m.name for m in analyzer.find_methods(source)}
-    helpers_before_target = [
-        h for h in helpers_before_target if _method_name_from_source(h, analyzer) not in existing_method_names
-    ]
-    helpers_after_target = [
-        h for h in helpers_after_target if _method_name_from_source(h, analyzer) not in existing_method_names
-    ]
+    existing_method_names = {m.name for m in cached_find_methods(source)}
+
+    # Use the per-call cache for helper parsing to avoid repeated parsing of helpers
+    helpers_before_filtered: list[str] = []
+    for h in helpers_before_target:
+        methods = cached_find_methods(h)
+        name = methods[0].name if methods else None
+        if name not in existing_method_names:
+            helpers_before_filtered.append(h)
+    helpers_before_target = helpers_before_filtered
+
+    helpers_after_filtered: list[str] = []
+    for h in helpers_after_target:
+        methods = cached_find_methods(h)
+        name = methods[0].name if methods else None
+        if name not in existing_method_names:
+            helpers_after_filtered.append(h)
+    helpers_after_target = helpers_after_filtered
+
 
     if not fields and not helpers_before_target and not helpers_after_target:
         return source
@@ -258,7 +297,7 @@ def _insert_class_members(
     if fields:
         _, body_node = get_target_class_and_body(result)
         if body_node:
-            existing_fields = analyzer.find_fields(result, class_name=class_name)
+            existing_fields = cached_find_fields(result, class_name)
             result_lines = result.splitlines(keepends=True)
             result_bytes = result.encode("utf8")
 
@@ -276,7 +315,7 @@ def _insert_class_members(
 
     # ── 2. Insert helpers-before-target just before the target method (Bug 3 fix) ─
     if helpers_before_target and target_method_name:
-        result_methods = analyzer.find_methods(result)
+        result_methods = cached_find_methods(result)
         target_methods = [m for m in result_methods if m.name == target_method_name]
         if target_methods:
             target_m = target_methods[0]
@@ -597,8 +636,16 @@ def _get_indentation(line: str) -> str:
         The indentation string (spaces/tabs).
 
     """
-    match = re.match(r"^(\s*)", line)
-    return match.group(1) if match else ""
+    # Use string operations instead of regex for better performance on hot path.
+    # This preserves the original behavior of returning the leading whitespace.
+    if not line:
+        return ""
+    # lstrip removes all leading whitespace characters; subtracting lengths yields count of leading whitespace
+    stripped = line.lstrip()
+    if stripped is line:
+        return ""
+    leading_len = len(line) - len(stripped)
+    return line[:leading_len]
 
 
 def _apply_indentation(lines: list[str], base_indent: str) -> str:
@@ -930,3 +977,36 @@ def add_runtime_comments(
         lines[idx] = f"{stripped} {comment}{trailing}"
 
     return "".join(lines)
+
+
+# The following helper functions are used by format_member. Keep them as-is to preserve behavior.
+def _dedent_member(raw: str) -> str:
+    """Simple dedent: remove common leading indentation from non-blank lines."""
+    lines = raw.splitlines()
+    # find minimum indentation among non-empty lines
+    min_indent = None
+    for ln in lines:
+        stripped = ln.lstrip()
+        if not stripped:
+            continue
+        indent = len(ln) - len(stripped)
+        if min_indent is None or indent < min_indent:
+            min_indent = indent
+    if not lines or min_indent is None or min_indent == 0:
+        return raw
+    # remove min_indent spaces/tabs from start of each line if present
+    new_lines = []
+    for ln in lines:
+        if ln.strip():
+            new_lines.append(ln[min_indent:])
+        else:
+            new_lines.append(ln)
+    return "\n".join(new_lines)
+
+
+def _apply_indentation(member_lines: list[str], indent: str) -> str:
+    """Apply the given indentation to all lines of a member, preserving existing line endings."""
+    if not member_lines:
+        return ""
+    # member_lines elements include their own line endings due to splitlines(keepends=True)
+    return "".join(indent + ln if ln.strip() else ln for ln in member_lines)
