@@ -873,6 +873,7 @@ def _run_tests_direct(
             "--details=none",
             "--config=junit.platform.output.capture.stdout=true",
             "--config=junit.platform.output.capture.stderr=true",
+            f"--config=junit.jupiter.execution.timeout.default={max(timeout // 3, 10)}s",
         ]
 
         if reports_dir:
