@@ -28,15 +28,18 @@ _classpath_cache: dict[tuple[Path, str | None], str] = {}
 _multimodule_deps_installed: set[tuple[Path, str]] = set()
 
 # Gradle init script that prints the test runtime classpath.
+# Uses projectsEvaluated to avoid triggering configuration of unrelated subprojects.
 _CLASSPATH_INIT_SCRIPT = """\
-allprojects {
-    task codeflashPrintClasspath {
-        doLast {
-            def cp = configurations.findByName('testRuntimeClasspath')
-            if (cp != null && cp.isCanBeResolved()) {
-                println "CODEFLASH_CP_START"
-                println cp.asPath
-                println "CODEFLASH_CP_END"
+gradle.projectsEvaluated {
+    allprojects {
+        tasks.register("codeflashPrintClasspath") {
+            doLast {
+                def cp = configurations.findByName('testRuntimeClasspath')
+                if (cp != null && cp.isCanBeResolved()) {
+                    println "CODEFLASH_CP_START"
+                    println cp.asPath
+                    println "CODEFLASH_CP_END"
+                }
             }
         }
     }
@@ -44,13 +47,16 @@ allprojects {
 """
 
 # Gradle init script that applies JaCoCo plugin for coverage collection.
+# Uses projectsEvaluated to avoid triggering configuration of unrelated subprojects.
 _JACOCO_INIT_SCRIPT = """\
-allprojects {
-    apply plugin: 'jacoco'
-    jacocoTestReport {
-        reports {
-            xml.required = true
-            html.required = false
+gradle.projectsEvaluated {
+    allprojects {
+        apply plugin: 'jacoco'
+        jacocoTestReport {
+            reports {
+                xml.required = true
+                html.required = false
+            }
         }
     }
 }
@@ -394,10 +400,12 @@ class GradleStrategy(BuildToolStrategy):
         per_test_timeout = max(timeout // 3, 10)
         quoted_args = ", ".join(f'"{a}"' for a in all_jvm_args)
         init_script_content = (
-            f"allprojects {{\n"
-            f"    tasks.withType(Test) {{\n"
-            f"        jvmArgs({quoted_args})\n"
-            f'        systemProperty "junit.jupiter.execution.timeout.default", "{per_test_timeout}s"\n'
+            f"gradle.projectsEvaluated {{\n"
+            f"    allprojects {{\n"
+            f"        tasks.withType(Test) {{\n"
+            f"            jvmArgs({quoted_args})\n"
+            f'            systemProperty "junit.jupiter.execution.timeout.default", "{per_test_timeout}s"\n'
+            f"        }}\n"
             f"    }}\n"
             f"}}\n"
         )
