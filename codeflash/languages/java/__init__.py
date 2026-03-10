@@ -10,14 +10,12 @@ from codeflash.languages.java.build_tools import (
     BuildTool,
     JavaProjectInfo,
     MavenTestResult,
-    add_codeflash_dependency_to_pom,
     detect_build_tool,
     find_gradle_executable,
     find_maven_executable,
     find_source_root,
     find_test_root,
     get_project_info,
-    install_codeflash_runtime,
 )
 from codeflash.languages.java.comparator import compare_invocations_directly, compare_test_results
 from codeflash.languages.java.config import (
@@ -56,6 +54,7 @@ from codeflash.languages.java.instrumentation import (
     instrument_generated_java_test,
     remove_instrumentation,
 )
+from codeflash.languages.java.maven_strategy import add_codeflash_dependency, install_codeflash_runtime
 from codeflash.languages.java.parser import (
     JavaAnalyzer,
     JavaClassNode,
@@ -123,7 +122,7 @@ __all__ = [
     "JavaTestRunResult",
     "MavenTestResult",
     "ResolvedImport",
-    "add_codeflash_dependency_to_pom",
+    "add_codeflash_dependency",
     # Replacement
     "add_runtime_comments",
     # Test discovery

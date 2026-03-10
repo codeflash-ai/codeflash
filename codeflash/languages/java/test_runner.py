@@ -108,36 +108,6 @@ def _validate_java_class_name(class_name: str) -> bool:
     return bool(_VALID_JAVA_CLASS_NAME.match(class_name))
 
 
-def _find_runtime_jar() -> Path | None:
-    """Find the codeflash-runtime JAR file.
-
-    Checks local Maven repo, package resources, and development build directory.
-    """
-    m2_jar = (
-        Path.home()
-        / ".m2"
-        / "repository"
-        / "com"
-        / "codeflash"
-        / "codeflash-runtime"
-        / "1.0.0"
-        / "codeflash-runtime-1.0.0.jar"
-    )
-    if m2_jar.exists():
-        return m2_jar
-
-    resources_jar = Path(__file__).parent / "resources" / "codeflash-runtime-1.0.0.jar"
-    if resources_jar.exists():
-        return resources_jar
-
-    dev_jar = (
-        Path(__file__).parent.parent.parent.parent / "codeflash-java-runtime" / "target" / "codeflash-runtime-1.0.0.jar"
-    )
-    if dev_jar.exists():
-        return dev_jar
-
-    return None
-
 
 def _extract_modules_from_pom_content(content: str) -> list[str]:
     """Extract module names from Maven POM XML content using proper XML parsing.
@@ -189,12 +159,60 @@ def _validate_test_filter(test_filter: str) -> str:
     return test_filter
 
 
-def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, str | None]:
-    """Find the multi-module Maven parent root if tests are in a different module.
+def _extract_modules_from_settings_gradle(content: str) -> list[str]:
+    """Extract module names from settings.gradle(.kts) content.
 
-    For multi-module Maven projects, tests may be in a separate module from the source code.
-    This function detects this situation and returns the parent project root along with
-    the module containing the tests.
+    Looks for include directives like:
+        include("module-a", "module-b")   // Kotlin DSL
+        include 'module-a', 'module-b'    // Groovy DSL
+    Module names may be prefixed with ':' which is stripped.
+    """
+    modules: list[str] = []
+    for match in re.findall(r"""include\s*\(?[^)\n]*\)?""", content):
+        for name in re.findall(r"""['"]([^'"]+)['"]""", match):
+            modules.append(name.lstrip(":"))
+    return modules
+
+
+def _detect_modules(directory: Path) -> list[str]:
+    """Detect sub-modules in a directory for both Maven and Gradle projects."""
+    pom_path = directory / "pom.xml"
+    if pom_path.exists():
+        try:
+            content = pom_path.read_text(encoding="utf-8")
+            modules = _extract_modules_from_pom_content(content)
+            if modules:
+                return modules
+        except Exception:
+            pass
+
+    for settings_name in ("settings.gradle.kts", "settings.gradle"):
+        settings_path = directory / settings_name
+        if settings_path.exists():
+            try:
+                content = settings_path.read_text(encoding="utf-8")
+                modules = _extract_modules_from_settings_gradle(content)
+                if modules:
+                    return modules
+            except Exception:
+                pass
+
+    return []
+
+
+def _is_build_root(directory: Path) -> bool:
+    """Check if a directory is a build root (has a build config file)."""
+    return (
+        (directory / "pom.xml").exists()
+        or (directory / "build.gradle").exists()
+        or (directory / "build.gradle.kts").exists()
+    )
+
+
+def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, str | None]:
+    """Find the multi-module parent root if tests are in a different module.
+
+    Works for both Maven and Gradle multi-module projects.
 
     Returns:
         Tuple of (build_root, test_module_name) where:
@@ -226,50 +244,39 @@ def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, 
             break
 
     if not test_outside_project:
-        pom_path = project_root / "pom.xml"
-        if pom_path.exists():
-            try:
-                content = pom_path.read_text(encoding="utf-8")
-                if "<modules>" in content:
-                    modules = re.findall(r"<module>([^<]+)</module>", content)
-                    for test_path in test_file_paths:
-                        try:
-                            rel_path = test_path.relative_to(project_root)
-                            first_component = rel_path.parts[0] if rel_path.parts else None
-                            if first_component and first_component in modules:
-                                logger.debug(
-                                    "Detected multi-module Maven project. Root: %s, Test module: %s",
-                                    project_root,
-                                    first_component,
-                                )
-                                return project_root, first_component
-                        except ValueError:
-                            pass
-            except Exception:
-                pass
+        modules = _detect_modules(project_root)
+        if modules:
+            for test_path in test_file_paths:
+                try:
+                    rel_path = test_path.relative_to(project_root)
+                    first_component = rel_path.parts[0] if rel_path.parts else None
+                    if first_component and first_component in modules:
+                        logger.debug(
+                            "Detected multi-module project. Root: %s, Test module: %s",
+                            project_root,
+                            first_component,
+                        )
+                        return project_root, first_component
+                except ValueError:
+                    pass
         return project_root, None
 
     current = project_root.parent
     while current != current.parent:
-        pom_path = current / "pom.xml"
-        if pom_path.exists():
-            try:
-                content = pom_path.read_text(encoding="utf-8")
-                if "<modules>" in content:
-                    if test_dir:
-                        try:
-                            test_module = test_dir.relative_to(current)
-                            test_module_name = test_module.parts[0] if test_module.parts else None
-                            logger.debug(
-                                "Detected multi-module Maven project. Root: %s, Test module: %s",
-                                current,
-                                test_module_name,
-                            )
-                            return current, test_module_name
-                        except ValueError:
-                            pass
-            except Exception:
-                pass
+        if _is_build_root(current):
+            modules = _detect_modules(current)
+            if modules and test_dir:
+                try:
+                    test_module = test_dir.relative_to(current)
+                    test_module_name = test_module.parts[0] if test_module.parts else None
+                    logger.debug(
+                        "Detected multi-module project. Root: %s, Test module: %s",
+                        current,
+                        test_module_name,
+                    )
+                    return current, test_module_name
+                except ValueError:
+                    pass
         current = current.parent
 
     return project_root, None
@@ -1212,7 +1219,7 @@ def _parse_surefire_xml(xml_file: Path) -> list[TestResult]:
     return results
 
 
-def _extract_source_dirs_from_pom(project_root: Path) -> list[str]:
+def _extract_custom_source_dirs(project_root: Path) -> list[str]:
     """Extract custom source and test source directories from pom.xml."""
     pom_path = project_root / "pom.xml"
     if not pom_path.exists():
@@ -1250,21 +1257,7 @@ def _extract_source_dirs_from_pom(project_root: Path) -> list[str]:
 
 
 def get_test_run_command(project_root: Path, test_classes: list[str] | None = None) -> list[str]:
-    """Get the command to run Java tests."""
-    from codeflash.languages.java.build_tools import find_maven_executable
+    """Get the command to run Java tests. Delegates to the appropriate build tool strategy."""
+    from codeflash.languages.java.build_tool_strategy import get_strategy
 
-    mvn = find_maven_executable() or "mvn"
-
-    cmd = [mvn, "test", "-B"]
-
-    if test_classes:
-        validated_classes = []
-        for test_class in test_classes:
-            if not _validate_java_class_name(test_class):
-                msg = f"Invalid test class name: '{test_class}'. Test names must follow Java identifier rules."
-                raise ValueError(msg)
-            validated_classes.append(test_class)
-
-        cmd.append(f"-Dtest={','.join(validated_classes)}")
-
-    return cmd
+    return get_strategy(project_root).get_test_run_command(project_root, test_classes)

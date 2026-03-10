@@ -2,17 +2,23 @@
 
 Defines the interface for build-tool-specific operations (compilation,
 classpath extraction, test execution, coverage). Concrete implementations
-live in maven_strategy.py (and future gradle_strategy.py).
+live in maven_strategy.py and gradle_strategy.py.
 """
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import subprocess
-    from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+_RUNTIME_JAR_NAME = "codeflash-runtime-1.0.0.jar"
+_JAVA_RUNTIME_DIR = Path(__file__).parent.parent.parent.parent / "codeflash-java-runtime"
 
 
 class BuildToolStrategy(ABC):
@@ -27,6 +33,27 @@ class BuildToolStrategy(ABC):
     def name(self) -> str:
         """Human-readable name for log messages (e.g. 'Maven', 'Gradle')."""
         ...
+
+    def find_runtime_jar(self) -> Path | None:
+        """Find the codeflash-runtime JAR file.
+
+        Checks package resources and development build directories.
+        Subclasses should override to prepend tool-specific cache paths
+        and fall back to super().find_runtime_jar().
+        """
+        resources_jar = Path(__file__).parent / "resources" / _RUNTIME_JAR_NAME
+        if resources_jar.exists():
+            return resources_jar
+
+        dev_jar_maven = _JAVA_RUNTIME_DIR / "target" / _RUNTIME_JAR_NAME
+        if dev_jar_maven.exists():
+            return dev_jar_maven
+
+        dev_jar_gradle = _JAVA_RUNTIME_DIR / "build" / "libs" / _RUNTIME_JAR_NAME
+        if dev_jar_gradle.exists():
+            return dev_jar_gradle
+
+        return None
 
     @abstractmethod
     def ensure_runtime(self, build_root: Path, test_module: str | None) -> bool:
@@ -111,24 +138,34 @@ class BuildToolStrategy(ABC):
         """Configure coverage tool (e.g. JaCoCo) and return expected XML report path."""
         ...
 
+    @abstractmethod
+    def get_test_run_command(self, project_root: Path, test_classes: list[str] | None = None) -> list[str]:
+        """Return the shell command to run tests, including any test class filters."""
+        ...
+
+
+def _build_strategy_registry() -> dict[str, type[BuildToolStrategy]]:
+    """Lazily import and return the {BuildTool.value -> class} mapping."""
+    from codeflash.languages.java.gradle_strategy import GradleStrategy
+    from codeflash.languages.java.maven_strategy import MavenStrategy
+
+    return {
+        "maven": MavenStrategy,
+        "gradle": GradleStrategy,
+    }
+
 
 def get_strategy(project_root: Path) -> BuildToolStrategy:
-    """Detect build tool and return the appropriate strategy.
-
-    Raises NotImplementedError for unsupported build tools.
-    """
-    from codeflash.languages.java.build_tools import BuildTool, detect_build_tool
+    """Detect build tool and return the appropriate strategy."""
+    from codeflash.languages.java.build_tools import detect_build_tool
 
     build_tool = detect_build_tool(project_root)
+    registry = _build_strategy_registry()
 
-    if build_tool == BuildTool.MAVEN:
-        from codeflash.languages.java.maven_strategy import MavenStrategy
+    strategy_cls = registry.get(build_tool.value)
+    if strategy_cls is not None:
+        return strategy_cls()
 
-        return MavenStrategy()
-
-    if build_tool == BuildTool.GRADLE:
-        msg = "Gradle support is not yet implemented. Only Maven projects are supported."
-        raise NotImplementedError(msg)
-
-    msg = f"No supported build tool found in {project_root}. Expected pom.xml (Maven) or build.gradle (Gradle)."
+    supported = ", ".join(registry)
+    msg = f"No supported build tool found in {project_root}. Expected one of: {supported}."
     raise ValueError(msg)

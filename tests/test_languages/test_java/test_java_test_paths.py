@@ -3,7 +3,7 @@
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from codeflash.languages.java.test_runner import _extract_source_dirs_from_pom, _path_to_class_name
+from codeflash.languages.java.test_runner import _extract_custom_source_dirs, _path_to_class_name
 
 
 class TestGetJavaSourcesRoot:
@@ -245,7 +245,7 @@ class TestExtractSourceDirsFromPom:
 </project>
 """
         (tmp_path / "pom.xml").write_text(pom_content)
-        dirs = _extract_source_dirs_from_pom(tmp_path)
+        dirs = _extract_custom_source_dirs(tmp_path)
         assert "src/main/custom" in dirs
         assert "src/test/custom" in dirs
 
@@ -259,11 +259,11 @@ class TestExtractSourceDirsFromPom:
 </project>
 """
         (tmp_path / "pom.xml").write_text(pom_content)
-        dirs = _extract_source_dirs_from_pom(tmp_path)
+        dirs = _extract_custom_source_dirs(tmp_path)
         assert dirs == []
 
     def test_no_pom_returns_empty(self, tmp_path):
-        dirs = _extract_source_dirs_from_pom(tmp_path)
+        dirs = _extract_custom_source_dirs(tmp_path)
         assert dirs == []
 
     def test_pom_without_build_section(self, tmp_path):
@@ -273,10 +273,10 @@ class TestExtractSourceDirsFromPom:
 </project>
 """
         (tmp_path / "pom.xml").write_text(pom_content)
-        dirs = _extract_source_dirs_from_pom(tmp_path)
+        dirs = _extract_custom_source_dirs(tmp_path)
         assert dirs == []
 
     def test_malformed_xml(self, tmp_path):
         (tmp_path / "pom.xml").write_text("this is not valid xml <<<<")
-        dirs = _extract_source_dirs_from_pom(tmp_path)
+        dirs = _extract_custom_source_dirs(tmp_path)
         assert dirs == []

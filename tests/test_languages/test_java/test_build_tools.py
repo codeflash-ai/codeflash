@@ -5,13 +5,13 @@ from pathlib import Path
 
 from codeflash.languages.java.build_tools import (
     BuildTool,
-    add_codeflash_dependency_to_pom,
     detect_build_tool,
     find_maven_executable,
     find_source_root,
     find_test_root,
     get_project_info,
 )
+from codeflash.languages.java.maven_strategy import add_codeflash_dependency
 from codeflash.languages.java.test_runner import _extract_modules_from_pom_content
 
 
@@ -460,7 +460,7 @@ class TestCustomSourceDirectoryDetection:
 
 
 class TestAddCodeflashDependencyToPom:
-    """Tests for add_codeflash_dependency_to_pom, including stale system-scope replacement."""
+    """Tests for add_codeflash_dependency, including stale system-scope replacement."""
 
     def test_adds_dependency_to_clean_pom(self, tmp_path):
         pom = tmp_path / "pom.xml"
@@ -477,7 +477,7 @@ class TestAddCodeflashDependencyToPom:
             "</project>\n",
             encoding="utf-8",
         )
-        assert add_codeflash_dependency_to_pom(pom) is True
+        assert add_codeflash_dependency(pom) is True
         content = pom.read_text(encoding="utf-8")
         assert "codeflash-runtime" in content
         assert "<scope>test</scope>" in content
@@ -499,7 +499,7 @@ class TestAddCodeflashDependencyToPom:
             "</project>\n",
             encoding="utf-8",
         )
-        assert add_codeflash_dependency_to_pom(pom) is True
+        assert add_codeflash_dependency(pom) is True
         content = pom.read_text(encoding="utf-8")
         assert "<scope>test</scope>" in content
         assert "<scope>system</scope>" not in content
@@ -523,7 +523,7 @@ class TestAddCodeflashDependencyToPom:
             "</project>\n",
             encoding="utf-8",
         )
-        assert add_codeflash_dependency_to_pom(pom) is True
+        assert add_codeflash_dependency(pom) is True
         content = pom.read_text(encoding="utf-8")
         assert "<scope>test</scope>" in content
         assert "<scope>system</scope>" not in content
@@ -545,17 +545,17 @@ class TestAddCodeflashDependencyToPom:
             "</project>\n",
             encoding="utf-8",
         )
-        assert add_codeflash_dependency_to_pom(pom) is True
+        assert add_codeflash_dependency(pom) is True
         content = pom.read_text(encoding="utf-8")
         assert content.count("codeflash-runtime") == 1
 
     def test_returns_false_for_missing_pom(self, tmp_path):
         pom = tmp_path / "pom.xml"
-        assert add_codeflash_dependency_to_pom(pom) is False
+        assert add_codeflash_dependency(pom) is False
 
     def test_returns_false_when_no_dependencies_tag(self, tmp_path):
         pom = tmp_path / "pom.xml"
         pom.write_text(
             '<?xml version="1.0"?>\n<project><modelVersion>4.0.0</modelVersion></project>\n', encoding="utf-8"
         )
-        assert add_codeflash_dependency_to_pom(pom) is False
+        assert add_codeflash_dependency(pom) is False

@@ -8,19 +8,14 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
 from codeflash.languages.java.build_tool_strategy import BuildToolStrategy
-from codeflash.languages.java.build_tools import (
-    add_codeflash_dependency_to_pom,
-    add_jacoco_plugin_to_pom,
-    find_maven_executable,
-    get_jacoco_xml_path,
-    install_codeflash_runtime,
-    is_jacoco_configured,
-)
+from codeflash.languages.java.build_tools import find_maven_executable
 
 _TARGET = "target"
 
@@ -42,33 +37,293 @@ _classpath_cache: dict[tuple[Path, str | None], str] = {}
 # Cache for multi-module dependency installs — keyed on (maven_root, test_module).
 _multimodule_deps_installed: set[tuple[Path, str]] = set()
 
+JACOCO_PLUGIN_VERSION = "0.8.13"
+
+CODEFLASH_DEPENDENCY_SNIPPET = """\
+        <dependency>
+            <groupId>com.codeflash</groupId>
+            <artifactId>codeflash-runtime</artifactId>
+            <version>1.0.0</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>"""
+
+
+def _safe_parse_xml(file_path: Path) -> ET.ElementTree:
+    content = file_path.read_text(encoding="utf-8")
+    root = ET.fromstring(content)
+    return ET.ElementTree(root)
+
+
+def install_codeflash_runtime(project_root: Path, runtime_jar_path: Path) -> bool:
+    mvn = find_maven_executable()
+    if not mvn:
+        logger.error("Maven not found")
+        return False
+
+    if not runtime_jar_path.exists():
+        logger.error("Runtime JAR not found: %s", runtime_jar_path)
+        return False
+
+    cmd = [
+        mvn,
+        "install:install-file",
+        f"-Dfile={runtime_jar_path}",
+        "-DgroupId=com.codeflash",
+        "-DartifactId=codeflash-runtime",
+        "-Dversion=1.0.0",
+        "-Dpackaging=jar",
+        "-B",
+    ]
+
+    try:
+        result = subprocess.run(cmd, check=False, cwd=project_root, capture_output=True, text=True, timeout=60)
+        if result.returncode == 0:
+            logger.info("Successfully installed codeflash-runtime to local Maven repository")
+            return True
+        logger.error("Failed to install codeflash-runtime: %s", result.stderr)
+        return False
+    except Exception as e:
+        logger.exception("Failed to install codeflash-runtime: %s", e)
+        return False
+
+
+def add_codeflash_dependency(pom_path: Path) -> bool:
+    if not pom_path.exists():
+        return False
+
+    try:
+        content = pom_path.read_text(encoding="utf-8")
+
+        if "codeflash-runtime" in content:
+            if "<scope>system</scope>" in content:
+
+                def replace_system_dep(match: re.Match) -> str:
+                    block = match.group(0)
+                    if "codeflash-runtime" in block and "<scope>system</scope>" in block:
+                        return (
+                            "<dependency>\n"
+                            "            <groupId>com.codeflash</groupId>\n"
+                            "            <artifactId>codeflash-runtime</artifactId>\n"
+                            "            <version>1.0.0</version>\n"
+                            "            <scope>test</scope>\n"
+                            "        </dependency>"
+                        )
+                    return block
+
+                content = re.sub(r"<dependency>[\s\S]*?</dependency>", replace_system_dep, content)
+                pom_path.write_text(content, encoding="utf-8")
+                logger.info("Replaced system-scope codeflash-runtime dependency with test scope")
+                return True
+            logger.info("codeflash-runtime dependency already present in pom.xml")
+            return True
+
+        closing_tag = "</dependencies>"
+        idx = content.find(closing_tag)
+        if idx == -1:
+            logger.warning("No </dependencies> tag found in pom.xml, cannot add dependency")
+            return False
+
+        new_content = content[:idx] + CODEFLASH_DEPENDENCY_SNIPPET
+        new_content += content[idx + len(closing_tag) :]
+
+        pom_path.write_text(new_content, encoding="utf-8")
+        logger.info("Added codeflash-runtime dependency to pom.xml")
+        return True
+
+    except Exception as e:
+        logger.exception("Failed to add dependency to pom.xml: %s", e)
+        return False
+
+
+def is_jacoco_configured(pom_path: Path) -> bool:
+    if not pom_path.exists():
+        return False
+
+    try:
+        tree = _safe_parse_xml(pom_path)
+        root = tree.getroot()
+
+        ns_prefix = "{http://maven.apache.org/POM/4.0.0}"
+        use_ns = root.tag.startswith("{")
+        if not use_ns:
+            ns_prefix = ""
+
+        for plugin in root.findall(f".//{ns_prefix}plugin" if use_ns else ".//plugin"):
+            artifact_id = plugin.find(f"{ns_prefix}artifactId" if use_ns else "artifactId")
+            if artifact_id is not None and artifact_id.text == "jacoco-maven-plugin":
+                group_id = plugin.find(f"{ns_prefix}groupId" if use_ns else "groupId")
+                if group_id is None or group_id.text == "org.jacoco":
+                    return True
+
+        return False
+
+    except ET.ParseError as e:
+        logger.warning("Failed to parse pom.xml for JaCoCo check: %s", e)
+        return False
+
+
+def _find_closing_tag(content: str, start_pos: int, tag_name: str) -> int:
+    open_tag = f"<{tag_name}>"
+    open_tag_short = f"<{tag_name} "
+    close_tag = f"</{tag_name}>"
+
+    depth = 1
+    pos = start_pos + len(f"<{tag_name}")
+
+    while pos < len(content):
+        next_open = content.find(open_tag, pos)
+        next_open_short = content.find(open_tag_short, pos)
+        next_close = content.find(close_tag, pos)
+
+        if next_close == -1:
+            return -1
+
+        candidates = [x for x in [next_open, next_open_short] if x != -1 and x < next_close]
+        next_open_any = min(candidates) if candidates else len(content) + 1
+
+        if next_open_any < next_close:
+            depth += 1
+            pos = next_open_any + 1
+        else:
+            depth -= 1
+            if depth == 0:
+                return next_close
+            pos = next_close + len(close_tag)
+
+    return -1
+
+
+def add_jacoco_plugin(pom_path: Path) -> bool:
+    if not pom_path.exists():
+        logger.error("pom.xml not found: %s", pom_path)
+        return False
+
+    if is_jacoco_configured(pom_path):
+        logger.info("JaCoCo plugin already configured in pom.xml")
+        return True
+
+    try:
+        content = pom_path.read_text(encoding="utf-8")
+
+        if "</project>" not in content:
+            logger.error("Invalid pom.xml: no closing </project> tag found")
+            return False
+
+        jacoco_plugin = f"""
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>{JACOCO_PLUGIN_VERSION}</version>
+        <executions>
+          <execution>
+            <id>prepare-agent</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>report</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+            <configuration>
+              <!-- For multi-module projects, include dependency classes -->
+              <includes>
+                <include>**/*.class</include>
+              </includes>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>"""
+
+        profiles_start = content.find("<profiles>")
+        profiles_end = content.find("</profiles>")
+
+        if profiles_start == -1:
+            build_start = content.find("<build>")
+            build_end = content.find("</build>")
+        else:
+            build_before_profiles = content[:profiles_start].rfind("<build>")
+            build_after_profiles = content[profiles_end:].find("<build>") if profiles_end != -1 else -1
+            if build_after_profiles != -1:
+                build_after_profiles += profiles_end
+
+            if build_before_profiles != -1:
+                build_start = build_before_profiles
+                build_end = _find_closing_tag(content, build_start, "build")
+            elif build_after_profiles != -1:
+                build_start = build_after_profiles
+                build_end = _find_closing_tag(content, build_start, "build")
+            else:
+                build_start = -1
+                build_end = -1
+
+        if build_start != -1 and build_end != -1:
+            build_section = content[build_start : build_end + len("</build>")]
+            plugins_start_in_build = build_section.find("<plugins>")
+            plugins_end_in_build = build_section.rfind("</plugins>")
+
+            if plugins_start_in_build != -1 and plugins_end_in_build != -1:
+                absolute_plugins_end = build_start + plugins_end_in_build
+                content = content[:absolute_plugins_end] + jacoco_plugin + "\n    " + content[absolute_plugins_end:]
+            else:
+                plugins_section = f"<plugins>{jacoco_plugin}\n    </plugins>\n  "
+                content = content[:build_end] + plugins_section + content[build_end:]
+        else:
+            project_end = content.rfind("</project>")
+            build_section = f"""
+  <build>
+    <plugins>{jacoco_plugin}
+    </plugins>
+  </build>
+"""
+            content = content[:project_end] + build_section + content[project_end:]
+
+        pom_path.write_text(content, encoding="utf-8")
+        logger.info("Added JaCoCo plugin to pom.xml")
+        return True
+
+    except Exception as e:
+        logger.exception("Failed to add JaCoCo plugin to pom.xml: %s", e)
+        return False
+
+
+def get_jacoco_report_path(project_root: Path) -> Path:
+    return project_root / "target" / "site" / "jacoco" / "jacoco.xml"
+
 
 class MavenStrategy(BuildToolStrategy):
     """Maven-specific build tool operations."""
+
+    _M2_JAR = (
+        Path.home()
+        / ".m2"
+        / "repository"
+        / "com"
+        / "codeflash"
+        / "codeflash-runtime"
+        / "1.0.0"
+        / "codeflash-runtime-1.0.0.jar"
+    )
 
     @property
     def name(self) -> str:
         return "Maven"
 
-    def ensure_runtime(self, build_root: Path, test_module: str | None) -> bool:
-        from codeflash.languages.java.test_runner import _find_runtime_jar
+    def find_runtime_jar(self) -> Path | None:
+        if self._M2_JAR.exists():
+            return self._M2_JAR
+        return super().find_runtime_jar()
 
-        runtime_jar = _find_runtime_jar()
+    def ensure_runtime(self, build_root: Path, test_module: str | None) -> bool:
+        runtime_jar = self.find_runtime_jar()
         if runtime_jar is None:
             logger.error("codeflash-runtime JAR not found. Generated tests will fail to compile.")
             return False
 
-        m2_jar = (
-            Path.home()
-            / ".m2"
-            / "repository"
-            / "com"
-            / "codeflash"
-            / "codeflash-runtime"
-            / "1.0.0"
-            / "codeflash-runtime-1.0.0.jar"
-        )
-        if not m2_jar.exists():
+        if not self._M2_JAR.exists():
             logger.info("Installing codeflash-runtime JAR to local Maven repository")
             if not install_codeflash_runtime(build_root, runtime_jar):
                 logger.error("Failed to install codeflash-runtime to local Maven repository")
@@ -80,7 +335,7 @@ class MavenStrategy(BuildToolStrategy):
             pom_path = build_root / "pom.xml"
 
         if pom_path.exists():
-            if not add_codeflash_dependency_to_pom(pom_path):
+            if not add_codeflash_dependency(pom_path):
                 logger.error("Failed to add codeflash-runtime dependency to %s", pom_path)
                 return False
         else:
@@ -363,7 +618,6 @@ class MavenStrategy(BuildToolStrategy):
         target_duration_seconds: float,
         inner_iterations: int,
     ) -> tuple[Path, Any]:
-        import re
         import time
 
         from codeflash.languages.java.test_runner import _find_multi_module_root, _get_combined_junit_xml
@@ -473,13 +727,28 @@ class MavenStrategy(BuildToolStrategy):
             if test_module_pom.exists():
                 if not is_jacoco_configured(test_module_pom):
                     logger.info("Adding JaCoCo plugin to test module pom.xml: %s", test_module_pom)
-                    add_jacoco_plugin_to_pom(test_module_pom)
-                return get_jacoco_xml_path(build_root / test_module)
+                    add_jacoco_plugin(test_module_pom)
+                return get_jacoco_report_path(build_root / test_module)
         else:
             pom_path = project_root / "pom.xml"
             if pom_path.exists():
                 if not is_jacoco_configured(pom_path):
                     logger.info("Adding JaCoCo plugin to pom.xml for coverage collection")
-                    add_jacoco_plugin_to_pom(pom_path)
-                return get_jacoco_xml_path(project_root)
+                    add_jacoco_plugin(pom_path)
+                return get_jacoco_report_path(project_root)
         return None
+
+    def get_test_run_command(self, project_root: Path, test_classes: list[str] | None = None) -> list[str]:
+        from codeflash.languages.java.test_runner import _validate_java_class_name
+
+        if test_classes:
+            for test_class in test_classes:
+                if not _validate_java_class_name(test_class):
+                    msg = f"Invalid test class name: '{test_class}'. Test names must follow Java identifier rules."
+                    raise ValueError(msg)
+
+        mvn = find_maven_executable(project_root) or "mvn"
+        cmd = [mvn, "test", "-B"]
+        if test_classes:
+            cmd.append(f"-Dtest={','.join(test_classes)}")
+        return cmd
