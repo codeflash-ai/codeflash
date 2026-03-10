@@ -418,15 +418,18 @@ def subagent_log_optimization_result(
     from codeflash.code_utils.time_utils import humanize_runtime
     from codeflash.models.test_type import TestType
 
+    def relativize(p: Path) -> str:
+        if project_root is not None:
+            with contextlib.suppress(ValueError):
+                return str(p.relative_to(project_root))
+        return str(p)
+
     diff_parts = []
     for path in original_code:
         old = original_code.get(path, "")
         new = new_code.get(path, "")
         if old != new:
-            display_path = str(path)
-            if project_root is not None:
-                with contextlib.suppress(ValueError):
-                    display_path = str(path.relative_to(project_root))
+            display_path = relativize(path)
             diff = unified_diff_strings(old, new, fromfile=display_path, tofile=display_path)
             if diff:
                 diff_parts.append(diff)
@@ -457,7 +460,7 @@ def subagent_log_optimization_result(
     xml = [
         "<codeflash-optimization>",
         f"  <function>{escape(function_name)}</function>",
-        f"  <file>{escape(str(file_path))}</file>",
+        f"  <file>{escape(relativize(file_path))}</file>",
         f"  <performance>{escape(perf_improvement_line)}</performance>",
         f"  <original-runtime>{escape(original_runtime)}</original-runtime>",
         f"  <optimized-runtime>{escape(optimized_runtime)}</optimized-runtime>",
@@ -472,7 +475,7 @@ def subagent_log_optimization_result(
         xml.append(f"  <diff>{escape(diff_str)}</diff>")
     for path in new_code:
         if new_code[path] != original_code.get(path, ""):
-            xml.append(f'  <optimized-code file="{escape(str(path))}">{escape(new_code[path])}</optimized-code>')
+            xml.append(f'  <optimized-code file="{escape(relativize(path))}">{escape(new_code[path])}</optimized-code>')
     xml.append("  <action>")
     xml.append("    1. Review the diff and optimized code yourself. Write a brief assessment (2-3 sentences) covering:")
     xml.append("       - Whether the optimization is correct and preserves behavior")
