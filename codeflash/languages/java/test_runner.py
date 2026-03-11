@@ -671,8 +671,9 @@ def run_behavioral_tests(
                 logger.warning("Could not set up JaCoCo agent — coverage will not be collected")
                 enable_coverage = False
 
-    # Use a minimum timeout of 60s for Java builds (300s when coverage uses mvn verify)
-    min_timeout = 300 if (enable_coverage and user_has_jacoco) else 60
+    # Use a minimum timeout of 60s for Java builds (300s when coverage is enabled —
+    # both mvn verify and standalone JaCoCo agent add significant instrumentation overhead)
+    min_timeout = 300 if enable_coverage else 60
     effective_timeout = max(timeout or 300, min_timeout)
 
     if enable_coverage and user_has_jacoco:
