@@ -741,6 +741,7 @@ def run_with_args(args: Namespace) -> None:
     optimizer = None
     original_sigterm = signal.getsignal(signal.SIGTERM)
     original_sighup = signal.getsignal(signal.SIGHUP)
+    original_sigquit = signal.getsignal(signal.SIGQUIT)
 
     def cleanup_worktree_on_exit() -> None:
         if optimizer and optimizer.current_worktree:
@@ -755,6 +756,7 @@ def run_with_args(args: Namespace) -> None:
     atexit.register(cleanup_worktree_on_exit)
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGHUP, signal_handler)
+    signal.signal(signal.SIGQUIT, signal_handler)
 
     try:
         optimizer = Optimizer(args)
@@ -769,3 +771,4 @@ def run_with_args(args: Namespace) -> None:
         atexit.unregister(cleanup_worktree_on_exit)
         signal.signal(signal.SIGTERM, original_sigterm)
         signal.signal(signal.SIGHUP, original_sighup)
+        signal.signal(signal.SIGQUIT, original_sigquit)
