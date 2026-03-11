@@ -418,18 +418,15 @@ def subagent_log_optimization_result(
     from codeflash.code_utils.time_utils import humanize_runtime
     from codeflash.models.test_type import TestType
 
-    def relativize(p: Path) -> str:
-        if project_root is not None:
-            with contextlib.suppress(ValueError):
-                return str(p.relative_to(project_root))
-        return str(p)
-
     diff_parts = []
     for path in original_code:
         old = original_code.get(path, "")
         new = new_code.get(path, "")
         if old != new:
-            display_path = relativize(path)
+            display_path = str(path)
+            if project_root is not None:
+                with contextlib.suppress(ValueError):
+                    display_path = str(path.relative_to(project_root))
             diff = unified_diff_strings(old, new, fromfile=display_path, tofile=display_path)
             if diff:
                 diff_parts.append(diff)
@@ -460,7 +457,7 @@ def subagent_log_optimization_result(
     xml = [
         "<codeflash-optimization>",
         f"  <function>{escape(function_name)}</function>",
-        f"  <file>{escape(relativize(file_path))}</file>",
+        f"  <file>{escape(str(file_path))}</file>",
         f"  <performance>{escape(perf_improvement_line)}</performance>",
         f"  <original-runtime>{escape(original_runtime)}</original-runtime>",
         f"  <optimized-runtime>{escape(optimized_runtime)}</optimized-runtime>",
@@ -475,15 +472,19 @@ def subagent_log_optimization_result(
         xml.append(f"  <diff>{escape(diff_str)}</diff>")
     for path in new_code:
         if new_code[path] != original_code.get(path, ""):
-            xml.append(f'  <optimized-code file="{escape(relativize(path))}">{escape(new_code[path])}</optimized-code>')
+            xml.append(f'  <optimized-code file="{escape(str(path))}">{escape(new_code[path])}</optimized-code>')
     xml.append("  <action>")
     xml.append("    1. Review the diff and optimized code yourself. Write a brief assessment (2-3 sentences) covering:")
     xml.append("       - Whether the optimization is correct and preserves behavior")
     xml.append("       - What technique was used (e.g. algorithmic improvement, caching, vectorization)")
     xml.append("       - Any risks or trade-offs (e.g. increased memory usage, reduced readability)")
-    xml.append("    2. Present a summary to the user: function name, performance improvement, and your review.")
-    xml.append("    3. Apply the optimized code by writing the content from optimized-code to the corresponding file")
-    xml.append("       using the Edit tool so the user sees the native inline diff in their editor.")
+    xml.append("    2. Present this optimization to the user using AskUserQuestion.")
+    xml.append("       Show the function name, performance improvement, and your review as the question text.")
+    xml.append("       Provide two options: 'Apply' (write the optimized code to the file) and 'Reject' (do nothing).")
+    xml.append(
+        "       Put the full diff in the 'Apply' option's markdown preview so the user can review the exact changes."
+    )
+    xml.append("    3. If the user chooses 'Apply', write the content from optimized-code to the corresponding file.")
     xml.append("  </action>")
     xml.append("</codeflash-optimization>")
 
