@@ -735,7 +735,27 @@ def mirror_path(path: Path, src_root: Path, dest_root: Path) -> Path:
 
 
 def run_with_args(args: Namespace) -> None:
+    import atexit
+    import signal
+
     optimizer = None
+    original_sigterm = signal.getsignal(signal.SIGTERM)
+    original_sighup = signal.getsignal(signal.SIGHUP)
+
+    def cleanup_worktree_on_exit() -> None:
+        if optimizer and optimizer.current_worktree:
+            remove_worktree(optimizer.current_worktree)
+
+    def signal_handler(signum: int, frame: object) -> None:
+        logger.warning(f"Signal {signum} received. Cleaning up worktree and exiting…")
+        if optimizer:
+            optimizer.cleanup_temporary_paths()
+        raise SystemExit(128 + signum)
+
+    atexit.register(cleanup_worktree_on_exit)
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGHUP, signal_handler)
+
     try:
         optimizer = Optimizer(args)
         optimizer.run()
@@ -745,3 +765,7 @@ def run_with_args(args: Namespace) -> None:
             optimizer.cleanup_temporary_paths()
 
         raise SystemExit from None
+    finally:
+        atexit.unregister(cleanup_worktree_on_exit)
+        signal.signal(signal.SIGTERM, original_sigterm)
+        signal.signal(signal.SIGHUP, original_sighup)
