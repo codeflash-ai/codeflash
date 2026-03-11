@@ -82,11 +82,13 @@ function findJestRunnerRecursive(nodeModulesPath, maxDepth = 5) {
 
                 // Recurse into:
                 // - node_modules subdirectories
-                // - scoped packages (@org/pkg)
+                // - scoped packages (@org/pkg) and their children (e.g. @jest/core)
                 // - hidden directories (.pnpm, .yarn, etc.)
                 // - pnpm versioned directories (jest-runner@30.0.5)
+                const isInsideScopedDir = path.basename(dir).startsWith('@');
                 const shouldRecurse = entry.name === 'node_modules' ||
                     entry.name.startsWith('@') ||
+                    isInsideScopedDir ||
                     entry.name === '.pnpm' || entry.name === '.yarn' ||
                     entry.name.startsWith('jest-runner@');
 

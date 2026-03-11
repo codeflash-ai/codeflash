@@ -19,43 +19,37 @@
         "tab": "Documentation",
         "groups": [
           {
-            "group": "🏠 Overview",
+            "group": "Overview",
             "pages": ["index"]
           },
           {
-            "group": "🚀 Quickstart",
+            "group": "Getting Started",
             "pages": [
               "getting-started/local-installation",
               "getting-started/javascript-installation"
             ]
           },
           {
-            "group": "⚡ Optimizing with Codeflash",
+            "group": "Using Codeflash",
             "pages": [
               "optimizing-with-codeflash/one-function",
+              "optimizing-with-codeflash/codeflash-all",
               "optimizing-with-codeflash/trace-and-optimize",
-              "optimizing-with-codeflash/codeflash-all"
-            ]
-          },
-          {
-            "group": "✨ Continuous Optimization",
-            "pages": [
               "optimizing-with-codeflash/codeflash-github-actions",
               "optimizing-with-codeflash/benchmarking",
               "optimizing-with-codeflash/review-optimizations"
             ]
           },
           {
-            "group": "🛠 IDE Extension",
+            "group": "Configuration",
             "pages": [
-              "editor-plugins/vscode/index",
-              "editor-plugins/vscode/features",
-              "editor-plugins/vscode/configuration",
-              "editor-plugins/vscode/troubleshooting"
+              "configuration/python",
+              "configuration/javascript",
+              "getting-the-best-out-of-codeflash"
             ]
           },
           {
-            "group": "🧠 Core Concepts",
+            "group": "Core Concepts",
             "pages": [
               "codeflash-concepts/how-codeflash-works",
               "codeflash-concepts/benchmarking",
@@ -64,8 +58,13 @@
             ]
           },
           {
-            "group": "⚙️ Configuration & Best Practices",
-            "pages": ["configuration", "getting-the-best-out-of-codeflash"]
+            "group": "IDE Extension",
+            "pages": [
+              "editor-plugins/vscode/index",
+              "editor-plugins/vscode/features",
+              "editor-plugins/vscode/configuration",
+              "editor-plugins/vscode/troubleshooting"
+            ]
           }
         ]
       }

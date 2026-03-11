@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - {{ setup_python_dependency_manager }}
+      - {{ setup_runtime_environment }}
       - name: 📦 Install Dependencies
         run: {{ install_dependencies_command }}
       - name: ⚡️Codeflash Optimization

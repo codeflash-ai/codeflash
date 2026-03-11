@@ -266,9 +266,95 @@ if (RANDOM_SEED !== 0) {
     }
 }
 
-// Current test context (set by Jest hooks)
+// Current test context (set by Jest hooks or Vitest worker)
 let currentTestName = null;
 let currentTestPath = null;  // Test file path from Jest
+
+/**
+ * Get the current test name from Vitest's internal worker API.
+ * Vitest doesn't inject beforeEach as a global, so the Jest-style hook doesn't fire.
+ * Instead, we query Vitest's worker directly for the current test name.
+ *
+ * In Vitest's fork pool, `__vitest_worker__.current` is the current task object
+ * with properties: name, fullName, fullTestName, suite, type, file, etc.
+ * Also, `expect.getState().currentTestName` works from within a test.
+ *
+ * @returns {string|null} The current test name, or null if not in Vitest
+ */
+function getVitestTestName() {
+    // Prefer expect.getState().currentTestName — returns full path including describe blocks
+    // e.g., "Performance tests > should return true for basic HTML tags"
+    // This matches what Jest's beforeEach hook would set.
+    try {
+        if (typeof expect !== 'undefined' && expect.getState) {
+            const state = expect.getState();
+            if (state?.currentTestName) {
+                return state.currentTestName;
+            }
+        }
+    } catch (e) {
+        // expect not available
+    }
+    // Fallback: Vitest worker API — worker.current.fullTestName includes describe path
+    try {
+        const worker = globalThis.__vitest_worker__;
+        if (worker?.current?.fullTestName) {
+            return worker.current.fullTestName;
+        }
+        if (worker?.current?.fullName) {
+            return worker.current.fullName;
+        }
+        if (worker?.current?.name) {
+            return worker.current.name;
+        }
+    } catch (e) {
+        // Not in Vitest context
+    }
+    return null;
+}
+
+/**
+ * Get the current test file path from Vitest's internal worker API.
+ * @returns {string|null} The current test file path, or null if not in Vitest
+ */
+function getVitestTestPath() {
+    try {
+        const worker = globalThis.__vitest_worker__;
+        if (worker?.filepath) {
+            return worker.filepath;
+        }
+    } catch (e) {
+        // Not in Vitest context
+    }
+    // Fallback: try expect.getState() for testPath
+    try {
+        if (typeof expect !== 'undefined' && expect.getState) {
+            const state = expect.getState();
+            if (state?.testPath) {
+                return state.testPath;
+            }
+        }
+    } catch (e) {
+        // expect not available
+    }
+    return null;
+}
+
+/**
+ * Get the effective test name, trying Jest hooks first, then Vitest API, then fallback.
+ * @returns {string} The current test name
+ */
+function getEffectiveTestName() {
+    return currentTestName || getVitestTestName() || 'unknown';
+}
+
+/**
+ * Get the effective test path, trying Jest hooks first, then Vitest API, then fallback.
+ * @returns {string|null} The current test file path
+ */
+function getEffectiveTestPath() {
+    return currentTestPath || getVitestTestPath() || null;
+}
 
 // Invocation counter map: tracks how many times each testId has been seen
 // Key: testId (testModule:testClass:testFunction:lineId:loopIndex)
@@ -549,13 +635,14 @@ function capture(funcName, lineId, fn, ...args) {
 
     // Get test context (raw values for SQLite storage)
     // Use TEST_MODULE env var if set, otherwise derive from test file path
+    const effectiveTestPath = getEffectiveTestPath();
     let testModulePath;
     if (TEST_MODULE) {
         testModulePath = TEST_MODULE;
-    } else if (currentTestPath) {
+    } else if (effectiveTestPath) {
         // Get relative path from cwd and convert to module-style path
         const path = require('path');
-        const relativePath = path.relative(process.cwd(), currentTestPath);
+        const relativePath = path.relative(process.cwd(), effectiveTestPath);
         // Convert to Python module-style path (e.g., "tests/test_foo.test.js" -> "tests.test_foo.test")
         // This matches what Jest's junit XML produces
         testModulePath = relativePath
@@ -564,10 +651,10 @@ function capture(funcName, lineId, fn, ...args) {
             .replace(/\.test$/, '.test') // Keep .test suffix
             .replace(/\//g, '.');       // Convert path separators to dots
     } else {
-        testModulePath = currentTestName || 'unknown';
+        testModulePath = getEffectiveTestName();
     }
     const testClassName = null;  // Jest doesn't use classes like Python
-    const testFunctionName = currentTestName || 'unknown';
+    const testFunctionName = getEffectiveTestName();
 
     // Sanitized versions for stdout tags (avoid regex conflicts)
     const safeModulePath = sanitizeTestId(testModulePath);
@@ -583,8 +670,8 @@ function capture(funcName, lineId, fn, ...args) {
     // Format stdout tag (matches Python format, uses sanitized names)
     const testStdoutTag = `${safeModulePath}:${testClassName ? testClassName + '.' : ''}${safeTestFunctionName}:${funcName}:${LOOP_INDEX}:${invocationId}`;
 
-    // Print start tag
-    console.log(`!$######${testStdoutTag}######$!`);
+    // Print start tag (use process.stdout.write to bypass test framework console interception)
+    process.stdout.write(`!$######${testStdoutTag}######$!\n`);
 
     // Timing with nanosecond precision
     const startTime = getTimeNs();
@@ -602,14 +689,14 @@ function capture(funcName, lineId, fn, ...args) {
                     const durationNs = getDurationNs(startTime, endTime);
                     recordResult(testModulePath, testClassName, testFunctionName, funcName, invocationId, args, resolved, null, durationNs);
                     // Print end tag (no duration for behavior mode)
-                    console.log(`!######${testStdoutTag}######!`);
+                    process.stdout.write(`!######${testStdoutTag}######!\n`);
                     return resolved;
                 },
                 (err) => {
                     const endTime = getTimeNs();
                     const durationNs = getDurationNs(startTime, endTime);
                     recordResult(testModulePath, testClassName, testFunctionName, funcName, invocationId, args, null, err, durationNs);
-                    console.log(`!######${testStdoutTag}######!`);
+                    process.stdout.write(`!######${testStdoutTag}######!\n`);
                     throw err;
                 }
             );
@@ -623,7 +710,7 @@ function capture(funcName, lineId, fn, ...args) {
     recordResult(testModulePath, testClassName, testFunctionName, funcName, invocationId, args, returnValue, error, durationNs);
 
     // Print end tag (no duration for behavior mode, matching Python)
-    console.log(`!######${testStdoutTag}######!`);
+    process.stdout.write(`!######${testStdoutTag}######!\n`);
 
     if (error) throw error;
     return returnValue;
@@ -656,22 +743,24 @@ function capturePerf(funcName, lineId, fn, ...args) {
     const shouldLoop = getPerfLoopCount() > 1 && !checkSharedTimeLimit();
 
     // Get test context (computed once, reused across batch)
+    // Uses Vitest worker API as fallback when Jest-style beforeEach hook doesn't fire
+    const effectiveTestPath = getEffectiveTestPath();
     let testModulePath;
     if (TEST_MODULE) {
         testModulePath = TEST_MODULE;
-    } else if (currentTestPath) {
+    } else if (effectiveTestPath) {
         const path = require('path');
-        const relativePath = path.relative(process.cwd(), currentTestPath);
+        const relativePath = path.relative(process.cwd(), effectiveTestPath);
         testModulePath = relativePath
             .replace(/\\/g, '/')
             .replace(/\.js$/, '')
             .replace(/\.test$/, '.test')
             .replace(/\//g, '.');
     } else {
-        testModulePath = currentTestName || 'unknown';
+        testModulePath = getEffectiveTestName();
     }
     const testClassName = null;
-    const testFunctionName = currentTestName || 'unknown';
+    const testFunctionName = getEffectiveTestName();
 
     const safeModulePath = sanitizeTestId(testModulePath);
     const safeTestFunctionName = sanitizeTestId(testFunctionName);
@@ -767,8 +856,8 @@ function capturePerf(funcName, lineId, fn, ...args) {
             lastError = e;
         }
 
-        // Print end tag with timing
-        console.log(`!######${testStdoutTag}:${durationNs}######!`);
+        // Print end tag with timing (use process.stdout.write to bypass test framework console interception)
+        process.stdout.write(`!######${testStdoutTag}:${durationNs}######!\n`);
 
         // Update shared loop counter
         sharedPerfState.totalLoopsCompleted++;
@@ -808,7 +897,7 @@ function capturePerf(funcName, lineId, fn, ...args) {
  * @private
  */
 function _recordAsyncTiming(startTime, testStdoutTag, durationNs, runtimes) {
-    console.log(`!######${testStdoutTag}:${durationNs}######!`);
+    process.stdout.write(`!######${testStdoutTag}:${durationNs}######!\n`);
     sharedPerfState.totalLoopsCompleted++;
     if (durationNs > 0) {
         runtimes.push(durationNs / 1000);

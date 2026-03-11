@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING, Optional, Union
 import libcst as cst
 
 from codeflash.cli_cmds.console import logger
-from codeflash.languages import is_python
+from codeflash.languages import current_language
+from codeflash.languages.base import Language
 from codeflash.languages.python.static_analysis.code_replacer import replace_function_definitions_in_module
 from codeflash.models.models import CodeString, CodeStringsMarkdown
 
@@ -747,7 +748,7 @@ def detect_unused_helper_functions(
 
     """
     # Skip this analysis for non-Python languages since we use Python's ast module
-    if not is_python():
+    if current_language() != Language.PYTHON:
         logger.debug("Skipping unused helper function detection for non-Python languages")
         return []
 
@@ -773,7 +774,7 @@ def detect_unused_helper_functions(
         # First, analyze imports to build a mapping of imported names to their original qualified names
         imported_names_map = _analyze_imports_in_optimized_code(optimized_ast, code_context)
 
-        # Extract all function calls in the entrypoint function
+        # Extract all function calls and attribute references in the entrypoint function
         called_function_names = {function_to_optimize.function_name}
         for node in ast.walk(entrypoint_function_ast):
             if isinstance(node, ast.Call):
@@ -794,7 +795,6 @@ def detect_unused_helper_functions(
                             # self.method_name() -> add both method_name and ClassName.method_name
                             called_function_names.add(attr_name)
                             # For class methods, also add the qualified name
-                            # For class methods, also add the qualified name
                             if hasattr(function_to_optimize, "parents") and function_to_optimize.parents:
                                 class_name = function_to_optimize.parents[0].name
                                 called_function_names.add(f"{class_name}.{attr_name}")
@@ -807,9 +807,25 @@ def detect_unused_helper_functions(
                             if mapped_names:
                                 called_function_names.update(mapped_names)
                     # Handle nested attribute access like obj.attr.method()
-                    # Handle nested attribute access like obj.attr.method()
                     else:
                         called_function_names.add(node.func.attr)
+            elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+                # Attribute reference without call: e.g. self._parse1 = self._parse_literal
+                # This covers methods used as callbacks, stored in variables, passed as arguments, etc.
+                attr_name = node.attr
+                value_id = node.value.id
+                if value_id == "self":
+                    called_function_names.add(attr_name)
+                    if hasattr(function_to_optimize, "parents") and function_to_optimize.parents:
+                        class_name = function_to_optimize.parents[0].name
+                        called_function_names.add(f"{class_name}.{attr_name}")
+                else:
+                    called_function_names.add(attr_name)
+                    full_ref = f"{value_id}.{attr_name}"
+                    called_function_names.add(full_ref)
+                    mapped_names = imported_names_map.get(full_ref)
+                    if mapped_names:
+                        called_function_names.update(mapped_names)
 
         logger.debug(f"Functions called in optimized entrypoint: {called_function_names}")
         logger.debug(f"Imported names mapping: {imported_names_map}")

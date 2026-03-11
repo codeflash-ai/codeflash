@@ -1,6 +1,6 @@
 ---
 title: "Trace & Optimize E2E Workflows"
-description: "End-to-end optimization of entire Python workflows with execution tracing"
+description: "End-to-end optimization of entire workflows with execution tracing"
 icon: "route"
 sidebarTitle: "Optimize E2E Workflows"
 keywords:
@@ -11,28 +11,50 @@ keywords:
     "end-to-end",
     "script optimization",
     "context manager",
+    "javascript",
+    "typescript",
+    "jest",
+    "vitest",
   ]
 ---
 
-Codeflash can optimize an entire Python script end-to-end by tracing the script's execution and generating Replay Tests.
-Tracing follows the execution of a script, profiles it and captures inputs to all functions it called, allowing them to be replayed during optimization.
-Codeflash uses these Replay Tests to optimize the most important functions called in the script, delivering the best performance for your workflow.
+Codeflash can optimize an entire script or test suite end-to-end by tracing its execution and generating Replay Tests.
+Tracing follows the execution of your code, profiles it and captures inputs to all functions it called, allowing them to be replayed during optimization.
+Codeflash uses these Replay Tests to optimize the most important functions called in the workflow, delivering the best performance.
 
 ![Function Optimization](/images/priority-order.png)
 
-To optimize a script, `python myscript.py`, simply replace `python` with `codeflash optimize` and run the following command:
+<Tabs>
+<Tab title="Python">
+To optimize a script, `python myscript.py`, simply replace `python` with `codeflash optimize`:
 
 ```bash
 codeflash optimize myscript.py
 ```
 
-You can also optimize code called by pytest tests that you could normally run like `python -m pytest tests/`, this provides for a good workload to optimize. Run this command:
+You can also optimize code called by pytest tests:
 
 ```bash
 codeflash optimize -m pytest tests/
 ```
+</Tab>
+<Tab title="JavaScript / TypeScript">
+To trace and optimize your Jest or Vitest tests:
 
-The powerful `codeflash optimize` command creates high-quality optimizations, making it ideal when you need to optimize a workflow or script. The initial tracing process can be slow, so try to limit your script's runtime to under 1 minute for best results. If your workflow is longer, consider tracing it into smaller sections by using the Codeflash tracer as a context manager (point 3 below).
+```bash
+# Jest
+codeflash optimize --jest
+
+# Vitest
+codeflash optimize --vitest
+
+# Or trace a specific script
+codeflash optimize --language javascript script.js
+```
+</Tab>
+</Tabs>
+
+The `codeflash optimize` command creates high-quality optimizations, making it ideal when you need to optimize a workflow or script. The initial tracing process can be slow, so try to limit your script's runtime to under 1 minute for best results.
 
 The generated replay tests and the trace file are for the immediate optimization use, don't add them to git.
 
@@ -60,6 +82,9 @@ Using Replay Tests, Codeflash can verify that the optimized functions produce th
 This way you can be _sure_ that the optimized function causes no changes of behavior for the traced workflow and also, that it is faster than the original function. To get more confidence on the correctness of the code, we also generate several LLM generated test cases and discover any existing unit cases you may have.
 
 ## Using codeflash optimize
+
+<Tabs>
+<Tab title="Python">
 
 Codeflash script optimizer can be used in three ways:
 
@@ -100,10 +125,10 @@ Codeflash script optimizer can be used in three ways:
 
    - `--timeout`: The maximum time in seconds to trace the entire workflow. Default is indefinite. This is useful while tracing really long workflows.
 
-3. **As a Context Manager -**
+3. **As a Context Manager**
 
-   To trace only specific sections of your code, You can also use the Codeflash Tracer as a context manager.
-   You can wrap the code you want to trace in a `with` statement as follows -
+   To trace only specific sections of your code, you can use the Codeflash Tracer as a context manager.
+   You can wrap the code you want to trace in a `with` statement as follows:
 
    ```python
    from codeflash.tracer import Tracer
@@ -128,3 +153,46 @@ Codeflash script optimizer can be used in three ways:
    - `output`: The file to save the trace to. Default is `codeflash.trace`.
    - `config_file_path`: The path to the `pyproject.toml` file which stores the Codeflash config. This is auto-discovered by default.
      You can also disable the tracer in the code by setting the `disable=True` option in the `Tracer` constructor.
+
+</Tab>
+<Tab title="JavaScript / TypeScript">
+
+The JavaScript tracer uses Babel instrumentation to capture function calls during your test suite execution.
+
+1. **Trace your test suite**
+
+   ```bash
+   # Jest projects
+   codeflash optimize --jest
+
+   # Vitest projects
+   codeflash optimize --vitest
+
+   # Trace a specific script
+   codeflash optimize --language javascript src/main.js
+   ```
+
+2. **Trace specific functions only**
+
+   ```bash
+   codeflash optimize --jest --only-functions processData,transformInput
+   ```
+
+3. **Trace and optimize as two separate steps**
+
+   ```bash
+   # Step 1: Create trace file
+   codeflash optimize --trace-only --jest --output trace_file.sqlite
+
+   # Step 2: Optimize with replay tests
+   codeflash --replay-test /path/to/test_replay_test_0.test.js
+   ```
+
+   More Options:
+
+   - `--timeout`: Maximum tracing time in seconds.
+   - `--max-function-count`: Maximum traces per function (default: 256).
+   - `--only-functions`: Comma-separated list of function names to trace.
+
+</Tab>
+</Tabs>

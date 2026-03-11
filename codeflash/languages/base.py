@@ -11,11 +11,13 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
+    import ast
     from collections.abc import Callable, Iterable, Sequence
     from pathlib import Path
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-    from codeflash.models.models import FunctionSource, GeneratedTestsList, InvocationId
+    from codeflash.models.models import FunctionSource, GeneratedTestsList, InvocationId, ValidCode
+    from codeflash.verification.verification_utils import TestConfig
 
 from codeflash.languages.language_enum import Language
 from codeflash.models.function_types import FunctionParent
@@ -91,6 +93,7 @@ class CodeContext:
     target_file: Path
     helper_functions: list[HelperFunction] = field(default_factory=list)
     read_only_context: str = ""
+    imported_type_skeletons: str = ""
     imports: list[str] = field(default_factory=list)
     language: Language = Language.PYTHON
 
@@ -166,6 +169,7 @@ class FunctionFilterCriteria:
     include_patterns: list[str] = field(default_factory=list)
     exclude_patterns: list[str] = field(default_factory=list)
     require_return: bool = True
+    require_export: bool = True
     include_async: bool = True
     include_methods: bool = True
     min_lines: int | None = None
@@ -251,7 +255,7 @@ class LanguageSupport(Protocol):
             def language(self) -> Language:
                 return Language.PYTHON
 
-            def discover_functions(self, file_path: Path, ...) -> list[FunctionInfo]:
+            def discover_functions(self, source: str, file_path: Path, ...) -> list[FunctionInfo]:
                 # Python-specific implementation using LibCST
                 ...
 
@@ -302,15 +306,49 @@ class LanguageSupport(Protocol):
         """
         ...
 
+    @property
+    def default_language_version(self) -> str | None:
+        """Default language version string sent to AI service.
+
+        Returns None for languages where the runtime version is auto-detected (e.g. Python).
+        Returns a version string (e.g. "ES2022") for languages that need an explicit default.
+        """
+        ...
+
+    @property
+    def valid_test_frameworks(self) -> tuple[str, ...]:
+        """Valid test frameworks for this language."""
+        ...
+
+    @property
+    def test_result_serialization_format(self) -> str:
+        """How test return values are serialized: "pickle" or "json"."""
+        return "pickle"
+
+    def load_coverage(
+        self,
+        coverage_database_file: Path,
+        function_name: str,
+        code_context: Any,
+        source_file: Path,
+        coverage_config_file: Path | None = None,
+    ) -> Any:
+        """Load coverage data from language-specific format.
+
+        Returns a CoverageData instance.
+        """
+        ...
+
     # === Discovery ===
 
     def discover_functions(
-        self, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
+        self, source: str, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
     ) -> list[FunctionToOptimize]:
-        """Find all optimizable functions in a file.
+        """Find all optimizable functions in source code.
 
         Args:
-            file_path: Path to the source file to analyze.
+            source: Source code to analyze.
+            file_path: Path to the source file (used for context and language detection).
             filter_criteria: Optional criteria to filter functions.
 
         Returns:
@@ -623,7 +661,7 @@ class LanguageSupport(Protocol):
 
     def compare_test_results(
         self, original_results_path: Path, candidate_results_path: Path, project_root: Path | None = None
-    ) -> tuple[bool, list]:
+    ) -> tuple[bool, list[Any]]:
         """Compare test results between original and candidate code.
 
         Args:
@@ -634,6 +672,45 @@ class LanguageSupport(Protocol):
         Returns:
             Tuple of (are_equivalent, list of TestDiff objects).
 
+        """
+        ...
+
+    @property
+    def function_optimizer_class(self) -> type:
+        """Return the FunctionOptimizer subclass for this language."""
+        from codeflash.languages.function_optimizer import FunctionOptimizer
+
+        return FunctionOptimizer
+
+    def prepare_module(
+        self, module_code: str, module_path: Path, project_root: Path
+    ) -> tuple[dict[Path, ValidCode], ast.Module | None] | None:
+        """Parse/validate a module before optimization."""
+        ...
+
+    def setup_test_config(self, test_cfg: TestConfig, file_path: Path) -> None:
+        """One-time project setup after language detection. Default: no-op."""
+
+    def adjust_test_config_for_discovery(self, test_cfg: TestConfig) -> None:
+        """Adjust test config before test discovery. Default: no-op."""
+
+    def detect_module_system(self, project_root: Path, source_file: Path) -> str | None:
+        """Detect the module system used by the project. Default: None (not applicable)."""
+        return None
+
+    def process_generated_test_strings(
+        self,
+        generated_test_source: str,
+        instrumented_behavior_test_source: str,
+        instrumented_perf_test_source: str,
+        function_to_optimize: FunctionToOptimize,
+        test_path: Path,
+        test_cfg: Any,
+        project_module_system: str | None,
+    ) -> tuple[str, str, str]:
+        """Process raw generated test strings (instrumentation, placeholder replacement, etc.).
+
+        Returns (generated_test_source, instrumented_behavior_source, instrumented_perf_source).
         """
         ...
 
@@ -726,11 +803,25 @@ class LanguageSupport(Protocol):
         """Instrument source code before line profiling."""
         ...
 
-    def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict:
+    def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict[str, Any]:
         """Parse line profiler output."""
         ...
 
     # === Test Execution ===
+
+    def generate_concolic_tests(
+        self,
+        test_cfg: TestConfig,
+        project_root: Path,
+        function_to_optimize: FunctionToOptimize,
+        function_to_optimize_ast: Any,
+    ) -> tuple[dict[str, Any], str]:
+        """Generate concolic tests for a function.
+
+        Default implementation returns empty results. Override for languages
+        that support concolic testing (e.g. Python via CrossHair).
+        """
+        return {}, ""
 
     def run_behavioral_tests(
         self,
@@ -788,8 +879,33 @@ class LanguageSupport(Protocol):
         """
         ...
 
+    def run_line_profile_tests(
+        self,
+        test_paths: Any,
+        test_env: dict[str, str],
+        cwd: Path,
+        timeout: int | None = None,
+        project_root: Path | None = None,
+        line_profile_output_file: Path | None = None,
+    ) -> tuple[Path, Any]:
+        """Run tests for line profiling.
 
-def convert_parents_to_tuple(parents: list | tuple) -> tuple[FunctionParent, ...]:
+        Args:
+            test_paths: TestFiles object containing test file information.
+            test_env: Environment variables for the test run.
+            cwd: Working directory for running tests.
+            timeout: Optional timeout in seconds.
+            project_root: Project root directory.
+            line_profile_output_file: Path where line profile results will be written.
+
+        Returns:
+            Tuple of (result_file_path, subprocess_result).
+
+        """
+        ...
+
+
+def convert_parents_to_tuple(parents: list[Any] | tuple[Any, ...]) -> tuple[FunctionParent, ...]:
     """Convert a list of parent objects to a tuple of FunctionParent.
 
     Args:

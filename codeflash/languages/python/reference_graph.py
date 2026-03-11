@@ -79,7 +79,7 @@ def _is_valid_definition(definition: Name, caller_qualified_name: str, project_r
         return False
 
     try:
-        from codeflash.optimization.function_context import belongs_to_function_qualified
+        from codeflash.languages.python.context.code_context_extractor import belongs_to_function_qualified
 
         if belongs_to_function_qualified(definition, caller_qualified_name):
             return False

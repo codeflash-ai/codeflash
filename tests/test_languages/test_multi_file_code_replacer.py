@@ -82,9 +82,9 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
 from codeflash.languages.registry import get_language_support
 from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown
-from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
 
@@ -110,7 +110,7 @@ def test_js_replcement() -> None:
         original_helper = helper_file.read_text("utf-8")
 
         js_support = get_language_support("javascript")
-        functions = js_support.discover_functions(main_file)
+        functions = js_support.discover_functions(main_file.read_text(encoding="utf-8"), main_file)
         target = None
         for func in functions:
             if func.function_name == "calculateStats":
@@ -135,7 +135,7 @@ def test_js_replcement() -> None:
             project_root_path=root_dir,
             pytest_cmd="jest",
         )
-        func_optimizer = FunctionOptimizer(
+        func_optimizer = JavaScriptFunctionOptimizer(
             function_to_optimize=func, test_cfg=test_config, aiservice_client=MagicMock()
         )
         result = func_optimizer.get_code_optimization_context()

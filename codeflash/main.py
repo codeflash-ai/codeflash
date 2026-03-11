@@ -18,14 +18,11 @@ if "--subagent" in sys.argv:
     warnings.filterwarnings("ignore")
 
 from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
-from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO, ask_run_end_to_end_test
 from codeflash.cli_cmds.console import paneled_text
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.checkpoint import ask_should_use_checkpoint_get_functions
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.version_check import check_for_newer_minor_version
-from codeflash.telemetry import posthog_cf
-from codeflash.telemetry.sentry import init_sentry
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -33,6 +30,9 @@ if TYPE_CHECKING:
 
 def main() -> None:
     """Entry point for the codeflash command-line interface."""
+    from codeflash.telemetry import posthog_cf
+    from codeflash.telemetry.sentry import init_sentry
+
     args = parse_args()
     print_codeflash_banner()
 
@@ -46,11 +46,30 @@ def main() -> None:
             disable_telemetry = pyproject_config.get("disable_telemetry", False)
         init_sentry(enabled=not disable_telemetry, exclude_errors=True)
         posthog_cf.initialize_posthog(enabled=not disable_telemetry)
-        args.func()
+
+        if args.command == "init":
+            from codeflash.cli_cmds.cmd_init import init_codeflash
+
+            init_codeflash()
+        elif args.command == "init-actions":
+            from codeflash.cli_cmds.github_workflow import install_github_actions
+
+            install_github_actions()
+        elif args.command == "vscode-install":
+            from codeflash.cli_cmds.extension import install_vscode_extension
+
+            install_vscode_extension()
+        elif args.command == "optimize":
+            from codeflash.tracer import main as tracer_main
+
+            tracer_main(args)
     elif args.verify_setup:
         args = process_pyproject_config(args)
         init_sentry(enabled=not args.disable_telemetry, exclude_errors=True)
         posthog_cf.initialize_posthog(enabled=not args.disable_telemetry)
+
+        from codeflash.cli_cmds.cmd_init import ask_run_end_to_end_test
+
         ask_run_end_to_end_test(args)
     else:
         # Check for first-run experience (no config exists)
@@ -122,6 +141,8 @@ def print_codeflash_banner() -> None:
     Renders the Codeflash ASCII logo inside a non-expanding panel titled with
     https://codeflash.ai, using bold gold text for visual emphasis.
     """
+    from codeflash.cli_cmds.console_constants import CODEFLASH_LOGO
+
     paneled_text(
         CODEFLASH_LOGO, panel_args={"title": "https://codeflash.ai", "expand": False}, text_args={"style": "bold gold3"}
     )

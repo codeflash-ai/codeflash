@@ -12,11 +12,13 @@ import libcst as cst
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import encoded_tokens_len, get_qualified_name, path_belongs_to_site_packages
-from codeflash.code_utils.config_consts import OPTIMIZATION_CONTEXT_TOKEN_LIMIT, TESTGEN_CONTEXT_TOKEN_LIMIT
+from codeflash.code_utils.config_consts import (
+    OPTIMIZATION_CONTEXT_TOKEN_LIMIT,
+    READ_WRITABLE_LIMIT_ERROR,
+    TESTGEN_CONTEXT_TOKEN_LIMIT,
+    TESTGEN_LIMIT_ERROR,
+)
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize  # noqa: TC001
-
-# Language support imports for multi-language code context extraction
-from codeflash.languages import Language, is_python
 from codeflash.languages.python.context.unused_definition_remover import (
     collect_top_level_defs_with_usages,
     get_section_names,
@@ -35,17 +37,12 @@ from codeflash.models.models import (
     CodeStringsMarkdown,
     FunctionSource,
 )
-from codeflash.optimization.function_context import belongs_to_function_qualified
 
 if TYPE_CHECKING:
     from jedi.api.classes import Name
 
-    from codeflash.languages.base import DependencyResolver, HelperFunction
+    from codeflash.languages.base import DependencyResolver
     from codeflash.languages.python.context.unused_definition_remover import UsageInfo
-
-# Error message constants
-READ_WRITABLE_LIMIT_ERROR = "Read-writable code has exceeded token limit, cannot proceed"
-TESTGEN_LIMIT_ERROR = "Testgen code context has exceeded token limit, cannot proceed"
 
 
 def build_testgen_context(
@@ -91,12 +88,6 @@ def get_code_optimization_context(
     testgen_token_limit: int = TESTGEN_CONTEXT_TOKEN_LIMIT,
     call_graph: DependencyResolver | None = None,
 ) -> CodeOptimizationContext:
-    # Route to language-specific implementation for non-Python languages
-    if not is_python():
-        return get_code_optimization_context_for_language(
-            function_to_optimize, project_root_path, optim_token_limit, testgen_token_limit
-        )
-
     # Get FunctionSource representation of helpers of FTO
     fto_input = {function_to_optimize.file_path: {function_to_optimize.qualified_name}}
     if call_graph is not None:
@@ -130,6 +121,13 @@ def get_code_optimization_context(
         remove_docstrings=False,
         code_context_type=CodeContextType.READ_WRITABLE,
     )
+
+    # Ensure the target file is first in the code blocks so the LLM knows which file to optimize
+    target_relative = function_to_optimize.file_path.resolve().relative_to(project_root_path.resolve())
+    target_blocks = [cs for cs in final_read_writable_code.code_strings if cs.file_path == target_relative]
+    other_blocks = [cs for cs in final_read_writable_code.code_strings if cs.file_path != target_relative]
+    if target_blocks:
+        final_read_writable_code.code_strings = target_blocks + other_blocks
 
     read_only_code_markdown = extract_code_markdown_context_from_files(
         helpers_of_fto_dict,
@@ -213,140 +211,6 @@ def get_code_optimization_context(
         helper_functions=helpers_of_fto_list,
         testgen_helper_fqns=all_helper_fqns,
         preexisting_objects=preexisting_objects,
-    )
-
-
-def get_code_optimization_context_for_language(
-    function_to_optimize: FunctionToOptimize,
-    project_root_path: Path,
-    optim_token_limit: int = OPTIMIZATION_CONTEXT_TOKEN_LIMIT,
-    testgen_token_limit: int = TESTGEN_CONTEXT_TOKEN_LIMIT,
-) -> CodeOptimizationContext:
-    """Extract code optimization context for non-Python languages.
-
-    Uses the language support abstraction to extract code context and converts
-    it to the CodeOptimizationContext format expected by the pipeline.
-
-    This function supports multi-file context extraction, grouping helpers by file
-    and creating proper CodeStringsMarkdown with file paths for multi-file replacement.
-
-    Args:
-        function_to_optimize: The function to extract context for.
-        project_root_path: Root of the project.
-        optim_token_limit: Token limit for optimization context.
-        testgen_token_limit: Token limit for testgen context.
-
-    Returns:
-        CodeOptimizationContext with target code and dependencies.
-
-    """
-    from codeflash.languages import get_language_support
-
-    # Get language support for this function
-    language = Language(function_to_optimize.language)
-    lang_support = get_language_support(language)
-
-    # Extract code context using language support
-    code_context = lang_support.extract_code_context(function_to_optimize, project_root_path, project_root_path)
-
-    # Build imports string if available
-    imports_code = "\n".join(code_context.imports) if code_context.imports else ""
-
-    # Get relative path for target file
-    try:
-        target_relative_path = function_to_optimize.file_path.resolve().relative_to(project_root_path.resolve())
-    except ValueError:
-        target_relative_path = function_to_optimize.file_path
-
-    # Group helpers by file path
-    helpers_by_file: dict[Path, list[HelperFunction]] = defaultdict(list)
-    helper_function_sources = []
-
-    for helper in code_context.helper_functions:
-        helpers_by_file[helper.file_path].append(helper)
-
-        # Convert to FunctionSource for pipeline compatibility
-        helper_function_sources.append(
-            FunctionSource(
-                file_path=helper.file_path,
-                qualified_name=helper.qualified_name,
-                fully_qualified_name=helper.qualified_name,
-                only_function_name=helper.name,
-                source_code=helper.source_code,
-            )
-        )
-
-    # Build read-writable code (target file + same-file helpers + global variables)
-    read_writable_code_strings = []
-
-    # Combine target code with same-file helpers
-    target_file_code = code_context.target_code
-    same_file_helpers = helpers_by_file.get(function_to_optimize.file_path, [])
-    if same_file_helpers:
-        helper_code = "\n\n".join(h.source_code for h in same_file_helpers)
-        target_file_code = target_file_code + "\n\n" + helper_code
-
-    # Note: code_context.read_only_context contains type definitions and global variables
-    # These should be passed as read-only context to the AI, not prepended to the target code
-    # If prepended to target code, the AI treats them as code to optimize and includes them in output
-
-    # Add imports to target file code
-    if imports_code:
-        target_file_code = imports_code + "\n\n" + target_file_code
-
-    read_writable_code_strings.append(
-        CodeString(code=target_file_code, file_path=target_relative_path, language=function_to_optimize.language)
-    )
-
-    # Add helper files (cross-file helpers)
-    for file_path, file_helpers in helpers_by_file.items():
-        if file_path == function_to_optimize.file_path:
-            continue  # Already included in target file
-
-        try:
-            helper_relative_path = file_path.resolve().relative_to(project_root_path.resolve())
-        except ValueError:
-            helper_relative_path = file_path
-
-        # Combine all helpers from this file
-        combined_helper_code = "\n\n".join(h.source_code for h in file_helpers)
-
-        read_writable_code_strings.append(
-            CodeString(
-                code=combined_helper_code, file_path=helper_relative_path, language=function_to_optimize.language
-            )
-        )
-
-    read_writable_code = CodeStringsMarkdown(
-        code_strings=read_writable_code_strings, language=function_to_optimize.language
-    )
-
-    # Build testgen context (same as read_writable for non-Python)
-    testgen_context = CodeStringsMarkdown(
-        code_strings=read_writable_code_strings.copy(), language=function_to_optimize.language
-    )
-
-    # Check token limits
-    read_writable_tokens = encoded_tokens_len(read_writable_code.markdown)
-    if read_writable_tokens > optim_token_limit:
-        raise ValueError(READ_WRITABLE_LIMIT_ERROR)
-
-    testgen_tokens = encoded_tokens_len(testgen_context.markdown)
-    if testgen_tokens > testgen_token_limit:
-        raise ValueError(TESTGEN_LIMIT_ERROR)
-
-    # Generate code hash from all read-writable code
-    code_hash = hashlib.sha256(read_writable_code.flat.encode("utf-8")).hexdigest()
-
-    return CodeOptimizationContext(
-        testgen_context=testgen_context,
-        read_writable_code=read_writable_code,
-        read_only_context_code=code_context.read_only_context,
-        hashing_code_context=read_writable_code.flat,
-        hashing_code_context_hash=code_hash,
-        helper_functions=helper_function_sources,
-        testgen_helper_fqns=[fs.fully_qualified_name for fs in helper_function_sources],
-        preexisting_objects=set(),
     )
 
 
@@ -574,6 +438,7 @@ def get_function_sources_from_jedi(
                                 fully_qualified_name=fqn,
                                 only_function_name=func_name,
                                 source_code=definition.get_line_code(),
+                                definition_type=definition.type,
                             )
                             file_path_to_function_source[definition_path].add(function_source)
                             function_source_list.append(function_source)
@@ -837,6 +702,41 @@ def extract_parameter_type_constructors(
     if func_node.args.kwarg:
         type_names |= collect_type_names_from_annotation(func_node.args.kwarg.annotation)
 
+    # Scan function body for isinstance(x, SomeType) and type(x) is/== SomeType patterns
+    for body_node in ast.walk(func_node):
+        if (
+            isinstance(body_node, ast.Call)
+            and isinstance(body_node.func, ast.Name)
+            and body_node.func.id == "isinstance"
+        ):
+            if len(body_node.args) >= 2:
+                second_arg = body_node.args[1]
+                if isinstance(second_arg, ast.Name):
+                    type_names.add(second_arg.id)
+                elif isinstance(second_arg, ast.Tuple):
+                    for elt in second_arg.elts:
+                        if isinstance(elt, ast.Name):
+                            type_names.add(elt.id)
+        elif isinstance(body_node, ast.Compare):
+            # type(x) is/== SomeType
+            if (
+                isinstance(body_node.left, ast.Call)
+                and isinstance(body_node.left.func, ast.Name)
+                and body_node.left.func.id == "type"
+            ):
+                for comparator in body_node.comparators:
+                    if isinstance(comparator, ast.Name):
+                        type_names.add(comparator.id)
+
+    # Collect base class names from enclosing class (if this is a method)
+    if function_to_optimize.class_name is not None:
+        for top_node in ast.walk(tree):
+            if isinstance(top_node, ast.ClassDef) and top_node.name == function_to_optimize.class_name:
+                for base in top_node.bases:
+                    if isinstance(base, ast.Name):
+                        type_names.add(base.id)
+                break
+
     type_names -= BUILTIN_AND_TYPING_NAMES
     type_names -= existing_class_names
     if not type_names:
@@ -879,6 +779,58 @@ def extract_parameter_type_constructors(
                 code_strings.append(CodeString(code=stub, file_path=module_path))
         except Exception:
             logger.debug(f"Error extracting constructor stub for {type_name} from {module_name}")
+            continue
+
+    # Transitive extraction (one level): for each extracted stub, find __init__ param types and extract their stubs
+    # Build an extended import map that includes imports from source modules of already-extracted stubs
+    transitive_import_map = dict(import_map)
+    for _, cached_tree in module_cache.values():
+        for cache_node in ast.walk(cached_tree):
+            if isinstance(cache_node, ast.ImportFrom) and cache_node.module:
+                for alias in cache_node.names:
+                    name = alias.asname if alias.asname else alias.name
+                    if name not in transitive_import_map:
+                        transitive_import_map[name] = cache_node.module
+
+    emitted_names = type_names | existing_class_names | BUILTIN_AND_TYPING_NAMES
+    transitive_type_names: set[str] = set()
+    for cs in code_strings:
+        try:
+            stub_tree = ast.parse(cs.code)
+        except SyntaxError:
+            continue
+        for stub_node in ast.walk(stub_tree):
+            if isinstance(stub_node, (ast.FunctionDef, ast.AsyncFunctionDef)) and stub_node.name in (
+                "__init__",
+                "__post_init__",
+            ):
+                for arg in stub_node.args.args + stub_node.args.posonlyargs + stub_node.args.kwonlyargs:
+                    transitive_type_names |= collect_type_names_from_annotation(arg.annotation)
+    transitive_type_names -= emitted_names
+    for type_name in sorted(transitive_type_names):
+        module_name = transitive_import_map.get(type_name)
+        if not module_name:
+            continue
+        try:
+            script_code = f"from {module_name} import {type_name}"
+            script = jedi.Script(script_code, project=jedi.Project(path=project_root_path))
+            definitions = script.goto(1, len(f"from {module_name} import ") + len(type_name), follow_imports=True)
+            if not definitions:
+                continue
+            module_path = definitions[0].module_path
+            if not module_path:
+                continue
+            if module_path in module_cache:
+                mod_source, mod_tree = module_cache[module_path]
+            else:
+                mod_source = module_path.read_text(encoding="utf-8")
+                mod_tree = ast.parse(mod_source)
+                module_cache[module_path] = (mod_source, mod_tree)
+            stub = extract_init_stub_from_class(type_name, mod_source, mod_tree)
+            if stub:
+                code_strings.append(CodeString(code=stub, file_path=module_path))
+        except Exception:
+            logger.debug(f"Error extracting transitive constructor stub for {type_name} from {module_name}")
             continue
 
     return CodeStringsMarkdown(code_strings=code_strings)
@@ -1004,12 +956,23 @@ def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path:
                 continue
             module_source, module_tree = mod_result
 
-            extract_class_and_bases(name, module_path, module_source, module_tree)
-
-            if (module_path, name) not in extracted_classes:
-                resolved_class = resolve_instance_class_name(name, module_tree)
-                if resolved_class and resolved_class not in existing_classes:
-                    extract_class_and_bases(resolved_class, module_path, module_source, module_tree)
+            if is_project:
+                extract_class_and_bases(name, module_path, module_source, module_tree)
+                if (module_path, name) not in extracted_classes:
+                    resolved_class = resolve_instance_class_name(name, module_tree)
+                    if resolved_class and resolved_class not in existing_classes:
+                        extract_class_and_bases(resolved_class, module_path, module_source, module_tree)
+            elif is_third_party:
+                target_name = name
+                if not any(isinstance(n, ast.ClassDef) and n.name == name for n in ast.walk(module_tree)):
+                    resolved_class = resolve_instance_class_name(name, module_tree)
+                    if resolved_class:
+                        target_name = resolved_class
+                if target_name not in emitted_class_names:
+                    stub = extract_init_stub_from_class(target_name, module_source, module_tree)
+                    if stub:
+                        code_strings.append(CodeString(code=stub, file_path=module_path))
+                        emitted_class_names.add(target_name)
 
         except Exception:
             logger.debug(f"Error extracting class definition for {name} from {module_name}")
@@ -1506,3 +1469,41 @@ def prune_cst(
             include_init_dunder=include_init_dunder,
         ),
     )
+
+
+def belongs_to_method(name: Name, class_name: str, method_name: str) -> bool:
+    """Check if the given name belongs to the specified method."""
+    return belongs_to_function(name, method_name) and belongs_to_class(name, class_name)
+
+
+def belongs_to_function(name: Name, function_name: str) -> bool:
+    """Check if the given jedi Name is a direct child of the specified function."""
+    if name.name == function_name:  # Handles function definition and recursive function calls
+        return False
+    if (name := name.parent()) and name.type == "function":
+        return bool(name.name == function_name)
+    return False
+
+
+def belongs_to_class(name: Name, class_name: str) -> bool:
+    """Check if given jedi Name is a direct child of the specified class."""
+    while name := name.parent():
+        if name.type == "class":
+            return bool(name.name == class_name)
+    return False
+
+
+def belongs_to_function_qualified(name: Name, qualified_function_name: str) -> bool:
+    """Check if the given jedi Name is a direct child of the specified function, matched by qualified function name."""
+    try:
+        if (
+            name.full_name.startswith(name.module_name)
+            and get_qualified_name(name.module_name, name.full_name) == qualified_function_name
+        ):
+            # Handles function definition and recursive function calls
+            return False
+        if (name := name.parent()) and name.type == "function":
+            return get_qualified_name(name.module_name, name.full_name) == qualified_function_name
+        return False
+    except ValueError:
+        return False

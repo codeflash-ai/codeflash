@@ -131,30 +131,13 @@ class TestGetJsCodeflashInstallStep:
 
         assert result == ""
 
-    def test_npm_global_install(self) -> None:
-        """Should generate npm global install when not a dependency."""
-        result = get_js_codeflash_install_step(JsPackageManager.NPM, is_dependency=False)
+    def test_uv_tool_install_when_not_dependency(self) -> None:
+        """Should generate uv tool install when not a dependency, regardless of package manager."""
+        for pkg_manager in (JsPackageManager.NPM, JsPackageManager.YARN, JsPackageManager.PNPM, JsPackageManager.BUN):
+            result = get_js_codeflash_install_step(pkg_manager, is_dependency=False)
 
-        assert "Install Codeflash" in result
-        assert "npm install -g codeflash" in result
-
-    def test_yarn_global_install(self) -> None:
-        """Should generate yarn global install when not a dependency."""
-        result = get_js_codeflash_install_step(JsPackageManager.YARN, is_dependency=False)
-
-        assert "yarn global add codeflash" in result
-
-    def test_pnpm_global_install(self) -> None:
-        """Should generate pnpm global install when not a dependency."""
-        result = get_js_codeflash_install_step(JsPackageManager.PNPM, is_dependency=False)
-
-        assert "pnpm add -g codeflash" in result
-
-    def test_bun_global_install(self) -> None:
-        """Should generate bun global install when not a dependency."""
-        result = get_js_codeflash_install_step(JsPackageManager.BUN, is_dependency=False)
-
-        assert "bun add -g codeflash" in result
+            assert "Install Codeflash" in result
+            assert "uv tool install codeflash" in result
 
 
 class TestGetJsCodeflashRunCommand:

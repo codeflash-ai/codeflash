@@ -20,12 +20,15 @@ All assertions use strict string equality to verify exact extraction output.
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import Language
 from codeflash.languages.javascript.support import JavaScriptSupport, TypeScriptSupport
-from codeflash.languages.python.context.code_context_extractor import get_code_optimization_context_for_language
+from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
+from codeflash.verification.verification_utils import TestConfig
 
 
 @pytest.fixture
@@ -61,7 +64,8 @@ export function add(a, b) {
         file_path = temp_project / "math.js"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         assert len(functions) == 1
         func = functions[0]
 
@@ -87,7 +91,8 @@ export const multiply = (a, b) => a * b;
         file_path = temp_project / "math.js"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         assert len(functions) == 1
         func = functions[0]
         assert func.function_name == "multiply"
@@ -121,7 +126,8 @@ export function add(a, b) {
         file_path = temp_project / "math.js"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         func = functions[0]
 
         context = js_support.extract_code_context(func, temp_project, temp_project)
@@ -173,7 +179,8 @@ export async function processItems(items, callback, options = {}) {
         file_path = temp_project / "processor.js"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         func = functions[0]
 
         context = js_support.extract_code_context(func, temp_project, temp_project)
@@ -243,7 +250,8 @@ export class CacheManager {
         file_path = temp_project / "cache.js"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         get_or_compute = next(f for f in functions if f.function_name == "getOrCompute")
 
         context = js_support.extract_code_context(get_or_compute, temp_project, temp_project)
@@ -339,7 +347,8 @@ export function validateUserData(data, validators) {
         file_path = temp_project / "validator.js"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         func = next(f for f in functions if f.function_name == "validateUserData")
 
         context = js_support.extract_code_context(func, temp_project, temp_project)
@@ -429,7 +438,8 @@ export async function fetchWithRetry(endpoint, options = {}) {
         file_path = temp_project / "api.js"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         func = next(f for f in functions if f.function_name == "fetchWithRetry")
 
         context = js_support.extract_code_context(func, temp_project, temp_project)
@@ -515,7 +525,8 @@ export function validateField(value, fieldType) {
         file_path = temp_project / "validation.js"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         func = functions[0]
 
         context = js_support.extract_code_context(func, temp_project, temp_project)
@@ -578,7 +589,8 @@ export function processUserInput(rawInput) {
         file_path = temp_project / "processor.js"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         process_func = next(f for f in functions if f.function_name == "processUserInput")
 
         context = js_support.extract_code_context(process_func, temp_project, temp_project)
@@ -633,7 +645,8 @@ export function generateReport(data) {
         file_path = temp_project / "report.js"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         report_func = next(f for f in functions if f.function_name == "generateReport")
 
         context = js_support.extract_code_context(report_func, temp_project, temp_project)
@@ -731,7 +744,8 @@ export class Graph {
         file_path = temp_project / "graph.js"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         topo_sort = next(f for f in functions if f.function_name == "topologicalSort")
 
         context = js_support.extract_code_context(topo_sort, temp_project, temp_project)
@@ -819,7 +833,8 @@ export class MainClass {
         file_path = temp_project / "classes.js"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         main_method = next(f for f in functions if f.function_name == "mainMethod" and f.class_name == "MainClass")
 
         context = js_support.extract_code_context(main_method, temp_project, temp_project)
@@ -875,7 +890,8 @@ module.exports = { sortFromAnotherFile };
         main_path = temp_project / "bubble_sort_imported.js"
         main_path.write_text(main_code, encoding="utf-8")
 
-        functions = js_support.discover_functions(main_path)
+        source = main_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, main_path)
         main_func = next(f for f in functions if f.function_name == "sortFromAnotherFile")
 
         context = js_support.extract_code_context(main_func, temp_project, temp_project)
@@ -926,7 +942,8 @@ export function processNumber(n) {
         main_path = temp_project / "main.js"
         main_path.write_text(main_code, encoding="utf-8")
 
-        functions = js_support.discover_functions(main_path)
+        source = main_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, main_path)
         process_func = next(f for f in functions if f.function_name == "processNumber")
 
         context = js_support.extract_code_context(process_func, temp_project, temp_project)
@@ -992,7 +1009,8 @@ export function handleUserInput(rawInput) {
         main_path = temp_project / "main.js"
         main_path.write_text(main_code, encoding="utf-8")
 
-        functions = js_support.discover_functions(main_path)
+        source = main_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, main_path)
         handle_func = next(f for f in functions if f.function_name == "handleUserInput")
 
         context = js_support.extract_code_context(handle_func, temp_project, temp_project)
@@ -1043,7 +1061,8 @@ export function createEntity<T extends object>(data: T): Entity<T> {
         file_path = temp_project / "entity.ts"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = ts_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = ts_support.discover_functions(source, file_path)
         func = functions[0]
 
         context = ts_support.extract_code_context(func, temp_project, temp_project)
@@ -1133,7 +1152,8 @@ export class TypedCache<T> {
         file_path = temp_project / "cache.ts"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = ts_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = ts_support.discover_functions(source, file_path)
         get_method = next(f for f in functions if f.function_name == "get")
 
         context = ts_support.extract_code_context(get_method, temp_project, temp_project)
@@ -1217,7 +1237,8 @@ export function createUser(input: CreateUserInput, role: UserRole = DEFAULT_ROLE
         service_path = temp_project / "service.ts"
         service_path.write_text(service_code, encoding="utf-8")
 
-        functions = ts_support.discover_functions(service_path)
+        source = service_path.read_text(encoding="utf-8")
+        functions = ts_support.discover_functions(source, service_path)
         func = next(f for f in functions if f.function_name == "createUser")
 
         context = ts_support.extract_code_context(func, temp_project, temp_project)
@@ -1271,7 +1292,8 @@ export function factorial(n) {
         file_path = temp_project / "math.js"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         func = functions[0]
 
         context = js_support.extract_code_context(func, temp_project, temp_project)
@@ -1301,7 +1323,8 @@ export function isOdd(n) {
         file_path = temp_project / "parity.js"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         is_even = next(f for f in functions if f.function_name == "isEven")
 
         context = js_support.extract_code_context(is_even, temp_project, temp_project)
@@ -1319,12 +1342,15 @@ export function isEven(n) {
         assert helper_names == ["isOdd"]
 
         # Verify helper source
-        assert context.helper_functions[0].source_code == """\
+        assert (
+            context.helper_functions[0].source_code
+            == """\
 export function isOdd(n) {
     if (n === 0) return false;
     return isEven(n - 1);
 }
 """
+        )
 
     def test_complex_recursive_tree_traversal(self, js_support, temp_project):
         """Test complex recursive tree traversal with multiple recursive calls."""
@@ -1363,7 +1389,8 @@ export function collectAllValues(root) {
         file_path = temp_project / "tree.js"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         collect_func = next(f for f in functions if f.function_name == "collectAllValues")
 
         context = js_support.extract_code_context(collect_func, temp_project, temp_project)
@@ -1428,7 +1455,8 @@ export async function fetchUserProfile(userId) {
         file_path = temp_project / "api.js"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         profile_func = next(f for f in functions if f.function_name == "fetchUserProfile")
 
         context = js_support.extract_code_context(profile_func, temp_project, temp_project)
@@ -1483,7 +1511,8 @@ module.exports = { Counter };
         file_path = temp_project / "counter.js"
         file_path.write_text(original_source, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         increment_func = next(fn for fn in functions if fn.function_name == "increment")
 
         # Step 1: Extract code context
@@ -1563,7 +1592,8 @@ export function processApiResponse({
         file_path = temp_project / "api.js"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         func = functions[0]
 
         context = js_support.extract_code_context(func, temp_project, temp_project)
@@ -1605,7 +1635,8 @@ export function* fibonacci(limit) {
         file_path = temp_project / "generators.js"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         range_func = next(f for f in functions if f.function_name == "range")
 
         context = js_support.extract_code_context(range_func, temp_project, temp_project)
@@ -1640,7 +1671,8 @@ export function createUserObject(name, email, age) {
         file_path = temp_project / "user.js"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         func = functions[0]
 
         context = js_support.extract_code_context(func, temp_project, temp_project)
@@ -1790,7 +1822,8 @@ export const sendSlackMessage = async (
         file_path.write_text(code, encoding="utf-8")
         target_func = "sendSlackMessage"
 
-        functions = ts_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = ts_support.discover_functions(source, file_path)
         func_info = next(f for f in functions if f.function_name == target_func)
         fto = FunctionToOptimize(
             function_name=target_func,
@@ -1804,9 +1837,11 @@ export const sendSlackMessage = async (
             language="typescript",
         )
 
-        ctx = get_code_optimization_context_for_language(
-            fto, temp_project
+        test_config = TestConfig(
+            tests_root=temp_project, tests_project_rootdir=temp_project, project_root_path=temp_project
         )
+        func_optimizer = JavaScriptFunctionOptimizer(function_to_optimize=fto, test_cfg=test_config, aiservice_client=MagicMock())
+        ctx = func_optimizer.get_code_optimization_context().unwrap()
 
         # The read_writable_code should contain the target function AND helper functions
         expected_read_writable = """```typescript:slack_util.ts
@@ -1899,7 +1934,6 @@ let web: WebClient | null = null"""
         assert ctx.read_only_context_code == expected_read_only
 
 
-
 class TestContextProperties:
     """Tests for CodeContext object properties."""
 
@@ -1913,7 +1947,8 @@ export function test() {
         file_path = temp_project / "test.js"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
         context = js_support.extract_code_context(functions[0], temp_project, temp_project)
 
         assert context.language == Language.JAVASCRIPT
@@ -1932,7 +1967,8 @@ export function test(): number {
         file_path = temp_project / "test.ts"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = ts_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = ts_support.discover_functions(source, file_path)
         context = ts_support.extract_code_context(functions[0], temp_project, temp_project)
 
         # TypeScript uses JavaScript language enum
@@ -1974,7 +2010,8 @@ export class Calculator {
         file_path = temp_project / "calculator.js"
         file_path.write_text(code, encoding="utf-8")
 
-        functions = js_support.discover_functions(file_path)
+        source = file_path.read_text(encoding="utf-8")
+        functions = js_support.discover_functions(source, file_path)
 
         for func in functions:
             if func.function_name != "constructor":

@@ -1,4 +1,5 @@
-from codeflash.code_utils.deduplicate_code import are_codes_duplicate, normalize_code
+from codeflash.languages.javascript.normalizer import normalize_js_code
+from codeflash.languages.python.normalizer import normalize_python_code as normalize_code
 
 
 def test_deduplicate1():
@@ -23,7 +24,7 @@ def compute_sum(numbers):
 """
 
     assert normalize_code(code1) == normalize_code(code2)
-    assert are_codes_duplicate(code1, code2)
+    assert normalize_code(code1) == normalize_code(code2)
 
     # Example 3: Same function and parameter names, different local variables (should match)
     code3 = """
@@ -43,7 +44,7 @@ def calculate_sum(numbers):
 """
 
     assert normalize_code(code3) == normalize_code(code4)
-    assert are_codes_duplicate(code3, code4)
+    assert normalize_code(code3) == normalize_code(code4)
 
     # Example 4: Nested functions and classes (preserving names)
     code5 = """
@@ -133,3 +134,74 @@ def safe_divide(a, b):
     assert normalize_code(code9) == normalize_code(code10)
 
     assert normalize_code(code9) != normalize_code(code8)
+
+
+# === JavaScript deduplication tests ===
+
+
+def test_js_deduplicate_same_logic_different_vars():
+    code1 = """
+function process(items) {
+    const result = [];
+    for (const item of items) {
+        result.push(item * 2);
+    }
+    return result;
+}
+"""
+    code2 = """
+function process(items) {
+    const output = [];
+    for (const val of items) {
+        output.push(val * 2);
+    }
+    return output;
+}
+"""
+    assert normalize_js_code(code1) == normalize_js_code(code2)
+
+
+def test_js_different_logic_not_deduplicated():
+    code1 = """
+function compute(x) {
+    return x + 1;
+}
+"""
+    code2 = """
+function compute(x) {
+    return x * 2;
+}
+"""
+    assert normalize_js_code(code1) != normalize_js_code(code2)
+
+
+def test_js_deduplicate_whitespace_and_comments():
+    code1 = """
+function add(a, b) {
+    // fast path
+    return a + b;
+}
+"""
+    code2 = """
+function add(a, b) {
+    /* optimized */
+    return a + b;
+}
+"""
+    assert normalize_js_code(code1) == normalize_js_code(code2)
+
+
+def test_ts_normalize():
+    code1 = """
+function greet(name: string): string {
+    const msg = "hello " + name;
+    return msg;
+}
+"""
+    code2 = """
+function greet(name: string): string {
+    const result = "hello " + name;
+    return result;
+}
+"""
+    assert normalize_js_code(code1, typescript=True) == normalize_js_code(code2, typescript=True)

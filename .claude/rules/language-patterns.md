@@ -9,4 +9,5 @@ paths:
 - Use `get_language_support(identifier)` from `languages/registry.py` to get a `LanguageSupport` instance — never import language classes directly
 - New language support classes must use the `@register_language` decorator to register with the extension and language registries
 - `languages/__init__.py` uses `__getattr__` for lazy imports to avoid circular dependencies — follow this pattern when adding new exports
-- `is_javascript()` returns `True` for both JavaScript and TypeScript
+- Prefer `LanguageSupport` protocol dispatch over `is_python()`/`is_javascript()` guards — remaining guards are being migrated to protocol methods
+- `is_javascript()` returns `True` for both JavaScript and TypeScript (still used in ~15 call sites pending migration)

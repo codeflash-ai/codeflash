@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 from collections import deque
 from contextlib import contextmanager
@@ -408,6 +409,7 @@ def subagent_log_optimization_result(
     new_code: dict[Path, str],
     review: str,
     test_results: TestResults,
+    project_root: Path | None = None,
 ) -> None:
     import sys
     from xml.sax.saxutils import escape
@@ -421,7 +423,11 @@ def subagent_log_optimization_result(
         old = original_code.get(path, "")
         new = new_code.get(path, "")
         if old != new:
-            diff = unified_diff_strings(old, new, fromfile=str(path), tofile=str(path))
+            display_path = str(path)
+            if project_root is not None:
+                with contextlib.suppress(ValueError):
+                    display_path = str(path.relative_to(project_root))
+            diff = unified_diff_strings(old, new, fromfile=display_path, tofile=display_path)
             if diff:
                 diff_parts.append(diff)
 
@@ -468,13 +474,17 @@ def subagent_log_optimization_result(
         if new_code[path] != original_code.get(path, ""):
             xml.append(f'  <optimized-code file="{escape(str(path))}">{escape(new_code[path])}</optimized-code>')
     xml.append("  <action>")
-    xml.append("    Present this optimization to the user using AskUserQuestion.")
-    xml.append("    Show the function name, performance improvement, and explanation as the question text.")
-    xml.append("    Provide two options: 'Apply' (write the optimized code to the file) and 'Reject' (do nothing).")
+    xml.append("    1. Review the diff and optimized code yourself. Write a brief assessment (2-3 sentences) covering:")
+    xml.append("       - Whether the optimization is correct and preserves behavior")
+    xml.append("       - What technique was used (e.g. algorithmic improvement, caching, vectorization)")
+    xml.append("       - Any risks or trade-offs (e.g. increased memory usage, reduced readability)")
+    xml.append("    2. Present this optimization to the user using AskUserQuestion.")
+    xml.append("       Show the function name, performance improvement, and your review as the question text.")
+    xml.append("       Provide two options: 'Apply' (write the optimized code to the file) and 'Reject' (do nothing).")
     xml.append(
-        "    Put the full diff in the 'Apply' option's markdown preview so the user can review the exact changes."
+        "       Put the full diff in the 'Apply' option's markdown preview so the user can review the exact changes."
     )
-    xml.append("    If the user chooses 'Apply', write the content from optimized-code to the corresponding file.")
+    xml.append("    3. If the user chooses 'Apply', write the content from optimized-code to the corresponding file.")
     xml.append("  </action>")
     xml.append("</codeflash-optimization>")
 

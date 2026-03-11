@@ -9,8 +9,6 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.languages.python.static_analysis.code_extractor import GlobalAssignmentCollector, add_global_assignments
-from codeflash.languages.python.static_analysis.code_replacer import replace_functions_and_add_imports
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.python.context.code_context_extractor import (
     collect_type_names_from_annotation,
@@ -20,6 +18,8 @@ from codeflash.languages.python.context.code_context_extractor import (
     get_code_optimization_context,
     resolve_instance_class_name,
 )
+from codeflash.languages.python.static_analysis.code_extractor import GlobalAssignmentCollector, add_global_assignments
+from codeflash.languages.python.static_analysis.code_replacer import replace_functions_and_add_imports
 from codeflash.models.models import CodeString, CodeStringsMarkdown, FunctionParent
 from codeflash.optimization.optimizer import Optimizer
 
@@ -243,6 +243,14 @@ def test_bubble_sort_helper() -> None:
     hashing_context = code_ctx.hashing_code_context
 
     expected_read_write_context = """
+```python:code_to_optimize/code_directories/retriever/bubble_sort_imported.py
+from bubble_sort_with_math import sorter
+
+
+def sort_from_another_file(arr):
+    sorted_arr = sorter(arr)
+    return sorted_arr
+```
 ```python:code_to_optimize/code_directories/retriever/bubble_sort_with_math.py
 import math
 
@@ -252,14 +260,6 @@ def sorter(arr):
     x = math.sqrt(2)
     print(x)
     return arr
-```
-```python:code_to_optimize/code_directories/retriever/bubble_sort_imported.py
-from bubble_sort_with_math import sorter
-
-
-def sort_from_another_file(arr):
-    sorted_arr = sorter(arr)
-    return sorted_arr
 ```
 """
     expected_read_only_context = ""
@@ -1178,6 +1178,26 @@ def test_repo_helper() -> None:
     hashing_context = code_ctx.hashing_code_context
     path_to_globals = project_root / "globals.py"
     expected_read_write_context = f"""
+```python:{path_to_file.relative_to(project_root)}
+import requests
+from globals import API_URL
+from utils import DataProcessor
+
+
+def fetch_and_process_data():
+    # Use the global variable for the request
+    response = requests.get(API_URL)
+    response.raise_for_status()
+
+    raw_data = response.text
+
+    # Use code from another file (utils.py)
+    processor = DataProcessor()
+    processed = processor.process_data(raw_data)
+    processed = processor.add_prefix(processed)
+
+    return processed
+```
 ```python:{path_to_globals.relative_to(project_root)}
 # Define a global variable
 API_URL = "https://api.example.com/data"
@@ -1200,26 +1220,6 @@ class DataProcessor:
     def add_prefix(self, data: str, prefix: str = "PREFIX_") -> str:
         \"\"\"Add a prefix to the processed data.\"\"\"
         return prefix + data
-```
-```python:{path_to_file.relative_to(project_root)}
-import requests
-from globals import API_URL
-from utils import DataProcessor
-
-
-def fetch_and_process_data():
-    # Use the global variable for the request
-    response = requests.get(API_URL)
-    response.raise_for_status()
-
-    raw_data = response.text
-
-    # Use code from another file (utils.py)
-    processor = DataProcessor()
-    processed = processor.process_data(raw_data)
-    processed = processor.add_prefix(processed)
-
-    return processed
 ```
 """
     expected_read_only_context = f"""
@@ -1278,6 +1278,25 @@ def test_repo_helper_of_helper() -> None:
     hashing_context = code_ctx.hashing_code_context
     path_to_globals = project_root / "globals.py"
     expected_read_write_context = f"""
+```python:{path_to_file.relative_to(project_root)}
+import requests
+from globals import API_URL
+from utils import DataProcessor
+
+
+def fetch_and_transform_data():
+    # Use the global variable for the request
+    response = requests.get(API_URL)
+
+    raw_data = response.text
+
+    # Use code from another file (utils.py)
+    processor = DataProcessor()
+    processed = processor.process_data(raw_data)
+    transformed = processor.transform_data(processed)
+
+    return transformed
+```
 ```python:{path_to_globals.relative_to(project_root)}
 # Define a global variable
 API_URL = "https://api.example.com/data"
@@ -1301,25 +1320,6 @@ class DataProcessor:
     def transform_data(self, data: str) -> str:
         \"\"\"Transform the processed data\"\"\"
         return DataTransformer().transform(data)
-```
-```python:{path_to_file.relative_to(project_root)}
-import requests
-from globals import API_URL
-from utils import DataProcessor
-
-
-def fetch_and_transform_data():
-    # Use the global variable for the request
-    response = requests.get(API_URL)
-
-    raw_data = response.text
-
-    # Use code from another file (utils.py)
-    processor = DataProcessor()
-    processed = processor.process_data(raw_data)
-    transformed = processor.transform_data(processed)
-
-    return transformed
 ```
 """
     expected_read_only_context = f"""
@@ -1384,14 +1384,6 @@ def test_repo_helper_of_helper_same_class() -> None:
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     hashing_context = code_ctx.hashing_code_context
     expected_read_write_context = f"""
-```python:{path_to_transform_utils.relative_to(project_root)}
-class DataTransformer:
-    def __init__(self):
-        self.data = None
-
-    def transform_using_own_method(self, data):
-        return self.transform(data)
-```
 ```python:{path_to_utils.relative_to(project_root)}
 import math
 from transform_utils import DataTransformer
@@ -1407,6 +1399,14 @@ class DataProcessor:
     def transform_data_own_method(self, data: str) -> str:
         \"\"\"Transform the processed data using own method\"\"\"
         return DataTransformer().transform_using_own_method(data)
+```
+```python:{path_to_transform_utils.relative_to(project_root)}
+class DataTransformer:
+    def __init__(self):
+        self.data = None
+
+    def transform_using_own_method(self, data):
+        return self.transform(data)
 ```
 """
     expected_read_only_context = f"""
@@ -1465,14 +1465,6 @@ def test_repo_helper_of_helper_same_file() -> None:
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     hashing_context = code_ctx.hashing_code_context
     expected_read_write_context = f"""
-```python:{path_to_transform_utils.relative_to(project_root)}
-class DataTransformer:
-    def __init__(self):
-        self.data = None
-
-    def transform_using_same_file_function(self, data):
-        return update_data(data)
-```
 ```python:{path_to_utils.relative_to(project_root)}
 import math
 from transform_utils import DataTransformer
@@ -1488,6 +1480,14 @@ class DataProcessor:
     def transform_data_same_file_function(self, data: str) -> str:
         \"\"\"Transform the processed data using a function from the same file\"\"\"
         return DataTransformer().transform_using_same_file_function(data)
+```
+```python:{path_to_transform_utils.relative_to(project_root)}
+class DataTransformer:
+    def __init__(self):
+        self.data = None
+
+    def transform_using_same_file_function(self, data):
+        return update_data(data)
 ```
 """
     expected_read_only_context = f"""
@@ -1605,6 +1605,17 @@ def test_repo_helper_circular_dependency() -> None:
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     hashing_context = code_ctx.hashing_code_context
     expected_read_write_context = f"""
+```python:{path_to_transform_utils.relative_to(project_root)}
+from code_to_optimize.code_directories.retriever.utils import DataProcessor
+
+
+class DataTransformer:
+    def __init__(self):
+        self.data = None
+
+    def circular_dependency(self, data):
+        return DataProcessor().circular_dependency(data)
+```
 ```python:{path_to_utils.relative_to(project_root)}
 import math
 from transform_utils import DataTransformer
@@ -1620,17 +1631,6 @@ class DataProcessor:
     def circular_dependency(self, data: str) -> str:
         \"\"\"Test circular dependency\"\"\"
         return DataTransformer().circular_dependency(data)
-```
-```python:{path_to_transform_utils.relative_to(project_root)}
-from code_to_optimize.code_directories.retriever.utils import DataProcessor
-
-
-class DataTransformer:
-    def __init__(self):
-        self.data = None
-
-    def circular_dependency(self, data):
-        return DataProcessor().circular_dependency(data)
 ```
 """
     expected_read_only_context = f"""
@@ -1796,6 +1796,12 @@ def function_to_optimize():
 ```
 """
     expected_read_write_context = f"""
+```python:{path_to_fto.relative_to(project_root)}
+import code_to_optimize.code_directories.retriever.main
+
+def function_to_optimize():
+    return code_to_optimize.code_directories.retriever.main.fetch_and_transform_data()
+```
 ```python:{path_to_main.relative_to(project_root)}
 import requests
 from globals import API_URL
@@ -1814,12 +1820,6 @@ def fetch_and_transform_data():
     transformed = processor.transform_data(processed)
 
     return transformed
-```
-```python:{path_to_fto.relative_to(project_root)}
-import code_to_optimize.code_directories.retriever.main
-
-def function_to_optimize():
-    return code_to_optimize.code_directories.retriever.main.fetch_and_transform_data()
 ```
 """
     assert read_write_context.markdown.strip() == expected_read_write_context.strip()
@@ -2244,6 +2244,20 @@ def get_system_details():
         # The expected contexts
         relative_path = file_path.relative_to(project_root)
         expected_read_write_context = f"""
+```python:{main_file_path.resolve().relative_to(opt.args.project_root.resolve())}
+import utility_module
+
+class Calculator:
+    def __init__(self, precision="high", fallback_precision=None, mode="standard"):
+        # This is where we use the imported module
+        self.precision = utility_module.select_precision(precision, fallback_precision)
+        self.mode = mode
+
+        # Using variables from the utility module
+        self.backend = utility_module.CALCULATION_BACKEND
+        self.system = utility_module.SYSTEM_TYPE
+        self.default_precision = utility_module.DEFAULT_PRECISION
+```
 ```python:utility_module.py
 import sys
 
@@ -2290,20 +2304,6 @@ def select_precision(precision, fallback_precision):
         return precision.lower()
     else:
         return DEFAULT_PRECISION
-```
-```python:{main_file_path.resolve().relative_to(opt.args.project_root.resolve())}
-import utility_module
-
-class Calculator:
-    def __init__(self, precision="high", fallback_precision=None, mode="standard"):
-        # This is where we use the imported module
-        self.precision = utility_module.select_precision(precision, fallback_precision)
-        self.mode = mode
-
-        # Using variables from the utility module
-        self.backend = utility_module.CALCULATION_BACKEND
-        self.system = utility_module.SYSTEM_TYPE
-        self.default_precision = utility_module.DEFAULT_PRECISION
 ```
 """
         expected_read_only_context = """
@@ -4701,3 +4701,167 @@ def get_log_level() -> str:
     combined = "\n".join(cs.code for cs in result.code_strings)
     assert "class AppConfig:" in combined
     assert "@property" in combined
+
+def test_extract_parameter_type_constructors_isinstance_single(tmp_path: Path) -> None:
+    """isinstance(x, SomeType) in function body should be picked up."""
+    pkg = tmp_path / "mypkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "models.py").write_text(
+        "class Widget:\n    def __init__(self, size: int):\n        self.size = size\n",
+        encoding="utf-8",
+    )
+    (pkg / "processor.py").write_text(
+        "from mypkg.models import Widget\n\ndef check(x) -> bool:\n    return isinstance(x, Widget)\n",
+        encoding="utf-8",
+    )
+    fto = FunctionToOptimize(
+        function_name="check", file_path=(pkg / "processor.py").resolve(), starting_line=3, ending_line=4
+    )
+    result = extract_parameter_type_constructors(fto, tmp_path.resolve(), set())
+    assert len(result.code_strings) == 1
+    assert "class Widget:" in result.code_strings[0].code
+    assert "__init__" in result.code_strings[0].code
+
+
+def test_extract_parameter_type_constructors_isinstance_tuple(tmp_path: Path) -> None:
+    """isinstance(x, (TypeA, TypeB)) should pick up both types."""
+    pkg = tmp_path / "mypkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "models.py").write_text(
+        "class Alpha:\n    def __init__(self, a: int):\n        self.a = a\n\n"
+        "class Beta:\n    def __init__(self, b: str):\n        self.b = b\n",
+        encoding="utf-8",
+    )
+    (pkg / "processor.py").write_text(
+        "from mypkg.models import Alpha, Beta\n\ndef check(x) -> bool:\n    return isinstance(x, (Alpha, Beta))\n",
+        encoding="utf-8",
+    )
+    fto = FunctionToOptimize(
+        function_name="check", file_path=(pkg / "processor.py").resolve(), starting_line=3, ending_line=4
+    )
+    result = extract_parameter_type_constructors(fto, tmp_path.resolve(), set())
+    assert len(result.code_strings) == 2
+    combined = "\n".join(cs.code for cs in result.code_strings)
+    assert "class Alpha:" in combined
+    assert "class Beta:" in combined
+
+
+def test_extract_parameter_type_constructors_type_is_pattern(tmp_path: Path) -> None:
+    """type(x) is SomeType pattern should be picked up."""
+    pkg = tmp_path / "mypkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "models.py").write_text(
+        "class Gadget:\n    def __init__(self, val: float):\n        self.val = val\n",
+        encoding="utf-8",
+    )
+    (pkg / "processor.py").write_text(
+        "from mypkg.models import Gadget\n\ndef check(x) -> bool:\n    return type(x) is Gadget\n",
+        encoding="utf-8",
+    )
+    fto = FunctionToOptimize(
+        function_name="check", file_path=(pkg / "processor.py").resolve(), starting_line=3, ending_line=4
+    )
+    result = extract_parameter_type_constructors(fto, tmp_path.resolve(), set())
+    assert len(result.code_strings) == 1
+    assert "class Gadget:" in result.code_strings[0].code
+
+
+def test_extract_parameter_type_constructors_base_classes(tmp_path: Path) -> None:
+    """Base classes of enclosing class should be picked up for methods."""
+    pkg = tmp_path / "mypkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "base.py").write_text(
+        "class BaseProcessor:\n    def __init__(self, config: str):\n        self.config = config\n",
+        encoding="utf-8",
+    )
+    (pkg / "child.py").write_text(
+        "from mypkg.base import BaseProcessor\n\nclass ChildProcessor(BaseProcessor):\n"
+        "    def process(self) -> str:\n        return self.config\n",
+        encoding="utf-8",
+    )
+    fto = FunctionToOptimize(
+        function_name="process",
+        file_path=(pkg / "child.py").resolve(),
+        starting_line=4,
+        ending_line=5,
+        parents=[FunctionParent(name="ChildProcessor", type="ClassDef")],
+    )
+    result = extract_parameter_type_constructors(fto, tmp_path.resolve(), set())
+    assert len(result.code_strings) == 1
+    assert "class BaseProcessor:" in result.code_strings[0].code
+
+
+def test_extract_parameter_type_constructors_isinstance_builtins_excluded(tmp_path: Path) -> None:
+    """Isinstance with builtins (int, str, etc.) should not produce stubs."""
+    pkg = tmp_path / "mypkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "func.py").write_text(
+        "def check(x) -> bool:\n    return isinstance(x, (int, str, float))\n",
+        encoding="utf-8",
+    )
+    fto = FunctionToOptimize(
+        function_name="check", file_path=(pkg / "func.py").resolve(), starting_line=1, ending_line=2
+    )
+    result = extract_parameter_type_constructors(fto, tmp_path.resolve(), set())
+    assert len(result.code_strings) == 0
+
+
+def test_extract_parameter_type_constructors_transitive(tmp_path: Path) -> None:
+    """Transitive extraction: if Widget.__init__ takes a Config, Config's stub should also appear."""
+    pkg = tmp_path / "mypkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "config.py").write_text(
+        "class Config:\n    def __init__(self, debug: bool = False):\n        self.debug = debug\n",
+        encoding="utf-8",
+    )
+    (pkg / "models.py").write_text(
+        "from mypkg.config import Config\n\n"
+        "class Widget:\n    def __init__(self, cfg: Config):\n        self.cfg = cfg\n",
+        encoding="utf-8",
+    )
+    (pkg / "processor.py").write_text(
+        "from mypkg.models import Widget\n\ndef process(w: Widget) -> str:\n    return str(w)\n",
+        encoding="utf-8",
+    )
+    fto = FunctionToOptimize(
+        function_name="process", file_path=(pkg / "processor.py").resolve(), starting_line=3, ending_line=4
+    )
+    result = extract_parameter_type_constructors(fto, tmp_path.resolve(), set())
+    combined = "\n".join(cs.code for cs in result.code_strings)
+    assert "class Widget:" in combined
+    assert "class Config:" in combined
+
+
+
+
+def test_enrich_testgen_context_third_party_uses_stubs(tmp_path: Path) -> None:
+    """Third-party classes should produce compact __init__ stubs, not full class source."""
+    # Use a real third-party package (pydantic) so jedi can actually resolve it
+    context_code = (
+        "from pydantic import BaseModel\n\n"
+        "class MyModel(BaseModel):\n"
+        "    name: str\n\n"
+        "def process(m: MyModel) -> str:\n"
+        "    return m.name\n"
+    )
+    consumer_path = tmp_path / "consumer.py"
+    consumer_path.write_text(context_code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=context_code, file_path=consumer_path)])
+    result = enrich_testgen_context(context, tmp_path)
+
+    # BaseModel lives in site-packages so should get stub treatment (compact __init__),
+    # not the full class definition with hundreds of methods
+    for cs in result.code_strings:
+        if "BaseModel" in cs.code:
+            assert "class BaseModel:" in cs.code
+            assert "__init__" in cs.code
+            # Full BaseModel has many methods; stubs should only have __init__/properties
+            assert "model_dump" not in cs.code
+            break

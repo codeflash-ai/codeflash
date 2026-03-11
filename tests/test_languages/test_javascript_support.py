@@ -52,7 +52,7 @@ export function add(a, b) {
 """)
             f.flush()
 
-            functions = js_support.discover_functions(Path(f.name))
+            functions = js_support.discover_functions(Path(f.name).read_text(encoding="utf-8"), Path(f.name))
 
             assert len(functions) == 1
             assert functions[0].function_name == "add"
@@ -76,7 +76,7 @@ export function multiply(a, b) {
 """)
             f.flush()
 
-            functions = js_support.discover_functions(Path(f.name))
+            functions = js_support.discover_functions(Path(f.name).read_text(encoding="utf-8"), Path(f.name))
 
             assert len(functions) == 3
             names = {func.function_name for func in functions}
@@ -94,7 +94,7 @@ export const multiply = (x, y) => x * y;
 """)
             f.flush()
 
-            functions = js_support.discover_functions(Path(f.name))
+            functions = js_support.discover_functions(Path(f.name).read_text(encoding="utf-8"), Path(f.name))
 
             assert len(functions) == 2
             names = {func.function_name for func in functions}
@@ -114,7 +114,7 @@ export function withoutReturn() {
 """)
             f.flush()
 
-            functions = js_support.discover_functions(Path(f.name))
+            functions = js_support.discover_functions(Path(f.name).read_text(encoding="utf-8"), Path(f.name))
 
             # Only the function with return should be discovered
             assert len(functions) == 1
@@ -136,7 +136,7 @@ export class Calculator {
 """)
             f.flush()
 
-            functions = js_support.discover_functions(Path(f.name))
+            functions = js_support.discover_functions(Path(f.name).read_text(encoding="utf-8"), Path(f.name))
 
             assert len(functions) == 2
             for func in functions:
@@ -157,7 +157,7 @@ export function syncFunction() {
 """)
             f.flush()
 
-            functions = js_support.discover_functions(Path(f.name))
+            functions = js_support.discover_functions(Path(f.name).read_text(encoding="utf-8"), Path(f.name))
 
             assert len(functions) == 2
 
@@ -182,7 +182,7 @@ export function syncFunc() {
             f.flush()
 
             criteria = FunctionFilterCriteria(include_async=False)
-            functions = js_support.discover_functions(Path(f.name), criteria)
+            functions = js_support.discover_functions(Path(f.name).read_text(encoding="utf-8"), Path(f.name), criteria)
 
             assert len(functions) == 1
             assert functions[0].function_name == "syncFunc"
@@ -204,7 +204,7 @@ export class MyClass {
             f.flush()
 
             criteria = FunctionFilterCriteria(include_methods=False)
-            functions = js_support.discover_functions(Path(f.name), criteria)
+            functions = js_support.discover_functions(Path(f.name).read_text(encoding="utf-8"), Path(f.name), criteria)
 
             assert len(functions) == 1
             assert functions[0].function_name == "standalone"
@@ -224,7 +224,7 @@ export function func2() {
 """)
             f.flush()
 
-            functions = js_support.discover_functions(Path(f.name))
+            functions = js_support.discover_functions(Path(f.name).read_text(encoding="utf-8"), Path(f.name))
 
             func1 = next(f for f in functions if f.function_name == "func1")
             func2 = next(f for f in functions if f.function_name == "func2")
@@ -246,7 +246,7 @@ export function* numberGenerator() {
 """)
             f.flush()
 
-            functions = js_support.discover_functions(Path(f.name))
+            functions = js_support.discover_functions(Path(f.name).read_text(encoding="utf-8"), Path(f.name))
 
             assert len(functions) == 1
             assert functions[0].function_name == "numberGenerator"
@@ -257,14 +257,14 @@ export function* numberGenerator() {
             f.write("this is not valid javascript {{{{")
             f.flush()
 
-            functions = js_support.discover_functions(Path(f.name))
+            functions = js_support.discover_functions(Path(f.name).read_text(encoding="utf-8"), Path(f.name))
             # Tree-sitter is lenient, so it may still parse partial code
             # The important thing is it doesn't crash
             assert isinstance(functions, list)
 
     def test_discover_nonexistent_file_returns_empty(self, js_support):
         """Test that nonexistent file returns empty list."""
-        functions = js_support.discover_functions(Path("/nonexistent/file.js"))
+        functions = js_support.discover_functions("", Path("/nonexistent/file.js"))
         assert functions == []
 
     def test_discover_function_expression(self, js_support):
@@ -277,7 +277,7 @@ export const add = function(a, b) {
 """)
             f.flush()
 
-            functions = js_support.discover_functions(Path(f.name))
+            functions = js_support.discover_functions(Path(f.name).read_text(encoding="utf-8"), Path(f.name))
 
             assert len(functions) == 1
             assert functions[0].function_name == "add"
@@ -296,7 +296,7 @@ export function named() {
 """)
             f.flush()
 
-            functions = js_support.discover_functions(Path(f.name))
+            functions = js_support.discover_functions(Path(f.name).read_text(encoding="utf-8"), Path(f.name))
 
             # Only the named function should be discovered
             assert len(functions) == 1
@@ -443,10 +443,10 @@ function add(a, b {
 
 
 class TestNormalizeCode:
-    """Tests for normalize_code method."""
+    """Tests for normalize_code method using tree-sitter normalizer."""
 
     def test_removes_comments(self, js_support):
-        """Test that single-line comments are removed."""
+        """Test that comments are absent from normalized output."""
         code = """
 function add(a, b) {
     // Add two numbers
@@ -455,19 +455,43 @@ function add(a, b) {
 """
         normalized = js_support.normalize_code(code)
         assert "// Add two numbers" not in normalized
-        assert "return a + b" in normalized
+        assert "Add two numbers" not in normalized
 
-    def test_preserves_functionality(self, js_support):
-        """Test that code functionality is preserved."""
-        code = """
-function add(a, b) {
-    // Comment
-    return a + b;
+    def test_same_logic_different_vars_are_equal(self, js_support):
+        """Test that two functions with same logic but different variable names normalize identically."""
+        code1 = """
+function process(items) {
+    const result = [];
+    for (const item of items) {
+        result.push(item * 2);
+    }
+    return result;
 }
 """
-        normalized = js_support.normalize_code(code)
-        assert "function add" in normalized
-        assert "return" in normalized
+        code2 = """
+function process(items) {
+    const output = [];
+    for (const val of items) {
+        output.push(val * 2);
+    }
+    return output;
+}
+"""
+        assert js_support.normalize_code(code1) == js_support.normalize_code(code2)
+
+    def test_different_logic_not_equal(self, js_support):
+        """Test that two functions with different logic produce different normalized forms."""
+        code1 = """
+function compute(x) {
+    return x + 1;
+}
+"""
+        code2 = """
+function compute(x) {
+    return x * 2;
+}
+"""
+        assert js_support.normalize_code(code1) != js_support.normalize_code(code2)
 
 
 class TestExtractCodeContext:
@@ -507,7 +531,7 @@ export function main(a) {
             file_path = Path(f.name)
 
             # First discover functions to get accurate line numbers
-            functions = js_support.discover_functions(file_path)
+            functions = js_support.discover_functions(file_path.read_text(encoding="utf-8"), file_path)
             main_func = next(f for f in functions if f.function_name == "main")
 
             context = js_support.extract_code_context(main_func, file_path.parent, file_path.parent)
@@ -535,7 +559,7 @@ class TestIntegration:
             file_path = Path(f.name)
 
             # Discover
-            functions = js_support.discover_functions(file_path)
+            functions = js_support.discover_functions(file_path.read_text(encoding="utf-8"), file_path)
             assert len(functions) == 1
             func = functions[0]
             assert func.function_name == "fibonacci"
@@ -584,7 +608,7 @@ export function standalone() {
             f.flush()
             file_path = Path(f.name)
 
-            functions = js_support.discover_functions(file_path)
+            functions = js_support.discover_functions(file_path.read_text(encoding="utf-8"), file_path)
 
             # Should find 4 functions
             assert len(functions) == 4
@@ -623,7 +647,7 @@ export default Button;
             f.flush()
             file_path = Path(f.name)
 
-            functions = js_support.discover_functions(file_path)
+            functions = js_support.discover_functions(file_path.read_text(encoding="utf-8"), file_path)
 
             # Should find both components
             names = {f.function_name for f in functions}
@@ -653,7 +677,7 @@ describe('Math functions', () => {
             f.flush()
             file_path = Path(f.name)
 
-            source = file_path.read_text()
+            source = file_path.read_text(encoding="utf-8")
             from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
             analyzer = get_analyzer_for_file(file_path)
@@ -687,7 +711,7 @@ class TestClassMethodExtraction:
             file_path = Path(f.name)
 
             # Discover the method
-            functions = js_support.discover_functions(file_path)
+            functions = js_support.discover_functions(file_path.read_text(encoding="utf-8"), file_path)
             add_method = next(f for f in functions if f.function_name == "add")
 
             # Extract code context
@@ -725,7 +749,7 @@ export class Calculator {
             f.flush()
             file_path = Path(f.name)
 
-            functions = js_support.discover_functions(file_path)
+            functions = js_support.discover_functions(file_path.read_text(encoding="utf-8"), file_path)
             add_method = next(f for f in functions if f.function_name == "add")
 
             context = js_support.extract_code_context(add_method, file_path.parent, file_path.parent)
@@ -763,7 +787,7 @@ export class Calculator {
             f.flush()
             file_path = Path(f.name)
 
-            functions = js_support.discover_functions(file_path)
+            functions = js_support.discover_functions(file_path.read_text(encoding="utf-8"), file_path)
             fib_method = next(f for f in functions if f.function_name == "fibonacci")
 
             context = js_support.extract_code_context(fib_method, file_path.parent, file_path.parent)
@@ -802,7 +826,7 @@ export class Calculator {
             f.flush()
             file_path = Path(f.name)
 
-            functions = js_support.discover_functions(file_path)
+            functions = js_support.discover_functions(file_path.read_text(encoding="utf-8"), file_path)
             add_method = next((f for f in functions if f.function_name == "add"), None)
 
             if add_method:
@@ -832,7 +856,7 @@ export class Calculator {
             f.flush()
             file_path = Path(f.name)
 
-            functions = js_support.discover_functions(file_path)
+            functions = js_support.discover_functions(file_path.read_text(encoding="utf-8"), file_path)
             fetch_method = next(f for f in functions if f.function_name == "fetchData")
 
             context = js_support.extract_code_context(fetch_method, file_path.parent, file_path.parent)
@@ -865,7 +889,7 @@ export class Calculator {
             f.flush()
             file_path = Path(f.name)
 
-            functions = js_support.discover_functions(file_path)
+            functions = js_support.discover_functions(file_path.read_text(encoding="utf-8"), file_path)
             add_method = next((f for f in functions if f.function_name == "add"), None)
 
             if add_method:
@@ -894,7 +918,7 @@ export class Calculator {
             f.flush()
             file_path = Path(f.name)
 
-            functions = js_support.discover_functions(file_path)
+            functions = js_support.discover_functions(file_path.read_text(encoding="utf-8"), file_path)
             method = next(f for f in functions if f.function_name == "simpleMethod")
 
             context = js_support.extract_code_context(method, file_path.parent, file_path.parent)
@@ -1079,7 +1103,7 @@ class TestClassMethodEdgeCases:
             f.flush()
             file_path = Path(f.name)
 
-            functions = js_support.discover_functions(file_path)
+            functions = js_support.discover_functions(file_path.read_text(encoding="utf-8"), file_path)
 
             # Should find constructor and increment
             names = {f.function_name for f in functions}
@@ -1109,7 +1133,7 @@ class TestClassMethodEdgeCases:
             f.flush()
             file_path = Path(f.name)
 
-            functions = js_support.discover_functions(file_path)
+            functions = js_support.discover_functions(file_path.read_text(encoding="utf-8"), file_path)
 
             # Should find at least greet
             names = {f.function_name for f in functions}
@@ -1137,7 +1161,7 @@ export class Dog extends Animal {
             f.flush()
             file_path = Path(f.name)
 
-            functions = js_support.discover_functions(file_path)
+            functions = js_support.discover_functions(file_path.read_text(encoding="utf-8"), file_path)
 
             # Find Dog's fetch method
             fetch_method = next((f for f in functions if f.function_name == "fetch" and f.class_name == "Dog"), None)
@@ -1172,7 +1196,7 @@ export class Dog extends Animal {
             f.flush()
             file_path = Path(f.name)
 
-            functions = js_support.discover_functions(file_path)
+            functions = js_support.discover_functions(file_path.read_text(encoding="utf-8"), file_path)
 
             # Should at least find publicMethod
             names = {f.function_name for f in functions}
@@ -1192,7 +1216,7 @@ module.exports = { Calculator };
             f.flush()
             file_path = Path(f.name)
 
-            functions = js_support.discover_functions(file_path)
+            functions = js_support.discover_functions(file_path.read_text(encoding="utf-8"), file_path)
             add_method = next(f for f in functions if f.function_name == "add")
 
             context = js_support.extract_code_context(add_method, file_path.parent, file_path.parent)
@@ -1212,7 +1236,7 @@ module.exports = { Calculator };
             f.flush()
             file_path = Path(f.name)
 
-            functions = js_support.discover_functions(file_path)
+            functions = js_support.discover_functions(file_path.read_text(encoding="utf-8"), file_path)
 
             # Find the add method
             add_method = next((f for f in functions if f.function_name == "add"), None)
@@ -1265,7 +1289,7 @@ module.exports = { Counter };
             f.flush()
             file_path = Path(f.name)
 
-            functions = js_support.discover_functions(file_path)
+            functions = js_support.discover_functions(file_path.read_text(encoding="utf-8"), file_path)
             increment_func = next(fn for fn in functions if fn.function_name == "increment")
 
             # Step 1: Extract code context (includes constructor for AI context)
@@ -1362,7 +1386,7 @@ export class User {
             f.flush()
             file_path = Path(f.name)
 
-            functions = ts_support.discover_functions(file_path)
+            functions = ts_support.discover_functions(file_path.read_text(encoding="utf-8"), file_path)
             get_name_func = next(fn for fn in functions if fn.function_name == "getName")
 
             # Step 1: Extract code context (includes fields and constructor)
@@ -1462,7 +1486,7 @@ export class Calculator {
             f.flush()
             file_path = Path(f.name)
 
-            functions = js_support.discover_functions(file_path)
+            functions = js_support.discover_functions(file_path.read_text(encoding="utf-8"), file_path)
             add_func = next(fn for fn in functions if fn.function_name == "add")
 
             # Extract context for add
@@ -1546,7 +1570,7 @@ export class MathUtils {
             f.flush()
             file_path = Path(f.name)
 
-            functions = js_support.discover_functions(file_path)
+            functions = js_support.discover_functions(file_path.read_text(encoding="utf-8"), file_path)
             add_func = next(fn for fn in functions if fn.function_name == "add")
 
             # Extract context

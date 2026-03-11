@@ -3,7 +3,7 @@ paths:
   - "codeflash/optimization/**/*.py"
   - "codeflash/verification/**/*.py"
   - "codeflash/benchmarking/**/*.py"
-  - "codeflash/context/**/*.py"
+  - "codeflash/languages/*/context/**/*.py"
 ---
 
 # Optimization Pipeline Patterns
