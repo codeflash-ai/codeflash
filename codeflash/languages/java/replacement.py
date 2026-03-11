@@ -16,7 +16,7 @@ import re
 import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.java.parser import get_java_analyzer
@@ -208,7 +208,7 @@ def _insert_class_members(
     if not fields and not helpers_before_target and not helpers_after_target:
         return source
 
-    def get_target_class_and_body(src: str):  # type: ignore[return]
+    def get_target_class_and_body(src: str) -> tuple[Any, Any]:
         for cls in analyzer.find_classes(src):
             if cls.name == class_name:
                 body = cls.node.child_by_field_name("body")

@@ -81,6 +81,7 @@ class TestInputValidation:
 
     def test_get_test_run_command_validates_input(self, tmp_path: Path):
         """Test that get_test_run_command validates test class names."""
+        (tmp_path / "pom.xml").write_text("<project></project>", encoding="utf-8")
         # Valid class names should work
         cmd = get_test_run_command(tmp_path, ["MyTest", "OtherTest"])
         assert "-Dtest=MyTest,OtherTest" in " ".join(cmd)
