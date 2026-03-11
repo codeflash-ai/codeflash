@@ -137,8 +137,9 @@ def _rediscover_function(
     """
     try:
         current_functions = lang_support.discover_functions(source_code, file_path, _SOURCE_CRITERIA)
+        target_name = function_to_optimize.function_name
         for func in current_functions:
-            if func.function_name == function_to_optimize.function_name:
+            if func.function_name == target_name:
                 return func
     except Exception as e:
         logger.debug(f"Error rediscovering function {function_to_optimize.function_name}: {e}")
