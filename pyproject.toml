@@ -196,6 +196,10 @@ exclude = [
     "Thumbs.db",
     "venv",
     "env",
+    # MVN_CENTRAL_TODO: Once codeflash-runtime is available on Maven Central (or GitHub
+    # Releases), exclude it from the wheel to save ~15MB. Users will get it via Maven
+    # resolution or download-on-first-run. Uncomment the line below:
+    # "codeflash/languages/java/resources/codeflash-runtime-*.jar",
 ]
 
 [tool.mypy]

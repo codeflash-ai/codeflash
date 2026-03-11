@@ -17,6 +17,8 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from codeflash.languages.java.build_tools import CODEFLASH_RUNTIME_JAR_NAME, CODEFLASH_RUNTIME_VERSION
+
 if TYPE_CHECKING:
     from tree_sitter import Node
 
@@ -24,7 +26,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-AGENT_JAR_NAME = "codeflash-runtime-1.0.0.jar"
+AGENT_JAR_NAME = CODEFLASH_RUNTIME_JAR_NAME
 DEFAULT_WARMUP_ITERATIONS = 100
 
 
@@ -569,7 +571,16 @@ def find_agent_jar() -> Path | None:
     Checks local Maven repo, package resources, and development build directory.
     """
     # Check local Maven repository first (fastest)
-    m2_jar = Path.home() / ".m2" / "repository" / "com" / "codeflash" / "codeflash-runtime" / "1.0.0" / AGENT_JAR_NAME
+    m2_jar = (
+        Path.home()
+        / ".m2"
+        / "repository"
+        / "com"
+        / "codeflash"
+        / "codeflash-runtime"
+        / CODEFLASH_RUNTIME_VERSION
+        / AGENT_JAR_NAME
+    )
     if m2_jar.exists():
         return m2_jar
 

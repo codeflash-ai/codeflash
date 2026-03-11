@@ -18,6 +18,56 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+CODEFLASH_RUNTIME_VERSION = "1.0.0"
+CODEFLASH_RUNTIME_JAR_NAME = f"codeflash-runtime-{CODEFLASH_RUNTIME_VERSION}.jar"
+
+JACOCO_PLUGIN_VERSION = "0.8.13"
+
+
+# MVN_CENTRAL_TODO: Uncomment once codeflash-runtime is published to Maven Central.
+# Steps:
+#   1. Uncomment resolve_from_maven_central() below
+#   2. Uncomment the call in test_runner.py _ensure_codeflash_runtime()
+#   3. Exclude the JAR from the PyPI wheel (see MVN_CENTRAL_TODO in pyproject.toml)
+#   4. The install:install-file fallback in _ensure_codeflash_runtime() can be removed
+#   5. The bundled JAR in resources/ can be removed from the repo
+#
+# Alternative: Instead of Maven resolution, you can download the JAR from GitHub
+# Releases using a download_jar_to_cache() helper — see git history for the
+# implementation that was removed in this cleanup.
+#
+# def resolve_from_maven_central(maven_root: Path) -> bool:
+#     """Ask Maven to resolve codeflash-runtime from Maven Central.
+#
+#     This downloads the JAR to ~/.m2/repository/ automatically.
+#     Only works once the JAR is published to Maven Central.
+#
+#     Returns True if Maven successfully resolved the artifact.
+#     """
+#     mvn = find_maven_executable()
+#     if not mvn:
+#         return False
+#     cmd = [
+#         mvn,
+#         "dependency:resolve",
+#         f"-Dartifact=com.codeflash:codeflash-runtime:{CODEFLASH_RUNTIME_VERSION}",
+#         "-B",
+#         "-q",
+#     ]
+#     try:
+#         result = subprocess.run(
+#             cmd, check=False, cwd=maven_root, capture_output=True, text=True, timeout=60
+#         )
+#         if result.returncode == 0:
+#             logger.info("Resolved codeflash-runtime %s from Maven Central", CODEFLASH_RUNTIME_VERSION)
+#             return True
+#         logger.debug("Maven Central resolution failed: %s", result.stderr)
+#         return False
+#     except Exception as e:
+#         logger.debug("Maven Central resolution error: %s", e)
+#         return False
+# --------------------------------------------------------------------------
+
 
 def _safe_parse_xml(file_path: Path) -> ET.ElementTree:
     """Safely parse an XML file with protections against XXE attacks.
@@ -595,7 +645,7 @@ def install_codeflash_runtime(project_root: Path, runtime_jar_path: Path) -> boo
         f"-Dfile={runtime_jar_path}",
         "-DgroupId=com.codeflash",
         "-DartifactId=codeflash-runtime",
-        "-Dversion=1.0.0",
+        f"-Dversion={CODEFLASH_RUNTIME_VERSION}",
         "-Dpackaging=jar",
         "-B",
     ]
@@ -614,11 +664,11 @@ def install_codeflash_runtime(project_root: Path, runtime_jar_path: Path) -> boo
         return False
 
 
-CODEFLASH_DEPENDENCY_SNIPPET = """\
+CODEFLASH_DEPENDENCY_SNIPPET = f"""\
         <dependency>
             <groupId>com.codeflash</groupId>
             <artifactId>codeflash-runtime</artifactId>
-            <version>1.0.0</version>
+            <version>{CODEFLASH_RUNTIME_VERSION}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>"""
@@ -661,7 +711,7 @@ def add_codeflash_dependency_to_pom(pom_path: Path) -> bool:
                             "<dependency>\n"
                             "            <groupId>com.codeflash</groupId>\n"
                             "            <artifactId>codeflash-runtime</artifactId>\n"
-                            "            <version>1.0.0</version>\n"
+                            f"            <version>{CODEFLASH_RUNTIME_VERSION}</version>\n"
                             "            <scope>test</scope>\n"
                             "        </dependency>"
                         )
@@ -692,9 +742,6 @@ def add_codeflash_dependency_to_pom(pom_path: Path) -> bool:
     except Exception as e:
         logger.exception("Failed to add dependency to pom.xml: %s", e)
         return False
-
-
-JACOCO_PLUGIN_VERSION = "0.8.13"
 
 
 def is_jacoco_configured(pom_path: Path) -> bool:
