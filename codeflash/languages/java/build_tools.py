@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 import subprocess
+import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from enum import Enum
@@ -22,6 +23,41 @@ CODEFLASH_RUNTIME_VERSION = "1.0.0"
 CODEFLASH_RUNTIME_JAR_NAME = f"codeflash-runtime-{CODEFLASH_RUNTIME_VERSION}.jar"
 
 JACOCO_PLUGIN_VERSION = "0.8.13"
+
+
+GITHUB_RELEASE_URL = (
+    "https://github.com/codeflash-ai/codeflash/releases/download"
+    f"/runtime-v{CODEFLASH_RUNTIME_VERSION}/{CODEFLASH_RUNTIME_JAR_NAME}"
+)
+
+CODEFLASH_CACHE_DIR = Path.home() / ".cache" / "codeflash"
+
+
+def download_from_github_releases() -> Path | None:
+    """Download codeflash-runtime JAR from GitHub Releases.
+
+    Downloads to ~/.cache/codeflash/ and returns the path to the downloaded JAR.
+    Returns None if the download fails (e.g., no release published yet, network error).
+
+    This serves as a fallback when Maven Central resolution fails — for example,
+    when the user's project doesn't have Maven installed or Maven Central is unreachable.
+    Requires a GitHub Release tagged 'runtime-v{version}' with the JAR as an asset.
+    """
+    cache_jar = CODEFLASH_CACHE_DIR / CODEFLASH_RUNTIME_JAR_NAME
+    if cache_jar.exists():
+        logger.info("Found cached codeflash-runtime JAR: %s", cache_jar)
+        return cache_jar
+
+    try:
+        CODEFLASH_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        logger.info("Downloading codeflash-runtime from GitHub Releases: %s", GITHUB_RELEASE_URL)
+        urllib.request.urlretrieve(GITHUB_RELEASE_URL, cache_jar)  # noqa: S310
+        logger.info("Downloaded codeflash-runtime to %s", cache_jar)
+        return cache_jar
+    except Exception as e:
+        logger.debug("GitHub Releases download failed: %s", e)
+        cache_jar.unlink(missing_ok=True)
+        return None
 
 
 def resolve_from_maven_central(maven_root: Path) -> bool:
