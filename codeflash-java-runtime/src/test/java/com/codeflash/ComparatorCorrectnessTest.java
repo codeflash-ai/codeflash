@@ -216,6 +216,9 @@ class ComparatorCorrectnessTest {
         try (Connection conn = DriverManager.getConnection(url);
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE IF NOT EXISTS test_results ("
+                + "test_module_path TEXT NOT NULL, "
+                + "test_class_name TEXT NOT NULL, "
+                + "test_function_name TEXT NOT NULL, "
                 + "iteration_id TEXT NOT NULL, "
                 + "loop_index INTEGER NOT NULL, "
                 + "return_value BLOB, "
@@ -227,10 +230,13 @@ class ComparatorCorrectnessTest {
         String url = "jdbc:sqlite:" + dbPath;
         try (Connection conn = DriverManager.getConnection(url);
              PreparedStatement ps = conn.prepareStatement(
-                 "INSERT INTO test_results (iteration_id, loop_index, return_value) VALUES (?, ?, ?)")) {
-            ps.setString(1, iterationId);
-            ps.setInt(2, loopIndex);
-            ps.setBytes(3, returnValue);
+                 "INSERT INTO test_results (test_module_path, test_class_name, test_function_name, iteration_id, loop_index, return_value) VALUES (?, ?, ?, ?, ?, ?)")) {
+            ps.setString(1, "src/test/java/com/example/TestClass.java");
+            ps.setString(2, "TestClass");
+            ps.setString(3, "testMethod");
+            ps.setString(4, iterationId);
+            ps.setInt(5, loopIndex);
+            ps.setBytes(6, returnValue);
             ps.executeUpdate();
         }
     }
