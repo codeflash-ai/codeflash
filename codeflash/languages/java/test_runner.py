@@ -926,29 +926,13 @@ def _get_combined_junit_xml(surefire_dir: Path, candidate_index: int) -> Path:
     result_xml_path = _TMPDIR / f"codeflash_java_results_{candidate_index}_{result_id}.xml"
 
     if not surefire_dir.exists():
-        # Ensure the shared empty template exists (create once)
-        if not _EMPTY_JUNIT_TEMPLATE.exists():
-            # Create parent directory implicitly exists (tmpdir), write template
-            _write_empty_junit_xml(_EMPTY_JUNIT_TEMPLATE)
-
-        # Create a new filesystem entry for the caller-specific result path that refers to the template content.
-        # Prefer hard link (cheap) but fall back to copy when not supported.
-        try:
-            os.link(_EMPTY_JUNIT_TEMPLATE, result_xml_path)
-        except Exception:
-            shutil.copyfile(_EMPTY_JUNIT_TEMPLATE, result_xml_path)
+        _copy_empty_junit_template(result_xml_path)
         return result_xml_path
 
     xml_files = list(surefire_dir.glob("TEST-*.xml"))
 
     if not xml_files:
-        # Same as missing surefire_dir: produce a new file that refers to the template
-        if not _EMPTY_JUNIT_TEMPLATE.exists():
-            _write_empty_junit_xml(_EMPTY_JUNIT_TEMPLATE)
-        try:
-            os.link(_EMPTY_JUNIT_TEMPLATE, result_xml_path)
-        except Exception:
-            shutil.copyfile(_EMPTY_JUNIT_TEMPLATE, result_xml_path)
+        _copy_empty_junit_template(result_xml_path)
         return result_xml_path
 
     if len(xml_files) == 1:
@@ -960,6 +944,19 @@ def _get_combined_junit_xml(surefire_dir: Path, candidate_index: int) -> Path:
     for xml_file in xml_files:
         Path(xml_file).unlink(missing_ok=True)
     return result_xml_path
+
+
+def _copy_empty_junit_template(result_xml_path: Path) -> None:
+    """Create a result file with empty JUnit XML content, reusing a shared template."""
+    if not _EMPTY_JUNIT_TEMPLATE.exists():
+        _write_empty_junit_xml(_EMPTY_JUNIT_TEMPLATE)
+    # Remove any stale file at the target (may be a hard link to the template from a previous run,
+    # which would cause SameFileError on copyfile or FileExistsError on link).
+    result_xml_path.unlink(missing_ok=True)
+    try:
+        os.link(_EMPTY_JUNIT_TEMPLATE, result_xml_path)
+    except OSError:
+        shutil.copyfile(_EMPTY_JUNIT_TEMPLATE, result_xml_path)
 
 
 def _write_empty_junit_xml(path: Path) -> None:

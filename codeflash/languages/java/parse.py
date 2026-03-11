@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from junitparser.xunit2 import JUnitXml
 
 from codeflash.cli_cmds.console import console, logger
-from codeflash.code_utils.code_utils import module_name_from_file_path
+from codeflash.code_utils.code_utils import extract_parameterized_test_index, module_name_from_file_path
 from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults
 
 if TYPE_CHECKING:
@@ -128,7 +128,9 @@ def parse_java_test_xml(
             if class_name is not None and class_name.startswith(test_module_path):
                 test_class = class_name[len(test_module_path) + 1 :]
 
-            loop_index = int(testcase.name.split("[ ")[-1][:-2]) if testcase.name and "[" in testcase.name else 1
+            loop_index = (
+                extract_parameterized_test_index(testcase.name) if testcase.name and "[" in testcase.name else 1
+            )
 
             timed_out = False
             if len(testcase.result) > 1:
