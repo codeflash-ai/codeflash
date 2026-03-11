@@ -22,6 +22,7 @@ from codeflash.code_utils.code_utils import cleanup_paths, get_run_tmp_file
 from codeflash.code_utils.env_utils import get_pr_number, is_pr_draft
 from codeflash.code_utils.git_utils import check_running_in_git_repo, git_root_dir
 from codeflash.code_utils.git_worktree_utils import (
+    cleanup_stale_worktrees,
     create_detached_worktree,
     create_diff_patch_from_worktree,
     create_worktree_snapshot_commit,
@@ -737,6 +738,8 @@ def mirror_path(path: Path, src_root: Path, dest_root: Path) -> Path:
 def run_with_args(args: Namespace) -> None:
     import atexit
     import signal
+
+    cleanup_stale_worktrees()
 
     optimizer = None
     original_sigterm = signal.getsignal(signal.SIGTERM)
