@@ -136,6 +136,11 @@ def _handle_config_loading(args: Namespace) -> Namespace | None:
 
 
 def print_codeflash_banner() -> None:
+    """Print the Codeflash banner with the branded styling.
+
+    Renders the Codeflash ASCII logo inside a non-expanding panel titled with
+    https://codeflash.ai, using bold gold text for visual emphasis.
+    """
     from codeflash.cli_cmds.console_constants import CODEFLASH_LOGO
 
     paneled_text(
