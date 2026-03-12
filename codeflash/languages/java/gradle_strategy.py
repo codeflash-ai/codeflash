@@ -527,6 +527,7 @@ class GradleStrategy(BuildToolStrategy):
             f"            jvmArgs({quoted_args})\n"
             f'            systemProperty "junit.jupiter.execution.timeout.default", "{per_test_timeout}s"\n'
             f"            reports.junitXml.outputPerTestCase = true\n"
+            f"            filter.failOnNoMatchingTests = false\n"
             f"        }}\n"
             f"    }}\n"
             f"}}\n"
@@ -552,9 +553,10 @@ class GradleStrategy(BuildToolStrategy):
             # --continue ensures Gradle keeps going even if some tests fail.
             # For coverage: needed so jacocoTestReport runs even after test failures
             #   (matches Maven's -Dmaven.test.failure.ignore=true).
-            # For multi-module: needed so --tests doesn't abort if a module has no matching tests
+            # Note: multi-module --tests filtering is handled by
+            #   filter.failOnNoMatchingTests = false in the init script above
             #   (matches Maven's -DfailIfNoTests=false).
-            if enable_coverage or test_module:
+            if enable_coverage:
                 cmd.append("--continue")
 
             for class_filter in test_filter.split(","):
