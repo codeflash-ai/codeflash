@@ -109,8 +109,6 @@ def _apply_deterministic_patches() -> None:
     _original_datetime_utcnow = datetime.datetime.utcnow
     _original_uuid4 = uuid.uuid4
     _original_uuid1 = uuid.uuid1
-    _original_random = random.random
-
     # Fixed deterministic values
     fixed_timestamp = 1761717605.108106
     fixed_datetime = datetime.datetime(2021, 1, 1, 2, 5, 10, tzinfo=datetime.timezone.utc)
@@ -154,20 +152,14 @@ def _apply_deterministic_patches() -> None:
         _original_uuid1(node, clock_seq)  # Maintain performance characteristics
         return fixed_uuid
 
-    def mock_random() -> float:
-        """Return deterministic random value while preserving performance characteristics."""
-        _original_random()  # Maintain performance characteristics
-        return 0.123456789  # Fixed random value
-
     # Apply patches
     time.time = mock_time_time
     time.perf_counter = mock_perf_counter
     uuid.uuid4 = mock_uuid4
     uuid.uuid1 = mock_uuid1
 
-    # Seed random module for other random functions
+    # Seed random module for deterministic behavior
     random.seed(42)
-    random.random = mock_random
 
     # For datetime, we need to use a different approach since we can't patch class methods
     # Store original methods for potential later use
