@@ -25,14 +25,22 @@ logger = logging.getLogger(__name__)
 # Skip validation/analysis tasks that reject generated instrumented test files.
 # Equivalent to Maven's _MAVEN_VALIDATION_SKIP_FLAGS.
 _GRADLE_VALIDATION_SKIP_TASKS = [
-    "-x", "checkstyleTest",
-    "-x", "checkstyleMain",
-    "-x", "spotbugsTest",
-    "-x", "spotbugsMain",
-    "-x", "pmdTest",
-    "-x", "pmdMain",
-    "-x", "rat",
-    "-x", "japicmp",
+    "-x",
+    "checkstyleTest",
+    "-x",
+    "checkstyleMain",
+    "-x",
+    "spotbugsTest",
+    "-x",
+    "spotbugsMain",
+    "-x",
+    "pmdTest",
+    "-x",
+    "pmdMain",
+    "-x",
+    "rat",
+    "-x",
+    "japicmp",
 ]
 
 # Cache for classpath strings — keyed on (gradle_root, test_module).
@@ -476,6 +484,14 @@ class GradleStrategy(BuildToolStrategy):
 
             cmd = [gradle, task, "--no-daemon", "--rerun", "--init-script", init_path]
             cmd.extend(_GRADLE_VALIDATION_SKIP_TASKS)
+
+            # --continue ensures Gradle keeps going even if some tests fail.
+            # For coverage: needed so jacocoTestReport runs even after test failures
+            #   (matches Maven's -Dmaven.test.failure.ignore=true).
+            # For multi-module: needed so --tests doesn't abort if a module has no matching tests
+            #   (matches Maven's -DfailIfNoTests=false).
+            if enable_coverage or test_module:
+                cmd.append("--continue")
 
             for class_filter in test_filter.split(","):
                 class_filter = class_filter.strip()
