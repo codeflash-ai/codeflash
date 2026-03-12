@@ -35,6 +35,7 @@ class ProjectLanguage(Enum):
     PYTHON = auto()
     JAVASCRIPT = auto()
     TYPESCRIPT = auto()
+    JAVA = auto()
 
 
 class JsPackageManager(Enum):
