@@ -95,6 +95,67 @@ def find_gradle_build_file(project_root: Path) -> Path | None:
     return None
 
 
+def _find_top_level_dependencies_block(build_file: Path, content: str) -> int | None:
+    """Find the insert position (before closing }) of the top-level dependencies block using tree-sitter.
+
+    Returns the byte offset of the closing brace, or None if no top-level dependencies block exists.
+    Only matches `dependencies { }` at the root level — ignores blocks nested inside
+    `buildscript`, `subprojects`, `allprojects`, etc.
+    """
+    import tree_sitter as ts
+
+    is_kts = build_file.name.endswith(".kts")
+    source_bytes = content.encode("utf-8")
+
+    if is_kts:
+        import tree_sitter_kotlin as tsk
+
+        parser = ts.Parser(ts.Language(tsk.language()))
+    else:
+        import tree_sitter_groovy as tsg
+
+        parser = ts.Parser(ts.Language(tsg.language()))
+
+    tree = parser.parse(source_bytes)
+
+    # Walk only direct children of root to find top-level `dependencies { }`
+    for child in tree.root_node.children:
+        # Groovy: expression_statement > method_invocation(identifier="dependencies", closure)
+        # Kotlin: call_expression(identifier="dependencies", annotated_lambda)
+        node = child
+        if node.type == "expression_statement" and node.child_count > 0:
+            node = node.children[0]
+
+        if node.type not in ("method_invocation", "call_expression"):
+            continue
+
+        name_node = None
+        body_node = None
+        for c in node.children:
+            if c.type == "identifier":
+                name_node = c
+            elif c.type in ("closure", "annotated_lambda", "lambda_literal"):
+                body_node = c
+
+        if name_node is None or body_node is None:
+            continue
+
+        name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf-8")
+        if name != "dependencies":
+            continue
+
+        # Find the closing brace of this block
+        closing_brace = body_node.children[-1] if body_node.children else None
+        # For Kotlin, annotated_lambda wraps lambda_literal
+        if closing_brace is not None and closing_brace.type == "lambda_literal":
+            closing_brace = closing_brace.children[-1] if closing_brace.children else None
+
+        if closing_brace is not None and closing_brace.type == "}":
+            return closing_brace.start_byte
+
+    return None
+
+
 def add_codeflash_dependency(build_file: Path, runtime_jar_path: Path) -> bool:
     if not build_file.exists():
         return False
@@ -114,25 +175,13 @@ def add_codeflash_dependency(build_file: Path, runtime_jar_path: Path) -> bool:
         else:
             dep_line = f"    testImplementation files('{jar_str}')  // codeflash-runtime\n"
 
-        # Try to insert inside existing dependencies block
-        if "dependencies {" in content or "dependencies{" in content:
-            last_deps_idx = content.rfind("dependencies")
-            if last_deps_idx != -1:
-                brace_depth = 0
-                insert_pos = -1
-                for i in range(last_deps_idx, len(content)):
-                    if content[i] == "{":
-                        brace_depth += 1
-                    elif content[i] == "}":
-                        brace_depth -= 1
-                        if brace_depth == 0:
-                            insert_pos = i
-                            break
-                if insert_pos != -1:
-                    content = content[:insert_pos] + dep_line + content[insert_pos:]
-                    build_file.write_text(content, encoding="utf-8")
-                    logger.info("Added codeflash-runtime dependency to %s", build_file.name)
-                    return True
+        # Use tree-sitter to find the top-level dependencies block
+        insert_pos = _find_top_level_dependencies_block(build_file, content)
+        if insert_pos is not None:
+            content = content[:insert_pos] + dep_line + content[insert_pos:]
+            build_file.write_text(content, encoding="utf-8")
+            logger.info("Added codeflash-runtime dependency to %s (tree-sitter)", build_file.name)
+            return True
 
         # No existing dependencies block — append one
         if is_kts:
@@ -140,7 +189,7 @@ def add_codeflash_dependency(build_file: Path, runtime_jar_path: Path) -> bool:
         else:
             content += f"\ndependencies {{\n    testImplementation files('{jar_str}')  // codeflash-runtime\n}}\n"
         build_file.write_text(content, encoding="utf-8")
-        logger.info("Added codeflash-runtime dependency to %s", build_file.name)
+        logger.info("Added codeflash-runtime dependency to %s (new block)", build_file.name)
         return True
 
     except Exception as e:
