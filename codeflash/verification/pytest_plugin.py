@@ -92,7 +92,6 @@ _ORIGINAL_TIME_TIME = _time_module.time
 _ORIGINAL_PERF_COUNTER = _time_module.perf_counter
 _ORIGINAL_PERF_COUNTER_NS = _time_module.perf_counter_ns
 _ORIGINAL_TIME_SLEEP = _time_module.sleep
-_ORIGINAL_MONOTONIC = _time_module.monotonic
 
 _DETERMINISTIC_PATCHES_APPLIED = False
 
@@ -173,7 +172,7 @@ def _apply_deterministic_patches() -> None:
     # Patch datetime.datetime with a subclass that overrides now() and utcnow()
     class DeterministicDatetime(datetime.datetime):
         @classmethod
-        def now(cls, tz=None) -> datetime.datetime:
+        def now(cls, tz: datetime.tzinfo | None = None) -> datetime.datetime:
             if tz is None:
                 return fixed_datetime.replace(tzinfo=None)
             return fixed_datetime.astimezone(tz)
