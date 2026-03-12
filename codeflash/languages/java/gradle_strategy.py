@@ -22,26 +22,41 @@ _BUILD = "build"
 
 logger = logging.getLogger(__name__)
 
-# Skip validation/analysis tasks that reject generated instrumented test files.
-# Equivalent to Maven's _MAVEN_VALIDATION_SKIP_FLAGS.
-_GRADLE_VALIDATION_SKIP_TASKS = [
-    "-x",
-    "checkstyleTest",
-    "-x",
-    "checkstyleMain",
-    "-x",
-    "spotbugsTest",
-    "-x",
-    "spotbugsMain",
-    "-x",
-    "pmdTest",
-    "-x",
-    "pmdMain",
-    "-x",
-    "rat",
-    "-x",
-    "japicmp",
-]
+# Groovy init script that disables validation/analysis plugins.
+# Equivalent to Maven's -Dcheckstyle.skip=true, -Dspotbugs.skip=true, etc.
+# Using an init script is safe even if the plugins aren't applied — unlike
+# `-x taskName` which fails if the task doesn't exist.
+_GRADLE_SKIP_VALIDATION_INIT_SCRIPT = """\
+gradle.projectsEvaluated {
+    allprojects {
+        tasks.matching { task ->
+            task.name in [
+                'checkstyleMain', 'checkstyleTest',
+                'spotbugsMain', 'spotbugsTest',
+                'pmdMain', 'pmdTest',
+                'rat', 'japicmp'
+            ]
+        }.configureEach {
+            enabled = false
+        }
+    }
+}
+"""
+
+# Lazily-created temp file for the validation-skip init script.
+_skip_validation_init_path: str | None = None
+
+
+def _get_skip_validation_init_script() -> str:
+    """Return the path to a persistent temp init script that disables validation tasks."""
+    global _skip_validation_init_path
+    if _skip_validation_init_path is None or not Path(_skip_validation_init_path).exists():
+        fd, path = tempfile.mkstemp(suffix=".gradle", prefix="codeflash_skip_validation_")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(_GRADLE_SKIP_VALIDATION_INIT_SCRIPT)
+        _skip_validation_init_path = path
+    return _skip_validation_init_path
+
 
 # Cache for classpath strings — keyed on (gradle_root, test_module).
 _classpath_cache: dict[tuple[Path, str | None], str] = {}
@@ -302,7 +317,7 @@ class GradleStrategy(BuildToolStrategy):
             return False
 
         cmd = [gradle, f":{test_module}:classes", "-x", "test", "--build-cache", "--no-daemon"]
-        cmd.extend(_GRADLE_VALIDATION_SKIP_TASKS)
+        cmd.extend(["--init-script", _get_skip_validation_init_script()])
 
         logger.info("Pre-installing multi-module dependencies: %s (module: %s)", build_root, test_module)
         logger.debug("Running: %s", " ".join(cmd))
@@ -339,7 +354,7 @@ class GradleStrategy(BuildToolStrategy):
             cmd = [gradle, f":{test_module}:testClasses", "--no-daemon"]
         else:
             cmd = [gradle, "testClasses", "--no-daemon"]
-        cmd.extend(_GRADLE_VALIDATION_SKIP_TASKS)
+        cmd.extend(["--init-script", _get_skip_validation_init_script()])
 
         logger.debug("Compiling tests: %s in %s", " ".join(cmd), build_root)
 
@@ -532,7 +547,7 @@ class GradleStrategy(BuildToolStrategy):
                 f.write(init_script_content)
 
             cmd = [gradle, task, "--no-daemon", "--rerun", "--init-script", init_path]
-            cmd.extend(_GRADLE_VALIDATION_SKIP_TASKS)
+            cmd.extend(["--init-script", _get_skip_validation_init_script()])
 
             # --continue ensures Gradle keeps going even if some tests fail.
             # For coverage: needed so jacocoTestReport runs even after test failures
