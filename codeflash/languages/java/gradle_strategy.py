@@ -39,6 +39,15 @@ gradle.projectsEvaluated {
         }.configureEach {
             enabled = false
         }
+        tasks.withType(JavaCompile) {
+            options.compilerArgs.removeAll { it == '-Werror' }
+            options.compilerArgs.removeAll { it == '-Xlint:all' }
+            if (options.hasProperty('errorprone')) {
+                options.errorprone {
+                    enabled = false
+                }
+            }
+        }
     }
 }
 """
