@@ -456,6 +456,7 @@ def configure_java_project(setup_info: JavaSetupInfo) -> bool:
     source_root = setup_info.module_root_override or detect_java_source_root(curdir)
     test_root = setup_info.test_root_override or detect_java_test_root(curdir)
 
+    config["language"] = "java"
     config["module-root"] = source_root
     config["tests-root"] = test_root
 
