@@ -176,9 +176,7 @@ def _apply_deterministic_patches() -> None:
         import importlib
 
         np_random = importlib.import_module("numpy.random")
-        np_random.seed(42)  # Keep legacy seed for compatibility  # noqa: NPY002
-
-    # Patch os.urandom if needed
+        np_random.seed(42)  # Keep legacy seed for compatibility
 
     # Patch os.urandom if needed
     try:
