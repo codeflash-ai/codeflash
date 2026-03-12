@@ -444,11 +444,10 @@ def get_java_formatter_cmd(formatter: str, build_tool: JavaBuildTool) -> list[st
 
 def configure_java_project(setup_info: JavaSetupInfo) -> bool:
     """Configure codeflash.toml for Java projects."""
-    import tomlkit
+    import json
 
     codeflash_config_path = Path.cwd() / "codeflash.toml"
 
-    # Build config
     config: dict[str, Any] = {}
 
     # Detect values
@@ -482,20 +481,24 @@ def configure_java_project(setup_info: JavaSetupInfo) -> bool:
         config["benchmarks-root"] = setup_info.benchmarks_root
 
     try:
-        # Create TOML document
-        doc = tomlkit.document()
-        doc.add(tomlkit.comment("Codeflash configuration for Java project"))
-        doc.add(tomlkit.nl())
+        # Build TOML string directly
+        lines: list[str] = []
+        lines.append("# Codeflash configuration for Java project")
+        lines.append("")  # blank line
+        lines.append("[tool.codeflash]")
 
-        codeflash_table = tomlkit.table()
         for key, value in config.items():
-            codeflash_table.add(key, value)
+            if isinstance(value, bool):
+                val_repr = "true" if value else "false"
+            else:
+                val_repr = json.dumps(value, ensure_ascii=False)
+            lines.append(f"{key} = {val_repr}")
 
-        doc.add("tool", tomlkit.table())
-        doc["tool"]["codeflash"] = codeflash_table
+        content = "\n".join(lines) + "\n"
 
         with codeflash_config_path.open("w", encoding="utf-8") as f:
-            f.write(tomlkit.dumps(doc))
+            f.write(content)
+
 
         click.echo(f"Created Codeflash configuration in {codeflash_config_path}")
         click.echo()
