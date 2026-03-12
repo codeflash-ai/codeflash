@@ -16,7 +16,6 @@ import shutil
 import signal
 import subprocess
 import sys
-import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,11 +24,7 @@ from typing import Any
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.languages.base import TestResult
 
-_TMPDIR = Path(tempfile.gettempdir())
-
 _result_counter = itertools.count(1)
-
-_EMPTY_JUNIT_TEMPLATE = _TMPDIR / "codeflash_java_empty_results_template.xml"
 
 _MAVEN_NS = "http://maven.apache.org/POM/4.0.0"
 
@@ -921,9 +916,8 @@ def _get_test_class_names(test_paths: Any, mode: str = "performance") -> list[st
 
 def _get_combined_junit_xml(surefire_dir: Path, candidate_index: int) -> Path:
     """Get or create a combined JUnit XML file from test reports."""
-    # Use a fast counter-based id instead of uuid for per-process uniqueness
     result_id = next(_result_counter)
-    result_xml_path = _TMPDIR / f"codeflash_java_results_{candidate_index}_{result_id}.xml"
+    result_xml_path = get_run_tmp_file(Path(f"java_results_{candidate_index}_{result_id}.xml"))
 
     if not surefire_dir.exists():
         _copy_empty_junit_template(result_xml_path)
@@ -947,16 +941,8 @@ def _get_combined_junit_xml(surefire_dir: Path, candidate_index: int) -> Path:
 
 
 def _copy_empty_junit_template(result_xml_path: Path) -> None:
-    """Create a result file with empty JUnit XML content, reusing a shared template."""
-    if not _EMPTY_JUNIT_TEMPLATE.exists():
-        _write_empty_junit_xml(_EMPTY_JUNIT_TEMPLATE)
-    # Remove any stale file at the target (may be a hard link to the template from a previous run,
-    # which would cause SameFileError on copyfile or FileExistsError on link).
-    result_xml_path.unlink(missing_ok=True)
-    try:
-        os.link(_EMPTY_JUNIT_TEMPLATE, result_xml_path)
-    except OSError:
-        shutil.copyfile(_EMPTY_JUNIT_TEMPLATE, result_xml_path)
+    """Create a result file with empty JUnit XML content."""
+    _write_empty_junit_xml(result_xml_path)
 
 
 def _write_empty_junit_xml(path: Path) -> None:
