@@ -65,6 +65,7 @@ class JavaSupport(LanguageSupport):
         self.line_profiler_agent_arg: str | None = None
         self.line_profiler_warmup_iterations: int = 0
         self._language_version: str | None = None
+        self._test_framework: str = "junit5"
 
     @property
     def language(self) -> Language:
@@ -78,8 +79,8 @@ class JavaSupport(LanguageSupport):
 
     @property
     def test_framework(self) -> str:
-        """Primary test framework name."""
-        return "junit5"
+        """Primary test framework name, detected from project build config."""
+        return self._test_framework
 
     @property
     def comment_prefix(self) -> str:
@@ -381,6 +382,12 @@ class JavaSupport(LanguageSupport):
 
     # === Configuration ===
 
+    def setup_test_config(self, test_cfg: Any, file_path: Path) -> None:
+        """Detect test framework from project build config (pom.xml / build.gradle)."""
+        config = detect_java_project(test_cfg.project_root_path)
+        if config is not None:
+            self._test_framework = config.test_framework
+
     def adjust_test_config_for_discovery(self, test_cfg: Any) -> None:
         """Adjust test config before test discovery for Java.
 
@@ -517,8 +524,8 @@ class JavaSupport(LanguageSupport):
         if self._language_version is None:
             self._detect_java_version()
 
-        # For now, assume the runtime is available
-        # A full implementation would check/install the JAR
+        self._test_framework = config.test_framework
+
         return True
 
     def _detect_java_version(self) -> None:
