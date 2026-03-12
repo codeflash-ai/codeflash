@@ -298,15 +298,12 @@ def _ensure_codeflash_runtime(maven_root: Path, test_module: str | None) -> bool
     if not m2_jar.exists():
         # Try resolving from Maven Central first
         if not resolve_from_maven_central(maven_root):
-            # Fallback 1: download from GitHub Releases (works for pip users without Maven Central)
+            # Fallback: download from GitHub Releases (works when Maven Central is unreachable)
             runtime_jar = download_from_github_releases()
-            if runtime_jar is None:
-                # Fallback 2: find JAR in local dev build (only works from source checkout)
-                runtime_jar = _find_runtime_jar()
             if runtime_jar is None:
                 logger.error(
                     "codeflash-runtime JAR not found. Maven Central resolution failed and "
-                    "no fallback JAR available. Generated tests will fail to compile."
+                    "GitHub Releases download failed. Generated tests will fail to compile."
                 )
                 return False
             logger.info("Installing codeflash-runtime JAR to local Maven repository from %s", runtime_jar)
