@@ -136,7 +136,7 @@ def parse_java_test_xml(
             if len(testcase.result) > 1:
                 logger.debug(f"!!!!!Multiple results for {testcase.name or '<None>'} in {test_xml_file_path}!!!")
             if len(testcase.result) == 1:
-                message = testcase.result[0].message.lower()
+                message = (testcase.result[0].message or "").lower()
                 if "failed: timeout >" in message or "timed out" in message:
                     timed_out = True
 

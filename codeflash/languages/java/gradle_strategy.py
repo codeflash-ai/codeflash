@@ -475,6 +475,11 @@ class GradleStrategy(BuildToolStrategy):
 
             result = _run_cmd_kill_pg_on_timeout(cmd, cwd=build_root, env=env, timeout=timeout)
 
+            # Normalize XML reports so <failure>/<error> always have a message
+            # attribute — Maven Surefire always sets it, Gradle may omit it.
+            reports_dir = self.get_reports_dir(build_root, test_module)
+            _normalize_gradle_xml_reports(reports_dir)
+
             if result.returncode != 0:
                 compilation_error_indicators = [
                     "Compilation failed",
@@ -589,7 +594,6 @@ class GradleStrategy(BuildToolStrategy):
         )
 
         reports_dir = self.get_reports_dir(gradle_root, test_module)
-        _normalize_gradle_xml_reports(reports_dir)
         result_xml_path = _get_combined_junit_xml(reports_dir, -1)
 
         return result_xml_path, combined_result
@@ -618,7 +622,6 @@ class GradleStrategy(BuildToolStrategy):
         )
 
         reports_dir = self.get_reports_dir(build_root, test_module)
-        _normalize_gradle_xml_reports(reports_dir)
         result_xml_path = _get_combined_junit_xml(reports_dir, candidate_index)
 
         return result, result_xml_path, coverage_xml_path
