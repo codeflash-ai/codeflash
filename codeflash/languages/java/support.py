@@ -365,10 +365,19 @@ class JavaSupport(LanguageSupport):
     # === Test Result Comparison ===
 
     def compare_test_results(
-        self, original_results_path: Path, candidate_results_path: Path, project_root: Path | None = None
+        self,
+        original_results_path: Path,
+        candidate_results_path: Path,
+        project_root: Path | None = None,
+        project_classpath: str | None = None,
     ) -> tuple[bool, list[Any]]:
         """Compare test results between original and candidate code."""
-        return _compare_test_results(original_results_path, candidate_results_path, project_root=project_root)
+        return _compare_test_results(
+            original_results_path,
+            candidate_results_path,
+            project_root=project_root,
+            project_classpath=project_classpath,
+        )
 
     # === Configuration ===
 

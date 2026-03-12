@@ -805,7 +805,11 @@ class PythonSupport:
     # === Test Result Comparison ===
 
     def compare_test_results(
-        self, original_results_path: Path, candidate_results_path: Path, project_root: Path | None = None
+        self,
+        original_results_path: Path,
+        candidate_results_path: Path,
+        project_root: Path | None = None,
+        project_classpath: str | None = None,
     ) -> tuple[bool, list]:
         """Compare test results between original and candidate code.
 
@@ -813,6 +817,7 @@ class PythonSupport:
             original_results_path: Path to original test results.
             candidate_results_path: Path to candidate test results.
             project_root: Project root directory.
+            project_classpath: Unused (Java only).
 
         Returns:
             Tuple of (are_equivalent, list of TestDiff objects).
