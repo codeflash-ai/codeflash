@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
@@ -124,6 +125,39 @@ def add_codeflash_dependency(build_file: Path, runtime_jar_path: Path) -> bool:
     except Exception as e:
         logger.exception("Failed to add dependency to %s: %s", build_file.name, e)
         return False
+
+
+def _normalize_gradle_xml_reports(reports_dir: Path) -> None:
+    """Normalize Gradle JUnit XML reports to match Maven Surefire format.
+
+    Gradle's JUnit Platform XML differs from Maven Surefire in ways that
+    can crash the downstream parser:
+    1. <failure>/<error> elements may omit the ``message`` attribute —
+       Maven always sets it.
+    2. Timeout information may only appear in the element body text,
+       not in the ``message`` attribute.
+
+    This function rewrites the XML files in-place so they conform to the
+    Maven Surefire contract the parser expects.
+    """
+    if not reports_dir.exists():
+        return
+    for xml_file in reports_dir.glob("TEST-*.xml"):
+        try:
+            tree = ET.parse(xml_file)
+            root = tree.getroot()
+            modified = False
+            for tag in ("failure", "error"):
+                for elem in root.iter(tag):
+                    if elem.get("message") is None:
+                        body = (elem.text or "").strip()
+                        first_line = body.split("\n", 1)[0] if body else ""
+                        elem.set("message", first_line)
+                        modified = True
+            if modified:
+                tree.write(xml_file, encoding="unicode", xml_declaration=True)
+        except ET.ParseError:
+            logger.debug("Failed to normalize Gradle XML report %s", xml_file)
 
 
 class GradleStrategy(BuildToolStrategy):
@@ -405,6 +439,7 @@ class GradleStrategy(BuildToolStrategy):
             f"        tasks.withType(Test) {{\n"
             f"            jvmArgs({quoted_args})\n"
             f'            systemProperty "junit.jupiter.execution.timeout.default", "{per_test_timeout}s"\n'
+            f"            reports.junitXml.outputPerTestCase = true\n"
             f"        }}\n"
             f"    }}\n"
             f"}}\n"
@@ -554,6 +589,7 @@ class GradleStrategy(BuildToolStrategy):
         )
 
         reports_dir = self.get_reports_dir(gradle_root, test_module)
+        _normalize_gradle_xml_reports(reports_dir)
         result_xml_path = _get_combined_junit_xml(reports_dir, -1)
 
         return result_xml_path, combined_result
@@ -582,6 +618,7 @@ class GradleStrategy(BuildToolStrategy):
         )
 
         reports_dir = self.get_reports_dir(build_root, test_module)
+        _normalize_gradle_xml_reports(reports_dir)
         result_xml_path = _get_combined_junit_xml(reports_dir, candidate_index)
 
         return result, result_xml_path, coverage_xml_path
