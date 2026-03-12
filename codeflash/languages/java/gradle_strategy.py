@@ -22,6 +22,19 @@ _BUILD = "build"
 
 logger = logging.getLogger(__name__)
 
+# Skip validation/analysis tasks that reject generated instrumented test files.
+# Equivalent to Maven's _MAVEN_VALIDATION_SKIP_FLAGS.
+_GRADLE_VALIDATION_SKIP_TASKS = [
+    "-x", "checkstyleTest",
+    "-x", "checkstyleMain",
+    "-x", "spotbugsTest",
+    "-x", "spotbugsMain",
+    "-x", "pmdTest",
+    "-x", "pmdMain",
+    "-x", "rat",
+    "-x", "japicmp",
+]
+
 # Cache for classpath strings — keyed on (gradle_root, test_module).
 _classpath_cache: dict[tuple[Path, str | None], str] = {}
 
@@ -232,6 +245,7 @@ class GradleStrategy(BuildToolStrategy):
             return False
 
         cmd = [gradle, f":{test_module}:classes", "-x", "test", "--build-cache", "--no-daemon"]
+        cmd.extend(_GRADLE_VALIDATION_SKIP_TASKS)
 
         logger.info("Pre-installing multi-module dependencies: %s (module: %s)", build_root, test_module)
         logger.debug("Running: %s", " ".join(cmd))
@@ -268,6 +282,7 @@ class GradleStrategy(BuildToolStrategy):
             cmd = [gradle, f":{test_module}:testClasses", "--no-daemon"]
         else:
             cmd = [gradle, "testClasses", "--no-daemon"]
+        cmd.extend(_GRADLE_VALIDATION_SKIP_TASKS)
 
         logger.debug("Compiling tests: %s in %s", " ".join(cmd), build_root)
 
@@ -460,6 +475,7 @@ class GradleStrategy(BuildToolStrategy):
                 f.write(init_script_content)
 
             cmd = [gradle, task, "--no-daemon", "--rerun", "--init-script", init_path]
+            cmd.extend(_GRADLE_VALIDATION_SKIP_TASKS)
 
             for class_filter in test_filter.split(","):
                 class_filter = class_filter.strip()
