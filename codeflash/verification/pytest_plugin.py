@@ -92,76 +92,77 @@ _ORIGINAL_TIME_TIME = _time_module.time
 _ORIGINAL_PERF_COUNTER = _time_module.perf_counter
 _ORIGINAL_PERF_COUNTER_NS = _time_module.perf_counter_ns
 _ORIGINAL_TIME_SLEEP = _time_module.sleep
+_ORIGINAL_MONOTONIC = _time_module.monotonic
+
+_DETERMINISTIC_PATCHES_APPLIED = False
 
 
 # Apply deterministic patches for reproducible test execution
 def _apply_deterministic_patches() -> None:
     """Apply patches to make all sources of randomness deterministic."""
+    global _DETERMINISTIC_PATCHES_APPLIED
+    if _DETERMINISTIC_PATCHES_APPLIED:
+        return
+    _DETERMINISTIC_PATCHES_APPLIED = True
+
     import datetime
     import random
     import time
     import uuid
-
-    # Store original functions (these are already saved globally above)
-    _original_time = time.time
-    _original_perf_counter = time.perf_counter
-    _original_datetime_now = datetime.datetime.now
-    _original_datetime_utcnow = datetime.datetime.utcnow
-    _original_uuid4 = uuid.uuid4
-    _original_uuid1 = uuid.uuid1
-    _original_random = random.random
 
     # Fixed deterministic values
     fixed_timestamp = 1761717605.108106
     fixed_datetime = datetime.datetime(2021, 1, 1, 2, 5, 10, tzinfo=datetime.timezone.utc)
     fixed_uuid = uuid.UUID("12345678-1234-5678-9abc-123456789012")
 
-    # Counter for perf_counter to maintain relative timing
+    # Counters for incrementing functions
     _perf_counter_start = fixed_timestamp
     _perf_counter_calls = 0
+    _monotonic_start = fixed_timestamp
+    _monotonic_calls = 0
+    _monotonic_ns_start = int(fixed_timestamp * 1_000_000_000)
+    _monotonic_ns_calls = 0
 
     def mock_time_time() -> float:
-        """Return fixed timestamp while preserving performance characteristics."""
-        _original_time()  # Maintain performance characteristics
         return fixed_timestamp
 
+    def mock_time_ns() -> int:
+        return int(fixed_timestamp * 1_000_000_000)
+
     def mock_perf_counter() -> float:
-        """Return incrementing counter for relative timing."""
         nonlocal _perf_counter_calls
-        _original_perf_counter()  # Maintain performance characteristics
         _perf_counter_calls += 1
-        return _perf_counter_start + (_perf_counter_calls * 0.001)  # Increment by 1ms each call
+        return _perf_counter_start + (_perf_counter_calls * 0.001)
 
-    def mock_datetime_now(tz: datetime.timezone | None = None) -> datetime.datetime:
-        """Return fixed datetime while preserving performance characteristics."""
-        _original_datetime_now(tz)  # Maintain performance characteristics
-        if tz is None:
-            return fixed_datetime
-        return fixed_datetime.replace(tzinfo=tz)
+    def mock_monotonic() -> float:
+        nonlocal _monotonic_calls
+        _monotonic_calls += 1
+        return _monotonic_start + (_monotonic_calls * 0.001)
 
-    def mock_datetime_utcnow() -> datetime.datetime:
-        """Return fixed UTC datetime while preserving performance characteristics."""
-        _original_datetime_utcnow()  # Maintain performance characteristics
-        return fixed_datetime
+    def mock_monotonic_ns() -> int:
+        nonlocal _monotonic_ns_calls
+        _monotonic_ns_calls += 1
+        return _monotonic_ns_start + (_monotonic_ns_calls * 1_000_000)
 
     def mock_uuid4() -> uuid.UUID:
-        """Return fixed UUID4 while preserving performance characteristics."""
-        _original_uuid4()  # Maintain performance characteristics
         return fixed_uuid
 
     def mock_uuid1(node: int | None = None, clock_seq: int | None = None) -> uuid.UUID:
-        """Return fixed UUID1 while preserving performance characteristics."""
-        _original_uuid1(node, clock_seq)  # Maintain performance characteristics
         return fixed_uuid
 
     def mock_random() -> float:
-        """Return deterministic random value while preserving performance characteristics."""
-        _original_random()  # Maintain performance characteristics
-        return 0.123456789  # Fixed random value
+        return 0.123456789
 
-    # Apply patches
+    # Patch time functions
+    # Note: perf_counter_ns is NOT patched because it is used by the profiling
+    # infrastructure (codeflash_capture, instrument_existing_tests) for timing measurements.
     time.time = mock_time_time
+    time.time_ns = mock_time_ns
     time.perf_counter = mock_perf_counter
+    time.monotonic = mock_monotonic
+    time.monotonic_ns = mock_monotonic_ns
+
+    # Patch uuid functions
     uuid.uuid4 = mock_uuid4
     uuid.uuid1 = mock_uuid1
 
@@ -169,36 +170,31 @@ def _apply_deterministic_patches() -> None:
     random.seed(42)
     random.random = mock_random
 
-    # For datetime, we need to use a different approach since we can't patch class methods
-    # Store original methods for potential later use
-    import builtins
+    # Patch datetime.datetime with a subclass that overrides now() and utcnow()
+    class DeterministicDatetime(datetime.datetime):
+        @classmethod
+        def now(cls, tz=None) -> datetime.datetime:
+            if tz is None:
+                return fixed_datetime.replace(tzinfo=None)
+            return fixed_datetime.astimezone(tz)
 
-    builtins._original_datetime_now = _original_datetime_now  # noqa: SLF001
-    builtins._original_datetime_utcnow = _original_datetime_utcnow  # noqa: SLF001
-    builtins._mock_datetime_now = mock_datetime_now  # noqa: SLF001
-    builtins._mock_datetime_utcnow = mock_datetime_utcnow  # noqa: SLF001
+        @classmethod
+        def utcnow(cls) -> datetime.datetime:
+            return fixed_datetime.replace(tzinfo=None)
+
+    datetime.datetime = DeterministicDatetime
 
     # Patch numpy.random if available
     if _HAS_NUMPY:
         import numpy as np
 
-        # Use modern numpy random generator approach
-        np.random.default_rng(42)
-        np.random.seed(42)  # Keep legacy seed for compatibility  # noqa: NPY002
+        np.random.seed(42)  # noqa: NPY002
 
-    # Patch os.urandom if needed
-    try:
-        import os
+    # Patch os.urandom
+    def mock_urandom(n: int) -> bytes:
+        return b"\x42" * n
 
-        _original_urandom = os.urandom
-
-        def mock_urandom(n: int) -> bytes:
-            _original_urandom(n)  # Maintain performance characteristics
-            return b"\x42" * n  # Fixed bytes
-
-        os.urandom = mock_urandom
-    except (ImportError, AttributeError):
-        pass
+    os.urandom = mock_urandom
 
 
 # Note: Deterministic patches are applied conditionally, not globally
