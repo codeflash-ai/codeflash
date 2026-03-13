@@ -96,19 +96,28 @@ def parse_config_file(
 ) -> tuple[dict[str, Any], Path]:
     package_json_path = find_package_json(config_file_path)
     pyproject_toml_path = find_closest_config_file("pyproject.toml") if config_file_path is None else None
+    codeflash_toml_path = find_closest_config_file("codeflash.toml") if config_file_path is None else None
+
+    # Pick the closest toml config (pyproject.toml or codeflash.toml).
+    # Java projects use codeflash.toml; Python projects use pyproject.toml.
+    closest_toml_path = None
+    if pyproject_toml_path and codeflash_toml_path:
+        closest_toml_path = max(pyproject_toml_path, codeflash_toml_path, key=lambda p: len(p.parent.parts))
+    else:
+        closest_toml_path = pyproject_toml_path or codeflash_toml_path
 
     # When both config files exist, prefer the one closer to CWD.
     # This prevents a parent-directory package.json (e.g., monorepo root)
-    # from overriding a closer pyproject.toml with [tool.codeflash].
+    # from overriding a closer pyproject.toml or codeflash.toml.
     use_package_json = False
     if package_json_path:
-        if pyproject_toml_path is None:
+        if closest_toml_path is None:
             use_package_json = True
         else:
             # Compare depth: more path parts = closer to CWD = more specific
             package_json_depth = len(package_json_path.parent.parts)
-            pyproject_toml_depth = len(pyproject_toml_path.parent.parts)
-            use_package_json = package_json_depth >= pyproject_toml_depth
+            toml_depth = len(closest_toml_path.parent.parts)
+            use_package_json = package_json_depth >= toml_depth
 
     if use_package_json:
         assert package_json_path is not None
