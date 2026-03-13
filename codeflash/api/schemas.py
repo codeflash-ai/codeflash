@@ -194,9 +194,7 @@ class TestGenRequest:
     def to_payload(self) -> dict[str, Any]:
         """Convert to API payload dict, maintaining backward compatibility."""
         # Backward compat: backend still expects python_version
-        python_version = (
-            self.language_info.version if self.language_info.name == "python" else _PLATFORM_PYTHON_VERSION
-        )
+        python_version = self.language_info.version if self.language_info.name == "python" else _PLATFORM_PYTHON_VERSION
 
         payload = {
             "source_code_being_tested": self.source_code,
