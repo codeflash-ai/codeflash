@@ -7,6 +7,7 @@ import sys
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from enum import Enum, auto
+from functools import cache
 from pathlib import Path
 from typing import Any, Union
 
@@ -55,6 +56,7 @@ class JavaSetupInfo:
     benchmarks_root: Union[str, None] = None
 
 
+@cache
 def _get_theme():
     """Get the CodeflashTheme - imported lazily to avoid circular imports."""
     from codeflash.cli_cmds.init_config import CodeflashTheme
