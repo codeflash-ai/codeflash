@@ -914,6 +914,7 @@ class TestResults(BaseModel):  # noqa: PLW1641
         return max(test_result.loop_index for test_result in self.test_results)
 
     def get_test_pass_fail_report_by_type(self) -> dict[TestType, dict[str, int]]:
+        """Aggregate pass/fail counts for the first loop iteration, grouped by test type."""
         report: dict[TestType, dict[str, int]] = {tt: {"passed": 0, "failed": 0} for tt in TestType}
         for test_result in self.test_results:
             if test_result.loop_index != 1:
