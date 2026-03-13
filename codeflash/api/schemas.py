@@ -12,9 +12,12 @@ Design principles:
 
 from __future__ import annotations
 
+import platform
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
+
+_PLATFORM_PYTHON_VERSION = platform.python_version()
 
 
 class ModuleSystem(str, Enum):
@@ -190,6 +193,11 @@ class TestGenRequest:
 
     def to_payload(self) -> dict[str, Any]:
         """Convert to API payload dict, maintaining backward compatibility."""
+        # Backward compat: backend still expects python_version
+        python_version = (
+            self.language_info.version if self.language_info.name == "python" else _PLATFORM_PYTHON_VERSION
+        )
+
         payload = {
             "source_code_being_tested": self.source_code,
             "function_to_optimize": {"function_name": self.function_name, "is_async": self.is_async},
@@ -204,17 +212,9 @@ class TestGenRequest:
             "codeflash_version": self.codeflash_version,
             "is_async": self.is_async,
             "is_numerical_code": self.is_numerical_code,
+            "language_version": self.language_info.version,
+            "python_version": python_version,
         }
-
-        # Add language version (canonical for all languages)
-        payload["language_version"] = self.language_info.version
-
-        # Backward compat: backend still expects python_version
-        import platform
-
-        payload["python_version"] = (
-            self.language_info.version if self.language_info.name == "python" else platform.python_version()
-        )
 
         # Module system for JS/TS
         if self.language_info.module_system != ModuleSystem.UNKNOWN:
