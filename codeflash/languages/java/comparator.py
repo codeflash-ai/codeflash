@@ -263,7 +263,7 @@ def compare_test_results(
                     candidate_value=diff.get("candidateValue"),
                     test_src_code=test_src_code,
                     candidate_pytest_error=diff.get("candidateError"),
-                    original_pass=True,
+                    original_pass=scope_str != "exception",
                     candidate_pass=scope_str not in ("missing", "exception"),
                     original_pytest_error=diff.get("originalError"),
                 )
