@@ -78,6 +78,13 @@ class BuildToolStrategy(ABC):
         ...
 
     @abstractmethod
+    def compile_source_only(
+        self, build_root: Path, env: dict[str, str], test_module: str | None, timeout: int = 120
+    ) -> subprocess.CompletedProcess[str]:
+        """Compile only main source code (not tests). Used when test classes are already compiled."""
+        ...
+
+    @abstractmethod
     def get_classpath(
         self, build_root: Path, env: dict[str, str], test_module: str | None, timeout: int = 60
     ) -> str | None:

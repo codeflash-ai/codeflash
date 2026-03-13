@@ -427,6 +427,30 @@ class MavenStrategy(BuildToolStrategy):
             logger.exception("Maven compilation failed: %s", e)
             return subprocess.CompletedProcess(args=cmd, returncode=-1, stdout="", stderr=str(e))
 
+    def compile_source_only(
+        self, build_root: Path, env: dict[str, str], test_module: str | None, timeout: int = 120
+    ) -> subprocess.CompletedProcess[str]:
+        from codeflash.languages.java.test_runner import _run_cmd_kill_pg_on_timeout
+
+        mvn = self.find_executable(build_root)
+        if not mvn:
+            logger.error("Maven not found")
+            return subprocess.CompletedProcess(args=["mvn"], returncode=-1, stdout="", stderr="Maven not found")
+
+        cmd = [mvn, "compile", "-e", "-B"]
+        cmd.extend(_MAVEN_VALIDATION_SKIP_FLAGS)
+
+        if test_module:
+            cmd.extend(["-pl", test_module])
+
+        logger.debug("Compiling source only: %s in %s", " ".join(cmd), build_root)
+
+        try:
+            return _run_cmd_kill_pg_on_timeout(cmd, cwd=build_root, env=env, timeout=timeout)
+        except Exception as e:
+            logger.exception("Maven source compilation failed: %s", e)
+            return subprocess.CompletedProcess(args=cmd, returncode=-1, stdout="", stderr=str(e))
+
     def get_classpath(
         self, build_root: Path, env: dict[str, str], test_module: str | None, timeout: int = 60
     ) -> str | None:

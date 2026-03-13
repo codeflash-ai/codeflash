@@ -373,6 +373,30 @@ class GradleStrategy(BuildToolStrategy):
             logger.exception("Gradle compilation failed: %s", e)
             return subprocess.CompletedProcess(args=cmd, returncode=-1, stdout="", stderr=str(e))
 
+    def compile_source_only(
+        self, build_root: Path, env: dict[str, str], test_module: str | None, timeout: int = 120
+    ) -> subprocess.CompletedProcess[str]:
+        from codeflash.languages.java.test_runner import _run_cmd_kill_pg_on_timeout
+
+        gradle = self.find_executable(build_root)
+        if not gradle:
+            logger.error("Gradle not found")
+            return subprocess.CompletedProcess(args=["gradle"], returncode=-1, stdout="", stderr="Gradle not found")
+
+        if test_module:
+            cmd = [gradle, f":{test_module}:classes", "--no-daemon"]
+        else:
+            cmd = [gradle, "classes", "--no-daemon"]
+        cmd.extend(["--init-script", _get_skip_validation_init_script()])
+
+        logger.debug("Compiling source only: %s in %s", " ".join(cmd), build_root)
+
+        try:
+            return _run_cmd_kill_pg_on_timeout(cmd, cwd=build_root, env=env, timeout=timeout)
+        except Exception as e:
+            logger.exception("Gradle source compilation failed: %s", e)
+            return subprocess.CompletedProcess(args=cmd, returncode=-1, stdout="", stderr=str(e))
+
     def get_classpath(
         self, build_root: Path, env: dict[str, str], test_module: str | None, timeout: int = 60
     ) -> str | None:
