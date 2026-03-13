@@ -102,6 +102,22 @@ class InitDecorator(ast.NodeTransformer):
         self._init_kwarg = ast.arg(arg="kwargs")
         self._init_self_arg = ast.arg(arg="self", annotation=None)
 
+        # Precreate commonly reused AST fragments for classes that lack __init__
+        # Create the super().__init__(*args, **kwargs) Expr (reuse prebuilt pieces)
+        self._super_call_expr = ast.Expr(
+            value=ast.Call(func=self._super_func, args=[self._super_starred], keywords=[self._super_kwarg])
+        )
+        # Create function arguments: self, *args, **kwargs (reuse arg nodes)
+        self._init_arguments = ast.arguments(
+            posonlyargs=[],
+            args=[self._init_self_arg],
+            vararg=self._init_vararg,
+            kwonlyargs=[],
+            kw_defaults=[],
+            kwarg=self._init_kwarg,
+            defaults=[],
+        )
+
     def visit_ImportFrom(self, node: ast.ImportFrom) -> ast.ImportFrom:
         # Check if our import already exists
         if node.module == "codeflash.verification.codeflash_capture" and any(
@@ -156,27 +172,42 @@ class InitDecorator(ast.NodeTransformer):
                     self.inserted_decorator = True
 
         if not has_init:
+            # Skip dataclasses — their __init__ is auto-generated at class creation time and isn't in the AST.
+            # The synthetic __init__ with super().__init__(*args, **kwargs) overrides it and fails because
+            # object.__init__() doesn't accept the dataclass field kwargs.
+            # TODO: support by saving a reference to the generated __init__ before overriding, e.g.
+            # _orig_init = ClassName.__init__; then calling _orig_init(self, *args, **kwargs) in the wrapper
+            for dec in node.decorator_list:
+                dec_name = self._expr_name(dec)
+                if dec_name is not None and dec_name.endswith("dataclass"):
+                    return node
+
+            # Skip NamedTuples — their __init__ is synthesized and cannot be overwritten.
+            for base in node.bases:
+                base_name = self._expr_name(base)
+                if base_name is not None and base_name.endswith("NamedTuple"):
+                    return node
+
             # Create super().__init__(*args, **kwargs) call (use prebuilt AST fragments)
-            super_call = ast.Expr(
-                value=ast.Call(func=self._super_func, args=[self._super_starred], keywords=[self._super_kwarg])
-            )
-            # Create function arguments: self, *args, **kwargs (reuse arg nodes)
-            arguments = ast.arguments(
-                posonlyargs=[],
-                args=[self._init_self_arg],
-                vararg=self._init_vararg,
-                kwonlyargs=[],
-                kw_defaults=[],
-                kwarg=self._init_kwarg,
-                defaults=[],
-            )
+            super_call = self._super_call_expr
+            # Create the complete function using prebuilt arguments/body but attach the class-specific decorator
 
             # Create the complete function
             init_func = ast.FunctionDef(
-                name="__init__", args=arguments, body=[super_call], decorator_list=[decorator], returns=None
+                name="__init__", args=self._init_arguments, body=[super_call], decorator_list=[decorator], returns=None
             )
 
             node.body.insert(0, init_func)
             self.inserted_decorator = True
 
         return node
+
+    def _expr_name(self, node: ast.AST) -> str | None:
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Call):
+            return self._expr_name(node.func)
+        if isinstance(node, ast.Attribute):
+            parent = self._expr_name(node.value)
+            return f"{parent}.{node.attr}" if parent else node.attr
+        return None

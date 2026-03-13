@@ -1,3 +1,18 @@
+from codeflash.code_utils.compat import LF
+from codeflash.version import __version__ as version
+
+CODEFLASH_LOGO: str = (
+    f"{LF}"
+    r"                   _          ___  _               _     " + f"{LF}"
+    r"                  | |        / __)| |             | |    " + f"{LF}"
+    r"  ____   ___    _ | |  ____ | |__ | |  ____   ___ | | _  " + f"{LF}"
+    r" / ___) / _ \  / || | / _  )|  __)| | / _  | /___)| || \ " + f"{LF}"
+    r"( (___ | |_| |( (_| |( (/ / | |   | |( ( | ||___ || | | |" + f"{LF}"
+    r" \____) \___/  \____| \____)|_|   |_| \_||_|(___/ |_| |_|" + f"{LF}"
+    f"{('v' + version).rjust(66)}{LF}"
+    f"{LF}"
+)
+
 SPINNER_TYPES = {
     "point",
     "simpleDots",

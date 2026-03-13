@@ -632,6 +632,6 @@ def format_line_profile_results(
     if line_contents is None:
         line_contents = results.get("line_contents", {})
 
-    from codeflash.verification.parse_line_profile_test_output import show_text_non_python
+    from codeflash.languages.python.parse_line_profile_test_output import show_text_non_python
 
     return show_text_non_python(results, line_contents)

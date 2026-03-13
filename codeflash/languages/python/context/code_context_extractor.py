@@ -37,7 +37,6 @@ from codeflash.models.models import (
     CodeStringsMarkdown,
     FunctionSource,
 )
-from codeflash.optimization.function_context import belongs_to_function_qualified
 
 if TYPE_CHECKING:
     from jedi.api.classes import Name
@@ -122,6 +121,13 @@ def get_code_optimization_context(
         remove_docstrings=False,
         code_context_type=CodeContextType.READ_WRITABLE,
     )
+
+    # Ensure the target file is first in the code blocks so the LLM knows which file to optimize
+    target_relative = function_to_optimize.file_path.resolve().relative_to(project_root_path.resolve())
+    target_blocks = [cs for cs in final_read_writable_code.code_strings if cs.file_path == target_relative]
+    other_blocks = [cs for cs in final_read_writable_code.code_strings if cs.file_path != target_relative]
+    if target_blocks:
+        final_read_writable_code.code_strings = target_blocks + other_blocks
 
     read_only_code_markdown = extract_code_markdown_context_from_files(
         helpers_of_fto_dict,
@@ -432,6 +438,7 @@ def get_function_sources_from_jedi(
                                 fully_qualified_name=fqn,
                                 only_function_name=func_name,
                                 source_code=definition.get_line_code(),
+                                definition_type=definition.type,
                             )
                             file_path_to_function_source[definition_path].add(function_source)
                             function_source_list.append(function_source)
@@ -1462,3 +1469,41 @@ def prune_cst(
             include_init_dunder=include_init_dunder,
         ),
     )
+
+
+def belongs_to_method(name: Name, class_name: str, method_name: str) -> bool:
+    """Check if the given name belongs to the specified method."""
+    return belongs_to_function(name, method_name) and belongs_to_class(name, class_name)
+
+
+def belongs_to_function(name: Name, function_name: str) -> bool:
+    """Check if the given jedi Name is a direct child of the specified function."""
+    if name.name == function_name:  # Handles function definition and recursive function calls
+        return False
+    if (name := name.parent()) and name.type == "function":
+        return bool(name.name == function_name)
+    return False
+
+
+def belongs_to_class(name: Name, class_name: str) -> bool:
+    """Check if given jedi Name is a direct child of the specified class."""
+    while name := name.parent():
+        if name.type == "class":
+            return bool(name.name == class_name)
+    return False
+
+
+def belongs_to_function_qualified(name: Name, qualified_function_name: str) -> bool:
+    """Check if the given jedi Name is a direct child of the specified function, matched by qualified function name."""
+    try:
+        if (
+            name.full_name.startswith(name.module_name)
+            and get_qualified_name(name.module_name, name.full_name) == qualified_function_name
+        ):
+            # Handles function definition and recursive function calls
+            return False
+        if (name := name.parent()) and name.type == "function":
+            return get_qualified_name(name.module_name, name.full_name) == qualified_function_name
+        return False
+    except ValueError:
+        return False

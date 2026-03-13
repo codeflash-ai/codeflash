@@ -1,6 +1,5 @@
 import shutil
 import sqlite3
-import time
 from pathlib import Path
 
 import pytest
@@ -18,6 +17,7 @@ def test_trace_benchmarks() -> None:
     replay_tests_dir = benchmarks_root / "codeflash_replay_tests"
     tests_root = project_root / "tests"
     output_file = (benchmarks_root / Path("test_trace_benchmarks.trace")).resolve()
+    conn: sqlite3.Connection | None = None
     trace_benchmarks_pytest(benchmarks_root, tests_root, project_root, output_file)
     assert output_file.exists()
     try:
@@ -121,8 +121,8 @@ def test_trace_benchmarks() -> None:
             assert actual[4] == expected[4], f"Mismatch at index {idx} for benchmark_function_name"
             assert actual[5] == expected[5], f"Mismatch at index {idx} for benchmark_module_path"
             assert actual[6] == expected[6], f"Mismatch at index {idx} for benchmark_line_number"
-        # Close connection
         conn.close()
+        conn = None
         generate_replay_test(output_file, replay_tests_dir)
         test_class_sort_path = replay_tests_dir / Path(
             "test_tests_pytest_benchmarks_test_test_benchmark_bubble_sort_example__replay_test_0.py"
@@ -217,7 +217,8 @@ def test_code_to_optimize_bubble_sort_codeflash_trace_sorter_test_no_func():
 """
         assert test_sort_path.read_text("utf-8").strip() == test_sort_code.strip()
     finally:
-        # cleanup
+        if conn is not None:
+            conn.close()
         output_file.unlink(missing_ok=True)
         shutil.rmtree(replay_tests_dir)
 
@@ -231,6 +232,7 @@ def test_trace_multithreaded_benchmark() -> None:
     output_file = (benchmarks_root / Path("test_trace_benchmarks.trace")).resolve()
     trace_benchmarks_pytest(benchmarks_root, tests_root, project_root, output_file)
     assert output_file.exists()
+    conn: sqlite3.Connection | None = None
     try:
         # check contents of trace file
         # connect to database
@@ -243,8 +245,6 @@ def test_trace_multithreaded_benchmark() -> None:
             "SELECT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name"
         )
         function_calls = cursor.fetchall()
-
-        conn.close()
 
         # Assert the length of function calls
         assert len(function_calls) == 10, f"Expected 10 function calls, but got {len(function_calls)}"
@@ -281,11 +281,9 @@ def test_trace_multithreaded_benchmark() -> None:
             assert actual[4] == expected[4], f"Mismatch at index {idx} for benchmark_function_name"
             assert actual[5] == expected[5], f"Mismatch at index {idx} for benchmark_module_path"
             assert actual[6] == expected[6], f"Mismatch at index {idx} for benchmark_line_number"
-        # Close connection
-        conn.close()
-
     finally:
-        # cleanup
+        if conn is not None:
+            conn.close()
         output_file.unlink(missing_ok=True)
 
 
@@ -296,6 +294,7 @@ def test_trace_benchmark_decorator() -> None:
     output_file = (benchmarks_root / Path("test_trace_benchmarks.trace")).resolve()
     trace_benchmarks_pytest(benchmarks_root, tests_root, project_root, output_file)
     assert output_file.exists()
+    conn: sqlite3.Connection | None = None
     try:
         # check contents of trace file
         # connect to database
@@ -352,11 +351,7 @@ def test_trace_benchmark_decorator() -> None:
             assert Path(actual[3]).name == Path(expected[3]).name, f"Mismatch at index {idx} for file_path"
             assert actual[4] == expected[4], f"Mismatch at index {idx} for benchmark_function_name"
             assert actual[5] == expected[5], f"Mismatch at index {idx} for benchmark_module_path"
-        # Close connection
-        cursor.close()
-        conn.close()
-        time.sleep(2)
     finally:
-        # cleanup
+        if conn is not None:
+            conn.close()
         output_file.unlink(missing_ok=True)
-        time.sleep(1)

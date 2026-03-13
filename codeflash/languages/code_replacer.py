@@ -6,14 +6,13 @@ via the LanguageSupport protocol.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
 from codeflash.languages.base import FunctionFilterCriteria, Language
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import LanguageSupport
     from codeflash.models.models import CodeStringsMarkdown
@@ -26,45 +25,35 @@ def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStrin
     from codeflash.languages.current import is_python
 
     file_to_code_context = optimized_code.file_to_path()
-    relative_path_str = str(relative_path)
-    module_optimized_code = file_to_code_context.get(relative_path_str)
-    if module_optimized_code is None:
-        # Fallback: if there's only one code block with None file path,
-        # use it regardless of the expected path (the AI server doesn't always include file paths)
-        if "None" in file_to_code_context and len(file_to_code_context) == 1:
-            module_optimized_code = file_to_code_context["None"]
-            logger.debug(f"Using code block with None file_path for {relative_path}")
-        else:
-            # Fallback: try to match by just the filename (for Java/JS where the AI
-            # might return just the class name like "Algorithms.java" instead of
-            # the full path like "src/main/java/com/example/Algorithms.java")
-            target_filename = relative_path.name
-            for file_path_str, code in file_to_code_context.items():
-                if file_path_str:
-                    if file_path_str.endswith(target_filename) and (
-                        len(file_path_str) == len(target_filename)
-                        or file_path_str[-len(target_filename) - 1] in ("/", "\\")
-                    ):
-                        module_optimized_code = code
-                        logger.debug(f"Matched {file_path_str} to {relative_path} by filename")
-                        break
+    module_optimized_code = file_to_code_context.get(str(relative_path))
+    if module_optimized_code is not None:
+        return module_optimized_code
 
-            if module_optimized_code is None:
-                # Also try matching if there's only one code file, but ONLY for non-Python
-                # languages where path matching is less strict.
-                if len(file_to_code_context) == 1 and not is_python():
-                    only_key = next(iter(file_to_code_context.keys()))
-                    module_optimized_code = file_to_code_context[only_key]
-                    logger.debug(f"Using only code block {only_key} for {relative_path}")
-                else:
-                    if logger.isEnabledFor(logger.level):
-                        logger.warning(
-                            f"Optimized code not found for {relative_path} In the context\n-------\n{optimized_code}\n-------\n"
-                            "re-check your 'markdown code structure'"
-                            f"existing files are {file_to_code_context.keys()}"
-                        )
-                    module_optimized_code = ""
-    return module_optimized_code
+    # Fallback 1: single code block with no file path
+    if "None" in file_to_code_context and len(file_to_code_context) == 1:
+        logger.debug(f"Using code block with None file_path for {relative_path}")
+        return file_to_code_context["None"]
+
+    # Fallback 2: match by filename (basename) — the LLM sometimes returns a different
+    # directory prefix but the correct filename
+    target_name = relative_path.name
+    basename_matches = [
+        code for path, code in file_to_code_context.items() if path != "None" and Path(path).name == target_name
+    ]
+    if len(basename_matches) == 1:
+        logger.debug(f"Using basename-matched code block for {relative_path}")
+        return basename_matches[0]
+
+    # Fallback 3: single code block for non-Python (AI often returns one block with wrong path)
+    if len(file_to_code_context) == 1 and not is_python():
+        only_key = next(iter(file_to_code_context.keys()))
+        logger.debug(f"Using only code block {only_key} for {relative_path}")
+        return file_to_code_context[only_key]
+
+    logger.warning(
+        f"Optimized code not found for {relative_path}, existing files are {list(file_to_code_context.keys())}"
+    )
+    return ""
 
 
 def replace_function_definitions_for_language(

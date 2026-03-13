@@ -10,8 +10,8 @@ from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 from codeflash.models.models import FunctionParent, TestFile, TestFiles, TestingMode, TestType, VerificationType
 from codeflash.verification.equivalence import compare_test_results
-from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
-from codeflash.verification.test_runner import execute_test_subprocess
+from codeflash.languages.python.instrument_codeflash_capture import instrument_codeflash_capture
+from codeflash.languages.python.test_runner import execute_test_subprocess
 from codeflash.verification.verification_utils import TestConfig
 
 

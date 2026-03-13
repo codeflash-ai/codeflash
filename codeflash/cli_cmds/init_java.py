@@ -57,7 +57,7 @@ class JavaSetupInfo:
 
 def _get_theme():
     """Get the CodeflashTheme - imported lazily to avoid circular imports."""
-    from codeflash.cli_cmds.cmd_init import CodeflashTheme
+    from codeflash.cli_cmds.init_config import CodeflashTheme
 
     return CodeflashTheme()
 
@@ -161,7 +161,8 @@ def detect_java_test_framework(project_root: Path) -> str:
 
 def init_java_project() -> None:
     """Initialize Codeflash for a Java project."""
-    from codeflash.cli_cmds.cmd_init import install_github_actions, install_github_app, prompt_api_key
+    from codeflash.cli_cmds.github_workflow import install_github_actions
+    from codeflash.cli_cmds.init_auth import install_github_app, prompt_api_key
 
     lang_panel = Panel(
         Text(
@@ -244,7 +245,7 @@ def collect_java_setup_info() -> JavaSetupInfo:
     """Collect setup information for Java projects."""
     from rich.prompt import Confirm
 
-    from codeflash.cli_cmds.cmd_init import ask_for_telemetry
+    from codeflash.cli_cmds.init_config import ask_for_telemetry
 
     curdir = Path.cwd()
 

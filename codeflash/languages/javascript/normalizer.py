@@ -1,7 +1,6 @@
 """JavaScript/TypeScript code normalizer using tree-sitter.
 
-Not currently wired into JavaScriptSupport.normalize_code — kept as a
-ready-to-use upgrade path when AST-based JS deduplication is needed.
+Wired into JavaScriptSupport.normalize_code for AST-based JS deduplication.
 
 The old CodeNormalizer ABC (deleted from base.py) is preserved below for reference.
 """
@@ -236,8 +235,7 @@ def normalize_js_code(code: str, typescript: bool = False) -> str:
     Uses tree-sitter to parse and normalize variable names. Falls back to
     basic comment/whitespace stripping if tree-sitter is unavailable or parsing fails.
 
-    Not currently wired into JavaScriptSupport.normalize_code — kept as a
-    ready-to-use upgrade path when AST-based JS deduplication is needed.
+    Wired into JavaScriptSupport.normalize_code for AST-based JS deduplication.
     """
     try:
         from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage

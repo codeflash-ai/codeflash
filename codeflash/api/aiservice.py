@@ -15,14 +15,15 @@ from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.languages import Language, current_language
-from codeflash.languages.current import current_language_support
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     AIServiceRefinerRequest,
     CodeStringsMarkdown,
+    FunctionRepairInfo,
     OptimizationReviewResult,
     OptimizedCandidate,
     OptimizedCandidateSource,
+    TestFileReview,
 )
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as codeflash_version
@@ -57,14 +58,22 @@ class AiServiceClient:
         payload: dict[str, Any], language_version: str | None = None, module_system: str | None = None
     ) -> None:
         """Add language version and module system metadata to an API payload."""
-        # Canonical for all languages
         payload["language_version"] = language_version
-        # Backward compat: Python backend still expects python_version
         payload["python_version"] = language_version if current_language() == Language.PYTHON else None
 
         if current_language() != Language.PYTHON:
             if module_system:
                 payload["module_system"] = module_system
+
+    @staticmethod
+    def log_error_response(response: requests.Response, action: str, ph_event: str) -> None:
+        """Log and report an API error response."""
+        try:
+            error = response.json()["error"]
+        except Exception:
+            error = response.text
+        logger.error(f"Error {action}: {response.status_code} - {error}")
+        ph(ph_event, {"response_status_code": response.status_code, "error": error})
 
     def get_aiservice_base_url(self) -> str:
         if os.environ.get("CODEFLASH_AIS_SERVER", default="prod").lower() == "local":
@@ -97,14 +106,6 @@ class AiServiceClient:
         ------
             requests.exceptions.RequestException: If the request fails
 
-        """
-        """Make an API request to the given endpoint on the AI service.
-
-        :param endpoint: The endpoint to call, e.g., "/optimize".
-        :param method: The HTTP method to use ('GET' or 'POST').
-        :param payload: Optional JSON payload to include in the POST request body.
-        :param timeout: The timeout for the request.
-        :return: The response object from the API.
         """
         url = f"{self.base_url}/ai{endpoint}"
         if method.upper() == "POST":
@@ -214,12 +215,7 @@ class AiServiceClient:
             logger.info(f"!lsp|Received {len(optimizations_json)} optimization candidates.")
             console.rule()
             return self._get_valid_candidates(optimizations_json, OptimizedCandidateSource.OPTIMIZE, language)
-        try:
-            error = response.json()["error"]
-        except Exception:
-            error = response.text
-        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
-        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        self.log_error_response(response, "generating optimized candidates", "cli-optimize-error-response")
         console.rule()
         return []
 
@@ -286,12 +282,7 @@ class AiServiceClient:
             end_time = time.perf_counter()
             logger.debug(f"!lsp|Generating jit rewritten code took {end_time - start_time:.2f} seconds.")
             return self._get_valid_candidates(optimizations_json, OptimizedCandidateSource.JIT_REWRITE)
-        try:
-            error = response.json()["error"]
-        except Exception:
-            error = response.text
-        logger.error(f"Error generating jit rewritten candidate: {response.status_code} - {error}")
-        ph("cli-jit-rewrite-error-response", {"response_status_code": response.status_code, "error": error})
+        self.log_error_response(response, "generating jit rewritten candidate", "cli-jit-rewrite-error-response")
         console.rule()
         return []
 
@@ -360,12 +351,7 @@ class AiServiceClient:
             logger.info(f"!lsp|Received {len(optimizations_json)} line profiler optimization candidates.")
             console.rule()
             return self._get_valid_candidates(optimizations_json, OptimizedCandidateSource.OPTIMIZE_LP)
-        try:
-            error = response.json()["error"]
-        except Exception:
-            error = response.text
-        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
-        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        self.log_error_response(response, "generating optimized candidates", "cli-optimize-error-response")
         console.rule()
         return []
 
@@ -393,12 +379,7 @@ class AiServiceClient:
 
             return valid_candidates[0]
 
-        try:
-            error = response.json()["error"]
-        except Exception:
-            error = response.text
-        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
-        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        self.log_error_response(response, "generating optimized candidates", "cli-optimize-error-response")
         return None
 
     def optimize_code_refinement(self, request: list[AIServiceRefinerRequest]) -> list[OptimizedCandidate]:
@@ -454,12 +435,7 @@ class AiServiceClient:
 
             return self._get_valid_candidates(refined_optimizations, OptimizedCandidateSource.REFINE)
 
-        try:
-            error = response.json()["error"]
-        except Exception:
-            error = response.text
-        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
-        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        self.log_error_response(response, "generating optimized candidates", "cli-optimize-error-response")
         console.rule()
         return []
 
@@ -506,12 +482,7 @@ class AiServiceClient:
 
             return valid_candidates[0]
 
-        try:
-            error = response.json()["error"]
-        except Exception:
-            error = response.text
-        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
-        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        self.log_error_response(response, "generating optimized candidates", "cli-optimize-error-response")
         console.rule()
         return None
 
@@ -606,12 +577,7 @@ class AiServiceClient:
             explanation: str = response.json()["explanation"]
             console.rule()
             return explanation
-        try:
-            error = response.json()["error"]
-        except Exception:
-            error = response.text
-        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
-        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        self.log_error_response(response, "generating optimized candidates", "cli-optimize-error-response")
         console.rule()
         return ""
 
@@ -658,12 +624,7 @@ class AiServiceClient:
             ranking: list[int] = response.json()["ranking"]
             console.rule()
             return ranking
-        try:
-            error = response.json()["error"]
-        except Exception:
-            error = response.text
-        logger.error(f"Error generating ranking: {response.status_code} - {error}")
-        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        self.log_error_response(response, "generating ranking", "cli-optimize-error-response")
         console.rule()
         return None
 
@@ -724,7 +685,7 @@ class AiServiceClient:
         language_version: str | None = None,
         module_system: str | None = None,
         is_numerical_code: bool | None = None,
-    ) -> tuple[str, str, str] | None:
+    ) -> tuple[str, str, str, str | None] | None:
         """Generate regression tests for the given function by making a request to the Django endpoint.
 
         Parameters
@@ -747,6 +708,8 @@ class AiServiceClient:
 
         """
         # Validate test framework based on language
+        from codeflash.languages.current import current_language_support
+
         lang_support = current_language_support()
         valid_frameworks = lang_support.valid_test_frameworks
         assert test_framework in valid_frameworks, (
@@ -779,6 +742,8 @@ class AiServiceClient:
         try:
             response = self.make_ai_service_request("/testgen", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
+            from codeflash.telemetry.posthog_cf import ph
+
             logger.exception(f"Error generating tests: {e}")
             ph("cli-testgen-error-caught", {"error": str(e)})
             return None
@@ -792,16 +757,110 @@ class AiServiceClient:
                 response_json["generated_tests"],
                 response_json["instrumented_behavior_tests"],
                 response_json["instrumented_perf_tests"],
+                response_json.get("raw_generated_tests"),
             )
+        self.log_error_response(response, "generating tests", "cli-testgen-error-response")
+        return None
+
+    def review_generated_tests(
+        self,
+        tests: list[dict[str, Any]],
+        function_source_code: str,
+        function_name: str,
+        trace_id: str,
+        coverage_summary: str = "",
+        coverage_details: dict[str, Any] | None = None,
+        language: str = "python",
+    ) -> list[TestFileReview]:
+        payload: dict[str, Any] = {
+            "tests": tests,
+            "function_source_code": function_source_code,
+            "function_name": function_name,
+            "trace_id": trace_id,
+            "language": language,
+            "codeflash_version": codeflash_version,
+            "call_sequence": self.get_next_sequence(),
+        }
+        if coverage_summary:
+            payload["coverage_summary"] = coverage_summary
+        if coverage_details:
+            payload["coverage_details"] = coverage_details
+        self.add_language_metadata(payload)
         try:
-            error = response.json()["error"]
-            logger.error(f"Error generating tests: {response.status_code} - {error}")
-            ph("cli-testgen-error-response", {"response_status_code": response.status_code, "error": error})
+            response = self.make_ai_service_request("/testgen_review", payload=payload, timeout=self.timeout)
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Error reviewing generated tests: {e}")
+            ph("cli-testgen-review-error-caught", {"error": str(e)})
+            return []
+
+        if response.status_code == 200:
+            data = response.json()
+            return [
+                TestFileReview(
+                    test_index=r["test_index"],
+                    functions_to_repair=[
+                        FunctionRepairInfo(function_name=f["function_name"], reason=f.get("reason", ""))
+                        for f in r.get("functions", [])
+                    ],
+                )
+                for r in data.get("reviews", [])
+            ]
+        self.log_error_response(response, "reviewing generated tests", "cli-testgen-review-error-response")
+        return []
+
+    def repair_generated_tests(
+        self,
+        test_source: str,
+        functions_to_repair: list[FunctionRepairInfo],
+        function_source_code: str,
+        function_to_optimize: FunctionToOptimize,
+        helper_function_names: list[str],
+        module_path: Path,
+        test_module_path: Path,
+        test_framework: str,
+        test_timeout: int,
+        trace_id: str,
+        language: str = "python",
+        coverage_details: dict[str, Any] | None = None,
+        previous_repair_errors: dict[str, str] | None = None,
+        module_source_code: str = "",
+    ) -> tuple[str, str, str] | None:
+        payload: dict[str, Any] = {
+            "test_source": test_source,
+            "functions_to_repair": [
+                {"function_name": f.function_name, "reason": f.reason} for f in functions_to_repair
+            ],
+            "function_source_code": function_source_code,
+            "function_to_optimize": function_to_optimize,
+            "helper_function_names": helper_function_names,
+            "module_path": module_path,
+            "test_module_path": test_module_path,
+            "test_framework": test_framework,
+            "test_timeout": test_timeout,
+            "trace_id": trace_id,
+            "language": language,
+            "codeflash_version": codeflash_version,
+            "call_sequence": self.get_next_sequence(),
+        }
+        if module_source_code:
+            payload["module_source_code"] = module_source_code
+        if coverage_details:
+            payload["coverage_details"] = coverage_details
+        if previous_repair_errors:
+            payload["previous_repair_errors"] = previous_repair_errors
+        self.add_language_metadata(payload)
+        try:
+            response = self.make_ai_service_request("/testgen_repair", payload=payload, timeout=self.timeout)
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Error repairing generated tests: {e}")
+            ph("cli-testgen-repair-error-caught", {"error": str(e)})
             return None
-        except Exception:
-            logger.error(f"Error generating tests: {response.status_code} - {response.text}")
-            ph("cli-testgen-error-response", {"response_status_code": response.status_code, "error": response.text})
-            return None
+
+        if response.status_code == 200:
+            data = response.json()
+            return (data["generated_tests"], data["instrumented_behavior_tests"], data["instrumented_perf_tests"])
+        self.log_error_response(response, "repairing generated tests", "cli-testgen-repair-error-response")
+        return None
 
     def get_optimization_review(
         self,
@@ -875,12 +934,7 @@ class AiServiceClient:
             return OptimizationReviewResult(
                 review=cast("str", data["review"]), explanation=cast("str", data.get("review_explanation", ""))
             )
-        try:
-            error = cast("str", response.json()["error"])
-        except Exception:
-            error = response.text
-        logger.error(f"Error generating optimization review: {response.status_code} - {error}")
-        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        self.log_error_response(response, "generating optimization review", "cli-optimize-error-response")
         console.rule()
         return OptimizationReviewResult(review="", explanation="")
 

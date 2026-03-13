@@ -42,8 +42,8 @@ if TYPE_CHECKING:
     from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import DependencyResolver
+    from codeflash.languages.function_optimizer import FunctionOptimizer
     from codeflash.models.models import BenchmarkKey, FunctionCalledInTest, ValidCode
-    from codeflash.optimization.function_optimizer import FunctionOptimizer
 
 
 class Optimizer:
@@ -519,9 +519,10 @@ class Optimizer:
                 validated_original_code, _original_module_ast = prepared_modules[original_module_path]
 
                 function_iterator_count = i + 1
+                line_suffix = f":{function_to_optimize.starting_line}" if function_to_optimize.starting_line else ""
                 logger.info(
                     f"Optimizing function {function_iterator_count} of {len(globally_ranked_functions)}: "
-                    f"{function_to_optimize.qualified_name} (in {original_module_path.name})"
+                    f"{function_to_optimize.qualified_name} (in {original_module_path}{line_suffix})"
                 )
                 console.rule()
                 function_optimizer = None

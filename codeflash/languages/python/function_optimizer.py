@@ -4,9 +4,13 @@ import ast
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from codeflash.cli_cmds.console import console, logger
+from rich.syntax import Syntax
+
+from codeflash.cli_cmds.console import code_print, console, logger
+from codeflash.code_utils.code_utils import unified_diff_strings
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
 from codeflash.either import Failure, Success
+from codeflash.languages.function_optimizer import FunctionOptimizer
 from codeflash.languages.python.context.unused_definition_remover import (
     detect_unused_helper_functions,
     revert_unused_helper_functions,
@@ -19,7 +23,6 @@ from codeflash.languages.python.static_analysis.code_replacer import (
 )
 from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports, contains_jit_decorator
 from codeflash.models.models import TestingMode, TestResults
-from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.parse_test_output import calculate_function_throughput_from_test_results
 
 if TYPE_CHECKING:
@@ -33,8 +36,10 @@ if TYPE_CHECKING:
         CodeStringsMarkdown,
         ConcurrencyMetrics,
         CoverageData,
+        GeneratedTestsList,
         OriginalCodeBaseline,
         TestDiff,
+        TestFileReview,
     )
 
 
@@ -82,9 +87,58 @@ class PythonFunctionOptimizer(FunctionOptimizer):
         return original_conftest_content
 
     def instrument_capture(self, file_path_to_helper_classes: dict[Path, set[str]]) -> None:
-        from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
+        from codeflash.languages.python.instrument_codeflash_capture import instrument_codeflash_capture
 
         instrument_codeflash_capture(self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root)
+
+    def display_repaired_functions(
+        self, generated_tests: GeneratedTestsList, reviews: list[TestFileReview], original_sources: dict[int, str]
+    ) -> None:
+        """Display per-function diffs of repaired tests using libcst."""
+        import libcst as cst
+
+        def extract_functions(source: str, names: set[str]) -> dict[str, str]:
+            """Extract functions by name from top-level and class bodies."""
+            try:
+                tree = cst.parse_module(source)
+            except cst.ParserSyntaxError:
+                logger.debug("Failed to parse source for diff display", exc_info=True)
+                return {}
+            result: dict[str, str] = {}
+            for node in tree.body:
+                if isinstance(node, cst.FunctionDef) and node.name.value in names:
+                    result[node.name.value] = tree.code_for_node(node)
+                elif isinstance(node, cst.ClassDef):
+                    for child in node.body.body:
+                        if isinstance(child, cst.FunctionDef) and child.name.value in names:
+                            result[child.name.value] = tree.code_for_node(child)
+            return result
+
+        for review in reviews:
+            gt = generated_tests.generated_tests[review.test_index]
+            repaired_names = {f.function_name for f in review.functions_to_repair}
+            new_source = gt.generated_original_test_source
+            old_source = original_sources.get(review.test_index, "")
+
+            old_funcs = extract_functions(old_source, repaired_names)
+            new_funcs = extract_functions(new_source, repaired_names)
+
+            for name in repaired_names:
+                old_func = old_funcs.get(name, "")
+                new_func = new_funcs.get(name, "")
+                if not new_func:
+                    continue
+                console.rule()
+                if old_func and old_func != new_func:
+                    diff = unified_diff_strings(
+                        old_func, new_func, fromfile=f"{name} (before)", tofile=f"{name} (after)"
+                    )
+                    if diff:
+                        logger.info(f"Repaired: {name}")
+                        console.print(Syntax(diff, "diff", theme="monokai"))
+                        continue
+                logger.info(f"Repaired: {name}")
+                code_print(new_func, language=self.function_to_optimize.language)
 
     def should_check_coverage(self) -> bool:
         return True
@@ -127,7 +181,7 @@ class PythonFunctionOptimizer(FunctionOptimizer):
     def parse_line_profile_test_results(
         self, line_profiler_output_file: Path | None
     ) -> tuple[TestResults | dict, CoverageData | None]:
-        from codeflash.verification.parse_line_profile_test_output import parse_line_profile_results
+        from codeflash.languages.python.parse_line_profile_test_output import parse_line_profile_results
 
         return parse_line_profile_results(line_profiler_output_file=line_profiler_output_file)
 
