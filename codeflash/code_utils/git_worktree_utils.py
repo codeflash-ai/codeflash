@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import configparser
+import os
 import shutil
 import stat
 import subprocess
@@ -65,6 +66,10 @@ def create_detached_worktree(module_root: Path) -> Optional[Path]:
 
     repository.git.worktree("add", "-d", str(worktree_dir))
 
+    # Write PID file so stale worktrees can be detected after SIGKILL
+    pid_file = worktree_dir / ".codeflash.pid"
+    pid_file.write_text(str(os.getpid()), encoding="utf-8")
+
     # Get uncommitted diff from the original repo
     repository.git.add("-N", ".")  # add the index for untracked files to be included in the diff
     exclude_binary_files = [":!*.pyc", ":!*.pyo", ":!*.pyd", ":!*.so", ":!*.dll", ":!*.whl", ":!*.egg", ":!*.egg-info", ":!*.pyz", ":!*.pkl", ":!*.pickle", ":!*.joblib", ":!*.npy", ":!*.npz", ":!*.h5", ":!*.hdf5", ":!*.pth", ":!*.pt", ":!*.pb", ":!*.onnx", ":!*.db", ":!*.sqlite", ":!*.sqlite3", ":!*.feather", ":!*.parquet", ":!*.jpg", ":!*.jpeg", ":!*.png", ":!*.gif", ":!*.bmp", ":!*.tiff", ":!*.webp", ":!*.wav", ":!*.mp3", ":!*.ogg", ":!*.flac", ":!*.mp4", ":!*.avi", ":!*.mov", ":!*.mkv", ":!*.pdf", ":!*.doc", ":!*.docx", ":!*.xls", ":!*.xlsx", ":!*.ppt", ":!*.pptx", ":!*.zip", ":!*.rar", ":!*.tar", ":!*.tar.gz", ":!*.tgz", ":!*.bz2", ":!*.xz"]  # fmt: off
@@ -117,6 +122,36 @@ def remove_worktree(worktree_dir: Path) -> None:
         logger.debug(f"Removed worktree: {worktree_dir}")
     except Exception:
         logger.exception(f"Failed to remove worktree: {worktree_dir}")
+
+
+def is_process_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # process exists but we can't signal it
+    return True
+
+
+def cleanup_stale_worktrees() -> None:
+    """Remove worktrees left behind by killed processes (e.g. SIGKILL)."""
+    if not worktree_dirs.exists():
+        return
+    for entry in worktree_dirs.iterdir():
+        if not entry.is_dir():
+            continue
+        pid_file = entry / ".codeflash.pid"
+        if pid_file.exists():
+            try:
+                pid = int(pid_file.read_text(encoding="utf-8").strip())
+            except (ValueError, OSError):
+                pid = None
+            if pid is not None and is_process_alive(pid):
+                continue  # worktree is still in use
+        # No PID file or owning process is dead — stale worktree
+        logger.info(f"Removing stale worktree: {entry}")
+        remove_worktree(entry)
 
 
 def create_diff_patch_from_worktree(
