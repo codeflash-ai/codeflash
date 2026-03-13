@@ -12,6 +12,7 @@ Design principles:
 
 from __future__ import annotations
 
+import platform
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -122,10 +123,16 @@ class OptimizeRequest:
 
     def to_payload(self) -> dict[str, Any]:
         """Convert to API payload dict, maintaining backward compatibility."""
+        # Cache frequently accessed attribute
+        lang = self.language_info
+
+        # Build payload in one shot using local references to minimize attribute lookups.
+        # Add language version (canonical for all languages)
+        # Backward compat: backend still expects python_version
         payload = {
             "source_code": self.source_code,
             "trace_id": self.trace_id,
-            "language": self.language_info.name,
+            "language": lang.name,
             "dependency_code": self.dependency_code,
             "is_async": self.is_async,
             "n_candidates": self.n_candidates,
@@ -135,21 +142,13 @@ class OptimizeRequest:
             "repo_name": self.repo_name,
             "current_username": self.current_username,
             "is_numerical_code": self.is_numerical_code,
+            "language_version": lang.version,
+            "python_version": (lang.version if lang.name == "python" else platform.python_version()),
         }
 
-        # Add language version (canonical for all languages)
-        payload["language_version"] = self.language_info.version
-
-        # Backward compat: backend still expects python_version
-        import platform
-
-        payload["python_version"] = (
-            self.language_info.version if self.language_info.name == "python" else platform.python_version()
-        )
-
         # Module system for JS/TS
-        if self.language_info.module_system != ModuleSystem.UNKNOWN:
-            payload["module_system"] = self.language_info.module_system.value
+        if lang.module_system != ModuleSystem.UNKNOWN:
+            payload["module_system"] = lang.module_system.value
 
         return payload
 
