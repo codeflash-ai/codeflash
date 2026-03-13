@@ -544,24 +544,6 @@ def get_java_test_command(build_tool: JavaBuildTool) -> str:
     return "mvn test"
 
 
-
-@lru_cache(maxsize=32)
-def _cached_repo_for_cwd(cwd: str) -> Repo | None:
-    try:
-        return Repo(Path(cwd), search_parent_directories=True)
-    except InvalidGitRepositoryError:
-        return None
-
-
-
-@lru_cache(maxsize=32)
-def _cached_git_remotes_for_cwd(cwd: str) -> list[str]:
-    repo = _cached_repo_for_cwd(cwd)
-    if not repo:
-        return []
-    return get_git_remotes(repo)
-
-
 @lru_cache(maxsize=32)
 def _cached_repo_for_cwd(cwd: str) -> Repo | None:
     try:
