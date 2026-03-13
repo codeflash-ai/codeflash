@@ -9,7 +9,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from codeflash.languages.base import Language, LanguageSupport
+from codeflash.languages.base import LanguageSupport
+from codeflash.languages.language_enum import Language
 from codeflash.languages.java.build_tools import find_test_root
 from codeflash.languages.java.comparator import compare_test_results as _compare_test_results
 from codeflash.languages.java.concurrency_analyzer import analyze_function_concurrency
@@ -344,6 +345,8 @@ class JavaSupport(LanguageSupport):
     def _build_runtime_map(self, inv_id_runtimes: dict[InvocationId, list[int]]) -> dict[str, int]:
         unique_inv_ids: dict[str, int] = {}
         for inv_id, runtimes in inv_id_runtimes.items():
+            if not inv_id.test_function_name:
+                continue
             test_qualified_name = (
                 inv_id.test_class_name + "." + inv_id.test_function_name
                 if inv_id.test_class_name
@@ -369,6 +372,33 @@ class JavaSupport(LanguageSupport):
     ) -> tuple[bool, list[Any]]:
         """Compare test results between original and candidate code."""
         return _compare_test_results(original_results_path, candidate_results_path, project_root=project_root)
+
+    # === Reference Finding ===
+
+    def find_references(
+        self,
+        function: FunctionToOptimize,
+        project_root: Path,
+        tests_root: Path | None = None,
+        max_files: int = 500,
+    ) -> list[Any]:
+        return []
+
+    def extract_calling_function_source(self, source_code: str, function_name: str, ref_line: int) -> str | None:
+        return None
+
+    def load_coverage(
+        self,
+        coverage_database_file: Path,
+        function_name: str,
+        code_context: Any,
+        source_file: Path,
+        coverage_config_file: Path | None = None,
+    ) -> None:
+        return None
+
+    def setup_test_config(self, test_cfg: Any, file_path: Path) -> None:
+        return None
 
     # === Configuration ===
 
