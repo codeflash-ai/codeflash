@@ -135,6 +135,8 @@ def _handle_config_loading(args: Namespace) -> Namespace | None:
     # Normal config loading
     return process_pyproject_config(args)
 
+def my_fun():
+    return 1
 
 def print_codeflash_banner() -> None:
     """Print the Codeflash banner with the branded styling.
