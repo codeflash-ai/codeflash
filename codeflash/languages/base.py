@@ -7,6 +7,8 @@ while FunctionToOptimize is the canonical representation of functions across all
 
 from __future__ import annotations
 
+import fnmatch
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
@@ -175,6 +177,23 @@ class FunctionFilterCriteria:
     min_lines: int | None = None
     max_lines: int | None = None
 
+    def __post_init__(self) -> None:
+        """Pre-compile regex patterns from glob patterns for faster matching."""
+        self._include_regexes = [re.compile(fnmatch.translate(p)) for p in self.include_patterns]
+        self._exclude_regexes = [re.compile(fnmatch.translate(p)) for p in self.exclude_patterns]
+
+    def matches_include_patterns(self, name: str) -> bool:
+        """Check if name matches any include pattern."""
+        if not self._include_regexes:
+            return True
+        return any(regex.match(name) for regex in self._include_regexes)
+
+    def matches_exclude_patterns(self, name: str) -> bool:
+        """Check if name matches any exclude pattern."""
+        if not self._exclude_regexes:
+            return False
+        return any(regex.match(name) for regex in self._exclude_regexes)
+
 
 @dataclass
 class ReferenceInfo:
@@ -307,12 +326,8 @@ class LanguageSupport(Protocol):
         ...
 
     @property
-    def default_language_version(self) -> str | None:
-        """Default language version string sent to AI service.
-
-        Returns None for languages where the runtime version is auto-detected (e.g. Python).
-        Returns a version string (e.g. "ES2022") for languages that need an explicit default.
-        """
+    def language_version(self) -> str | None:
+        """The detected language version (e.g., "17" for Java, "ES2022" for JS)."""
         ...
 
     @property
@@ -324,6 +339,12 @@ class LanguageSupport(Protocol):
     def test_result_serialization_format(self) -> str:
         """How test return values are serialized: "pickle" or "json"."""
         return "pickle"
+
+    def parse_test_xml(
+        self, test_xml_file_path: Path, test_files: Any, test_config: Any, run_result: Any = None
+    ) -> Any:
+        """Parse JUnit XML test results with language-specific timing markers."""
+        ...
 
     def load_coverage(
         self,
@@ -725,6 +746,58 @@ class LanguageSupport(Protocol):
         """
         ...
 
+    def get_test_dir_for_source(self, test_dir: Path, source_file: Path | None) -> Path | None:
+        """Find the appropriate test directory for a source file.
+
+        For monorepos (JS), this finds the package's test directory from the source file path.
+        Default implementation returns None (no special directory resolution needed).
+
+        Args:
+            test_dir: The root tests directory.
+            source_file: Path to the source file being tested.
+
+        Returns:
+            The test directory path, or None if no special handling is needed.
+
+        """
+        return None
+
+    def resolve_test_file_from_class_path(self, test_class_path: str, base_dir: Path) -> Path | None:
+        """Resolve a test file path from a class path string.
+
+        Languages with non-Python module systems (e.g., Java package names like
+        "com.example.TestClass") override this to provide custom resolution.
+        Default: returns None (fall through to shared Python/file-path logic).
+
+        Args:
+            test_class_path: The class path string from JUnit XML (e.g., "com.example.TestClass").
+            base_dir: The base directory for tests.
+
+        Returns:
+            Path to the test file if found, None to fall through to default logic.
+
+        """
+        return None
+
+    def resolve_test_module_path_for_pr(
+        self, test_module_path: str, tests_project_rootdir: Path, non_generated_tests: set[Path]
+    ) -> Path | None:
+        """Resolve test module path to an absolute file path for PR creation.
+
+        Languages with non-Python module naming (e.g., Java class names)
+        override this. Default: returns None (fall through to shared logic).
+
+        Args:
+            test_module_path: The test module path string.
+            tests_project_rootdir: The tests project root directory.
+            non_generated_tests: Set of known non-generated test file paths.
+
+        Returns:
+            Resolved absolute path, or None to fall through to default logic.
+
+        """
+        return None
+
     def find_test_root(self, project_root: Path) -> Path | None:
         """Find the test root directory for a project.
 
@@ -823,6 +896,31 @@ class LanguageSupport(Protocol):
         """
         return {}, ""
 
+    def run_line_profile_tests(
+        self,
+        test_paths: Any,
+        test_env: dict[str, str],
+        cwd: Path,
+        timeout: int | None = None,
+        project_root: Path | None = None,
+        line_profile_output_file: Path | None = None,
+    ) -> tuple[Path, Any]:
+        """Run tests for line profiling.
+
+        Args:
+            test_paths: TestFiles object containing test file information.
+            test_env: Environment variables for the test run.
+            cwd: Working directory for running tests.
+            timeout: Optional timeout in seconds.
+            project_root: Project root directory.
+            line_profile_output_file: Path where line profile results will be written.
+
+        Returns:
+            Tuple of (result_file_path, subprocess_result).
+
+        """
+        ...
+
     def run_behavioral_tests(
         self,
         test_paths: Any,
@@ -860,6 +958,7 @@ class LanguageSupport(Protocol):
         min_loops: int = 5,
         max_loops: int = 100_000,
         target_duration_seconds: float = 10.0,
+        inner_iterations: int = 100,
     ) -> tuple[Path, Any]:
         """Run benchmarking tests for this language.
 
@@ -872,31 +971,7 @@ class LanguageSupport(Protocol):
             min_loops: Minimum number of loops for benchmarking.
             max_loops: Maximum number of loops for benchmarking.
             target_duration_seconds: Target duration for benchmarking in seconds.
-
-        Returns:
-            Tuple of (result_file_path, subprocess_result).
-
-        """
-        ...
-
-    def run_line_profile_tests(
-        self,
-        test_paths: Any,
-        test_env: dict[str, str],
-        cwd: Path,
-        timeout: int | None = None,
-        project_root: Path | None = None,
-        line_profile_output_file: Path | None = None,
-    ) -> tuple[Path, Any]:
-        """Run tests for line profiling.
-
-        Args:
-            test_paths: TestFiles object containing test file information.
-            test_env: Environment variables for the test run.
-            cwd: Working directory for running tests.
-            timeout: Optional timeout in seconds.
-            project_root: Project root directory.
-            line_profile_output_file: Path where line profile results will be written.
+            inner_iterations: Number of inner loop iterations per test method (Java only).
 
         Returns:
             Tuple of (result_file_path, subprocess_result).

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
-from codeflash.languages.base import FunctionFilterCriteria
+from codeflash.languages.base import FunctionFilterCriteria, Language
 
 if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -22,6 +22,8 @@ _SOURCE_CRITERIA = FunctionFilterCriteria(require_return=False, require_export=F
 
 
 def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStringsMarkdown) -> str:
+    from codeflash.languages.current import is_python
+
     file_to_code_context = optimized_code.file_to_path()
     module_optimized_code = file_to_code_context.get(str(relative_path))
     if module_optimized_code is not None:
@@ -41,6 +43,12 @@ def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStrin
     if len(basename_matches) == 1:
         logger.debug(f"Using basename-matched code block for {relative_path}")
         return basename_matches[0]
+
+    # Fallback 3: single code block for non-Python (AI often returns one block with wrong path)
+    if len(file_to_code_context) == 1 and not is_python():
+        only_key = next(iter(file_to_code_context.keys()))
+        logger.debug(f"Using only code block {only_key} for {relative_path}")
+        return file_to_code_context[only_key]
 
     logger.warning(
         f"Optimized code not found for {relative_path}, existing files are {list(file_to_code_context.keys())}"
@@ -71,19 +79,27 @@ def replace_function_definitions_for_language(
         optimized_code=code_to_apply, original_source=original_source_code, module_abspath=module_abspath
     )
 
+    language = lang_support.language
+
     if (
         function_to_optimize
         and function_to_optimize.starting_line
         and function_to_optimize.ending_line
         and function_to_optimize.file_path == module_abspath
     ):
-        optimized_func = _extract_function_from_code(
-            lang_support, code_to_apply, function_to_optimize.function_name, module_abspath
-        )
-        if optimized_func:
-            new_code = lang_support.replace_function(original_source_code, function_to_optimize, optimized_func)
-        else:
+        # For Java, we need to pass the full optimized code so replace_function can
+        # extract and add any new class members (static fields, helper methods).
+        # For other languages, we extract just the target function.
+        if language == Language.JAVA:
             new_code = lang_support.replace_function(original_source_code, function_to_optimize, code_to_apply)
+        else:
+            optimized_func = _extract_function_from_code(
+                lang_support, code_to_apply, function_to_optimize.function_name, module_abspath
+            )
+            if optimized_func:
+                new_code = lang_support.replace_function(original_source_code, function_to_optimize, optimized_func)
+            else:
+                new_code = lang_support.replace_function(original_source_code, function_to_optimize, code_to_apply)
     else:
         new_code = original_source_code
         modified = False
@@ -102,12 +118,18 @@ def replace_function_definitions_for_language(
             if func is None:
                 continue
 
-            optimized_func = _extract_function_from_code(
-                lang_support, code_to_apply, func.function_name, module_abspath
-            )
-            if optimized_func:
-                new_code = lang_support.replace_function(new_code, func, optimized_func)
+            # For Java, pass the full optimized code to handle class member insertion.
+            # For other languages, extract just the target function.
+            if language == Language.JAVA:
+                new_code = lang_support.replace_function(new_code, func, code_to_apply)
                 modified = True
+            else:
+                optimized_func = _extract_function_from_code(
+                    lang_support, code_to_apply, func.function_name, module_abspath
+                )
+                if optimized_func:
+                    new_code = lang_support.replace_function(new_code, func, optimized_func)
+                    modified = True
 
         if not modified:
             logger.warning(f"Could not find function {function_names} in {module_abspath}")

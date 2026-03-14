@@ -111,13 +111,25 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     # For JS/TS projects, tests_root is optional (Jest auto-discovers tests)
     # Default to module_root if not specified
     is_js_ts_project = pyproject_config.get("language") in ("javascript", "typescript")
+    is_java_project = pyproject_config.get("language") == "java"
 
     # Set the test framework singleton for JS/TS projects
     if is_js_ts_project and pyproject_config.get("test_framework"):
         set_current_test_framework(pyproject_config["test_framework"])
 
     if args.tests_root is None:
-        if is_js_ts_project:
+        if is_java_project:
+            # Try standard Maven/Gradle test directories
+            for test_dir in ["src/test/java", "test", "tests"]:
+                test_path = Path(args.module_root).parent / test_dir if "/" in test_dir else Path(test_dir)
+                if not test_path.is_absolute():
+                    test_path = Path.cwd() / test_path
+                if test_path.is_dir():
+                    args.tests_root = str(test_path)
+                    break
+            if args.tests_root is None:
+                args.tests_root = str(Path.cwd() / "src" / "test" / "java")
+        elif is_js_ts_project:
             # Try common JS test directories at project root first
             for test_dir in ["test", "tests", "__tests__"]:
                 if Path(test_dir).is_dir():
@@ -187,6 +199,19 @@ def process_pyproject_config(args: Namespace) -> Namespace:
 def project_root_from_module_root(module_root: Path, pyproject_file_path: Path) -> Path:
     if pyproject_file_path.parent == module_root:
         return module_root
+
+    # For Java projects, find the directory containing pom.xml or build.gradle
+    # This handles the case where module_root is src/main/java
+    current = module_root
+    while current != current.parent:
+        if (current / "pom.xml").exists():
+            return current.resolve()
+        if (current / "build.gradle").exists() or (current / "build.gradle.kts").exists():
+            return current.resolve()
+        if (current / "codeflash.toml").exists():
+            return current.resolve()
+        current = current.parent
+
     return module_root.parent.resolve()
 
 

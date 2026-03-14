@@ -13,7 +13,7 @@ ALL_CONFIG_FILES: dict[Path, dict[str, Path]] = {}
 
 
 def find_pyproject_toml(config_file: Path | None = None) -> Path:
-    # Find the pyproject.toml file on the root of the project
+    # Find the pyproject.toml or codeflash.toml file on the root of the project
 
     if config_file is not None:
         config_file = Path(config_file)
@@ -29,15 +29,21 @@ def find_pyproject_toml(config_file: Path | None = None) -> Path:
     # see if it was encountered before in search
     if cur_path in PYPROJECT_TOML_CACHE:
         return PYPROJECT_TOML_CACHE[cur_path]
-    # map current path to closest file
+    # map current path to closest file - check both pyproject.toml and codeflash.toml
     while dir_path != dir_path.parent:
+        # First check pyproject.toml (Python projects)
         config_file = dir_path / "pyproject.toml"
         if config_file.exists():
             PYPROJECT_TOML_CACHE[cur_path] = config_file
             return config_file
-        # Search for pyproject.toml in the parent directories
+        # Then check codeflash.toml (Java/other projects)
+        config_file = dir_path / "codeflash.toml"
+        if config_file.exists():
+            PYPROJECT_TOML_CACHE[cur_path] = config_file
+            return config_file
+        # Search in parent directories
         dir_path = dir_path.parent
-    msg = f"Could not find pyproject.toml in the current directory {Path.cwd()} or any of the parent directories. Please create it by running `codeflash init`, or pass the path to pyproject.toml with the --config-file argument."
+    msg = f"Could not find pyproject.toml or codeflash.toml in the current directory {Path.cwd()} or any of the parent directories. Please create it by running `codeflash init`, or pass the path to the config file with the --config-file argument."
 
     raise ValueError(msg) from None
 
@@ -90,19 +96,28 @@ def parse_config_file(
 ) -> tuple[dict[str, Any], Path]:
     package_json_path = find_package_json(config_file_path)
     pyproject_toml_path = find_closest_config_file("pyproject.toml") if config_file_path is None else None
+    codeflash_toml_path = find_closest_config_file("codeflash.toml") if config_file_path is None else None
+
+    # Pick the closest toml config (pyproject.toml or codeflash.toml).
+    # Java projects use codeflash.toml; Python projects use pyproject.toml.
+    closest_toml_path = None
+    if pyproject_toml_path and codeflash_toml_path:
+        closest_toml_path = max(pyproject_toml_path, codeflash_toml_path, key=lambda p: len(p.parent.parts))
+    else:
+        closest_toml_path = pyproject_toml_path or codeflash_toml_path
 
     # When both config files exist, prefer the one closer to CWD.
     # This prevents a parent-directory package.json (e.g., monorepo root)
-    # from overriding a closer pyproject.toml with [tool.codeflash].
+    # from overriding a closer pyproject.toml or codeflash.toml.
     use_package_json = False
     if package_json_path:
-        if pyproject_toml_path is None:
+        if closest_toml_path is None:
             use_package_json = True
         else:
             # Compare depth: more path parts = closer to CWD = more specific
             package_json_depth = len(package_json_path.parent.parts)
-            pyproject_toml_depth = len(pyproject_toml_path.parent.parts)
-            use_package_json = package_json_depth >= pyproject_toml_depth
+            toml_depth = len(closest_toml_path.parent.parts)
+            use_package_json = package_json_depth >= toml_depth
 
     if use_package_json:
         assert package_json_path is not None
@@ -138,13 +153,14 @@ def parse_config_file(
         if lsp_mode:
             # don't fail in lsp mode if codeflash config is not found.
             return {}, config_file_path
-        msg = f"Could not find the 'codeflash' block in the config file {config_file_path}. Please run 'codeflash init' to add Codeflash config in the pyproject.toml config file."
+        msg = f"Could not find the 'codeflash' block in the config file {config_file_path}. Please run 'codeflash init' to add Codeflash config."
         raise ValueError(msg) from e
     assert isinstance(config, dict)
 
     if config == {} and lsp_mode:
         return {}, config_file_path
 
+    # Preserve language field if present (important for Java/JS projects using codeflash.toml)
     # default values:
     path_keys = ["module-root", "tests-root", "benchmarks-root"]
     path_list_keys = ["ignore-paths"]
@@ -155,7 +171,9 @@ def parse_config_file(
         "disable-imports-sorting": False,
         "benchmark": False,
     }
-    list_str_keys = {"formatter-cmds": ["black $file"]}
+    # Note: formatter-cmds defaults to empty list. For Python projects, black is typically
+    # detected by the project detector. For Java projects, no formatter is supported yet.
+    list_str_keys = {"formatter-cmds": []}
 
     for key, default_value in str_keys.items():
         if key in config:

@@ -538,7 +538,7 @@ def run_mocha_benchmarking_tests(
 
     # Subprocess timeout: target_duration + 120s headroom for Mocha startup.
     # capturePerf's time budget governs actual looping.
-    total_timeout = max(120, (target_duration_ms // 1000) + 120)
+    total_timeout = max(120, (target_duration_ms // 1000) + 120, timeout or 120)
 
     logger.debug(f"Running Mocha benchmarking tests: {' '.join(mocha_cmd)}")
     logger.debug(

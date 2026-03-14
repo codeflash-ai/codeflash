@@ -3809,8 +3809,7 @@ def test_enrich_testgen_context_deduplicates(tmp_path: Path) -> None:
     package_dir.mkdir()
     (package_dir / "__init__.py").write_text("", encoding="utf-8")
     (package_dir / "base.py").write_text(
-        "class Base:\n    def __init__(self, x: int):\n        self.x = x\n",
-        encoding="utf-8",
+        "class Base:\n    def __init__(self, x: int):\n        self.x = x\n", encoding="utf-8"
     )
 
     code = "from mypkg.base import Base\n\nclass A(Base):\n    pass\n\nclass B(Base):\n    pass\n"
@@ -3954,8 +3953,7 @@ def test_testgen_context_includes_external_base_inits(tmp_path: Path) -> None:
     package_dir.mkdir()
     (package_dir / "__init__.py").write_text("", encoding="utf-8")
     (package_dir / "base.py").write_text(
-        "class BaseDict:\n    def __init__(self, data=None):\n        self.data = data or {}\n",
-        encoding="utf-8",
+        "class BaseDict:\n    def __init__(self, data=None):\n        self.data = data or {}\n", encoding="utf-8"
     )
 
     code = "from mypkg.base import BaseDict\n\nclass MyCustomDict(BaseDict):\n    def target_method(self):\n        return self.data\n"
@@ -4009,8 +4007,7 @@ def test_enrich_testgen_context_attribute_base(tmp_path: Path) -> None:
     package_dir.mkdir()
     (package_dir / "__init__.py").write_text("", encoding="utf-8")
     (package_dir / "base.py").write_text(
-        "class CustomDict:\n    def __init__(self, data=None):\n        self.data = data or {}\n",
-        encoding="utf-8",
+        "class CustomDict:\n    def __init__(self, data=None):\n        self.data = data or {}\n", encoding="utf-8"
     )
 
     code = "from mypkg.base import CustomDict\n\nclass MyDict(CustomDict):\n    def custom_method(self):\n        return self.data\n"
@@ -4702,18 +4699,17 @@ def get_log_level() -> str:
     assert "class AppConfig:" in combined
     assert "@property" in combined
 
+
 def test_extract_parameter_type_constructors_isinstance_single(tmp_path: Path) -> None:
     """isinstance(x, SomeType) in function body should be picked up."""
     pkg = tmp_path / "mypkg"
     pkg.mkdir()
     (pkg / "__init__.py").write_text("", encoding="utf-8")
     (pkg / "models.py").write_text(
-        "class Widget:\n    def __init__(self, size: int):\n        self.size = size\n",
-        encoding="utf-8",
+        "class Widget:\n    def __init__(self, size: int):\n        self.size = size\n", encoding="utf-8"
     )
     (pkg / "processor.py").write_text(
-        "from mypkg.models import Widget\n\ndef check(x) -> bool:\n    return isinstance(x, Widget)\n",
-        encoding="utf-8",
+        "from mypkg.models import Widget\n\ndef check(x) -> bool:\n    return isinstance(x, Widget)\n", encoding="utf-8"
     )
     fto = FunctionToOptimize(
         function_name="check", file_path=(pkg / "processor.py").resolve(), starting_line=3, ending_line=4
@@ -4754,12 +4750,10 @@ def test_extract_parameter_type_constructors_type_is_pattern(tmp_path: Path) -> 
     pkg.mkdir()
     (pkg / "__init__.py").write_text("", encoding="utf-8")
     (pkg / "models.py").write_text(
-        "class Gadget:\n    def __init__(self, val: float):\n        self.val = val\n",
-        encoding="utf-8",
+        "class Gadget:\n    def __init__(self, val: float):\n        self.val = val\n", encoding="utf-8"
     )
     (pkg / "processor.py").write_text(
-        "from mypkg.models import Gadget\n\ndef check(x) -> bool:\n    return type(x) is Gadget\n",
-        encoding="utf-8",
+        "from mypkg.models import Gadget\n\ndef check(x) -> bool:\n    return type(x) is Gadget\n", encoding="utf-8"
     )
     fto = FunctionToOptimize(
         function_name="check", file_path=(pkg / "processor.py").resolve(), starting_line=3, ending_line=4
@@ -4775,8 +4769,7 @@ def test_extract_parameter_type_constructors_base_classes(tmp_path: Path) -> Non
     pkg.mkdir()
     (pkg / "__init__.py").write_text("", encoding="utf-8")
     (pkg / "base.py").write_text(
-        "class BaseProcessor:\n    def __init__(self, config: str):\n        self.config = config\n",
-        encoding="utf-8",
+        "class BaseProcessor:\n    def __init__(self, config: str):\n        self.config = config\n", encoding="utf-8"
     )
     (pkg / "child.py").write_text(
         "from mypkg.base import BaseProcessor\n\nclass ChildProcessor(BaseProcessor):\n"
@@ -4801,8 +4794,7 @@ def test_extract_parameter_type_constructors_isinstance_builtins_excluded(tmp_pa
     pkg.mkdir()
     (pkg / "__init__.py").write_text("", encoding="utf-8")
     (pkg / "func.py").write_text(
-        "def check(x) -> bool:\n    return isinstance(x, (int, str, float))\n",
-        encoding="utf-8",
+        "def check(x) -> bool:\n    return isinstance(x, (int, str, float))\n", encoding="utf-8"
     )
     fto = FunctionToOptimize(
         function_name="check", file_path=(pkg / "func.py").resolve(), starting_line=1, ending_line=2
@@ -4817,8 +4809,7 @@ def test_extract_parameter_type_constructors_transitive(tmp_path: Path) -> None:
     pkg.mkdir()
     (pkg / "__init__.py").write_text("", encoding="utf-8")
     (pkg / "config.py").write_text(
-        "class Config:\n    def __init__(self, debug: bool = False):\n        self.debug = debug\n",
-        encoding="utf-8",
+        "class Config:\n    def __init__(self, debug: bool = False):\n        self.debug = debug\n", encoding="utf-8"
     )
     (pkg / "models.py").write_text(
         "from mypkg.config import Config\n\n"
@@ -4826,8 +4817,7 @@ def test_extract_parameter_type_constructors_transitive(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     (pkg / "processor.py").write_text(
-        "from mypkg.models import Widget\n\ndef process(w: Widget) -> str:\n    return str(w)\n",
-        encoding="utf-8",
+        "from mypkg.models import Widget\n\ndef process(w: Widget) -> str:\n    return str(w)\n", encoding="utf-8"
     )
     fto = FunctionToOptimize(
         function_name="process", file_path=(pkg / "processor.py").resolve(), starting_line=3, ending_line=4
@@ -4836,8 +4826,6 @@ def test_extract_parameter_type_constructors_transitive(tmp_path: Path) -> None:
     combined = "\n".join(cs.code for cs in result.code_strings)
     assert "class Widget:" in combined
     assert "class Config:" in combined
-
-
 
 
 def test_enrich_testgen_context_third_party_uses_stubs(tmp_path: Path) -> None:

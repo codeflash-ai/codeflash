@@ -14,6 +14,7 @@ from codeflash.code_utils.github_utils import github_pr_url
 from codeflash.code_utils.tabulate import tabulate
 from codeflash.code_utils.time_utils import format_perf, format_time
 from codeflash.github.PrComment import FileDiffContent, PrComment
+from codeflash.languages import current_language_support
 from codeflash.languages.python.static_analysis.code_replacer import is_zero_diff
 from codeflash.result.critic import performance_gain
 
@@ -139,8 +140,18 @@ def existing_tests_source_for(
             else:
                 logger.debug(f"[PR-DEBUG] No mapping found for {instrumented_abs_path.name}")
         else:
-            # Python: convert module name to path
-            abs_path = Path(test_module_path.replace(".", os.sep)).with_suffix(".py").resolve()
+            lang = current_language_support()
+            # Let language-specific resolution handle non-Python module paths
+            lang_result = lang.resolve_test_module_path_for_pr(
+                test_module_path, test_cfg.tests_project_rootdir, non_generated_tests
+            )
+            if lang_result is not None:
+                abs_path = lang_result
+            else:
+                # Default (Python): convert module name to path
+                abs_path = (
+                    Path(test_module_path.replace(".", os.sep)).with_suffix(lang.default_file_extension).resolve()
+                )
         if abs_path not in non_generated_tests:
             skipped_count += 1
             if skipped_count <= 5:

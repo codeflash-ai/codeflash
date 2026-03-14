@@ -470,8 +470,7 @@ class OuterClass:
 
     decorator_name = get_decorator_name_for_mode(TestingMode.BEHAVIOR)
     code_with_decorator = nested_async_code.replace(
-        "        async def nested_async_method",
-        f"        @{decorator_name}\n        async def nested_async_method",
+        "        async def nested_async_method", f"        @{decorator_name}\n        async def nested_async_method"
     )
     code_with_import = f"from codeflash_async_wrapper import {decorator_name}\n{code_with_decorator}"
     expected = sort_imports(code=code_with_import, float_to_top=True)

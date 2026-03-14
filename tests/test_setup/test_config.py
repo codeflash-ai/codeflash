@@ -74,10 +74,7 @@ class TestCodeflashConfig:
 
     def test_to_pyproject_dict_minimal(self):
         """Should only include non-default values."""
-        config = CodeflashConfig(
-            language="python",
-            module_root="src",
-        )
+        config = CodeflashConfig(language="python", module_root="src")
 
         result = config.to_pyproject_dict()
 
@@ -149,11 +146,7 @@ class TestCodeflashConfig:
 
     def test_from_package_json_dict(self):
         """Should create config from package.json dict."""
-        data = {
-            "moduleRoot": "lib",
-            "formatterCmds": ["npx prettier --write $file"],
-            "disableTelemetry": True,
-        }
+        data = {"moduleRoot": "lib", "formatterCmds": ["npx prettier --write $file"], "disableTelemetry": True}
 
         config = CodeflashConfig.from_package_json_dict(data)
 
@@ -168,11 +161,7 @@ class TestWritePyprojectToml:
 
     def test_creates_new_pyproject(self, tmp_path):
         """Should create pyproject.toml if it doesn't exist."""
-        config = CodeflashConfig(
-            language="python",
-            module_root="src",
-            tests_root="tests",
-        )
+        config = CodeflashConfig(language="python", module_root="src", tests_root="tests")
 
         success, message = _write_pyproject_toml(tmp_path, config)
 
@@ -192,10 +181,7 @@ class TestWritePyprojectToml:
             '[project]\nname = "myapp"\nversion = "1.0.0"\n\n[tool.ruff]\nline-length = 120'
         )
 
-        config = CodeflashConfig(
-            language="python",
-            module_root="src",
-        )
+        config = CodeflashConfig(language="python", module_root="src")
 
         success, message = _write_pyproject_toml(tmp_path, config)
 
@@ -210,15 +196,9 @@ class TestWritePyprojectToml:
 
     def test_updates_existing_codeflash_section(self, tmp_path):
         """Should update existing codeflash section."""
-        (tmp_path / "pyproject.toml").write_text(
-            '[tool.codeflash]\nmodule-root = "old"\ntests-root = "old_tests"'
-        )
+        (tmp_path / "pyproject.toml").write_text('[tool.codeflash]\nmodule-root = "old"\ntests-root = "old_tests"')
 
-        config = CodeflashConfig(
-            language="python",
-            module_root="new",
-            tests_root="new_tests",
-        )
+        config = CodeflashConfig(language="python", module_root="new", tests_root="new_tests")
 
         success, message = _write_pyproject_toml(tmp_path, config)
 
@@ -235,15 +215,10 @@ class TestWritePackageJson:
 
     def test_adds_codeflash_section(self, tmp_path):
         """Should add codeflash section to package.json."""
-        (tmp_path / "package.json").write_text(json.dumps({
-            "name": "myapp",
-            "version": "1.0.0"
-        }, indent=2))
+        (tmp_path / "package.json").write_text(json.dumps({"name": "myapp", "version": "1.0.0"}, indent=2))
 
         config = CodeflashConfig(
-            language="javascript",
-            module_root="lib",
-            formatter_cmds=["npx prettier --write $file"],
+            language="javascript", module_root="lib", formatter_cmds=["npx prettier --write $file"]
         )
 
         success, message = _write_package_json(tmp_path, config)
@@ -259,16 +234,14 @@ class TestWritePackageJson:
 
     def test_preserves_existing_content(self, tmp_path):
         """Should preserve existing package.json content."""
-        (tmp_path / "package.json").write_text(json.dumps({
-            "name": "myapp",
-            "dependencies": {"lodash": "^4.17.0"},
-            "devDependencies": {"jest": "^29.0.0"}
-        }, indent=2))
-
-        config = CodeflashConfig(
-            language="javascript",
-            module_root="lib",
+        (tmp_path / "package.json").write_text(
+            json.dumps(
+                {"name": "myapp", "dependencies": {"lodash": "^4.17.0"}, "devDependencies": {"jest": "^29.0.0"}},
+                indent=2,
+            )
         )
+
+        config = CodeflashConfig(language="javascript", module_root="lib")
 
         success, message = _write_package_json(tmp_path, config)
 
@@ -281,10 +254,9 @@ class TestWritePackageJson:
 
     def test_removes_empty_codeflash_section(self, tmp_path):
         """Should remove codeflash section if all defaults."""
-        (tmp_path / "package.json").write_text(json.dumps({
-            "name": "myapp",
-            "codeflash": {"moduleRoot": "old"}
-        }, indent=2))
+        (tmp_path / "package.json").write_text(
+            json.dumps({"name": "myapp", "codeflash": {"moduleRoot": "old"}}, indent=2)
+        )
 
         # Config with all defaults - should result in empty dict
         config = CodeflashConfig(
@@ -342,9 +314,7 @@ class TestRemoveConfig:
 
     def test_removes_from_pyproject(self, tmp_path):
         """Should remove codeflash section from pyproject.toml."""
-        (tmp_path / "pyproject.toml").write_text(
-            '[project]\nname = "test"\n\n[tool.codeflash]\nmodule-root = "src"'
-        )
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"\n\n[tool.codeflash]\nmodule-root = "src"')
 
         success, message = remove_config(tmp_path, "python")
 
@@ -357,10 +327,9 @@ class TestRemoveConfig:
 
     def test_removes_from_package_json(self, tmp_path):
         """Should remove codeflash section from package.json."""
-        (tmp_path / "package.json").write_text(json.dumps({
-            "name": "test",
-            "codeflash": {"moduleRoot": "src"}
-        }, indent=2))
+        (tmp_path / "package.json").write_text(
+            json.dumps({"name": "test", "codeflash": {"moduleRoot": "src"}}, indent=2)
+        )
 
         success, message = remove_config(tmp_path, "javascript")
 

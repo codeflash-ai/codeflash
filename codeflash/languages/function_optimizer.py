@@ -542,6 +542,9 @@ class FunctionOptimizer:
     ) -> tuple[TestResults | dict, CoverageData | None]:
         return TestResults(test_results=[]), None
 
+    def fixup_generated_tests(self, generated_tests: GeneratedTestsList) -> GeneratedTestsList:
+        return generated_tests
+
     # --- End hooks ---
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
@@ -643,6 +646,8 @@ class FunctionOptimizer:
             project_root=self.project_root,
             source_file_path=self.function_to_optimize.file_path,
         )
+
+        generated_tests = self.fixup_generated_tests(generated_tests)
 
         logger.debug(f"[PIPELINE] Processing {count_tests} generated tests")
         for i, generated_test in enumerate(generated_tests.generated_tests):
@@ -1227,6 +1232,7 @@ class FunctionOptimizer:
                             optimized_line_profiler_results=best_optimization.line_profiler_test_results["str_out"],
                             function_references=function_references,
                             language=self.function_to_optimize.language,
+                            language_version=self.language_support.language_version,
                         )
                     ],
                 )
@@ -1288,6 +1294,7 @@ class FunctionOptimizer:
             else None,
             is_numerical_code=self.is_numerical_code and not self.args.no_jit_opts,
             language=self.function_to_optimize.language,
+            language_version=self.language_support.language_version,
         )
 
         processor = CandidateProcessor(
@@ -1788,6 +1795,7 @@ class FunctionOptimizer:
             self.function_trace_id[:-4] + "EXP0" if run_experiment else self.function_trace_id,
             ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
             language=self.function_to_optimize.language,
+            language_version=self.language_support.language_version,
             is_async=self.function_to_optimize.is_async,
             n_candidates=n_candidates,
             is_numerical_code=is_numerical_code,
@@ -1814,6 +1822,7 @@ class FunctionOptimizer:
                 self.function_trace_id[:-4] + "EXP1",
                 ExperimentMetadata(id=self.experiment_id, group="experiment"),
                 language=self.function_to_optimize.language,
+                language_version=self.language_support.language_version,
                 is_async=self.function_to_optimize.is_async,
                 n_candidates=n_candidates,
             )

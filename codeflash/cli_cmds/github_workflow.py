@@ -148,7 +148,9 @@ def install_github_actions(override_formatter_check: bool = False) -> None:
 
         # Select the appropriate workflow template based on project language
         project_language = detect_project_language_for_workflow(Path.cwd())
-        if project_language in ("javascript", "typescript"):
+        if project_language == "java":
+            workflow_template = "codeflash-optimize-java.yaml"
+        elif project_language in ("javascript", "typescript"):
             workflow_template = "codeflash-optimize-js.yaml"
         else:
             workflow_template = "codeflash-optimize.yaml"
@@ -554,8 +556,16 @@ def get_github_action_working_directory(toml_path: Path, git_root: Path) -> str:
 def detect_project_language_for_workflow(project_root: Path) -> str:
     """Detect the primary language of the project for workflow generation.
 
-    Returns: 'python', 'javascript', or 'typescript'
+    Returns: 'python', 'javascript', 'typescript', or 'java'
     """
+    # Check for Java build tools first (pom.xml or build.gradle)
+    if (
+        (project_root / "pom.xml").exists()
+        or (project_root / "build.gradle").exists()
+        or (project_root / "build.gradle.kts").exists()
+    ):
+        return "java"
+
     # Check for TypeScript config
     if (project_root / "tsconfig.json").exists():
         return "typescript"
@@ -684,9 +694,9 @@ def generate_dynamic_workflow_content(
     # Detect project language
     project_language = detect_project_language_for_workflow(Path.cwd())
 
-    # For JavaScript/TypeScript projects, use static template customization
+    # For JavaScript/TypeScript and Java projects, use static template customization
     # (AI-generated steps are currently Python-only)
-    if project_language in ("javascript", "typescript"):
+    if project_language in ("javascript", "typescript", "java"):
         return customize_codeflash_yaml_content(optimize_yml_content, config, git_root, benchmark_mode)
 
     # Python project - try AI-generated steps
@@ -809,8 +819,10 @@ def customize_codeflash_yaml_content(
     # Detect project language
     project_language = detect_project_language_for_workflow(Path.cwd())
 
+    if project_language == "java":
+        return _customize_java_workflow_content(optimize_yml_content, git_root)
+
     if project_language in ("javascript", "typescript"):
-        # JavaScript/TypeScript project
         return _customize_js_workflow_content(optimize_yml_content, git_root, benchmark_mode)
 
     # Python project (default)
@@ -904,3 +916,36 @@ def _customize_js_workflow_content(optimize_yml_content: str, git_root: Path, be
     if benchmark_mode:
         codeflash_cmd += " --benchmark"
     return optimize_yml_content.replace("{{ codeflash_command }}", codeflash_cmd)
+
+
+def _customize_java_workflow_content(optimize_yml_content: str, git_root: Path) -> str:
+    """Customize workflow content for Java projects."""
+    from codeflash.cli_cmds.init_java import (
+        JavaBuildTool,
+        detect_java_build_tool,
+        get_java_dependency_installation_commands,
+    )
+
+    project_root = Path.cwd()
+    build_tool = detect_java_build_tool(project_root)
+
+    # Working directory
+    if project_root == git_root:
+        working_dir = ""
+    else:
+        rel_path = str(project_root.relative_to(git_root))
+        working_dir = f"""defaults:
+      run:
+        working-directory: ./{rel_path}"""
+
+    optimize_yml_content = optimize_yml_content.replace("{{ working_directory }}", working_dir)
+
+    # Build tool cache
+    if build_tool == JavaBuildTool.GRADLE:
+        optimize_yml_content = optimize_yml_content.replace("{{ java_build_tool }}", "gradle")
+    else:
+        optimize_yml_content = optimize_yml_content.replace("{{ java_build_tool }}", "maven")
+
+    # Install dependencies command
+    install_deps = get_java_dependency_installation_commands(build_tool)
+    return optimize_yml_content.replace("{{ install_dependencies_command }}", install_deps)

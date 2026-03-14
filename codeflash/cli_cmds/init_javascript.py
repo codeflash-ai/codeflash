@@ -38,6 +38,7 @@ class ProjectLanguage(Enum):
     PYTHON = auto()
     JAVASCRIPT = auto()
     TYPESCRIPT = auto()
+    JAVA = auto()
 
 
 class JsPackageManager(Enum):
@@ -88,6 +89,12 @@ def detect_project_language(project_root: Path | None = None) -> ProjectLanguage
 
     """
     root = project_root or Path.cwd()
+
+    # Java detection (pom.xml or build.gradle is definitive)
+    has_pom = (root / "pom.xml").exists()
+    has_gradle = (root / "build.gradle").exists() or (root / "build.gradle.kts").exists()
+    if has_pom or has_gradle:
+        return ProjectLanguage.JAVA
 
     has_pyproject = (root / "pyproject.toml").exists()
     has_setup_py = (root / "setup.py").exists()

@@ -17,10 +17,7 @@ def make_func(name: str, class_name: str | None = None) -> FunctionToOptimize:
     """Helper to create FunctionToOptimize for testing."""
     parents = [FunctionParent(name=class_name, type="ClassDef")] if class_name else []
     return FunctionToOptimize(
-        function_name=name,
-        file_path=Path("/test/file.js"),
-        parents=parents,
-        language="javascript",
+        function_name=name, file_path=Path("/test/file.js"), parents=parents, language="javascript"
     )
 
 
@@ -458,7 +455,9 @@ class TestQualifiedNames:
     def test_simple_qualified_name(self) -> None:
         """Test simple qualified name."""
         code = "expect(func(5)).toBe(5);"
-        result, _ = transform_expect_calls(code, make_func("func", class_name="module"), "capture", remove_assertions=True)
+        result, _ = transform_expect_calls(
+            code, make_func("func", class_name="module"), "capture", remove_assertions=True
+        )
         assert result == "codeflash.capture('module.func', '1', func, 5);"
 
     def test_nested_qualified_name(self) -> None:

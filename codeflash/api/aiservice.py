@@ -58,12 +58,10 @@ class AiServiceClient:
         payload: dict[str, Any], language_version: str | None = None, module_system: str | None = None
     ) -> None:
         """Add language version and module system metadata to an API payload."""
-        from codeflash.languages.current import current_language_support
+        payload["language_version"] = language_version
+        payload["python_version"] = language_version if current_language() == Language.PYTHON else None
 
-        payload["python_version"] = platform.python_version()
-        default_lang_version = current_language_support().default_language_version
-        if default_lang_version is not None:
-            payload["language_version"] = language_version or default_lang_version
+        if current_language() != Language.PYTHON:
             if module_system:
                 payload["module_system"] = module_system
 
@@ -147,8 +145,7 @@ class AiServiceClient:
         experiment_metadata: ExperimentMetadata | None = None,
         *,
         language: str = "python",
-        language_version: str
-        | None = None,  # TODO:{claude} add language version to the language support and it should be cached
+        language_version: str | None = None,
         module_system: str | None = None,
         is_async: bool = False,
         n_candidates: int = 5,
@@ -264,7 +261,7 @@ class AiServiceClient:
             "source_code": source_code,
             "trace_id": trace_id,
             "dependency_code": "",  # dummy value to please the api endpoint
-            "python_version": "3.12.1",  # dummy value to please the api endpoint
+            "python_version": platform.python_version(),  # backward compat
             "current_username": get_last_commit_author_if_pr_exists(None),
             "repo_owner": git_repo_owner,
             "repo_name": git_repo_name,
@@ -326,18 +323,15 @@ class AiServiceClient:
         logger.info("Generating optimized candidates with line profiler…")
         console.rule()
 
-        # Set python_version for backward compatibility with Python, or use language_version
-        python_version = language_version if language_version else platform.python_version()
-
         payload = {
             "source_code": source_code,
             "dependency_code": dependency_code,
             "n_candidates": n_candidates,
             "line_profiler_results": line_profiler_results,
             "trace_id": trace_id,
-            "python_version": python_version,
             "language": language,
             "language_version": language_version,
+            "python_version": language_version if current_language() == Language.PYTHON else None,
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
             "call_sequence": self.get_next_sequence(),
@@ -614,7 +608,7 @@ class AiServiceClient:
             "diffs": diffs,
             "speedups": speedups,
             "optimization_ids": optimization_ids,
-            "python_version": platform.python_version(),
+            "python_version": platform.python_version(),  # backward compat
             "function_references": function_references,
         }
         logger.info("loading|Generating ranking")
@@ -737,6 +731,8 @@ class AiServiceClient:
             "is_async": function_to_optimize.is_async,
             "call_sequence": self.get_next_sequence(),
             "is_numerical_code": is_numerical_code,
+            "class_name": function_to_optimize.class_name,
+            "qualified_name": function_to_optimize.qualified_name,
         }
 
         self.add_language_metadata(payload, language_version, module_system)
@@ -921,6 +917,7 @@ class AiServiceClient:
             "codeflash_version": codeflash_version,
             "calling_fn_details": calling_fn_details,
             "language": language,
+            "language_version": platform.python_version() if current_language() == Language.PYTHON else None,
             "python_version": platform.python_version() if current_language() == Language.PYTHON else None,
             "call_sequence": self.get_next_sequence(),
         }
