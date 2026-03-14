@@ -10,6 +10,7 @@ import os
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
+import math
 
 if "--subagent" in sys.argv:
     os.environ["CODEFLASH_SUBAGENT_MODE"] = "true"
