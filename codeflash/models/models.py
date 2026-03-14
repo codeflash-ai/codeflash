@@ -954,11 +954,11 @@ class TestResults(BaseModel):  # noqa: PLW1641
     def usable_runtime_data_by_test_case(self) -> dict[InvocationId, list[int]]:
         # Efficient single traversal, directly accumulating into a dict.
         # can track mins here and only sums can be return in total_passed_runtime
-        by_id: dict[InvocationId, list[int]] = {}
+        runtimes_by_test_case: dict[InvocationId, list[int]] = {}
         for result in self.test_results:
             if result.did_pass:
                 if result.runtime:
-                    by_id.setdefault(result.id, []).append(result.runtime)
+                    runtimes_by_test_case.setdefault(result.id, []).append(result.runtime)
                 else:
                     msg = (
                         f"Ignoring test case that passed but had no runtime -> {result.id}, "
@@ -966,7 +966,7 @@ class TestResults(BaseModel):  # noqa: PLW1641
                         f"Verification Type: {result.verification_type}"
                     )
                     logger.debug(msg)
-        return by_id
+        return runtimes_by_test_case
 
     def total_passed_runtime(self) -> int:
         """Calculate the sum of runtimes of all test cases that passed.
