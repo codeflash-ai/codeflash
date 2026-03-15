@@ -14,7 +14,7 @@ from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
 from codeflash.code_utils.time_utils import humanize_runtime
-from codeflash.languages import Language, current_language
+from codeflash.languages import Language, current_language, current_language_support
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     AIServiceRefinerRequest,
@@ -58,6 +58,8 @@ class AiServiceClient:
         payload: dict[str, Any], language_version: str | None = None, module_system: str | None = None
     ) -> None:
         """Add language version and module system metadata to an API payload."""
+        if language_version is None:
+            language_version = current_language_support().language_version
         payload["language_version"] = language_version
         payload["python_version"] = language_version if current_language() == Language.PYTHON else None
 
