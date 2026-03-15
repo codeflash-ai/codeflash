@@ -319,11 +319,8 @@ class ReferenceGraph:
         if resolved is None:
             resolved = self.resolve_path(file_path)
 
-        # Fast path: if already indexed this session, skip disk I/O
-        if resolved in self.indexed_file_hashes:
-            return IndexResult(file_path=file_path, cached=True, num_edges=0, edges=(), cross_file_edges=0, error=False)
-
-        # Read and hash the file to detect on-disk changes vs DB cache
+        # Always read and hash to detect on-disk changes (no in-memory shortcut here;
+        # build_index has its own fast path for batch initialization)
         try:
             content = file_path.read_text(encoding="utf-8")
         except Exception:
