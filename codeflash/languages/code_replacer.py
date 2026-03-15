@@ -6,13 +6,15 @@ via the LanguageSupport protocol.
 
 from __future__ import annotations
 
-from pathlib import Path
+import os
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
 from codeflash.languages.base import FunctionFilterCriteria, Language
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import LanguageSupport
     from codeflash.models.models import CodeStringsMarkdown
@@ -38,7 +40,7 @@ def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStrin
     # directory prefix but the correct filename
     target_name = relative_path.name
     basename_matches = [
-        code for path, code in file_to_code_context.items() if path != "None" and Path(path).name == target_name
+        code for path, code in file_to_code_context.items() if path != "None" and os.path.basename(path) == target_name
     ]
     if len(basename_matches) == 1:
         logger.debug(f"Using basename-matched code block for {relative_path}")
