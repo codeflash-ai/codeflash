@@ -76,28 +76,48 @@ class CallGraph:
 
     def descendants(self, node: FunctionNode, max_depth: int | None = None) -> set[FunctionNode]:
         visited: set[FunctionNode] = set()
-        queue: deque[tuple[FunctionNode, int]] = deque([(node, 0)])
-        while queue:
-            current, depth = queue.popleft()
-            if max_depth is not None and depth >= max_depth:
-                continue
-            for edge in self.callees_of(current):
-                if edge.callee not in visited:
-                    visited.add(edge.callee)
-                    queue.append((edge.callee, depth + 1))
+        forward_map = self._forward
+        if max_depth is None:
+            queue: deque[FunctionNode] = deque([node])
+            while queue:
+                current = queue.popleft()
+                for edge in forward_map.get(current, []):
+                    if edge.callee not in visited:
+                        visited.add(edge.callee)
+                        queue.append(edge.callee)
+        else:
+            depth_queue: deque[tuple[FunctionNode, int]] = deque([(node, 0)])
+            while depth_queue:
+                current, depth = depth_queue.popleft()
+                if depth >= max_depth:
+                    continue
+                for edge in forward_map.get(current, []):
+                    if edge.callee not in visited:
+                        visited.add(edge.callee)
+                        depth_queue.append((edge.callee, depth + 1))
         return visited
 
     def ancestors(self, node: FunctionNode, max_depth: int | None = None) -> set[FunctionNode]:
         visited: set[FunctionNode] = set()
-        queue: deque[tuple[FunctionNode, int]] = deque([(node, 0)])
-        while queue:
-            current, depth = queue.popleft()
-            if max_depth is not None and depth >= max_depth:
-                continue
-            for edge in self.callers_of(current):
-                if edge.caller not in visited:
-                    visited.add(edge.caller)
-                    queue.append((edge.caller, depth + 1))
+        reverse_map = self._reverse
+        if max_depth is None:
+            queue: deque[FunctionNode] = deque([node])
+            while queue:
+                current = queue.popleft()
+                for edge in reverse_map.get(current, []):
+                    if edge.caller not in visited:
+                        visited.add(edge.caller)
+                        queue.append(edge.caller)
+        else:
+            depth_queue: deque[tuple[FunctionNode, int]] = deque([(node, 0)])
+            while depth_queue:
+                current, depth = depth_queue.popleft()
+                if depth >= max_depth:
+                    continue
+                for edge in reverse_map.get(current, []):
+                    if edge.caller not in visited:
+                        visited.add(edge.caller)
+                        depth_queue.append((edge.caller, depth + 1))
         return visited
 
     def subgraph(self, nodes: set[FunctionNode]) -> CallGraph:
@@ -114,26 +134,28 @@ class CallGraph:
 
     def topological_order(self) -> list[FunctionNode]:
         in_degree: dict[FunctionNode, int] = {}
-        for node in self.nodes:
+        all_nodes = self._nodes
+        for node in all_nodes:
             in_degree.setdefault(node, 0)
         for edge in self.edges:
             in_degree[edge.callee] = in_degree.get(edge.callee, 0) + 1
 
+        forward_map = self._forward
         queue = deque(node for node, deg in in_degree.items() if deg == 0)
         result: list[FunctionNode] = []
         while queue:
             node = queue.popleft()
             result.append(node)
-            for edge in self.callees_of(node):
+            for edge in forward_map.get(node, []):
                 in_degree[edge.callee] -= 1
                 if in_degree[edge.callee] == 0:
                     queue.append(edge.callee)
 
-        if len(result) < len(self.nodes):
+        if len(result) < len(all_nodes):
             logger.warning(
                 "Call graph contains cycles: %d of %d nodes excluded from topological order",
-                len(self.nodes) - len(result),
-                len(self.nodes),
+                len(all_nodes) - len(result),
+                len(all_nodes),
             )
 
         # Leaves-first: reverse the topological order
