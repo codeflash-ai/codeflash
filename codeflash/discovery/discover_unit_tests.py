@@ -11,6 +11,7 @@ import sqlite3
 import subprocess
 import unittest
 from collections import defaultdict
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional, final
 
@@ -38,7 +39,7 @@ if TYPE_CHECKING:
 def existing_unit_test_count(
     func: FunctionToOptimize, project_root: Path, function_to_tests: dict[str, set[FunctionCalledInTest]]
 ) -> int:
-    key = func.qualified_name_with_modules_from_root(project_root)
+    key = f"{module_name_from_file_path_cached(func.file_path, project_root)}.{func.qualified_name}"
     tests = function_to_tests.get(key, set())
     seen: set[tuple[Path, str | None, str]] = set()
     for t in tests:
@@ -1094,3 +1095,9 @@ def process_test_files(
     tests_cache.close()
 
     return dict(function_to_test_map), num_discovered_tests, num_discovered_replay_tests
+
+
+# Cache module name resolution to avoid repeated Path.resolve()/relative_to() calls
+@lru_cache(maxsize=128)
+def module_name_from_file_path_cached(file_path: Path, project_root: Path) -> str:
+    return module_name_from_file_path(file_path, project_root)
