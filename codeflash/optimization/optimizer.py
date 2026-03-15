@@ -65,6 +65,7 @@ class Optimizer:
         self.current_worktree: Path | None = None
         self.original_args_and_test_cfg: tuple[Namespace, TestConfig] | None = None
         self.patch_files: list[Path] = []
+        self._cached_callee_counts: dict[tuple[Path, str], int] = {}
 
     def run_benchmarks(
         self, file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]], num_optimizable_functions: int
@@ -392,7 +393,9 @@ class Optimizer:
                 from codeflash.discovery.discover_unit_tests import existing_unit_test_count
 
                 globally_ranked.sort(
-                    key=lambda item: -existing_unit_test_count(item[1], self.args.project_root, function_to_tests)
+                    key=lambda item: (
+                        0 if existing_unit_test_count(item[1], self.args.project_root, function_to_tests) > 0 else 1
+                    )
                 )
 
             console.rule()
@@ -528,7 +531,7 @@ class Optimizer:
             prepared_modules: dict[Path, tuple[dict[Path, ValidCode], ast.Module | None]] = {}
 
             # Reuse callee counts from rank_by_dependency_count if available, otherwise compute
-            callee_counts: dict[tuple[Path, str], int] = getattr(self, "_cached_callee_counts", {})
+            callee_counts = self._cached_callee_counts
             if not callee_counts and resolver is not None:
                 file_to_qns: dict[Path, set[str]] = defaultdict(set)
                 for fp, fn in globally_ranked_functions:
@@ -536,6 +539,12 @@ class Optimizer:
                 callee_counts = resolver.count_callees_per_function(dict(file_to_qns))
 
             from codeflash.discovery.discover_unit_tests import existing_unit_test_count
+
+            # Pre-compute test counts for logging (already computed during ranking, avoid re-filtering)
+            test_count_cache: dict[tuple[Path, str], int] = {
+                (fp, fn.qualified_name): existing_unit_test_count(fn, self.args.project_root, function_to_tests)
+                for fp, fn in globally_ranked_functions
+            }
 
             # Optimize functions in globally ranked order
             for i, (original_module_path, function_to_optimize) in enumerate(globally_ranked_functions):
@@ -555,7 +564,7 @@ class Optimizer:
                 callee_count = callee_counts.get((original_module_path, function_to_optimize.qualified_name), 0)
                 callee_suffix = f", {callee_count} callees" if callee_count else ""
 
-                test_count = existing_unit_test_count(function_to_optimize, self.args.project_root, function_to_tests)
+                test_count = test_count_cache.get((original_module_path, function_to_optimize.qualified_name), 0)
                 test_suffix = f", {test_count} tests" if test_count else ""
 
                 effort_override: str | None = None
