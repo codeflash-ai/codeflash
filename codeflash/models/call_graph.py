@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, NamedTuple
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -38,15 +41,20 @@ class CallGraph:
     edges: list[CallEdge]
     _forward: dict[FunctionNode, list[CallEdge]] | None = field(default=None, init=False, repr=False)
     _reverse: dict[FunctionNode, list[CallEdge]] | None = field(default=None, init=False, repr=False)
+    _nodes: set[FunctionNode] | None = field(default=None, init=False, repr=False)
 
     def _build_adjacency(self) -> None:
         fwd: dict[FunctionNode, list[CallEdge]] = {}
         rev: dict[FunctionNode, list[CallEdge]] = {}
+        nodes: set[FunctionNode] = set()
         for edge in self.edges:
             fwd.setdefault(edge.caller, []).append(edge)
             rev.setdefault(edge.callee, []).append(edge)
+            nodes.add(edge.caller)
+            nodes.add(edge.callee)
         self._forward = fwd
         self._reverse = rev
+        self._nodes = nodes
 
     @property
     def forward(self) -> dict[FunctionNode, list[CallEdge]]:
@@ -64,11 +72,10 @@ class CallGraph:
 
     @property
     def nodes(self) -> set[FunctionNode]:
-        result: set[FunctionNode] = set()
-        for edge in self.edges:
-            result.add(edge.caller)
-            result.add(edge.callee)
-        return result
+        if self._nodes is None:
+            self._build_adjacency()
+        assert self._nodes is not None
+        return self._nodes
 
     def callees_of(self, node: FunctionNode) -> list[CallEdge]:
         return self.forward.get(node, [])
@@ -131,6 +138,13 @@ class CallGraph:
                 if in_degree[edge.callee] == 0:
                     queue.append(edge.callee)
 
+        if len(result) < len(self.nodes):
+            logger.warning(
+                "Call graph contains cycles: %d of %d nodes excluded from topological order",
+                len(self.nodes) - len(result),
+                len(self.nodes),
+            )
+
         # Leaves-first: reverse the topological order
         result.reverse()
         return result
@@ -171,6 +185,7 @@ def augment_with_trace(graph: CallGraph, trace_db_path: Path) -> CallGraph:
                     is_cross_file=edge.is_cross_file,
                     call_count=call_count,
                     total_time_ns=total_time,
+                    callee_metadata=edge.callee_metadata,
                 )
             )
         else:

@@ -392,8 +392,7 @@ class Optimizer:
                 from codeflash.discovery.discover_unit_tests import existing_unit_test_count
 
                 globally_ranked.sort(
-                    key=lambda item: existing_unit_test_count(item[1], self.args.project_root, function_to_tests) > 0,
-                    reverse=True,
+                    key=lambda item: -existing_unit_test_count(item[1], self.args.project_root, function_to_tests)
                 )
 
             console.rule()
@@ -535,6 +534,8 @@ class Optimizer:
                     file_to_qns[fp].add(fn.qualified_name)
                 callee_counts = resolver.count_callees_per_function(dict(file_to_qns))
 
+            from codeflash.discovery.discover_unit_tests import existing_unit_test_count
+
             # Optimize functions in globally ranked order
             for i, (original_module_path, function_to_optimize) in enumerate(globally_ranked_functions):
                 # Prepare module if not already cached
@@ -550,10 +551,8 @@ class Optimizer:
                 function_iterator_count = i + 1
                 line_suffix = f":{function_to_optimize.starting_line}" if function_to_optimize.starting_line else ""
 
-                ref_count = callee_counts.get((original_module_path, function_to_optimize.qualified_name), 0)
-                ref_suffix = f", {ref_count} refs" if ref_count else ""
-
-                from codeflash.discovery.discover_unit_tests import existing_unit_test_count
+                callee_count = callee_counts.get((original_module_path, function_to_optimize.qualified_name), 0)
+                callee_suffix = f", {callee_count} callees" if callee_count else ""
 
                 test_count = existing_unit_test_count(function_to_optimize, self.args.project_root, function_to_tests)
                 test_suffix = f", {test_count} tests" if test_count else ""
@@ -564,7 +563,7 @@ class Optimizer:
 
                 logger.info(
                     f"Optimizing function {function_iterator_count} of {len(globally_ranked_functions)}: "
-                    f"{function_to_optimize.qualified_name} (in {original_module_path}{line_suffix}{ref_suffix}{test_suffix})"
+                    f"{function_to_optimize.qualified_name} (in {original_module_path}{line_suffix}{callee_suffix}{test_suffix})"
                 )
                 console.rule()
                 function_optimizer = None
