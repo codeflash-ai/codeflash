@@ -99,7 +99,7 @@ class CallGraph:
     def ancestors(self, node: FunctionNode, max_depth: int | None = None) -> set[FunctionNode]:
         visited: set[FunctionNode] = set()
         reverse_map = self.reverse
-        
+
         if max_depth is None:
             queue: deque[FunctionNode] = deque([node])
             while queue:
@@ -118,7 +118,7 @@ class CallGraph:
                     if edge.caller not in visited:
                         visited.add(edge.caller)
                         queue_with_depth.append((edge.caller, depth + 1))
-        
+
         return visited
 
     def subgraph(self, nodes: set[FunctionNode]) -> CallGraph:
@@ -160,20 +160,6 @@ class CallGraph:
         # Leaves-first: reverse the topological order
         result.reverse()
         return result
-
-    def _build_reverse(self) -> dict[FunctionNode, list[CallEdge]]:
-        rev: dict[FunctionNode, list[CallEdge]] = {}
-        for e in self.edges:
-            rev.setdefault(e.callee, []).append(e)
-        return rev
-
-    @property
-    def reverse(self) -> dict[FunctionNode, list[CallEdge]]:
-        rv = self._reverse
-        if rv is None:
-            rv = self._build_reverse()
-            self._reverse = rv
-        return rv
 
 
 def augment_with_trace(graph: CallGraph, trace_db_path: Path) -> CallGraph:
