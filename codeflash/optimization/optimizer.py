@@ -422,6 +422,7 @@ class Optimizer:
         for file_path, func in all_functions:
             file_to_qns[file_path].add(func.qualified_name)
         callee_counts = call_graph.count_callees_per_function(dict(file_to_qns))
+        self._cached_callee_counts = callee_counts
 
         if function_to_tests:
             from codeflash.discovery.discover_unit_tests import existing_unit_test_count
@@ -526,9 +527,9 @@ class Optimizer:
             # Cache for module preparation (avoid re-parsing same files)
             prepared_modules: dict[Path, tuple[dict[Path, ValidCode], ast.Module | None]] = {}
 
-            # Build callee counts for per-function logging
-            callee_counts: dict[tuple[Path, str], int] = {}
-            if resolver is not None:
+            # Reuse callee counts from rank_by_dependency_count if available, otherwise compute
+            callee_counts: dict[tuple[Path, str], int] = getattr(self, "_cached_callee_counts", {})
+            if not callee_counts and resolver is not None:
                 file_to_qns: dict[Path, set[str]] = defaultdict(set)
                 for fp, fn in globally_ranked_functions:
                     file_to_qns[fp].add(fn.qualified_name)

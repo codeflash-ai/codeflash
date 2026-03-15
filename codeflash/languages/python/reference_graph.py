@@ -200,6 +200,7 @@ class ReferenceGraph:
         self.conn = sqlite3.connect(str(db_path))
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.indexed_file_hashes: dict[str, str] = {}
+        self._resolved_paths: dict[Path, str] = {}
         self._init_schema()
 
     def _init_schema(self) -> None:
@@ -260,6 +261,14 @@ class ReferenceGraph:
         )
         self.conn.commit()
 
+    def resolve_path(self, file_path: Path) -> str:
+        cached = self._resolved_paths.get(file_path)
+        if cached is not None:
+            return cached
+        resolved = str(file_path.resolve())
+        self._resolved_paths[file_path] = resolved
+        return resolved
+
     def get_callees(
         self, file_path_to_qualified_names: dict[Path, set[str]]
     ) -> tuple[dict[Path, set[FunctionSource]], list[FunctionSource]]:
@@ -273,7 +282,7 @@ class ReferenceGraph:
     ) -> dict[tuple[Path, str], int]:
         all_caller_keys: list[tuple[Path, str, str]] = []
         for file_path, qualified_names in file_path_to_qualified_names.items():
-            resolved = str(file_path.resolve())
+            resolved = self.resolve_path(file_path)
             self.ensure_file_indexed(file_path, resolved)
             all_caller_keys.extend((file_path, resolved, qn) for qn in qualified_names)
 
@@ -308,9 +317,13 @@ class ReferenceGraph:
 
     def ensure_file_indexed(self, file_path: Path, resolved: str | None = None) -> IndexResult:
         if resolved is None:
-            resolved = str(file_path.resolve())
+            resolved = self.resolve_path(file_path)
 
-        # Always read and hash the file before checking the cache so we detect on-disk changes
+        # Fast path: if already indexed this session, skip disk I/O
+        if resolved in self.indexed_file_hashes:
+            return IndexResult(file_path=file_path, cached=True, num_edges=0, edges=(), cross_file_edges=0, error=False)
+
+        # Read and hash the file to detect on-disk changes vs DB cache
         try:
             content = file_path.read_text(encoding="utf-8")
         except Exception:
@@ -325,7 +338,7 @@ class ReferenceGraph:
 
     def index_file(self, file_path: Path, file_hash: str, resolved: str | None = None) -> IndexResult:
         if resolved is None:
-            resolved = str(file_path.resolve())
+            resolved = self.resolve_path(file_path)
         edges, had_error = _analyze_file(file_path, self.jedi_project, self.project_root_str)
         if had_error:
             logger.debug(f"ReferenceGraph: failed to parse {file_path}")
@@ -388,7 +401,17 @@ class ReferenceGraph:
         to_index: list[tuple[Path, str, str]] = []
 
         for file_path in file_paths:
-            resolved = str(file_path.resolve())
+            resolved = self.resolve_path(file_path)
+
+            # Fast path: already indexed this session
+            if resolved in self.indexed_file_hashes:
+                self._report_progress(
+                    on_progress,
+                    IndexResult(
+                        file_path=file_path, cached=True, num_edges=0, edges=(), cross_file_edges=0, error=False
+                    ),
+                )
+                continue
 
             try:
                 content = file_path.read_text(encoding="utf-8")
@@ -403,7 +426,7 @@ class ReferenceGraph:
 
             file_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
 
-            # Check if already cached (in-memory or DB)
+            # Check if cached in DB
             if self._is_file_cached(resolved, file_hash):
                 self._report_progress(
                     on_progress,
@@ -509,7 +532,7 @@ class ReferenceGraph:
 
         all_caller_keys: list[tuple[Path, str, str]] = []
         for file_path, qualified_names in file_path_to_qualified_names.items():
-            resolved = str(file_path.resolve())
+            resolved = self.resolve_path(file_path)
             self.ensure_file_indexed(file_path, resolved)
             all_caller_keys.extend((file_path, resolved, qn) for qn in qualified_names)
 

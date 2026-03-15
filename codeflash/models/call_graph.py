@@ -39,11 +39,11 @@ class CallEdge:
 @dataclass
 class CallGraph:
     edges: list[CallEdge]
-    _forward: dict[FunctionNode, list[CallEdge]] | None = field(default=None, init=False, repr=False)
-    _reverse: dict[FunctionNode, list[CallEdge]] | None = field(default=None, init=False, repr=False)
-    _nodes: set[FunctionNode] | None = field(default=None, init=False, repr=False)
+    _forward: dict[FunctionNode, list[CallEdge]] = field(default_factory=dict, init=False, repr=False)
+    _reverse: dict[FunctionNode, list[CallEdge]] = field(default_factory=dict, init=False, repr=False)
+    _nodes: set[FunctionNode] = field(default_factory=set, init=False, repr=False)
 
-    def _build_adjacency(self) -> None:
+    def __post_init__(self) -> None:
         fwd: dict[FunctionNode, list[CallEdge]] = {}
         rev: dict[FunctionNode, list[CallEdge]] = {}
         nodes: set[FunctionNode] = set()
@@ -58,23 +58,14 @@ class CallGraph:
 
     @property
     def forward(self) -> dict[FunctionNode, list[CallEdge]]:
-        if self._forward is None:
-            self._build_adjacency()
-        assert self._forward is not None
         return self._forward
 
     @property
     def reverse(self) -> dict[FunctionNode, list[CallEdge]]:
-        if self._reverse is None:
-            self._build_adjacency()
-        assert self._reverse is not None
         return self._reverse
 
     @property
     def nodes(self) -> set[FunctionNode]:
-        if self._nodes is None:
-            self._build_adjacency()
-        assert self._nodes is not None
         return self._nodes
 
     def callees_of(self, node: FunctionNode) -> list[CallEdge]:
