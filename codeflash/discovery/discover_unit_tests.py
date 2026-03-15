@@ -35,6 +35,21 @@ if TYPE_CHECKING:
     from codeflash.verification.verification_utils import TestConfig
 
 
+def existing_unit_test_count(
+    func: FunctionToOptimize, project_root: Path, function_to_tests: dict[str, set[FunctionCalledInTest]]
+) -> int:
+    key = func.qualified_name_with_modules_from_root(project_root)
+    tests = function_to_tests.get(key, set())
+    seen: set[tuple[Path, str | None, str]] = set()
+    for t in tests:
+        if t.tests_in_file.test_type != TestType.EXISTING_UNIT_TEST:
+            continue
+        tif = t.tests_in_file
+        base_name = tif.test_function.split("[", 1)[0]
+        seen.add((tif.test_file, tif.test_class, base_name))
+    return len(seen)
+
+
 @final
 class PytestExitCode(enum.IntEnum):  # don't need to import entire pytest just for this
     #: Tests passed.
