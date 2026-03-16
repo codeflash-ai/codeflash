@@ -33,6 +33,7 @@ class CompilationCache:
     def __init__(self) -> None:
         self.tests_compiled: set[tuple[Path, str | None]] = set()
         self.last_compiled_candidate: dict[tuple[Path, str | None], int] = {}
+        self.failed: set[tuple[Path, str | None]] = set()
 
     @classmethod
     def get(cls) -> CompilationCache:
@@ -49,6 +50,12 @@ class CompilationCache:
 
     def needs_source_only(self, build_root: Path, test_module: str | None) -> bool:
         return (build_root, test_module) in self.tests_compiled
+
+    def is_failed(self, build_root: Path, test_module: str | None) -> bool:
+        return (build_root, test_module) in self.failed
+
+    def mark_failed(self, build_root: Path, test_module: str | None) -> None:
+        self.failed.add((build_root, test_module))
 
     def mark_compiled(
         self, build_root: Path, test_module: str | None, candidate_index: int, *, tests: bool = False
@@ -481,32 +488,19 @@ def run_benchmarking_tests(
     candidate_index = int(test_env.get("CODEFLASH_TEST_ITERATION", -1))
     compile_time = 0.0
     cache = CompilationCache.get()
-    if cache.should_skip(build_root, test_module, candidate_index):
+    if cache.is_failed(build_root, test_module):
+        logger.debug("Step 1: Skipping — test compilation previously failed, skipping all candidates")
+        return _get_empty_result(strategy, build_root, test_module)
+    elif cache.should_skip(build_root, test_module, candidate_index):
         logger.debug("Step 1: Skipping compilation — already compiled for candidate %d", candidate_index)
     elif cache.needs_source_only(build_root, test_module):
         logger.debug("Step 1: Compiling source only (tests already compiled)")
         compile_start = time.time()
         compile_result = strategy.compile_source_only(build_root, compile_env, test_module, timeout=120)
         if compile_result.returncode != 0:
-            logger.warning("Source compilation failed, falling back to full compile")
-            compile_result = strategy.compile_tests(build_root, compile_env, test_module, timeout=120)
-            if compile_result.returncode != 0:
-                logger.warning("Falling back to %s-based test execution", strategy.name)
-                cache.mark_compiled(build_root, test_module, candidate_index)
-                return strategy.run_benchmarking_via_build_tool(
-                    test_paths,
-                    test_env,
-                    cwd,
-                    timeout,
-                    project_root,
-                    min_loops,
-                    max_loops,
-                    target_duration_seconds,
-                    inner_iterations,
-                )
-            cache.mark_compiled(build_root, test_module, candidate_index, tests=True)
-        else:
-            cache.mark_compiled(build_root, test_module, candidate_index)
+            logger.warning("Source compilation failed for candidate %d, skipping", candidate_index)
+            return _get_empty_result(strategy, build_root, test_module)
+        cache.mark_compiled(build_root, test_module, candidate_index)
         compile_time = time.time() - compile_start
         logger.debug("Source compilation completed in %.2fs", compile_time)
     else:
@@ -522,19 +516,8 @@ def run_benchmarking_tests(
                 compile_result.stdout,
                 compile_result.stderr,
             )
-            logger.warning("Falling back to %s-based test execution", strategy.name)
-            cache.mark_compiled(build_root, test_module, candidate_index, tests=True)
-            return strategy.run_benchmarking_via_build_tool(
-                test_paths,
-                test_env,
-                cwd,
-                timeout,
-                project_root,
-                min_loops,
-                max_loops,
-                target_duration_seconds,
-                inner_iterations,
-            )
+            cache.mark_failed(build_root, test_module)
+            return _get_empty_result(strategy, build_root, test_module)
 
         logger.debug("Compilation completed in %.2fs", compile_time)
         cache.mark_compiled(build_root, test_module, candidate_index, tests=True)
@@ -758,44 +741,33 @@ def _run_direct_or_fallback(
         result_xml_path, empty_result = _get_empty_result(strategy, build_root, test_module)
         return empty_result, result_xml_path
 
-    # Step 1: Compile (3-tier: skip / source-only / full)
+    # Step 1: Compile (4-tier: failed / skip / source-only / full)
     cache = CompilationCache.get()
-    if cache.should_skip(build_root, test_module, candidate_index):
+    if cache.is_failed(build_root, test_module):
+        logger.debug("Step 1: Skipping — test compilation previously failed, skipping all candidates")
+        result_xml_path, empty_result = _get_empty_result(strategy, build_root, test_module)
+        return empty_result, result_xml_path
+    elif cache.should_skip(build_root, test_module, candidate_index):
         logger.debug("Step 1: Skipping compilation — already compiled for candidate %d", candidate_index)
     elif cache.needs_source_only(build_root, test_module):
         logger.debug("Step 1: Compiling source only (tests already compiled)")
         compile_result = strategy.compile_source_only(build_root, run_env, test_module, timeout=120)
         if compile_result.returncode != 0:
-            logger.warning("Source compilation failed (rc=%d), falling back to full compile", compile_result.returncode)
-            compile_result = strategy.compile_tests(build_root, run_env, test_module, timeout=120)
-            if compile_result.returncode != 0:
-                logger.warning("Full compilation also failed, falling back to %s-based execution", strategy.name)
-                cache.mark_compiled(build_root, test_module, candidate_index)
-                result = strategy.run_tests_via_build_tool(
-                    build_root, test_paths, run_env, timeout=timeout, mode=mode, test_module=test_module
-                )
-                reports_dir = strategy.get_reports_dir(build_root, test_module)
-                result_xml_path = _get_combined_junit_xml(reports_dir, candidate_index)
-                return result, result_xml_path
-            cache.mark_compiled(build_root, test_module, candidate_index, tests=True)
-        else:
-            cache.mark_compiled(build_root, test_module, candidate_index)
+            logger.warning("Source compilation failed for candidate %d, skipping", candidate_index)
+            result_xml_path, empty_result = _get_empty_result(strategy, build_root, test_module)
+            return empty_result, result_xml_path
+        cache.mark_compiled(build_root, test_module, candidate_index)
     else:
         logger.debug("Step 1: Compiling tests + source (first time)")
         compile_result = strategy.compile_tests(build_root, run_env, test_module, timeout=120)
         if compile_result.returncode != 0:
             logger.warning(
-                "Compilation failed (rc=%d), falling back to %s-based execution",
+                "Compilation failed (rc=%d), skipping all candidates",
                 compile_result.returncode,
-                strategy.name,
             )
-            cache.mark_compiled(build_root, test_module, candidate_index, tests=True)
-            result = strategy.run_tests_via_build_tool(
-                build_root, test_paths, run_env, timeout=timeout, mode=mode, test_module=test_module
-            )
-            reports_dir = strategy.get_reports_dir(build_root, test_module)
-            result_xml_path = _get_combined_junit_xml(reports_dir, candidate_index)
-            return result, result_xml_path
+            cache.mark_failed(build_root, test_module)
+            result_xml_path, empty_result = _get_empty_result(strategy, build_root, test_module)
+            return empty_result, result_xml_path
         cache.mark_compiled(build_root, test_module, candidate_index, tests=True)
 
     # Step 2: Get classpath (cached after first call)
