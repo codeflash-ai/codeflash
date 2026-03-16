@@ -198,6 +198,7 @@ exclude = [
     "Thumbs.db",
     "venv",
     "env",
+    "codeflash/languages/java/resources/codeflash-runtime-*.jar",
 ]
 
 [tool.mypy]

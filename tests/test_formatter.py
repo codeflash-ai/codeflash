@@ -9,7 +9,7 @@ from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.formatter import format_code, format_generated_code, sort_imports
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodeString, CodeStringsMarkdown
-from codeflash.optimization.function_optimizer import FunctionOptimizer
+from codeflash.languages.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
 

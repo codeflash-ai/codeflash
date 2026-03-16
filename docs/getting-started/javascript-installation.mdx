@@ -1,7 +1,8 @@
 ---
 title: "JavaScript / TypeScript Installation"
 description: "Install and configure Codeflash for your JavaScript/TypeScript project"
-icon: "node-js"
+icon: "js"
+sidebarTitle: "JS / TS Setup"
 keywords:
   [
     "installation",
@@ -214,7 +215,11 @@ my-monorepo/
 |-----------|--------|-------------------|
 | **Jest** | Supported | `jest` in dependencies |
 | **Vitest** | Supported | `vitest` in dependencies |
-| **Mocha** | Coming soon | — |
+| **Mocha** | Supported | `mocha` in dependencies |
+
+<Info>
+**Mocha projects** use `node:assert/strict` for generated tests (zero extra dependencies). Mocha's `describe`/`it` globals are used automatically — no imports needed.
+</Info>
 
 <Info>
 **Functions must be exported** to be optimizable. Codeflash can only discover and optimize functions that are exported from their module (via `export`, `export default`, or `module.exports`).
@@ -237,8 +242,8 @@ codeflash --file src/utils.ts --function processData --no-pr
 codeflash --all
 ```
 
-```bash Trace and optimize
-codeflash optimize --jest
+```bash Dry run (see what would be optimized)
+codeflash --all --dry-run
 ```
 </CodeGroup>
 

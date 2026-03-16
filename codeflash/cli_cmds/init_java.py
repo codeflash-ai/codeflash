@@ -7,6 +7,7 @@ import sys
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from enum import Enum, auto
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Union
 
@@ -55,9 +56,10 @@ class JavaSetupInfo:
     benchmarks_root: Union[str, None] = None
 
 
+@lru_cache(maxsize=1)
 def _get_theme():
     """Get the CodeflashTheme - imported lazily to avoid circular imports."""
-    from codeflash.cli_cmds.cmd_init import CodeflashTheme
+    from codeflash.cli_cmds.init_config import CodeflashTheme
 
     return CodeflashTheme()
 
@@ -161,7 +163,8 @@ def detect_java_test_framework(project_root: Path) -> str:
 
 def init_java_project() -> None:
     """Initialize Codeflash for a Java project."""
-    from codeflash.cli_cmds.cmd_init import install_github_actions, install_github_app, prompt_api_key
+    from codeflash.cli_cmds.github_workflow import install_github_actions
+    from codeflash.cli_cmds.init_auth import install_github_app, prompt_api_key
 
     lang_panel = Panel(
         Text(
@@ -244,7 +247,7 @@ def collect_java_setup_info() -> JavaSetupInfo:
     """Collect setup information for Java projects."""
     from rich.prompt import Confirm
 
-    from codeflash.cli_cmds.cmd_init import ask_for_telemetry
+    from codeflash.cli_cmds.init_config import ask_for_telemetry
 
     curdir = Path.cwd()
 
@@ -365,17 +368,15 @@ def _prompt_directory_override(dir_type: str, detected: str, curdir: Path) -> st
 
 def _prompt_custom_directory(dir_type: str) -> str:
     """Prompt for a custom directory path."""
+    # Reuse the question object to avoid reconstructing it on every loop iteration.
+    custom_question = inquirer.Path(
+        "custom_path",
+        message=f"Enter the path to your {dir_type} directory",
+        path_type=inquirer.Path.DIRECTORY,
+        exists=True,
+    )
     while True:
-        custom_questions = [
-            inquirer.Path(
-                "custom_path",
-                message=f"Enter the path to your {dir_type} directory",
-                path_type=inquirer.Path.DIRECTORY,
-                exists=True,
-            )
-        ]
-
-        custom_answers = inquirer.prompt(custom_questions, theme=_get_theme())
+        custom_answers = inquirer.prompt([custom_question], theme=_get_theme())
         if not custom_answers:
             apologize_and_exit()
 
@@ -456,6 +457,7 @@ def configure_java_project(setup_info: JavaSetupInfo) -> bool:
     source_root = setup_info.module_root_override or detect_java_source_root(curdir)
     test_root = setup_info.test_root_override or detect_java_test_root(curdir)
 
+    config["language"] = "java"
     config["module-root"] = source_root
     config["tests-root"] = test_root
 

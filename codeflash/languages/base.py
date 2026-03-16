@@ -706,7 +706,7 @@ class LanguageSupport(Protocol):
     @property
     def function_optimizer_class(self) -> type:
         """Return the FunctionOptimizer subclass for this language."""
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
+        from codeflash.languages.function_optimizer import FunctionOptimizer
 
         return FunctionOptimizer
 
@@ -883,7 +883,7 @@ class LanguageSupport(Protocol):
         """Instrument source code before line profiling."""
         ...
 
-    def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict:
+    def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict[str, Any]:
         """Parse line profiler output."""
         ...
 
@@ -895,7 +895,7 @@ class LanguageSupport(Protocol):
         project_root: Path,
         function_to_optimize: FunctionToOptimize,
         function_to_optimize_ast: Any,
-    ) -> tuple[dict, str]:
+    ) -> tuple[dict[str, Any], str]:
         """Generate concolic tests for a function.
 
         Default implementation returns empty results. Override for languages
@@ -987,7 +987,7 @@ class LanguageSupport(Protocol):
         ...
 
 
-def convert_parents_to_tuple(parents: list | tuple) -> tuple[FunctionParent, ...]:
+def convert_parents_to_tuple(parents: list[Any] | tuple[Any, ...]) -> tuple[FunctionParent, ...]:
     """Convert a list of parent objects to a tuple of FunctionParent.
 
     Args:

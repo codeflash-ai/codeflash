@@ -731,20 +731,63 @@ class PythonSupport:
         """
         import libcst as cst
 
+        bare_names: set[str] = set()
+        qualified_names: set[str] = set()
+        for name in functions_to_remove:
+            if "." in name:
+                qualified_names.add(name)
+            else:
+                bare_names.add(name)
+
         class TestFunctionRemover(cst.CSTTransformer):
-            def __init__(self, names_to_remove: list[str]) -> None:
-                self.names_to_remove = set(names_to_remove)
+            def __init__(self) -> None:
+                self.class_stack: list[str] = []
+                self.emptied_classes: set[str] = set()
+
+            def visit_ClassDef(self, node: cst.ClassDef) -> bool:
+                self.class_stack.append(node.name.value)
+                return True
+
+            def leave_ClassDef(
+                self, original_node: cst.ClassDef, updated_node: cst.ClassDef
+            ) -> cst.ClassDef | cst.RemovalSentinel:
+                class_name = self.class_stack.pop()
+                if class_name in self.emptied_classes:
+                    self.emptied_classes.discard(class_name)
+                    body = updated_node.body
+                    if isinstance(body, cst.IndentedBlock):
+                        has_meaningful_body = any(
+                            not (
+                                isinstance(s, cst.SimpleStatementLine)
+                                and len(s.body) == 1
+                                and isinstance(s.body[0], (cst.Pass, cst.Expr))
+                                and (
+                                    isinstance(s.body[0], cst.Pass)
+                                    or (isinstance(s.body[0].value, (cst.SimpleString, cst.ConcatenatedString)))
+                                )
+                            )
+                            for s in body.body
+                        )
+                        if not has_meaningful_body:
+                            return cst.RemovalSentinel.REMOVE
+                return updated_node
 
             def leave_FunctionDef(
                 self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef
             ) -> cst.FunctionDef | cst.RemovalSentinel:
-                if original_node.name.value in self.names_to_remove:
+                fn_name = original_node.name.value
+                if fn_name in bare_names and not self.class_stack:
                     return cst.RemovalSentinel.REMOVE
+                if self.class_stack:
+                    qualified = f"{self.class_stack[-1]}.{fn_name}"
+                    if qualified in qualified_names:
+                        self.emptied_classes.add(self.class_stack[-1])
+                        return cst.RemovalSentinel.REMOVE
                 return updated_node
 
         try:
             tree = cst.parse_module(test_source)
-            modified = tree.visit(TestFunctionRemover(functions_to_remove))
+            modified = tree.visit(TestFunctionRemover())
             return modified.code
         except Exception:
             return test_source
@@ -1032,8 +1075,8 @@ class PythonSupport:
         from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
         from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
         from codeflash.languages.python.static_analysis.coverage_utils import prepare_coverage_files
+        from codeflash.languages.python.test_runner import execute_test_subprocess
         from codeflash.models.models import TestType
-        from codeflash.verification.test_runner import execute_test_subprocess
 
         blocklisted_plugins = ["benchmark", "codspeed", "xdist", "sugar"]
 
@@ -1137,7 +1180,7 @@ class PythonSupport:
 
         from codeflash.code_utils.code_utils import get_run_tmp_file
         from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
-        from codeflash.verification.test_runner import execute_test_subprocess
+        from codeflash.languages.python.test_runner import execute_test_subprocess
 
         blocklisted_plugins = ["codspeed", "cov", "benchmark", "profiling", "xdist", "sugar"]
 
@@ -1181,7 +1224,7 @@ class PythonSupport:
         from codeflash.code_utils.code_utils import get_run_tmp_file
         from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
         from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
-        from codeflash.verification.test_runner import execute_test_subprocess
+        from codeflash.languages.python.test_runner import execute_test_subprocess
 
         blocklisted_plugins = ["codspeed", "cov", "benchmark", "profiling", "xdist", "sugar"]
 

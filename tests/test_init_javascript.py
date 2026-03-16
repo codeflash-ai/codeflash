@@ -8,6 +8,8 @@ import pytest
 
 from codeflash.cli_cmds.init_javascript import (
     JsPackageManager,
+    ProjectLanguage,
+    detect_project_language,
     determine_js_package_manager,
     get_package_install_command,
     should_modify_package_json_config,
@@ -344,3 +346,95 @@ class TestCollectJsSetupInfoSkipConfirm:
         assert setup_info.module_root_override is None
         assert setup_info.formatter_override is None
         assert setup_info.git_remote == "origin"
+
+
+class TestDetectProjectLanguage:
+    """Tests for detect_project_language function."""
+
+    def test_detects_java_from_pom_xml(self, tmp_project: Path) -> None:
+        (tmp_project / "pom.xml").write_text("<project/>")
+
+        result = detect_project_language(tmp_project)
+
+        assert result == ProjectLanguage.JAVA
+
+    def test_detects_java_from_build_gradle(self, tmp_project: Path) -> None:
+        (tmp_project / "build.gradle").write_text("")
+
+        result = detect_project_language(tmp_project)
+
+        assert result == ProjectLanguage.JAVA
+
+    def test_detects_java_from_build_gradle_kts(self, tmp_project: Path) -> None:
+        (tmp_project / "build.gradle.kts").write_text("")
+
+        result = detect_project_language(tmp_project)
+
+        assert result == ProjectLanguage.JAVA
+
+    def test_detects_typescript_from_tsconfig(self, tmp_project: Path) -> None:
+        (tmp_project / "tsconfig.json").write_text("{}")
+
+        result = detect_project_language(tmp_project)
+
+        assert result == ProjectLanguage.TYPESCRIPT
+
+    def test_detects_javascript_from_package_json(self, tmp_project: Path) -> None:
+        (tmp_project / "package.json").write_text("{}")
+
+        result = detect_project_language(tmp_project)
+
+        assert result == ProjectLanguage.JAVASCRIPT
+
+    def test_detects_python_from_pyproject_toml(self, tmp_project: Path) -> None:
+        (tmp_project / "pyproject.toml").write_text("")
+
+        result = detect_project_language(tmp_project)
+
+        assert result == ProjectLanguage.PYTHON
+
+    def test_defaults_to_python_for_empty_directory(self, tmp_project: Path) -> None:
+        result = detect_project_language(tmp_project)
+
+        assert result == ProjectLanguage.PYTHON
+
+    def test_java_takes_priority_over_python(self, tmp_project: Path) -> None:
+        (tmp_project / "pom.xml").write_text("<project/>")
+        (tmp_project / "pyproject.toml").write_text("")
+
+        result = detect_project_language(tmp_project)
+
+        assert result == ProjectLanguage.JAVA
+
+    def test_java_takes_priority_over_javascript(self, tmp_project: Path) -> None:
+        (tmp_project / "build.gradle").write_text("")
+        (tmp_project / "package.json").write_text("{}")
+
+        result = detect_project_language(tmp_project)
+
+        assert result == ProjectLanguage.JAVA
+
+    def test_java_takes_priority_over_typescript(self, tmp_project: Path) -> None:
+        (tmp_project / "pom.xml").write_text("<project/>")
+        (tmp_project / "tsconfig.json").write_text("{}")
+
+        result = detect_project_language(tmp_project)
+
+        assert result == ProjectLanguage.JAVA
+
+    def test_javascript_with_js_indicators_over_python(self, tmp_project: Path) -> None:
+        (tmp_project / "package.json").write_text("{}")
+        (tmp_project / "pyproject.toml").write_text("")
+        (tmp_project / "node_modules").mkdir()
+
+        result = detect_project_language(tmp_project)
+
+        assert result == ProjectLanguage.JAVASCRIPT
+
+    def test_python_over_package_json_without_js_indicators(self, tmp_project: Path) -> None:
+        (tmp_project / "package.json").write_text("{}")
+        (tmp_project / "pyproject.toml").write_text("")
+
+        result = detect_project_language(tmp_project)
+
+        assert result == ProjectLanguage.PYTHON

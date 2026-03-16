@@ -304,7 +304,7 @@ describe('fibonacci', () => {
         """Test FunctionOptimizer can be instantiated for JavaScript."""
         skip_if_js_not_supported()
         from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
+        from codeflash.languages.function_optimizer import FunctionOptimizer
 
         src_file = js_project / "utils.js"
         functions = find_all_functions_in_file(src_file)
@@ -337,7 +337,7 @@ describe('fibonacci', () => {
         """Test FunctionOptimizer can be instantiated for TypeScript."""
         skip_if_js_not_supported()
         from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
+        from codeflash.languages.function_optimizer import FunctionOptimizer
 
         src_file = ts_project / "utils.ts"
         functions = find_all_functions_in_file(src_file)
