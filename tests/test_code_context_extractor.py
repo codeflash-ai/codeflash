@@ -4501,6 +4501,104 @@ def process(w: Widget) -> str:
     assert "size" in code
 
 
+def test_extract_parameter_type_constructors_stdlib_type(tmp_path: Path) -> None:
+    pkg = tmp_path / "mypkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "processor.py").write_text(
+        """from argparse import Namespace
+
+def process(ns: Namespace) -> str:
+    return str(ns)
+""",
+        encoding="utf-8",
+    )
+
+    fto = FunctionToOptimize(
+        function_name="process", file_path=(pkg / "processor.py").resolve(), starting_line=3, ending_line=4
+    )
+    result = extract_parameter_type_constructors(fto, tmp_path.resolve(), set())
+    assert len(result.code_strings) == 1
+    code = result.code_strings[0].code
+    assert "class Namespace:" in code
+    assert "def __init__(self, **kwargs):" in code
+
+
+def test_extract_parameter_type_constructors_namedtuple_project_type(tmp_path: Path) -> None:
+    pkg = tmp_path / "mypkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "models.py").write_text(
+        """from pathlib import Path
+from typing import NamedTuple
+
+class FunctionNode(NamedTuple):
+    file_path: Path
+    qualified_name: str
+""",
+        encoding="utf-8",
+    )
+    (pkg / "processor.py").write_text(
+        """from mypkg.models import FunctionNode
+
+def process(node: FunctionNode) -> str:
+    return node.qualified_name
+""",
+        encoding="utf-8",
+    )
+
+    fto = FunctionToOptimize(
+        function_name="process", file_path=(pkg / "processor.py").resolve(), starting_line=3, ending_line=4
+    )
+    result = extract_parameter_type_constructors(fto, tmp_path.resolve(), set())
+    assert len(result.code_strings) == 1
+    code = result.code_strings[0].code
+    assert "class FunctionNode(NamedTuple):" in code
+    assert "file_path: Path" in code
+    assert "qualified_name: str" in code
+
+
+def test_extract_parameter_type_constructors_uses_raw_project_context_for_small_class(tmp_path: Path) -> None:
+    pkg = tmp_path / "mypkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "models.py").write_text(
+        """from functools import total_ordering
+
+@total_ordering
+class Rank:
+    def __init__(self, value: int):
+        self.value = value
+
+    def __lt__(self, other: "Rank") -> bool:
+        return self.value < other.value
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, Rank) and self.value == other.value
+""",
+        encoding="utf-8",
+    )
+    (pkg / "processor.py").write_text(
+        """from mypkg.models import Rank
+
+def process(rank: Rank) -> int:
+    return rank.value
+""",
+        encoding="utf-8",
+    )
+
+    fto = FunctionToOptimize(
+        function_name="process", file_path=(pkg / "processor.py").resolve(), starting_line=3, ending_line=4
+    )
+    result = extract_parameter_type_constructors(fto, tmp_path.resolve(), set())
+    assert len(result.code_strings) == 1
+    code = result.code_strings[0].code
+    assert "from functools import total_ordering" in code
+    assert "@total_ordering" in code
+    assert "def __lt__" in code
+    assert "def __eq__" in code
+
+
 def test_extract_parameter_type_constructors_excludes_builtins(tmp_path: Path) -> None:
     pkg = tmp_path / "mypkg"
     pkg.mkdir()
@@ -4788,6 +4886,48 @@ def test_extract_parameter_type_constructors_base_classes(tmp_path: Path) -> Non
     assert "class BaseProcessor:" in result.code_strings[0].code
 
 
+def test_extract_parameter_type_constructors_attribute_base_prefers_imported_project_class(tmp_path: Path) -> None:
+    pkg = tmp_path / "mypkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "external.py").write_text(
+        """class Base:
+    def __init__(self, x: int):
+        self.x = x
+""",
+        encoding="utf-8",
+    )
+    (pkg / "models.py").write_text(
+        """import mypkg.external as ext
+
+class Base:
+    pass
+
+class Child(ext.Base):
+    def __init__(self, x: int):
+        super().__init__(x)
+""",
+        encoding="utf-8",
+    )
+    (pkg / "processor.py").write_text(
+        """from mypkg.models import Child
+
+def process(c: Child) -> int:
+    return c.x
+""",
+        encoding="utf-8",
+    )
+
+    fto = FunctionToOptimize(
+        function_name="process", file_path=(pkg / "processor.py").resolve(), starting_line=3, ending_line=4
+    )
+    result = extract_parameter_type_constructors(fto, tmp_path.resolve(), set())
+    combined = "\n".join(cs.code for cs in result.code_strings)
+    assert "class Child(ext.Base):" in combined
+    assert "self.x = x" in combined
+    assert "class Base:\n    pass" not in combined
+
+
 def test_extract_parameter_type_constructors_isinstance_builtins_excluded(tmp_path: Path) -> None:
     """Isinstance with builtins (int, str, etc.) should not produce stubs."""
     pkg = tmp_path / "mypkg"
@@ -4826,6 +4966,51 @@ def test_extract_parameter_type_constructors_transitive(tmp_path: Path) -> None:
     combined = "\n".join(cs.code for cs in result.code_strings)
     assert "class Widget:" in combined
     assert "class Config:" in combined
+
+
+def test_extract_parameter_type_constructors_uses_raw_project_context_for_dataclass_inheritance(tmp_path: Path) -> None:
+    pkg = tmp_path / "mypkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "base.py").write_text(
+        """from dataclasses import dataclass
+from pathlib import Path
+
+@dataclass
+class BaseConfig:
+    file_path: Path
+""",
+        encoding="utf-8",
+    )
+    (pkg / "models.py").write_text(
+        """from dataclasses import dataclass
+from mypkg.base import BaseConfig
+
+@dataclass
+class ChildConfig(BaseConfig):
+    qualified_name: str
+""",
+        encoding="utf-8",
+    )
+    (pkg / "processor.py").write_text(
+        """from mypkg.models import ChildConfig
+
+def process(cfg: ChildConfig) -> str:
+    return cfg.qualified_name
+""",
+        encoding="utf-8",
+    )
+
+    fto = FunctionToOptimize(
+        function_name="process", file_path=(pkg / "processor.py").resolve(), starting_line=3, ending_line=4
+    )
+    result = extract_parameter_type_constructors(fto, tmp_path.resolve(), set())
+    combined = "\n".join(cs.code for cs in result.code_strings)
+    assert "@dataclass" in combined
+    assert "class BaseConfig" in combined
+    assert "file_path: Path" in combined
+    assert "class ChildConfig(BaseConfig):" in combined
+    assert "qualified_name: str" in combined
 
 
 def test_enrich_testgen_context_third_party_uses_stubs(tmp_path: Path) -> None:
