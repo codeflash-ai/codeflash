@@ -492,6 +492,7 @@ def run_benchmarking_tests(
             compile_result = strategy.compile_tests(build_root, compile_env, test_module, timeout=120)
             if compile_result.returncode != 0:
                 logger.warning("Falling back to %s-based test execution", strategy.name)
+                cache.mark_compiled(build_root, test_module, candidate_index)
                 return strategy.run_benchmarking_via_build_tool(
                     test_paths,
                     test_env,
@@ -503,8 +504,11 @@ def run_benchmarking_tests(
                     target_duration_seconds,
                     inner_iterations,
                 )
-        logger.debug("Source compilation completed in %.2fs", time.time() - compile_start)
-        cache.mark_compiled(build_root, test_module, candidate_index)
+            cache.mark_compiled(build_root, test_module, candidate_index, tests=True)
+        else:
+            cache.mark_compiled(build_root, test_module, candidate_index)
+        compile_time = time.time() - compile_start
+        logger.debug("Source compilation completed in %.2fs", compile_time)
     else:
         logger.debug("Step 1: Compiling tests + source (one-time %s overhead)", strategy.name)
         compile_start = time.time()
@@ -519,6 +523,7 @@ def run_benchmarking_tests(
                 compile_result.stderr,
             )
             logger.warning("Falling back to %s-based test execution", strategy.name)
+            cache.mark_compiled(build_root, test_module, candidate_index, tests=True)
             return strategy.run_benchmarking_via_build_tool(
                 test_paths,
                 test_env,
@@ -765,13 +770,16 @@ def _run_direct_or_fallback(
             compile_result = strategy.compile_tests(build_root, run_env, test_module, timeout=120)
             if compile_result.returncode != 0:
                 logger.warning("Full compilation also failed, falling back to %s-based execution", strategy.name)
+                cache.mark_compiled(build_root, test_module, candidate_index)
                 result = strategy.run_tests_via_build_tool(
                     build_root, test_paths, run_env, timeout=timeout, mode=mode, test_module=test_module
                 )
                 reports_dir = strategy.get_reports_dir(build_root, test_module)
                 result_xml_path = _get_combined_junit_xml(reports_dir, candidate_index)
                 return result, result_xml_path
-        cache.mark_compiled(build_root, test_module, candidate_index)
+            cache.mark_compiled(build_root, test_module, candidate_index, tests=True)
+        else:
+            cache.mark_compiled(build_root, test_module, candidate_index)
     else:
         logger.debug("Step 1: Compiling tests + source (first time)")
         compile_result = strategy.compile_tests(build_root, run_env, test_module, timeout=120)
@@ -781,6 +789,7 @@ def _run_direct_or_fallback(
                 compile_result.returncode,
                 strategy.name,
             )
+            cache.mark_compiled(build_root, test_module, candidate_index, tests=True)
             result = strategy.run_tests_via_build_tool(
                 build_root, test_paths, run_env, timeout=timeout, mode=mode, test_module=test_module
             )
