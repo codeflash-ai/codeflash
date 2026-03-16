@@ -921,14 +921,14 @@ def _should_use_raw_project_class_context(class_node: ast.ClassDef, import_alias
     # Check decorator presence first - cheapest check that can short-circuit
     if class_node.decorator_list:
         return True
-    
+
     # Check for namedtuple/dataclass early - these are common patterns that avoid body scanning
     if _is_namedtuple_class(class_node, import_aliases):
         return True
     is_dataclass, _, _ = _get_dataclass_config(class_node, import_aliases)
     if is_dataclass:
         return True
-    
+
     # Calculate size metrics once
     start_line = _get_class_start_line(class_node)
     assert class_node.end_lineno is not None
@@ -936,7 +936,7 @@ def _should_use_raw_project_class_context(class_node: ast.ClassDef, import_alias
     is_small = (
         class_line_count <= MAX_RAW_PROJECT_CLASS_LINES and len(class_node.body) <= MAX_RAW_PROJECT_CLASS_BODY_ITEMS
     )
-    
+
     # Single-pass body scan with early returns
     has_explicit_init = False
 
