@@ -8,6 +8,7 @@ from codeflash.languages.javascript.frameworks.react.discovery import (
 )
 from codeflash.languages.javascript.frameworks.react.testgen import (
     generate_rerender_test_template,
+    has_high_density_interactions,
     post_process_react_tests,
 )
 
@@ -54,6 +55,40 @@ class TestPostProcessReactTests:
         source = "import { render } from '@testing-library/react';\ntest('renders', () => { render(<Foo />); });"
         result = post_process_react_tests(source, _make_info())
         assert "@testing-library/user-event" not in result
+
+
+class TestPostProcessWarnsLowDensity:
+    def test_warns_on_low_density(self, caplog):
+        """Post-processing should warn when tests lack high-density interactions."""
+        import logging
+
+        source = (
+            "import { render } from '@testing-library/react';\n"
+            "describe('MyComp', () => {\n"
+            "  it('does one thing', () => { fireEvent.click(btn); });\n"
+            "});"
+        )
+        with caplog.at_level(logging.WARNING):
+            post_process_react_tests(source, _make_info())
+        assert "high-density" in caplog.text.lower() or "lack high-density" in caplog.text.lower()
+
+    def test_no_warn_on_high_density(self, caplog):
+        """No warning when tests have loops with interactions."""
+        import logging
+
+        source = (
+            "import { render } from '@testing-library/react';\n"
+            "describe('MyComp', () => {\n"
+            "  it('rapid clicks', () => {\n"
+            "    for (let i = 0; i < 10; i++) {\n"
+            "      fireEvent.click(btn);\n"
+            "    }\n"
+            "  });\n"
+            "});"
+        )
+        with caplog.at_level(logging.WARNING):
+            post_process_react_tests(source, _make_info())
+        assert "high-density" not in caplog.text.lower()
 
 
 def _make_info() -> ReactComponentInfo:

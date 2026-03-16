@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from codeflash.languages.javascript.frameworks.react.profiler import (
     MARKER_PREFIX,
     generate_render_counter_code,
+    instrument_all_components_except,
+    instrument_all_components_for_tracing,
 )
 from codeflash.languages.javascript.parse import (
     REACT_RENDER_MARKER_PATTERN,
@@ -109,3 +113,50 @@ class TestParseReactRenderMarkers:
         assert len(profiles) == 2
         assert profiles[0].component_name == "Counter"
         assert profiles[1].render_count == 2
+
+
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+
+class TestInstrumentAllComponentsExcept:
+    def _get_analyzer(self, file_path: Path):
+        from codeflash.languages.javascript.treesitter import get_analyzer_for_file
+
+        return get_analyzer_for_file(file_path)
+
+    def test_excludes_target_instruments_children(self):
+        """When excluding MemoizedList, only ListItem should be instrumented."""
+        file_path = FIXTURES_DIR / "MemoizedList.tsx"
+        source = file_path.read_text("utf-8")
+        analyzer = self._get_analyzer(file_path)
+        result = instrument_all_components_except(source, file_path, analyzer, "MemoizedList")
+        # ListItem should be instrumented (has Profiler wrapping)
+        assert "_codeflashOnRender_ListItem" in result
+        # MemoizedList should NOT be instrumented
+        assert "_codeflashOnRender_MemoizedList" not in result
+
+    def test_instruments_all_when_no_match(self):
+        """When excluding a non-existent component, all should be instrumented."""
+        file_path = FIXTURES_DIR / "MemoizedList.tsx"
+        source = file_path.read_text("utf-8")
+        analyzer = self._get_analyzer(file_path)
+        result = instrument_all_components_except(source, file_path, analyzer, "NonExistent")
+        assert "_codeflashOnRender_ListItem" in result
+        assert "_codeflashOnRender_MemoizedList" in result
+
+    def test_no_change_when_only_target(self):
+        """When file has only the target component, source is unchanged."""
+        file_path = FIXTURES_DIR / "Counter.tsx"
+        source = file_path.read_text("utf-8")
+        analyzer = self._get_analyzer(file_path)
+        result = instrument_all_components_except(source, file_path, analyzer, "Counter")
+        assert result == source
+
+    def test_instrument_all_includes_target(self):
+        """instrument_all_components_for_tracing should include the target component too."""
+        file_path = FIXTURES_DIR / "MemoizedList.tsx"
+        source = file_path.read_text("utf-8")
+        analyzer = self._get_analyzer(file_path)
+        result = instrument_all_components_for_tracing(source, file_path, analyzer)
+        assert "_codeflashOnRender_ListItem" in result
+        assert "_codeflashOnRender_MemoizedList" in result

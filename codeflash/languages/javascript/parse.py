@@ -41,6 +41,10 @@ REACT_RENDER_MARKER_PATTERN = re.compile(r"!######REACT_RENDER:([^:]+):([^:]+):(
 # Format: !######DOM_MUTATIONS:{component}:{mutationCount}######!
 DOM_MUTATION_MARKER_PATTERN = re.compile(r"!######DOM_MUTATIONS:([^:]+):(\d+)######!")
 
+# React interaction duration marker pattern
+# Format: !######REACT_INTERACTION_DURATION:{component}:{durationMs}:{burstCount}######!
+REACT_INTERACTION_DURATION_PATTERN = re.compile(r"!######REACT_INTERACTION_DURATION:([^:]+):([^:]+):(\d+)######!")
+
 
 @dataclass(frozen=True)
 class RenderProfile:
@@ -59,7 +63,9 @@ def parse_react_render_markers(stdout: str) -> list[RenderProfile]:
     Returns a list of RenderProfile instances, one per marker found.
     """
     profiles: list[RenderProfile] = []
+    total_matches = 0
     for match in REACT_RENDER_MARKER_PATTERN.finditer(stdout):
+        total_matches += 1
         try:
             profiles.append(
                 RenderProfile(
@@ -72,6 +78,10 @@ def parse_react_render_markers(stdout: str) -> list[RenderProfile]:
             )
         except (ValueError, IndexError) as e:
             logger.debug("Failed to parse React render marker: %s", e)
+    if total_matches > 0 and not profiles:
+        logger.warning(
+            "[REACT] All %d REACT_RENDER markers were malformed — marker format may have changed", total_matches
+        )
     return profiles
 
 
@@ -89,7 +99,9 @@ def parse_dom_mutation_markers(stdout: str) -> list[DomMutationProfile]:
     Returns a list of DomMutationProfile instances, one per marker found.
     """
     profiles: list[DomMutationProfile] = []
+    total_matches = 0
     for match in DOM_MUTATION_MARKER_PATTERN.finditer(stdout):
+        total_matches += 1
         try:
             profiles.append(
                 DomMutationProfile(
@@ -99,6 +111,39 @@ def parse_dom_mutation_markers(stdout: str) -> list[DomMutationProfile]:
             )
         except (ValueError, IndexError) as e:
             logger.debug("Failed to parse DOM mutation marker: %s", e)
+    if total_matches > 0 and not profiles:
+        logger.warning(
+            "[REACT] All %d DOM_MUTATIONS markers were malformed — marker format may have changed", total_matches
+        )
+    return profiles
+
+
+@dataclass(frozen=True)
+class InteractionDurationProfile:
+    """Parsed interaction-to-settle duration from MutationObserver timestamps."""
+
+    component_name: str
+    duration_ms: float
+    burst_count: int
+
+
+def parse_interaction_duration_markers(stdout: str) -> list[InteractionDurationProfile]:
+    """Parse interaction duration markers from test output.
+
+    Returns a list of InteractionDurationProfile instances, one per marker found.
+    """
+    profiles: list[InteractionDurationProfile] = []
+    for match in REACT_INTERACTION_DURATION_PATTERN.finditer(stdout):
+        try:
+            profiles.append(
+                InteractionDurationProfile(
+                    component_name=match.group(1),
+                    duration_ms=float(match.group(2)),
+                    burst_count=int(match.group(3)),
+                )
+            )
+        except (ValueError, IndexError) as e:
+            logger.debug("Failed to parse interaction duration marker: %s", e)
     return profiles
 
 

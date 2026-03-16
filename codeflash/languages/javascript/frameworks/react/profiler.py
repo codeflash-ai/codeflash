@@ -128,6 +128,32 @@ def instrument_all_components_for_tracing(source: str, file_path: Path, analyzer
     return result
 
 
+def instrument_all_components_except(
+    source: str, file_path: Path, analyzer: TreeSitterAnalyzer, exclude_component_name: str
+) -> str:
+    """Instrument all components in a file EXCEPT the specified one.
+
+    Used when captureRenderPerf() handles the target component — child
+    components still need source-level Profiler instrumentation so that
+    per-component render data is visible in benchmarks.
+    """
+    from codeflash.languages.javascript.frameworks.react.discovery import find_react_components
+
+    components = find_react_components(source, file_path, analyzer)
+    if not components:
+        return source
+
+    result = source
+    for comp in sorted(components, key=lambda c: c.start_line, reverse=True):
+        if comp.returns_jsx and comp.function_name != exclude_component_name:
+            result = instrument_component_with_profiler(result, comp.function_name, analyzer)
+
+    return result
+
+
+_WRAPPER_CALLEES = frozenset({"forwardRef", "memo", "React.forwardRef", "React.memo"})
+
+
 def _find_component_function(root_node: Node, component_name: str, source_bytes: bytes) -> Node | None:
     """Find the tree-sitter node for a named component function."""
     # Check function declarations
@@ -144,6 +170,14 @@ def _find_component_function(root_node: Node, component_name: str, source_bytes:
         if name_node:
             name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf-8")
             if name == component_name:
+                # If the value is a HOC wrapper (forwardRef/memo), extract the inner function
+                inner = _unwrap_hoc_call(root_node, source_bytes)
+                if inner is not None:
+                    return inner
+                # Return the actual function node so _find_jsx_returns doesn't skip it
+                value_node = root_node.child_by_field_name("value")
+                if value_node and value_node.type in ("arrow_function", "function_expression", "function"):
+                    return value_node
                 return root_node
 
     # Check export statements
@@ -158,6 +192,50 @@ def _find_component_function(root_node: Node, component_name: str, source_bytes:
         if result:
             return result
 
+    return None
+
+
+def _unwrap_hoc_call(declarator_node: Node, source_bytes: bytes) -> Node | None:
+    """Extract the inner function from a HOC wrapper like memo() or forwardRef().
+
+    Handles patterns like:
+        const MyComp = React.memo((props) => { ... })
+        const MyComp = forwardRef(function MyComp(props, ref) { ... })
+        const MyComp = memo(React.forwardRef((props, ref) => { ... }))
+    """
+    value_node = declarator_node.child_by_field_name("value")
+    if value_node is None or value_node.type != "call_expression":
+        return None
+
+    callee = value_node.child_by_field_name("function")
+    if callee is None:
+        return None
+
+    callee_text = source_bytes[callee.start_byte : callee.end_byte].decode("utf-8")
+    if callee_text not in _WRAPPER_CALLEES:
+        return None
+
+    # The first argument to the wrapper is the component function
+    args_node = value_node.child_by_field_name("arguments")
+    if args_node is None:
+        return None
+
+    for child in args_node.children:
+        if child.type in ("arrow_function", "function_expression", "function"):
+            return child
+        # Handle nested wrappers: memo(forwardRef((props, ref) => ...))
+        if child.type == "call_expression":
+            nested_callee = child.child_by_field_name("function")
+            if nested_callee is not None:
+                nested_text = source_bytes[nested_callee.start_byte : nested_callee.end_byte].decode("utf-8")
+                if nested_text in _WRAPPER_CALLEES:
+                    nested_args = child.child_by_field_name("arguments")
+                    if nested_args is not None:
+                        for nested_child in nested_args.children:
+                            if nested_child.type in ("arrow_function", "function_expression", "function"):
+                                return nested_child
+
+    logger.debug("HOC wrapper %s found but could not extract inner function", callee_text)
     return None
 
 
@@ -340,6 +418,9 @@ def _build_render_counter_code(component_name: str, marker_prefix: str) -> str:
     safe_name = _SAFE_NAME_RE.sub("_", component_name)
     return f"""\
 let _codeflash_render_count_{safe_name} = 0;
+if (typeof beforeEach !== 'undefined') {{
+  beforeEach(() => {{ _codeflash_render_count_{safe_name} = 0; }});
+}}
 function _codeflashOnRender_{safe_name}(id, phase, actualDuration, baseDuration) {{
   _codeflash_render_count_{safe_name}++;
   console.log(`!######{marker_prefix}:${{id}}:${{phase}}:${{actualDuration}}:${{baseDuration}}:${{_codeflash_render_count_{safe_name}}}######!`);

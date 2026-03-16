@@ -6,8 +6,11 @@ test templates, and post-processing for generated React tests.
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import TYPE_CHECKING, Any
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from codeflash.languages.base import CodeContext
@@ -161,4 +164,61 @@ def post_process_react_tests(test_source: str, component_info: ReactComponentInf
             count=1,
         )
 
+    # Warn if no tests contain interaction calls — mount-phase only markers are
+    # not useful for measuring optimization effectiveness.
+    if not has_react_test_interactions(result):
+        logger.warning(
+            "[REACT] Generated tests for %s contain no interactions (fireEvent, userEvent, rerender). "
+            "Tests will produce only mount-phase markers which cannot measure optimization improvements.",
+            component_info.function_name,
+        )
+
+    # Warn if tests lack high-density interaction patterns (loops or 3+ sequential calls)
+    if not has_high_density_interactions(result):
+        logger.warning(
+            "[REACT] Generated tests for %s lack high-density interactions (no loops with interactions or "
+            "3+ sequential interaction calls). Render count differences may be too small to measure.",
+            component_info.function_name,
+        )
+
     return result
+
+
+# Patterns that indicate a test triggers user interactions causing re-renders
+_INTERACTION_PATTERNS = re.compile(
+    r"fireEvent\.|userEvent\.|\.rerender\(|rerender\(|act\("
+)
+
+
+def has_react_test_interactions(test_source: str) -> bool:
+    """Check if a React test contains interactions that trigger re-renders.
+
+    Returns True if the test source contains any of: fireEvent, userEvent,
+    rerender(), or act() calls — all of which cause update-phase renders
+    that the Profiler can measure.
+    """
+    return bool(_INTERACTION_PATTERNS.search(test_source))
+
+
+# Patterns for loops containing interaction calls
+_LOOP_WITH_INTERACTION = re.compile(
+    r"for\s*\([^)]*\)\s*\{[^}]*(?:fireEvent\.|userEvent\.|rerender\()",
+    re.DOTALL,
+)
+
+# Minimum sequential interaction calls to consider "high density"
+_MIN_SEQUENTIAL_INTERACTIONS = 3
+
+
+def has_high_density_interactions(test_source: str) -> bool:
+    """Check if tests contain high-density interaction patterns.
+
+    Returns True if the test source contains either:
+    - A loop (for/while) with interaction calls inside, OR
+    - 3+ sequential interaction calls (fireEvent/userEvent/rerender)
+    """
+    if _LOOP_WITH_INTERACTION.search(test_source):
+        return True
+
+    interaction_calls = _INTERACTION_PATTERNS.findall(test_source)
+    return len(interaction_calls) >= _MIN_SEQUENTIAL_INTERACTIONS

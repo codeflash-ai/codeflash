@@ -112,7 +112,7 @@ def speedup_critic(
     # React render efficiency evaluation
     render_efficiency_improved = False
     if original_render_profiles and candidate_result.render_profiles:
-        from codeflash.languages.javascript.frameworks.react.benchmarking import compare_render_benchmarks
+        from codeflash.languages.javascript.frameworks.react.benchmarking import compare_render_benchmarks  # noqa: PLC0415
 
         benchmark = compare_render_benchmarks(original_render_profiles, candidate_result.render_profiles)
         if benchmark:
@@ -123,6 +123,14 @@ def speedup_critic(
                 benchmark.optimized_avg_duration_ms,
                 original_dom_mutations=benchmark.original_dom_mutations,
                 optimized_dom_mutations=benchmark.optimized_dom_mutations,
+                original_update_render_count=benchmark.original_update_render_count,
+                optimized_update_render_count=benchmark.optimized_update_render_count,
+                original_update_duration=benchmark.original_update_avg_duration_ms,
+                optimized_update_duration=benchmark.optimized_update_avg_duration_ms,
+                child_render_reduction=benchmark.child_render_reduction,
+                original_interaction_duration_ms=benchmark.original_interaction_duration_ms,
+                optimized_interaction_duration_ms=benchmark.optimized_interaction_duration_ms,
+                trust_duration=False,
             )
 
     throughput_improved = True  # Default to True if no throughput data
@@ -176,6 +184,13 @@ def get_acceptance_reason(
     optimized_render_duration: float | None = None,
     original_dom_mutations: int = 0,
     optimized_dom_mutations: int = 0,
+    original_update_render_count: int = 0,
+    optimized_update_render_count: int = 0,
+    original_update_duration: float = 0.0,
+    optimized_update_duration: float = 0.0,
+    child_render_reduction: int = 0,
+    original_interaction_duration_ms: float = 0.0,
+    optimized_interaction_duration_ms: float = 0.0,
 ) -> AcceptanceReason:
     """Determine why an optimization was accepted.
 
@@ -204,6 +219,14 @@ def get_acceptance_reason(
             optimized_render_duration,
             original_dom_mutations=original_dom_mutations,
             optimized_dom_mutations=optimized_dom_mutations,
+            original_update_render_count=original_update_render_count,
+            optimized_update_render_count=optimized_update_render_count,
+            original_update_duration=original_update_duration,
+            optimized_update_duration=optimized_update_duration,
+            child_render_reduction=child_render_reduction,
+            original_interaction_duration_ms=original_interaction_duration_ms,
+            optimized_interaction_duration_ms=optimized_interaction_duration_ms,
+            trust_duration=False,
         )
 
     throughput_improved = False
@@ -268,6 +291,11 @@ MIN_RENDER_COUNT_REDUCTION_PCT = 0.20  # 20%
 MIN_DOM_MUTATION_REDUCTION_PCT = 0.20  # 20%
 
 
+MIN_INTERACTION_DURATION_REDUCTION_PCT = 0.20  # 20%
+
+MIN_CHILD_RENDER_REDUCTION = 2
+
+
 def render_efficiency_critic(
     original_render_count: int,
     optimized_render_count: int,
@@ -276,29 +304,55 @@ def render_efficiency_critic(
     best_render_count_until_now: int | None = None,
     original_dom_mutations: int = 0,
     optimized_dom_mutations: int = 0,
+    original_update_render_count: int = 0,
+    optimized_update_render_count: int = 0,
+    original_update_duration: float = 0.0,
+    optimized_update_duration: float = 0.0,
+    child_render_reduction: int = 0,
+    original_interaction_duration_ms: float = 0.0,
+    optimized_interaction_duration_ms: float = 0.0,
+    trust_duration: bool = True,
 ) -> bool:
     """Evaluate whether a React optimization reduces re-renders, render time, or DOM mutations sufficiently.
 
+    Uses update-phase render counts as primary signal when available (tests that
+    trigger interactions produce update-phase markers). Falls back to total
+    render count if no update-phase data exists.
+
+    When ``trust_duration`` is False (e.g. jsdom where actualDuration is noise),
+    render duration is excluded from the acceptance criteria.
+
     Accepts if:
-    - Render count is reduced by >= 20%
-    - OR render duration is reduced by >= MIN_IMPROVEMENT_THRESHOLD
-    - OR DOM mutations are reduced by >= 20%
+    - Update render count reduced by >= 20% (primary), OR total render count reduced by >= 20% (fallback)
+    - OR render duration reduced by >= MIN_IMPROVEMENT_THRESHOLD (when trust_duration=True)
+    - OR DOM mutations reduced by >= 20%
+    - OR child component render reduction >= MIN_CHILD_RENDER_REDUCTION (captures useCallback/memo optimizations)
+    - OR interaction duration reduced by >= 20% (captures debounce/throttle optimizations)
     - AND the candidate is the best seen so far
     """
-    if original_render_count == 0 and original_dom_mutations == 0:
+    if original_render_count == 0 and original_dom_mutations == 0 and child_render_reduction == 0:
         return False
+
+    # Use update-phase counts as primary signal when available
+    has_update_data = original_update_render_count > 0 or optimized_update_render_count > 0
+    effective_orig_count = original_update_render_count if has_update_data else original_render_count
+    effective_opt_count = optimized_update_render_count if has_update_data else optimized_render_count
 
     # Check render count reduction
     count_improved = False
-    if original_render_count > 0:
-        count_reduction = (original_render_count - optimized_render_count) / original_render_count
+    if effective_orig_count > 0:
+        count_reduction = (effective_orig_count - effective_opt_count) / effective_orig_count
         count_improved = count_reduction >= MIN_RENDER_COUNT_REDUCTION_PCT
 
-    # Check render duration reduction
+    # Check render duration reduction (prefer update-phase duration)
+    # Skipped when trust_duration=False (jsdom actualDuration is noise)
     duration_improved = False
-    if original_render_duration > 0:
-        duration_gain = (original_render_duration - optimized_render_duration) / original_render_duration
-        duration_improved = duration_gain > MIN_IMPROVEMENT_THRESHOLD
+    if trust_duration:
+        effective_orig_duration = original_update_duration if has_update_data else original_render_duration
+        effective_opt_duration = optimized_update_duration if has_update_data else optimized_render_duration
+        if effective_orig_duration > 0:
+            duration_gain = (effective_orig_duration - effective_opt_duration) / effective_orig_duration
+            duration_improved = duration_gain > MIN_IMPROVEMENT_THRESHOLD
 
     # Check DOM mutation reduction
     dom_mutations_improved = False
@@ -306,7 +360,24 @@ def render_efficiency_critic(
         dom_reduction = (original_dom_mutations - optimized_dom_mutations) / original_dom_mutations
         dom_mutations_improved = dom_reduction >= MIN_DOM_MUTATION_REDUCTION_PCT
 
-    # Check if this is the best candidate so far
-    is_best = best_render_count_until_now is None or optimized_render_count <= best_render_count_until_now
+    # Check child render reduction (useCallback/memo optimization signal)
+    child_renders_improved = child_render_reduction >= MIN_CHILD_RENDER_REDUCTION
 
-    return (count_improved or duration_improved or dom_mutations_improved) and is_best
+    # Check interaction duration reduction (debounce/throttle optimization signal)
+    interaction_duration_improved = False
+    if original_interaction_duration_ms > 0:
+        interaction_reduction = (
+            (original_interaction_duration_ms - optimized_interaction_duration_ms) / original_interaction_duration_ms
+        )
+        interaction_duration_improved = interaction_reduction >= MIN_INTERACTION_DURATION_REDUCTION_PCT
+
+    # Check if this is the best candidate so far
+    is_best = best_render_count_until_now is None or effective_opt_count <= best_render_count_until_now
+
+    return (
+        count_improved
+        or duration_improved
+        or dom_mutations_improved
+        or child_renders_improved
+        or interaction_duration_improved
+    ) and is_best

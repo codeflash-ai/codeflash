@@ -669,21 +669,29 @@ function capture(funcName, lineId, fn, ...args) {
  */
 function capturePerf(funcName, lineId, fn, ...args) {
     // In React Profiler mode, skip the benchmarking loop. Just call the function
-    // once and let React.Profiler instrumentation in the source capture render metrics.
+    // once. Render metrics are captured by captureRenderPerf()'s React.Profiler
+    // wrapper or by source-level instrumentation (legacy fallback).
     if (process.env.CODEFLASH_REACT_PROFILER_MODE === 'true') {
         const result = fn(...args);
 
-        // Set up DOM mutation counting for React profiler mode
+        // Set up DOM mutation counting and timestamp tracking for React profiler mode
         const MutationObserverCls = globalThis.MutationObserver;
         if (MutationObserverCls && result && result.container) {
             let mutationCount = 0;
+            const mutationTimestamps = [];
             const observer = new MutationObserverCls((mutations) => {
                 mutationCount += mutations.length;
+                mutationTimestamps.push(performance.now());
             });
             observer.observe(result.container, {
                 childList: true, subtree: true, attributes: true
             });
-            const entry = { funcName, observer, getMutationCount: () => mutationCount };
+            const entry = {
+                funcName,
+                observer,
+                getMutationCount: () => mutationCount,
+                getMutationTimestamps: () => mutationTimestamps,
+            };
             _activeMutationObservers.push(entry);
         }
 
@@ -1086,107 +1094,68 @@ function captureRender(funcName, lineId, renderFn, Component, ...createElementAr
 /**
  * Capture a React component render call for PERFORMANCE benchmarking only.
  *
- * This is the render-specific counterpart to capturePerf(). It measures the
- * time spent in render() calls with the same batched looping, time budget,
- * and stability checking as capturePerf.
+ * Wraps the component in React.Profiler at the render call site to emit
+ * REACT_RENDER markers on every mount and update phase — no source-level
+ * instrumentation needed. Sets up a MutationObserver to count DOM changes
+ * during subsequent test interactions (fireEvent, rerender).
  *
- * Between loop iterations the previous render result is unmounted to keep
- * the DOM clean and ensure each iteration starts from the same state.
- *
- * When CODEFLASH_REACT_PROFILER_MODE is enabled, skips the Benchmark.jsx
- * mount/unmount cycling and renders once normally. The React.Profiler
- * instrumentation in the source code emits timing data automatically via
- * stdout markers, so no additional benchmarking is needed.
+ * The test continues normally after this call — interactions trigger re-renders
+ * which produce update-phase Profiler markers (the primary optimization signal).
  *
  * @param {string} funcName - Name of the component being tested (static)
  * @param {string} lineId - Line number identifier in test file (static)
  * @param {Function} renderFn - The render function from @testing-library/react
  * @param {Function|object} Component - The React component to render
  * @param {...any} createElementArgs - Arguments for React.createElement (props, children)
- * @returns {object} - The render result from the final iteration
+ * @returns {object} - The render result (wrapped in Promise for API compat)
  * @throws {Error} - Re-throws any error from rendering
  */
 function captureRenderPerf(funcName, lineId, renderFn, Component, ...createElementArgs) {
-    // In Profiler mode, skip Benchmark.jsx cycling. The React.Profiler wrapper
-    // in the source code emits render markers automatically on every render.
-    // Just render once normally so test assertions pass.
-    if (process.env.CODEFLASH_REACT_PROFILER_MODE === 'true') {
-        const React = _getReact();
-        const element = React.createElement(Component, ...createElementArgs);
+    const React = _getReact();
 
-        const result = renderFn(element);
-
-        // Set up DOM mutation counting after initial render
-        const MutationObserverCls = globalThis.MutationObserver;
-        if (MutationObserverCls && result && result.container) {
-            let mutationCount = 0;
-            const observer = new MutationObserverCls((mutations) => {
-                mutationCount += mutations.length;
-            });
-            observer.observe(result.container, {
-                childList: true, subtree: true, attributes: true
-            });
-
-            // Track for automatic emission in afterEach
-            const entry = { funcName, observer, getMutationCount: () => mutationCount };
-            _activeMutationObservers.push(entry);
-
-            // Attach cleanup helper so tests can also emit manually if needed
-            result._codeflashMutationObserver = observer;
-            result._codeflashGetMutationCount = () => {
-                observer.disconnect();
-                console.log(`!######DOM_MUTATIONS:${funcName}:${mutationCount}######!`);
-                return mutationCount;
-            };
-        }
-
-        return Promise.resolve(result);
+    let renderCount = 0;
+    function onRender(id, phase, actualDuration, baseDuration) {
+        renderCount++;
+        console.log(`!######REACT_RENDER:${funcName}:${phase}:${actualDuration}:${baseDuration}:${renderCount}######!`);
     }
 
-    const runBenchmark = require('./react-benchmark/run');
+    const element = React.createElement(Component, ...createElementArgs);
+    const wrapped = React.createElement(React.Profiler, { id: funcName, onRender }, element);
 
-    const { testClassName, safeModulePath, safeTestFunctionName } = _getTestContext();
+    const result = renderFn(wrapped);
 
-    const invocationKey = `${safeModulePath}:${testClassName}:${safeTestFunctionName}:${funcName}:${lineId}`;
+    // Set up DOM mutation counting and timestamp tracking after initial render
+    const MutationObserverCls = globalThis.MutationObserver;
+    if (MutationObserverCls && result && result.container) {
+        let mutationCount = 0;
+        const mutationTimestamps = [];
+        const observer = new MutationObserverCls((mutations) => {
+            mutationCount += mutations.length;
+            mutationTimestamps.push(performance.now());
+        });
+        observer.observe(result.container, {
+            childList: true, subtree: true, attributes: true
+        });
 
-    const numSamples = getPerfLoopCount() > 1 ? getPerfLoopCount() : 50;
+        // Track for automatic emission in afterEach
+        const entry = {
+            funcName,
+            observer,
+            getMutationCount: () => mutationCount,
+            getMutationTimestamps: () => mutationTimestamps,
+        };
+        _activeMutationObservers.push(entry);
 
-    // createElementArgs matches React.createElement signature: (props, ...children)
-    const props = createElementArgs[0] || {};
+        // Attach cleanup helper so tests can also emit manually if needed
+        result._codeflashMutationObserver = observer;
+        result._codeflashGetMutationCount = () => {
+            observer.disconnect();
+            console.log(`!######DOM_MUTATIONS:${funcName}:${mutationCount}######!`);
+            return mutationCount;
+        };
+    }
 
-    const MS_TO_NS = 1e6;
-
-    return runBenchmark({
-        component: Component,
-        props,
-        samples: numSamples,
-        type: 'mount',
-    }).then((results) => {
-        // Emit perf markers for each sample so the Python parser can collect timings
-        for (let i = 0; i < results.samples.length; i++) {
-            const sample = results.samples[i];
-            const durationNs = Math.round(sample.elapsed * MS_TO_NS);
-
-            const loopIndex = getInvocationLoopIndex(invocationKey);
-            const testId = `${safeModulePath}:${testClassName}:${safeTestFunctionName}:${lineId}:${loopIndex}`;
-            const invocationIndex = getInvocationIndex(testId);
-            const invocationId = `${lineId}_${invocationIndex}`;
-            const testStdoutTag = `${safeModulePath}:${testClassName ? testClassName + '.' : ''}${safeTestFunctionName}:${funcName}:${loopIndex}:${invocationId}`;
-
-            console.log(`!######${testStdoutTag}:${durationNs}######!`);
-            sharedPerfState.totalLoopsCompleted++;
-        }
-
-        // Render once more so the test's own assertions (e.g. screen.getByText) still pass
-        const React = _getReact();
-        const element = React.createElement(Component, ...createElementArgs);
-        return renderFn(element);
-    }).catch(() => {
-        // If benchmark fails, render once so test assertions can still run
-        const React = _getReact();
-        const element = React.createElement(Component, ...createElementArgs);
-        return renderFn(element);
-    });
+    return Promise.resolve(result);
 }
 
 /**
@@ -1308,14 +1277,31 @@ if (typeof beforeEach !== 'undefined') {
     });
 }
 
+function _countBursts(timestamps, gapMs) {
+    if (timestamps.length === 0) return 0;
+    let bursts = 1;
+    for (let i = 1; i < timestamps.length; i++) {
+        if (timestamps[i] - timestamps[i - 1] > gapMs) bursts++;
+    }
+    return bursts;
+}
+
 if (typeof afterEach !== 'undefined') {
     afterEach(() => {
-        // Emit DOM mutation markers for any active observers from this test
+        // Emit DOM mutation and interaction duration markers for any active observers from this test
         for (const entry of _activeMutationObservers) {
             try {
                 entry.observer.disconnect();
                 const count = entry.getMutationCount();
                 console.log(`!######DOM_MUTATIONS:${entry.funcName}:${count}######!`);
+
+                // Emit interaction-to-settle duration marker
+                const timestamps = entry.getMutationTimestamps ? entry.getMutationTimestamps() : [];
+                if (timestamps.length > 1) {
+                    const durationMs = timestamps[timestamps.length - 1] - timestamps[0];
+                    const burstCount = _countBursts(timestamps, 10);
+                    console.log(`!######REACT_INTERACTION_DURATION:${entry.funcName}:${durationMs.toFixed(2)}:${burstCount}######!`);
+                }
             } catch (e) {
                 // Ignore errors from already-disconnected observers
             }

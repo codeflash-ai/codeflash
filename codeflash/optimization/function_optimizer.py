@@ -501,29 +501,68 @@ class FunctionOptimizer:
         metadata = self.function_to_optimize.metadata or {}
         return bool(metadata.get("is_react_component", False))
 
+    def tests_use_capture_render_perf(self) -> bool:
+        """Check if generated perf test files use captureRenderPerf().
+
+        When tests use captureRenderPerf, the runtime wrapper in capture.js
+        handles React.Profiler instrumentation — no source-level rewriting needed.
+        """
+        for tf in self.test_files.test_files:
+            if tf.benchmarking_file_path and tf.benchmarking_file_path.exists():
+                try:
+                    content = tf.benchmarking_file_path.read_text("utf-8")
+                    if "captureRenderPerf" in content:
+                        return True
+                except OSError:
+                    continue
+        return False
+
     def instrument_source_with_react_profiler(self) -> str | None:
-        """Instrument the source file with React.Profiler if this is a React component.
+        """Instrument the source file with React.Profiler for render measurement.
+
+        When tests use captureRenderPerf(), the target component is already
+        wrapped by the runtime — only child components need source-level
+        Profiler instrumentation so per-component render data is visible.
+
+        When captureRenderPerf() is NOT used, wraps ALL components.
 
         Returns the original source code (for restoration) if instrumentation succeeded, None otherwise.
         """
         if not self.is_react_component:
             return None
         try:
-            from codeflash.languages.javascript.frameworks.react.profiler import instrument_component_with_profiler
-            from codeflash.languages.javascript.treesitter import get_analyzer_for_file
+            from codeflash.languages.javascript.frameworks.react.profiler import (  # noqa: PLC0415
+                instrument_all_components_except,
+                instrument_all_components_for_tracing,
+            )
+            from codeflash.languages.javascript.treesitter import get_analyzer_for_file  # noqa: PLC0415
 
             file_path = self.function_to_optimize.file_path
             original_source = file_path.read_text("utf-8")
             analyzer = get_analyzer_for_file(file_path)
-            instrumented = instrument_component_with_profiler(
-                original_source, self.function_to_optimize.function_name, analyzer
-            )
+
+            if self.tests_use_capture_render_perf():
+                target_name = self.function_to_optimize.function_name
+                instrumented = instrument_all_components_except(original_source, file_path, analyzer, target_name)
+                label = f"child components (excluding {target_name})"
+            else:
+                instrumented = instrument_all_components_for_tracing(original_source, file_path, analyzer)
+                label = "all components"
+
             if instrumented != original_source:
                 file_path.write_text(instrumented, encoding="utf-8")
-                logger.debug(f"Instrumented {self.function_to_optimize.function_name} with React.Profiler")
+                logger.debug(f"Instrumented {label} in {file_path.name} with React.Profiler")
                 return original_source
+            logger.warning(
+                "[REACT] Profiler instrumentation did not modify source for %s — render markers will not be emitted",
+                self.function_to_optimize.function_name,
+            )
         except Exception:
-            logger.debug("Failed to instrument source with React.Profiler", exc_info=True)
+            logger.warning(
+                "[REACT] Failed to instrument source with React.Profiler for %s",
+                self.function_to_optimize.function_name,
+                exc_info=True,
+            )
         return None
 
     def restore_source_after_profiler(self, original_source: str | None) -> None:
@@ -542,6 +581,10 @@ class FunctionOptimizer:
             if profiles:
                 logger.debug(f"Parsed {len(profiles)} React render profiles from test output")
                 return profiles
+            logger.warning(
+                "[REACT] No REACT_RENDER markers found in perf output despite profiler mode being active"
+            )
+            logger.debug("[REACT] perf_stdout preview (first 500 chars): %s", test_results.perf_stdout[:500])
         except Exception:
             logger.debug("Failed to parse React render markers", exc_info=True)
         return None
@@ -551,14 +594,30 @@ class FunctionOptimizer:
         if not self.is_react_component or not test_results.perf_stdout:
             return None
         try:
-            from codeflash.languages.javascript.parse import parse_dom_mutation_markers
+            from codeflash.languages.javascript.parse import parse_dom_mutation_markers  # noqa: PLC0415
 
             profiles = parse_dom_mutation_markers(test_results.perf_stdout)
             if profiles:
                 logger.debug(f"Parsed {len(profiles)} DOM mutation profiles from test output")
                 return profiles
+            logger.warning("[REACT] No DOM_MUTATIONS markers found in perf output despite profiler mode being active")
         except Exception:
             logger.debug("Failed to parse DOM mutation markers", exc_info=True)
+        return None
+
+    def parse_interaction_durations_from_results(self, test_results: TestResults) -> list | None:
+        """Parse interaction duration markers from test stdout."""
+        if not self.is_react_component or not test_results.perf_stdout:
+            return None
+        try:
+            from codeflash.languages.javascript.parse import parse_interaction_duration_markers  # noqa: PLC0415
+
+            profiles = parse_interaction_duration_markers(test_results.perf_stdout)
+            if profiles:
+                logger.debug(f"Parsed {len(profiles)} interaction duration profiles from test output")
+                return profiles
+        except Exception:
+            logger.debug("Failed to parse interaction duration markers", exc_info=True)
         return None
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
@@ -953,13 +1012,16 @@ class FunctionOptimizer:
         # Compute React render benchmark if profiler data is available
         render_benchmark = None
         if original_code_baseline.render_profiles and candidate_result.render_profiles:
-            from codeflash.languages.javascript.frameworks.react.benchmarking import compare_render_benchmarks
+            from codeflash.languages.javascript.frameworks.react.benchmarking import compare_render_benchmarks  # noqa: PLC0415
 
             render_benchmark = compare_render_benchmarks(
                 original_code_baseline.render_profiles,
                 candidate_result.render_profiles,
                 original_dom_mutations=original_code_baseline.dom_mutations,
                 optimized_dom_mutations=candidate_result.dom_mutations,
+                target_component_name=self.function_to_optimize.function_name,
+                original_interaction_durations=original_code_baseline.interaction_durations,
+                optimized_interaction_durations=candidate_result.interaction_durations,
             )
 
         best_optimization = BestOptimization(
@@ -1853,6 +1915,65 @@ class FunctionOptimizer:
                         )
                     )
 
+            # For React components, validate that tests have interactions (fireEvent, userEvent, etc.)
+            # Tests without interactions only produce mount-phase markers, which aren't useful.
+            if self.is_react_component and tests:
+                from codeflash.languages.javascript.frameworks.react.testgen import has_react_test_interactions  # noqa: PLC0415
+
+                tests_without_interactions = [
+                    (i, t)
+                    for i, t in enumerate(tests)
+                    if not has_react_test_interactions(t.generated_original_test_source)
+                ]
+                if tests_without_interactions:
+                    logger.debug(
+                        f"[REACT-TESTGEN] {len(tests_without_interactions)}/{len(tests)} tests lack interactions, retrying"
+                    )
+                    max_retries = 2
+                    for retry in range(max_retries):
+                        retry_futures = [
+                            self.executor.submit(
+                                generate_tests,
+                                self.aiservice_client,
+                                testgen_context.markdown,
+                                self.function_to_optimize,
+                                testgen_helper_fqns
+                                or [d.fully_qualified_name for d in helper_functions],
+                                Path(self.original_module_path),
+                                self.test_cfg,
+                                INDIVIDUAL_TESTCASE_TIMEOUT,
+                                self.function_trace_id,
+                                idx,
+                                tests[idx].behavior_file_path,
+                                tests[idx].perf_file_path,
+                                self.is_numerical_code,
+                                self.is_react_component,
+                                (self.function_to_optimize.metadata or {}).get("react_context"),
+                            )
+                            for idx, _t in tests_without_interactions
+                        ]
+                        concurrent.futures.wait(retry_futures)
+                        still_missing = []
+                        for (idx, _t), future in zip(tests_without_interactions, retry_futures):
+                            res = future.result()
+                            if res and has_react_test_interactions(res[0]):
+                                tests[idx] = GeneratedTests(
+                                    generated_original_test_source=res[0],
+                                    instrumented_behavior_test_source=res[1],
+                                    instrumented_perf_test_source=res[2],
+                                    behavior_file_path=res[3],
+                                    perf_file_path=res[4],
+                                )
+                            else:
+                                still_missing.append((idx, tests[idx]))
+                        tests_without_interactions = still_missing
+                        if not tests_without_interactions:
+                            break
+                    if tests_without_interactions:
+                        logger.warning(
+                            f"[REACT-TESTGEN] {len(tests_without_interactions)} tests still lack interactions after retries"
+                        )
+
             if not tests:
                 logger.warning(f"Failed to generate and instrument tests for {self.function_to_optimize.function_name}")
                 return Failure(f"/!\\ NO TESTS GENERATED for {self.function_to_optimize.function_name}")
@@ -2076,6 +2197,10 @@ class FunctionOptimizer:
                     optimized_render_duration=rb.optimized_avg_duration_ms if rb else None,
                     original_dom_mutations=rb.original_dom_mutations if rb else 0,
                     optimized_dom_mutations=rb.optimized_dom_mutations if rb else 0,
+                    original_update_render_count=rb.original_update_render_count if rb else 0,
+                    optimized_update_render_count=rb.optimized_update_render_count if rb else 0,
+                    original_update_duration=rb.original_update_avg_duration_ms if rb else 0.0,
+                    optimized_update_duration=rb.optimized_update_avg_duration_ms if rb else 0.0,
                 )
 
                 # Format render benchmark markdown for PR/explanation
@@ -2481,7 +2606,7 @@ class FunctionOptimizer:
 
             # Instrument source with React.Profiler for render measurement
             pre_profiler_source = self.instrument_source_with_react_profiler()
-            if pre_profiler_source is not None:
+            if self.is_react_component:
                 test_env["CODEFLASH_REACT_PROFILER_MODE"] = "true"
 
             try:
@@ -2504,9 +2629,10 @@ class FunctionOptimizer:
                         self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                     )
 
-        # Parse React render profiles and DOM mutation data from performance test stdout
+        # Parse React render profiles, DOM mutations, and interaction durations from performance test stdout
         original_render_profiles = self.parse_render_profiles_from_results(benchmarking_results)
         original_dom_mutations = self.parse_dom_mutations_from_results(benchmarking_results)
+        original_interaction_durations = self.parse_interaction_durations_from_results(benchmarking_results)
 
         console.print(
             TestResults.report_to_tree(
@@ -2575,6 +2701,7 @@ class FunctionOptimizer:
                     concurrency_metrics=concurrency_metrics,
                     render_profiles=original_render_profiles,
                     dom_mutations=original_dom_mutations,
+                    interaction_durations=original_interaction_durations,
                 ),
                 functions_to_remove,
             )
@@ -2752,7 +2879,7 @@ class FunctionOptimizer:
 
             # Instrument candidate source with React.Profiler for render measurement
             pre_profiler_source = self.instrument_source_with_react_profiler()
-            if pre_profiler_source is not None:
+            if self.is_react_component:
                 test_env["CODEFLASH_REACT_PROFILER_MODE"] = "true"
 
             try:
@@ -2774,9 +2901,10 @@ class FunctionOptimizer:
                         candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
                     )
 
-            # Parse React render profiles and DOM mutation data from candidate performance test stdout
+            # Parse React render profiles, DOM mutations, and interaction durations from candidate performance test stdout
             candidate_render_profiles = self.parse_render_profiles_from_results(candidate_benchmarking_results)
             candidate_dom_mutations = self.parse_dom_mutations_from_results(candidate_benchmarking_results)
+            candidate_interaction_durations = self.parse_interaction_durations_from_results(candidate_benchmarking_results)
             # Use effective_loop_count which represents the minimum number of timing samples
             # across all test cases. This is more accurate for JavaScript tests where
             # capturePerf does internal looping with potentially different iteration counts per test.
@@ -2829,6 +2957,7 @@ class FunctionOptimizer:
                     concurrency_metrics=candidate_concurrency_metrics,
                     render_profiles=candidate_render_profiles,
                     dom_mutations=candidate_dom_mutations,
+                    interaction_durations=candidate_interaction_durations,
                 )
             )
 

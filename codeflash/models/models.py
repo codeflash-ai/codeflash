@@ -403,6 +403,7 @@ class OptimizedCandidateResult(BaseModel):
     concurrency_metrics: Optional[ConcurrencyMetrics] = None
     render_profiles: Optional[list[Any]] = None
     dom_mutations: Optional[list[Any]] = None
+    interaction_durations: Optional[list[Any]] = None
 
 
 class GeneratedTests(BaseModel):
@@ -638,6 +639,7 @@ class OriginalCodeBaseline(BaseModel):
     concurrency_metrics: Optional[ConcurrencyMetrics] = None
     render_profiles: Optional[list[Any]] = None
     dom_mutations: Optional[list[Any]] = None
+    interaction_durations: Optional[list[Any]] = None
 
 
 class CoverageStatus(Enum):
