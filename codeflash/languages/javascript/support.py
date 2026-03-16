@@ -1939,13 +1939,14 @@ class JavaScriptSupport:
         from codeflash.languages.javascript.test_runner import find_node_project_root
 
         test_cfg.js_project_root = find_node_project_root(file_path)
-        original_js_root = git_root_dir()
-        worktree_node_modules = test_cfg.js_project_root / "node_modules"
-        original_node_modules = (
-            mirror_path(test_cfg.js_project_root, current_worktree, original_js_root) / "node_modules"
-        )
-        if original_node_modules.exists() and not worktree_node_modules.exists():
-            worktree_node_modules.symlink_to(original_node_modules)
+        if current_worktree is not None:
+            original_js_root = git_root_dir()
+            worktree_node_modules = test_cfg.js_project_root / "node_modules"
+            original_node_modules = (
+                mirror_path(test_cfg.js_project_root, current_worktree, original_js_root) / "node_modules"
+            )
+            if original_node_modules.exists() and not worktree_node_modules.exists():
+                worktree_node_modules.symlink_to(original_node_modules)
         verify_js_requirements(test_cfg)
 
     def adjust_test_config_for_discovery(self, test_cfg: TestConfig) -> None:
