@@ -383,7 +383,9 @@ def remove_unused_definitions_recursively(
                 if isinstance(statement, cst.FunctionDef):
                     new_statements.append(statement)
                 elif isinstance(statement, (cst.Assign, cst.AnnAssign, cst.AugAssign)):
-                    if class_has_dependencies or is_assignment_used(statement, definitions, name_prefix=f"{class_name}."):
+                    if class_has_dependencies or is_assignment_used(
+                        statement, definitions, name_prefix=f"{class_name}."
+                    ):
                         new_statements.append(statement)
                 else:
                     new_statements.append(statement)
@@ -425,13 +427,15 @@ def collect_top_level_defs_with_usages(
     return definitions
 
 
-def remove_unused_definitions_by_function_names(code: str, qualified_function_names: set[str]) -> str:
+def remove_unused_definitions_by_function_names(
+    code: Union[str, cst.Module], qualified_function_names: set[str]
+) -> cst.Module:
     """Remove top-level definitions (classes, variables, functions) not used by the specified qualified function names."""
     try:
-        module = cst.parse_module(code)
+        module = code if isinstance(code, cst.Module) else cst.parse_module(code)
     except Exception as e:
         logger.debug(f"Failed to parse code with libcst: {type(e).__name__}: {e}")
-        return code
+        return code if isinstance(code, cst.Module) else cst.parse_module("")
 
     try:
         defs_with_usages = collect_top_level_defs_with_usages(module, qualified_function_names)
@@ -439,11 +443,11 @@ def remove_unused_definitions_by_function_names(code: str, qualified_function_na
         # Apply the recursive removal transformation
         modified_module, _ = remove_unused_definitions_recursively(module, defs_with_usages)
 
-        return modified_module.code if modified_module else ""
+        return modified_module if modified_module else cst.parse_module("")
     except Exception as e:
         # If any other error occurs during processing, return the original code
         logger.debug(f"Error processing code to remove unused definitions: {type(e).__name__}: {e}")
-        return code
+        return module
 
 
 def revert_unused_helper_functions(
@@ -569,11 +573,7 @@ def find_target_node(
 
 
 def _collect_attr_names(
-    value_id: str,
-    attr_name: str,
-    class_name: str | None,
-    names: set[str],
-    imported_names_map: dict[str, set[str]],
+    value_id: str, attr_name: str, class_name: str | None, names: set[str], imported_names_map: dict[str, set[str]]
 ) -> None:
     if value_id == "self":
         names.add(attr_name)
@@ -605,9 +605,7 @@ def _collect_called_names(
                     called.update(mapped_names)
             elif isinstance(node.func, ast.Attribute):
                 if isinstance(node.func.value, ast.Name):
-                    _collect_attr_names(
-                        node.func.value.id, node.func.attr, class_name, called, imported_names_map
-                    )
+                    _collect_attr_names(node.func.value.id, node.func.attr, class_name, called, imported_names_map)
                 else:
                     called.add(node.func.attr)
         elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):

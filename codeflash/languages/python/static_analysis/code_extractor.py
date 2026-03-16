@@ -540,7 +540,7 @@ def resolve_star_import(module_name: str, project_root: Path) -> set[str]:
 
 
 def add_needed_imports_from_module(
-    src_module_code: str,
+    src_module_code: str | cst.Module,
     dst_module_code: str | cst.Module,
     src_path: Path,
     dst_path: Path,
@@ -549,7 +549,6 @@ def add_needed_imports_from_module(
     helper_functions_fqn: set[str] | None = None,
 ) -> str:
     """Add all needed and used source module code imports to the destination module code, and return it."""
-    src_module_code = delete___future___aliased_imports(src_module_code)
     if not helper_functions_fqn:
         helper_functions_fqn = {f.fully_qualified_name for f in (helper_functions or [])}
 
@@ -571,7 +570,10 @@ def add_needed_imports_from_module(
         )
     )
     try:
-        src_module = cst.parse_module(src_module_code)
+        if isinstance(src_module_code, cst.Module):
+            src_module = src_module_code.visit(FutureAliasedImportTransformer())
+        else:
+            src_module = cst.parse_module(src_module_code).visit(FutureAliasedImportTransformer())
         # Exclude function/class bodies so GatherImportsVisitor only sees module-level imports.
         # Nested imports (inside functions) are part of function logic and must not be
         # scheduled for add/remove — RemoveImportsVisitor would strip them as "unused".
