@@ -578,22 +578,36 @@ def _parse_and_collect_imports(code_context: CodeStringsMarkdown) -> tuple[ast.M
 def collect_existing_class_names(tree: ast.Module) -> set[str]:
     class_names = set()
     stack = [tree]
-    
+
     while stack:
         node = stack.pop()
-        
+
         if isinstance(node, ast.ClassDef):
             class_names.add(node.name)
-        
+
         # Only traverse nodes that can contain ClassDef nodes
-        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef, 
-                            ast.If, ast.For, ast.AsyncFor, ast.While, ast.With, ast.AsyncWith,
-                            ast.Try, ast.ExceptHandler)):
-            stack.extend(getattr(node, 'body', []))
-            stack.extend(getattr(node, 'orelse', []))
-            stack.extend(getattr(node, 'finalbody', []))
-            stack.extend(getattr(node, 'handlers', []))
-    
+        if isinstance(
+            node,
+            (
+                ast.Module,
+                ast.ClassDef,
+                ast.FunctionDef,
+                ast.AsyncFunctionDef,
+                ast.If,
+                ast.For,
+                ast.AsyncFor,
+                ast.While,
+                ast.With,
+                ast.AsyncWith,
+                ast.Try,
+                ast.ExceptHandler,
+            ),
+        ):
+            stack.extend(getattr(node, "body", []))
+            stack.extend(getattr(node, "orelse", []))
+            stack.extend(getattr(node, "finalbody", []))
+            stack.extend(getattr(node, "handlers", []))
+
     return class_names
 
 
