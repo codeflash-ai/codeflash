@@ -10,7 +10,6 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from codeflash.languages.base import LanguageSupport
-from codeflash.languages.language_enum import Language
 from codeflash.languages.java.build_tools import find_test_root
 from codeflash.languages.java.comparator import compare_test_results as _compare_test_results
 from codeflash.languages.java.concurrency_analyzer import analyze_function_concurrency
@@ -32,6 +31,7 @@ from codeflash.languages.java.test_runner import (
     run_benchmarking_tests,
     run_tests,
 )
+from codeflash.languages.language_enum import Language
 from codeflash.languages.registry import register_language
 
 if TYPE_CHECKING:
@@ -376,11 +376,7 @@ class JavaSupport(LanguageSupport):
     # === Reference Finding ===
 
     def find_references(
-        self,
-        function: FunctionToOptimize,
-        project_root: Path,
-        tests_root: Path | None = None,
-        max_files: int = 500,
+        self, function: FunctionToOptimize, project_root: Path, tests_root: Path | None = None, max_files: int = 500
     ) -> list[Any]:
         return []
 
@@ -397,7 +393,7 @@ class JavaSupport(LanguageSupport):
     ) -> None:
         return None
 
-    def setup_test_config(self, test_cfg: Any, file_path: Path) -> None:
+    def setup_test_config(self, test_cfg: Any, file_path: Path, current_worktree: Path | None = None) -> None:
         return None
 
     # === Configuration ===

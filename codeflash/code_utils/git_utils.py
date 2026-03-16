@@ -136,6 +136,11 @@ def git_root_dir(repo: Repo | None = None) -> Path:
     return Path(repository.working_dir)
 
 
+def mirror_path(path: Path, src_root: Path, dest_root: Path) -> Path:
+    relative_path = path.resolve().relative_to(src_root.resolve())
+    return Path(dest_root / relative_path)
+
+
 def check_running_in_git_repo(module_root: str) -> bool:
     try:
         _ = git.Repo(module_root, search_parent_directories=True).git_dir

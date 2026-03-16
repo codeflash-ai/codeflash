@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from codeflash.code_utils.git_utils import git_root_dir, mirror_path
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, Language, TestInfo, TestResult
 from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
@@ -1933,11 +1934,18 @@ class JavaScriptSupport:
 
         return prepare_javascript_module(module_code, module_path)
 
-    def setup_test_config(self, test_cfg: TestConfig, file_path: Path) -> None:
+    def setup_test_config(self, test_cfg: TestConfig, file_path: Path, current_worktree: Path | None) -> None:
         from codeflash.languages.javascript.optimizer import verify_js_requirements
         from codeflash.languages.javascript.test_runner import find_node_project_root
 
         test_cfg.js_project_root = find_node_project_root(file_path)
+        original_js_root = git_root_dir()
+        worktree_node_modules = test_cfg.js_project_root / "node_modules"
+        original_node_modules = (
+            mirror_path(test_cfg.js_project_root, current_worktree, original_js_root) / "node_modules"
+        )
+        if original_node_modules.exists() and not worktree_node_modules.exists():
+            worktree_node_modules.symlink_to(original_node_modules)
         verify_js_requirements(test_cfg)
 
     def adjust_test_config_for_discovery(self, test_cfg: TestConfig) -> None:

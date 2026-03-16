@@ -1039,7 +1039,7 @@ class PythonSupport:
 
     pytest_cmd: str = "pytest"
 
-    def setup_test_config(self, test_cfg: TestConfig, file_path: Path) -> None:
+    def setup_test_config(self, test_cfg: TestConfig, file_path: Path, current_worktree: Path | None = None) -> None:
         self.pytest_cmd = test_cfg.pytest_cmd or "pytest"
 
     def pytest_cmd_tokens(self, is_posix: bool) -> list[str]:
