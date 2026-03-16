@@ -6,7 +6,6 @@ import os
 from collections import defaultdict
 from dataclasses import dataclass, field
 from itertools import chain
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import libcst as cst
@@ -40,6 +39,8 @@ from codeflash.models.models import (
 )
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from jedi.api.classes import Name
 
     from codeflash.languages.base import DependencyResolver
@@ -954,6 +955,7 @@ def _has_descriptor_like_class_fields(class_node: ast.ClassDef) -> bool:
 
 def _should_use_raw_project_class_context(class_node: ast.ClassDef, import_aliases: dict[str, str]) -> bool:
     start_line = _get_class_start_line(class_node)
+    assert class_node.end_lineno is not None
     class_line_count = class_node.end_lineno - start_line + 1
     is_small = (
         class_line_count <= MAX_RAW_PROJECT_CLASS_LINES and len(class_node.body) <= MAX_RAW_PROJECT_CLASS_BODY_ITEMS
