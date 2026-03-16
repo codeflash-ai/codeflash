@@ -774,7 +774,7 @@ def _bool_literal(node: ast.AST) -> bool | None:
 
 
 def _is_namedtuple_class(class_node: ast.ClassDef, import_aliases: dict[str, str]) -> bool:
-    for base in class_node.bases:
+    for base in class_node.bases:  # noqa: SIM110
         if _expr_matches_name(base, import_aliases, "NamedTuple"):
             return True
     return False
