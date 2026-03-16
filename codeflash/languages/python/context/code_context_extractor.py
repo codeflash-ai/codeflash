@@ -1487,9 +1487,9 @@ def _maybe_strip_docstring(node: cst.FunctionDef | cst.ClassDef, cfg: PruneConfi
 
 
 class ImportCollector(ast.NodeVisitor):
-    def __init__(self):
+    def __init__(self) -> None:
         self.imported_names: dict[str, str] = {}
-    
+
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         if node.module:
             for alias in node.names:
