@@ -42,7 +42,7 @@ def _init_index_worker(project_root: str) -> None:
 def _resolve_definitions(ref: Name) -> list[Name]:
     try:
         inferred = ref.infer()
-        valid = [d for d in inferred if d.type in ("function", "class")]
+        valid = [d for d in inferred if d.type in ("function", "class", "statement")]
         if valid:
             return valid
     except Exception:
@@ -69,7 +69,7 @@ def _is_valid_definition(definition: Name, caller_qualified_name: str, project_r
     if not definition.full_name or not definition.full_name.startswith(definition.module_name):
         return False
 
-    if definition.type not in ("function", "class"):
+    if definition.type not in ("function", "class", "statement"):
         return False
 
     try:
@@ -160,6 +160,20 @@ def _analyze_file(file_path: Path, jedi_project: object, project_root_str: str) 
                         init_qn,
                         f"{definition.full_name}.__init__",
                         "__init__",
+                        definition.type,
+                        definition.get_line_code(),
+                    )
+                )
+            elif definition.type == "statement":
+                callee_qn = get_qualified_name(definition.module_name, definition.full_name)
+                if len(callee_qn.split(".")) > 2:
+                    continue
+                edges.add(
+                    (
+                        *edge_base,
+                        callee_qn,
+                        definition.full_name,
+                        definition.name,
                         definition.type,
                         definition.get_line_code(),
                     )

@@ -430,6 +430,26 @@ def caller():
         finally:
             cg.close()
 
+    def test_get_callees_includes_statement_dependencies(self, project: Path, db_path: Path) -> None:
+        write_file(
+            project,
+            "mod.py",
+            """\
+X = 1
+
+def caller():
+    return X + 1
+""",
+        )
+        cg = ReferenceGraph(project, db_path=db_path)
+        try:
+            _, function_sources = cg.get_callees({project / "mod.py": {"caller"}})
+            assert [(source.qualified_name, source.definition_type) for source in function_sources] == [
+                ("X", "statement")
+            ]
+        finally:
+            cg.close()
+
 
 # ---------------------------------------------------------------------------
 # CalleeMetadata unit tests

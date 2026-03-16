@@ -382,21 +382,29 @@ class Optimizer:
                 # Use a tuple of unique identifiers as the key
                 key: tuple[Path, str, int | None] = (func.file_path, func.qualified_name, func.starting_line)
                 func_to_file_map[key] = file_path
-            globally_ranked = []
-            for func in ranked_functions:
+            ranked_with_metadata: list[tuple[Path, FunctionToOptimize, float, int]] = []
+            for rank_index, func in enumerate(ranked_functions):
                 key = (func.file_path, func.qualified_name, func.starting_line)
                 file_path = func_to_file_map.get(key)
                 if file_path:
-                    globally_ranked.append((file_path, func))
+                    ranked_with_metadata.append(
+                        (file_path, func, ranker.get_function_addressable_time(func), rank_index)
+                    )
 
             if function_to_tests:
                 from codeflash.discovery.discover_unit_tests import existing_unit_test_count
 
-                globally_ranked.sort(
+                ranked_with_metadata.sort(
                     key=lambda item: (
-                        0 if existing_unit_test_count(item[1], self.args.project_root, function_to_tests) > 0 else 1
+                        -item[2],
+                        -existing_unit_test_count(item[1], self.args.project_root, function_to_tests),
+                        item[3],
                     )
                 )
+
+            globally_ranked = [
+                (file_path, func) for file_path, func, _addressable_time, _rank_index in ranked_with_metadata
+            ]
 
             console.rule()
             logger.info(
@@ -433,8 +441,8 @@ class Optimizer:
             ranked = sorted(
                 enumerate(all_functions),
                 key=lambda x: (
-                    -existing_unit_test_count(x[1][1], self.args.project_root, function_to_tests),
                     -callee_counts.get((x[1][0], x[1][1].qualified_name), 0),
+                    -existing_unit_test_count(x[1][1], self.args.project_root, function_to_tests),
                     x[0],
                 ),
             )
