@@ -6,7 +6,6 @@ import os
 from collections import defaultdict
 from dataclasses import dataclass, field
 from itertools import chain
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import libcst as cst
@@ -40,6 +39,8 @@ from codeflash.models.models import (
 )
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from jedi.api.classes import Name
 
     from codeflash.languages.base import DependencyResolver
@@ -576,7 +577,39 @@ def _parse_and_collect_imports(code_context: CodeStringsMarkdown) -> tuple[ast.M
 
 
 def collect_existing_class_names(tree: ast.Module) -> set[str]:
-    return {node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)}
+    class_names = set()
+    stack = [tree]
+
+    while stack:
+        node = stack.pop()
+
+        if isinstance(node, ast.ClassDef):
+            class_names.add(node.name)
+
+        # Only traverse nodes that can contain ClassDef nodes
+        if isinstance(
+            node,
+            (
+                ast.Module,
+                ast.ClassDef,
+                ast.FunctionDef,
+                ast.AsyncFunctionDef,
+                ast.If,
+                ast.For,
+                ast.AsyncFor,
+                ast.While,
+                ast.With,
+                ast.AsyncWith,
+                ast.Try,
+                ast.ExceptHandler,
+            ),
+        ):
+            stack.extend(getattr(node, "body", []))
+            stack.extend(getattr(node, "orelse", []))
+            stack.extend(getattr(node, "finalbody", []))
+            stack.extend(getattr(node, "handlers", []))
+
+    return class_names
 
 
 BUILTIN_AND_TYPING_NAMES = frozenset(
@@ -741,7 +774,10 @@ def _bool_literal(node: ast.AST) -> bool | None:
 
 
 def _is_namedtuple_class(class_node: ast.ClassDef, import_aliases: dict[str, str]) -> bool:
-    return any(_expr_matches_name(base, import_aliases, "NamedTuple") for base in class_node.bases)
+    for base in class_node.bases:  # noqa: SIM110
+        if _expr_matches_name(base, import_aliases, "NamedTuple"):
+            return True
+    return False
 
 
 def _get_dataclass_config(class_node: ast.ClassDef, import_aliases: dict[str, str]) -> tuple[bool, bool, bool]:
@@ -779,10 +815,10 @@ def _get_class_start_line(class_node: ast.ClassDef) -> int:
 
 
 def _class_has_explicit_init(class_node: ast.ClassDef) -> bool:
-    return any(
-        isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name == "__init__"
-        for item in class_node.body
-    )
+    for item in class_node.body:
+        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name == "__init__":
+            return True
+    return False
 
 
 def _collect_synthetic_constructor_type_names(class_node: ast.ClassDef, import_aliases: dict[str, str]) -> set[str]:
@@ -915,13 +951,15 @@ def _has_non_property_method_decorator(
 
 
 def _has_descriptor_like_class_fields(class_node: ast.ClassDef) -> bool:
-    return any(
-        isinstance(item, (ast.Assign, ast.AnnAssign)) and isinstance(item.value, ast.Call) for item in class_node.body
-    )
+    for item in class_node.body:
+        if isinstance(item, (ast.Assign, ast.AnnAssign)) and isinstance(item.value, ast.Call):
+            return True
+    return False
 
 
 def _should_use_raw_project_class_context(class_node: ast.ClassDef, import_aliases: dict[str, str]) -> bool:
     start_line = _get_class_start_line(class_node)
+    assert class_node.end_lineno is not None
     class_line_count = class_node.end_lineno - start_line + 1
     is_small = (
         class_line_count <= MAX_RAW_PROJECT_CLASS_LINES and len(class_node.body) <= MAX_RAW_PROJECT_CLASS_BODY_ITEMS
