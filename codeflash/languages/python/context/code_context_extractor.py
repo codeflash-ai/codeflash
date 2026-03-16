@@ -774,7 +774,10 @@ def _bool_literal(node: ast.AST) -> bool | None:
 
 
 def _is_namedtuple_class(class_node: ast.ClassDef, import_aliases: dict[str, str]) -> bool:
-    return any(_expr_matches_name(base, import_aliases, "NamedTuple") for base in class_node.bases)
+    for base in class_node.bases:
+        if _expr_matches_name(base, import_aliases, "NamedTuple"):
+            return True
+    return False
 
 
 def _get_dataclass_config(class_node: ast.ClassDef, import_aliases: dict[str, str]) -> tuple[bool, bool, bool]:
@@ -812,10 +815,10 @@ def _get_class_start_line(class_node: ast.ClassDef) -> int:
 
 
 def _class_has_explicit_init(class_node: ast.ClassDef) -> bool:
-    return any(
-        isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name == "__init__"
-        for item in class_node.body
-    )
+    for item in class_node.body:
+        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name == "__init__":
+            return True
+    return False
 
 
 def _collect_synthetic_constructor_type_names(class_node: ast.ClassDef, import_aliases: dict[str, str]) -> set[str]:
@@ -948,9 +951,10 @@ def _has_non_property_method_decorator(
 
 
 def _has_descriptor_like_class_fields(class_node: ast.ClassDef) -> bool:
-    return any(
-        isinstance(item, (ast.Assign, ast.AnnAssign)) and isinstance(item.value, ast.Call) for item in class_node.body
-    )
+    for item in class_node.body:
+        if isinstance(item, (ast.Assign, ast.AnnAssign)) and isinstance(item.value, ast.Call):
+            return True
+    return False
 
 
 def _should_use_raw_project_class_context(class_node: ast.ClassDef, import_aliases: dict[str, str]) -> bool:
