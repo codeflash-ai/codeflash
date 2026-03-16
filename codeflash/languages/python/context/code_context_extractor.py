@@ -446,14 +446,17 @@ def re_extract_from_cache(
         except ValueError:
             continue
         if pruned.code.strip():
-            code = add_needed_imports_from_module(
-                src_module_code=cache.original_module,
-                dst_module_code=pruned,
-                src_path=cache.file_path,
-                dst_path=cache.file_path,
-                project_root=project_root_path,
-                helper_functions=cache.helper_functions,
-            )
+            if code_context_type == CodeContextType.HASHING:
+                code = ast.unparse(ast.parse(pruned.code))
+            else:
+                code = add_needed_imports_from_module(
+                    src_module_code=cache.original_module,
+                    dst_module_code=pruned,
+                    src_path=cache.file_path,
+                    dst_path=cache.file_path,
+                    project_root=project_root_path,
+                    helper_functions=cache.helper_functions,
+                )
             result.code_strings.append(CodeString(code=code, file_path=cache.relative_path))
     return result
 
