@@ -349,7 +349,10 @@ module-root = "codeflash"
 tests-root = "tests"
 benchmarks-root = "tests/benchmarks"
 ignore-paths = []
-formatter-cmds = ["disabled"]
+formatter-cmds = [
+    "uvx ruff check --exit-zero --fix $file",
+    "uvx ruff format $file",
+]
 
 [tool.pytest.ini_options]
 filterwarnings = [
