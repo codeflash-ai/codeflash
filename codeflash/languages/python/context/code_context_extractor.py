@@ -567,13 +567,9 @@ def _parse_and_collect_imports(code_context: CodeStringsMarkdown) -> tuple[ast.M
         tree = ast.parse(all_code)
     except SyntaxError:
         return None
-    imported_names: dict[str, str] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module:
-            for alias in node.names:
-                if alias.name != "*":
-                    imported_names[alias.asname if alias.asname else alias.name] = node.module
-    return tree, imported_names
+    collector = ImportCollector()
+    collector.visit(tree)
+    return tree, collector.imported_names
 
 
 def collect_existing_class_names(tree: ast.Module) -> set[str]:
@@ -1526,6 +1522,17 @@ def _maybe_strip_docstring(node: cst.FunctionDef | cst.ClassDef, cfg: PruneConfi
     if cfg.remove_docstrings and isinstance(node.body, cst.IndentedBlock):
         return node.with_changes(body=remove_docstring_from_body(node.body))
     return node
+
+
+class ImportCollector(ast.NodeVisitor):
+    def __init__(self) -> None:
+        self.imported_names: dict[str, str] = {}
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        if node.module:
+            for alias in node.names:
+                if alias.name != "*":
+                    self.imported_names[alias.asname if alias.asname else alias.name] = node.module
 
 
 @dataclass(frozen=True)
