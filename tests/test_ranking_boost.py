@@ -26,6 +26,15 @@ def make_test(test_type: TestType, test_name: str = "test_something") -> Functio
     )
 
 
+def build_test_count_cache(
+    funcs: list[FunctionToOptimize], project_root: Path, function_to_tests: dict[str, set[FunctionCalledInTest]]
+) -> dict[tuple[Path, str], int]:
+    return {
+        (func.file_path, func.qualified_name): existing_unit_test_count(func, project_root, function_to_tests)
+        for func in funcs
+    }
+
+
 def make_optimizer(project_root: Path) -> Optimizer:
     def _noop_display_global_ranking(*_args: object, **_kwargs: object) -> None:
         return None
@@ -177,7 +186,9 @@ def test_trace_ranking_keeps_addressable_time_primary_over_test_count(project_ro
 
     with patch("codeflash.benchmarking.function_ranker.FunctionRanker", FakeRanker):
         ranked = optimizer.rank_all_functions_globally(
-            {project_root / "mod.py": funcs}, trace_file, function_to_tests=function_to_tests
+            {project_root / "mod.py": funcs},
+            trace_file,
+            test_count_cache=build_test_count_cache(funcs, project_root, function_to_tests),
         )
 
     assert [func.function_name for _, func in ranked] == ["foo", "bar", "baz"]
@@ -214,7 +225,9 @@ def test_trace_ranking_uses_test_count_as_tiebreaker(project_root: Path, tmp_pat
 
     with patch("codeflash.benchmarking.function_ranker.FunctionRanker", FakeRanker):
         ranked = optimizer.rank_all_functions_globally(
-            {project_root / "mod.py": funcs}, trace_file, function_to_tests=function_to_tests
+            {project_root / "mod.py": funcs},
+            trace_file,
+            test_count_cache=build_test_count_cache(funcs, project_root, function_to_tests),
         )
 
     assert [func.function_name for _, func in ranked] == ["bar", "foo", "baz"]
@@ -233,15 +246,12 @@ def test_dependency_count_ranking_keeps_callee_count_primary(project_root: Path)
 
     class FakeResolver:
         def count_callees_per_function(self, _mapping: dict[Path, set[str]]) -> dict[tuple[Path, str], int]:
-            return {
-                (project_root / "mod.py", "foo"): 5,
-                (project_root / "mod.py", "bar"): 1,
-            }
+            return {(project_root / "mod.py", "foo"): 5, (project_root / "mod.py", "bar"): 1}
 
     ranked = optimizer.rank_by_dependency_count(
         [(project_root / "mod.py", funcs[0]), (project_root / "mod.py", funcs[1])],
         FakeResolver(),
-        function_to_tests=function_to_tests,
+        test_count_cache=build_test_count_cache(funcs, project_root, function_to_tests),
     )
 
     assert [func.function_name for _, func in ranked] == ["foo", "bar"]
@@ -263,15 +273,12 @@ def test_dependency_count_ranking_uses_test_count_as_tiebreaker(project_root: Pa
 
     class FakeResolver:
         def count_callees_per_function(self, _mapping: dict[Path, set[str]]) -> dict[tuple[Path, str], int]:
-            return {
-                (project_root / "mod.py", "foo"): 2,
-                (project_root / "mod.py", "bar"): 2,
-            }
+            return {(project_root / "mod.py", "foo"): 2, (project_root / "mod.py", "bar"): 2}
 
     ranked = optimizer.rank_by_dependency_count(
         [(project_root / "mod.py", funcs[0]), (project_root / "mod.py", funcs[1])],
         FakeResolver(),
-        function_to_tests=function_to_tests,
+        test_count_cache=build_test_count_cache(funcs, project_root, function_to_tests),
     )
 
     assert [func.function_name for _, func in ranked] == ["bar", "foo"]

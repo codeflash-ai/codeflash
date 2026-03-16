@@ -332,7 +332,7 @@ class Optimizer:
         file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]],
         trace_file_path: Path | None,
         call_graph: DependencyResolver | None = None,
-        function_to_tests: dict[str, set[FunctionCalledInTest]] | None = None,
+        test_count_cache: dict[tuple[Path, str], int] | None = None,
     ) -> list[tuple[Path, FunctionToOptimize]]:
         """Rank all functions globally across all files based on trace data.
 
@@ -355,7 +355,7 @@ class Optimizer:
         # If no trace file, rank by dependency count if call graph is available
         if not trace_file_path or not trace_file_path.exists():
             if call_graph is not None:
-                return self.rank_by_dependency_count(all_functions, call_graph, function_to_tests=function_to_tests)
+                return self.rank_by_dependency_count(all_functions, call_graph, test_count_cache=test_count_cache)
             logger.debug("No trace file available, using original function order")
             return all_functions
 
@@ -391,15 +391,9 @@ class Optimizer:
                         (file_path, func, ranker.get_function_addressable_time(func), rank_index)
                     )
 
-            if function_to_tests:
-                from codeflash.discovery.discover_unit_tests import existing_unit_test_count
-
+            if test_count_cache:
                 ranked_with_metadata.sort(
-                    key=lambda item: (
-                        -item[2],
-                        -existing_unit_test_count(item[1], self.args.project_root, function_to_tests),
-                        item[3],
-                    )
+                    key=lambda item: (-item[2], -test_count_cache.get((item[0], item[1].qualified_name), 0), item[3])
                 )
 
             globally_ranked = [
@@ -427,7 +421,7 @@ class Optimizer:
         self,
         all_functions: list[tuple[Path, FunctionToOptimize]],
         call_graph: DependencyResolver,
-        function_to_tests: dict[str, set[FunctionCalledInTest]] | None = None,
+        test_count_cache: dict[tuple[Path, str], int] | None = None,
     ) -> list[tuple[Path, FunctionToOptimize]]:
         file_to_qns: dict[Path, set[str]] = defaultdict(set)
         for file_path, func in all_functions:
@@ -435,14 +429,12 @@ class Optimizer:
         callee_counts = call_graph.count_callees_per_function(dict(file_to_qns))
         self._cached_callee_counts = callee_counts
 
-        if function_to_tests:
-            from codeflash.discovery.discover_unit_tests import existing_unit_test_count
-
+        if test_count_cache:
             ranked = sorted(
                 enumerate(all_functions),
                 key=lambda x: (
                     -callee_counts.get((x[1][0], x[1][1].qualified_name), 0),
-                    -existing_unit_test_count(x[1][1], self.args.project_root, function_to_tests),
+                    -test_count_cache.get((x[1][0], x[1][1].qualified_name), 0),
                     x[0],
                 ),
             )
@@ -531,9 +523,21 @@ class Optimizer:
             if self.args.all and not self.args.subagent:
                 self.functions_checkpoint = CodeflashRunCheckpoint(self.args.module_root)
 
+            # Pre-compute test counts once for ranking and logging
+            if function_to_tests:
+                from codeflash.discovery.discover_unit_tests import existing_unit_test_count
+
+                test_count_cache: dict[tuple[Path, str], int] = {
+                    (fp, fn.qualified_name): existing_unit_test_count(fn, self.args.project_root, function_to_tests)
+                    for fp, fns in file_to_funcs_to_optimize.items()
+                    for fn in fns
+                }
+            else:
+                test_count_cache: dict[tuple[Path, str], int] = {}
+
             # GLOBAL RANKING: Rank all functions together before optimizing
             globally_ranked_functions = self.rank_all_functions_globally(
-                file_to_funcs_to_optimize, trace_file_path, call_graph=resolver, function_to_tests=function_to_tests
+                file_to_funcs_to_optimize, trace_file_path, call_graph=resolver, test_count_cache=test_count_cache
             )
             # Cache for module preparation (avoid re-parsing same files)
             prepared_modules: dict[Path, tuple[dict[Path, ValidCode], ast.Module | None]] = {}
@@ -545,14 +549,6 @@ class Optimizer:
                 for fp, fn in globally_ranked_functions:
                     file_to_qns[fp].add(fn.qualified_name)
                 callee_counts = resolver.count_callees_per_function(dict(file_to_qns))
-
-            from codeflash.discovery.discover_unit_tests import existing_unit_test_count
-
-            # Pre-compute test counts for logging (already computed during ranking, avoid re-filtering)
-            test_count_cache: dict[tuple[Path, str], int] = {
-                (fp, fn.qualified_name): existing_unit_test_count(fn, self.args.project_root, function_to_tests)
-                for fp, fn in globally_ranked_functions
-            }
 
             # Optimize functions in globally ranked order
             for i, (original_module_path, function_to_optimize) in enumerate(globally_ranked_functions):
@@ -578,6 +574,10 @@ class Optimizer:
                 effort_override: str | None = None
                 if i < HIGH_EFFORT_TOP_N and self.args.effort == EffortLevel.MEDIUM.value:
                     effort_override = EffortLevel.HIGH.value
+                    logger.debug(
+                        f"Escalating effort for {function_to_optimize.qualified_name} from medium to high"
+                        f" (top {HIGH_EFFORT_TOP_N} ranked)"
+                    )
 
                 logger.info(
                     f"Optimizing function {function_iterator_count} of {len(globally_ranked_functions)}: "
