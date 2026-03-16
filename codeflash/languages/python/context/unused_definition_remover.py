@@ -428,7 +428,9 @@ def collect_top_level_defs_with_usages(
 
 
 def remove_unused_definitions_by_function_names(
-    code: Union[str, cst.Module], qualified_function_names: set[str]
+    code: Union[str, cst.Module],
+    qualified_function_names: set[str],
+    defs_with_usages: dict[str, UsageInfo] | None = None,
 ) -> cst.Module:
     """Remove top-level definitions (classes, variables, functions) not used by the specified qualified function names."""
     try:
@@ -438,7 +440,8 @@ def remove_unused_definitions_by_function_names(
         return code if isinstance(code, cst.Module) else cst.parse_module("")
 
     try:
-        defs_with_usages = collect_top_level_defs_with_usages(module, qualified_function_names)
+        if defs_with_usages is None:
+            defs_with_usages = collect_top_level_defs_with_usages(module, qualified_function_names)
 
         # Apply the recursive removal transformation
         modified_module, _ = remove_unused_definitions_recursively(module, defs_with_usages)

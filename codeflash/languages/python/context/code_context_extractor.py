@@ -4,7 +4,7 @@ import ast
 import hashlib
 import os
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -47,11 +47,23 @@ if TYPE_CHECKING:
 
 
 @dataclass
+class FileContextCache:
+    original_module: cst.Module
+    cleaned_module: cst.Module
+    fto_names: set[str]
+    hoh_names: set[str]
+    helper_functions: list[FunctionSource]
+    file_path: Path
+    relative_path: Path
+
+
+@dataclass
 class AllContextResults:
     read_writable: CodeStringsMarkdown
     read_only: CodeStringsMarkdown
     hashing: CodeStringsMarkdown
     testgen: CodeStringsMarkdown
+    file_caches: list[FileContextCache] = field(default_factory=list, repr=False)
 
 
 def build_testgen_context(
@@ -146,8 +158,8 @@ def get_code_optimization_context(
     read_only_tokens = encoded_tokens_len(read_only_context_code)
     if final_read_writable_tokens + read_only_tokens > optim_token_limit:
         logger.debug("Code context has exceeded token limit, removing docstrings from read-only code")
-        read_only_code_no_docstrings = extract_code_markdown_context_from_files(
-            helpers_of_fto_dict, helpers_of_helpers_dict, project_root_path, remove_docstrings=True
+        read_only_code_no_docstrings = re_extract_from_cache(
+            all_ctx.file_caches, CodeContextType.READ_ONLY, project_root_path
         )
         read_only_context_code = read_only_code_no_docstrings.markdown
         if final_read_writable_tokens + encoded_tokens_len(read_only_context_code) > optim_token_limit:
@@ -161,13 +173,7 @@ def get_code_optimization_context(
 
     if encoded_tokens_len(testgen_context.markdown) > testgen_token_limit:
         logger.debug("Testgen context exceeded token limit, removing docstrings")
-        testgen_base_no_docs = extract_code_markdown_context_from_files(
-            helpers_of_fto_dict,
-            helpers_of_helpers_dict,
-            project_root_path,
-            remove_docstrings=True,
-            code_context_type=CodeContextType.TESTGEN,
-        )
+        testgen_base_no_docs = re_extract_from_cache(all_ctx.file_caches, CodeContextType.TESTGEN, project_root_path)
         testgen_context = build_testgen_context(
             testgen_base_no_docs, project_root_path, function_to_optimize=function_to_optimize
         )
@@ -195,68 +201,18 @@ def get_code_optimization_context(
     )
 
 
-def process_file_context(
-    file_path: Path,
-    primary_qualified_names: set[str],
-    secondary_qualified_names: set[str],
-    code_context_type: CodeContextType,
-    remove_docstrings: bool,
-    project_root_path: Path,
-    helper_functions: list[FunctionSource],
-) -> CodeString | None:
-    try:
-        original_code = file_path.read_text("utf8")
-    except Exception as e:
-        logger.exception(f"Error while parsing {file_path}: {e}")
-        return None
-
-    try:
-        original_module = cst.parse_module(original_code)
-    except Exception as e:
-        logger.debug(f"Failed to parse {file_path} with libcst: {type(e).__name__}: {e}")
-        return None
-
-    try:
-        all_names = primary_qualified_names | secondary_qualified_names
-        cleaned_module = remove_unused_definitions_by_function_names(original_module, all_names)
-        pruned_module = parse_code_and_prune_cst(
-            cleaned_module, code_context_type, primary_qualified_names, secondary_qualified_names, remove_docstrings
-        )
-    except ValueError as e:
-        logger.debug(f"Error while getting read-only code: {e}")
-        return None
-
-    if pruned_module.code.strip():
-        if code_context_type == CodeContextType.HASHING:
-            code_context = ast.unparse(ast.parse(pruned_module.code))
-        else:
-            code_context = add_needed_imports_from_module(
-                src_module_code=original_module,
-                dst_module_code=pruned_module,
-                src_path=file_path,
-                dst_path=file_path,
-                project_root=project_root_path,
-                helper_functions=helper_functions,
-            )
-        try:
-            relative_path = file_path.resolve().relative_to(project_root_path.resolve())
-        except ValueError:
-            relative_path = file_path
-        return CodeString(code=code_context, file_path=relative_path)
-    return None
-
-
 def extract_all_contexts_from_files(
     helpers_of_fto: dict[Path, set[FunctionSource]],
     helpers_of_helpers: dict[Path, set[FunctionSource]],
     project_root_path: Path,
 ) -> AllContextResults:
     """Extract all 4 code context types from files in a single pass, parsing each file only once."""
-    # Deduplicate: remove HoH entries that overlap with FTO
+    # Deduplicate: remove HoH entries that overlap with FTO (without mutating the caller's dict)
+    hoh_deduped: dict[Path, set[FunctionSource]] = {}
     helpers_of_helpers_no_overlap: dict[Path, set[FunctionSource]] = {}
     for file_path, function_sources in helpers_of_helpers.items():
         if file_path in helpers_of_fto:
-            helpers_of_helpers[file_path] -= helpers_of_fto[file_path]
+            hoh_deduped[file_path] = function_sources - helpers_of_fto[file_path]
         else:
             helpers_of_helpers_no_overlap[file_path] = function_sources
 
@@ -264,11 +220,12 @@ def extract_all_contexts_from_files(
     ro = CodeStringsMarkdown()
     hashing = CodeStringsMarkdown()
     testgen = CodeStringsMarkdown()
+    file_caches: list[FileContextCache] = []
 
     # Process files containing FTO helpers (all 4 context types)
     for file_path, function_sources in helpers_of_fto.items():
         fto_names = {func.qualified_name for func in function_sources}
-        hoh_funcs = helpers_of_helpers.get(file_path, set())
+        hoh_funcs = hoh_deduped.get(file_path, set())
         hoh_names = {func.qualified_name for func in hoh_funcs}
         rw_helper_functions = list(function_sources)
         all_helper_functions = list(function_sources | hoh_funcs)
@@ -290,8 +247,10 @@ def extract_all_contexts_from_files(
         except ValueError:
             relative_path = file_path
 
+        # Compute defs once for fto_names and reuse across remove + prune
+        fto_defs = collect_top_level_defs_with_usages(original_module, fto_names)
         # Clean by fto_names only (for RW)
-        rw_cleaned = remove_unused_definitions_by_function_names(original_module, fto_names)
+        rw_cleaned = remove_unused_definitions_by_function_names(original_module, fto_names, defs_with_usages=fto_defs)
         # Clean by all names (for RO/HASH/TESTGEN) — reuse rw_cleaned if no extra HoH names
         all_names = fto_names | hoh_names
         all_cleaned = (
@@ -301,7 +260,12 @@ def extract_all_contexts_from_files(
         # READ_WRITABLE
         try:
             rw_pruned = parse_code_and_prune_cst(
-                rw_cleaned, CodeContextType.READ_WRITABLE, fto_names, set(), remove_docstrings=False
+                rw_cleaned,
+                CodeContextType.READ_WRITABLE,
+                fto_names,
+                set(),
+                remove_docstrings=False,
+                defs_with_usages=fto_defs,
             )
             if rw_pruned.code.strip():
                 rw_code = add_needed_imports_from_module(
@@ -362,6 +326,18 @@ def extract_all_contexts_from_files(
                 testgen.code_strings.append(CodeString(code=testgen_code, file_path=relative_path))
         except ValueError as e:
             logger.debug(f"Error while getting testgen code: {e}")
+
+        file_caches.append(
+            FileContextCache(
+                original_module=original_module,
+                cleaned_module=all_cleaned,
+                fto_names=fto_names,
+                hoh_names=hoh_names,
+                helper_functions=all_helper_functions,
+                file_path=file_path,
+                relative_path=relative_path,
+            )
+        )
 
     # Process files containing only helpers of helpers (RO/HASH/TESTGEN only)
     for file_path, function_sources in helpers_of_helpers_no_overlap.items():
@@ -434,62 +410,51 @@ def extract_all_contexts_from_files(
         except ValueError as e:
             logger.debug(f"Error while getting testgen code: {e}")
 
-    return AllContextResults(read_writable=rw, read_only=ro, hashing=hashing, testgen=testgen)
+        file_caches.append(
+            FileContextCache(
+                original_module=original_module,
+                cleaned_module=cleaned,
+                fto_names=set(),
+                hoh_names=hoh_names,
+                helper_functions=helper_functions,
+                file_path=file_path,
+                relative_path=relative_path,
+            )
+        )
+
+    return AllContextResults(read_writable=rw, read_only=ro, hashing=hashing, testgen=testgen, file_caches=file_caches)
 
 
-def extract_code_markdown_context_from_files(
-    helpers_of_fto: dict[Path, set[FunctionSource]],
-    helpers_of_helpers: dict[Path, set[FunctionSource]],
+def re_extract_from_cache(
+    file_caches: list[FileContextCache],
+    code_context_type: CodeContextType,
     project_root_path: Path,
-    remove_docstrings: bool = False,
-    code_context_type: CodeContextType = CodeContextType.READ_ONLY,
+    remove_docstrings: bool = True,
 ) -> CodeStringsMarkdown:
-    """Extract code context from files containing target functions and their helpers, formatted as markdown."""
-    # Rearrange to remove overlaps, so we only access each file path once
-    helpers_of_helpers_no_overlap = defaultdict(set)
-    for file_path, function_sources in helpers_of_helpers.items():
-        if file_path in helpers_of_fto:
-            # Remove duplicates within the same file path, in case a helper of helper is also a helper of fto
-            helpers_of_helpers[file_path] -= helpers_of_fto[file_path]
-        else:
-            helpers_of_helpers_no_overlap[file_path] = function_sources
-    code_context_markdown = CodeStringsMarkdown()
-    # Extract code from file paths that contain fto and first degree helpers. helpers of helpers may also be included if they are in the same files
-    for file_path, function_sources in helpers_of_fto.items():
-        qualified_function_names = {func.qualified_name for func in function_sources}
-        helpers_of_helpers_qualified_names = {func.qualified_name for func in helpers_of_helpers.get(file_path, set())}
-        helper_functions = list(helpers_of_fto.get(file_path, set()) | helpers_of_helpers.get(file_path, set()))
-
-        result = process_file_context(
-            file_path=file_path,
-            primary_qualified_names=qualified_function_names,
-            secondary_qualified_names=helpers_of_helpers_qualified_names,
-            code_context_type=code_context_type,
-            remove_docstrings=remove_docstrings,
-            project_root_path=project_root_path,
-            helper_functions=helper_functions,
-        )
-
-        if result is not None:
-            code_context_markdown.code_strings.append(result)
-    # Extract code from file paths containing helpers of helpers
-    for file_path, helper_function_sources in helpers_of_helpers_no_overlap.items():
-        qualified_helper_function_names = {func.qualified_name for func in helper_function_sources}
-        helper_functions = list(helper_function_sources)
-
-        result = process_file_context(
-            file_path=file_path,
-            primary_qualified_names=set(),
-            secondary_qualified_names=qualified_helper_function_names,
-            code_context_type=code_context_type,
-            remove_docstrings=remove_docstrings,
-            project_root_path=project_root_path,
-            helper_functions=helper_functions,
-        )
-
-        if result is not None:
-            code_context_markdown.code_strings.append(result)
-    return code_context_markdown
+    """Re-extract context from cached modules without file I/O or CST parsing."""
+    result = CodeStringsMarkdown()
+    for cache in file_caches:
+        try:
+            pruned = parse_code_and_prune_cst(
+                cache.cleaned_module,
+                code_context_type,
+                cache.fto_names,
+                cache.hoh_names,
+                remove_docstrings=remove_docstrings,
+            )
+        except ValueError:
+            continue
+        if pruned.code.strip():
+            code = add_needed_imports_from_module(
+                src_module_code=cache.original_module,
+                dst_module_code=pruned,
+                src_path=cache.file_path,
+                dst_path=cache.file_path,
+                project_root=project_root_path,
+                helper_functions=cache.helper_functions,
+            )
+            result.code_strings.append(CodeString(code=code, file_path=cache.relative_path))
+    return result
 
 
 def get_function_to_optimize_as_function_source(
@@ -1543,12 +1508,16 @@ def parse_code_and_prune_cst(
     target_functions: set[str],
     helpers_of_helper_functions: set[str] = set(),  # noqa: B006
     remove_docstrings: bool = False,
+    defs_with_usages: dict[str, UsageInfo] | None = None,
 ) -> cst.Module:
     """Parse and filter the code CST, returning the pruned Module."""
     module = code if isinstance(code, cst.Module) else cst.parse_module(code)
 
     if code_context_type == CodeContextType.READ_WRITABLE:
-        defs_with_usages = collect_top_level_defs_with_usages(module, target_functions | helpers_of_helper_functions)
+        if defs_with_usages is None:
+            defs_with_usages = collect_top_level_defs_with_usages(
+                module, target_functions | helpers_of_helper_functions
+            )
         cfg = PruneConfig(defs_with_usages=defs_with_usages, keep_class_init=True)
     elif code_context_type == CodeContextType.READ_ONLY:
         cfg = PruneConfig(
