@@ -1,8 +1,12 @@
 import os
+import sqlite3
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from codeflash.discovery.discover_unit_tests import (
+    TestsCache,
     analyze_imports_in_test_file,
     discover_unit_tests,
     filter_test_files_by_imports,
@@ -2045,3 +2049,64 @@ def test_discover_unit_tests_caching():
     assert non_cached_num_discovered_tests == num_discovered_tests
     assert non_cached_function_to_tests == tests
     assert non_cached_num_discovered_replay_tests == num_discovered_replay_tests
+
+
+def test_tests_cache_batches_commits(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    real_connect = sqlite3.connect
+    commit_count = 0
+
+    class CountingConnection:
+        def __init__(self, path: str) -> None:
+            self._connection = real_connect(path)
+
+        def __getattr__(self, name: str):
+            return getattr(self._connection, name)
+
+        def commit(self) -> None:
+            nonlocal commit_count
+            commit_count += 1
+            self._connection.commit()
+
+    db_path = tmp_path / "tests_cache.sqlite"
+    monkeypatch.setattr(
+        "codeflash.discovery.discover_unit_tests.codeflash_cache_db",
+        db_path,
+    )
+    monkeypatch.setattr(
+        "codeflash.discovery.discover_unit_tests.sqlite3.connect",
+        lambda path: CountingConnection(str(path)),
+    )
+
+    cache = TestsCache(project_root_path=tmp_path)
+    initial_commit_count = commit_count
+
+    cache.insert_test(
+        file_path=str(tmp_path / "test_a.py"),
+        file_hash="hash-a",
+        qualified_name_with_modules_from_root="pkg.fn_a",
+        function_name="fn_a",
+        test_class="",
+        test_function="test_fn_a",
+        test_type=TestType.EXISTING_UNIT_TEST,
+        line_number=1,
+        col_number=0,
+    )
+    cache.insert_test(
+        file_path=str(tmp_path / "test_b.py"),
+        file_hash="hash-b",
+        qualified_name_with_modules_from_root="pkg.fn_b",
+        function_name="fn_b",
+        test_class="",
+        test_function="test_fn_b",
+        test_type=TestType.EXISTING_UNIT_TEST,
+        line_number=2,
+        col_number=0,
+    )
+
+    assert commit_count == initial_commit_count
+
+    cache.flush()
+    assert commit_count == initial_commit_count + 1
+    assert cache.pending_rows == []
+
+    cache.close()

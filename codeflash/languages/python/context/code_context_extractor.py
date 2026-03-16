@@ -4,6 +4,8 @@ import ast
 import hashlib
 import os
 from collections import defaultdict, deque
+from dataclasses import dataclass, field
+from functools import cache
 from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -45,6 +47,22 @@ if TYPE_CHECKING:
     from codeflash.languages.python.context.unused_definition_remover import UsageInfo
 
 
+@dataclass
+class ContextProcessingCache:
+    source_by_file: dict[Path, str] = field(default_factory=dict)
+    pruned_source_by_key: dict[tuple[Path, frozenset[str]], str] = field(default_factory=dict)
+    code_string_by_key: dict[tuple[Path, frozenset[str], frozenset[str], CodeContextType, bool], CodeString | None] = (
+        field(default_factory=dict)
+    )
+
+
+@cache
+def _get_jedi_project(project_root_path: str):  # type: ignore[no-untyped-def]
+    import jedi
+
+    return jedi.Project(path=project_root_path)
+
+
 def build_testgen_context(
     helpers_of_fto_dict: dict[Path, set[FunctionSource]],
     helpers_of_helpers_dict: dict[Path, set[FunctionSource]],
@@ -53,6 +71,7 @@ def build_testgen_context(
     remove_docstrings: bool = False,
     include_enrichment: bool = True,
     function_to_optimize: FunctionToOptimize | None = None,
+    processing_cache: ContextProcessingCache | None = None,
 ) -> CodeStringsMarkdown:
     testgen_context = extract_code_markdown_context_from_files(
         helpers_of_fto_dict,
@@ -60,6 +79,7 @@ def build_testgen_context(
         project_root_path,
         remove_docstrings=remove_docstrings,
         code_context_type=CodeContextType.TESTGEN,
+        processing_cache=processing_cache,
     )
 
     if include_enrichment:
@@ -88,15 +108,23 @@ def get_code_optimization_context(
     testgen_token_limit: int = TESTGEN_CONTEXT_TOKEN_LIMIT,
     call_graph: DependencyResolver | None = None,
 ) -> CodeOptimizationContext:
+    processing_cache = ContextProcessingCache()
+    project_root_path = project_root_path.resolve()
+    jedi_project = _get_jedi_project(str(project_root_path))
+
     # Get FunctionSource representation of helpers of FTO
     fto_input = {function_to_optimize.file_path: {function_to_optimize.qualified_name}}
     if call_graph is not None:
         helpers_of_fto_dict, helpers_of_fto_list = call_graph.get_callees(fto_input)
     else:
-        helpers_of_fto_dict, helpers_of_fto_list = get_function_sources_from_jedi(fto_input, project_root_path)
+        helpers_of_fto_dict, helpers_of_fto_list = get_function_sources_from_jedi(
+            fto_input, project_root_path, jedi_project=jedi_project
+        )
 
     # Add function to optimize into helpers of FTO dict, as they'll be processed together
-    fto_as_function_source = get_function_to_optimize_as_function_source(function_to_optimize, project_root_path)
+    fto_as_function_source = get_function_to_optimize_as_function_source(
+        function_to_optimize, project_root_path, jedi_project=jedi_project
+    )
     helpers_of_fto_dict[function_to_optimize.file_path].add(fto_as_function_source)
 
     # Format data to search for helpers of helpers using get_function_sources_from_jedi
@@ -110,7 +138,7 @@ def get_code_optimization_context(
         qualified_names.update({f"{qn.rsplit('.', 1)[0]}.__init__" for qn in qualified_names if "." in qn})
 
     helpers_of_helpers_dict, helpers_of_helpers_list = get_function_sources_from_jedi(
-        helpers_of_fto_qualified_names_dict, project_root_path
+        helpers_of_fto_qualified_names_dict, project_root_path, jedi_project=jedi_project
     )
 
     # Extract code context for optimization
@@ -120,6 +148,7 @@ def get_code_optimization_context(
         project_root_path,
         remove_docstrings=False,
         code_context_type=CodeContextType.READ_WRITABLE,
+        processing_cache=processing_cache,
     )
 
     # Ensure the target file is first in the code blocks so the LLM knows which file to optimize
@@ -135,6 +164,7 @@ def get_code_optimization_context(
         project_root_path,
         remove_docstrings=False,
         code_context_type=CodeContextType.READ_ONLY,
+        processing_cache=processing_cache,
     )
     hashing_code_context = extract_code_markdown_context_from_files(
         helpers_of_fto_dict,
@@ -142,6 +172,7 @@ def get_code_optimization_context(
         project_root_path,
         remove_docstrings=True,
         code_context_type=CodeContextType.HASHING,
+        processing_cache=processing_cache,
     )
 
     # Handle token limits
@@ -163,7 +194,11 @@ def get_code_optimization_context(
     if final_read_writable_tokens + read_only_tokens > optim_token_limit:
         logger.debug("Code context has exceeded token limit, removing docstrings from read-only code")
         read_only_code_no_docstrings = extract_code_markdown_context_from_files(
-            helpers_of_fto_dict, helpers_of_helpers_dict, project_root_path, remove_docstrings=True
+            helpers_of_fto_dict,
+            helpers_of_helpers_dict,
+            project_root_path,
+            remove_docstrings=True,
+            processing_cache=processing_cache,
         )
         read_only_context_code = read_only_code_no_docstrings.markdown
         if final_read_writable_tokens + encoded_tokens_len(read_only_context_code) > optim_token_limit:
@@ -172,7 +207,11 @@ def get_code_optimization_context(
 
     # Progressive fallback for testgen context token limits
     testgen_context = build_testgen_context(
-        helpers_of_fto_dict, helpers_of_helpers_dict, project_root_path, function_to_optimize=function_to_optimize
+        helpers_of_fto_dict,
+        helpers_of_helpers_dict,
+        project_root_path,
+        function_to_optimize=function_to_optimize,
+        processing_cache=processing_cache,
     )
 
     if encoded_tokens_len(testgen_context.markdown) > testgen_token_limit:
@@ -183,6 +222,7 @@ def get_code_optimization_context(
             project_root_path,
             remove_docstrings=True,
             function_to_optimize=function_to_optimize,
+            processing_cache=processing_cache,
         )
 
         if encoded_tokens_len(testgen_context.markdown) > testgen_token_limit:
@@ -193,6 +233,7 @@ def get_code_optimization_context(
                 project_root_path,
                 remove_docstrings=True,
                 include_enrichment=False,
+                processing_cache=processing_cache,
             )
 
             if encoded_tokens_len(testgen_context.markdown) > testgen_token_limit:
@@ -222,16 +263,38 @@ def process_file_context(
     remove_docstrings: bool,
     project_root_path: Path,
     helper_functions: list[FunctionSource],
+    processing_cache: ContextProcessingCache | None = None,
 ) -> CodeString | None:
+    cache_key = (
+        file_path,
+        frozenset(primary_qualified_names),
+        frozenset(secondary_qualified_names),
+        code_context_type,
+        remove_docstrings,
+    )
+    if processing_cache is not None and cache_key in processing_cache.code_string_by_key:
+        return processing_cache.code_string_by_key[cache_key]
+
     try:
-        original_code = file_path.read_text("utf8")
+        if processing_cache is not None and file_path in processing_cache.source_by_file:
+            original_code = processing_cache.source_by_file[file_path]
+        else:
+            original_code = file_path.read_text("utf8")
+            if processing_cache is not None:
+                processing_cache.source_by_file[file_path] = original_code
     except Exception as e:
         logger.exception(f"Error while parsing {file_path}: {e}")
         return None
 
     try:
         all_names = primary_qualified_names | secondary_qualified_names
-        code_without_unused_defs = remove_unused_definitions_by_function_names(original_code, all_names)
+        pruned_source_key = (file_path, frozenset(all_names))
+        if processing_cache is not None and pruned_source_key in processing_cache.pruned_source_by_key:
+            code_without_unused_defs = processing_cache.pruned_source_by_key[pruned_source_key]
+        else:
+            code_without_unused_defs = remove_unused_definitions_by_function_names(original_code, all_names)
+            if processing_cache is not None:
+                processing_cache.pruned_source_by_key[pruned_source_key] = code_without_unused_defs
         pruned_module = parse_code_and_prune_cst(
             code_without_unused_defs,
             code_context_type,
@@ -241,6 +304,8 @@ def process_file_context(
         )
     except ValueError as e:
         logger.debug(f"Error while getting read-only code: {e}")
+        if processing_cache is not None:
+            processing_cache.code_string_by_key[cache_key] = None
         return None
 
     if pruned_module.code.strip():
@@ -259,7 +324,12 @@ def process_file_context(
             relative_path = file_path.resolve().relative_to(project_root_path.resolve())
         except ValueError:
             relative_path = file_path
-        return CodeString(code=code_context, file_path=relative_path)
+        result = CodeString(code=code_context, file_path=relative_path)
+        if processing_cache is not None:
+            processing_cache.code_string_by_key[cache_key] = result
+        return result
+    if processing_cache is not None:
+        processing_cache.code_string_by_key[cache_key] = None
     return None
 
 
@@ -269,6 +339,7 @@ def extract_code_markdown_context_from_files(
     project_root_path: Path,
     remove_docstrings: bool = False,
     code_context_type: CodeContextType = CodeContextType.READ_ONLY,
+    processing_cache: ContextProcessingCache | None = None,
 ) -> CodeStringsMarkdown:
     """Extract code context from files containing target functions and their helpers, formatting them as markdown.
 
@@ -316,6 +387,7 @@ def extract_code_markdown_context_from_files(
             remove_docstrings=remove_docstrings,
             project_root_path=project_root_path,
             helper_functions=helper_functions,
+            processing_cache=processing_cache,
         )
 
         if result is not None:
@@ -333,6 +405,7 @@ def extract_code_markdown_context_from_files(
             remove_docstrings=remove_docstrings,
             project_root_path=project_root_path,
             helper_functions=helper_functions,
+            processing_cache=processing_cache,
         )
 
         if result is not None:
@@ -341,12 +414,15 @@ def extract_code_markdown_context_from_files(
 
 
 def get_function_to_optimize_as_function_source(
-    function_to_optimize: FunctionToOptimize, project_root_path: Path
+    function_to_optimize: FunctionToOptimize, project_root_path: Path, *, jedi_project: object | None = None
 ) -> FunctionSource:
     import jedi
 
     # Use jedi to find function to optimize
-    script = jedi.Script(path=function_to_optimize.file_path, project=jedi.Project(path=project_root_path))
+    script = jedi.Script(
+        path=function_to_optimize.file_path,
+        project=jedi_project if jedi_project is not None else _get_jedi_project(str(project_root_path.resolve())),
+    )
 
     # Get all names in the file
     names = script.get_names(all_scopes=True, definitions=True, references=False)
@@ -377,22 +453,32 @@ def get_function_to_optimize_as_function_source(
 
 
 def get_function_sources_from_jedi(
-    file_path_to_qualified_function_names: dict[Path, set[str]], project_root_path: Path
+    file_path_to_qualified_function_names: dict[Path, set[str]],
+    project_root_path: Path,
+    *,
+    jedi_project: object | None = None,
 ) -> tuple[dict[Path, set[FunctionSource]], list[FunctionSource]]:
     import jedi
 
+    project_root_path = project_root_path.resolve()
+    project = jedi_project if jedi_project is not None else _get_jedi_project(str(project_root_path))
     file_path_to_function_source = defaultdict(set)
     function_source_list: list[FunctionSource] = []
     for file_path, qualified_function_names in file_path_to_qualified_function_names.items():
-        script = jedi.Script(path=file_path, project=jedi.Project(path=project_root_path))
+        script = jedi.Script(path=file_path, project=project)
         file_refs = script.get_names(all_scopes=True, definitions=False, references=True)
+        refs_by_qualified_function: dict[str, list[Name]] = defaultdict(list)
+        for ref in file_refs:
+            try:
+                parent = ref.parent()
+                if parent is None or parent.type != "function":
+                    continue
+                refs_by_qualified_function[get_qualified_name(parent.module_name, parent.full_name)].append(ref)
+            except (AttributeError, ValueError):
+                continue
 
         for qualified_function_name in qualified_function_names:
-            names = [
-                ref
-                for ref in file_refs
-                if ref.full_name and belongs_to_function_qualified(ref, qualified_function_name)
-            ]
+            names = refs_by_qualified_function.get(qualified_function_name, [])
             for name in names:
                 try:
                     definitions: list[Name] = name.goto(follow_imports=True, follow_builtin_imports=False)

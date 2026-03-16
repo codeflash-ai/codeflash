@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+import codeflash.languages.python.context.code_context_extractor as code_context_extractor
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.python.context.code_context_extractor import (
     collect_type_names_from_annotation,
@@ -2539,6 +2540,56 @@ class TestClass:
 
     expected_hash = hashlib.sha256(code_ctx1.hashing_code_context.encode("utf-8")).hexdigest()
     assert code_ctx1.hashing_code_context_hash == expected_hash
+
+
+def test_code_context_reuses_target_file_reads(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    code_path = tmp_path / "target.py"
+    code_path.write_text(
+        "def helper(value):\n    return value + 1\n\n\ndef target(value):\n    return helper(value)\n",
+        encoding="utf-8",
+    )
+    function_to_optimize = FunctionToOptimize(function_name="target", file_path=code_path, parents=[])
+
+    original_read_text = Path.read_text
+    target_read_count = 0
+
+    def counting_read_text(path: Path, *args, **kwargs):  # type: ignore[no-untyped-def]
+        nonlocal target_read_count
+        if path == code_path:
+            target_read_count += 1
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", counting_read_text)
+
+    get_code_optimization_context(function_to_optimize=function_to_optimize, project_root_path=tmp_path)
+
+    assert target_read_count <= 2
+
+
+def test_code_context_reuses_cached_jedi_project(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    pytest.importorskip("jedi")
+    import jedi
+
+    code_context_extractor._get_jedi_project.cache_clear()
+
+    code_path = tmp_path / "target.py"
+    code_path.write_text("def target(value):\n    return value + 1\n", encoding="utf-8")
+    function_to_optimize = FunctionToOptimize(function_name="target", file_path=code_path, parents=[])
+
+    real_project = jedi.Project
+    project_calls = 0
+
+    def counting_project(*args, **kwargs):  # type: ignore[no-untyped-def]
+        nonlocal project_calls
+        project_calls += 1
+        return real_project(*args, **kwargs)
+
+    monkeypatch.setattr(jedi, "Project", counting_project)
+
+    get_code_optimization_context(function_to_optimize=function_to_optimize, project_root_path=tmp_path)
+    get_code_optimization_context(function_to_optimize=function_to_optimize, project_root_path=tmp_path)
+
+    assert project_calls == 1
 
 
 def test_hashing_code_context_different_code_different_hash(tmp_path: Path) -> None:
