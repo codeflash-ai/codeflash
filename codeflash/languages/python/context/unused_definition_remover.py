@@ -54,20 +54,16 @@ def extract_names_from_targets(target: cst.CSTNode) -> list[str]:
 
 def is_assignment_used(node: cst.CSTNode, definitions: dict[str, UsageInfo], name_prefix: str = "") -> bool:
     if isinstance(node, cst.Assign):
-        for target in node.targets:
-            names = extract_names_from_targets(target.target)
-            for name in names:
-                lookup = f"{name_prefix}{name}" if name_prefix else name
-                if lookup in definitions and definitions[lookup].used_by_qualified_function:
-                    return True
+        targets = [target.target for target in node.targets]
+    elif isinstance(node, (cst.AnnAssign, cst.AugAssign)):
+        targets = [node.target]
+    else:
         return False
-    if isinstance(node, (cst.AnnAssign, cst.AugAssign)):
-        names = extract_names_from_targets(node.target)
-        for name in names:
+    for target in targets:
+        for name in extract_names_from_targets(target):
             lookup = f"{name_prefix}{name}" if name_prefix else name
             if lookup in definitions and definitions[lookup].used_by_qualified_function:
                 return True
-        return False
     return False
 
 
@@ -119,84 +115,43 @@ def collect_top_level_definitions(
     node: cst.CSTNode, definitions: Optional[dict[str, UsageInfo]] = None
 ) -> dict[str, UsageInfo]:
     """Recursively collect all top-level variable, function, and class definitions."""
-    # Locally bind types and helpers for faster lookup
-    FunctionDef = cst.FunctionDef  # noqa: N806
-    ClassDef = cst.ClassDef  # noqa: N806
-    Assign = cst.Assign  # noqa: N806
-    AnnAssign = cst.AnnAssign  # noqa: N806
-    AugAssign = cst.AugAssign  # noqa: N806
-    IndentedBlock = cst.IndentedBlock  # noqa: N806
-
     if definitions is None:
         definitions = {}
 
-    # Speed: Single isinstance+local var instead of several type calls
-    node_type = type(node)
-    # Fast path: function def
-    if node_type is FunctionDef:
-        name = node.name.value
-        definitions[name] = UsageInfo(
-            name=name,
-            used_by_qualified_function=False,  # Will be marked later if in qualified functions
-        )
-        return definitions
-
-    # Fast path: class def
-    if node_type is ClassDef:
+    if isinstance(node, cst.FunctionDef):
         name = node.name.value
         definitions[name] = UsageInfo(name=name)
+        return definitions
 
-        # Collect class methods
-        body = getattr(node, "body", None)
-        if body is not None and type(body) is IndentedBlock:
-            statements = body.body
-            # Precompute f-string template for efficiency
+    if isinstance(node, cst.ClassDef):
+        name = node.name.value
+        definitions[name] = UsageInfo(name=name)
+        if isinstance(node.body, cst.IndentedBlock):
             prefix = name + "."
-            for statement in statements:
-                if type(statement) is FunctionDef:
+            for statement in node.body.body:
+                if isinstance(statement, cst.FunctionDef):
                     method_name = prefix + statement.name.value
                     definitions[method_name] = UsageInfo(name=method_name)
-
         return definitions
 
-    # Fast path: assignment
-    if node_type is Assign:
-        # Inline extract_names_from_targets for single-target speed
-        targets = node.targets
-        append_def = definitions.__setitem__
-        for target in targets:
-            names = extract_names_from_targets(target.target)
-            for name in names:
-                append_def(name, UsageInfo(name=name))
-        return definitions
-
-    if node_type is AnnAssign or node_type is AugAssign:
-        tgt = node.target
-        if type(tgt) is cst.Name:
-            name = tgt.value
-            definitions[name] = UsageInfo(name=name)
-        else:
-            names = extract_names_from_targets(tgt)
-            for name in names:
+    if isinstance(node, cst.Assign):
+        for target in node.targets:
+            for name in extract_names_from_targets(target.target):
                 definitions[name] = UsageInfo(name=name)
         return definitions
 
-    # Recursively process children. Takes care of top level assignments in if/else/while/for blocks
-    section_names = get_section_names(node)
+    if isinstance(node, (cst.AnnAssign, cst.AugAssign)):
+        for name in extract_names_from_targets(node.target):
+            definitions[name] = UsageInfo(name=name)
+        return definitions
 
-    if section_names:
-        getattr_ = getattr
-        for section in section_names:
-            original_content = getattr_(node, section, None)
-            # Instead of isinstance check for list/tuple, rely on duck-type via iter
-            # If section contains a list of nodes
-            if isinstance(original_content, (list, tuple)):
-                defs = definitions  # Move out for minor speed
-                for child in original_content:
-                    collect_top_level_definitions(child, defs)
-            # If section contains a single node
-            elif original_content is not None:
-                collect_top_level_definitions(original_content, definitions)
+    for section in get_section_names(node):
+        original_content = getattr(node, section, None)
+        if isinstance(original_content, (list, tuple)):
+            for child in original_content:
+                collect_top_level_definitions(child, definitions)
+        elif original_content is not None:
+            collect_top_level_definitions(original_content, definitions)
 
     return definitions
 
@@ -237,43 +192,24 @@ class DependencyCollector(cst.CSTVisitor):
                 # Regular top-level function
                 self.current_top_level_name = function_name
 
-        # Check parameter type annotations for dependencies
-        if hasattr(node, "params") and node.params:
-            for param in node.params.params:
-                if param.annotation:
-                    # Visit the annotation to extract dependencies
-                    self._collect_annotation_dependencies(param.annotation)
+        for param in node.params.params:
+            if param.annotation:
+                self._extract_names_from_annotation(param.annotation.annotation)
 
         self.function_depth += 1
 
-    def _collect_annotation_dependencies(self, annotation: cst.Annotation) -> None:
-        """Extract dependencies from type annotations."""
-        if hasattr(annotation, "annotation"):
-            # Extract names from annotation (could be Name, Attribute, Subscript, etc.)
-            self._extract_names_from_annotation(annotation.annotation)
-
     def _extract_names_from_annotation(self, node: cst.CSTNode) -> None:
-        """Extract names from a type annotation node."""
-        # Simple name reference like 'int', 'str', or custom type
         if isinstance(node, cst.Name):
             name = node.value
             if name in self.definitions and name != self.current_top_level_name and self.current_top_level_name:
                 self.definitions[self.current_top_level_name].dependencies.add(name)
-
-        # Handle compound annotations like List[int], Dict[str, CustomType], etc.
         elif isinstance(node, cst.Subscript):
-            if hasattr(node, "value"):
-                self._extract_names_from_annotation(node.value)
-            if hasattr(node, "slice"):
-                for slice_item in node.slice:
-                    if hasattr(slice_item, "slice"):
-                        self._extract_names_from_annotation(slice_item.slice)
-
-        # Handle attribute access like module.Type
+            self._extract_names_from_annotation(node.value)
+            for slice_item in node.slice:
+                if hasattr(slice_item, "slice"):
+                    self._extract_names_from_annotation(slice_item.slice)
         elif isinstance(node, cst.Attribute):
-            if hasattr(node, "value"):
-                self._extract_names_from_annotation(node.value)
-            # No need to check the attribute name itself as it's likely not a top-level definition
+            self._extract_names_from_annotation(node.value)
 
     def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:
         self.function_depth -= 1
@@ -334,21 +270,16 @@ class DependencyCollector(cst.CSTVisitor):
             self.current_top_level_name = ""
 
     def visit_AnnAssign(self, node: cst.AnnAssign) -> None:
-        # Extract names from the variable annotations
-        if hasattr(node, "annotation") and node.annotation:
-            # First mark we're processing a variable to avoid recording it as a dependency of itself
-            self.processing_variable = True
-            if isinstance(node.target, cst.Name):
-                self.current_variable_names.add(node.target.value)
-            else:
-                self.current_variable_names.update(extract_names_from_targets(node.target))
+        self.processing_variable = True
+        if isinstance(node.target, cst.Name):
+            self.current_variable_names.add(node.target.value)
+        else:
+            self.current_variable_names.update(extract_names_from_targets(node.target))
 
-            # Process the annotation
-            self._collect_annotation_dependencies(node.annotation)
+        self._extract_names_from_annotation(node.annotation.annotation)
 
-            # Reset processing state
-            self.processing_variable = False
-            self.current_variable_names.clear()
+        self.processing_variable = False
+        self.current_variable_names.clear()
 
     def visit_Name(self, node: cst.Name) -> None:
         name = node.value
@@ -406,18 +337,8 @@ class QualifiedFunctionUsageMarker:
 
     def mark_used_definitions(self) -> None:
         """Find all qualified functions and mark them and their dependencies as used."""
-        # Avoid list comprehension for set intersection
-        expanded_names = self.expanded_qualified_functions
         defs = self.definitions
-        # Use set intersection but only if defs.keys is a set (Python 3.12 dict_keys supports it efficiently)
-        fnames = (
-            expanded_names & defs.keys()
-            if isinstance(expanded_names, set)
-            else [name for name in expanded_names if name in defs]
-        )
-
-        # For each specified function, mark it and all its dependencies as used
-        for func_name in fnames:
+        for func_name in self.expanded_qualified_functions & defs.keys():
             defs[func_name].used_by_qualified_function = True
             for dep in defs[func_name].dependencies:
                 self.mark_as_used_recursively(dep)
@@ -442,17 +363,7 @@ def remove_unused_definitions_recursively(
 ) -> tuple[cst.CSTNode | None, bool]:
     """Recursively filter the node to remove unused definitions.
 
-    Args:
-    ----
-        node: The CST node to process
-        definitions: Dictionary of definition info
-
-    Returns:
-    -------
-        (filtered_node, used_by_function):
-          filtered_node: The modified CST node or None if it should be removed
-          used_by_function: True if this node or any child is used by qualified functions
-
+    Returns (filtered_node_or_None, used_by_function).
     """
     # Skip import statements
     if isinstance(node, (cst.Import, cst.ImportFrom)):
@@ -462,50 +373,23 @@ def remove_unused_definitions_recursively(
     if isinstance(node, cst.FunctionDef):
         return node, True
 
-    # Never remove class definitions
     if isinstance(node, cst.ClassDef):
         class_name = node.name.value
+        class_has_dependencies = class_name in definitions and definitions[class_name].used_by_qualified_function
 
-        # Check if any methods or variables in this class are used
-        method_or_var_used = False
-        class_has_dependencies = False
-
-        # Check if class itself is marked as used
-        if class_name in definitions and definitions[class_name].used_by_qualified_function:
-            class_has_dependencies = True
-
-        if hasattr(node, "body") and isinstance(node.body, cst.IndentedBlock):
-            updates = {}
+        if isinstance(node.body, cst.IndentedBlock):
             new_statements = []
-
             for statement in node.body.body:
-                # Keep all function definitions
                 if isinstance(statement, cst.FunctionDef):
-                    method_name = f"{class_name}.{statement.name.value}"
-                    if method_name in definitions and definitions[method_name].used_by_qualified_function:
-                        method_or_var_used = True
                     new_statements.append(statement)
-                # Only process variable assignments
                 elif isinstance(statement, (cst.Assign, cst.AnnAssign, cst.AugAssign)):
-                    var_used = False
-
-                    if is_assignment_used(statement, definitions, name_prefix=f"{class_name}."):
-                        var_used = True
-                        method_or_var_used = True
-
-                    if var_used or class_has_dependencies:
+                    if class_has_dependencies or is_assignment_used(statement, definitions, name_prefix=f"{class_name}."):
                         new_statements.append(statement)
                 else:
-                    # Keep all other statements in the class
                     new_statements.append(statement)
+            return node.with_changes(body=node.body.with_changes(body=new_statements)), True
 
-            # Update the class body
-            new_body = node.body.with_changes(body=new_statements)
-            updates["body"] = new_body
-
-            return node.with_changes(**updates), True
-
-        return node, method_or_var_used or class_has_dependencies
+        return node, class_has_dependencies
 
     # Handle assignments (Assign, AnnAssign, AugAssign)
     if isinstance(node, (cst.Assign, cst.AnnAssign, cst.AugAssign)):
@@ -542,17 +426,7 @@ def collect_top_level_defs_with_usages(
 
 
 def remove_unused_definitions_by_function_names(code: str, qualified_function_names: set[str]) -> str:
-    """Analyze a file and remove top level definitions not used by specified functions.
-
-    Top level definitions, in this context, are only classes, variables or functions.
-    If a class is referenced by a qualified function, we keep the entire class.
-
-    Args:
-    ----
-        code: The code to process
-        qualified_function_names: Set of function names to keep. For methods, use format 'classname.methodname'
-
-    """
+    """Remove top-level definitions (classes, variables, functions) not used by the specified qualified function names."""
     try:
         module = cst.parse_module(code)
     except Exception as e:
@@ -575,35 +449,23 @@ def remove_unused_definitions_by_function_names(code: str, qualified_function_na
 def revert_unused_helper_functions(
     project_root: Path, unused_helpers: list[FunctionSource], original_helper_code: dict[Path, str]
 ) -> None:
-    """Revert unused helper functions back to their original definitions.
-
-    Args:
-        project_root: project_root
-        unused_helpers: List of unused helper functions to revert
-        original_helper_code: Dictionary mapping file paths to their original code
-
-    """
+    """Revert unused helper functions back to their original definitions."""
     if not unused_helpers:
         return
 
     logger.debug(f"Reverting {len(unused_helpers)} unused helper function(s) to original definitions")
 
-    # Resolve all path keys for consistent comparison (Windows 8.3 short names may differ from Jedi-resolved paths)
+    # Resolve path keys for consistent comparison (Windows 8.3 short names may differ from Jedi-resolved paths)
     resolved_original_helper_code = {p.resolve(): code for p, code in original_helper_code.items()}
 
-    # Group unused helpers by file path
     unused_helpers_by_file = defaultdict(list)
     for helper in unused_helpers:
         unused_helpers_by_file[helper.file_path.resolve()].append(helper)
 
-    # For each file, revert the unused helper functions to their original definitions
     for file_path, helpers_in_file in unused_helpers_by_file.items():
         if file_path in resolved_original_helper_code:
             try:
-                # Get original code for this file
                 original_code = resolved_original_helper_code[file_path]
-
-                # Use the code replacer to selectively revert only the unused helper functions
                 helper_names = [helper.qualified_name for helper in helpers_in_file]
                 reverted_code = replace_function_definitions_in_module(
                     function_names=helper_names,
@@ -611,11 +473,11 @@ def revert_unused_helper_functions(
                         code_strings=[
                             CodeString(code=original_code, file_path=Path(file_path).relative_to(project_root))
                         ]
-                    ),  # Use original code as the "optimized" code to revert
+                    ),
                     module_abspath=file_path,
                     preexisting_objects=set(),  # Empty set since we're reverting
                     project_root_path=project_root,
-                    should_add_global_assignments=False,  # since we revert helpers functions after applying the optimization, we know that the file already has global assignments added, otherwise they would be added twice.
+                    should_add_global_assignments=False,  # file already has global assignments from the optimization pass
                 )
 
                 if reverted_code:
@@ -628,16 +490,7 @@ def revert_unused_helper_functions(
 def _analyze_imports_in_optimized_code(
     optimized_ast: ast.AST, code_context: CodeOptimizationContext
 ) -> dict[str, set[str]]:
-    """Analyze import statements in optimized code to map imported names to qualified helper names.
-
-    Args:
-        optimized_ast: The AST of the optimized code
-        code_context: The code optimization context containing helper functions
-
-    Returns:
-        Dictionary mapping imported names to sets of possible qualified helper names
-
-    """
+    """Map imported names to qualified helper names based on import statements in optimized code."""
     imported_names_map = defaultdict(set)
 
     # Precompute a two-level dict: module_name -> func_name -> [helpers]
@@ -652,23 +505,7 @@ def _analyze_imports_in_optimized_code(
             helpers_by_file_and_func[module_name].setdefault(func_name, []).append(helper)
             helpers_by_file[module_name].append(helper)
 
-    # Collect only import nodes to avoid per-node isinstance checks across the whole AST
-    class _ImportCollector(ast.NodeVisitor):
-        def __init__(self) -> None:
-            self.nodes: list[ast.AST] = []
-
-        def visit_Import(self, node: ast.Import) -> None:
-            self.nodes.append(node)
-            # No need to recurse further for import nodes
-
-        def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-            self.nodes.append(node)
-            # No need to recurse further for import-from nodes
-
-    collector = _ImportCollector()
-    collector.visit(optimized_ast)
-
-    for node in collector.nodes:
+    for node in ast.walk(optimized_ast):
         if isinstance(node, ast.ImportFrom):
             # Handle "from module import function" statements
             module_name = node.module
@@ -820,17 +657,15 @@ def detect_unused_helper_functions(
             helper_simple_name = helper_function.only_function_name
             helper_fully_qualified_name = helper_function.fully_qualified_name
 
-            if (
+            is_called = (
                 helper_qualified_name in called_function_names
                 or helper_simple_name in called_function_names
                 or helper_fully_qualified_name in called_function_names
-            ):
-                is_called = True
-            elif helper_function.file_path != entrypoint_file_path:
-                module_call = f"{helper_function.file_path.stem}.{helper_simple_name}"
-                is_called = module_call in called_function_names
-            else:
-                is_called = False
+                or (
+                    helper_function.file_path != entrypoint_file_path
+                    and f"{helper_function.file_path.stem}.{helper_simple_name}" in called_function_names
+                )
+            )
 
             if not is_called:
                 unused_helpers.append(helper_function)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import os
-from collections import defaultdict, deque
+from collections import defaultdict
 from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
@@ -271,29 +271,7 @@ def extract_code_markdown_context_from_files(
     remove_docstrings: bool = False,
     code_context_type: CodeContextType = CodeContextType.READ_ONLY,
 ) -> CodeStringsMarkdown:
-    """Extract code context from files containing target functions and their helpers, formatting them as markdown.
-
-    This function processes two sets of files:
-    1. Files containing the function to optimize (fto) and their first-degree helpers
-    2. Files containing only helpers of helpers (with no overlap with the first set)
-
-    For each file, it extracts relevant code based on the specified context type, adds necessary
-    imports, and combines them into a structured markdown format.
-
-    Args:
-    ----
-        helpers_of_fto: Dictionary mapping file paths to sets of Function Sources of function to optimize and its helpers
-        helpers_of_helpers: Dictionary mapping file paths to sets of Function Sources of helpers of helper functions
-        project_root_path: Root path of the project
-        remove_docstrings: Whether to remove docstrings from the extracted code
-        code_context_type: Type of code context to extract (READ_ONLY, READ_WRITABLE, or TESTGEN)
-
-    Returns:
-    -------
-        CodeStringsMarkdown containing the extracted code context with necessary imports,
-        formatted for inclusion in markdown
-
-    """
+    """Extract code context from files containing target functions and their helpers, formatted as markdown."""
     # Rearrange to remove overlaps, so we only access each file path once
     helpers_of_helpers_no_overlap = defaultdict(set)
     for file_path, function_sources in helpers_of_helpers.items():
@@ -324,7 +302,7 @@ def extract_code_markdown_context_from_files(
     # Extract code from file paths containing helpers of helpers
     for file_path, helper_function_sources in helpers_of_helpers_no_overlap.items():
         qualified_helper_function_names = {func.qualified_name for func in helper_function_sources}
-        helper_functions = list(helpers_of_helpers_no_overlap.get(file_path, set()))
+        helper_functions = list(helper_function_sources)
 
         result = process_file_context(
             file_path=file_path,
@@ -421,10 +399,7 @@ def get_function_sources_from_jedi(
                         and definition.full_name.startswith(definition.module_name)
                     )
                     if is_valid_definition and definition.type in ("function", "class", "statement"):
-                        if definition.type == "function":
-                            fqn = definition.full_name
-                            func_name = definition.name
-                        elif definition.type == "class":
+                        if definition.type == "class":
                             fqn = f"{definition.full_name}.__init__"
                             func_name = "__init__"
                         else:
@@ -454,74 +429,16 @@ def _parse_and_collect_imports(code_context: CodeStringsMarkdown) -> tuple[ast.M
     except SyntaxError:
         return None
     imported_names: dict[str, str] = {}
-
-    # Directly iterate over the module body and nested structures instead of ast.walk
-    # This avoids traversing every single node in the tree
-    def collect_imports(nodes: list[ast.stmt]) -> None:
-        for node in nodes:
-            if isinstance(node, ast.ImportFrom) and node.module:
-                for alias in node.names:
-                    if alias.name != "*":
-                        imported_name = alias.asname if alias.asname else alias.name
-                        imported_names[imported_name] = node.module
-            # Recursively check nested structures (function defs, class defs, if statements, etc.)
-            elif isinstance(
-                node,
-                (
-                    ast.FunctionDef,
-                    ast.AsyncFunctionDef,
-                    ast.ClassDef,
-                    ast.If,
-                    ast.For,
-                    ast.AsyncFor,
-                    ast.While,
-                    ast.With,
-                    ast.AsyncWith,
-                    ast.Try,
-                    ast.ExceptHandler,
-                ),
-            ):
-                if hasattr(node, "body"):
-                    collect_imports(node.body)
-                if hasattr(node, "orelse"):
-                    collect_imports(node.orelse)
-                if hasattr(node, "finalbody"):
-                    collect_imports(node.finalbody)
-                if hasattr(node, "handlers"):
-                    for handler in node.handlers:
-                        collect_imports(handler.body)
-            # Handle match/case statements (Python 3.10+)
-            elif hasattr(ast, "Match") and isinstance(node, ast.Match):
-                for case in node.cases:
-                    collect_imports(case.body)
-
-    collect_imports(tree.body)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                if alias.name != "*":
+                    imported_names[alias.asname if alias.asname else alias.name] = node.module
     return tree, imported_names
 
 
 def collect_existing_class_names(tree: ast.Module) -> set[str]:
-    class_names = set()
-    stack = list(tree.body)
-
-    while stack:
-        node = stack.pop()
-        if isinstance(node, ast.ClassDef):
-            class_names.add(node.name)
-            stack.extend(node.body)
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            stack.extend(node.body)
-        elif isinstance(node, (ast.If, ast.For, ast.While, ast.With)):
-            stack.extend(node.body)
-            if hasattr(node, "orelse"):
-                stack.extend(node.orelse)
-        elif isinstance(node, ast.Try):
-            stack.extend(node.body)
-            stack.extend(node.orelse)
-            stack.extend(node.finalbody)
-            for handler in node.handlers:
-                stack.extend(handler.body)
-
-    return class_names
+    return {node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)}
 
 
 BUILTIN_AND_TYPING_NAMES = frozenset(
@@ -654,14 +571,7 @@ def _collect_import_aliases(module_tree: ast.Module) -> dict[str, str]:
 
 
 def _find_class_node_by_name(class_name: str, module_tree: ast.Module) -> ast.ClassDef | None:
-    # Use a deque-based BFS to find the first matching ClassDef (preserves ast.walk order)
-    q: deque[ast.AST] = deque([module_tree])
-    while q:
-        candidate = q.popleft()
-        if isinstance(candidate, ast.ClassDef) and candidate.name == class_name:
-            return candidate
-        q.extend(ast.iter_child_nodes(candidate))
-    return None
+    return next((n for n in ast.walk(module_tree) if isinstance(n, ast.ClassDef) and n.name == class_name), None)
 
 
 def _expr_matches_name(node: ast.AST | None, import_aliases: dict[str, str], suffix: str) -> bool:
@@ -725,11 +635,9 @@ def _is_project_path(module_path: Path, project_root_path: Path) -> bool:
 
 
 def _get_class_start_line(class_node: ast.ClassDef) -> int:
-    start_line = class_node.lineno
     if class_node.decorator_list:
-        for decorator in class_node.decorator_list:
-            start_line = min(start_line, decorator.lineno)
-    return start_line
+        return min(d.lineno for d in class_node.decorator_list)
+    return class_node.lineno
 
 
 def _class_has_explicit_init(class_node: ast.ClassDef) -> bool:
@@ -845,10 +753,7 @@ def _build_synthetic_init_stub(
 def _extract_function_stub_snippet(
     fn_node: ast.FunctionDef | ast.AsyncFunctionDef, module_lines: list[str]
 ) -> str:
-    start_line = fn_node.lineno
-    if fn_node.decorator_list:
-        for decorator in fn_node.decorator_list:
-            start_line = min(start_line, decorator.lineno)
+    start_line = min(d.lineno for d in fn_node.decorator_list) if fn_node.decorator_list else fn_node.lineno
     return "\n".join(module_lines[start_line - 1 : fn_node.end_lineno])
 
 
@@ -867,21 +772,14 @@ def _has_non_property_method_decorator(
         if _expr_matches_name(decorator, import_aliases, "property"):
             continue
         decorator_name = _get_expr_name(decorator)
-        if decorator_name is not None and decorator_name.endswith(".setter"):
-            continue
-        if decorator_name is not None and decorator_name.endswith(".deleter"):
+        if decorator_name and decorator_name.endswith((".setter", ".deleter")):
             continue
         return True
     return False
 
 
 def _has_descriptor_like_class_fields(class_node: ast.ClassDef) -> bool:
-    for item in class_node.body:
-        if isinstance(item, ast.Assign) and isinstance(item.value, ast.Call):
-            return True
-        if isinstance(item, ast.AnnAssign) and isinstance(item.value, ast.Call):
-            return True
-    return False
+    return any(isinstance(item, (ast.Assign, ast.AnnAssign)) and isinstance(item.value, ast.Call) for item in class_node.body)
 
 
 def _should_use_raw_project_class_context(class_node: ast.ClassDef, import_aliases: dict[str, str]) -> bool:
@@ -938,15 +836,12 @@ def extract_init_stub_from_class(class_name: str, module_source: str, module_tre
                     break
 
     snippets: list[str] = []
-    if explicit_init_nodes:
-        for fn_node in support_nodes:
-            snippets.append(_extract_function_stub_snippet(fn_node, lines))
-    else:
+    if not explicit_init_nodes:
         synthetic_init = _build_synthetic_init_stub(class_node, module_source, import_aliases)
         if synthetic_init is not None:
             snippets.append(synthetic_init)
-        for fn_node in support_nodes:
-            snippets.append(_extract_function_stub_snippet(fn_node, lines))
+    for fn_node in support_nodes:
+        snippets.append(_extract_function_stub_snippet(fn_node, lines))
 
     if not snippets:
         return None
@@ -1066,6 +961,56 @@ def _append_project_class_context(
     return True
 
 
+def _collect_type_names_from_function(
+    func_node: ast.FunctionDef | ast.AsyncFunctionDef,
+    tree: ast.Module,
+    class_name: str | None,
+) -> set[str]:
+    type_names: set[str] = set()
+    for arg in func_node.args.args + func_node.args.posonlyargs + func_node.args.kwonlyargs:
+        type_names |= collect_type_names_from_annotation(arg.annotation)
+    if func_node.args.vararg:
+        type_names |= collect_type_names_from_annotation(func_node.args.vararg.annotation)
+    if func_node.args.kwarg:
+        type_names |= collect_type_names_from_annotation(func_node.args.kwarg.annotation)
+    for body_node in ast.walk(func_node):
+        if isinstance(body_node, ast.Call) and isinstance(body_node.func, ast.Name) and body_node.func.id == "isinstance":
+            if len(body_node.args) >= 2:
+                second_arg = body_node.args[1]
+                if isinstance(second_arg, ast.Name):
+                    type_names.add(second_arg.id)
+                elif isinstance(second_arg, ast.Tuple):
+                    for elt in second_arg.elts:
+                        if isinstance(elt, ast.Name):
+                            type_names.add(elt.id)
+        elif isinstance(body_node, ast.Compare):
+            if (
+                isinstance(body_node.left, ast.Call)
+                and isinstance(body_node.left.func, ast.Name)
+                and body_node.left.func.id == "type"
+            ):
+                for comparator in body_node.comparators:
+                    if isinstance(comparator, ast.Name):
+                        type_names.add(comparator.id)
+    if class_name is not None:
+        for top_node in ast.walk(tree):
+            if isinstance(top_node, ast.ClassDef) and top_node.name == class_name:
+                for base in top_node.bases:
+                    if isinstance(base, ast.Name):
+                        type_names.add(base.id)
+                break
+    return type_names
+
+
+def _build_import_from_map(tree: ast.Module) -> dict[str, str]:
+    import_map: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                import_map[alias.asname if alias.asname else alias.name] = node.module
+    return import_map
+
+
 def extract_parameter_type_constructors(
     function_to_optimize: FunctionToOptimize, project_root_path: Path, existing_class_names: set[str]
 ) -> CodeStringsMarkdown:
@@ -1090,60 +1035,13 @@ def extract_parameter_type_constructors(
     if func_node is None:
         return CodeStringsMarkdown(code_strings=[])
 
-    type_names: set[str] = set()
-    for arg in func_node.args.args + func_node.args.posonlyargs + func_node.args.kwonlyargs:
-        type_names |= collect_type_names_from_annotation(arg.annotation)
-    if func_node.args.vararg:
-        type_names |= collect_type_names_from_annotation(func_node.args.vararg.annotation)
-    if func_node.args.kwarg:
-        type_names |= collect_type_names_from_annotation(func_node.args.kwarg.annotation)
-
-    # Scan function body for isinstance(x, SomeType) and type(x) is/== SomeType patterns
-    for body_node in ast.walk(func_node):
-        if (
-            isinstance(body_node, ast.Call)
-            and isinstance(body_node.func, ast.Name)
-            and body_node.func.id == "isinstance"
-        ):
-            if len(body_node.args) >= 2:
-                second_arg = body_node.args[1]
-                if isinstance(second_arg, ast.Name):
-                    type_names.add(second_arg.id)
-                elif isinstance(second_arg, ast.Tuple):
-                    for elt in second_arg.elts:
-                        if isinstance(elt, ast.Name):
-                            type_names.add(elt.id)
-        elif isinstance(body_node, ast.Compare):
-            # type(x) is/== SomeType
-            if (
-                isinstance(body_node.left, ast.Call)
-                and isinstance(body_node.left.func, ast.Name)
-                and body_node.left.func.id == "type"
-            ):
-                for comparator in body_node.comparators:
-                    if isinstance(comparator, ast.Name):
-                        type_names.add(comparator.id)
-
-    # Collect base class names from enclosing class (if this is a method)
-    if function_to_optimize.class_name is not None:
-        for top_node in ast.walk(tree):
-            if isinstance(top_node, ast.ClassDef) and top_node.name == function_to_optimize.class_name:
-                for base in top_node.bases:
-                    if isinstance(base, ast.Name):
-                        type_names.add(base.id)
-                break
-
+    type_names = _collect_type_names_from_function(func_node, tree, function_to_optimize.class_name)
     type_names -= BUILTIN_AND_TYPING_NAMES
     type_names -= existing_class_names
     if not type_names:
         return CodeStringsMarkdown(code_strings=[])
 
-    import_map: dict[str, str] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module:
-            for alias in node.names:
-                name = alias.asname if alias.asname else alias.name
-                import_map[name] = node.module
+    import_map = _build_import_from_map(tree)
 
     code_strings: list[CodeString] = []
     module_cache: dict[Path, tuple[str, ast.Module]] = {}
@@ -1211,15 +1109,10 @@ def extract_parameter_type_constructors(
         append_type_context(type_name, module_name)
 
     # Transitive extraction (one level): for each extracted stub, find __init__ param types and extract their stubs
-    # Build an extended import map that includes imports from source modules of already-extracted stubs
     transitive_import_map = dict(import_map)
     for _, cached_tree in module_cache.values():
-        for cache_node in ast.walk(cached_tree):
-            if isinstance(cache_node, ast.ImportFrom) and cache_node.module:
-                for alias in cache_node.names:
-                    name = alias.asname if alias.asname else alias.name
-                    if name not in transitive_import_map:
-                        transitive_import_map[name] = cache_node.module
+        for name, module in _build_import_from_map(cached_tree).items():
+            transitive_import_map.setdefault(name, module)
 
     emitted_names = type_names | existing_class_names | emitted_class_names | BUILTIN_AND_TYPING_NAMES
     transitive_type_names: set[str] = set()
@@ -1289,30 +1182,13 @@ def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path:
     extracted_classes: set[tuple[Path, str]] = set()
     module_cache: dict[Path, tuple[str, ast.Module]] = {}
 
-    def get_module_source_and_tree(module_path: Path) -> tuple[str, ast.Module] | None:
-        if module_path in module_cache:
-            return module_cache[module_path]
-        try:
-            module_source = module_path.read_text(encoding="utf-8")
-            module_tree = ast.parse(module_source)
-        except Exception:
-            return None
-        else:
-            module_cache[module_path] = (module_source, module_tree)
-            return module_source, module_tree
-
     def extract_class_and_bases(
         class_name: str, module_path: Path, module_source: str, module_tree: ast.Module
     ) -> None:
         if (module_path, class_name) in extracted_classes:
             return
 
-        class_node = None
-        for node in ast.walk(module_tree):
-            if isinstance(node, ast.ClassDef) and node.name == class_name:
-                class_node = node
-                break
-
+        class_node = _find_class_node_by_name(class_name, module_tree)
         if class_node is None:
             return
 
@@ -1330,14 +1206,9 @@ def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path:
             return
 
         lines = module_source.split("\n")
-        start_line = class_node.lineno
-        if class_node.decorator_list:
-            start_line = min(d.lineno for d in class_node.decorator_list)
-        class_source = "\n".join(lines[start_line - 1 : class_node.end_lineno])
+        class_source = "\n".join(lines[_get_class_start_line(class_node) - 1 : class_node.end_lineno])
 
-        full_source = class_source
-
-        code_strings.append(CodeString(code=full_source, file_path=module_path))
+        code_strings.append(CodeString(code=class_source, file_path=module_path))
         extracted_classes.add((module_path, class_name))
         emitted_class_names.add(class_name)
 
@@ -1363,7 +1234,7 @@ def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path:
             if not is_project and not is_third_party:
                 continue
 
-            mod_result = get_module_source_and_tree(module_path)
+            mod_result = _get_module_source_and_tree(module_path, module_cache)
             if mod_result is None:
                 continue
             module_source, module_tree = mod_result
@@ -1376,7 +1247,7 @@ def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path:
                         extract_class_and_bases(resolved_class, module_path, module_source, module_tree)
             elif is_third_party:
                 target_name = name
-                if not any(isinstance(n, ast.ClassDef) and n.name == name for n in ast.walk(module_tree)):
+                if _find_class_node_by_name(name, module_tree) is None:
                     resolved_class = resolve_instance_class_name(name, module_tree)
                     if resolved_class:
                         target_name = resolved_class
@@ -1391,175 +1262,6 @@ def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path:
             continue
 
     return CodeStringsMarkdown(code_strings=code_strings)
-
-
-def resolve_classes_from_modules(candidates: set[tuple[str, str]]) -> list[tuple[type, str]]:
-    """Import modules and resolve candidate (class_name, module_name) pairs to class objects."""
-    import importlib
-    import inspect
-
-    resolved: list[tuple[type, str]] = []
-    module_cache: dict[str, object] = {}
-
-    for class_name, module_name in candidates:
-        try:
-            module = module_cache.get(module_name)
-            if module is None:
-                module = importlib.import_module(module_name)
-                module_cache[module_name] = module
-
-            cls = getattr(module, class_name, None)
-            if cls is not None and inspect.isclass(cls):
-                resolved.append((cls, class_name))
-        except (ImportError, ModuleNotFoundError, AttributeError):
-            logger.debug(f"Failed to import {module_name}.{class_name}")
-
-    return resolved
-
-
-MAX_TRANSITIVE_DEPTH = 5
-
-
-def extract_classes_from_type_hint(hint: object) -> list[type]:
-    """Recursively extract concrete class objects from a type annotation.
-
-    Unwraps Optional, Union, List, Dict, Callable, Annotated, etc.
-    Filters out builtins and typing module types.
-    """
-    import typing
-
-    classes: list[type] = []
-    origin = getattr(hint, "__origin__", None)
-    args = getattr(hint, "__args__", None)
-
-    if origin is not None and args:
-        for arg in args:
-            classes.extend(extract_classes_from_type_hint(arg))
-    elif isinstance(hint, type):
-        module = getattr(hint, "__module__", "")
-        if module not in ("builtins", "typing", "typing_extensions", "types"):
-            classes.append(hint)
-    # Handle typing.Annotated on older Pythons where __origin__ may not be set
-    if hasattr(typing, "get_args") and origin is None and args is None:
-        try:
-            inner_args = typing.get_args(hint)
-            if inner_args:
-                for arg in inner_args:
-                    classes.extend(extract_classes_from_type_hint(arg))
-        except Exception:
-            pass
-
-    return classes
-
-
-def resolve_transitive_type_deps(cls: type) -> list[type]:
-    """Find external classes referenced in cls.__init__ type annotations.
-
-    Returns classes from site-packages that have a custom __init__.
-    """
-    import inspect
-    import typing
-
-    try:
-        init_method = getattr(cls, "__init__")
-        hints = typing.get_type_hints(init_method)
-    except Exception:
-        return []
-
-    deps: list[type] = []
-    for param_name, hint in hints.items():
-        if param_name == "return":
-            continue
-        for dep_cls in extract_classes_from_type_hint(hint):
-            if dep_cls is cls:
-                continue
-            init_method = getattr(dep_cls, "__init__", None)
-            if init_method is None or init_method is object.__init__:
-                continue
-            try:
-                class_file = Path(inspect.getfile(dep_cls))
-            except (OSError, TypeError):
-                continue
-            if not path_belongs_to_site_packages(class_file):
-                continue
-            deps.append(dep_cls)
-
-    return deps
-
-
-def extract_init_stub(cls: type, class_name: str, require_site_packages: bool = True) -> CodeString | None:
-    """Extract a stub containing the class definition with only its __init__ method.
-
-    Args:
-        cls: The class object to extract __init__ from
-        class_name: Name to use for the class in the stub
-        require_site_packages: If True, only extract from site-packages. If False, include stdlib too.
-
-    """
-    import inspect
-    import textwrap
-
-    init_method = getattr(cls, "__init__", None)
-    if init_method is None or init_method is object.__init__:
-        return None
-
-    try:
-        class_file = Path(inspect.getfile(cls))
-    except (OSError, TypeError):
-        return None
-
-    if require_site_packages and not path_belongs_to_site_packages(class_file):
-        return None
-
-    try:
-        init_source = inspect.getsource(init_method)
-        init_source = textwrap.dedent(init_source)
-    except (OSError, TypeError):
-        return None
-
-    parts = class_file.parts
-    if "site-packages" in parts:
-        idx = parts.index("site-packages")
-        class_file = Path(*parts[idx + 1 :])
-
-    class_source = f"class {class_name}:\n" + textwrap.indent(init_source, "    ")
-    return CodeString(code=class_source, file_path=class_file)
-
-
-def _is_project_module_cached(module_name: str, project_root_path: Path, cache: dict[str, bool]) -> bool:
-    cached = cache.get(module_name)
-    if cached is not None:
-        return cached
-    is_project = _is_project_module(module_name, project_root_path)
-    cache[module_name] = is_project
-    return is_project
-
-
-def is_project_path(module_path: Path | None, project_root_path: Path) -> bool:
-    if module_path is None:
-        return False
-    # site-packages must be checked first because .venv/site-packages is under project root
-    if path_belongs_to_site_packages(module_path):
-        return False
-    try:
-        module_path.resolve().relative_to(project_root_path.resolve())
-        return True
-    except ValueError:
-        return False
-
-
-def _is_project_module(module_name: str, project_root_path: Path) -> bool:
-    """Check if a module is part of the project (not external/stdlib)."""
-    import importlib.util
-
-    try:
-        spec = importlib.util.find_spec(module_name)
-    except (ImportError, ModuleNotFoundError, ValueError):
-        return False
-    else:
-        if spec is None or spec.origin is None:
-            return False
-        return is_project_path(Path(spec.origin), project_root_path)
 
 
 def extract_imports_for_class(module_tree: ast.Module, class_node: ast.ClassDef, module_source: str) -> str:
@@ -1596,26 +1298,18 @@ def extract_imports_for_class(module_tree: ast.Module, class_node: ast.ClassDef,
             if isinstance(item.value.func, ast.Name):
                 needed_names.add(item.value.func.id)
 
-    # Find imports that provide these names
     import_lines: list[str] = []
     source_lines = module_source.split("\n")
-    added_imports: set[int] = set()  # Track line numbers to avoid duplicates
-
+    added_imports: set[int] = set()
     for node in module_tree.body:
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                name = alias.asname if alias.asname else alias.name.split(".")[0]
-                if name in needed_names and node.lineno not in added_imports:
-                    import_lines.append(source_lines[node.lineno - 1])
-                    added_imports.add(node.lineno)
-                    break
-        elif isinstance(node, ast.ImportFrom):
-            for alias in node.names:
-                name = alias.asname if alias.asname else alias.name
-                if name in needed_names and node.lineno not in added_imports:
-                    import_lines.append(source_lines[node.lineno - 1])
-                    added_imports.add(node.lineno)
-                    break
+        if not isinstance(node, (ast.Import, ast.ImportFrom)) or node.lineno in added_imports:
+            continue
+        for alias in node.names:
+            name = alias.asname if alias.asname else (alias.name.split(".")[0] if isinstance(node, ast.Import) else alias.name)
+            if name in needed_names:
+                import_lines.append(source_lines[node.lineno - 1])
+                added_imports.add(node.lineno)
+                break
 
     return "\n".join(import_lines)
 
@@ -1637,18 +1331,21 @@ def collect_names_from_annotation(node: ast.expr, names: set[str]) -> None:
         names.add(node.value.id)
 
 
-def is_dunder_method(name: str) -> bool:
-    return len(name) > 4 and name.isascii() and name.startswith("__") and name.endswith("__")
-
-
 def remove_docstring_from_body(indented_block: cst.IndentedBlock) -> cst.CSTNode:
-    """Removes the docstring from an indented block if it exists."""
     if not isinstance(indented_block.body[0], cst.SimpleStatementLine):
         return indented_block
     first_stmt = indented_block.body[0].body[0]
     if isinstance(first_stmt, cst.Expr) and isinstance(first_stmt.value, cst.SimpleString):
         return indented_block.with_changes(body=indented_block.body[1:])
     return indented_block
+
+
+def _maybe_strip_docstring(
+    node: cst.FunctionDef | cst.ClassDef, cfg: PruneConfig
+) -> cst.FunctionDef | cst.ClassDef:
+    if cfg.remove_docstrings and isinstance(node.body, cst.IndentedBlock):
+        return node.with_changes(body=remove_docstring_from_body(node.body))
+    return node
 
 
 @dataclass(frozen=True)
@@ -1716,20 +1413,14 @@ def prune_cst(
     if isinstance(node, cst.FunctionDef):
         qualified_name = f"{prefix}.{node.name.value}" if prefix else node.name.value
 
-        # Check if it's a helper function (higher priority than target)
         if cfg.helpers and qualified_name in cfg.helpers:
-            if cfg.remove_docstrings and isinstance(node.body, cst.IndentedBlock):
-                return node.with_changes(body=remove_docstring_from_body(node.body)), True
-            return node, True
+            return _maybe_strip_docstring(node, cfg), True
 
-        # Check if it's a target function
         if qualified_name in target_functions:
             if cfg.exclude_init_from_targets and node.name.value == "__init__":
                 return None, False
             if cfg.include_target_in_output:
-                if cfg.remove_docstrings and isinstance(node.body, cst.IndentedBlock):
-                    return node.with_changes(body=remove_docstring_from_body(node.body)), True
-                return node, True
+                return _maybe_strip_docstring(node, cfg), True
             return None, True
 
         if cfg.keep_class_init and node.name.value == "__init__":
@@ -1743,9 +1434,7 @@ def prune_cst(
         ):
             if not cfg.include_init_dunder and node.name.value == "__init__":
                 return None, False
-            if cfg.remove_docstrings and isinstance(node.body, cst.IndentedBlock):
-                return node.with_changes(body=remove_docstring_from_body(node.body)), False
-            return node, False
+            return _maybe_strip_docstring(node, cfg), False
 
         return None, False
 
@@ -1780,13 +1469,10 @@ def prune_cst(
 
         if not found_in_class:
             return None, False
-
-        if cfg.remove_docstrings and new_class_body:
-            updated_body = node.body.with_changes(body=new_class_body)
-            assert isinstance(updated_body, cst.IndentedBlock)
-            return node.with_changes(body=remove_docstring_from_body(updated_body)), True
-
-        return node.with_changes(body=node.body.with_changes(body=new_class_body)) if new_class_body else None, True
+        if not new_class_body:
+            return None, True
+        updated = node.with_changes(body=node.body.with_changes(body=new_class_body))
+        return _maybe_strip_docstring(updated, cfg), True
 
     # Handle assignments for READ_WRITABLE mode
     if cfg.defs_with_usages is not None:
@@ -1806,28 +1492,6 @@ def prune_cst(
         lambda child: prune_cst(child, target_functions, cfg, prefix),
         keep_non_target_children=cfg.helpers is not None,
     )
-
-
-def belongs_to_method(name: Name, class_name: str, method_name: str) -> bool:
-    """Check if the given name belongs to the specified method."""
-    return belongs_to_function(name, method_name) and belongs_to_class(name, class_name)
-
-
-def belongs_to_function(name: Name, function_name: str) -> bool:
-    """Check if the given jedi Name is a direct child of the specified function."""
-    if name.name == function_name:  # Handles function definition and recursive function calls
-        return False
-    if (name := name.parent()) and name.type == "function":
-        return bool(name.name == function_name)
-    return False
-
-
-def belongs_to_class(name: Name, class_name: str) -> bool:
-    """Check if given jedi Name is a direct child of the specified class."""
-    while name := name.parent():
-        if name.type == "class":
-            return bool(name.name == class_name)
-    return False
 
 
 def belongs_to_function_qualified(name: Name, qualified_function_name: str) -> bool:

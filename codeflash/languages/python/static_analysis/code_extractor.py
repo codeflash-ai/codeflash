@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import ast
 import time
-from dataclasses import dataclass
 from importlib.util import find_spec
 from itertools import chain
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Optional
 
-import jedi
 import libcst as cst
 from libcst.codemod import CodemodContext
 from libcst.codemod.visitors import AddImportsVisitor, GatherImportsVisitor, RemoveImportsVisitor
@@ -17,7 +15,7 @@ from libcst.helpers import calculate_module_and_package
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.config_consts import MAX_CONTEXT_LEN_REVIEW
 from codeflash.languages.base import Language
-from codeflash.models.models import CodePosition, FunctionParent
+from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
     from libcst.helpers import ModuleNameAndPackage
@@ -33,27 +31,16 @@ class GlobalFunctionCollector(cst.CSTVisitor):
         super().__init__()
         self.functions: dict[str, cst.FunctionDef] = {}
         self.function_order: list[str] = []
-        self.scope_depth = 0
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> Optional[bool]:
-        if self.scope_depth == 0:
-            # Module-level function
-            name = node.name.value
-            self.functions[name] = node
-            if name not in self.function_order:
-                self.function_order.append(name)
-        self.scope_depth += 1
-        return True
-
-    def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:
-        self.scope_depth -= 1
+        name = node.name.value
+        self.functions[name] = node
+        if name not in self.function_order:
+            self.function_order.append(name)
+        return False
 
     def visit_ClassDef(self, node: cst.ClassDef) -> Optional[bool]:
-        self.scope_depth += 1
-        return True
-
-    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:
-        self.scope_depth -= 1
+        return False
 
 
 class GlobalFunctionTransformer(cst.CSTTransformer):
@@ -64,29 +51,19 @@ class GlobalFunctionTransformer(cst.CSTTransformer):
         self.new_functions = new_functions
         self.new_function_order = new_function_order
         self.processed_functions: set[str] = set()
-        self.scope_depth = 0
 
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
-        self.scope_depth += 1
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
+        return False
 
     def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
-        self.scope_depth -= 1
-        if self.scope_depth > 0:
-            return updated_node
-
-        # Check if this is a module-level function we need to replace
         name = original_node.name.value
         if name in self.new_functions:
             self.processed_functions.add(name)
             return self.new_functions[name]
         return updated_node
 
-    def visit_ClassDef(self, node: cst.ClassDef) -> None:
-        self.scope_depth += 1
-
-    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:
-        self.scope_depth -= 1
-        return updated_node
+    def visit_ClassDef(self, node: cst.ClassDef) -> bool:
+        return False
 
     def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
         # Add any new functions that weren't in the original file
@@ -138,23 +115,13 @@ class GlobalAssignmentCollector(cst.CSTVisitor):
         super().__init__()
         self.assignments: dict[str, cst.Assign | cst.AnnAssign] = {}
         self.assignment_order: list[str] = []
-        # Track scope depth to identify global assignments
-        self.scope_depth = 0
         self.if_else_depth = 0
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> Optional[bool]:
-        self.scope_depth += 1
-        return True
-
-    def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:
-        self.scope_depth -= 1
+        return False
 
     def visit_ClassDef(self, node: cst.ClassDef) -> Optional[bool]:
-        self.scope_depth += 1
-        return True
-
-    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:
-        self.scope_depth -= 1
+        return False
 
     def visit_If(self, node: cst.If) -> Optional[bool]:
         self.if_else_depth += 1
@@ -163,13 +130,8 @@ class GlobalAssignmentCollector(cst.CSTVisitor):
     def leave_If(self, original_node: cst.If) -> None:
         self.if_else_depth -= 1
 
-    def visit_Else(self, node: cst.Else) -> Optional[bool]:
-        # Else blocks are already counted as part of the if statement
-        return True
-
     def visit_Assign(self, node: cst.Assign) -> Optional[bool]:
-        # Only process global assignments (not inside functions, classes, etc.)
-        if self.scope_depth == 0 and self.if_else_depth == 0:  # We're at module level
+        if self.if_else_depth == 0:
             for target in node.targets:
                 if isinstance(target.target, cst.Name):
                     name = target.target.value
@@ -179,14 +141,7 @@ class GlobalAssignmentCollector(cst.CSTVisitor):
         return True
 
     def visit_AnnAssign(self, node: cst.AnnAssign) -> Optional[bool]:
-        # Handle annotated assignments like: _CACHE: Dict[str, int] = {}
-        # Only process module-level annotated assignments with a value
-        if (
-            self.scope_depth == 0
-            and self.if_else_depth == 0
-            and isinstance(node.target, cst.Name)
-            and node.value is not None
-        ):
+        if self.if_else_depth == 0 and isinstance(node.target, cst.Name) and node.value is not None:
             name = node.target.value
             self.assignments[name] = node
             if name not in self.assignment_order:
@@ -229,22 +184,13 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
         self.new_assignments = new_assignments
         self.new_assignment_order = new_assignment_order
         self.processed_assignments: set[str] = set()
-        self.scope_depth = 0
         self.if_else_depth = 0
 
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
-        self.scope_depth += 1
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
+        return False
 
-    def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
-        self.scope_depth -= 1
-        return updated_node
-
-    def visit_ClassDef(self, node: cst.ClassDef) -> None:
-        self.scope_depth += 1
-
-    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:
-        self.scope_depth -= 1
-        return updated_node
+    def visit_ClassDef(self, node: cst.ClassDef) -> bool:
+        return False
 
     def visit_If(self, node: cst.If) -> None:
         self.if_else_depth += 1
@@ -253,12 +199,8 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
         self.if_else_depth -= 1
         return updated_node
 
-    def visit_Else(self, node: cst.Else) -> None:
-        # Else blocks are already counted as part of the if statement
-        pass
-
     def leave_Assign(self, original_node: cst.Assign, updated_node: cst.Assign) -> cst.CSTNode:
-        if self.scope_depth > 0 or self.if_else_depth > 0:
+        if self.if_else_depth > 0:
             return updated_node
 
         # Check if this is a global assignment we need to replace
@@ -272,7 +214,7 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
         return updated_node
 
     def leave_AnnAssign(self, original_node: cst.AnnAssign, updated_node: cst.AnnAssign) -> cst.CSTNode:
-        if self.scope_depth > 0 or self.if_else_depth > 0:
+        if self.if_else_depth > 0:
             return updated_node
 
         # Check if this is a global annotated assignment we need to replace
@@ -357,15 +299,7 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
 
 
 class GlobalStatementTransformer(cst.CSTTransformer):
-    """Transformer that appends global statements at the end of the module.
-
-    This ensures that global statements (like function calls at module level) are placed
-    after all functions, classes, and assignments they might reference, preventing NameError
-    at module load time.
-
-    This transformer should be run LAST after GlobalFunctionTransformer and
-    GlobalAssignmentTransformer have already added their content.
-    """
+    """Appends global statements at the end of the module. Run LAST after other transformers."""
 
     def __init__(self, global_statements: list[cst.SimpleStatementLine]) -> None:
         super().__init__()
@@ -390,70 +324,30 @@ class GlobalStatementTransformer(cst.CSTTransformer):
 
 
 class GlobalStatementCollector(cst.CSTVisitor):
-    """Visitor that collects all global statements (excluding imports and functions/classes)."""
+    """Collects module-level statements (excluding imports, assignments, functions and classes)."""
 
     def __init__(self) -> None:
         super().__init__()
-        self.global_statements = []
-        self.in_function_or_class = False
+        self.global_statements: list[cst.SimpleStatementLine] = []
 
     def visit_ClassDef(self, node: cst.ClassDef) -> bool:
-        # Don't visit inside classes
-        self.in_function_or_class = True
         return False
-
-    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:
-        self.in_function_or_class = False
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
-        # Don't visit inside functions
-        self.in_function_or_class = True
         return False
 
-    def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:
-        self.in_function_or_class = False
-
     def visit_SimpleStatementLine(self, node: cst.SimpleStatementLine) -> None:
-        if not self.in_function_or_class:
-            for statement in node.body:
-                # Skip imports and assignments (both regular and annotated)
-                if not isinstance(statement, (cst.Import, cst.ImportFrom, cst.Assign, cst.AnnAssign)):
-                    self.global_statements.append(node)
-                    break
-
-
-class LastImportFinder(cst.CSTVisitor):
-    """Finds the position of the last import statement in the module."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.last_import_line = 0
-        self.current_line = 0
-
-    def visit_SimpleStatementLine(self, node: cst.SimpleStatementLine) -> None:
-        self.current_line += 1
         for statement in node.body:
-            if isinstance(statement, (cst.Import, cst.ImportFrom)):
-                self.last_import_line = self.current_line
+            if not isinstance(statement, (cst.Import, cst.ImportFrom, cst.Assign, cst.AnnAssign)):
+                self.global_statements.append(node)
+                break
 
 
 class DottedImportCollector(cst.CSTVisitor):
-    """Collects all top-level imports from a Python module in normalized dotted format, including top-level conditional imports like `if TYPE_CHECKING:`.
-
-    Examples
-    --------
-        import os                                                                  ==> "os"
-        import dbt.adapters.factory                                                ==> "dbt.adapters.factory"
-        from pathlib import Path                                                   ==> "pathlib.Path"
-        from recce.adapter.base import BaseAdapter                                 ==> "recce.adapter.base.BaseAdapter"
-        from typing import Any, List, Optional                                     ==> "typing.Any", "typing.List", "typing.Optional"
-        from recce.util.lineage import ( build_column_key, filter_dependency_maps) ==> "recce.util.lineage.build_column_key", "recce.util.lineage.filter_dependency_maps"
-
-    """
+    """Collects top-level imports as normalized dotted strings (e.g. 'from pathlib import Path' -> 'pathlib.Path')."""
 
     def __init__(self) -> None:
         self.imports: set[str] = set()
-        self.depth = 0  # top-level
 
     def get_full_dotted_name(self, expr: cst.BaseExpression) -> str:
         if isinstance(expr, cst.Name):
@@ -488,28 +382,19 @@ class DottedImportCollector(cst.CSTVisitor):
                                 self.imports.add(f"{module}.{asname}")
 
     def visit_Module(self, node: cst.Module) -> None:
-        self.depth = 0
         self._collect_imports_from_block(node)
 
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
-        self.depth += 1
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
+        return False
 
-    def leave_FunctionDef(self, node: cst.FunctionDef) -> None:
-        self.depth -= 1
-
-    def visit_ClassDef(self, node: cst.ClassDef) -> None:
-        self.depth += 1
-
-    def leave_ClassDef(self, node: cst.ClassDef) -> None:
-        self.depth -= 1
+    def visit_ClassDef(self, node: cst.ClassDef) -> bool:
+        return False
 
     def visit_If(self, node: cst.If) -> None:
-        if self.depth == 0:
-            self._collect_imports_from_block(node.body)
+        self._collect_imports_from_block(node.body)
 
     def visit_Try(self, node: cst.Try) -> None:
-        if self.depth == 0:
-            self._collect_imports_from_block(node.body)
+        self._collect_imports_from_block(node.body)
 
 
 def extract_global_statements(source_code: str) -> tuple[cst.Module, list[cst.SimpleStatementLine]]:
@@ -518,14 +403,6 @@ def extract_global_statements(source_code: str) -> tuple[cst.Module, list[cst.Si
     collector = GlobalStatementCollector()
     module.visit(collector)
     return module, collector.global_statements
-
-
-def find_last_import_line(target_code: str) -> int:
-    """Find the line number of the last import statement."""
-    module = cst.parse_module(target_code)
-    finder = LastImportFinder()
-    module.visit(finder)
-    return finder.last_import_line
 
 
 class FutureAliasedImportTransformer(cst.CSTTransformer):
@@ -561,11 +438,6 @@ def add_global_assignments(src_module_code: str, dst_module_code: str) -> str:
             continue
         unique_global_statements.append(stmt)
 
-    # Reuse already-parsed dst_module
-    original_module = dst_module
-
-    # Parse the src_module_code once only (already done above: src_module)
-    # Collect assignments from the new file
     new_assignment_collector = GlobalAssignmentCollector()
     src_module.visit(new_assignment_collector)
 
@@ -574,7 +446,7 @@ def add_global_assignments(src_module_code: str, dst_module_code: str) -> str:
     src_module.visit(src_function_collector)
 
     dst_function_collector = GlobalFunctionCollector()
-    original_module.visit(dst_function_collector)
+    dst_module.visit(dst_function_collector)
 
     # Filter out functions that already exist in the destination (only add truly new functions)
     new_functions = {
@@ -584,35 +456,22 @@ def add_global_assignments(src_module_code: str, dst_module_code: str) -> str:
     }
     new_function_order = [name for name in src_function_collector.function_order if name in new_functions]
 
-    # If there are no assignments, no new functions, and no global statements, return unchanged
     if not new_assignment_collector.assignments and not new_functions and not unique_global_statements:
         return dst_module_code
 
-    # The order of transformations matters:
-    # 1. Functions first - so assignments and statements can reference them
-    # 2. Assignments second - so they come after functions but before statements
-    # 3. Global statements last - so they can reference both functions and assignments
-
-    # Transform functions if any
+    # Transform in order: functions, then assignments, then global statements (so each can reference the previous)
     if new_functions:
-        function_transformer = GlobalFunctionTransformer(new_functions, new_function_order)
-        original_module = original_module.visit(function_transformer)
+        dst_module = dst_module.visit(GlobalFunctionTransformer(new_functions, new_function_order))
 
-    # Transform assignments if any
     if new_assignment_collector.assignments:
-        transformer = GlobalAssignmentTransformer(
-            new_assignment_collector.assignments, new_assignment_collector.assignment_order
+        dst_module = dst_module.visit(
+            GlobalAssignmentTransformer(new_assignment_collector.assignments, new_assignment_collector.assignment_order)
         )
-        original_module = original_module.visit(transformer)
 
-    # Insert global statements (like function calls at module level) LAST,
-    # after all functions and assignments are added, to ensure they can reference any
-    # functions or variables defined in the module
     if unique_global_statements:
-        statement_transformer = GlobalStatementTransformer(unique_global_statements)
-        original_module = original_module.visit(statement_transformer)
+        dst_module = dst_module.visit(GlobalStatementTransformer(unique_global_statements))
 
-    return original_module.code
+    return dst_module.code
 
 
 def resolve_star_import(module_name: str, project_root: Path) -> set[str]:
@@ -648,8 +507,6 @@ def resolve_star_import(module_name: str, project_root: Path) -> set[str]:
                     for elt in node.value.elts:
                         if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
                             all_names.append(elt.value)
-                        elif isinstance(elt, ast.Str):  # Python < 3.8 compatibility
-                            all_names.append(elt.s)
                 break
 
         if all_names is not None:
@@ -938,18 +795,6 @@ def get_code(functions_to_optimize: list[FunctionToOptimize]) -> tuple[str | Non
     return class_code + target_code, contextual_dunder_methods
 
 
-def extract_code(functions_to_optimize: list[FunctionToOptimize]) -> tuple[str | None, set[tuple[str, str]]]:
-    edited_code, contextual_dunder_methods = get_code(functions_to_optimize)
-    if edited_code is None:
-        return None, set()
-    try:
-        compile(edited_code, "edited_code", "exec")
-    except SyntaxError as e:
-        logger.exception(f"extract_code - Syntax error in extracted optimization candidate code: {e}")
-        return None, set()
-    return edited_code, contextual_dunder_methods
-
-
 def find_preexisting_objects(source_code: str) -> set[tuple[str, tuple[FunctionParent, ...]]]:
     """Find all preexisting functions, classes or class methods in the source code."""
     preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = set()
@@ -969,417 +814,6 @@ def find_preexisting_objects(source_code: str) -> set[tuple[str, tuple[FunctionP
     return preexisting_objects
 
 
-@dataclass
-class FunctionCallLocation:
-    """Represents a location where the target function is called."""
-
-    calling_function: str
-    line: int
-    column: int
-
-
-@dataclass
-class FunctionDefinitionInfo:
-    """Contains information about a function definition."""
-
-    name: str
-    node: ast.FunctionDef
-    source_code: str
-    start_line: int
-    end_line: int
-    is_method: bool
-    class_name: Optional[str] = None
-
-
-class FunctionCallFinder(ast.NodeVisitor):
-    """AST visitor that finds all function definitions that call a specific qualified function.
-
-    Args:
-        target_function_name: The qualified name of the function to find (e.g., "module.function" or "function")
-        target_filepath: The filepath where the target function is defined
-
-    """
-
-    def __init__(self, target_function_name: str, target_filepath: str, source_lines: list[str]) -> None:
-        self.target_function_name = target_function_name
-        self.target_filepath = target_filepath
-        self.source_lines = source_lines  # Store original source lines for extraction
-
-        # Parse the target function name into parts
-        self.target_parts = target_function_name.split(".")
-        self.target_base_name = self.target_parts[-1]
-
-        # Track current context
-        self.current_function_stack: list[tuple[str, ast.FunctionDef]] = []
-        self.current_class_stack: list[str] = []
-
-        # Track imports to resolve qualified names
-        self.imports: dict[str, str] = {}  # Maps imported names to their full paths
-
-        # Results
-        self.function_calls: list[FunctionCallLocation] = []
-        self.calling_functions: set[str] = set()
-        self.function_definitions: dict[str, FunctionDefinitionInfo] = {}
-
-        # Track if we found calls in the current function
-        self.found_call_in_current_function = False
-        self.functions_with_nested_calls: set[str] = set()
-
-    def visit_Import(self, node: ast.Import) -> None:
-        """Track regular imports."""
-        for alias in node.names:
-            if alias.asname:
-                # import module as alias
-                self.imports[alias.asname] = alias.name
-            else:
-                # import module
-                self.imports[alias.name.split(".")[-1]] = alias.name
-        self.generic_visit(node)
-
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        """Track from imports."""
-        if node.module:
-            for alias in node.names:
-                if alias.name == "*":
-                    # from module import *
-                    self.imports["*"] = node.module
-                elif alias.asname:
-                    # from module import name as alias
-                    self.imports[alias.asname] = f"{node.module}.{alias.name}"
-                else:
-                    # from module import name
-                    self.imports[alias.name] = f"{node.module}.{alias.name}"
-        self.generic_visit(node)
-
-    def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        """Track when entering a class definition."""
-        self.current_class_stack.append(node.name)
-        self.generic_visit(node)
-        self.current_class_stack.pop()
-
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        """Track when entering a function definition."""
-        self._visit_function_def(node)
-
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        """Track when entering an async function definition."""
-        self._visit_function_def(node)
-
-    def _visit_function_def(self, node: ast.FunctionDef) -> None:
-        """Track when entering a function definition."""
-        func_name = node.name
-
-        # Build the full qualified name including class if applicable
-        full_name = f"{'.'.join(self.current_class_stack)}.{func_name}" if self.current_class_stack else func_name
-
-        self.current_function_stack.append((full_name, node))
-        self.found_call_in_current_function = False
-
-        # Visit the function body
-        self.generic_visit(node)
-
-        # Process the function after visiting its body
-        if self.found_call_in_current_function and full_name not in self.function_definitions:
-            # Extract function source code
-            source_code = self._extract_source_code(node)
-
-            self.function_definitions[full_name] = FunctionDefinitionInfo(
-                name=full_name,
-                node=node,
-                source_code=source_code,
-                start_line=node.lineno,
-                end_line=node.end_lineno if hasattr(node, "end_lineno") else node.lineno,
-                is_method=bool(self.current_class_stack),
-                class_name=self.current_class_stack[-1] if self.current_class_stack else None,
-            )
-
-        # Handle nested functions - mark parent as containing nested calls
-        if self.found_call_in_current_function and len(self.current_function_stack) > 1:
-            parent_name = self.current_function_stack[-2][0]
-            self.functions_with_nested_calls.add(parent_name)
-
-            # Also store the parent function if not already stored
-            if parent_name not in self.function_definitions:
-                parent_node = self.current_function_stack[-2][1]
-                parent_source = self._extract_source_code(parent_node)
-
-                # Check if parent is a method (excluding current level)
-                parent_class_context = self.current_class_stack if len(self.current_function_stack) == 2 else []
-
-                self.function_definitions[parent_name] = FunctionDefinitionInfo(
-                    name=parent_name,
-                    node=parent_node,
-                    source_code=parent_source,
-                    start_line=parent_node.lineno,
-                    end_line=parent_node.end_lineno if hasattr(parent_node, "end_lineno") else parent_node.lineno,
-                    is_method=bool(parent_class_context),
-                    class_name=parent_class_context[-1] if parent_class_context else None,
-                )
-
-        self.current_function_stack.pop()
-
-        # Reset flag for parent function
-        if self.current_function_stack:
-            parent_name = self.current_function_stack[-1][0]
-            self.found_call_in_current_function = parent_name in self.calling_functions
-
-    def visit_Call(self, node: ast.Call) -> None:
-        """Check if this call matches our target function."""
-        if not self.current_function_stack:
-            # Not inside a function, skip
-            self.generic_visit(node)
-            return
-
-        if self._is_target_function_call(node):
-            current_func_name = self.current_function_stack[-1][0]
-
-            call_location = FunctionCallLocation(
-                calling_function=current_func_name, line=node.lineno, column=node.col_offset
-            )
-
-            self.function_calls.append(call_location)
-            self.calling_functions.add(current_func_name)
-            self.found_call_in_current_function = True
-
-        self.generic_visit(node)
-
-    def _is_target_function_call(self, node: ast.Call) -> bool:
-        """Determine if this call node is calling our target function."""
-        call_name = self._get_call_name(node.func)
-        if not call_name:
-            return False
-
-        # Check if it matches directly
-        if call_name == self.target_function_name:
-            return True
-
-        # Check if it's just the base name matching
-        if call_name == self.target_base_name:
-            # Could be imported with a different name, check imports
-            if call_name in self.imports:
-                imported_path = self.imports[call_name]
-                if imported_path == self.target_function_name or imported_path.endswith(
-                    f".{self.target_function_name}"
-                ):
-                    return True
-            # Could also be a direct call if we're in the same file
-            return True
-
-        # Check for qualified calls with imports
-        call_parts = call_name.split(".")
-        if call_parts[0] in self.imports:
-            # Resolve the full path using imports
-            base_import = self.imports[call_parts[0]]
-            full_path = f"{base_import}.{'.'.join(call_parts[1:])}" if len(call_parts) > 1 else base_import
-
-            if full_path == self.target_function_name or full_path.endswith(f".{self.target_function_name}"):
-                return True
-
-        return False
-
-    def _get_call_name(self, func_node) -> Optional[str]:
-        """Extract the name being called from a function node."""
-        # Fast path short-circuit for ast.Name nodes
-        if isinstance(func_node, ast.Name):
-            return func_node.id
-
-        # Fast attribute chain extraction (speed: append, loop, join, NO reversed)
-        if isinstance(func_node, ast.Attribute):
-            parts = []
-            current = func_node
-            # Unwind attribute chain as tight as possible (checked at each loop iteration)
-            while True:
-                parts.append(current.attr)
-                val = current.value
-                if isinstance(val, ast.Attribute):
-                    current = val
-                    continue
-                if isinstance(val, ast.Name):
-                    parts.append(val.id)
-                    # Join in-place backwards via slice instead of reversed for slight speedup
-                    return ".".join(parts[::-1])
-                break
-        return None
-
-    def _extract_source_code(self, node: ast.FunctionDef) -> str:
-        """Extract source code for a function node using original source lines."""
-        if not self.source_lines or not hasattr(node, "lineno"):
-            # Fallback to ast.unparse if available (Python 3.9+)
-            try:
-                return ast.unparse(node)
-            except AttributeError:
-                return f"# Source code extraction not available for {node.name}"
-
-        # Get the lines for this function
-        start_line = node.lineno - 1  # Convert to 0-based index
-        end_line = node.end_lineno if hasattr(node, "end_lineno") else len(self.source_lines)
-
-        # Extract the function lines
-        func_lines = self.source_lines[start_line:end_line]
-
-        # Find the minimum indentation (excluding empty lines)
-        min_indent = float("inf")
-        for line in func_lines:
-            if line.strip():  # Skip empty lines
-                indent = len(line) - len(line.lstrip())
-                min_indent = min(min_indent, indent)
-
-        # If this is a method (inside a class), preserve one level of indentation
-        if self.current_class_stack:
-            # Keep 4 spaces of indentation for methods
-            dedent_amount = max(0, min_indent - 4)
-            result_lines = []
-            for line in func_lines:
-                if line.strip():  # Only dedent non-empty lines
-                    result_lines.append(line[dedent_amount:] if len(line) > dedent_amount else line)
-                else:
-                    result_lines.append(line)
-        else:
-            # For top-level functions, remove all leading indentation
-            result_lines = []
-            for line in func_lines:
-                if line.strip():  # Only dedent non-empty lines
-                    result_lines.append(line[min_indent:] if len(line) > min_indent else line)
-                else:
-                    result_lines.append(line)
-
-        return "".join(result_lines).rstrip()
-
-    def get_results(self) -> dict[str, str]:
-        """Get the results of the analysis.
-
-        Returns:
-            A dictionary mapping qualified function names to their source code definitions.
-
-        """
-        return {info.name: info.source_code for info in self.function_definitions.values()}
-
-
-def find_function_calls(source_code: str, target_function_name: str, target_filepath: str) -> dict[str, str]:
-    """Find all function definitions that call a specific target function.
-
-    Args:
-        source_code: The Python source code to analyze
-        target_function_name: The qualified name of the function to find (e.g., "module.function")
-        target_filepath: The filepath where the target function is defined
-
-    Returns:
-        A dictionary mapping qualified function names to their source code definitions.
-        Example: {"function_a": "def function_a():    ...", "MyClass.method_one": "def method_one(self):    ..."}
-
-    """
-    # Parse the source code
-    tree = ast.parse(source_code)
-
-    # Split source into lines for source extraction
-    source_lines = source_code.splitlines(keepends=True)
-
-    # Create and run the visitor
-    visitor = FunctionCallFinder(target_function_name, target_filepath, source_lines)
-    visitor.visit(tree)
-
-    return visitor.get_results()
-
-
-def find_occurances(
-    qualified_name: str, file_path: str, fn_matches: list[Path], project_root: Path, tests_root: Path
-) -> list[str]:  # max chars for context
-    context_len = 0
-    fn_call_context = ""
-    for cur_file in fn_matches:
-        if context_len > MAX_CONTEXT_LEN_REVIEW:
-            break
-        cur_file_path = Path(cur_file)
-        # exclude references in tests
-        try:
-            if cur_file_path.relative_to(tests_root):
-                continue
-        except ValueError:
-            pass
-        with cur_file_path.open(encoding="utf8") as f:
-            file_content = f.read()
-        results = find_function_calls(file_content, target_function_name=qualified_name, target_filepath=file_path)
-        if results:
-            try:
-                path_relative_to_project_root = cur_file_path.relative_to(project_root)
-            except Exception as e:
-                # shouldn't happen but ensuring we don't crash
-                logger.debug(f"investigate {e}")
-                continue
-            fn_call_context += f"```python:{path_relative_to_project_root}\n"
-            for (
-                fn_definition
-            ) in results.values():  # multiple functions in the file might be calling the desired function
-                fn_call_context += f"{fn_definition}\n"
-                context_len += len(fn_definition)
-            fn_call_context += "```\n"
-    return fn_call_context
-
-
-def find_specific_function_in_file(
-    source_code: str, filepath: Union[str, Path], target_function: str, target_class: str | None
-) -> Optional[tuple[int, int]]:
-    """Find a specific function definition in a Python file and return its location.
-
-    Stops searching once the target is found (optimized for performance).
-
-    Args:
-        source_code: Source code string
-        filepath: Path to the Python file
-        target_function: Function Name of the function to find
-        target_class: Class name of the function to find
-
-    Returns:
-        Tuple of (line_number, column_offset) if found, None otherwise
-
-    """
-    script = jedi.Script(code=source_code, path=filepath)
-    names = script.get_names(all_scopes=True, definitions=True)
-    for name in names:
-        if name.type == "function" and name.name == target_function:
-            # If class name specified, check parent
-            if target_class:
-                parent = name.parent()
-                if parent and parent.name == target_class and parent.type == "class":
-                    return CodePosition(line_no=name.line, col_no=name.column)
-            else:
-                # Top-level function match
-                return CodePosition(line_no=name.line, col_no=name.column)
-
-    return None  # Function not found
-
-
-def get_fn_references_jedi(
-    source_code: str, file_path: Path, project_root: Path, target_function: str, target_class: str | None
-) -> list[Path]:
-    start_time = time.perf_counter()
-    function_position: CodePosition | None = find_specific_function_in_file(
-        source_code, file_path, target_function, target_class
-    )
-    if function_position is None:
-        # Function not found (may be non-Python code)
-        return []
-    try:
-        script = jedi.Script(code=source_code, path=file_path, project=jedi.Project(path=project_root))
-        # Get references to the function
-        references = script.get_references(line=function_position.line_no, column=function_position.col_no)
-        # Collect unique file paths where references are found
-        end_time = time.perf_counter()
-        logger.debug(f"Jedi for function references ran in {end_time - start_time:.2f} seconds")
-        reference_files = set()
-        for ref in references:
-            if ref.module_path:
-                # Convert to string and normalize path
-                ref_path = str(ref.module_path)
-                # Skip the definition itself
-                if not (ref_path == file_path and ref.line == function_position.line_no):
-                    reference_files.add(ref_path)
-        return sorted(reference_files)
-    except Exception as e:
-        print(f"Error during Jedi analysis: {e}")
-        return []
-
-
 has_numba = find_spec("numba") is not None
 
 NUMERICAL_MODULES = frozenset({"numpy", "torch", "numba", "jax", "tensorflow", "math", "scipy"})
@@ -1387,163 +821,54 @@ NUMERICAL_MODULES = frozenset({"numpy", "torch", "numba", "jax", "tensorflow", "
 NUMBA_REQUIRED_MODULES = frozenset({"numpy", "math", "scipy"})
 
 
-class NumericalUsageChecker(ast.NodeVisitor):
-    """AST visitor that checks if a function uses numerical computing libraries."""
-
-    def __init__(self, numerical_names: set[str]) -> None:
-        self.numerical_names = numerical_names
-        self.found_numerical = False
-
-    def visit_Call(self, node: ast.Call) -> None:
-        """Check function calls for numerical library usage."""
-        if self.found_numerical:
-            return
-        call_name = self._get_root_name(node.func)
-        if call_name and call_name in self.numerical_names:
-            self.found_numerical = True
-            return
-        self.generic_visit(node)
-
-    def visit_Attribute(self, node: ast.Attribute) -> None:
-        """Check attribute access for numerical library usage."""
-        if self.found_numerical:
-            return
-        root_name = self._get_root_name(node)
-        if root_name and root_name in self.numerical_names:
-            self.found_numerical = True
-            return
-        self.generic_visit(node)
-
-    def visit_Name(self, node: ast.Name) -> None:
-        """Check name references for numerical library usage."""
-        if self.found_numerical:
-            return
-        if node.id in self.numerical_names:
-            self.found_numerical = True
-
-    def _get_root_name(self, node: ast.expr) -> str | None:
-        """Get the root name from an expression (e.g., 'np' from 'np.array')."""
-        if isinstance(node, ast.Name):
-            return node.id
-        if isinstance(node, ast.Attribute):
-            return self._get_root_name(node.value)
-        return None
+def _uses_numerical_names(node: ast.AST, numerical_names: set[str]) -> bool:
+    return any(isinstance(n, ast.Name) and n.id in numerical_names for n in ast.walk(node))
 
 
 def _collect_numerical_imports(tree: ast.Module) -> tuple[set[str], set[str]]:
-    """Collect names that reference numerical computing libraries from imports.
-
-    Returns:
-        A tuple of (numerical_names, modules_used) where:
-        - numerical_names: set of names/aliases that reference numerical libraries
-        - modules_used: set of actual module names (e.g., "numpy", "math") being imported
-
-    """
     numerical_names: set[str] = set()
     modules_used: set[str] = set()
-
-    stack: list[ast.AST] = [tree]
-    while stack:
-        node = stack.pop()
+    for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                # import numpy or import numpy as np
                 module_root = alias.name.split(".")[0]
                 if module_root in NUMERICAL_MODULES:
-                    # Use the alias if present, otherwise the module name
-                    name = alias.asname if alias.asname else alias.name.split(".")[0]
-                    numerical_names.add(name)
+                    numerical_names.add(alias.asname if alias.asname else module_root)
                     modules_used.add(module_root)
         elif isinstance(node, ast.ImportFrom) and node.module:
             module_root = node.module.split(".")[0]
             if module_root in NUMERICAL_MODULES:
-                # from numpy import array, zeros as z
                 for alias in node.names:
                     if alias.name == "*":
-                        # Can't track star imports, but mark the module as numerical
                         numerical_names.add(module_root)
                     else:
-                        name = alias.asname if alias.asname else alias.name
-                        numerical_names.add(name)
+                        numerical_names.add(alias.asname if alias.asname else alias.name)
                 modules_used.add(module_root)
-        else:
-            stack.extend(ast.iter_child_nodes(node))
-
     return numerical_names, modules_used
 
 
 def _find_function_node(tree: ast.Module, name_parts: list[str]) -> ast.FunctionDef | None:
-    """Find a function node in the AST given its qualified name parts.
-
-    Note: This function only finds regular (sync) functions, not async functions.
-
-    Args:
-        tree: The parsed AST module
-        name_parts: List of name parts, e.g., ["ClassName", "method_name"] or ["function_name"]
-
-    Returns:
-        The function node if found, None otherwise
-
-    """
-    if not name_parts:
+    """Find a function node in the AST given its qualified name parts (e.g. ["ClassName", "method"] or ["func"])."""
+    if not name_parts or len(name_parts) > 2:
         return None
-
-    if len(name_parts) == 1:
-        # Top-level function
-        func_name = name_parts[0]
-        for node in tree.body:
-            if isinstance(node, ast.FunctionDef) and node.name == func_name:
-                return node
-        return None
-
-    if len(name_parts) == 2:
-        # Class method: ClassName.method_name
-        class_name, method_name = name_parts
-        for node in tree.body:
-            if isinstance(node, ast.ClassDef) and node.name == class_name:
-                for class_node in node.body:
-                    if isinstance(class_node, ast.FunctionDef) and class_node.name == method_name:
-                        return class_node
-        return None
-
+    body: list[ast.stmt] = tree.body
+    for part in name_parts[:-1]:
+        for node in body:
+            if isinstance(node, ast.ClassDef) and node.name == part:
+                body = node.body
+                break
+        else:
+            return None
+    for node in body:
+        if isinstance(node, ast.FunctionDef) and node.name == name_parts[-1]:
+            return node
     return None
 
 
 def is_numerical_code(code_string: str, function_name: str | None = None) -> bool:
-    """Check if a function uses numerical computing libraries.
+    """Check if a function uses numerical computing libraries (numpy, torch, numba, jax, tensorflow, scipy, math).
 
-    Detects usage of numpy, torch, numba, jax, tensorflow, scipy, and math libraries
-    within the specified function.
-
-    Note: For math, numpy, and scipy usage, this function returns True only if numba
-    is installed in the environment, as numba is required to optimize such code.
-
-    Args:
-        code_string: The entire file's content as a string
-        function_name: The name of the function to check. Can be a simple name like "foo"
-                      or a qualified name like "ClassName.method_name" for methods,
-                      staticmethods, or classmethods.
-
-    Returns:
-        True if the function uses any numerical computing library functions, False otherwise.
-        Returns False for math/numpy/scipy usage if numba is not installed.
-
-    Examples:
-        >>> code = '''
-        ... import numpy as np
-        ... def process_data(x):
-        ...     return np.sum(x)
-        ... '''
-        >>> is_numerical_code(code, "process_data")  # Returns True only if numba is installed
-        True
-
-        >>> code = '''
-        ... def simple_func(x):
-        ...     return x + 1
-        ... '''
-        >>> is_numerical_code(code, "simple_func")
-        False
-
+    Returns False for math/numpy/scipy if numba is not installed.
     """
     try:
         tree = ast.parse(code_string)
@@ -1565,11 +890,7 @@ def is_numerical_code(code_string: str, function_name: str | None = None) -> boo
     if target_function is None:
         return False
 
-    # Check if the function body uses any numerical library
-    checker = NumericalUsageChecker(numerical_names)
-    checker.visit(target_function)
-
-    if not checker.found_numerical:
+    if not _uses_numerical_names(target_function, numerical_names):
         return False
 
     # If numba is not installed and all modules used require numba for optimization,
@@ -1580,22 +901,7 @@ def is_numerical_code(code_string: str, function_name: str | None = None) -> boo
 def get_opt_review_metrics(
     source_code: str, file_path: Path, qualified_name: str, project_root: Path, tests_root: Path, language: Language
 ) -> str:
-    """Get function reference metrics for optimization review.
-
-    Uses the LanguageSupport abstraction to find references, supporting both Python and JavaScript/TypeScript.
-
-    Args:
-        source_code: Source code of the file containing the function.
-        file_path: Path to the file.
-        qualified_name: Qualified name of the function (e.g., "module.ClassName.method").
-        project_root: Root of the project.
-        tests_root: Root of the tests directory.
-        language: The programming language.
-
-    Returns:
-        Markdown-formatted string with code blocks showing calling functions.
-
-    """
+    """Get markdown-formatted calling function context for optimization review."""
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.registry import get_language_support
     from codeflash.models.models import FunctionParent
@@ -1649,18 +955,7 @@ def get_opt_review_metrics(
 
 
 def _format_references_as_markdown(references: list, file_path: Path, project_root: Path, language: Language) -> str:
-    """Format references as markdown code blocks with calling function code.
-
-    Args:
-        references: List of ReferenceInfo objects.
-        file_path: Path to the source file (to exclude).
-        project_root: Root of the project.
-        language: The programming language.
-
-    Returns:
-        Markdown-formatted string.
-
-    """
+    """Format references as markdown code blocks with calling function code."""
     # Group references by file
     refs_by_file: dict[Path, list] = {}
     for ref in references:
