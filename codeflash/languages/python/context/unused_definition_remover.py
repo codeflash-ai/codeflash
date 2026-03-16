@@ -731,22 +731,59 @@ def find_target_node(
     return None
 
 
+def _collect_attr_names(
+    value_id: str,
+    attr_name: str,
+    class_name: str | None,
+    names: set[str],
+    imported_names_map: dict[str, set[str]],
+) -> None:
+    if value_id == "self":
+        names.add(attr_name)
+        if class_name:
+            names.add(f"{class_name}.{attr_name}")
+    else:
+        names.add(attr_name)
+        full_ref = f"{value_id}.{attr_name}"
+        names.add(full_ref)
+        mapped_names = imported_names_map.get(full_ref)
+        if mapped_names:
+            names.update(mapped_names)
+
+
+def _collect_called_names(
+    entrypoint_ast: ast.FunctionDef | ast.AsyncFunctionDef,
+    function_to_optimize: FunctionToOptimize,
+    imported_names_map: dict[str, set[str]],
+) -> set[str]:
+    called = {function_to_optimize.function_name}
+    class_name = function_to_optimize.parents[0].name if function_to_optimize.parents else None
+
+    for node in ast.walk(entrypoint_ast):
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name):
+                called.add(node.func.id)
+                mapped_names = imported_names_map.get(node.func.id)
+                if mapped_names:
+                    called.update(mapped_names)
+            elif isinstance(node.func, ast.Attribute):
+                if isinstance(node.func.value, ast.Name):
+                    _collect_attr_names(
+                        node.func.value.id, node.func.attr, class_name, called, imported_names_map
+                    )
+                else:
+                    called.add(node.func.attr)
+        elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+            _collect_attr_names(node.value.id, node.attr, class_name, called, imported_names_map)
+
+    return called
+
+
 def detect_unused_helper_functions(
     function_to_optimize: FunctionToOptimize,
     code_context: CodeOptimizationContext,
     optimized_code: str | CodeStringsMarkdown,
 ) -> list[FunctionSource]:
-    """Detect helper functions that are no longer called by the optimized entrypoint function.
-
-    Args:
-        function_to_optimize: The function to optimize
-        code_context: The code optimization context containing helper functions
-        optimized_code: The optimized code to analyze
-
-    Returns:
-        List of FunctionSource objects representing unused helper functions
-
-    """
     # Skip this analysis for non-Python languages since we use Python's ast module
     if current_language() != Language.PYTHON:
         logger.debug("Skipping unused helper function detection for non-Python languages")
@@ -761,107 +798,45 @@ def detect_unused_helper_functions(
         )
 
     try:
-        # Parse the optimized code to analyze function calls and imports
         optimized_ast = ast.parse(optimized_code)
-
-        # Find the optimized entrypoint function
         entrypoint_function_ast = find_target_node(optimized_ast, function_to_optimize)
 
         if not entrypoint_function_ast:
             logger.debug(f"Could not find entrypoint function {function_to_optimize.function_name} in optimized code")
             return []
 
-        # First, analyze imports to build a mapping of imported names to their original qualified names
         imported_names_map = _analyze_imports_in_optimized_code(optimized_ast, code_context)
-
-        # Extract all function calls and attribute references in the entrypoint function
-        called_function_names = {function_to_optimize.function_name}
-        for node in ast.walk(entrypoint_function_ast):
-            if isinstance(node, ast.Call):
-                if isinstance(node.func, ast.Name):
-                    # Regular function call: function_name()
-                    called_name = node.func.id
-                    called_function_names.add(called_name)
-                    # Also add the qualified name if this is an imported function
-                    mapped_names = imported_names_map.get(called_name)
-                    if mapped_names:
-                        called_function_names.update(mapped_names)
-                elif isinstance(node.func, ast.Attribute):
-                    # Method call: obj.method() or self.method() or module.function()
-                    if isinstance(node.func.value, ast.Name):
-                        attr_name = node.func.attr
-                        value_id = node.func.value.id
-                        if value_id == "self":
-                            # self.method_name() -> add both method_name and ClassName.method_name
-                            called_function_names.add(attr_name)
-                            # For class methods, also add the qualified name
-                            if hasattr(function_to_optimize, "parents") and function_to_optimize.parents:
-                                class_name = function_to_optimize.parents[0].name
-                                called_function_names.add(f"{class_name}.{attr_name}")
-                        else:
-                            called_function_names.add(attr_name)
-                            full_call = f"{value_id}.{attr_name}"
-                            called_function_names.add(full_call)
-                            # Check if this is a module.function call that maps to a helper
-                            mapped_names = imported_names_map.get(full_call)
-                            if mapped_names:
-                                called_function_names.update(mapped_names)
-                    # Handle nested attribute access like obj.attr.method()
-                    else:
-                        called_function_names.add(node.func.attr)
-            elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
-                # Attribute reference without call: e.g. self._parse1 = self._parse_literal
-                # This covers methods used as callbacks, stored in variables, passed as arguments, etc.
-                attr_name = node.attr
-                value_id = node.value.id
-                if value_id == "self":
-                    called_function_names.add(attr_name)
-                    if hasattr(function_to_optimize, "parents") and function_to_optimize.parents:
-                        class_name = function_to_optimize.parents[0].name
-                        called_function_names.add(f"{class_name}.{attr_name}")
-                else:
-                    called_function_names.add(attr_name)
-                    full_ref = f"{value_id}.{attr_name}"
-                    called_function_names.add(full_ref)
-                    mapped_names = imported_names_map.get(full_ref)
-                    if mapped_names:
-                        called_function_names.update(mapped_names)
+        called_function_names = _collect_called_names(entrypoint_function_ast, function_to_optimize, imported_names_map)
 
         logger.debug(f"Functions called in optimized entrypoint: {called_function_names}")
         logger.debug(f"Imported names mapping: {imported_names_map}")
 
-        # Find helper functions that are no longer called
         unused_helpers = []
         entrypoint_file_path = function_to_optimize.file_path
         for helper_function in code_context.helper_functions:
-            jedi_type = helper_function.definition_type
-            if jedi_type != "class":  # Include when definition_type is None (non-Python)
-                # Check if the helper function is called using multiple name variants
-                helper_qualified_name = helper_function.qualified_name
-                helper_simple_name = helper_function.only_function_name
-                helper_fully_qualified_name = helper_function.fully_qualified_name
+            if helper_function.definition_type == "class":
+                continue
+            helper_qualified_name = helper_function.qualified_name
+            helper_simple_name = helper_function.only_function_name
+            helper_fully_qualified_name = helper_function.fully_qualified_name
 
-                # Check membership efficiently - exit early on first match
-                if (
-                    helper_qualified_name in called_function_names
-                    or helper_simple_name in called_function_names
-                    or helper_fully_qualified_name in called_function_names
-                ):
-                    is_called = True
-                # For cross-file helpers, also consider module-based calls
-                elif helper_function.file_path != entrypoint_file_path:
-                    # Add potential module.function combinations
-                    module_name = helper_function.file_path.stem
-                    module_call = f"{module_name}.{helper_simple_name}"
-                    is_called = module_call in called_function_names
-                else:
-                    is_called = False
+            if (
+                helper_qualified_name in called_function_names
+                or helper_simple_name in called_function_names
+                or helper_fully_qualified_name in called_function_names
+            ):
+                is_called = True
+            elif helper_function.file_path != entrypoint_file_path:
+                module_call = f"{helper_function.file_path.stem}.{helper_simple_name}"
+                is_called = module_call in called_function_names
+            else:
+                is_called = False
 
-                if not is_called:
-                    unused_helpers.append(helper_function)
-                    logger.debug(f"Helper function {helper_qualified_name} is not called in optimized code")
-                else:
-                    logger.debug(f"Helper function {helper_qualified_name} is still called in optimized code")
+            if not is_called:
+                unused_helpers.append(helper_function)
+                logger.debug(f"Helper function {helper_qualified_name} is not called in optimized code")
+            else:
+                logger.debug(f"Helper function {helper_qualified_name} is still called in optimized code")
 
     except Exception as e:
         logger.debug(f"Error detecting unused helper functions: {e}")
