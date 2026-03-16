@@ -816,7 +816,7 @@ def _get_class_start_line(class_node: ast.ClassDef) -> int:
 
 def _class_has_explicit_init(class_node: ast.ClassDef) -> bool:
     for item in class_node.body:
-        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name == "__init__":
+        if (item.__class__ is ast.FunctionDef or item.__class__ is ast.AsyncFunctionDef) and item.name == "__init__":
             return True
     return False
 
