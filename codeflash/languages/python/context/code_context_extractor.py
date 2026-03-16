@@ -577,7 +577,7 @@ def _parse_and_collect_imports(code_context: CodeStringsMarkdown) -> tuple[ast.M
 
 def collect_existing_class_names(tree: ast.Module) -> set[str]:
     class_names = set()
-    stack = [tree]
+    stack: list[ast.AST] = [tree]
 
     while stack:
         node = stack.pop()
