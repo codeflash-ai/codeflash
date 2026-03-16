@@ -4,7 +4,6 @@ import ast
 import time
 from importlib.util import find_spec
 from itertools import chain
-from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import libcst as cst
@@ -18,6 +17,8 @@ from codeflash.languages.base import Language
 from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from libcst.helpers import ModuleNameAndPackage
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
