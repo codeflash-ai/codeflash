@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import logging
 import os
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
 from codeflash.languages.base import FunctionFilterCriteria, Language
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import LanguageSupport
     from codeflash.models.models import CodeStringsMarkdown
@@ -47,13 +48,13 @@ def get_optimized_code_for_module(
     # directory prefix but the correct filename
     target_name = relative_path.name
     # Avoid building a full list of matches and avoid Path() construction for each key.
-    first_match = None
+    first_match: str = ""
     match_count = 0
     for path, code in file_to_code_context.items():
         if path == "None":
             continue
-        # Use os.path.basename which is lighter than constructing Path objects
-        if os.path.basename(path) == target_name:
+        # os.path.basename is faster than constructing Path objects for each key
+        if os.path.basename(path) == target_name:  # noqa: PTH119
             first_match = code
             match_count += 1
             if match_count > 1:
@@ -63,8 +64,6 @@ def get_optimized_code_for_module(
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(f"Using basename-matched code block for {relative_path}")
         return first_match
-
-    # Fallback 3: single code block for non-Python (AI often returns one block with wrong path)
 
     # Fallback 3: single code block for non-Python (AI often returns one block with wrong path)
     if len(file_to_code_context) == 1 and not is_python():
