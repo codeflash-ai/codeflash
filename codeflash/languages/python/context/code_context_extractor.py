@@ -1770,3 +1770,22 @@ def belongs_to_function_qualified(name: Name, qualified_function_name: str) -> b
         return False
     except ValueError:
         return False
+
+
+def _maybe_strip_docstring(node: cst.FunctionDef | cst.ClassDef, cfg: PruneConfig) -> cst.FunctionDef | cst.ClassDef:
+    """Strip docstring from function or class if configured to do so."""
+    if not cfg.remove_docstrings or not isinstance(node.body, cst.IndentedBlock):
+        return node
+
+    body_stmts = node.body.body
+    if not body_stmts:
+        return node
+
+    first_stmt = body_stmts[0]
+    if isinstance(first_stmt, cst.SimpleStatementLine) and len(first_stmt.body) == 1:
+        expr_stmt = first_stmt.body[0]
+        if isinstance(expr_stmt, cst.Expr) and isinstance(expr_stmt.value, cst.SimpleString | cst.ConcatenatedString):
+            new_body = body_stmts[1:] or [cst.SimpleStatementLine(body=[cst.Pass()])]
+            return node.with_changes(body=node.body.with_changes(body=new_body))
+
+    return node
