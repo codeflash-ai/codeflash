@@ -13,6 +13,7 @@ from rich.prompt import Confirm
 from unidiff import PatchSet
 
 from codeflash.cli_cmds.console import logger
+from codeflash.languages.registry import get_supported_extensions
 
 if TYPE_CHECKING:
     from git import Repo
@@ -35,11 +36,12 @@ def get_git_diff(
         uni_diff_text = repository.git.diff(
             commit.hexsha + "^1", commit.hexsha, ignore_blank_lines=True, ignore_space_at_eol=True
         )
+    supported_extensions = set(get_supported_extensions())
     patch_set = PatchSet(StringIO(uni_diff_text))
     change_list: dict[str, list[int]] = {}  # list of changes
     for patched_file in patch_set:
         file_path: Path = Path(patched_file.path)
-        if file_path.suffix != ".py":
+        if file_path.suffix not in supported_extensions:
             continue
         file_path = Path(repository.working_dir) / file_path
         logger.debug(f"file name: {file_path}")
