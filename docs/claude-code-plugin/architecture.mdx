@@ -1,6 +1,9 @@
-# Architecture
-
-This document describes the plugin's components, data flow, and internal protocols.
+---
+title: "Architecture"
+description: "Plugin components, data flow, and internal protocols"
+icon: "sitemap"
+sidebarTitle: "Architecture"
+---
 
 ## Data flow
 
@@ -56,7 +59,7 @@ allowed-tools: Task
 ---
 ```
 
-The `context: fork` setting means the skill runs in a forked context -- the optimizer agent gets its own conversation branch, keeping the main session clean.
+The `context: fork` setting means the skill runs in a forked context — the optimizer agent gets its own conversation branch, keeping the main session clean.
 
 ## Agent format
 
@@ -99,14 +102,15 @@ The agent body contains the full workflow: project detection, environment verifi
 }
 ```
 
-- **Event**: `Stop` -- fires every time Claude finishes a response
-- **Matcher**: `*` -- matches all stops (no filtering by tool or content)
+- **Event**: `Stop` — fires every time Claude finishes a response
+- **Matcher**: `*` — matches all stops (no filtering by tool or content)
 - **Timeout**: 30 seconds for the hook script to complete
 - **`${CLAUDE_PLUGIN_ROOT}`**: Resolved by Claude Code to the plugin's install directory
 
 ### Hook stdin/stdout protocol
 
 **Input** (JSON on stdin):
+
 ```json
 {
   "stop_hook_active": false,
@@ -115,6 +119,7 @@ The agent body contains the full workflow: project detection, environment verifi
 ```
 
 **Output** (JSON on stdout):
+
 ```json
 {"decision": "block", "reason": "message for Claude to act on"}
 ```
@@ -122,8 +127,8 @@ The agent body contains the full workflow: project detection, environment verifi
 Or no output / exit 0 to allow the stop (no blocking).
 
 The `decision` field can be:
-- `"block"` -- prevents Claude from stopping, injects `reason` as a new prompt for Claude to act on
-- Absent / script exits 0 without output -- allows the stop
+- `"block"` — prevents Claude from stopping, injects `reason` as a new prompt for Claude to act on
+- Absent / script exits 0 without output — allows the stop
 
 ## State files
 

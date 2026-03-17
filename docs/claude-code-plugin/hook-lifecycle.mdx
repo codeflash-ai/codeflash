@@ -1,6 +1,11 @@
-# Hook Lifecycle
+---
+title: "Hook Lifecycle"
+description: "Deep dive into the Stop hook: commit detection, deduplication, and decision tree"
+icon: "arrows-rotate"
+sidebarTitle: "Hook Lifecycle"
+---
 
-Deep dive into `scripts/suggest-optimize.sh` -- the Stop hook that detects commits and suggests optimizations.
+Deep dive into `scripts/suggest-optimize.sh` — the Stop hook that detects commits and suggests optimizations.
 
 ## When the hook fires
 
@@ -12,41 +17,43 @@ The hook evaluates a series of conditions and takes the first matching exit path
 
 ```
 1. stop_hook_active == true?
-   YES -> exit 0 (allow stop, prevent infinite loop)
+   YES → exit 0 (allow stop, prevent infinite loop)
 
 2. Not inside a git repo?
-   YES -> exit 0
+   YES → exit 0
 
 3. No transcript_path or file doesn't exist?
-   YES -> exit 0
+   YES → exit 0
 
 4. Session start time unavailable?
-   YES -> exit 0
+   YES → exit 0
 
 5. No commits with .py/.js/.ts/.jsx/.tsx files since session start?
-   YES -> exit 0
+   YES → exit 0
 
 6. Commit hash set already seen (in codeflash-seen)?
-   YES -> exit 0
+   YES → exit 0
 
 7. JS/TS project with JS changes?
-   7a. Not configured -> block: set up config (+ install if needed)
-   7b. Configured, not installed -> block: install codeflash
-   7c. Configured + installed -> block: run codeflash
+   7a. Not configured → block: set up config (+ install if needed)
+   7b. Configured, not installed → block: install codeflash
+   7c. Configured + installed → block: run codeflash
 
 8. No Python changes?
-   YES -> exit 0
+   YES → exit 0
 
 9. Python project, no venv found?
-   YES -> block: create venv, install, configure, run
+   YES → block: create venv, install, configure, run
 
 10. Python project with venv:
-    10a. Not configured -> block: set up config (+ install if needed)
-    10b. Configured, not installed -> block: install codeflash
-    10c. Configured + installed -> block: run codeflash
+    10a. Not configured → block: set up config (+ install if needed)
+    10b. Configured, not installed → block: install codeflash
+    10c. Configured + installed → block: run codeflash
 ```
 
+<Note>
 Every `block` decision also appends auto-allow instructions if `Bash(*codeflash*)` is not yet in `.claude/settings.json`.
+</Note>
 
 ## Infinite loop prevention
 
@@ -74,9 +81,9 @@ git log --after="@$SESSION_START" --name-only --diff-filter=ACMR \
   --pretty=format: -- '*.py' '*.js' '*.ts' '*.jsx' '*.tsx'
 ```
 
-- `--after=@$SESSION_START` -- only commits after session start (Unix timestamp)
-- `--diff-filter=ACMR` -- Added, Copied, Modified, Renamed files only
-- `--pretty=format:` -- suppress commit metadata, show only file names
+- `--after=@$SESSION_START` — only commits after session start (Unix timestamp)
+- `--diff-filter=ACMR` — Added, Copied, Modified, Renamed files only
+- `--pretty=format:` — suppress commit metadata, show only file names
 - File patterns filter to Python and JS/TS extensions
 
 The results are sorted and deduplicated. The hook also determines which language families have changes (`HAS_PYTHON_CHANGES`, `HAS_JS_CHANGES`) by grepping the file list for extension patterns.
@@ -87,7 +94,8 @@ The hook prevents suggesting optimization for the same set of commits twice:
 
 1. It computes the commit hashes of all matching commits:
    ```bash
-   git log --after="@$SESSION_START" --pretty=format:%H -- '*.py' '*.js' '*.ts' '*.jsx' '*.tsx'
+   git log --after="@$SESSION_START" --pretty=format:%H \
+     -- '*.py' '*.js' '*.ts' '*.jsx' '*.tsx'
    ```
 2. It hashes the full list with SHA-256:
    ```bash
@@ -113,7 +121,7 @@ The `detect_project` function walks from `$PWD` upward to `$REPO_ROOT`:
 
 For Python, it checks for `[tool.codeflash]` in `pyproject.toml`. For JS/TS, it checks for a `"codeflash"` key in `package.json` using `jq`.
 
-The walk stops at `$REPO_ROOT` -- it never searches above the git repository root.
+The walk stops at `$REPO_ROOT` — it never searches above the git repository root.
 
 ## Auto-allow suggestion
 

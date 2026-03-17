@@ -1,4 +1,9 @@
-# Usage Guide
+---
+title: "Usage Guide"
+description: "Commands, flags, and workflows for the Codeflash Claude Code plugin"
+icon: "book"
+sidebarTitle: "Usage Guide"
+---
 
 ## The `/optimize` skill
 
@@ -44,7 +49,9 @@ The agent has up to **15 turns** to complete its work (install codeflash, config
 3. If not, adds it (creating the file and directory if needed)
 4. Preserves any existing settings
 
-Running `/setup` multiple times is safe -- it's idempotent. If permissions are already configured, it reports "No changes needed."
+<Info>
+Running `/setup` multiple times is safe — it's idempotent. If permissions are already configured, it reports "No changes needed."
+</Info>
 
 ## Automatic post-commit suggestions
 
@@ -89,4 +96,4 @@ For JavaScript/TypeScript projects, the optimizer agent:
 3. Always runs from the project root (the directory containing `package.json`)
 4. Runs: `npx codeflash --subagent [flags]`
 
-No virtual environment is needed -- JS/TS projects use `npx`/`npm` directly.
+No virtual environment is needed — JS/TS projects use `npx`/`npm` directly.

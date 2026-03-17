@@ -1,4 +1,9 @@
-# Troubleshooting
+---
+title: "Troubleshooting"
+description: "Common problems and fixes for the Codeflash Claude Code plugin"
+icon: "wrench"
+sidebarTitle: "Troubleshooting"
+---
 
 ## Plugin not appearing after install
 
@@ -16,7 +21,7 @@
 **Possible causes**:
 - No project config found. The agent walks from CWD to the git root looking for `pyproject.toml` or `package.json`. Make sure you're inside a git repository.
 - Codeflash CLI not installed. For Python: `pip install codeflash` in your venv. For JS/TS: `npm install --save-dev codeflash`.
-- The agent is running in the background. Check if you see "Codeflash is optimizing in the background" -- results appear when the background task completes.
+- The agent is running in the background. Check if you see "Codeflash is optimizing in the background" — results appear when the background task completes.
 
 ## Permission prompts every time
 
@@ -55,6 +60,7 @@ The plugin searches for venvs in this order:
 **Symptom**: `npx codeflash --version` fails or package not found.
 
 **Fix**:
+
 ```bash
 npm install --save-dev codeflash
 ```
@@ -83,7 +89,9 @@ This shouldn't happen due to deduplication (the hook tracks seen commit hashes i
 
 ## "Attempting to repair broken tests..."
 
+<Info>
 This is **normal codeflash behavior**, not an error. Codeflash generates tests and sometimes needs to fix them. Let it continue.
+</Info>
 
 ## 10-minute timeout exceeded
 

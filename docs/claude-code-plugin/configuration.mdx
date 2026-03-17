@@ -1,6 +1,9 @@
-# Configuration
-
-This document covers all configuration surfaces: plugin manifests, project-level codeflash config, and Claude Code permissions.
+---
+title: "Configuration"
+description: "Configuration reference for plugin manifests, project config, and Claude Code permissions"
+icon: "gear"
+sidebarTitle: "Configuration"
+---
 
 ## Plugin manifests
 
@@ -43,8 +46,8 @@ formatter-cmds = ["disabled"]  # Formatter commands, or ["disabled"] to skip for
 
 | Field | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `module-root` | Yes | -- | Relative path to the module root. If your tests do `from mypackage import ...`, then `mypackage/` is the module root |
-| `tests-root` | Yes | -- | Relative path to the tests directory |
+| `module-root` | Yes | — | Relative path to the module root. If your tests do `from mypackage import ...`, then `mypackage/` is the module root |
+| `tests-root` | Yes | — | Relative path to the tests directory |
 | `ignore-paths` | No | `[]` | List of paths to exclude from optimization |
 | `formatter-cmds` | No | `["disabled"]` | List of formatter commands. Each can include flags, e.g. `"black --line-length 88 {file}"`. Use `["disabled"]` to skip formatting |
 
@@ -76,8 +79,8 @@ Codeflash reads its configuration from a `"codeflash"` key at the root level of 
 
 | Field | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `moduleRoot` | Yes | -- | Relative path to the JS/TS module root (e.g. `.` or `src`) |
-| `testsRoot` | Yes | -- | Relative path to the tests directory |
+| `moduleRoot` | Yes | — | Relative path to the JS/TS module root (e.g. `.` or `src`) |
+| `testsRoot` | Yes | — | Relative path to the tests directory |
 | `formatterCmds` | No | `["disabled"]` | Formatter commands. Use `npx` prefix for project-local tools, e.g. `"npx prettier --write {file}"` |
 | `ignorePaths` | No | `[]` | Glob patterns to exclude from optimization |
 
@@ -114,4 +117,6 @@ The permission can be placed at different levels:
 | `.claude/settings.local.json` | Project-wide, personal (gitignored) |
 | `~/.claude/settings.json` | User-wide, all projects |
 
+<Note>
 The stop hook checks `.claude/settings.json` in the repo root to determine if auto-allow is already configured. If the `permissions.allow` array contains any entry matching `codeflash`, the hook skips adding auto-allow instructions to its suggestions.
+</Note>

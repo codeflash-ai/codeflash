@@ -1,4 +1,9 @@
-# Getting Started
+---
+title: "Getting Started"
+description: "Install the Codeflash Claude Code plugin and run your first optimization"
+icon: "rocket"
+sidebarTitle: "Getting Started"
+---
 
 This guide walks you through installing the Codeflash Claude Code plugin and running your first optimization.
 
@@ -10,7 +15,7 @@ This guide walks you through installing the Codeflash Claude Code plugin and run
 
 ## Installation
 
-### 1. Add the marketplace and install
+### Add the marketplace and install
 
 ```bash
 /plugin marketplace add codeflash-ai/codeflash-cc-plugin
@@ -25,7 +30,7 @@ git clone https://github.com/codeflash-ai/codeflash-cc-plugin.git
 /plugin install codeflash
 ```
 
-### 2. Choose installation scope
+### Choose installation scope
 
 By default, plugins install at the **user** level (available across all projects). You can change this:
 
@@ -39,7 +44,7 @@ By default, plugins install at the **user** level (available across all projects
 /plugin install codeflash --scope project
 ```
 
-### 3. Verify installation
+### Verify installation
 
 Run `/plugin` to open the plugin manager. Confirm **codeflash** appears under the **Installed** tab.
 
@@ -74,6 +79,17 @@ This adds `Bash(*codeflash*)` to the `permissions.allow` array in `.claude/setti
 
 ## Next steps
 
-- [Usage Guide](usage-guide.md) -- all commands, flags, and workflows
-- [Configuration](configuration.md) -- config reference for Python and JS/TS projects
-- [Troubleshooting](troubleshooting.md) -- common problems and fixes
+<CardGroup cols={2}>
+  <Card title="Usage Guide" icon="book" href="/claude-code-plugin/usage-guide">
+    All commands, flags, and workflows
+  </Card>
+  <Card title="Configuration" icon="gear" href="/claude-code-plugin/configuration">
+    Config reference for Python and JS/TS projects
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/claude-code-plugin/troubleshooting">
+    Common problems and fixes
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/claude-code-plugin/architecture">
+    How the plugin works internally
+  </Card>
+</CardGroup>
