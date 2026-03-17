@@ -15,8 +15,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from codeflash.cli_cmds.cli_common import apologize_and_exit
-from codeflash.cli_cmds.console import console, logger
+from codeflash.cli_cmds.console import apologize_and_exit, console, logger
 from codeflash.cli_cmds.extension import install_vscode_extension
 from codeflash.cli_cmds.github_workflow import install_github_actions
 from codeflash.cli_cmds.init_auth import install_github_app, prompt_api_key

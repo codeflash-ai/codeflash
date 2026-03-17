@@ -6,7 +6,7 @@ ensuring that merge resolution doesn't silently break the multi-language metadat
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -80,17 +80,21 @@ class TestAddLanguageMetadata:
         assert payload["module_system"] == "commonjs"
 
     @patch("codeflash.api.aiservice.current_language", return_value=Language.PYTHON)
-    def test_none_language_version_python(self, _mock_lang: object) -> None:
-        """When language_version is None for Python, payload should still have the keys."""
+    @patch("codeflash.api.aiservice.current_language_support")
+    def test_none_language_version_python_auto_detects(self, mock_support: MagicMock, _mock_lang: object) -> None:
+        """When language_version is None for Python, it should auto-detect from language support."""
+        mock_support.return_value.language_version = "3.12.0"
         payload: dict = {}
         AiServiceClient.add_language_metadata(payload, language_version=None)
-        assert payload["language_version"] is None
-        assert payload["python_version"] is None
+        assert payload["language_version"] == "3.12.0"
+        assert payload["python_version"] == "3.12.0"
 
     @patch("codeflash.api.aiservice.current_language", return_value=Language.JAVA)
-    def test_none_language_version_java(self, _mock_lang: object) -> None:
-        """When language_version is None for Java, payload should still have the keys."""
+    @patch("codeflash.api.aiservice.current_language_support")
+    def test_none_language_version_java_auto_detects(self, mock_support: MagicMock, _mock_lang: object) -> None:
+        """When language_version is None for Java, it should auto-detect from language support."""
+        mock_support.return_value.language_version = "17"
         payload: dict = {}
         AiServiceClient.add_language_metadata(payload, language_version=None)
-        assert payload["language_version"] is None
+        assert payload["language_version"] == "17"
         assert payload["python_version"] is None

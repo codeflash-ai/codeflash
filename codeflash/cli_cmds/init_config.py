@@ -12,8 +12,7 @@ import inquirer.themes
 import tomlkit
 from pydantic.dataclasses import dataclass
 
-from codeflash.cli_cmds.cli_common import apologize_and_exit
-from codeflash.cli_cmds.console import console
+from codeflash.cli_cmds.console import apologize_and_exit, console
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import check_formatter_installed

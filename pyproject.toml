@@ -295,6 +295,7 @@ ignore = [
     "F841",    # Unused variable (often intentional)
     "ANN202",  # Missing return type for private functions
     "B009",    # getattr-with-constant - needed to avoid mypy [misc] on dunder access
+    "PTH119",  # os.path.basename — faster than Path().name for string paths
 ]
 
 [tool.ruff.lint.flake8-type-checking]
@@ -349,7 +350,10 @@ module-root = "codeflash"
 tests-root = "tests"
 benchmarks-root = "tests/benchmarks"
 ignore-paths = []
-formatter-cmds = ["disabled"]
+formatter-cmds = [
+    "uvx ruff check --exit-zero --fix $file",
+    "uvx ruff format $file",
+]
 
 [tool.pytest.ini_options]
 filterwarnings = [

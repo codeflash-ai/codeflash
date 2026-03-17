@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from codeflash.cli_cmds import logging_config
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import apologize_and_exit, logger
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import exit_with_message, normalize_ignore_paths
 from codeflash.code_utils.config_parser import parse_config_file
@@ -234,8 +234,6 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
                     f"I couldn't find a git repository in the current directory. "
                     f"I need a git repository to run {mode} and open PRs for optimizations. Exiting..."
                 )
-                from codeflash.cli_cmds.cli_common import apologize_and_exit
-
                 apologize_and_exit()
             git_remote = getattr(args, "git_remote", None)
             if not check_and_push_branch(git_repo, git_remote=git_remote):
