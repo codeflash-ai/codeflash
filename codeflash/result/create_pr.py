@@ -9,12 +9,13 @@ import git
 from codeflash.api import cfapi
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.code_replacer import is_zero_diff
 from codeflash.code_utils.git_utils import check_and_push_branch, get_current_branch, get_repo_owner_and_name
 from codeflash.code_utils.github_utils import github_pr_url
 from codeflash.code_utils.tabulate import tabulate
 from codeflash.code_utils.time_utils import format_perf, format_time
 from codeflash.github.PrComment import FileDiffContent, PrComment
+from codeflash.languages import current_language_support
+from codeflash.languages.python.static_analysis.code_replacer import is_zero_diff
 from codeflash.result.critic import performance_gain
 
 if TYPE_CHECKING:
@@ -126,10 +127,10 @@ def existing_tests_source_for(
             tests_dir_name = test_cfg.tests_project_rootdir.name
             if file_path.startswith((tests_dir_name + os.sep, tests_dir_name + "/")):
                 # Module path includes "tests." - use project root parent
-                instrumented_abs_path = (test_cfg.tests_project_rootdir.parent / file_path).resolve()
+                instrumented_abs_path = test_cfg.tests_project_rootdir.parent / file_path
             else:
                 # Module path doesn't include tests dir - use tests root directly
-                instrumented_abs_path = (test_cfg.tests_project_rootdir / file_path).resolve()
+                instrumented_abs_path = test_cfg.tests_project_rootdir / file_path
             logger.debug(f"[PR-DEBUG] Looking up: {instrumented_abs_path}")
             logger.debug(f"[PR-DEBUG]   Available keys: {list(instrumented_to_original.keys())[:3]}")
             # Try to map instrumented path to original path
@@ -139,8 +140,18 @@ def existing_tests_source_for(
             else:
                 logger.debug(f"[PR-DEBUG] No mapping found for {instrumented_abs_path.name}")
         else:
-            # Python: convert module name to path
-            abs_path = Path(test_module_path.replace(".", os.sep)).with_suffix(".py").resolve()
+            lang = current_language_support()
+            # Let language-specific resolution handle non-Python module paths
+            lang_result = lang.resolve_test_module_path_for_pr(
+                test_module_path, test_cfg.tests_project_rootdir, non_generated_tests
+            )
+            if lang_result is not None:
+                abs_path = lang_result
+            else:
+                # Default (Python): convert module name to path
+                abs_path = (
+                    Path(test_module_path.replace(".", os.sep)).with_suffix(lang.default_file_extension).resolve()
+                )
         if abs_path not in non_generated_tests:
             skipped_count += 1
             if skipped_count <= 5:

@@ -5,6 +5,7 @@ Python-specific implementations (LibCST, Jedi, pytest, etc.) to conform
 to the LanguageSupport protocol.
 """
 
+from codeflash.languages.python.reference_graph import ReferenceGraph
 from codeflash.languages.python.support import PythonSupport
 
-__all__ = ["PythonSupport"]
+__all__ = ["PythonSupport", "ReferenceGraph"]

@@ -9,8 +9,6 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from codeflash.languages.javascript.vitest_runner import (
     _build_vitest_behavioral_command,
     _build_vitest_benchmarking_command,

@@ -2,6 +2,7 @@ import logging
 
 import sentry_sdk
 from sentry_sdk.integrations.logging import LoggingIntegration
+from sentry_sdk.integrations.stdlib import StdlibIntegration
 
 
 def init_sentry(*, enabled: bool = False, exclude_errors: bool = False) -> None:
@@ -16,12 +17,8 @@ def init_sentry(*, enabled: bool = False, exclude_errors: bool = False) -> None:
         sentry_sdk.init(
             dsn="https://4b9a1902f9361b48c04376df6483bc96@o4506833230561280.ingest.sentry.io/4506833262477312",
             integrations=[sentry_logging],
-            # Set traces_sample_rate to 1.0 to capture 100%
-            # of transactions for performance monitoring.
-            traces_sample_rate=1.0,
-            # Set profiles_sample_rate to 1.0 to profile 100%
-            # of sampled transactions.
-            # We recommend adjusting this value in production.
-            profiles_sample_rate=1.0,
+            disabled_integrations=[StdlibIntegration],
+            traces_sample_rate=0,
+            profiles_sample_rate=0,
             ignore_errors=[KeyboardInterrupt],
         )

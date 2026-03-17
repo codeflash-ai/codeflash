@@ -11,6 +11,7 @@ import sqlite3
 import subprocess
 import unittest
 from collections import defaultdict
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional, final
 
@@ -33,6 +34,21 @@ from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInF
 
 if TYPE_CHECKING:
     from codeflash.verification.verification_utils import TestConfig
+
+
+def existing_unit_test_count(
+    func: FunctionToOptimize, project_root: Path, function_to_tests: dict[str, set[FunctionCalledInTest]]
+) -> int:
+    key = f"{module_name_from_file_path_cached(func.file_path, project_root)}.{func.qualified_name}"
+    tests = function_to_tests.get(key, set())
+    seen: set[tuple[Path, str | None, str]] = set()
+    for t in tests:
+        if t.tests_in_file.test_type != TestType.EXISTING_UNIT_TEST:
+            continue
+        tif = t.tests_in_file
+        base_name = tif.test_function.split("[", 1)[0]
+        seen.add((tif.test_file, tif.test_class, base_name))
+    return len(seen)
 
 
 @final
@@ -69,8 +85,8 @@ FUNCTION_NAME_REGEX = re.compile(r"([^.]+)\.([a-zA-Z0-9_]+)$")
 class TestsCache:
     SCHEMA_VERSION = 1  # Increment this when schema changes
 
-    def __init__(self, project_root_path: str | Path) -> None:
-        self.project_root_path = Path(project_root_path).resolve().as_posix()
+    def __init__(self, project_root_path: Path) -> None:
+        self.project_root_path = project_root_path.resolve().as_posix()
         self.connection = sqlite3.connect(codeflash_cache_db)
         self.cur = self.connection.cursor()
 
@@ -641,17 +657,14 @@ def discover_unit_tests(
     discover_only_these_tests: list[Path] | None = None,
     file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]] | None = None,
 ) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
-    from codeflash.languages import is_javascript, is_python
+    from codeflash.languages.current import current_language_support
 
     # Detect language from functions being optimized
     language = _detect_language_from_functions(file_to_funcs_to_optimize)
 
     # Route to language-specific test discovery for non-Python languages
-    if not is_python():
-        # For JavaScript/TypeScript, tests_project_rootdir should be tests_root itself
-        # The Jest helper will be configured to NOT include "tests." prefix to match
-        if is_javascript():
-            cfg.tests_project_rootdir = cfg.tests_root
+    if current_language_support().test_result_serialization_format != "pickle":
+        current_language_support().adjust_test_config_for_discovery(cfg)
         return discover_tests_for_language(cfg, language, file_to_funcs_to_optimize)
 
     # Existing Python logic
@@ -728,6 +741,10 @@ def discover_tests_pytest(
         logger.debug(f"Pytest collection exit code: {exitcode}")
     if pytest_rootdir is not None:
         cfg.tests_project_rootdir = Path(pytest_rootdir)
+    if discover_only_these_tests:
+        resolved_discover_only = {p.resolve() for p in discover_only_these_tests}
+    else:
+        resolved_discover_only = None
     file_to_test_map: dict[Path, list[FunctionCalledInTest]] = defaultdict(list)
     for test in tests:
         if "__replay_test" in test["test_file"]:
@@ -737,13 +754,14 @@ def discover_tests_pytest(
         else:
             test_type = TestType.EXISTING_UNIT_TEST
 
+        test_file_path = Path(test["test_file"]).resolve()
         test_obj = TestsInFile(
-            test_file=Path(test["test_file"]),
+            test_file=test_file_path,
             test_class=test["test_class"],
             test_function=test["test_function"],
             test_type=test_type,
         )
-        if discover_only_these_tests and test_obj.test_file not in discover_only_these_tests:
+        if resolved_discover_only and test_obj.test_file not in resolved_discover_only:
             continue
         file_to_test_map[test_obj.test_file].append(test_obj)
     # Within these test files, find the project functions they are referring to and return their names/locations
@@ -1077,3 +1095,9 @@ def process_test_files(
     tests_cache.close()
 
     return dict(function_to_test_map), num_discovered_tests, num_discovered_replay_tests
+
+
+# Cache module name resolution to avoid repeated Path.resolve()/relative_to() calls
+@lru_cache(maxsize=128)
+def module_name_from_file_path_cached(file_path: Path, project_root: Path) -> str:
+    return module_name_from_file_path(file_path, project_root)

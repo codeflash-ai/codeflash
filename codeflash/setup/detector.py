@@ -15,6 +15,9 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -33,7 +36,7 @@ class DetectedProject:
     """
 
     # Core detection results
-    language: str  # "python" | "javascript" | "typescript"
+    language: str  # "python" | "javascript" | "typescript" | "java"
     project_root: Path
     module_root: Path
     tests_root: Path | None
@@ -161,7 +164,15 @@ def _find_project_root(start_path: Path) -> Path | None:
 
     while current != current.parent:
         # Check for project markers
-        markers = [".git", "pyproject.toml", "package.json", "Cargo.toml"]
+        markers = [
+            ".git",
+            "pyproject.toml",
+            "package.json",
+            "Cargo.toml",
+            "pom.xml",
+            "build.gradle",
+            "build.gradle.kts",
+        ]
         for marker in markers:
             if (current / marker).exists():
                 return current
@@ -190,6 +201,14 @@ def _detect_language(project_root: Path) -> tuple[str, float, str]:
     has_pyproject = (project_root / "pyproject.toml").exists()
     has_setup_py = (project_root / "setup.py").exists()
     has_package_json = (project_root / "package.json").exists()
+    has_pom_xml = (project_root / "pom.xml").exists()
+    has_build_gradle = (project_root / "build.gradle").exists() or (project_root / "build.gradle.kts").exists()
+
+    # Java (pom.xml or build.gradle is definitive)
+    if has_pom_xml:
+        return "java", 1.0, "pom.xml found"
+    if has_build_gradle:
+        return "java", 1.0, "build.gradle found"
 
     # TypeScript (tsconfig.json is definitive)
     if has_tsconfig:
@@ -215,7 +234,10 @@ def _detect_language(project_root: Path) -> tuple[str, float, str]:
     py_count = len(list(project_root.rglob("*.py")))
     js_count = len(list(project_root.rglob("*.js")))
     ts_count = len(list(project_root.rglob("*.ts")))
+    java_count = len(list(project_root.rglob("*.java")))
 
+    if java_count > 0 and java_count >= max(py_count, js_count, ts_count):
+        return "java", 0.5, f"found {java_count} .java files"
     if ts_count > 0:
         return "typescript", 0.5, f"found {ts_count} .ts files"
     if js_count > py_count:
@@ -240,6 +262,8 @@ def _detect_module_root(project_root: Path, language: str) -> tuple[Path, str]:
     """
     if language in ("javascript", "typescript"):
         return _detect_js_module_root(project_root)
+    if language == "java":
+        return _detect_java_module_root(project_root)
     return _detect_python_module_root(project_root)
 
 
@@ -379,6 +403,44 @@ def _detect_js_module_root(project_root: Path) -> tuple[Path, str]:
     return project_root, "project root"
 
 
+def _detect_java_module_root(project_root: Path) -> tuple[Path, str]:
+    """Detect Java source root directory.
+
+    Priority:
+    1. src/main/java (standard Maven/Gradle layout)
+    2. src/ directory
+    3. Project root
+
+    """
+    # Standard Maven/Gradle layout
+    standard_src = project_root / "src" / "main" / "java"
+    if standard_src.is_dir():
+        return standard_src, "src/main/java (Maven/Gradle standard)"
+
+    # Try to detect from pom.xml
+    import xml.etree.ElementTree as ET
+
+    pom_path = project_root / "pom.xml"
+    if pom_path.exists():
+        try:
+            tree = ET.parse(pom_path)
+            root = tree.getroot()
+            ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+            source_dir = root.find(".//m:sourceDirectory", ns)
+            if source_dir is not None and source_dir.text:
+                src_path = project_root / source_dir.text
+                if src_path.is_dir():
+                    return src_path, f"{source_dir.text} (from pom.xml)"
+        except ET.ParseError:
+            pass
+
+    # Fallback to src directory
+    if (project_root / "src").is_dir():
+        return project_root / "src", "src/ directory"
+
+    return project_root, "project root"
+
+
 def is_build_output_dir(path: Path) -> bool:
     """Check if a path is within a common build output directory.
 
@@ -412,6 +474,52 @@ def _detect_tests_root(project_root: Path, language: str) -> tuple[Path | None, 
     - spec/ (Ruby/JavaScript)
 
     """
+    # Java: standard Maven/Gradle test layout
+    if language == "java":
+        import xml.etree.ElementTree as ET
+
+        standard_test = project_root / "src" / "test" / "java"
+        if standard_test.is_dir():
+            return standard_test, "src/test/java (Maven/Gradle standard)"
+
+        # Check for multi-module Maven project with a test module
+        # that has a custom testSourceDirectory
+        for test_module_name in ["test", "tests"]:
+            test_module_dir = project_root / test_module_name
+            test_module_pom = test_module_dir / "pom.xml"
+            if test_module_pom.exists():
+                try:
+                    tree = ET.parse(test_module_pom)
+                    root = tree.getroot()
+                    ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+                    for build in [root.find("m:build", ns), root.find("build")]:
+                        if build is not None:
+                            for elem in [build.find("m:testSourceDirectory", ns), build.find("testSourceDirectory")]:
+                                if elem is not None and elem.text:
+                                    # Resolve ${project.basedir}/src -> test_module_dir/src
+                                    dir_text = (
+                                        elem.text.strip()
+                                        .replace("${project.basedir}/", "")
+                                        .replace("${project.basedir}", ".")
+                                    )
+                                    resolved = test_module_dir / dir_text
+                                    if resolved.is_dir():
+                                        return (
+                                            resolved,
+                                            f"{test_module_name}/{dir_text} (from {test_module_name}/pom.xml testSourceDirectory)",
+                                        )
+                except ET.ParseError:
+                    pass
+                # Test module exists but no custom testSourceDirectory - use the module root
+                if test_module_dir.is_dir():
+                    return test_module_dir, f"{test_module_name}/ directory (Maven test module)"
+
+        if (project_root / "test").is_dir():
+            return project_root / "test", "test/ directory"
+        if (project_root / "tests").is_dir():
+            return project_root / "tests", "tests/ directory"
+        return project_root / "src" / "test" / "java", "src/test/java (default)"
+
     # Common test directory names
     test_dirs = ["tests", "test", "__tests__", "spec"]
 
@@ -448,7 +556,42 @@ def _detect_test_runner(project_root: Path, language: str) -> tuple[str, str]:
     """
     if language in ("javascript", "typescript"):
         return _detect_js_test_runner(project_root)
+    if language == "java":
+        return _detect_java_test_runner(project_root)
     return _detect_python_test_runner(project_root)
+
+
+def _detect_java_test_runner(project_root: Path) -> tuple[str, str]:
+    """Detect Java test framework."""
+    pom_path = project_root / "pom.xml"
+    if pom_path.exists():
+        try:
+            content = pom_path.read_text(encoding="utf-8")
+            if "junit-jupiter" in content or "junit.jupiter" in content:
+                return "junit5", "from pom.xml (JUnit Jupiter)"
+            if "testng" in content.lower():
+                return "testng", "from pom.xml (TestNG)"
+            if "junit" in content.lower():
+                return "junit4", "from pom.xml (JUnit)"
+        except Exception:
+            pass
+
+    gradle_file = project_root / "build.gradle"
+    if not gradle_file.exists():
+        gradle_file = project_root / "build.gradle.kts"
+    if gradle_file.exists():
+        try:
+            content = gradle_file.read_text(encoding="utf-8")
+            if "junit-jupiter" in content or "useJUnitPlatform" in content:
+                return "junit5", "from build.gradle (JUnit 5)"
+            if "testng" in content.lower():
+                return "testng", "from build.gradle (TestNG)"
+            if "junit" in content.lower():
+                return "junit4", "from build.gradle (JUnit)"
+        except Exception:
+            pass
+
+    return "junit5", "default (JUnit 5)"
 
 
 def _detect_python_test_runner(project_root: Path) -> tuple[str, str]:
@@ -536,11 +679,60 @@ def _detect_formatter(project_root: Path, language: str) -> tuple[list[str], str
 
     Python: ruff > black
     JavaScript: prettier > eslint --fix
+    Java: google-java-format (if java and JAR available)
 
     """
     if language in ("javascript", "typescript"):
         return _detect_js_formatter(project_root)
+    if language == "java":
+        return _detect_java_formatter(project_root)
     return _detect_python_formatter(project_root)
+
+
+def _detect_java_formatter(project_root: Path) -> tuple[list[str], str]:
+    """Detect Java formatter (google-java-format).
+
+    Checks for a Java executable and the google-java-format JAR in standard locations.
+    Returns formatter commands if both are available, otherwise returns an empty list
+    with a descriptive fallback message.
+
+    """
+    from codeflash.languages.java.formatter import JavaFormatter
+
+    # Find java executable
+    java_executable = None
+    java_home = os.environ.get("JAVA_HOME")
+    if java_home:
+        java_path = Path(java_home) / "bin" / "java"
+        if java_path.exists():
+            java_executable = str(java_path)
+    if not java_executable:
+        java_which = shutil.which("java")
+        if java_which:
+            java_executable = java_which
+
+    if not java_executable:
+        return [], "no Java formatter found (java not available)"
+
+    # Check for google-java-format JAR in standard locations
+    version = JavaFormatter.GOOGLE_JAVA_FORMAT_VERSION
+    jar_name = f"google-java-format-{version}-all-deps.jar"
+    possible_paths = [
+        project_root / ".codeflash" / jar_name,
+        Path.home() / ".codeflash" / jar_name,
+        Path(tempfile.gettempdir()) / "codeflash" / jar_name,
+    ]
+
+    jar_path = None
+    for candidate in possible_paths:
+        if candidate.exists():
+            jar_path = candidate
+            break
+
+    if not jar_path:
+        return [], "no Java formatter found (install google-java-format)"
+
+    return ([f"{java_executable} -jar {jar_path} --replace $file"], "google-java-format")
 
 
 def _detect_python_formatter(project_root: Path) -> tuple[list[str], str]:
@@ -643,6 +835,7 @@ def _detect_ignore_paths(project_root: Path, language: str) -> tuple[list[Path],
         ],
         "javascript": ["node_modules", "dist", "build", ".next", ".nuxt", "coverage", ".cache"],
         "typescript": ["node_modules", "dist", "build", ".next", ".nuxt", "coverage", ".cache"],
+        "java": ["target", "build", ".gradle", ".idea", "out"],
     }
 
     # Add default ignores
@@ -693,19 +886,20 @@ def has_existing_config(project_root: Path) -> tuple[bool, str | None]:
 
     Returns:
         Tuple of (has_config, config_file_type).
-        config_file_type is "pyproject.toml", "package.json", or None.
+        config_file_type is "pyproject.toml", "codeflash.toml", "package.json", or None.
 
     """
-    # Check pyproject.toml
-    pyproject_path = project_root / "pyproject.toml"
-    if pyproject_path.exists():
-        try:
-            with pyproject_path.open("rb") as f:
-                data = tomlkit.parse(f.read())
-            if "tool" in data and "codeflash" in data["tool"]:
-                return True, "pyproject.toml"
-        except Exception:
-            pass
+    # Check TOML config files (pyproject.toml, codeflash.toml)
+    for toml_filename in ("pyproject.toml", "codeflash.toml"):
+        toml_path = project_root / toml_filename
+        if toml_path.exists():
+            try:
+                with toml_path.open("rb") as f:
+                    data = tomlkit.parse(f.read())
+                if "tool" in data and "codeflash" in data["tool"]:
+                    return True, toml_filename
+            except Exception:
+                pass
 
     # Check package.json
     package_json_path = project_root / "package.json"

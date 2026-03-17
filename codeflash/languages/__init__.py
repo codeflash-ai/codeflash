@@ -11,7 +11,7 @@ Usage:
     lang = get_language_support(Path("example.py"))
 
     # Discover functions
-    functions = lang.discover_functions(file_path)
+    functions = lang.discover_functions(source, file_path)
 
     # Replace a function
     new_source = lang.replace_function(file_path, function, new_code)
@@ -19,7 +19,9 @@ Usage:
 
 from codeflash.languages.base import (
     CodeContext,
+    DependencyResolver,
     HelperFunction,
+    IndexResult,
     Language,
     LanguageSupport,
     ParentInfo,
@@ -29,6 +31,7 @@ from codeflash.languages.base import (
 from codeflash.languages.current import (
     current_language,
     current_language_support,
+    is_java,
     is_javascript,
     is_python,
     is_typescript,
@@ -76,14 +79,20 @@ def __getattr__(name: str):
         from codeflash.languages.python.support import PythonSupport
 
         return PythonSupport
+    if name == "JavaSupport":
+        from codeflash.languages.java.support import JavaSupport
+
+        return JavaSupport
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)
 
 
 __all__ = [
     "CodeContext",
+    "DependencyResolver",
     "FunctionInfo",
     "HelperFunction",
+    "IndexResult",
     "Language",
     "LanguageSupport",
     "ParentInfo",
@@ -97,6 +106,7 @@ __all__ = [
     "get_language_support",
     "get_supported_extensions",
     "get_supported_languages",
+    "is_java",
     "is_javascript",
     "is_jest",
     "is_mocha",

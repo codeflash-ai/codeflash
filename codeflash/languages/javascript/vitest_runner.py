@@ -194,10 +194,13 @@ def _ensure_codeflash_vitest_config(project_root: Path) -> Path | None:
 
     codeflash_config_path = project_root / "codeflash.vitest.config.mjs"
 
-    # If already exists, use it
+    # Regenerate if existing config is missing required settings (e.g., pool: 'forks')
     if codeflash_config_path.exists():
-        logger.debug(f"Using existing Codeflash Vitest config: {codeflash_config_path}")
-        return codeflash_config_path
+        existing_content = codeflash_config_path.read_text(encoding="utf-8")
+        if "pool: 'forks'" in existing_content:
+            logger.debug(f"Using existing Codeflash Vitest config: {codeflash_config_path}")
+            return codeflash_config_path
+        logger.debug("Regenerating Codeflash Vitest config (missing pool: 'forks')")
 
     # Find the original vitest config to extend
     original_config = None
@@ -225,6 +228,8 @@ export default mergeConfig(originalConfig, {{
   test: {{
     // Override include pattern to match all test files including generated ones
     include: ['**/*.test.ts', '**/*.test.js', '**/*.test.tsx', '**/*.test.jsx'],
+    // Use forks pool so timing markers from process.stdout.write flow to parent stdout
+    pool: 'forks',
   }},
 }});
 """
@@ -239,6 +244,8 @@ export default defineConfig({
     include: ['**/*.test.ts', '**/*.test.js', '**/*.test.tsx', '**/*.test.jsx'],
     // Exclude common non-test directories
     exclude: ['**/node_modules/**', '**/dist/**'],
+    // Use forks pool so timing markers from process.stdout.write flow to parent stdout
+    pool: 'forks',
   },
 });
 """
@@ -277,6 +284,7 @@ def _build_vitest_behavioral_command(
         "--reporter=default",
         "--reporter=junit",
         "--no-file-parallelism",  # Serial execution for deterministic timing
+        "--pool=forks",  # Use child processes so timing markers flow to parent stdout
     ]
 
     # For monorepos with restrictive vitest configs (e.g., include: test/**/*.test.ts),
@@ -326,6 +334,7 @@ def _build_vitest_benchmarking_command(
         "--reporter=default",
         "--reporter=junit",
         "--no-file-parallelism",  # Serial execution for consistent benchmarking
+        "--pool=forks",  # Use child processes so timing markers flow to parent stdout
     ]
 
     # Use codeflash vitest config to override restrictive include patterns
@@ -607,8 +616,10 @@ def run_vitest_benchmarking_tests(
         vitest_env["CODEFLASH_TEST_MODULE"] = test_module_path
         logger.debug(f"[VITEST-BENCH] Set CODEFLASH_TEST_MODULE={test_module_path}")
 
-    # Total timeout for the entire benchmark run
-    total_timeout = max(120, (target_duration_ms // 1000) + 60, timeout or 120)
+    # Subprocess timeout: target_duration + 120s headroom for Vitest startup
+    # (TS compilation, module resolution).  The capturePerf time budget (10s default)
+    # governs actual looping; this is just a safety net for process-level hangs.
+    total_timeout = max(120, (target_duration_ms // 1000) + 120)
 
     logger.debug(f"[VITEST-BENCH] Running Vitest benchmarking tests: {' '.join(vitest_cmd)}")
     logger.debug(
@@ -656,11 +667,6 @@ def run_vitest_benchmarking_tests(
             )
         else:
             logger.debug(f"[VITEST-BENCH] No perf END markers found in stdout (len={len(result.stdout)})")
-            # Check if there are behavior END markers instead
-            behavior_end_pattern = re.compile(r"!######[^:]+:[^:]+:[^:]+:\d+:[^#]+######!")
-            behavior_matches = list(behavior_end_pattern.finditer(result.stdout))
-            if behavior_matches:
-                logger.debug(f"[VITEST-BENCH] Found {len(behavior_matches)} behavior END markers instead (no duration)")
 
     return result_file_path, result
 
@@ -719,6 +725,7 @@ def run_vitest_line_profile_tests(
         "--reporter=default",
         "--reporter=junit",
         "--no-file-parallelism",  # Serial execution for consistent line profiling
+        "--pool=forks",  # Use child processes so timing markers flow to parent stdout
     ]
 
     # Use codeflash vitest config to override restrictive include patterns

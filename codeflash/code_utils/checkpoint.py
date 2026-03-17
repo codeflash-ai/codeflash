@@ -141,12 +141,18 @@ def get_all_historical_functions(module_root: Path, checkpoint_dir: Path) -> dic
 
 def ask_should_use_checkpoint_get_functions(args: argparse.Namespace) -> Optional[dict[str, dict[str, str]]]:
     previous_checkpoint_functions = None
+    if getattr(args, "subagent", False):
+        console.rule()
+        return None
     if args.all and codeflash_temp_dir.is_dir():
         previous_checkpoint_functions = get_all_historical_functions(args.module_root, codeflash_temp_dir)
-        if previous_checkpoint_functions and Confirm.ask(
-            "Previous Checkpoint detected from an incomplete optimization run, shall I continue the optimization from that point?",
-            default=True,
-            console=console,
+        if previous_checkpoint_functions and (
+            getattr(args, "yes", False)
+            or Confirm.ask(
+                "Previous Checkpoint detected from an incomplete optimization run, shall I continue the optimization from that point?",
+                default=True,
+                console=console,
+            )
         ):
             console.rule()
         else:

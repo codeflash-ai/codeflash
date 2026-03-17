@@ -7,14 +7,20 @@ while FunctionToOptimize is the canonical representation of functions across all
 
 from __future__ import annotations
 
+import fnmatch
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    import ast
+    from collections.abc import Callable, Iterable, Sequence
     from pathlib import Path
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.models.call_graph import CallGraph
+    from codeflash.models.models import FunctionSource, GeneratedTestsList, InvocationId, ValidCode
+    from codeflash.verification.verification_utils import TestConfig
 
 from codeflash.languages.language_enum import Language
 from codeflash.models.function_types import FunctionParent
@@ -32,6 +38,16 @@ def __getattr__(name: str) -> Any:
         return FunctionToOptimize
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)
+
+
+@dataclass(frozen=True)
+class IndexResult:
+    file_path: Path
+    cached: bool
+    num_edges: int
+    edges: tuple[tuple[str, str, bool], ...]  # (caller_qn, callee_name, is_cross_file)
+    cross_file_edges: int
+    error: bool
 
 
 @dataclass
@@ -80,6 +96,7 @@ class CodeContext:
     target_file: Path
     helper_functions: list[HelperFunction] = field(default_factory=list)
     read_only_context: str = ""
+    imported_type_skeletons: str = ""
     imports: list[str] = field(default_factory=list)
     language: Language = Language.PYTHON
 
@@ -155,10 +172,28 @@ class FunctionFilterCriteria:
     include_patterns: list[str] = field(default_factory=list)
     exclude_patterns: list[str] = field(default_factory=list)
     require_return: bool = True
+    require_export: bool = True
     include_async: bool = True
     include_methods: bool = True
     min_lines: int | None = None
     max_lines: int | None = None
+
+    def __post_init__(self) -> None:
+        """Pre-compile regex patterns from glob patterns for faster matching."""
+        self._include_regexes = [re.compile(fnmatch.translate(p)) for p in self.include_patterns]
+        self._exclude_regexes = [re.compile(fnmatch.translate(p)) for p in self.exclude_patterns]
+
+    def matches_include_patterns(self, name: str) -> bool:
+        """Check if name matches any include pattern."""
+        if not self._include_regexes:
+            return True
+        return any(regex.match(name) for regex in self._include_regexes)
+
+    def matches_exclude_patterns(self, name: str) -> bool:
+        """Check if name matches any exclude pattern."""
+        if not self._exclude_regexes:
+            return False
+        return any(regex.match(name) for regex in self._exclude_regexes)
 
 
 @dataclass
@@ -193,6 +228,41 @@ class ReferenceInfo:
 
 
 @runtime_checkable
+class DependencyResolver(Protocol):
+    """Protocol for language-specific dependency resolution.
+
+    Implementations analyze source files to discover call-graph edges
+    between functions so the optimizer can extract richer context.
+    """
+
+    def build_index(self, file_paths: Iterable[Path], on_progress: Callable[[IndexResult], None] | None = None) -> None:
+        """Pre-index a batch of files."""
+        ...
+
+    def get_callees(
+        self, file_path_to_qualified_names: dict[Path, set[str]]
+    ) -> tuple[dict[Path, set[FunctionSource]], list[FunctionSource]]:
+        """Return callees for the given functions."""
+        ...
+
+    def count_callees_per_function(
+        self, file_path_to_qualified_names: dict[Path, set[str]]
+    ) -> dict[tuple[Path, str], int]:
+        """Return the number of callees for each (file_path, qualified_name) pair."""
+        ...
+
+    def get_call_graph(
+        self, file_path_to_qualified_names: dict[Path, set[str]], *, include_metadata: bool = False
+    ) -> CallGraph:
+        """Return a CallGraph with full caller→callee edges for the given functions."""
+        ...
+
+    def close(self) -> None:
+        """Release resources (e.g. database connections)."""
+        ...
+
+
+@runtime_checkable
 class LanguageSupport(Protocol):
     """Protocol defining what a language implementation must provide.
 
@@ -211,7 +281,7 @@ class LanguageSupport(Protocol):
             def language(self) -> Language:
                 return Language.PYTHON
 
-            def discover_functions(self, file_path: Path, ...) -> list[FunctionInfo]:
+            def discover_functions(self, source: str, file_path: Path, ...) -> list[FunctionInfo]:
                 # Python-specific implementation using LibCST
                 ...
 
@@ -254,15 +324,59 @@ class LanguageSupport(Protocol):
         """Like # or //."""
         ...
 
+    @property
+    def dir_excludes(self) -> frozenset[str]:
+        """Directory name patterns to skip during file discovery.
+
+        Supports glob wildcards: "name" for exact, "prefix*" for startswith, "*suffix" for endswith.
+        """
+        ...
+
+    @property
+    def language_version(self) -> str | None:
+        """The detected language version (e.g., "17" for Java, "ES2022" for JS)."""
+        ...
+
+    @property
+    def valid_test_frameworks(self) -> tuple[str, ...]:
+        """Valid test frameworks for this language."""
+        ...
+
+    @property
+    def test_result_serialization_format(self) -> str:
+        """How test return values are serialized: "pickle" or "json"."""
+        return "pickle"
+
+    def parse_test_xml(
+        self, test_xml_file_path: Path, test_files: Any, test_config: Any, run_result: Any = None
+    ) -> Any:
+        """Parse JUnit XML test results with language-specific timing markers."""
+        ...
+
+    def load_coverage(
+        self,
+        coverage_database_file: Path,
+        function_name: str,
+        code_context: Any,
+        source_file: Path,
+        coverage_config_file: Path | None = None,
+    ) -> Any:
+        """Load coverage data from language-specific format.
+
+        Returns a CoverageData instance.
+        """
+        ...
+
     # === Discovery ===
 
     def discover_functions(
-        self, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
+        self, source: str, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
     ) -> list[FunctionToOptimize]:
-        """Find all optimizable functions in a file.
+        """Find all optimizable functions in source code.
 
         Args:
-            file_path: Path to the source file to analyze.
+            source: Source code to analyze.
+            file_path: Path to the source file (used for context and language detection).
             filter_criteria: Optional criteria to filter functions.
 
         Returns:
@@ -490,11 +604,92 @@ class LanguageSupport(Protocol):
         """
         ...
 
+    def postprocess_generated_tests(
+        self, generated_tests: GeneratedTestsList, test_framework: str, project_root: Path, source_file_path: Path
+    ) -> GeneratedTestsList:
+        """Apply language-specific postprocessing to generated tests.
+
+        Args:
+            generated_tests: Generated tests to update.
+            test_framework: Test framework used for the project.
+            project_root: Project root directory.
+            source_file_path: Path to the source file under optimization.
+
+        Returns:
+            Updated generated tests.
+
+        """
+        ...
+
+    def remove_test_functions_from_generated_tests(
+        self, generated_tests: GeneratedTestsList, functions_to_remove: list[str]
+    ) -> GeneratedTestsList:
+        """Remove specific test functions from generated tests.
+
+        Args:
+            generated_tests: Generated tests to update.
+            functions_to_remove: List of function names to remove.
+
+        Returns:
+            Updated generated tests.
+
+        """
+        ...
+
+    def add_runtime_comments_to_generated_tests(
+        self,
+        generated_tests: GeneratedTestsList,
+        original_runtimes: dict[InvocationId, list[int]],
+        optimized_runtimes: dict[InvocationId, list[int]],
+        tests_project_rootdir: Path | None = None,
+    ) -> GeneratedTestsList:
+        """Add runtime comments to generated tests.
+
+        Args:
+            generated_tests: Generated tests to update.
+            original_runtimes: Mapping of invocation IDs to original runtimes.
+            optimized_runtimes: Mapping of invocation IDs to optimized runtimes.
+            tests_project_rootdir: Root directory for tests (if applicable).
+
+        Returns:
+            Updated generated tests.
+
+        """
+        ...
+
+    def add_global_declarations(self, optimized_code: str, original_source: str, module_abspath: Path) -> str:
+        """Add new global declarations from optimized code to original source.
+
+        Args:
+            optimized_code: The optimized code that may contain new declarations.
+            original_source: The original source code.
+            module_abspath: Path to the module file (for parser selection).
+
+        Returns:
+            Original source with new declarations added.
+
+        """
+        ...
+
+    def extract_calling_function_source(self, source_code: str, function_name: str, ref_line: int) -> str | None:
+        """Extract the source code of a calling function.
+
+        Args:
+            source_code: Full source code of the file.
+            function_name: Name of the function to extract.
+            ref_line: Line number where the reference is.
+
+        Returns:
+            Source code of the function, or None if not found.
+
+        """
+        ...
+
     # === Test Result Comparison ===
 
     def compare_test_results(
         self, original_results_path: Path, candidate_results_path: Path, project_root: Path | None = None
-    ) -> tuple[bool, list]:
+    ) -> tuple[bool, list[Any]]:
         """Compare test results between original and candidate code.
 
         Args:
@@ -508,6 +703,45 @@ class LanguageSupport(Protocol):
         """
         ...
 
+    @property
+    def function_optimizer_class(self) -> type:
+        """Return the FunctionOptimizer subclass for this language."""
+        from codeflash.languages.function_optimizer import FunctionOptimizer
+
+        return FunctionOptimizer
+
+    def prepare_module(
+        self, module_code: str, module_path: Path, project_root: Path
+    ) -> tuple[dict[Path, ValidCode], ast.Module | None] | None:
+        """Parse/validate a module before optimization."""
+        ...
+
+    def setup_test_config(self, test_cfg: TestConfig, file_path: Path) -> None:
+        """One-time project setup after language detection. Default: no-op."""
+
+    def adjust_test_config_for_discovery(self, test_cfg: TestConfig) -> None:
+        """Adjust test config before test discovery. Default: no-op."""
+
+    def detect_module_system(self, project_root: Path, source_file: Path) -> str | None:
+        """Detect the module system used by the project. Default: None (not applicable)."""
+        return None
+
+    def process_generated_test_strings(
+        self,
+        generated_test_source: str,
+        instrumented_behavior_test_source: str,
+        instrumented_perf_test_source: str,
+        function_to_optimize: FunctionToOptimize,
+        test_path: Path,
+        test_cfg: Any,
+        project_module_system: str | None,
+    ) -> tuple[str, str, str]:
+        """Process raw generated test strings (instrumentation, placeholder replacement, etc.).
+
+        Returns (generated_test_source, instrumented_behavior_source, instrumented_perf_source).
+        """
+        ...
+
     # === Configuration ===
 
     def get_test_file_suffix(self) -> str:
@@ -518,6 +752,58 @@ class LanguageSupport(Protocol):
 
         """
         ...
+
+    def get_test_dir_for_source(self, test_dir: Path, source_file: Path | None) -> Path | None:
+        """Find the appropriate test directory for a source file.
+
+        For monorepos (JS), this finds the package's test directory from the source file path.
+        Default implementation returns None (no special directory resolution needed).
+
+        Args:
+            test_dir: The root tests directory.
+            source_file: Path to the source file being tested.
+
+        Returns:
+            The test directory path, or None if no special handling is needed.
+
+        """
+        return None
+
+    def resolve_test_file_from_class_path(self, test_class_path: str, base_dir: Path) -> Path | None:
+        """Resolve a test file path from a class path string.
+
+        Languages with non-Python module systems (e.g., Java package names like
+        "com.example.TestClass") override this to provide custom resolution.
+        Default: returns None (fall through to shared Python/file-path logic).
+
+        Args:
+            test_class_path: The class path string from JUnit XML (e.g., "com.example.TestClass").
+            base_dir: The base directory for tests.
+
+        Returns:
+            Path to the test file if found, None to fall through to default logic.
+
+        """
+        return None
+
+    def resolve_test_module_path_for_pr(
+        self, test_module_path: str, tests_project_rootdir: Path, non_generated_tests: set[Path]
+    ) -> Path | None:
+        """Resolve test module path to an absolute file path for PR creation.
+
+        Languages with non-Python module naming (e.g., Java class names)
+        override this. Default: returns None (fall through to shared logic).
+
+        Args:
+            test_module_path: The test module path string.
+            tests_project_rootdir: The tests project root directory.
+            non_generated_tests: Set of known non-generated test file paths.
+
+        Returns:
+            Resolved absolute path, or None to fall through to default logic.
+
+        """
+        return None
 
     def find_test_root(self, project_root: Path) -> Path | None:
         """Find the test root directory for a project.
@@ -556,6 +842,15 @@ class LanguageSupport(Protocol):
         # Default implementation: just copy runtime files
         return False
 
+    def create_dependency_resolver(self, project_root: Path) -> DependencyResolver | None:
+        """Create a language-specific dependency resolver, if available.
+
+        Returns:
+            A DependencyResolver instance, or None if not supported.
+
+        """
+        return None
+
     def instrument_existing_test(
         self,
         test_path: Path,
@@ -588,11 +883,50 @@ class LanguageSupport(Protocol):
         """Instrument source code before line profiling."""
         ...
 
-    def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict:
+    def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict[str, Any]:
         """Parse line profiler output."""
         ...
 
     # === Test Execution ===
+
+    def generate_concolic_tests(
+        self,
+        test_cfg: TestConfig,
+        project_root: Path,
+        function_to_optimize: FunctionToOptimize,
+        function_to_optimize_ast: Any,
+    ) -> tuple[dict[str, Any], str]:
+        """Generate concolic tests for a function.
+
+        Default implementation returns empty results. Override for languages
+        that support concolic testing (e.g. Python via CrossHair).
+        """
+        return {}, ""
+
+    def run_line_profile_tests(
+        self,
+        test_paths: Any,
+        test_env: dict[str, str],
+        cwd: Path,
+        timeout: int | None = None,
+        project_root: Path | None = None,
+        line_profile_output_file: Path | None = None,
+    ) -> tuple[Path, Any]:
+        """Run tests for line profiling.
+
+        Args:
+            test_paths: TestFiles object containing test file information.
+            test_env: Environment variables for the test run.
+            cwd: Working directory for running tests.
+            timeout: Optional timeout in seconds.
+            project_root: Project root directory.
+            line_profile_output_file: Path where line profile results will be written.
+
+        Returns:
+            Tuple of (result_file_path, subprocess_result).
+
+        """
+        ...
 
     def run_behavioral_tests(
         self,
@@ -631,6 +965,7 @@ class LanguageSupport(Protocol):
         min_loops: int = 5,
         max_loops: int = 100_000,
         target_duration_seconds: float = 10.0,
+        inner_iterations: int = 100,
     ) -> tuple[Path, Any]:
         """Run benchmarking tests for this language.
 
@@ -643,6 +978,7 @@ class LanguageSupport(Protocol):
             min_loops: Minimum number of loops for benchmarking.
             max_loops: Maximum number of loops for benchmarking.
             target_duration_seconds: Target duration for benchmarking in seconds.
+            inner_iterations: Number of inner loop iterations per test method (Java only).
 
         Returns:
             Tuple of (result_file_path, subprocess_result).
@@ -651,7 +987,7 @@ class LanguageSupport(Protocol):
         ...
 
 
-def convert_parents_to_tuple(parents: list | tuple) -> tuple[FunctionParent, ...]:
+def convert_parents_to_tuple(parents: list[Any] | tuple[Any, ...]) -> tuple[FunctionParent, ...]:
     """Convert a list of parent objects to a tuple of FunctionParent.
 
     Args:

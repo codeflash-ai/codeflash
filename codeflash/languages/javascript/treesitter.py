@@ -208,6 +208,22 @@ class TreeSitterAnalyzer:
             current_function=None,
         )
 
+        # Post-process: upgrade is_exported for functions referenced in named export clauses
+        # e.g., const joinBy = () => {}; export { joinBy };
+        exports = self.find_exports(source)
+        exported_names: set[str] = set()
+        for export in exports:
+            for name, _ in export.exported_names:
+                exported_names.add(name)
+            if export.default_export:
+                exported_names.add(export.default_export)
+            if export.wrapped_default_args:
+                exported_names.update(export.wrapped_default_args)
+
+        for func in functions:
+            if not func.is_exported and func.name in exported_names:
+                func.is_exported = True
+
         return functions
 
     def _walk_tree_for_functions(
@@ -505,13 +521,96 @@ class TreeSitterAnalyzer:
 
         # Check module.exports = name (single export)
         if left_text == "module.exports" and right_node.type == "identifier":
-            if self.get_node_text(right_node, source_bytes) == name:
+            exported_var = self.get_node_text(right_node, source_bytes)
+            if exported_var == name:
+                return True
+            # module.exports = varName → check if name is a property of varName's object
+            if self._is_name_property_of_variable(node, exported_var, name, source_bytes):
                 return True
 
         # Check module.exports.name = ... or exports.name = ...
         if left_text in {f"module.exports.{name}", f"exports.{name}"}:
             return True
 
+        return False
+
+    def _resolve_variable_object_properties(
+        self, node: Node, var_name: str, source_bytes: bytes
+    ) -> list[tuple[str, str | None]]:
+        """Resolve a variable name to its object literal and return property names.
+
+        For `const utils = { match() {}, foo: bar }`, returns [("match", None), ("foo", None)].
+        """
+        root = node
+        while root.parent:
+            root = root.parent
+
+        properties: list[tuple[str, str | None]] = []
+        for child in root.children:
+            if child.type in ("lexical_declaration", "variable_declaration"):
+                for decl in child.children:
+                    if decl.type == "variable_declarator":
+                        name_node = decl.child_by_field_name("name")
+                        value_node = decl.child_by_field_name("value")
+                        if (
+                            name_node
+                            and self.get_node_text(name_node, source_bytes) == var_name
+                            and value_node
+                            and value_node.type == "object"
+                        ):
+                            for obj_child in value_node.children:
+                                if obj_child.type == "method_definition":
+                                    method_name_node = obj_child.child_by_field_name("name")
+                                    if method_name_node:
+                                        properties.append((self.get_node_text(method_name_node, source_bytes), None))
+                                elif obj_child.type == "shorthand_property_identifier":
+                                    properties.append((self.get_node_text(obj_child, source_bytes), None))
+                                elif obj_child.type == "pair":
+                                    key_node = obj_child.child_by_field_name("key")
+                                    if key_node:
+                                        properties.append((self.get_node_text(key_node, source_bytes), None))
+        return properties
+
+    def _is_name_property_of_variable(self, node: Node, var_name: str, prop_name: str, source_bytes: bytes) -> bool:
+        """Check if prop_name is a property/method of the object assigned to var_name.
+
+        Resolves patterns like:
+            const utils = { match() {}, foo: bar };
+            module.exports = utils;
+        → checks if prop_name is a key of the object literal assigned to var_name.
+        """
+        root = node
+        while root.parent:
+            root = root.parent
+
+        for child in root.children:
+            # Look for: const/let/var varName = { ... }
+            if child.type in ("lexical_declaration", "variable_declaration"):
+                for decl in child.children:
+                    if decl.type == "variable_declarator":
+                        name_node = decl.child_by_field_name("name")
+                        value_node = decl.child_by_field_name("value")
+                        if (
+                            name_node
+                            and self.get_node_text(name_node, source_bytes) == var_name
+                            and value_node
+                            and value_node.type == "object"
+                        ):
+                            for obj_child in value_node.children:
+                                if obj_child.type == "method_definition":
+                                    method_name_node = obj_child.child_by_field_name("name")
+                                    if (
+                                        method_name_node
+                                        and self.get_node_text(method_name_node, source_bytes) == prop_name
+                                    ):
+                                        return True
+                                elif obj_child.type == "shorthand_property_identifier":
+                                    if self.get_node_text(obj_child, source_bytes) == prop_name:
+                                        return True
+                                elif obj_child.type == "pair":
+                                    key_node = obj_child.child_by_field_name("key")
+                                    if key_node and self.get_node_text(key_node, source_bytes) == prop_name:
+                                        return True
         return False
 
     def _find_preceding_jsdoc(self, node: Node, source_bytes: bytes) -> int | None:
@@ -1005,8 +1104,12 @@ class TreeSitterAnalyzer:
                 name_node = right_node.child_by_field_name("name")
                 default_export = self.get_node_text(name_node, source_bytes) if name_node else "default"
             elif right_node.type == "identifier":
-                # module.exports = someFunction
-                default_export = self.get_node_text(right_node, source_bytes)
+                # module.exports = someFunction or module.exports = someObject
+                var_name = self.get_node_text(right_node, source_bytes)
+                default_export = var_name
+                # Resolve variable to object literal and add its properties as exports
+                obj_props = self._resolve_variable_object_properties(node, var_name, source_bytes)
+                exported_names.extend(obj_props)
             elif right_node.type == "object":
                 # module.exports = { foo, bar, baz: qux }
                 for child in right_node.children:
@@ -1788,3 +1891,37 @@ def get_analyzer_for_file(file_path: Path) -> TreeSitterAnalyzer:
         return TreeSitterAnalyzer(TreeSitterLanguage.TSX)
     # Default to JavaScript for .js, .jsx, .mjs, .cjs
     return TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
+
+
+# Author: Saurabh Misra <misra.saurabh1@gmail.com>
+def extract_calling_function_source(source_code: str, function_name: str, ref_line: int) -> str | None:
+    """Extract the source code of a calling function in JavaScript/TypeScript.
+
+    Args:
+        source_code: Full source code of the file.
+        function_name: Name of the function to extract.
+        ref_line: Line number where the reference is (helps identify the right function).
+
+    Returns:
+        Source code of the function, or None if not found.
+
+    """
+    try:
+        # Try TypeScript first, fall back to JavaScript
+        for lang in [TreeSitterLanguage.TYPESCRIPT, TreeSitterLanguage.TSX, TreeSitterLanguage.JAVASCRIPT]:
+            try:
+                analyzer = TreeSitterAnalyzer(lang)
+                functions = analyzer.find_functions(source_code, include_methods=True)
+
+                for func in functions:
+                    if func.name == function_name:
+                        # Check if the reference line is within this function
+                        if func.start_line <= ref_line <= func.end_line:
+                            return func.source_text
+                break
+            except Exception:
+                continue
+
+        return None
+    except Exception:
+        return None

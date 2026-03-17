@@ -1,22 +1,22 @@
 from __future__ import annotations
 
 import ast
+import contextlib
 import os
 import random
 import warnings
-from _ast import AsyncFunctionDef, ClassDef, FunctionDef
 from collections import defaultdict
 from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 import git
-import libcst as cst
 from pydantic.dataclasses import dataclass
+from rich.text import Text
 from rich.tree import Tree
 
 from codeflash.api.cfapi import get_blocklisted_functions, is_function_being_optimized_again
-from codeflash.cli_cmds.console import DEBUG_MODE, console, logger
+from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.code_utils import (
     exit_with_message,
     is_class_defined_in_file,
@@ -38,18 +38,8 @@ __all__ = ["FunctionParent", "FunctionToOptimize"]
 if TYPE_CHECKING:
     from argparse import Namespace
 
-    from libcst import CSTNode
-    from libcst.metadata import CodeRange
-
     from codeflash.models.models import CodeOptimizationContext
     from codeflash.verification.verification_utils import TestConfig
-import contextlib
-
-from rich.text import Text
-
-_property_id = "property"
-
-_ast_name = ast.Name
 
 
 @dataclass(frozen=True)
@@ -61,90 +51,30 @@ class FunctionProperties:
     staticmethod_class_name: Optional[str]
 
 
-class ReturnStatementVisitor(cst.CSTVisitor):
-    def __init__(self) -> None:
-        super().__init__()
-        self.has_return_statement: bool = False
-
-    def visit_Return(self, node: cst.Return) -> None:
-        self.has_return_statement = True
-
-
-class FunctionVisitor(cst.CSTVisitor):
-    METADATA_DEPENDENCIES = (cst.metadata.PositionProvider, cst.metadata.ParentNodeProvider)
-
-    def __init__(self, file_path: str) -> None:
-        super().__init__()
-        self.file_path: str = file_path
-        self.functions: list[FunctionToOptimize] = []
-
-    @staticmethod
-    def is_pytest_fixture(node: cst.FunctionDef) -> bool:
-        for decorator in node.decorators:
-            dec = decorator.decorator
-            if isinstance(dec, cst.Call):
-                dec = dec.func
-            if isinstance(dec, cst.Attribute) and dec.attr.value == "fixture":
-                if isinstance(dec.value, cst.Name) and dec.value.value == "pytest":
-                    return True
-            if isinstance(dec, cst.Name) and dec.value == "fixture":
-                return True
-        return False
-
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
-        return_visitor: ReturnStatementVisitor = ReturnStatementVisitor()
-        node.visit(return_visitor)
-        if return_visitor.has_return_statement and not self.is_pytest_fixture(node):
-            pos: CodeRange = self.get_metadata(cst.metadata.PositionProvider, node)
-            parents: CSTNode | None = self.get_metadata(cst.metadata.ParentNodeProvider, node)
-            ast_parents: list[FunctionParent] = []
-            while parents is not None:
-                if isinstance(parents, (cst.FunctionDef, cst.ClassDef)):
-                    ast_parents.append(FunctionParent(parents.name.value, parents.__class__.__name__))
-                parents = self.get_metadata(cst.metadata.ParentNodeProvider, parents, default=None)
-            self.functions.append(
-                FunctionToOptimize(
-                    function_name=node.name.value,
-                    file_path=self.file_path,
-                    parents=list(reversed(ast_parents)),
-                    starting_line=pos.start.line,
-                    ending_line=pos.end.line,
-                    is_async=bool(node.asynchronous),
-                )
-            )
-
-
-class FunctionWithReturnStatement(ast.NodeVisitor):
-    def __init__(self, file_path: Path) -> None:
-        self.functions: list[FunctionToOptimize] = []
-        self.ast_path: list[FunctionParent] = []
-        self.file_path: Path = file_path
-
-    def visit_FunctionDef(self, node: FunctionDef) -> None:
-        if function_has_return_statement(node) and not function_is_a_property(node):
-            self.functions.append(
-                FunctionToOptimize(function_name=node.name, file_path=self.file_path, parents=self.ast_path[:])
-            )
-
-    def visit_AsyncFunctionDef(self, node: AsyncFunctionDef) -> None:
-        if function_has_return_statement(node) and not function_is_a_property(node):
-            self.functions.append(
-                FunctionToOptimize(
-                    function_name=node.name, file_path=self.file_path, parents=self.ast_path[:], is_async=True
-                )
-            )
-
-    def generic_visit(self, node: ast.AST) -> None:
-        if isinstance(node, (FunctionDef, AsyncFunctionDef, ClassDef)):
-            self.ast_path.append(FunctionParent(node.name, node.__class__.__name__))
-        super().generic_visit(node)
-        if isinstance(node, (FunctionDef, AsyncFunctionDef, ClassDef)):
-            self.ast_path.pop()
-
-
 # =============================================================================
 # Multi-language support helpers
 # =============================================================================
+
+_VCS_EXCLUDES = frozenset({".git", ".hg", ".svn"})
+
+
+def parse_dir_excludes(patterns: frozenset[str]) -> tuple[frozenset[str], tuple[str, ...], tuple[str, ...]]:
+    """Split glob patterns into exact names, prefixes, and suffixes.
+
+    Patterns ending with ``*`` become prefix matches, patterns starting with ``*``
+    become suffix matches, and plain strings become exact matches.
+    """
+    exact: set[str] = set()
+    prefixes: list[str] = []
+    suffixes: list[str] = []
+    for p in patterns:
+        if p.endswith("*"):
+            prefixes.append(p[:-1])
+        elif p.startswith("*"):
+            suffixes.append(p[1:])
+        else:
+            exact.add(p)
+    return frozenset(exact), tuple(prefixes), tuple(suffixes)
 
 
 def get_files_for_language(
@@ -164,37 +94,44 @@ def get_files_for_language(
     if ignore_paths is None:
         ignore_paths = []
 
+    all_patterns: frozenset[str]
     if language is not None:
         support = get_language_support(language)
         extensions = support.file_extensions
+        all_patterns = support.dir_excludes | _VCS_EXCLUDES
     else:
         extensions = tuple(get_supported_extensions())
+        all_patterns = _VCS_EXCLUDES
+        for lang in Language:
+            if is_language_supported(lang):
+                all_patterns = all_patterns | get_language_support(lang).dir_excludes
 
-    # Default directory patterns to always exclude for JS/TS
-    js_ts_default_excludes = {
-        "node_modules",
-        "dist",
-        "build",
-        ".next",
-        ".nuxt",
-        "coverage",
-        ".cache",
-        ".turbo",
-        ".vercel",
-        "__pycache__",
-    }
+    dir_excludes, prefixes, suffixes = parse_dir_excludes(all_patterns)
 
-    files = []
-    for ext in extensions:
-        pattern = f"*{ext}"
-        for file_path in module_root_path.rglob(pattern):
-            # Check explicit ignore paths
-            if any(file_path.is_relative_to(ignore_path) for ignore_path in ignore_paths):
-                continue
-            # Check default JS/TS excludes in path parts
-            if any(part in js_ts_default_excludes for part in file_path.parts):
-                continue
-            files.append(file_path)
+    ignore_dirs: set[str] = set()
+    ignore_files: set[Path] = set()
+    for p in ignore_paths:
+        p = Path(p) if not isinstance(p, Path) else p
+        if p.is_file():
+            ignore_files.add(p)
+        else:
+            ignore_dirs.add(str(p))
+
+    files: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(module_root_path):
+        dirnames[:] = [
+            d
+            for d in dirnames
+            if d not in dir_excludes
+            and not (prefixes and d.startswith(prefixes))
+            and not (suffixes and d.endswith(suffixes))
+            and str(Path(dirpath) / d) not in ignore_dirs
+        ]
+        for fname in filenames:
+            if fname.endswith(extensions):
+                fpath = Path(dirpath, fname)
+                if fpath not in ignore_files:
+                    files.append(fpath)
     return files
 
 
@@ -224,23 +161,26 @@ def _is_js_ts_function_exported(file_path: Path, function_name: str) -> tuple[bo
         return True, None
 
 
-def _find_all_functions_in_python_file(file_path: Path) -> dict[Path, list[FunctionToOptimize]]:
-    """Find all optimizable functions in a Python file using AST parsing.
+def _is_js_ts_function_exists_but_not_exported(file_path: Path, function_name: str) -> bool:
+    """Check if a JS/TS function exists in the file but is not exported.
 
-    This is the original Python implementation preserved for backward compatibility.
+    Returns True only if the function name is found as a defined function
+    but is_exported is False.
     """
-    functions: dict[Path, list[FunctionToOptimize]] = {}
-    with file_path.open(encoding="utf8") as f:
-        try:
-            ast_module = ast.parse(f.read())
-        except Exception as e:
-            if DEBUG_MODE:
-                logger.exception(e)
-            return functions
-        function_name_visitor = FunctionWithReturnStatement(file_path)
-        function_name_visitor.visit(ast_module)
-        functions[file_path] = function_name_visitor.functions
-    return functions
+    from codeflash.languages.javascript.treesitter import get_analyzer_for_file
+
+    try:
+        source = file_path.read_text(encoding="utf-8")
+        analyzer = get_analyzer_for_file(file_path)
+        all_funcs = analyzer.find_functions(
+            source, include_methods=True, include_arrow_functions=True, require_name=True
+        )
+        for func in all_funcs:
+            if func.name == function_name:
+                return not func.is_exported
+    except Exception as e:
+        logger.debug(f"Failed to check function existence for {function_name}: {e}")
+    return False
 
 
 def _find_all_functions_via_language_support(file_path: Path) -> dict[Path, list[FunctionToOptimize]]:
@@ -256,7 +196,6 @@ def _find_all_functions_via_language_support(file_path: Path) -> dict[Path, list
     try:
         lang_support = get_language_support(file_path)
         criteria = FunctionFilterCriteria(require_return=True)
-        # discover_functions already returns FunctionToOptimize objects
         functions[file_path] = lang_support.discover_functions(file_path, criteria)
     except Exception as e:
         logger.debug(f"Failed to discover functions in {file_path}: {e}")
@@ -278,7 +217,7 @@ def get_functions_to_optimize(
     assert sum([bool(optimize_all), bool(replay_test), bool(file)]) <= 1, (
         "Only one of optimize_all, replay_test, or file should be provided"
     )
-    functions: dict[str, list[FunctionToOptimize]]
+    functions: dict[Path, list[FunctionToOptimize]]
     trace_file_path: Path | None = None
     is_lsp = is_LSP_enabled()
     with warnings.catch_warnings():
@@ -295,7 +234,7 @@ def get_functions_to_optimize(
             logger.info("!lsp|Finding all functions in the file '%s'…", file)
             console.rule()
             file = Path(file) if isinstance(file, str) else file
-            functions: dict[Path, list[FunctionToOptimize]] = find_all_functions_in_file(file)
+            functions = find_all_functions_in_file(file)
             if only_get_this_function is not None:
                 split_function = only_get_this_function.split(".")
                 if len(split_function) > 2:
@@ -318,6 +257,18 @@ def get_functions_to_optimize(
                 if found_function is None:
                     if is_lsp:
                         return functions, 0, None
+
+                    # For JS/TS: check if the function exists but is not exported
+                    if is_language_supported(file):
+                        lang_support = get_language_support(file)
+                        if lang_support.language in (Language.JAVASCRIPT, Language.TYPESCRIPT):
+                            if _is_js_ts_function_exists_but_not_exported(file, only_function_name):
+                                exit_with_message(
+                                    f"Function '{only_function_name}' exists in {file} but is not exported.\n"
+                                    f"In JavaScript/TypeScript, only exported functions can be optimized.\n"
+                                    f"Add: export {{ {only_function_name} }}"
+                                )
+
                     found = closest_matching_file_function_name(only_get_this_function, functions)
                     if found is not None:
                         file, found_function = found
@@ -330,6 +281,7 @@ def get_functions_to_optimize(
                         f"Function {only_get_this_function} not found in file {file}\nor the function does not have a 'return' statement or is a property"
                     )
 
+                assert found_function is not None
                 # For JavaScript/TypeScript, verify that the function (or its parent class) is exported
                 # Non-exported functions cannot be imported by tests
                 if found_function.language in ("javascript", "typescript"):
@@ -373,7 +325,7 @@ def get_functions_to_optimize(
         return filtered_modified_functions, functions_count, trace_file_path
 
 
-def get_functions_within_git_diff(uncommitted_changes: bool) -> dict[str, list[FunctionToOptimize]]:
+def get_functions_within_git_diff(uncommitted_changes: bool) -> dict[Path, list[FunctionToOptimize]]:
     modified_lines: dict[str, list[int]] = get_git_diff(uncommitted_changes=uncommitted_changes)
     return get_functions_within_lines(modified_lines)
 
@@ -414,7 +366,7 @@ def closest_matching_file_function_name(
                 closest_match = function
                 closest_file = file_path
 
-    if closest_match is not None:
+    if closest_match is not None and closest_file is not None:
         return closest_file, closest_match
     return None
 
@@ -448,39 +400,31 @@ def levenshtein_distance(s1: str, s2: str) -> int:
     return previous[len1]
 
 
-def get_functions_inside_a_commit(commit_hash: str) -> dict[str, list[FunctionToOptimize]]:
+def get_functions_inside_a_commit(commit_hash: str) -> dict[Path, list[FunctionToOptimize]]:
     modified_lines: dict[str, list[int]] = get_git_diff(only_this_commit=commit_hash)
     return get_functions_within_lines(modified_lines)
 
 
-def get_functions_within_lines(modified_lines: dict[str, list[int]]) -> dict[str, list[FunctionToOptimize]]:
-    functions: dict[str, list[FunctionToOptimize]] = {}
+def get_functions_within_lines(modified_lines: dict[str, list[int]]) -> dict[Path, list[FunctionToOptimize]]:
+    functions: dict[Path, list[FunctionToOptimize]] = {}
     for path_str, lines_in_file in modified_lines.items():
         path = Path(path_str)
         if not path.exists():
             continue
-        with path.open(encoding="utf8") as f:
-            file_content = f.read()
-            try:
-                wrapper = cst.metadata.MetadataWrapper(cst.parse_module(file_content))
-            except Exception as e:
-                logger.exception(e)
-                continue
-            function_lines = FunctionVisitor(file_path=str(path))
-            wrapper.visit(function_lines)
-            functions[str(path)] = [
-                function_to_optimize
-                for function_to_optimize in function_lines.functions
-                if (start_line := function_to_optimize.starting_line) is not None
-                and (end_line := function_to_optimize.ending_line) is not None
-                and any(start_line <= line <= end_line for line in lines_in_file)
-            ]
+        all_functions = find_all_functions_in_file(path)
+        functions[path] = [
+            func
+            for func in all_functions.get(path, [])
+            if func.starting_line is not None
+            and func.ending_line is not None
+            and any(func.starting_line <= line <= func.ending_line for line in lines_in_file)
+        ]
     return functions
 
 
 def get_all_files_and_functions(
     module_root_path: Path, ignore_paths: list[Path], language: Language | None = None
-) -> dict[str, list[FunctionToOptimize]]:
+) -> dict[Path, list[FunctionToOptimize]]:
     """Get all optimizable functions from files in the module root.
 
     Args:
@@ -492,9 +436,8 @@ def get_all_files_and_functions(
         Dictionary mapping file paths to lists of FunctionToOptimize.
 
     """
-    functions: dict[str, list[FunctionToOptimize]] = {}
+    functions: dict[Path, list[FunctionToOptimize]] = {}
     for file_path in get_files_for_language(module_root_path, ignore_paths, language):
-        # Find all the functions in the file
         functions.update(find_all_functions_in_file(file_path).items())
     # Randomize the order of the files to optimize to avoid optimizing the same file in the same order every time.
     # Helpful if an optimize-all run is stuck and we restart it.
@@ -504,34 +447,19 @@ def get_all_files_and_functions(
 
 
 def find_all_functions_in_file(file_path: Path) -> dict[Path, list[FunctionToOptimize]]:
-    """Find all optimizable functions in a file, routing to the appropriate language handler.
-
-    This function checks if the file extension is supported and routes to either
-    the Python-specific implementation (for backward compatibility) or the
-    language support abstraction for other languages.
-
-    Args:
-        file_path: Path to the source file.
-
-    Returns:
-        Dictionary mapping file path to list of FunctionToOptimize.
-
-    """
-    # Check if the file extension is supported
+    """Find all optimizable functions in a file using the language support abstraction."""
     if not is_language_supported(file_path):
         return {}
-
     try:
+        from codeflash.languages.base import FunctionFilterCriteria
+
         lang_support = get_language_support(file_path)
-    except Exception:
+        criteria = FunctionFilterCriteria(require_return=True)
+        source = file_path.read_text(encoding="utf-8")
+        return {file_path: lang_support.discover_functions(source, file_path, criteria)}
+    except Exception as e:
+        logger.debug(f"Failed to discover functions in {file_path}: {e}")
         return {}
-
-    # Route to Python-specific implementation for backward compatibility
-    if lang_support.language == Language.PYTHON:
-        return _find_all_functions_in_python_file(file_path)
-
-    # Use language support abstraction for other languages
-    return _find_all_functions_via_language_support(file_path)
 
 
 def get_all_replay_test_functions(
@@ -808,7 +736,8 @@ def filter_functions(
     *,
     disable_logs: bool = False,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
-    filtered_modified_functions: dict[str, list[FunctionToOptimize]] = {}
+    resolved_project_root = project_root.resolve()
+    filtered_modified_functions: dict[Path, list[FunctionToOptimize]] = {}
     blocklist_funcs = get_blocklisted_functions()
     logger.debug(f"Blocklisted functions: {blocklist_funcs}")
     # Remove any function that we don't want to optimize
@@ -884,7 +813,7 @@ def filter_functions(
         lang_support = get_language_support(Path(file_path))
         if lang_support.language == Language.PYTHON:
             try:
-                ast.parse(f"import {module_name_from_file_path(Path(file_path), project_root)}")
+                ast.parse(f"import {module_name_from_file_path(Path(file_path), resolved_project_root)}")
             except SyntaxError:
                 malformed_paths_count += 1
                 continue
@@ -906,13 +835,16 @@ def filter_functions(
         if previous_checkpoint_functions:
             functions_tmp = []
             for function in _functions:
-                if function.qualified_name_with_modules_from_root(project_root) in previous_checkpoint_functions:
+                if (
+                    function.qualified_name_with_modules_from_root(resolved_project_root)
+                    in previous_checkpoint_functions
+                ):
                     previous_checkpoint_functions_removed_count += 1
                     continue
                 functions_tmp.append(function)
             _functions = functions_tmp
 
-        filtered_modified_functions[file_path] = _functions
+        filtered_modified_functions[file_path_path] = _functions
         functions_count += len(_functions)
 
     if not disable_logs:
@@ -933,7 +865,24 @@ def filter_functions(
         if len(tree.children) > 0:
             console.print(tree)
             console.rule()
-    return {Path(k): v for k, v in filtered_modified_functions.items() if v}, functions_count
+    return {k: v for k, v in filtered_modified_functions.items() if v}, functions_count
+
+
+def _is_test_file_by_pattern(file_path: Path) -> bool:
+    """Check if a file is a test file using naming conventions.
+
+    Used when tests_root overlaps with module_root, so directory-based filtering would
+    incorrectly exclude all source files. Falls back to filename and directory patterns.
+    """
+    name = file_path.name.lower()
+    if name.startswith("test_") or name == "conftest.py":
+        return True
+    test_name_patterns = (".test.", ".spec.", "_test.", "_spec.")
+    if any(p in name for p in test_name_patterns):
+        return True
+    path_str = str(file_path).lower()
+    test_dir_patterns = (os.sep + "test" + os.sep, os.sep + "tests" + os.sep, os.sep + "__tests__" + os.sep)
+    return any(p in path_str for p in test_dir_patterns)
 
 
 def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list[Path], module_root: Path) -> bool:
@@ -942,7 +891,13 @@ def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list
     Takes in file paths and returns the count of files that are to be optimized.
     """
     submodule_paths = None
-    if file_path.is_relative_to(tests_root):
+    # When tests_root overlaps module_root (e.g., both are "src"), use pattern matching
+    # instead of directory matching to avoid filtering out all source files.
+    tests_root_overlaps = tests_root == module_root or module_root.is_relative_to(tests_root)
+    if tests_root_overlaps:
+        if _is_test_file_by_pattern(file_path):
+            return False
+    elif file_path.is_relative_to(tests_root):
         return False
     if file_path in ignore_paths or any(file_path.is_relative_to(ignore_path) for ignore_path in ignore_paths):
         return False
@@ -956,22 +911,3 @@ def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list
         file_path in submodule_paths
         or any(file_path.is_relative_to(submodule_path) for submodule_path in submodule_paths)
     )
-
-
-def function_has_return_statement(function_node: FunctionDef | AsyncFunctionDef) -> bool:
-    # Custom DFS, return True as soon as a Return node is found
-    stack: list[ast.AST] = [function_node]
-    while stack:
-        node = stack.pop()
-        if isinstance(node, ast.Return):
-            return True
-        stack.extend(ast.iter_child_nodes(node))
-    return False
-
-
-def function_is_a_property(function_node: FunctionDef | AsyncFunctionDef) -> bool:
-    for node in function_node.decorator_list:  # noqa: SIM110
-        # Use isinstance rather than type(...) is ... for better performance with single inheritance trees like ast
-        if isinstance(node, _ast_name) and node.id == _property_id:
-            return True
-    return False

@@ -11,13 +11,13 @@ from typing import TYPE_CHECKING, Optional, Union
 
 from codeflash.api.cfapi import get_codeflash_api_key, get_user_id
 from codeflash.cli_cmds.cli import process_pyproject_config
-from codeflash.cli_cmds.cmd_init import (
+from codeflash.cli_cmds.cmd_init import create_find_common_tags_file
+from codeflash.cli_cmds.init_config import (
     CommonSections,
     VsCodeSetupInfo,
     config_found,
     configure_pyproject_toml,
     create_empty_pyproject_toml,
-    create_find_common_tags_file,
     get_formatter_cmds,
     get_suggestions,
     get_valid_subdirs,
@@ -114,7 +114,7 @@ def get_functions_in_commit(params: OptimizableFunctionsInCommitParams) -> dict[
     return {"functions": file_to_qualified_names, "status": "success"}
 
 
-def _group_functions_by_file(functions: dict[str, list[FunctionToOptimize]]) -> dict[str, list[str]]:
+def _group_functions_by_file(functions: dict[Path, list[FunctionToOptimize]]) -> dict[str, list[str]]:
     file_to_funcs_to_optimize, _ = filter_functions(
         modified_functions=functions,
         tests_root=server.optimizer.test_cfg.tests_root,
@@ -463,14 +463,10 @@ def _initialize_current_function_optimizer() -> Union[dict[str, str], WrappedIni
             "message": "Failed to prepare module for optimization",
         }
 
-    validated_original_code, original_module_ast = module_prep_result
+    validated_original_code, _original_module_ast = module_prep_result
 
     function_optimizer = server.optimizer.create_function_optimizer(
-        fto,
-        function_to_optimize_source_code=validated_original_code[fto.file_path].source_code,
-        original_module_ast=original_module_ast,
-        original_module_path=fto.file_path,
-        function_to_tests={},
+        fto, function_to_optimize_source_code=validated_original_code[fto.file_path].source_code, function_to_tests={}
     )
 
     server.optimizer.current_function_optimizer = function_optimizer

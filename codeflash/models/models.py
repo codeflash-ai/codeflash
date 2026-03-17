@@ -25,7 +25,6 @@ from pathlib import Path
 from re import Pattern
 from typing import Any, NamedTuple, Optional, cast
 
-from jedi.api.classes import Name
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, model_validator
 from pydantic.dataclasses import dataclass
 
@@ -116,6 +115,16 @@ class OptimizationReviewResult(NamedTuple):
     explanation: str
 
 
+class FunctionRepairInfo(NamedTuple):
+    function_name: str
+    reason: str
+
+
+class TestFileReview(NamedTuple):
+    test_index: int
+    functions_to_repair: list[FunctionRepairInfo]
+
+
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
 # qualified name of the method is foo.eggs.Ham.spam, its qualified name is Ham.spam, and its name is spam. The full name
 # of the module is foo.eggs.
@@ -136,14 +145,14 @@ class CoverReturnCode(IntEnum):
     ERROR = 2
 
 
-@dataclass(frozen=True, config={"arbitrary_types_allowed": True})
+@dataclass(frozen=True)
 class FunctionSource:
     file_path: Path
     qualified_name: str
     fully_qualified_name: str
     only_function_name: str
     source_code: str
-    jedi_definition: Name | None = None  # None for non-Python languages
+    definition_type: str | None = None  # e.g. "function", "class"; None for non-Python languages
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, FunctionSource):
@@ -246,8 +255,7 @@ class CodeString(BaseModel):
         """Validate code syntax for the specified language."""
         if self.language == "python":
             validate_python_code(self.code)
-        elif self.language in ("javascript", "typescript"):
-            # Validate JavaScript/TypeScript syntax using language support
+        else:
             from codeflash.languages.registry import get_language_support
 
             lang_support = get_language_support(self.language)
@@ -273,8 +281,6 @@ def get_code_block_splitter(file_path: Path | None) -> str:
 # Pattern to match markdown code blocks with optional language tag and file path
 # Matches: ```language:filepath\ncode\n``` or ```language\ncode\n```
 markdown_pattern = re.compile(r"```(\w+)(?::([^\n]+))?\n(.*?)\n```", re.DOTALL)
-# Legacy pattern for backward compatibility (only python)
-markdown_pattern_python_only = re.compile(r"```python:([^\n]+)\n(.*?)\n```", re.DOTALL)
 
 
 class CodeStringsMarkdown(BaseModel):
@@ -332,12 +338,12 @@ class CodeStringsMarkdown(BaseModel):
             dict[str, str]: Mapping from file path (as string) to code.
 
         """
-        if self._cache.get("file_to_path") is not None:
+        try:
             return self._cache["file_to_path"]
-        self._cache["file_to_path"] = {
-            str(code_string.file_path): code_string.code for code_string in self.code_strings
-        }
-        return self._cache["file_to_path"]
+        except KeyError:
+            mapping = {str(code_string.file_path): code_string.code for code_string in self.code_strings}
+            self._cache["file_to_path"] = mapping
+            return mapping
 
     @staticmethod
     def parse_markdown_code(markdown_code: str, expected_language: str = "python") -> CodeStringsMarkdown:
@@ -380,6 +386,7 @@ class CodeOptimizationContext(BaseModel):
     hashing_code_context: str = ""
     hashing_code_context_hash: str = ""
     helper_functions: list[FunctionSource]
+    testgen_helper_fqns: list[str] = []
     preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]]
 
 
@@ -406,6 +413,7 @@ class GeneratedTests(BaseModel):
     generated_original_test_source: str
     instrumented_behavior_test_source: str
     instrumented_perf_test_source: str
+    raw_generated_test_source: str | None = None
     behavior_file_path: Path
     perf_file_path: Path
 
@@ -425,9 +433,6 @@ class TestFile(BaseModel):
 
 class TestFiles(BaseModel):
     test_files: list[TestFile]
-
-    def get_by_type(self, test_type: TestType) -> TestFiles:
-        return TestFiles(test_files=[test_file for test_file in self.test_files if test_file.test_type == test_type])
 
     def add(self, test_file: TestFile) -> None:
         if test_file not in self.test_files:
@@ -774,7 +779,13 @@ class InvocationId:
             test_src = test_path.read_text(encoding="utf-8")
             module_node = cst.parse_module(test_src)
         except Exception:
-            return None
+            # libcst can't parse non-Python files (JS/TS) — return a descriptive string
+            # so the code repair API receives a non-None test_src_code.
+            return (
+                f"// Test: {self.test_function_name}\n"
+                f"// File: {test_path.name}\n"
+                f"// Testing function: {self.function_getting_tested}"
+            )
 
         if self.test_class_name:
             for stmt in module_node.body:
@@ -885,9 +896,6 @@ class TestResults(BaseModel):  # noqa: PLW1641
             return self.test_results[self.test_result_idx[unique_invocation_loop_id]]
         except (IndexError, KeyError):
             return None
-
-    def get_all_ids(self) -> set[InvocationId]:
-        return {test_result.id for test_result in self.test_results}
 
     def get_all_unique_invocation_loop_ids(self) -> set[str]:
         return {test_result.unique_invocation_loop_id for test_result in self.test_results}

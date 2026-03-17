@@ -60,8 +60,9 @@ class TestTypeScriptFunctionDiscovery:
 
         # Critical: Verify language is "typescript", not "javascript"
         for func in func_list:
-            assert func.language == "typescript", \
+            assert func.language == "typescript", (
                 f"Function {func.function_name} should have language='typescript', got '{func.language}'"
+            )
 
     def test_discover_functions_with_type_annotations(self):
         """Test discovering TypeScript functions with type annotations."""
@@ -124,10 +125,8 @@ class TestTypeScriptCodeContext:
         """Test extracting code context for a TypeScript function."""
         skip_if_ts_not_supported()
         from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
-        from codeflash.languages import current as lang_current
-        from codeflash.languages.python.context.code_context_extractor import get_code_optimization_context
-
-        lang_current._current_language = Language.TYPESCRIPT
+        from codeflash.languages import get_language_support
+        from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
 
         fib_file = ts_project_dir / "fibonacci.ts"
         if not fib_file.exists():
@@ -139,7 +138,11 @@ class TestTypeScriptCodeContext:
         fib_func = next((f for f in func_list if f.function_name == "fibonacci"), None)
         assert fib_func is not None
 
-        context = get_code_optimization_context(fib_func, ts_project_dir)
+        ts_support = get_language_support(Language.TYPESCRIPT)
+        code_context = ts_support.extract_code_context(fib_func, ts_project_dir, ts_project_dir)
+        context = JavaScriptFunctionOptimizer._build_optimization_context(
+            code_context, fib_file, "typescript", ts_project_dir
+        )
 
         assert context.read_writable_code is not None
         # Critical: language should be "typescript", not "javascript"
@@ -174,11 +177,7 @@ function multiply(a: number, b: number): number {
         ts_support = get_language_support(Language.TYPESCRIPT)
 
         func_info = FunctionInfo(
-            function_name="add",
-            file_path=Path("/tmp/test.ts"),
-            starting_line=2,
-            ending_line=4,
-            language="typescript"
+            function_name="add", file_path=Path("/tmp/test.ts"), starting_line=2, ending_line=4, language="typescript"
         )
 
         result = ts_support.replace_function(original_source, func_info, new_function)
@@ -225,7 +224,7 @@ function processConfig(config: Config): string {
             file_path=Path("/tmp/test.ts"),
             starting_line=7,
             ending_line=9,
-            language="typescript"
+            language="typescript",
         )
 
         result = ts_support.replace_function(original_source, func_info, new_function)
@@ -262,11 +261,7 @@ class TestTypeScriptTestDiscovery:
 
         fib_file = ts_project_dir / "fibonacci.ts"
         func_info = FunctionInfo(
-            function_name="fibonacci",
-            file_path=fib_file,
-            starting_line=1,
-            ending_line=7,
-            language="typescript"
+            function_name="fibonacci", file_path=fib_file, starting_line=1, ending_line=7, language="typescript"
         )
 
         tests = ts_support.discover_tests(test_root, [func_info])
@@ -326,7 +321,7 @@ export function standalone(x: number): number {
                 CodeString(
                     code="function add(a: number, b: number): number { return a + b; }",
                     file_path=Path("test.ts"),
-                    language="typescript"
+                    language="typescript",
                 )
             ],
             language="typescript",

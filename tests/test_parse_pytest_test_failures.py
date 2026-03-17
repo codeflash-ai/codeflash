@@ -127,7 +127,9 @@ code_to_optimize/tests/test_simple.py:10: AssertionError
     )
 
     assert "TestCalculator.test_divide_by_zero" in errors
-    assert errors["TestCalculator.test_divide_by_zero"] == """
+    assert (
+        errors["TestCalculator.test_divide_by_zero"]
+        == """
     class TestCalculator:
         def test_divide_by_zero(self):
 >           Calculator().divide(10, 0)
@@ -135,6 +137,7 @@ E           ZeroDivisionError: division by zero
 
 code_to_optimize/tests/test_calculator.py:22: ZeroDivisionError
 """
+    )
 
 
 def test_extracting_from_invalid_pytest_stdout():

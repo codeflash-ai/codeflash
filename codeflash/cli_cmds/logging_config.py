@@ -1,19 +1,38 @@
 VERBOSE_LOGGING_FORMAT = "%(asctime)s [%(pathname)s:%(lineno)s in function %(funcName)s] %(message)s"
-LOGGING_FORMAT = "[%(levelname)s] %(message)s"
 BARE_LOGGING_FORMAT = "%(message)s"
 
 
 def set_level(level: int, *, echo_setting: bool = True) -> None:
     import logging
+    import sys
     import time
 
+    from codeflash.lsp.helpers import is_subagent_mode
+
+    if is_subagent_mode():
+        logging.basicConfig(
+            level=level, handlers=[logging.StreamHandler(sys.stderr)], format="%(levelname)s: %(message)s", force=True
+        )
+        logging.getLogger().setLevel(level)
+        return
+
+    from rich.highlighter import NullHighlighter
     from rich.logging import RichHandler
 
     from codeflash.cli_cmds.console import console
 
     logging.basicConfig(
         level=level,
-        handlers=[RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False)],
+        handlers=[
+            RichHandler(
+                rich_tracebacks=True,
+                markup=False,
+                highlighter=NullHighlighter(),
+                console=console,
+                show_path=False,
+                show_time=False,
+            )
+        ],
         format=BARE_LOGGING_FORMAT,
     )
     logging.getLogger().setLevel(level)
@@ -22,7 +41,14 @@ def set_level(level: int, *, echo_setting: bool = True) -> None:
         logging.basicConfig(
             format=VERBOSE_LOGGING_FORMAT,
             handlers=[
-                RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False)
+                RichHandler(
+                    rich_tracebacks=True,
+                    markup=False,
+                    highlighter=NullHighlighter(),
+                    console=console,
+                    show_path=False,
+                    show_time=False,
+                )
             ],
             force=True,
         )

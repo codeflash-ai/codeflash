@@ -15,8 +15,9 @@ from codeflash.code_utils.instrument_existing_tests import (
     FunctionImportedAsVisitor,
     inject_profiling_into_existing_test,
 )
-from codeflash.code_utils.line_profile_utils import add_decorator_imports
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
+from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports
 from codeflash.models.models import (
     CodeOptimizationContext,
     CodePosition,
@@ -27,7 +28,6 @@ from codeflash.models.models import (
     TestsInFile,
     TestType,
 )
-from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
 codeflash_wrap_string = """def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test_class_name, codeflash_test_name, codeflash_function_name, codeflash_line_id, codeflash_loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
@@ -434,7 +434,7 @@ def test_sort():
             test_framework="pytest",
             pytest_cmd="pytest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
@@ -695,7 +695,7 @@ def test_sort_parametrized(input, expected_output):
             test_framework="pytest",
             pytest_cmd="pytest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
@@ -984,7 +984,7 @@ def test_sort_parametrized_loop(input, expected_output):
             test_framework="pytest",
             pytest_cmd="pytest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
@@ -1341,7 +1341,7 @@ def test_sort():
             test_framework="pytest",
             pytest_cmd="pytest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
@@ -1723,7 +1723,7 @@ class TestPigLatin(unittest.TestCase):
             test_framework="unittest",
             pytest_cmd="pytest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
@@ -1973,7 +1973,7 @@ import unittest
             test_framework="unittest",
             pytest_cmd="pytest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
@@ -2229,7 +2229,7 @@ import unittest
             test_framework="unittest",
             pytest_cmd="pytest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
             test_env=test_env,
             testing_type=TestingMode.BEHAVIOR,
@@ -2481,7 +2481,7 @@ import unittest
             test_framework="unittest",
             pytest_cmd="pytest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=f, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=f, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
@@ -3144,7 +3144,7 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
             test_framework="pytest",
             pytest_cmd="pytest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_files = TestFiles(
             test_files=[
                 TestFile(
@@ -3279,7 +3279,7 @@ import unittest
             test_framework="unittest",
             pytest_cmd="pytest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,

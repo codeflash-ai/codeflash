@@ -16,7 +16,7 @@ from codeflash.code_utils.instrument_existing_tests import (
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodePosition, FunctionParent, TestFile, TestFiles, TestingMode, TestType
 from codeflash.optimization.optimizer import Optimizer
-from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
+from codeflash.languages.python.instrument_codeflash_capture import instrument_codeflash_capture
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")

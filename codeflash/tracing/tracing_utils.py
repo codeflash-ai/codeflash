@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import site
 from dataclasses import dataclass
 from functools import cache
@@ -50,13 +51,34 @@ def module_name_from_file_path(file_path: Path, project_root_path: Path) -> str:
     return relative_path.with_suffix("").as_posix().replace("/", ".")
 
 
+def _is_test_file_by_pattern(file_path: Path) -> bool:
+    """Check if a file is a test file using naming conventions.
+
+    Used when tests_root overlaps with module_root, so directory-based filtering would
+    incorrectly exclude all source files.
+    """
+    name = file_path.name.lower()
+    if name.startswith("test_") or name == "conftest.py":
+        return True
+    test_name_patterns = (".test.", ".spec.", "_test.", "_spec.")
+    if any(p in name for p in test_name_patterns):
+        return True
+    path_str = str(file_path).lower()
+    test_dir_patterns = (os.sep + "test" + os.sep, os.sep + "tests" + os.sep, os.sep + "__tests__" + os.sep)
+    return any(p in path_str for p in test_dir_patterns)
+
+
 def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list[Path], module_root: Path) -> bool:
     """Optimized version of the filter_functions function above.
 
     Takes in file paths and returns the count of files that are to be optimized.
     """
     submodule_paths = None
-    if file_path.is_relative_to(tests_root):
+    tests_root_overlaps = tests_root == module_root or module_root.is_relative_to(tests_root)
+    if tests_root_overlaps:
+        if _is_test_file_by_pattern(file_path):
+            return False
+    elif file_path.is_relative_to(tests_root):
         return False
     if file_path in ignore_paths or any(file_path.is_relative_to(ignore_path) for ignore_path in ignore_paths):
         return False

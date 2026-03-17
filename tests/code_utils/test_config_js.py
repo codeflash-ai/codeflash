@@ -926,11 +926,7 @@ class TestTestFrameworkConfigOverride:
         package_json = tmp_path / "package.json"
         package_json.write_text(
             json.dumps(
-                {
-                    "name": "test-project",
-                    "devDependencies": {"vitest": "^1.0.0"},
-                    "codeflash": {"moduleRoot": "src"},
-                }
+                {"name": "test-project", "devDependencies": {"vitest": "^1.0.0"}, "codeflash": {"moduleRoot": "src"}}
             )
         )
 
@@ -945,11 +941,7 @@ class TestTestFrameworkConfigOverride:
         package_json = tmp_path / "package.json"
         package_json.write_text(
             json.dumps(
-                {
-                    "name": "test-project",
-                    "devDependencies": {"jest": "^29.0.0"},
-                    "codeflash": {"test-framework": ""},
-                }
+                {"name": "test-project", "devDependencies": {"jest": "^29.0.0"}, "codeflash": {"test-framework": ""}}
             )
         )
 

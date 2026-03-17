@@ -10,31 +10,27 @@ Each test verifies:
 
 from __future__ import annotations
 
-import pytest
 from pathlib import Path
 
+import pytest
+
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.languages.base import Language, ReferenceInfo
 from codeflash.languages.javascript.find_references import (
+    ExportedFunction,
     Reference,
     ReferenceFinder,
-    ExportedFunction,
     ReferenceSearchContext,
     find_references,
 )
-from codeflash.languages.base import Language, FunctionInfo, ReferenceInfo
-from codeflash.code_utils.code_extractor import _format_references_as_markdown
+from codeflash.languages.python.static_analysis.code_extractor import _format_references_as_markdown
 from codeflash.models.models import FunctionParent
 
 
 def make_func(name: str, file_path: Path, class_name: str | None = None) -> FunctionToOptimize:
     """Helper to create FunctionToOptimize for testing."""
     parents = [FunctionParent(name=class_name, type="ClassDef")] if class_name else []
-    return FunctionToOptimize(
-        function_name=name,
-        file_path=file_path,
-        parents=parents,
-        language="javascript",
-    )
+    return FunctionToOptimize(function_name=name, file_path=file_path, parents=parents, language="javascript")
 
 
 class TestReferenceFinder:
@@ -93,30 +89,30 @@ class TestBasicNamedExports:
 
         # Source file with named export
         (utils_dir / "DynamicBindingUtils.ts").write_text(
-            'export function getDynamicBindings(value: string): string[] {\n'
-            '    const regex = /{{([^}]+)}}/g;\n'
-            '    return [];\n'
-            '}\n'
+            "export function getDynamicBindings(value: string): string[] {\n"
+            "    const regex = /{{([^}]+)}}/g;\n"
+            "    return [];\n"
+            "}\n"
         )
 
         # File that imports and uses the function
         (src_dir / "evaluator.ts").write_text(
             "import { getDynamicBindings } from './utils/DynamicBindingUtils';\n"
-            '\n'
-            'export function evaluate(expression: string) {\n'
-            '    const bindings = getDynamicBindings(expression);\n'
-            '    return bindings;\n'
-            '}\n'
+            "\n"
+            "export function evaluate(expression: string) {\n"
+            "    const bindings = getDynamicBindings(expression);\n"
+            "    return bindings;\n"
+            "}\n"
         )
 
         # Another file that uses the function
         (src_dir / "validator.ts").write_text(
             "import { getDynamicBindings } from './utils/DynamicBindingUtils';\n"
-            '\n'
-            'export function validateBindings(input: string) {\n'
-            '    const bindings = getDynamicBindings(input);\n'
-            '    return bindings.length > 0;\n'
-            '}\n'
+            "\n"
+            "export function validateBindings(input: string) {\n"
+            "    const bindings = getDynamicBindings(input);\n"
+            "    return bindings.length > 0;\n"
+            "}\n"
         )
 
         return tmp_path
@@ -158,36 +154,39 @@ class TestBasicNamedExports:
         refs = finder.find_references(make_func("getDynamicBindings", source_file))
 
         # Convert to ReferenceInfo and sort for consistent ordering
-        ref_infos = sorted([
-            ReferenceInfo(
-                file_path=r.file_path,
-                line=r.line,
-                column=r.column,
-                end_line=r.end_line,
-                end_column=r.end_column,
-                context=r.context,
-                reference_type=r.reference_type,
-                import_name=r.import_name,
-                caller_function=r.caller_function,
-            )
-            for r in refs
-        ], key=lambda r: str(r.file_path))
+        ref_infos = sorted(
+            [
+                ReferenceInfo(
+                    file_path=r.file_path,
+                    line=r.line,
+                    column=r.column,
+                    end_line=r.end_line,
+                    end_column=r.end_column,
+                    context=r.context,
+                    reference_type=r.reference_type,
+                    import_name=r.import_name,
+                    caller_function=r.caller_function,
+                )
+                for r in refs
+            ],
+            key=lambda r: str(r.file_path),
+        )
 
         markdown = _format_references_as_markdown(ref_infos, source_file, project_root, Language.TYPESCRIPT)
 
         expected_markdown = (
-            '```typescript:src/evaluator.ts\n'
-            'function evaluate(expression: string) {\n'
-            '    const bindings = getDynamicBindings(expression);\n'
-            '    return bindings;\n'
-            '}\n'
-            '```\n'
-            '```typescript:src/validator.ts\n'
-            'function validateBindings(input: string) {\n'
-            '    const bindings = getDynamicBindings(input);\n'
-            '    return bindings.length > 0;\n'
-            '}\n'
-            '```\n'
+            "```typescript:src/evaluator.ts\n"
+            "function evaluate(expression: string) {\n"
+            "    const bindings = getDynamicBindings(expression);\n"
+            "    return bindings;\n"
+            "}\n"
+            "```\n"
+            "```typescript:src/validator.ts\n"
+            "function validateBindings(input: string) {\n"
+            "    const bindings = getDynamicBindings(input);\n"
+            "    return bindings.length > 0;\n"
+            "}\n"
+            "```\n"
         )
         assert markdown == expected_markdown
 
@@ -203,30 +202,30 @@ class TestDefaultExports:
 
         # Source file with default export
         (src_dir / "helper.ts").write_text(
-            'function processData(data: any[]) {\n'
-            '    return data.filter(item => item.active);\n'
-            '}\n'
-            '\n'
-            'export default processData;\n'
+            "function processData(data: any[]) {\n"
+            "    return data.filter(item => item.active);\n"
+            "}\n"
+            "\n"
+            "export default processData;\n"
         )
 
         # File that imports the default export
         (src_dir / "main.ts").write_text(
             "import processData from './helper';\n"
-            '\n'
-            'export function handleData(items: any[]) {\n'
-            '    const processed = processData(items);\n'
-            '    return processed.length;\n'
-            '}\n'
+            "\n"
+            "export function handleData(items: any[]) {\n"
+            "    const processed = processData(items);\n"
+            "    return processed.length;\n"
+            "}\n"
         )
 
         # File that imports with a different name
         (src_dir / "alternative.ts").write_text(
             "import myProcessor from './helper';\n"
-            '\n'
-            'export function process(items: any[]) {\n'
-            '    return myProcessor(items);\n'
-            '}\n'
+            "\n"
+            "export function process(items: any[]) {\n"
+            "    return myProcessor(items);\n"
+            "}\n"
         )
 
         return tmp_path
@@ -263,30 +262,38 @@ class TestDefaultExports:
         source_file = project_root / "src" / "helper.ts"
 
         refs = finder.find_references(make_func("processData", source_file))
-        ref_infos = sorted([
-            ReferenceInfo(
-                file_path=r.file_path, line=r.line, column=r.column,
-                end_line=r.end_line, end_column=r.end_column, context=r.context,
-                reference_type=r.reference_type, import_name=r.import_name,
-                caller_function=r.caller_function,
-            )
-            for r in refs
-        ], key=lambda r: str(r.file_path))
+        ref_infos = sorted(
+            [
+                ReferenceInfo(
+                    file_path=r.file_path,
+                    line=r.line,
+                    column=r.column,
+                    end_line=r.end_line,
+                    end_column=r.end_column,
+                    context=r.context,
+                    reference_type=r.reference_type,
+                    import_name=r.import_name,
+                    caller_function=r.caller_function,
+                )
+                for r in refs
+            ],
+            key=lambda r: str(r.file_path),
+        )
 
         markdown = _format_references_as_markdown(ref_infos, source_file, project_root, Language.TYPESCRIPT)
 
         expected_markdown = (
-            '```typescript:src/alternative.ts\n'
-            'function process(items: any[]) {\n'
-            '    return myProcessor(items);\n'
-            '}\n'
-            '```\n'
-            '```typescript:src/main.ts\n'
-            'function handleData(items: any[]) {\n'
-            '    const processed = processData(items);\n'
-            '    return processed.length;\n'
-            '}\n'
-            '```\n'
+            "```typescript:src/alternative.ts\n"
+            "function process(items: any[]) {\n"
+            "    return myProcessor(items);\n"
+            "}\n"
+            "```\n"
+            "```typescript:src/main.ts\n"
+            "function handleData(items: any[]) {\n"
+            "    const processed = processData(items);\n"
+            "    return processed.length;\n"
+            "}\n"
+            "```\n"
         )
         assert markdown == expected_markdown
 
@@ -304,23 +311,21 @@ class TestReExports:
 
         # Original function file
         (utils_dir / "filterUtils.ts").write_text(
-            'export function filterBySearchTerm(items: any[], term: string) {\n'
-            '    return items.filter(i => i.name.includes(term));\n'
-            '}\n'
+            "export function filterBySearchTerm(items: any[], term: string) {\n"
+            "    return items.filter(i => i.name.includes(term));\n"
+            "}\n"
         )
 
         # Index file that re-exports
-        (utils_dir / "index.ts").write_text(
-            "export { filterBySearchTerm } from './filterUtils';\n"
-        )
+        (utils_dir / "index.ts").write_text("export { filterBySearchTerm } from './filterUtils';\n")
 
         # Consumer that imports from index
         (src_dir / "consumer.ts").write_text(
             "import { filterBySearchTerm } from './utils';\n"
-            '\n'
-            'export function searchItems(items: any[], query: string) {\n'
-            '    return filterBySearchTerm(items, query);\n'
-            '}\n'
+            "\n"
+            "export function searchItems(items: any[], query: string) {\n"
+            "    return filterBySearchTerm(items, query);\n"
+            "}\n"
         )
 
         return tmp_path
@@ -352,27 +357,35 @@ class TestReExports:
         source_file = project_root / "src" / "utils" / "filterUtils.ts"
 
         refs = finder.find_references(make_func("filterBySearchTerm", source_file))
-        ref_infos = sorted([
-            ReferenceInfo(
-                file_path=r.file_path, line=r.line, column=r.column,
-                end_line=r.end_line, end_column=r.end_column, context=r.context,
-                reference_type=r.reference_type, import_name=r.import_name,
-                caller_function=r.caller_function,
-            )
-            for r in refs
-        ], key=lambda r: str(r.file_path))
+        ref_infos = sorted(
+            [
+                ReferenceInfo(
+                    file_path=r.file_path,
+                    line=r.line,
+                    column=r.column,
+                    end_line=r.end_line,
+                    end_column=r.end_column,
+                    context=r.context,
+                    reference_type=r.reference_type,
+                    import_name=r.import_name,
+                    caller_function=r.caller_function,
+                )
+                for r in refs
+            ],
+            key=lambda r: str(r.file_path),
+        )
 
         markdown = _format_references_as_markdown(ref_infos, source_file, project_root, Language.TYPESCRIPT)
 
         expected_markdown = (
-            '```typescript:src/consumer.ts\n'
-            'function searchItems(items: any[], query: string) {\n'
-            '    return filterBySearchTerm(items, query);\n'
-            '}\n'
-            '```\n'
-            '```typescript:src/utils/index.ts\n'
+            "```typescript:src/consumer.ts\n"
+            "function searchItems(items: any[], query: string) {\n"
+            "    return filterBySearchTerm(items, query);\n"
+            "}\n"
+            "```\n"
+            "```typescript:src/utils/index.ts\n"
             "export { filterBySearchTerm } from './filterUtils';\n"
-            '```\n'
+            "```\n"
         )
         assert markdown == expected_markdown
 
@@ -388,19 +401,17 @@ class TestCallbackPatterns:
 
         # Helper function
         (src_dir / "transforms.ts").write_text(
-            'export function normalizeItem(item: any) {\n'
-            '    return { ...item, normalized: true };\n'
-            '}\n'
+            "export function normalizeItem(item: any) {\n    return { ...item, normalized: true };\n}\n"
         )
 
         # Consumer using callbacks
         (src_dir / "processor.ts").write_text(
             "import { normalizeItem } from './transforms';\n"
-            '\n'
-            'export function processItems(items: any[]) {\n'
-            '    const normalized = items.map(normalizeItem);\n'
-            '    return normalized;\n'
-            '}\n'
+            "\n"
+            "export function processItems(items: any[]) {\n"
+            "    const normalized = items.map(normalizeItem);\n"
+            "    return normalized;\n"
+            "}\n"
         )
 
         return tmp_path
@@ -430,9 +441,14 @@ class TestCallbackPatterns:
         refs = finder.find_references(make_func("normalizeItem", source_file))
         ref_infos = [
             ReferenceInfo(
-                file_path=r.file_path, line=r.line, column=r.column,
-                end_line=r.end_line, end_column=r.end_column, context=r.context,
-                reference_type=r.reference_type, import_name=r.import_name,
+                file_path=r.file_path,
+                line=r.line,
+                column=r.column,
+                end_line=r.end_line,
+                end_column=r.end_column,
+                context=r.context,
+                reference_type=r.reference_type,
+                import_name=r.import_name,
                 caller_function=r.caller_function,
             )
             for r in refs
@@ -441,12 +457,12 @@ class TestCallbackPatterns:
         markdown = _format_references_as_markdown(ref_infos, source_file, project_root, Language.TYPESCRIPT)
 
         expected_markdown = (
-            '```typescript:src/processor.ts\n'
-            'function processItems(items: any[]) {\n'
-            '    const normalized = items.map(normalizeItem);\n'
-            '    return normalized;\n'
-            '}\n'
-            '```\n'
+            "```typescript:src/processor.ts\n"
+            "function processItems(items: any[]) {\n"
+            "    const normalized = items.map(normalizeItem);\n"
+            "    return normalized;\n"
+            "}\n"
+            "```\n"
         )
         assert expected_markdown == markdown
 
@@ -462,19 +478,17 @@ class TestAliasImports:
 
         # Source file
         (src_dir / "utils.ts").write_text(
-            'export function computeValue(input: number): number {\n'
-            '    return input * 2;\n'
-            '}\n'
+            "export function computeValue(input: number): number {\n    return input * 2;\n}\n"
         )
 
         # File using alias
         (src_dir / "consumer.ts").write_text(
             "import { computeValue as calculate } from './utils';\n"
-            '\n'
-            'export function processNumber(n: number) {\n'
-            '    const result = calculate(n);\n'
-            '    return result + 10;\n'
-            '}\n'
+            "\n"
+            "export function processNumber(n: number) {\n"
+            "    const result = calculate(n);\n"
+            "    return result + 10;\n"
+            "}\n"
         )
 
         return tmp_path
@@ -504,9 +518,14 @@ class TestAliasImports:
         refs = finder.find_references(make_func("computeValue", source_file))
         ref_infos = [
             ReferenceInfo(
-                file_path=r.file_path, line=r.line, column=r.column,
-                end_line=r.end_line, end_column=r.end_column, context=r.context,
-                reference_type=r.reference_type, import_name=r.import_name,
+                file_path=r.file_path,
+                line=r.line,
+                column=r.column,
+                end_line=r.end_line,
+                end_column=r.end_column,
+                context=r.context,
+                reference_type=r.reference_type,
+                import_name=r.import_name,
                 caller_function=r.caller_function,
             )
             for r in refs
@@ -515,12 +534,12 @@ class TestAliasImports:
         markdown = _format_references_as_markdown(ref_infos, source_file, project_root, Language.TYPESCRIPT)
 
         expected_markdown = (
-            '```typescript:src/consumer.ts\n'
-            'function processNumber(n: number) {\n'
-            '    const result = calculate(n);\n'
-            '    return result + 10;\n'
-            '}\n'
-            '```\n'
+            "```typescript:src/consumer.ts\n"
+            "function processNumber(n: number) {\n"
+            "    const result = calculate(n);\n"
+            "    return result + 10;\n"
+            "}\n"
+            "```\n"
         )
         assert expected_markdown == markdown
 
@@ -536,18 +555,16 @@ class TestNamespaceImports:
 
         # Source file with multiple exports
         (src_dir / "mathUtils.ts").write_text(
-            'export function add(a: number, b: number): number {\n'
-            '    return a + b;\n'
-            '}\n'
+            "export function add(a: number, b: number): number {\n    return a + b;\n}\n"
         )
 
         # File using namespace import
         (src_dir / "calculator.ts").write_text(
             "import * as MathUtils from './mathUtils';\n"
-            '\n'
-            'export function calculate(a: number, b: number) {\n'
-            '    return MathUtils.add(a, b);\n'
-            '}\n'
+            "\n"
+            "export function calculate(a: number, b: number) {\n"
+            "    return MathUtils.add(a, b);\n"
+            "}\n"
         )
 
         return tmp_path
@@ -576,9 +593,14 @@ class TestNamespaceImports:
         refs = finder.find_references(make_func("add", source_file))
         ref_infos = [
             ReferenceInfo(
-                file_path=r.file_path, line=r.line, column=r.column,
-                end_line=r.end_line, end_column=r.end_column, context=r.context,
-                reference_type=r.reference_type, import_name=r.import_name,
+                file_path=r.file_path,
+                line=r.line,
+                column=r.column,
+                end_line=r.end_line,
+                end_column=r.end_column,
+                context=r.context,
+                reference_type=r.reference_type,
+                import_name=r.import_name,
                 caller_function=r.caller_function,
             )
             for r in refs
@@ -587,11 +609,11 @@ class TestNamespaceImports:
         markdown = _format_references_as_markdown(ref_infos, source_file, project_root, Language.TYPESCRIPT)
 
         expected_markdown = (
-            '```typescript:src/calculator.ts\n'
-            'function calculate(a: number, b: number) {\n'
-            '    return MathUtils.add(a, b);\n'
-            '}\n'
-            '```\n'
+            "```typescript:src/calculator.ts\n"
+            "function calculate(a: number, b: number) {\n"
+            "    return MathUtils.add(a, b);\n"
+            "}\n"
+            "```\n"
         )
         assert expected_markdown == markdown
 
@@ -607,21 +629,19 @@ class TestMemoizedFunctions:
 
         # Source file with function to be memoized
         (src_dir / "expensive.ts").write_text(
-            'export function computeExpensive(x: number): number {\n'
-            '    return x * x;\n'
-            '}\n'
+            "export function computeExpensive(x: number): number {\n    return x * x;\n}\n"
         )
 
         # File that memoizes the function
         (src_dir / "memoized.ts").write_text(
             "import memoize from 'micro-memoize';\n"
             "import { computeExpensive } from './expensive';\n"
-            '\n'
-            'export const memoizedCompute = memoize(computeExpensive);\n'
-            '\n'
-            'export function process(x: number) {\n'
-            '    return computeExpensive(x) + memoizedCompute(x);\n'
-            '}\n'
+            "\n"
+            "export const memoizedCompute = memoize(computeExpensive);\n"
+            "\n"
+            "export function process(x: number) {\n"
+            "    return computeExpensive(x) + memoizedCompute(x);\n"
+            "}\n"
         )
 
         return tmp_path
@@ -659,10 +679,10 @@ class TestSameFileReferences:
 
         # File with internal references
         (src_dir / "recursive.ts").write_text(
-            'export function factorial(n: number): number {\n'
-            '    if (n <= 1) return 1;\n'
-            '    return n * factorial(n - 1);\n'
-            '}\n'
+            "export function factorial(n: number): number {\n"
+            "    if (n <= 1) return 1;\n"
+            "    return n * factorial(n - 1);\n"
+            "}\n"
         )
 
         return tmp_path
@@ -697,24 +717,20 @@ class TestComplexMultiFileScenarios:
 
         # Core utility function
         (src_dir / "utils" / "widgetUtils.ts").write_text(
-            'export function isLargeWidget(type: string): boolean {\n'
-            "    return ['TABLE', 'LIST'].includes(type);\n"
-            '}\n'
+            "export function isLargeWidget(type: string): boolean {\n    return ['TABLE', 'LIST'].includes(type);\n}\n"
         )
 
         # Re-export from index
-        (src_dir / "utils" / "index.ts").write_text(
-            "export { isLargeWidget } from './widgetUtils';\n"
-        )
+        (src_dir / "utils" / "index.ts").write_text("export { isLargeWidget } from './widgetUtils';\n")
 
         # Component using the function via re-export
         (src_dir / "components" / "Widget.tsx").write_text(
             "import { isLargeWidget } from '../utils';\n"
-            '\n'
-            'export function Widget({ type }: { type: string }) {\n'
-            '    const isLarge = isLargeWidget(type);\n'
-            '    return isLarge;\n'
-            '}\n'
+            "\n"
+            "export function Widget({ type }: { type: string }) {\n"
+            "    const isLarge = isLargeWidget(type);\n"
+            "    return isLarge;\n"
+            "}\n"
         )
 
         return tmp_path
@@ -745,28 +761,36 @@ class TestComplexMultiFileScenarios:
         source_file = project_root / "src" / "utils" / "widgetUtils.ts"
 
         refs = finder.find_references(make_func("isLargeWidget", source_file))
-        ref_infos = sorted([
-            ReferenceInfo(
-                file_path=r.file_path, line=r.line, column=r.column,
-                end_line=r.end_line, end_column=r.end_column, context=r.context,
-                reference_type=r.reference_type, import_name=r.import_name,
-                caller_function=r.caller_function,
-            )
-            for r in refs
-        ], key=lambda r: str(r.file_path))
+        ref_infos = sorted(
+            [
+                ReferenceInfo(
+                    file_path=r.file_path,
+                    line=r.line,
+                    column=r.column,
+                    end_line=r.end_line,
+                    end_column=r.end_column,
+                    context=r.context,
+                    reference_type=r.reference_type,
+                    import_name=r.import_name,
+                    caller_function=r.caller_function,
+                )
+                for r in refs
+            ],
+            key=lambda r: str(r.file_path),
+        )
 
         markdown = _format_references_as_markdown(ref_infos, source_file, project_root, Language.TYPESCRIPT)
 
         expected_markdown = (
-            '```typescript:src/components/Widget.tsx\n'
-            'function Widget({ type }: { type: string }) {\n'
-            '    const isLarge = isLargeWidget(type);\n'
-            '    return isLarge;\n'
-            '}\n'
-            '```\n'
-            '```typescript:src/utils/index.ts\n'
+            "```typescript:src/components/Widget.tsx\n"
+            "function Widget({ type }: { type: string }) {\n"
+            "    const isLarge = isLargeWidget(type);\n"
+            "    return isLarge;\n"
+            "}\n"
+            "```\n"
+            "```typescript:src/utils/index.ts\n"
             "export { isLargeWidget } from './widgetUtils';\n"
-            '```\n'
+            "```\n"
         )
         assert markdown == expected_markdown
 
@@ -794,13 +818,13 @@ class TestEdgeCases:
         """Test handling of non-exported function."""
         # Create a file with non-exported function
         (project_root / "src" / "private.ts").write_text(
-            'function internalHelper() {\n'
-            '    return 42;\n'
-            '}\n'
-            '\n'
-            'export function publicFunction() {\n'
-            '    return internalHelper();\n'
-            '}\n'
+            "function internalHelper() {\n"
+            "    return 42;\n"
+            "}\n"
+            "\n"
+            "export function publicFunction() {\n"
+            "    return internalHelper();\n"
+            "}\n"
         )
 
         finder = ReferenceFinder(project_root)
@@ -824,7 +848,9 @@ class TestEdgeCases:
 
     def test_format_references_empty_list(self, project_root):
         """Test _format_references_as_markdown with empty list."""
-        markdown = _format_references_as_markdown([], project_root / "src" / "file.ts", project_root, Language.TYPESCRIPT)
+        markdown = _format_references_as_markdown(
+            [], project_root / "src" / "file.ts", project_root, Language.TYPESCRIPT
+        )
         assert markdown == ""
 
 
@@ -839,22 +865,22 @@ class TestCommonJSPatterns:
 
         # CommonJS module
         (src_dir / "helpers.js").write_text(
-            'function processConfig(config) {\n'
-            '    return { ...config, processed: true };\n'
-            '}\n'
-            '\n'
-            'module.exports = { processConfig };\n'
+            "function processConfig(config) {\n"
+            "    return { ...config, processed: true };\n"
+            "}\n"
+            "\n"
+            "module.exports = { processConfig };\n"
         )
 
         # Consumer using destructured require
         (src_dir / "main.js").write_text(
             "const { processConfig } = require('./helpers');\n"
-            '\n'
-            'function handleConfig(config) {\n'
-            '    return processConfig(config);\n'
-            '}\n'
-            '\n'
-            'module.exports = handleConfig;\n'
+            "\n"
+            "function handleConfig(config) {\n"
+            "    return processConfig(config);\n"
+            "}\n"
+            "\n"
+            "module.exports = handleConfig;\n"
         )
 
         return tmp_path
@@ -879,24 +905,28 @@ class TestCommonJSPatterns:
         source_file = project_root / "src" / "helpers.js"
 
         refs = finder.find_references(make_func("processConfig", source_file))
-        ref_infos = sorted([
-            ReferenceInfo(
-                file_path=r.file_path, line=r.line, column=r.column,
-                end_line=r.end_line, end_column=r.end_column, context=r.context,
-                reference_type=r.reference_type, import_name=r.import_name,
-                caller_function=r.caller_function,
-            )
-            for r in refs
-        ], key=lambda r: str(r.file_path))
+        ref_infos = sorted(
+            [
+                ReferenceInfo(
+                    file_path=r.file_path,
+                    line=r.line,
+                    column=r.column,
+                    end_line=r.end_line,
+                    end_column=r.end_column,
+                    context=r.context,
+                    reference_type=r.reference_type,
+                    import_name=r.import_name,
+                    caller_function=r.caller_function,
+                )
+                for r in refs
+            ],
+            key=lambda r: str(r.file_path),
+        )
 
         markdown = _format_references_as_markdown(ref_infos, source_file, project_root, Language.JAVASCRIPT)
 
         expected_markdown = (
-            '```javascript:src/main.js\n'
-            'function handleConfig(config) {\n'
-            '    return processConfig(config);\n'
-            '}\n'
-            '```\n'
+            "```javascript:src/main.js\nfunction handleConfig(config) {\n    return processConfig(config);\n}\n```\n"
         )
         assert markdown == expected_markdown
 
@@ -910,18 +940,10 @@ class TestConvenienceFunction:
         src_dir = tmp_path / "src"
         src_dir.mkdir()
 
-        (src_dir / "utils.ts").write_text(
-            'export function helper() {\n'
-            '    return 42;\n'
-            '}\n'
-        )
+        (src_dir / "utils.ts").write_text("export function helper() {\n    return 42;\n}\n")
 
         (src_dir / "main.ts").write_text(
-            "import { helper } from './utils';\n"
-            '\n'
-            'export function main() {\n'
-            '    return helper();\n'
-            '}\n'
+            "import { helper } from './utils';\n\nexport function main() {\n    return helper();\n}\n"
         )
 
         return tmp_path
@@ -988,10 +1010,7 @@ class TestExportedFunctionDataclass:
     def test_exported_function_named(self, tmp_path):
         """Test ExportedFunction for named export."""
         exp = ExportedFunction(
-            function_name="myHelper",
-            export_name="myHelper",
-            is_default=False,
-            file_path=tmp_path / "utils.ts",
+            function_name="myHelper", export_name="myHelper", is_default=False, file_path=tmp_path / "utils.ts"
         )
 
         assert exp.function_name == "myHelper"
@@ -1002,10 +1021,7 @@ class TestExportedFunctionDataclass:
     def test_exported_function_default(self, tmp_path):
         """Test ExportedFunction for default export."""
         exp = ExportedFunction(
-            function_name="processData",
-            export_name="default",
-            is_default=True,
-            file_path=tmp_path / "processor.ts",
+            function_name="processData", export_name="default", is_default=True, file_path=tmp_path / "processor.ts"
         )
 
         assert exp.function_name == "processData"
@@ -1046,23 +1062,19 @@ class TestEdgeCasesAdvanced:
 
         # Create circular import structure
         (src_dir / "a.ts").write_text(
-            "import { funcB } from './b';\n"
-            '\n'
-            'export function funcA() {\n'
-            '    return funcB() + 1;\n'
-            '}\n'
+            "import { funcB } from './b';\n\nexport function funcA() {\n    return funcB() + 1;\n}\n"
         )
 
         (src_dir / "b.ts").write_text(
             "import { funcA } from './a';\n"
-            '\n'
-            'export function funcB() {\n'
-            '    return 42;\n'
-            '}\n'
-            '\n'
-            'export function callsA() {\n'
-            '    return funcA();\n'
-            '}\n'
+            "\n"
+            "export function funcB() {\n"
+            "    return 42;\n"
+            "}\n"
+            "\n"
+            "export function callsA() {\n"
+            "    return funcA();\n"
+            "}\n"
         )
 
         finder = ReferenceFinder(project_root)
@@ -1080,19 +1092,11 @@ class TestEdgeCasesAdvanced:
         """Test that syntax errors in files are handled gracefully."""
         src_dir = project_root / "src"
 
-        (src_dir / "valid.ts").write_text(
-            'export function validFunction() {\n'
-            '    return 42;\n'
-            '}\n'
-        )
+        (src_dir / "valid.ts").write_text("export function validFunction() {\n    return 42;\n}\n")
 
         # Create a file with syntax error
         (src_dir / "invalid.ts").write_text(
-            "import { validFunction } from './valid';\n"
-            '\n'
-            'export function broken( {\n'
-            '    return validFunction(\n'
-            '}\n'
+            "import { validFunction } from './valid';\n\nexport function broken( {\n    return validFunction(\n}\n"
         )
 
         finder = ReferenceFinder(project_root)

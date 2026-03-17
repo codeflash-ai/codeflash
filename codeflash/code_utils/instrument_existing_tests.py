@@ -709,6 +709,7 @@ def inject_profiling_into_existing_test(
     tests_project_root: Path,
     mode: TestingMode = TestingMode.BEHAVIOR,
 ) -> tuple[bool, str | None]:
+    tests_project_root = tests_project_root.resolve()
     if function_to_optimize.is_async:
         return inject_async_profiling_into_existing_test(
             test_path, call_positions, function_to_optimize, tests_project_root, mode

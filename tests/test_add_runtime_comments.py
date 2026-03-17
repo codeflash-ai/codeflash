@@ -4,7 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from codeflash.code_utils.edit_generated_tests import add_runtime_comments_to_generated_tests
+from codeflash.languages.python.static_analysis.edit_generated_tests import add_runtime_comments_to_generated_tests
 from codeflash.models.models import (
     FunctionTestInvocation,
     GeneratedTests,

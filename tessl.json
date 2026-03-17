@@ -20,7 +20,7 @@
       "version": "0.13.0"
     },
     "tessl/pypi-pydantic": {
-      "version": "1.10.0"
+      "version": "2.11.0"
     },
     "tessl/pypi-humanize": {
       "version": "4.13.0"
@@ -35,7 +35,7 @@
       "version": "3.4.0"
     },
     "tessl/pypi-sentry-sdk": {
-      "version": "1.45.0"
+      "version": "2.36.0"
     },
     "tessl/pypi-parameterized": {
       "version": "0.9.0"
@@ -44,10 +44,10 @@
       "version": "0.4.0"
     },
     "tessl/pypi-rich": {
-      "version": "13.9.0"
+      "version": "14.1.0"
     },
     "tessl/pypi-lxml": {
-      "version": "5.4.0"
+      "version": "6.0.0"
     },
     "tessl/pypi-crosshair-tool": {
       "version": "0.0.0"
@@ -64,17 +64,20 @@
     "tessl/pypi-filelock": {
       "version": "3.19.0"
     },
-    "codeflash/codeflash-rules": {
-      "version": "0.1.0"
+    "tessl/pypi-ipython": {
+      "version": "9.5.0"
     },
-    "codeflash/codeflash-docs": {
-      "version": "0.1.0"
+    "tessl/pypi-mypy": {
+      "version": "1.17.0"
     },
-    "codeflash/codeflash-skills": {
-      "version": "0.2.0"
+    "tessl/pypi-ty": {
+      "version": "0.0.0"
     },
-    "tessl-labs/tessl-skill-eval-scenarios": {
-      "version": "0.0.5"
+    "tessl/pypi-types-jsonschema": {
+      "version": "3.2.0"
+    },
+    "tessl/pypi-uv": {
+      "version": "0.8.0"
     }
   }
 }

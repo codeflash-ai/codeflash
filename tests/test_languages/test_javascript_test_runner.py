@@ -1,5 +1,6 @@
 """Tests for JavaScript/Jest test runner functionality."""
 
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -8,28 +9,23 @@ import pytest
 
 
 class TestJestRootsConfiguration:
-    """Tests for Jest --roots flag handling."""
+    """Tests for Jest runtime config creation when test files are outside the project root."""
 
-    def test_behavioral_tests_adds_roots_for_test_directories(self):
-        """Test that run_jest_behavioral_tests adds --roots for test directories."""
-        from codeflash.languages.javascript.test_runner import run_jest_behavioral_tests
+    def test_no_runtime_config_when_tests_inside_project_root(self):
+        """Test that no runtime config is created when test files are inside the project root."""
+        from codeflash.languages.javascript.test_runner import clear_created_config_files, get_created_config_files, run_jest_behavioral_tests
         from codeflash.models.models import TestFile, TestFiles
         from codeflash.models.test_type import TestType
 
-        # Create mock test files in a test directory
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir).resolve()
             test_dir = tmpdir_path / "test"
             test_dir.mkdir()
 
-            # Create package.json to simulate a Node project
             (tmpdir_path / "package.json").write_text('{"name": "test"}')
 
-            # Create mock test files
             test_file1 = test_dir / "test_func__unit_test_0.test.ts"
-            test_file2 = test_dir / "test_func__unit_test_1.test.ts"
             test_file1.write_text("// test 1")
-            test_file2.write_text("// test 2")
 
             mock_test_files = TestFiles(
                 test_files=[
@@ -39,16 +35,11 @@ class TestJestRootsConfiguration:
                         benchmarking_file_path=test_file1,
                         test_type=TestType.GENERATED_REGRESSION,
                     ),
-                    TestFile(
-                        original_file_path=test_file2,
-                        instrumented_behavior_file_path=test_file2,
-                        benchmarking_file_path=test_file2,
-                        test_type=TestType.GENERATED_REGRESSION,
-                    ),
                 ]
             )
 
-            # Mock subprocess.run to capture the command
+            clear_created_config_files()
+
             with patch("subprocess.run") as mock_run:
                 mock_result = MagicMock()
                 mock_result.stdout = ""
@@ -64,39 +55,90 @@ class TestJestRootsConfiguration:
                         project_root=tmpdir_path,
                     )
                 except Exception:
-                    pass  # Expected to fail since no real Jest
+                    pass
 
-                # Verify the command included --roots
                 if mock_run.called:
-                    call_args = mock_run.call_args
-                    cmd = call_args[0][0]
+                    cmd = mock_run.call_args[0][0]
+                    # No --roots flags should be present
+                    assert "--roots" not in cmd, "Should not have --roots flags when tests are inside project root"
+                    # No runtime config should have been created
+                    runtime_configs = [f for f in get_created_config_files() if "codeflash.runtime" in f.name]
+                    assert len(runtime_configs) == 0, "Should not create runtime config when tests are inside project root"
 
-                    # Find --roots flags in the command
-                    roots_flags = []
-                    for i, arg in enumerate(cmd):
-                        if arg == "--roots" and i + 1 < len(cmd):
-                            roots_flags.append(cmd[i + 1])
+            clear_created_config_files()
 
-                    # Should have added the test directory as a root
-                    assert len(roots_flags) > 0, "Expected --roots flag in Jest command"
-                    assert str(test_dir) in roots_flags or any(
-                        str(test_dir) in root for root in roots_flags
-                    ), f"Expected test directory {test_dir} in --roots flags: {roots_flags}"
-
-    def test_benchmarking_tests_adds_roots_for_test_directories(self):
-        """Test that run_jest_benchmarking_tests adds --roots for test directories."""
-        from codeflash.languages.javascript.test_runner import run_jest_benchmarking_tests
+    def test_behavioral_tests_creates_runtime_config_for_external_tests(self):
+        """Test that run_jest_behavioral_tests creates a runtime config when tests are outside the project root."""
+        from codeflash.languages.javascript.test_runner import clear_created_config_files, get_created_config_files, run_jest_behavioral_tests
         from codeflash.models.models import TestFile, TestFiles
         from codeflash.models.test_type import TestType
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir_path = Path(tmpdir).resolve()
-            test_dir = tmpdir_path / "test"
-            test_dir.mkdir()
+        with tempfile.TemporaryDirectory() as project_dir, tempfile.TemporaryDirectory() as external_dir:
+            project_path = Path(project_dir).resolve()
+            external_path = Path(external_dir).resolve()
 
-            (tmpdir_path / "package.json").write_text('{"name": "test"}')
+            (project_path / "package.json").write_text('{"name": "test"}')
 
-            test_file = test_dir / "test_func__perf_test_0.test.ts"
+            test_file = external_path / "test_func__unit_test_0.test.ts"
+            test_file.write_text("// test 1")
+
+            mock_test_files = TestFiles(
+                test_files=[
+                    TestFile(
+                        original_file_path=test_file,
+                        instrumented_behavior_file_path=test_file,
+                        benchmarking_file_path=test_file,
+                        test_type=TestType.GENERATED_REGRESSION,
+                    ),
+                ]
+            )
+
+            clear_created_config_files()
+
+            with patch("subprocess.run") as mock_run:
+                mock_result = MagicMock()
+                mock_result.stdout = ""
+                mock_result.stderr = ""
+                mock_result.returncode = 1
+                mock_run.return_value = mock_result
+
+                try:
+                    run_jest_behavioral_tests(
+                        test_paths=mock_test_files,
+                        test_env={},
+                        cwd=project_path,
+                        project_root=project_path,
+                    )
+                except Exception:
+                    pass
+
+                if mock_run.called:
+                    cmd = mock_run.call_args[0][0]
+                    config_args = [arg for arg in cmd if arg.startswith("--config=")]
+                    assert any("codeflash.runtime" in arg for arg in config_args), (
+                        f"Expected runtime config in --config flag, got: {config_args}"
+                    )
+
+                runtime_configs = [f for f in get_created_config_files() if "codeflash.runtime" in f.name]
+                assert len(runtime_configs) == 1, f"Expected 1 runtime config, got {len(runtime_configs)}"
+                config_content = runtime_configs[0].read_text(encoding="utf-8")
+                assert str(external_path) in config_content, "Runtime config should contain external test directory"
+
+            clear_created_config_files()
+
+    def test_benchmarking_tests_creates_runtime_config_for_external_tests(self):
+        """Test that run_jest_benchmarking_tests creates a runtime config when tests are outside the project root."""
+        from codeflash.languages.javascript.test_runner import clear_created_config_files, get_created_config_files, run_jest_benchmarking_tests
+        from codeflash.models.models import TestFile, TestFiles
+        from codeflash.models.test_type import TestType
+
+        with tempfile.TemporaryDirectory() as project_dir, tempfile.TemporaryDirectory() as external_dir:
+            project_path = Path(project_dir).resolve()
+            external_path = Path(external_dir).resolve()
+
+            (project_path / "package.json").write_text('{"name": "test"}')
+
+            test_file = external_path / "test_func__perf_test_0.test.ts"
             test_file.write_text("// perf test")
 
             mock_test_files = TestFiles(
@@ -110,6 +152,8 @@ class TestJestRootsConfiguration:
                 ]
             )
 
+            clear_created_config_files()
+
             with patch("subprocess.run") as mock_run:
                 mock_result = MagicMock()
                 mock_result.stdout = ""
@@ -121,37 +165,30 @@ class TestJestRootsConfiguration:
                     run_jest_benchmarking_tests(
                         test_paths=mock_test_files,
                         test_env={},
-                        cwd=tmpdir_path,
-                        project_root=tmpdir_path,
+                        cwd=project_path,
+                        project_root=project_path,
                     )
                 except Exception:
                     pass
 
-                if mock_run.called:
-                    call_args = mock_run.call_args
-                    cmd = call_args[0][0]
+                runtime_configs = [f for f in get_created_config_files() if "codeflash.runtime" in f.name]
+                assert len(runtime_configs) == 1, "Expected runtime config for external test files"
 
-                    roots_flags = []
-                    for i, arg in enumerate(cmd):
-                        if arg == "--roots" and i + 1 < len(cmd):
-                            roots_flags.append(cmd[i + 1])
+            clear_created_config_files()
 
-                    assert len(roots_flags) > 0, "Expected --roots flag in Jest command"
-
-    def test_line_profile_tests_adds_roots_for_test_directories(self):
-        """Test that run_jest_line_profile_tests adds --roots for test directories."""
-        from codeflash.languages.javascript.test_runner import run_jest_line_profile_tests
+    def test_line_profile_tests_creates_runtime_config_for_external_tests(self):
+        """Test that run_jest_line_profile_tests creates a runtime config when tests are outside the project root."""
+        from codeflash.languages.javascript.test_runner import clear_created_config_files, get_created_config_files, run_jest_line_profile_tests
         from codeflash.models.models import TestFile, TestFiles
         from codeflash.models.test_type import TestType
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir_path = Path(tmpdir)
-            test_dir = tmpdir_path / "test"
-            test_dir.mkdir()
+        with tempfile.TemporaryDirectory() as project_dir, tempfile.TemporaryDirectory() as external_dir:
+            project_path = Path(project_dir).resolve()
+            external_path = Path(external_dir).resolve()
 
-            (tmpdir_path / "package.json").write_text('{"name": "test"}')
+            (project_path / "package.json").write_text('{"name": "test"}')
 
-            test_file = test_dir / "test_func__line_profile.test.ts"
+            test_file = external_path / "test_func__line_profile.test.ts"
             test_file.write_text("// line profile test")
 
             mock_test_files = TestFiles(
@@ -165,6 +202,8 @@ class TestJestRootsConfiguration:
                 ]
             )
 
+            clear_created_config_files()
+
             with patch("subprocess.run") as mock_run:
                 mock_result = MagicMock()
                 mock_result.stdout = ""
@@ -176,88 +215,16 @@ class TestJestRootsConfiguration:
                     run_jest_line_profile_tests(
                         test_paths=mock_test_files,
                         test_env={},
-                        cwd=tmpdir_path,
-                        project_root=tmpdir_path,
+                        cwd=project_path,
+                        project_root=project_path,
                     )
                 except Exception:
                     pass
 
-                if mock_run.called:
-                    call_args = mock_run.call_args
-                    cmd = call_args[0][0]
+                runtime_configs = [f for f in get_created_config_files() if "codeflash.runtime" in f.name]
+                assert len(runtime_configs) == 1, "Expected runtime config for external test files"
 
-                    roots_flags = []
-                    for i, arg in enumerate(cmd):
-                        if arg == "--roots" and i + 1 < len(cmd):
-                            roots_flags.append(cmd[i + 1])
-
-                    assert len(roots_flags) > 0, "Expected --roots flag in Jest command"
-
-    def test_multiple_test_directories_all_added_to_roots(self):
-        """Test that multiple test directories are all added as --roots."""
-        from codeflash.languages.javascript.test_runner import run_jest_behavioral_tests
-        from codeflash.models.models import TestFile, TestFiles
-        from codeflash.models.test_type import TestType
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir_path = Path(tmpdir)
-            test_dir1 = tmpdir_path / "test"
-            test_dir2 = tmpdir_path / "spec"
-            test_dir1.mkdir()
-            test_dir2.mkdir()
-
-            (tmpdir_path / "package.json").write_text('{"name": "test"}')
-
-            test_file1 = test_dir1 / "test_func__unit_test_0.test.ts"
-            test_file2 = test_dir2 / "test_func__unit_test_1.test.ts"
-            test_file1.write_text("// test 1")
-            test_file2.write_text("// test 2")
-
-            mock_test_files = TestFiles(
-                test_files=[
-                    TestFile(
-                        original_file_path=test_file1,
-                        instrumented_behavior_file_path=test_file1,
-                        benchmarking_file_path=test_file1,
-                        test_type=TestType.GENERATED_REGRESSION,
-                    ),
-                    TestFile(
-                        original_file_path=test_file2,
-                        instrumented_behavior_file_path=test_file2,
-                        benchmarking_file_path=test_file2,
-                        test_type=TestType.GENERATED_REGRESSION,
-                    ),
-                ]
-            )
-
-            with patch("subprocess.run") as mock_run:
-                mock_result = MagicMock()
-                mock_result.stdout = ""
-                mock_result.stderr = ""
-                mock_result.returncode = 1
-                mock_run.return_value = mock_result
-
-                try:
-                    run_jest_behavioral_tests(
-                        test_paths=mock_test_files,
-                        test_env={},
-                        cwd=tmpdir_path,
-                        project_root=tmpdir_path,
-                    )
-                except Exception:
-                    pass
-
-                if mock_run.called:
-                    call_args = mock_run.call_args
-                    cmd = call_args[0][0]
-
-                    roots_flags = []
-                    for i, arg in enumerate(cmd):
-                        if arg == "--roots" and i + 1 < len(cmd):
-                            roots_flags.append(cmd[i + 1])
-
-                    # Should have two --roots flags (one for each directory)
-                    assert len(roots_flags) == 2, f"Expected 2 --roots flags, got {len(roots_flags)}"
+            clear_created_config_files()
 
 
 class TestVitestTimeoutConfiguration:
@@ -728,3 +695,373 @@ class TestBundlerModuleResolutionFix:
             # Verify codeflash configs were NOT created
             assert not (tmpdir_path / "jest.codeflash.config.js").exists()
             assert not (tmpdir_path / "tsconfig.codeflash.json").exists()
+
+
+class TestBundledJestReporter:
+    """Tests for the bundled codeflash/jest-reporter.
+
+    Verifies that:
+    1. The reporter JS file exists in the runtime package
+    2. Jest commands reference 'codeflash/jest-reporter' (not jest-junit)
+    3. The reporter produces valid JUnit XML
+    4. The CODEFLASH_JEST_REPORTER constant is correct
+    """
+
+    def test_reporter_js_file_exists(self):
+        """The jest-reporter.js file must exist in the runtime directory."""
+        reporter_path = Path(__file__).resolve().parents[2] / "packages" / "codeflash" / "runtime" / "jest-reporter.js"
+        assert reporter_path.exists(), f"jest-reporter.js not found at {reporter_path}"
+
+    def test_reporter_constant_value(self):
+        """CODEFLASH_JEST_REPORTER should be 'codeflash/jest-reporter'."""
+        from codeflash.languages.javascript.test_runner import CODEFLASH_JEST_REPORTER
+
+        assert CODEFLASH_JEST_REPORTER == "codeflash/jest-reporter"
+
+    def test_behavioral_command_uses_bundled_reporter(self):
+        """run_jest_behavioral_tests should use codeflash/jest-reporter in --reporters flag."""
+        from codeflash.languages.javascript.test_runner import run_jest_behavioral_tests
+        from codeflash.models.models import TestFile, TestFiles
+        from codeflash.models.test_type import TestType
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            (tmpdir_path / "package.json").write_text('{"name": "test"}')
+            test_dir = tmpdir_path / "test"
+            test_dir.mkdir()
+            test_file = test_dir / "test_func.test.js"
+            test_file.write_text("// test")
+
+            mock_test_files = TestFiles(
+                test_files=[
+                    TestFile(
+                        original_file_path=test_file,
+                        instrumented_behavior_file_path=test_file,
+                        benchmarking_file_path=test_file,
+                        test_type=TestType.GENERATED_REGRESSION,
+                    ),
+                ]
+            )
+
+            with patch("subprocess.run") as mock_run:
+                mock_result = MagicMock()
+                mock_result.stdout = ""
+                mock_result.stderr = ""
+                mock_result.returncode = 1
+                mock_run.return_value = mock_result
+
+                try:
+                    run_jest_behavioral_tests(
+                        test_paths=mock_test_files,
+                        test_env={},
+                        cwd=tmpdir_path,
+                        project_root=tmpdir_path,
+                    )
+                except Exception:
+                    pass
+
+                if mock_run.called:
+                    cmd = mock_run.call_args[0][0]
+                    reporter_args = [a for a in cmd if "--reporters=" in a and "jest-reporter" in a]
+                    assert len(reporter_args) == 1, f"Expected exactly one codeflash/jest-reporter flag, got: {reporter_args}"
+                    assert reporter_args[0] == "--reporters=codeflash/jest-reporter"
+                    # Must NOT reference jest-junit
+                    jest_junit_args = [a for a in cmd if "jest-junit" in a]
+                    assert len(jest_junit_args) == 0, f"Should not reference jest-junit: {jest_junit_args}"
+
+    def test_benchmarking_command_uses_bundled_reporter(self):
+        """run_jest_benchmarking_tests should use codeflash/jest-reporter."""
+        from codeflash.languages.javascript.test_runner import run_jest_benchmarking_tests
+        from codeflash.models.models import TestFile, TestFiles
+        from codeflash.models.test_type import TestType
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            (tmpdir_path / "package.json").write_text('{"name": "test"}')
+            test_dir = tmpdir_path / "test"
+            test_dir.mkdir()
+            test_file = test_dir / "test_func__perf.test.js"
+            test_file.write_text("// test")
+
+            mock_test_files = TestFiles(
+                test_files=[
+                    TestFile(
+                        original_file_path=test_file,
+                        instrumented_behavior_file_path=test_file,
+                        benchmarking_file_path=test_file,
+                        test_type=TestType.GENERATED_REGRESSION,
+                    ),
+                ]
+            )
+
+            with patch("subprocess.run") as mock_run:
+                mock_result = MagicMock()
+                mock_result.stdout = ""
+                mock_result.stderr = ""
+                mock_result.returncode = 1
+                mock_run.return_value = mock_result
+
+                try:
+                    run_jest_benchmarking_tests(
+                        test_paths=mock_test_files,
+                        test_env={},
+                        cwd=tmpdir_path,
+                        project_root=tmpdir_path,
+                    )
+                except Exception:
+                    pass
+
+                if mock_run.called:
+                    cmd = mock_run.call_args[0][0]
+                    reporter_args = [a for a in cmd if "--reporters=codeflash/jest-reporter" in a]
+                    assert len(reporter_args) == 1
+
+    def test_line_profile_command_uses_bundled_reporter(self):
+        """run_jest_line_profile_tests should use codeflash/jest-reporter."""
+        from codeflash.languages.javascript.test_runner import run_jest_line_profile_tests
+        from codeflash.models.models import TestFile, TestFiles
+        from codeflash.models.test_type import TestType
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            (tmpdir_path / "package.json").write_text('{"name": "test"}')
+            test_dir = tmpdir_path / "test"
+            test_dir.mkdir()
+            test_file = test_dir / "test_func__line.test.js"
+            test_file.write_text("// test")
+
+            mock_test_files = TestFiles(
+                test_files=[
+                    TestFile(
+                        original_file_path=test_file,
+                        instrumented_behavior_file_path=test_file,
+                        benchmarking_file_path=test_file,
+                        test_type=TestType.GENERATED_REGRESSION,
+                    ),
+                ]
+            )
+
+            with patch("subprocess.run") as mock_run:
+                mock_result = MagicMock()
+                mock_result.stdout = ""
+                mock_result.stderr = ""
+                mock_result.returncode = 1
+                mock_run.return_value = mock_result
+
+                try:
+                    run_jest_line_profile_tests(
+                        test_paths=mock_test_files,
+                        test_env={},
+                        cwd=tmpdir_path,
+                        project_root=tmpdir_path,
+                    )
+                except Exception:
+                    pass
+
+                if mock_run.called:
+                    cmd = mock_run.call_args[0][0]
+                    reporter_args = [a for a in cmd if "--reporters=codeflash/jest-reporter" in a]
+                    assert len(reporter_args) == 1
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="Node.js subprocess pipe behavior unreliable on Windows CI")
+    def test_reporter_produces_valid_junit_xml(self):
+        """The reporter JS should produce JUnit XML parseable by junitparser."""
+        import subprocess
+
+        reporter_path = Path(__file__).resolve().parents[2] / "packages" / "codeflash" / "runtime" / "jest-reporter.js"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_file = Path(tmpdir) / "results.xml"
+
+            # Create a Node.js script that exercises the reporter with mock data
+            test_script = Path(tmpdir) / "test_reporter.js"
+            reporter_path_js = reporter_path.as_posix()
+            output_file_js = output_file.as_posix()
+            test_script.write_text(f"""
+// Set env vars BEFORE requiring reporter (matches real Jest behavior)
+process.env.JEST_JUNIT_OUTPUT_FILE = '{output_file_js}';
+process.env.JEST_JUNIT_CLASSNAME = '{{filepath}}';
+process.env.JEST_JUNIT_SUITE_NAME = '{{filepath}}';
+process.env.JEST_JUNIT_ADD_FILE_ATTRIBUTE = 'true';
+process.env.JEST_JUNIT_INCLUDE_CONSOLE_OUTPUT = 'true';
+
+const Reporter = require('{reporter_path_js}');
+
+// Mock Jest globalConfig
+const globalConfig = {{ rootDir: '/tmp/project' }};
+const reporter = new Reporter(globalConfig, {{}});
+
+// Mock test results (matches Jest's aggregatedResults structure)
+const results = {{
+  testResults: [
+    {{
+      testFilePath: '/tmp/project/test/math.test.js',
+      displayName: 'math tests',
+      console: [{{ type: 'log', message: 'CODEFLASH_START test1' }}],
+      testResults: [
+        {{
+          fullName: 'math > adds numbers',
+          title: 'adds numbers',
+          status: 'passed',
+          duration: 12,
+        }},
+        {{
+          fullName: 'math > handles failure',
+          title: 'handles failure',
+          status: 'failed',
+          duration: 5,
+          failureMessages: ['Expected 4 but got 5'],
+        }},
+        {{
+          fullName: 'math > skipped test',
+          title: 'skipped test',
+          status: 'pending',
+          duration: 0,
+        }},
+      ],
+    }},
+  ],
+}};
+
+// Simulate onTestFileResult for console capture
+reporter.onTestFileResult(null, results.testResults[0], null);
+
+// Simulate onRunComplete
+reporter.onRunComplete([], results);
+
+console.log('OK');
+""", encoding="utf-8")
+
+            result = subprocess.run(
+                ["node", str(test_script)],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+            assert result.returncode == 0, f"Reporter script failed: {result.stderr}"
+            assert output_file.exists(), "Reporter did not create output file"
+
+            xml_content = output_file.read_text()
+
+            # Verify basic XML structure
+            assert '<?xml version="1.0"' in xml_content
+            assert "<testsuites" in xml_content
+            assert "<testsuite" in xml_content
+            assert "<testcase" in xml_content
+
+            # Verify classname uses filepath template
+            assert 'classname="/tmp/project/test/math.test.js"' in xml_content
+
+            # Verify file attribute is present
+            assert 'file="/tmp/project/test/math.test.js"' in xml_content
+
+            # Verify failure element
+            assert "<failure" in xml_content
+            assert "Expected 4 but got 5" in xml_content
+
+            # Verify skipped element
+            assert "<skipped/>" in xml_content
+
+            # Verify system-out with console output
+            assert "<system-out>" in xml_content
+            assert "CODEFLASH_START" in xml_content
+
+            # Verify it's parseable by junitparser (our actual parser)
+            from junitparser import JUnitXml
+
+            parsed = JUnitXml.fromfile(str(output_file))
+            suites = list(parsed)
+            assert len(suites) == 1
+            testcases = list(suites[0])
+            assert len(testcases) == 3
+
+    def test_reporter_export_in_package_json(self):
+        """package.json should export codeflash/jest-reporter."""
+        import json
+
+        pkg_path = Path(__file__).resolve().parents[2] / "packages" / "codeflash" / "package.json"
+        with pkg_path.open() as f:
+            pkg = json.load(f)
+
+        exports = pkg.get("exports", {})
+        assert "./jest-reporter" in exports, "Missing ./jest-reporter export in package.json"
+        assert exports["./jest-reporter"]["require"] == "./runtime/jest-reporter.js"
+
+
+
+class TestUnsupportedFrameworkError:
+    """Tests for clear error on unsupported test frameworks."""
+
+    def test_unknown_framework_raises_error_behavioral(self):
+        """run_behavioral_tests should raise NotImplementedError for unknown frameworks."""
+        from codeflash.languages.javascript.support import JavaScriptSupport
+
+        support = JavaScriptSupport()
+        with pytest.raises(NotImplementedError, match="not yet supported"):
+            support.run_behavioral_tests(
+                test_paths=MagicMock(),
+                test_env={},
+                cwd=Path("."),
+                test_framework="tap",
+            )
+
+    def test_unknown_framework_raises_error_benchmarking(self):
+        """run_benchmarking_tests should raise NotImplementedError for unknown frameworks."""
+        from codeflash.languages.javascript.support import JavaScriptSupport
+
+        support = JavaScriptSupport()
+        with pytest.raises(NotImplementedError, match="not yet supported"):
+            support.run_benchmarking_tests(
+                test_paths=MagicMock(),
+                test_env={},
+                cwd=Path("."),
+                test_framework="tap",
+            )
+
+    def test_unknown_framework_raises_error_line_profile(self):
+        """run_line_profile_tests should raise NotImplementedError for unknown frameworks."""
+        from codeflash.languages.javascript.support import JavaScriptSupport
+
+        support = JavaScriptSupport()
+        with pytest.raises(NotImplementedError, match="not yet supported"):
+            support.run_line_profile_tests(
+                test_paths=MagicMock(),
+                test_env={},
+                cwd=Path("."),
+                test_framework="tap",
+            )
+
+    def test_jest_framework_does_not_raise_not_implemented(self):
+        """jest framework should NOT raise NotImplementedError."""
+        from codeflash.languages.javascript.support import JavaScriptSupport
+
+        support = JavaScriptSupport()
+        try:
+            support.run_behavioral_tests(
+                test_paths=MagicMock(),
+                test_env={},
+                cwd=Path("."),
+                test_framework="jest",
+            )
+        except NotImplementedError:
+            pytest.fail("jest framework should not raise NotImplementedError")
+        except Exception:
+            pass  # Other exceptions are fine — Jest isn't installed in test env
+
+    def test_mocha_framework_does_not_raise_not_implemented(self):
+        """mocha framework should NOT raise NotImplementedError."""
+        from codeflash.languages.javascript.support import JavaScriptSupport
+
+        support = JavaScriptSupport()
+        try:
+            support.run_behavioral_tests(
+                test_paths=MagicMock(),
+                test_env={},
+                cwd=Path("."),
+                test_framework="mocha",
+            )
+        except NotImplementedError:
+            pytest.fail("mocha framework should not raise NotImplementedError")
+        except Exception:
+            pass  # Other exceptions are fine — Mocha isn't installed in test env
