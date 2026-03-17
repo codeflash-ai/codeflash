@@ -491,7 +491,7 @@ def run_benchmarking_tests(
     if cache.is_failed(build_root, test_module):
         logger.debug("Step 1: Skipping — test compilation previously failed, skipping all candidates")
         return _get_empty_result(strategy, build_root, test_module)
-    elif cache.should_skip(build_root, test_module, candidate_index):
+    if cache.should_skip(build_root, test_module, candidate_index):
         logger.debug("Step 1: Skipping compilation — already compiled for candidate %d", candidate_index)
     elif cache.needs_source_only(build_root, test_module):
         logger.debug("Step 1: Compiling source only (tests already compiled)")
@@ -747,7 +747,7 @@ def _run_direct_or_fallback(
         logger.debug("Step 1: Skipping — test compilation previously failed, skipping all candidates")
         result_xml_path, empty_result = _get_empty_result(strategy, build_root, test_module)
         return empty_result, result_xml_path
-    elif cache.should_skip(build_root, test_module, candidate_index):
+    if cache.should_skip(build_root, test_module, candidate_index):
         logger.debug("Step 1: Skipping compilation — already compiled for candidate %d", candidate_index)
     elif cache.needs_source_only(build_root, test_module):
         logger.debug("Step 1: Compiling source only (tests already compiled)")
@@ -761,10 +761,7 @@ def _run_direct_or_fallback(
         logger.debug("Step 1: Compiling tests + source (first time)")
         compile_result = strategy.compile_tests(build_root, run_env, test_module, timeout=120)
         if compile_result.returncode != 0:
-            logger.warning(
-                "Compilation failed (rc=%d), skipping all candidates",
-                compile_result.returncode,
-            )
+            logger.warning("Compilation failed (rc=%d), skipping all candidates", compile_result.returncode)
             cache.mark_failed(build_root, test_module)
             result_xml_path, empty_result = _get_empty_result(strategy, build_root, test_module)
             return empty_result, result_xml_path
