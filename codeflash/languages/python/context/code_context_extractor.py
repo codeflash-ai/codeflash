@@ -1583,7 +1583,6 @@ def collect_names_from_annotation(node: ast.expr, names: set[str]) -> None:
         names.add(node.value.id)
 
 
-
 class ImportCollector(ast.NodeVisitor):
     def __init__(self) -> None:
         self.imported_names: dict[str, str] = {}
