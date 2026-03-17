@@ -3,19 +3,20 @@ from __future__ import annotations
 import hashlib
 import os
 import sqlite3
-from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_qualified_name, path_belongs_to_site_packages
 from codeflash.languages.base import IndexResult
-from codeflash.models.models import FunctionSource
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
     from jedi.api.classes import Name
+
+    from codeflash.models.call_graph import CallGraph
+    from codeflash.models.models import FunctionSource
 
 
 # ---------------------------------------------------------------------------
@@ -41,7 +42,7 @@ def _init_index_worker(project_root: str) -> None:
 def _resolve_definitions(ref: Name) -> list[Name]:
     try:
         inferred = ref.infer()
-        valid = [d for d in inferred if d.type in ("function", "class")]
+        valid = [d for d in inferred if d.type in ("function", "class", "statement")]
         if valid:
             return valid
     except Exception:
@@ -68,7 +69,7 @@ def _is_valid_definition(definition: Name, caller_qualified_name: str, project_r
     if not definition.full_name or not definition.full_name.startswith(definition.module_name):
         return False
 
-    if definition.type not in ("function", "class"):
+    if definition.type not in ("function", "class", "statement"):
         return False
 
     try:
@@ -163,6 +164,20 @@ def _analyze_file(file_path: Path, jedi_project: object, project_root_str: str) 
                         definition.get_line_code(),
                     )
                 )
+            elif definition.type == "statement":
+                callee_qn = get_qualified_name(definition.module_name, definition.full_name)
+                if len(callee_qn.split(".")) > 2:
+                    continue
+                edges.add(
+                    (
+                        *edge_base,
+                        callee_qn,
+                        definition.full_name,
+                        definition.name,
+                        definition.type,
+                        definition.get_line_code(),
+                    )
+                )
         except Exception:
             continue
 
@@ -199,6 +214,7 @@ class ReferenceGraph:
         self.conn = sqlite3.connect(str(db_path))
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.indexed_file_hashes: dict[str, str] = {}
+        self._resolved_paths: dict[Path, str] = {}
         self._init_schema()
 
     def _init_schema(self) -> None:
@@ -259,59 +275,28 @@ class ReferenceGraph:
         )
         self.conn.commit()
 
+    def resolve_path(self, file_path: Path) -> str:
+        cached = self._resolved_paths.get(file_path)
+        if cached is not None:
+            return cached
+        resolved = str(file_path.resolve())
+        self._resolved_paths[file_path] = resolved
+        return resolved
+
     def get_callees(
         self, file_path_to_qualified_names: dict[Path, set[str]]
     ) -> tuple[dict[Path, set[FunctionSource]], list[FunctionSource]]:
-        file_path_to_function_source: dict[Path, set[FunctionSource]] = defaultdict(set)
-        function_source_list: list[FunctionSource] = []
+        from codeflash.models.call_graph import callees_from_graph
 
-        all_caller_keys: list[tuple[str, str]] = []
-        for file_path, qualified_names in file_path_to_qualified_names.items():
-            resolved = str(file_path.resolve())
-            self.ensure_file_indexed(file_path, resolved)
-            all_caller_keys.extend((resolved, qn) for qn in qualified_names)
-
-        if not all_caller_keys:
-            return file_path_to_function_source, function_source_list
-
-        cur = self.conn.cursor()
-        cur.execute("CREATE TEMP TABLE IF NOT EXISTS _caller_keys (caller_file TEXT, caller_qualified_name TEXT)")
-        cur.execute("DELETE FROM _caller_keys")
-        cur.executemany("INSERT INTO _caller_keys VALUES (?, ?)", all_caller_keys)
-
-        rows = cur.execute(
-            """
-            SELECT ce.callee_file, ce.callee_qualified_name, ce.callee_fully_qualified_name,
-                   ce.callee_only_function_name, ce.callee_definition_type, ce.callee_source_line
-            FROM call_edges ce
-            INNER JOIN _caller_keys ck
-                ON ce.caller_file = ck.caller_file AND ce.caller_qualified_name = ck.caller_qualified_name
-            WHERE ce.project_root = ? AND ce.language = ?
-            """,
-            (self.project_root_str, self.language),
-        ).fetchall()
-
-        for callee_file, callee_qn, callee_fqn, callee_name, callee_type, callee_src in rows:
-            callee_path = Path(callee_file)
-            fs = FunctionSource(
-                file_path=callee_path,
-                qualified_name=callee_qn,
-                fully_qualified_name=callee_fqn,
-                only_function_name=callee_name,
-                source_code=callee_src,
-                definition_type=callee_type,
-            )
-            file_path_to_function_source[callee_path].add(fs)
-            function_source_list.append(fs)
-
-        return file_path_to_function_source, function_source_list
+        graph = self.get_call_graph(file_path_to_qualified_names, include_metadata=True)
+        return callees_from_graph(graph)
 
     def count_callees_per_function(
         self, file_path_to_qualified_names: dict[Path, set[str]]
     ) -> dict[tuple[Path, str], int]:
         all_caller_keys: list[tuple[Path, str, str]] = []
         for file_path, qualified_names in file_path_to_qualified_names.items():
-            resolved = str(file_path.resolve())
+            resolved = self.resolve_path(file_path)
             self.ensure_file_indexed(file_path, resolved)
             all_caller_keys.extend((file_path, resolved, qn) for qn in qualified_names)
 
@@ -346,9 +331,10 @@ class ReferenceGraph:
 
     def ensure_file_indexed(self, file_path: Path, resolved: str | None = None) -> IndexResult:
         if resolved is None:
-            resolved = str(file_path.resolve())
+            resolved = self.resolve_path(file_path)
 
-        # Always read and hash the file before checking the cache so we detect on-disk changes
+        # Always read and hash to detect on-disk changes (no in-memory shortcut here;
+        # build_index has its own fast path for batch initialization)
         try:
             content = file_path.read_text(encoding="utf-8")
         except Exception:
@@ -363,7 +349,7 @@ class ReferenceGraph:
 
     def index_file(self, file_path: Path, file_hash: str, resolved: str | None = None) -> IndexResult:
         if resolved is None:
-            resolved = str(file_path.resolve())
+            resolved = self.resolve_path(file_path)
         edges, had_error = _analyze_file(file_path, self.jedi_project, self.project_root_str)
         if had_error:
             logger.debug(f"ReferenceGraph: failed to parse {file_path}")
@@ -426,7 +412,17 @@ class ReferenceGraph:
         to_index: list[tuple[Path, str, str]] = []
 
         for file_path in file_paths:
-            resolved = str(file_path.resolve())
+            resolved = self.resolve_path(file_path)
+
+            # Fast path: already indexed this session
+            if resolved in self.indexed_file_hashes:
+                self._report_progress(
+                    on_progress,
+                    IndexResult(
+                        file_path=file_path, cached=True, num_edges=0, edges=(), cross_file_edges=0, error=False
+                    ),
+                )
+                continue
 
             try:
                 content = file_path.read_text(encoding="utf-8")
@@ -441,7 +437,7 @@ class ReferenceGraph:
 
             file_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
 
-            # Check if already cached (in-memory or DB)
+            # Check if cached in DB
             if self._is_file_cached(resolved, file_hash):
                 self._report_progress(
                     on_progress,
@@ -539,6 +535,91 @@ class ReferenceGraph:
                 continue
             result = self.index_file(file_path, file_hash, resolved)
             self._report_progress(on_progress, result)
+
+    def get_call_graph(
+        self, file_path_to_qualified_names: dict[Path, set[str]], *, include_metadata: bool = False
+    ) -> CallGraph:
+        from codeflash.models.call_graph import CallEdge, CalleeMetadata, CallGraph, FunctionNode
+
+        all_caller_keys: list[tuple[Path, str, str]] = []
+        for file_path, qualified_names in file_path_to_qualified_names.items():
+            resolved = self.resolve_path(file_path)
+            self.ensure_file_indexed(file_path, resolved)
+            all_caller_keys.extend((file_path, resolved, qn) for qn in qualified_names)
+
+        if not all_caller_keys:
+            return CallGraph(edges=[])
+
+        cur = self.conn.cursor()
+        cur.execute("CREATE TEMP TABLE IF NOT EXISTS _graph_keys (caller_file TEXT, caller_qualified_name TEXT)")
+        cur.execute("DELETE FROM _graph_keys")
+        cur.executemany(
+            "INSERT INTO _graph_keys VALUES (?, ?)", [(resolved, qn) for _, resolved, qn in all_caller_keys]
+        )
+
+        if include_metadata:
+            rows = cur.execute(
+                """
+                SELECT ce.caller_file, ce.caller_qualified_name,
+                       ce.callee_file, ce.callee_qualified_name,
+                       ce.callee_fully_qualified_name, ce.callee_only_function_name,
+                       ce.callee_definition_type, ce.callee_source_line
+                FROM call_edges ce
+                INNER JOIN _graph_keys gk
+                    ON ce.caller_file = gk.caller_file AND ce.caller_qualified_name = gk.caller_qualified_name
+                WHERE ce.project_root = ? AND ce.language = ?
+                """,
+                (self.project_root_str, self.language),
+            ).fetchall()
+
+            edges: list[CallEdge] = []
+            for (
+                caller_file,
+                caller_qn,
+                callee_file,
+                callee_qn,
+                callee_fqn,
+                callee_name,
+                callee_type,
+                callee_src,
+            ) in rows:
+                edges.append(
+                    CallEdge(
+                        caller=FunctionNode(file_path=Path(caller_file), qualified_name=caller_qn),
+                        callee=FunctionNode(file_path=Path(callee_file), qualified_name=callee_qn),
+                        is_cross_file=caller_file != callee_file,
+                        callee_metadata=CalleeMetadata(
+                            fully_qualified_name=callee_fqn,
+                            only_function_name=callee_name,
+                            definition_type=callee_type,
+                            source_line=callee_src,
+                        ),
+                    )
+                )
+        else:
+            rows = cur.execute(
+                """
+                SELECT ce.caller_file, ce.caller_qualified_name,
+                       ce.callee_file, ce.callee_qualified_name
+                FROM call_edges ce
+                INNER JOIN _graph_keys gk
+                    ON ce.caller_file = gk.caller_file AND ce.caller_qualified_name = gk.caller_qualified_name
+                WHERE ce.project_root = ? AND ce.language = ?
+                """,
+                (self.project_root_str, self.language),
+            ).fetchall()
+
+            edges = []
+            for caller_file, caller_qn, callee_file, callee_qn in rows:
+                edges.append(
+                    CallEdge(
+                        caller=FunctionNode(file_path=Path(caller_file), qualified_name=caller_qn),
+                        callee=FunctionNode(file_path=Path(callee_file), qualified_name=callee_qn),
+                        is_cross_file=caller_file != callee_file,
+                    )
+                )
+
+        return CallGraph(edges=edges)
 
     def close(self) -> None:
         self.conn.close()

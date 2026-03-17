@@ -295,6 +295,7 @@ ignore = [
     "F841",    # Unused variable (often intentional)
     "ANN202",  # Missing return type for private functions
     "B009",    # getattr-with-constant - needed to avoid mypy [misc] on dunder access
+    "PTH119",  # os.path.basename — faster than Path().name for string paths
 ]
 
 [tool.ruff.lint.flake8-type-checking]

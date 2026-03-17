@@ -42,53 +42,55 @@ def normalize_code(code: str) -> str:
     return ast.unparse(normalize_node(ast.parse(code)))
 
 
+def has_autouse_fixture(node: cst.FunctionDef) -> bool:
+    for decorator in node.decorators:
+        dec = decorator.decorator
+        if not isinstance(dec, cst.Call):
+            continue
+        is_fixture = (
+            isinstance(dec.func, cst.Attribute)
+            and isinstance(dec.func.value, cst.Name)
+            and dec.func.attr.value == "fixture"
+            and dec.func.value.value == "pytest"
+        ) or (isinstance(dec.func, cst.Name) and dec.func.value == "fixture")
+        if is_fixture:
+            for arg in dec.args:
+                if (
+                    arg.keyword
+                    and arg.keyword.value == "autouse"
+                    and isinstance(arg.value, cst.Name)
+                    and arg.value.value == "True"
+                ):
+                    return True
+    return False
+
+
 class AddRequestArgument(cst.CSTTransformer):
     METADATA_DEPENDENCIES = (PositionProvider,)
 
     def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
-        # Matcher for '@fixture' or '@pytest.fixture'
-        for decorator in original_node.decorators:
-            dec = decorator.decorator
+        if not has_autouse_fixture(original_node):
+            return updated_node
 
-            if isinstance(dec, cst.Call):
-                func_name = ""
-                if isinstance(dec.func, cst.Attribute) and isinstance(dec.func.value, cst.Name):
-                    if dec.func.attr.value == "fixture" and dec.func.value.value == "pytest":
-                        func_name = "pytest.fixture"
-                elif isinstance(dec.func, cst.Name) and dec.func.value == "fixture":
-                    func_name = "fixture"
+        args = updated_node.params.params
+        arg_names = {arg.name.value for arg in args}
 
-                if func_name:
-                    for arg in dec.args:
-                        if (
-                            arg.keyword
-                            and arg.keyword.value == "autouse"
-                            and isinstance(arg.value, cst.Name)
-                            and arg.value.value == "True"
-                        ):
-                            args = updated_node.params.params
-                            arg_names = {arg.name.value for arg in args}
+        if "request" in arg_names:
+            return updated_node
 
-                            # Skip if 'request' is already present
-                            if "request" in arg_names:
-                                return updated_node
+        request_param = cst.Param(name=cst.Name("request"))
 
-                            # Create a new 'request' param
-                            request_param = cst.Param(name=cst.Name("request"))
+        if args:
+            first_arg = args[0].name.value
+            if first_arg in {"self", "cls"}:
+                new_params = [args[0], request_param] + list(args[1:])  # noqa: RUF005
+            else:
+                new_params = [request_param] + list(args)  # noqa: RUF005
+        else:
+            new_params = [request_param]
 
-                            # Add 'request' as the first argument (after 'self' or 'cls' if needed)
-                            if args:
-                                first_arg = args[0].name.value
-                                if first_arg in {"self", "cls"}:
-                                    new_params = [args[0], request_param] + list(args[1:])  # noqa: RUF005
-                                else:
-                                    new_params = [request_param] + list(args)  # noqa: RUF005
-                            else:
-                                new_params = [request_param]
-
-                            new_param_list = updated_node.params.with_changes(params=new_params)
-                            return updated_node.with_changes(params=new_param_list)
-        return updated_node
+        new_param_list = updated_node.params.with_changes(params=new_params)
+        return updated_node.with_changes(params=new_param_list)
 
 
 class PytestMarkAdder(cst.CSTTransformer):
@@ -159,43 +161,15 @@ class PytestMarkAdder(cst.CSTTransformer):
 
 class AutouseFixtureModifier(cst.CSTTransformer):
     def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
-        # Matcher for '@fixture' or '@pytest.fixture'
-        for decorator in original_node.decorators:
-            dec = decorator.decorator
+        if not has_autouse_fixture(original_node):
+            return updated_node
 
-            if isinstance(dec, cst.Call):
-                func_name = ""
-                if isinstance(dec.func, cst.Attribute) and isinstance(dec.func.value, cst.Name):
-                    if dec.func.attr.value == "fixture" and dec.func.value.value == "pytest":
-                        func_name = "pytest.fixture"
-                elif isinstance(dec.func, cst.Name) and dec.func.value == "fixture":
-                    func_name = "fixture"
-
-                if func_name:
-                    for arg in dec.args:
-                        if (
-                            arg.keyword
-                            and arg.keyword.value == "autouse"
-                            and isinstance(arg.value, cst.Name)
-                            and arg.value.value == "True"
-                        ):
-                            # Found a matching fixture with autouse=True
-
-                            # 1. The original body of the function will become the 'else' block.
-                            #    updated_node.body is an IndentedBlock, which is what cst.Else expects.
-                            else_block = cst.Else(body=updated_node.body)
-
-                            # 2. Create the new 'if' block that will exit the fixture early.
-                            if_test = cst.parse_expression('request.node.get_closest_marker("codeflash_no_autouse")')
-                            yield_statement = cst.parse_statement("yield")
-                            if_body = cst.IndentedBlock(body=[yield_statement])
-
-                            # 3. Construct the full if/else statement.
-                            new_if_statement = cst.If(test=if_test, body=if_body, orelse=else_block)
-
-                            # 4. Replace the entire function's body with our new single statement.
-                            return updated_node.with_changes(body=cst.IndentedBlock(body=[new_if_statement]))
-        return updated_node
+        else_block = cst.Else(body=updated_node.body)
+        if_test = cst.parse_expression('request.node.get_closest_marker("codeflash_no_autouse")')
+        yield_statement = cst.parse_statement("yield")
+        if_body = cst.IndentedBlock(body=[yield_statement])
+        new_if_statement = cst.If(test=if_test, body=if_body, orelse=else_block)
+        return updated_node.with_changes(body=cst.IndentedBlock(body=[new_if_statement]))
 
 
 def disable_autouse(test_path: Path) -> str:
