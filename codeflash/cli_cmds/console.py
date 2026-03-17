@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import sys
 from collections import deque
 from contextlib import contextmanager
 from itertools import cycle
@@ -112,6 +113,16 @@ class DummyProgress:
 
     def advance(self, task_id: TaskID, advance: int = 1) -> None:
         pass
+
+
+def apologize_and_exit() -> None:
+    console.rule()
+    logger.info(
+        "💡 If you're having trouble, see https://docs.codeflash.ai/getting-started/local-installation for further help getting started with Codeflash!"
+    )
+    console.rule()
+    logger.info("👋 Exiting...")
+    sys.exit(1)
 
 
 def lsp_log(message: LspMessage) -> None:
