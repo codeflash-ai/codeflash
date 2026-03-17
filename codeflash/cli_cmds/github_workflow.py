@@ -15,8 +15,7 @@ from rich.text import Text
 
 from codeflash.api.aiservice import AiServiceClient
 from codeflash.api.cfapi import setup_github_actions
-from codeflash.cli_cmds.console import apologize_and_exit
-from codeflash.cli_cmds.console import console, logger
+from codeflash.cli_cmds.console import apologize_and_exit, console, logger
 from codeflash.cli_cmds.init_config import CodeflashTheme
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file

@@ -9,8 +9,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from codeflash.api.cfapi import get_user_id, is_github_app_installed_on_repo
-from codeflash.cli_cmds.console import apologize_and_exit
-from codeflash.cli_cmds.console import console
+from codeflash.cli_cmds.console import apologize_and_exit, console
 from codeflash.cli_cmds.init_config import CodeflashTheme
 from codeflash.cli_cmds.oauth_handler import perform_oauth_signin
 from codeflash.code_utils.compat import LF
