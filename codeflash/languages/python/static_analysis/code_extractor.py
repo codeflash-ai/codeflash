@@ -558,7 +558,7 @@ def add_needed_imports_from_module(
         dst_code_fallback = dst_module_code
         parsed_dst_module = None
     else:
-        dst_code_fallback = dst_module_code.code
+        dst_code_fallback = dst_module_code.code.lstrip("\n")
         parsed_dst_module = dst_module_code
 
     src_module_and_package: ModuleNameAndPackage = calculate_module_and_package(project_root, src_path)
