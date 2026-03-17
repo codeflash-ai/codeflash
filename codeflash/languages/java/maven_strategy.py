@@ -11,11 +11,13 @@ import os
 import re
 import shutil
 import subprocess
+import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
 from codeflash.languages.java.build_tool_strategy import BuildToolStrategy
+from codeflash.languages.java.build_tools import CODEFLASH_RUNTIME_JAR_NAME, CODEFLASH_RUNTIME_VERSION
 
 _TARGET = "target"
 
@@ -42,6 +44,13 @@ _multimodule_deps_installed: set[tuple[Path, str]] = set()
 
 JACOCO_PLUGIN_VERSION = "0.8.13"
 
+GITHUB_RELEASE_URL = (
+    "https://github.com/codeflash-ai/codeflash/releases/download"
+    f"/runtime-v{CODEFLASH_RUNTIME_VERSION}/{CODEFLASH_RUNTIME_JAR_NAME}"
+)
+
+CODEFLASH_CACHE_DIR = Path.home() / ".cache" / "codeflash"
+
 CODEFLASH_DEPENDENCY_SNIPPET = """\
         <dependency>
             <groupId>com.codeflash</groupId>
@@ -50,6 +59,57 @@ CODEFLASH_DEPENDENCY_SNIPPET = """\
             <scope>test</scope>
         </dependency>
     </dependencies>"""
+
+
+def download_from_github_releases() -> Path | None:
+    """Download codeflash-runtime JAR from GitHub Releases.
+
+    Downloads to ~/.cache/codeflash/ and returns the path to the downloaded JAR.
+    Returns None if the download fails (e.g., no release published yet, network error).
+    """
+    cache_jar = CODEFLASH_CACHE_DIR / CODEFLASH_RUNTIME_JAR_NAME
+    if cache_jar.exists():
+        logger.info("Found cached codeflash-runtime JAR: %s", cache_jar)
+        return cache_jar
+
+    try:
+        CODEFLASH_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        logger.info("Downloading codeflash-runtime from GitHub Releases: %s", GITHUB_RELEASE_URL)
+        urllib.request.urlretrieve(GITHUB_RELEASE_URL, cache_jar)  # noqa: S310
+        logger.info("Downloaded codeflash-runtime to %s", cache_jar)
+        return cache_jar
+    except Exception as e:
+        logger.debug("GitHub Releases download failed: %s", e)
+        cache_jar.unlink(missing_ok=True)
+        return None
+
+
+def resolve_from_maven_central(maven_root: Path) -> bool:
+    """Ask Maven to resolve codeflash-runtime from Maven Central.
+
+    Downloads the JAR to ~/.m2/repository/ automatically.
+    Returns True if Maven successfully resolved the artifact.
+    """
+    mvn = shutil.which("mvn")
+    if not mvn:
+        return False
+    cmd = [
+        mvn,
+        "dependency:resolve",
+        f"-Dartifact=com.codeflash:codeflash-runtime:{CODEFLASH_RUNTIME_VERSION}",
+        "-B",
+        "-q",
+    ]
+    try:
+        result = subprocess.run(cmd, check=False, cwd=maven_root, capture_output=True, text=True, timeout=60)
+        if result.returncode == 0:
+            logger.info("Resolved codeflash-runtime %s from Maven Central", CODEFLASH_RUNTIME_VERSION)
+            return True
+        logger.debug("Maven Central resolution failed: %s", result.stderr)
+        return False
+    except Exception as e:
+        logger.debug("Maven Central resolution error: %s", e)
+        return False
 
 
 def _safe_parse_xml(file_path: Path) -> ET.ElementTree:
@@ -337,16 +397,23 @@ class MavenStrategy(BuildToolStrategy):
         return super().find_runtime_jar()
 
     def ensure_runtime(self, build_root: Path, test_module: str | None) -> bool:
-        runtime_jar = self.find_runtime_jar()
-        if runtime_jar is None:
-            logger.error("codeflash-runtime JAR not found. Generated tests will fail to compile.")
-            return False
-
         if not self._M2_JAR.exists():
-            logger.info("Installing codeflash-runtime JAR to local Maven repository")
-            if not install_codeflash_runtime(build_root, runtime_jar, mvn=self.find_executable(build_root)):
-                logger.error("Failed to install codeflash-runtime to local Maven repository")
-                return False
+            if resolve_from_maven_central(build_root):
+                logger.info("Resolved codeflash-runtime from Maven Central")
+            else:
+                runtime_jar = self.find_runtime_jar()
+                if runtime_jar is None:
+                    runtime_jar = download_from_github_releases()
+                if runtime_jar is None:
+                    logger.error(
+                        "codeflash-runtime JAR not found. Maven Central resolution failed and "
+                        "GitHub Releases download failed. Generated tests will fail to compile."
+                    )
+                    return False
+                logger.info("Installing codeflash-runtime JAR to local Maven repository from %s", runtime_jar)
+                if not install_codeflash_runtime(build_root, runtime_jar, mvn=self.find_executable(build_root)):
+                    logger.error("Failed to install codeflash-runtime to local Maven repository")
+                    return False
 
         if test_module:
             pom_path = build_root / test_module / "pom.xml"
