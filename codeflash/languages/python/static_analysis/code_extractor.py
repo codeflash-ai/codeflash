@@ -577,11 +577,10 @@ def add_needed_imports_from_module(
 
         # Early exit: check if source has any imports at module level
         has_module_level_imports = any(
-            isinstance(stmt, (cst.Import, cst.ImportFrom))
+            isinstance(s, (cst.Import, cst.ImportFrom))
             for stmt in src_module.body
             if isinstance(stmt, cst.SimpleStatementLine)
             for s in stmt.body
-            if isinstance(s, (cst.Import, cst.ImportFrom))
         )
 
         if not has_module_level_imports:
