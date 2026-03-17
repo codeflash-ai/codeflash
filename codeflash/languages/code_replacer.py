@@ -6,6 +6,8 @@ via the LanguageSupport protocol.
 
 from __future__ import annotations
 
+import logging
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -27,7 +29,8 @@ def get_optimized_code_for_module(
     from codeflash.languages.current import is_python
 
     file_to_code_context = optimized_code.file_to_path()
-    module_optimized_code = file_to_code_context.get(str(relative_path))
+    target_key = str(relative_path)
+    module_optimized_code = file_to_code_context.get(target_key)
     if module_optimized_code is not None:
         return module_optimized_code
 
@@ -36,23 +39,38 @@ def get_optimized_code_for_module(
 
     # Fallback 1: single code block with no file path
     if "None" in file_to_code_context and len(file_to_code_context) == 1:
-        logger.debug(f"Using code block with None file_path for {relative_path}")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"Using code block with None file_path for {relative_path}")
         return file_to_code_context["None"]
 
     # Fallback 2: match by filename (basename) — the LLM sometimes returns a different
     # directory prefix but the correct filename
     target_name = relative_path.name
-    basename_matches = [
-        code for path, code in file_to_code_context.items() if path != "None" and Path(path).name == target_name
-    ]
-    if len(basename_matches) == 1:
-        logger.debug(f"Using basename-matched code block for {relative_path}")
-        return basename_matches[0]
+    # Avoid building a full list of matches and avoid Path() construction for each key.
+    first_match = None
+    match_count = 0
+    for path, code in file_to_code_context.items():
+        if path == "None":
+            continue
+        # Use os.path.basename which is lighter than constructing Path objects
+        if os.path.basename(path) == target_name:
+            first_match = code
+            match_count += 1
+            if match_count > 1:
+                break
+
+    if match_count == 1:
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"Using basename-matched code block for {relative_path}")
+        return first_match
+
+    # Fallback 3: single code block for non-Python (AI often returns one block with wrong path)
 
     # Fallback 3: single code block for non-Python (AI often returns one block with wrong path)
     if len(file_to_code_context) == 1 and not is_python():
         only_key = next(iter(file_to_code_context.keys()))
-        logger.debug(f"Using only code block {only_key} for {relative_path}")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"Using only code block {only_key} for {relative_path}")
         return file_to_code_context[only_key]
 
     logger.warning(
