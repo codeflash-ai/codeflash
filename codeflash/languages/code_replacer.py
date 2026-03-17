@@ -89,19 +89,24 @@ def replace_function_definitions_for_language(
         and function_to_optimize.ending_line
         and function_to_optimize.file_path == module_abspath
     ):
+        # Re-discover the function in the (possibly modified) source to get updated line numbers.
+        # add_global_declarations may have inserted new declarations above the function,
+        # shifting its line numbers from the original function_to_optimize values.
+        current_func = _rediscover_function(lang_support, original_source_code, module_abspath, function_to_optimize)
+
         # For Java, we need to pass the full optimized code so replace_function can
         # extract and add any new class members (static fields, helper methods).
         # For other languages, we extract just the target function.
         if language == Language.JAVA:
-            new_code = lang_support.replace_function(original_source_code, function_to_optimize, code_to_apply)
+            new_code = lang_support.replace_function(original_source_code, current_func, code_to_apply)
         else:
             optimized_func = _extract_function_from_code(
-                lang_support, code_to_apply, function_to_optimize.function_name, module_abspath
+                lang_support, code_to_apply, current_func.function_name, module_abspath
             )
             if optimized_func:
-                new_code = lang_support.replace_function(original_source_code, function_to_optimize, optimized_func)
+                new_code = lang_support.replace_function(original_source_code, current_func, optimized_func)
             else:
-                new_code = lang_support.replace_function(original_source_code, function_to_optimize, code_to_apply)
+                new_code = lang_support.replace_function(original_source_code, current_func, code_to_apply)
     else:
         new_code = original_source_code
         modified = False
@@ -142,6 +147,33 @@ def replace_function_definitions_for_language(
 
     module_abspath.write_text(new_code, encoding="utf8")
     return True
+
+
+def _rediscover_function(
+    lang_support: LanguageSupport, source_code: str, file_path: Path, function_to_optimize: FunctionToOptimize
+) -> FunctionToOptimize:
+    """Re-discover a function in source code to get updated line numbers.
+
+    After add_global_declarations inserts new declarations, the target function's
+    line numbers shift. This re-discovers the function by name to get current positions.
+
+    Returns the original function_to_optimize if rediscovery fails.
+    """
+    try:
+        current_functions = lang_support.discover_functions(source_code, file_path, _SOURCE_CRITERIA)
+        target_name = function_to_optimize.function_name
+        original_start = function_to_optimize.starting_line or 0
+        candidates = [func for func in current_functions if func.function_name == target_name]
+        if len(candidates) == 1:
+            return candidates[0]
+        if candidates:
+            # For overloaded methods, pick the one closest to the original line position.
+            # Global declarations shift lines down, so the new start >= original start.
+            return min(candidates, key=lambda f: abs((f.starting_line or 0) - original_start))
+    except Exception as e:
+        logger.debug(f"Error rediscovering function {function_to_optimize.function_name}: {e}")
+
+    return function_to_optimize
 
 
 def _extract_function_from_code(
