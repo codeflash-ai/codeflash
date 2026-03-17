@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import sys
 from collections import deque
 from contextlib import contextmanager
 from itertools import cycle
 from typing import TYPE_CHECKING, Optional
 
 from rich.console import Console
+from rich.highlighter import NullHighlighter
 from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.progress import (
@@ -39,7 +41,7 @@ if TYPE_CHECKING:
 
 DEBUG_MODE = logging.getLogger().getEffectiveLevel() == logging.DEBUG
 
-console = Console()
+console = Console(highlighter=NullHighlighter())
 
 if is_LSP_enabled() or is_subagent_mode():
     console.quiet = True
@@ -71,7 +73,16 @@ if is_subagent_mode():
 else:
     logging.basicConfig(
         level=logging.INFO,
-        handlers=[RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False)],
+        handlers=[
+            RichHandler(
+                rich_tracebacks=True,
+                markup=False,
+                highlighter=NullHighlighter(),
+                console=console,
+                show_path=False,
+                show_time=False,
+            )
+        ],
         format=BARE_LOGGING_FORMAT,
     )
 
@@ -102,6 +113,16 @@ class DummyProgress:
 
     def advance(self, task_id: TaskID, advance: int = 1) -> None:
         pass
+
+
+def apologize_and_exit() -> None:
+    console.rule()
+    logger.info(
+        "💡 If you're having trouble, see https://docs.codeflash.ai/getting-started/local-installation for further help getting started with Codeflash!"
+    )
+    console.rule()
+    logger.info("👋 Exiting...")
+    sys.exit(1)
 
 
 def lsp_log(message: LspMessage) -> None:
@@ -470,21 +491,18 @@ def subagent_log_optimization_result(
     xml.append("  </verification>")
     if diff_str:
         xml.append(f"  <diff>{escape(diff_str)}</diff>")
-    for path in new_code:
-        if new_code[path] != original_code.get(path, ""):
-            xml.append(f'  <optimized-code file="{escape(str(path))}">{escape(new_code[path])}</optimized-code>')
     xml.append("  <action>")
-    xml.append("    1. Review the diff and optimized code yourself. Write a brief assessment (2-3 sentences) covering:")
+    xml.append("    1. Review the diff yourself. Write a brief assessment (2-3 sentences) covering:")
     xml.append("       - Whether the optimization is correct and preserves behavior")
     xml.append("       - What technique was used (e.g. algorithmic improvement, caching, vectorization)")
     xml.append("       - Any risks or trade-offs (e.g. increased memory usage, reduced readability)")
     xml.append("    2. Present this optimization to the user using AskUserQuestion.")
     xml.append("       Show the function name, performance improvement, and your review as the question text.")
-    xml.append("       Provide two options: 'Apply' (write the optimized code to the file) and 'Reject' (do nothing).")
+    xml.append("       Provide two options: 'Apply' (apply the diff to the file) and 'Reject' (do nothing).")
     xml.append(
         "       Put the full diff in the 'Apply' option's markdown preview so the user can review the exact changes."
     )
-    xml.append("    3. If the user chooses 'Apply', write the content from optimized-code to the corresponding file.")
+    xml.append("    3. If the user chooses 'Apply', apply the changes from the diff to the corresponding file.")
     xml.append("  </action>")
     xml.append("</codeflash-optimization>")
 

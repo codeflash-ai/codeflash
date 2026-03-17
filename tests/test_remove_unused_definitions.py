@@ -1,5 +1,3 @@
-
-
 from codeflash.languages.python.context.unused_definition_remover import remove_unused_definitions_by_function_names
 
 
@@ -35,7 +33,7 @@ def another_function():
     qualified_functions = {"main_function"}
     result = remove_unused_definitions_by_function_names(code, qualified_functions)
     # Normalize whitespace for comparison
-    assert result.strip() == expected.strip()
+    assert result.code.strip() == expected.strip()
 
 
 def test_class_variable_removal() -> None:
@@ -86,7 +84,7 @@ def helper_function():
     qualified_functions = {"helper_function"}
     result = remove_unused_definitions_by_function_names(code, qualified_functions)
     # Normalize whitespace for comparison
-    assert result.strip() == expected.strip()
+    assert result.code.strip() == expected.strip()
 
 
 def test_complex_variable_dependencies() -> None:
@@ -124,7 +122,7 @@ def tuple_user():
 
     qualified_functions = {"main_function"}
     result = remove_unused_definitions_by_function_names(code, qualified_functions)
-    assert result.strip() == expected.strip()
+    assert result.code.strip() == expected.strip()
 
 
 def test_type_annotation_usage() -> None:
@@ -158,7 +156,7 @@ def unused_function(param: UnusedType) -> UnusedType:
     qualified_functions = {"main_function"}
     result = remove_unused_definitions_by_function_names(code, qualified_functions)
     # Normalize whitespace for comparison
-    assert result.strip() == expected.strip()
+    assert result.code.strip() == expected.strip()
 
 
 def test_class_method_with_dunder_methods() -> None:
@@ -217,7 +215,7 @@ def helper_function():
     qualified_functions = {"MyClass.target_method"}
     result = remove_unused_definitions_by_function_names(code, qualified_functions)
     # Normalize whitespace for comparison
-    assert result.strip() == expected.strip()
+    assert result.code.strip() == expected.strip()
 
 
 def test_complex_type_annotations() -> None:
@@ -265,7 +263,7 @@ def unused_function(param: UnusedType) -> None:
 
     qualified_functions = {"process_data"}
     result = remove_unused_definitions_by_function_names(code, qualified_functions)
-    assert result.strip() == expected.strip()
+    assert result.code.strip() == expected.strip()
 
 
 def test_try_except_finally_variables() -> None:
@@ -327,7 +325,7 @@ def unused_function():
 
     qualified_functions = {"use_constants", "use_cleanup"}
     result = remove_unused_definitions_by_function_names(code, qualified_functions)
-    assert result.strip() == expected.strip()
+    assert result.code.strip() == expected.strip()
 
 
 def test_base_class_inheritance() -> None:
@@ -385,8 +383,9 @@ def test_function():
     qualified_functions = {"test_function"}
     result = remove_unused_definitions_by_function_names(code, qualified_functions)
     # LayoutDumper should be preserved because ObjectDetectionLayoutDumper inherits from it
-    assert "class LayoutDumper" in result
-    assert "class ObjectDetectionLayoutDumper" in result
+    assert "class LayoutDumper" in result.code
+    assert "class ObjectDetectionLayoutDumper" in result.code
+    assert result.code.strip() == expected.strip()
 
 
 def test_conditional_and_loop_variables() -> None:
@@ -473,7 +472,7 @@ def unused_function():
 
     qualified_functions = {"get_platform_info", "get_loop_result"}
     result = remove_unused_definitions_by_function_names(code, qualified_functions)
-    assert result.strip() == expected.strip()
+    assert result.code.strip() == expected.strip()
 
 
 def test_enum_attribute_access_dependency() -> None:
@@ -521,10 +520,10 @@ def process_message(kind):
     qualified_functions = {"process_message"}
     result = remove_unused_definitions_by_function_names(code, qualified_functions)
     # MessageKind should be preserved because process_message uses MessageKind.VALUE
-    assert "class MessageKind" in result
+    assert "class MessageKind" in result.code
     # UNUSED_VAR should be removed
-    assert "UNUSED_VAR" not in result
-    assert result.strip() == expected.strip()
+    assert "UNUSED_VAR" not in result.code
+    assert result.code.strip() == expected.strip()
 
 
 def test_attribute_access_does_not_track_attr_name() -> None:
@@ -553,7 +552,7 @@ class MyClass:
     qualified_functions = {"MyClass.get_x", "MyClass.__init__"}
     result = remove_unused_definitions_by_function_names(code, qualified_functions)
     # Module-level x should NOT be kept (self.x doesn't reference it)
-    assert 'x = "module_level_x"' not in result
+    assert 'x = "module_level_x"' not in result.code
     # UNUSED_VAR should also be removed
-    assert "UNUSED_VAR" not in result
-    assert result.strip() == expected.strip()
+    assert "UNUSED_VAR" not in result.code
+    assert result.code.strip() == expected.strip()

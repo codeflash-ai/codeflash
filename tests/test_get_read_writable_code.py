@@ -123,7 +123,9 @@ def test_multiple_top_level_classes() -> None:
         def process(self):
             return "C"
     """
-    result = parse_code_and_prune_cst(dedent(code), CodeContextType.READ_WRITABLE, {"ClassA.process", "ClassC.process"}).code
+    result = parse_code_and_prune_cst(
+        dedent(code), CodeContextType.READ_WRITABLE, {"ClassA.process", "ClassC.process"}
+    ).code
 
     expected = dedent("""
     class ClassA:

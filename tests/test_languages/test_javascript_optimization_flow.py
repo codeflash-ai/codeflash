@@ -86,9 +86,7 @@ export function add(a: number, b: number): number {
 
         ts_support = get_language_support(Language.TYPESCRIPT)
         code_context = ts_support.extract_code_context(func, tmp_path, tmp_path)
-        context = JavaScriptFunctionOptimizer._build_optimization_context(
-            code_context, ts_file, "typescript", tmp_path
-        )
+        context = JavaScriptFunctionOptimizer._build_optimization_context(code_context, ts_file, "typescript", tmp_path)
 
         assert context.read_writable_code is not None
         assert context.read_writable_code.language == "typescript"
@@ -193,8 +191,9 @@ export function add(a: number, b: number): number {
             assert mock_request.called, "API request should have been made"
             call_args = mock_request.call_args
             payload = call_args[1].get("payload", call_args[0][1] if len(call_args[0]) > 1 else {})
-            assert payload.get("language") == "typescript", \
+            assert payload.get("language") == "typescript", (
                 f"Expected language='typescript', got language='{payload.get('language')}'"
+            )
 
 
 class TestFunctionOptimizerForJavaScript:
@@ -305,7 +304,7 @@ describe('fibonacci', () => {
         """Test FunctionOptimizer can be instantiated for JavaScript."""
         skip_if_js_not_supported()
         from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
+        from codeflash.languages.function_optimizer import FunctionOptimizer
 
         src_file = js_project / "utils.js"
         functions = find_all_functions_in_file(src_file)
@@ -328,9 +327,7 @@ describe('fibonacci', () => {
         )
 
         optimizer = FunctionOptimizer(
-            function_to_optimize=func_to_optimize,
-            test_cfg=test_config,
-            aiservice_client=MagicMock(),
+            function_to_optimize=func_to_optimize, test_cfg=test_config, aiservice_client=MagicMock()
         )
 
         assert optimizer is not None
@@ -340,7 +337,7 @@ describe('fibonacci', () => {
         """Test FunctionOptimizer can be instantiated for TypeScript."""
         skip_if_js_not_supported()
         from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
-        from codeflash.optimization.function_optimizer import FunctionOptimizer
+        from codeflash.languages.function_optimizer import FunctionOptimizer
 
         src_file = ts_project / "utils.ts"
         functions = find_all_functions_in_file(src_file)
@@ -363,9 +360,7 @@ describe('fibonacci', () => {
         )
 
         optimizer = FunctionOptimizer(
-            function_to_optimize=func_to_optimize,
-            test_cfg=test_config,
-            aiservice_client=MagicMock(),
+            function_to_optimize=func_to_optimize, test_cfg=test_config, aiservice_client=MagicMock()
         )
 
         assert optimizer is not None
@@ -398,9 +393,7 @@ describe('fibonacci', () => {
         )
 
         optimizer = JavaScriptFunctionOptimizer(
-            function_to_optimize=func_to_optimize,
-            test_cfg=test_config,
-            aiservice_client=MagicMock(),
+            function_to_optimize=func_to_optimize, test_cfg=test_config, aiservice_client=MagicMock()
         )
 
         result = optimizer.get_code_optimization_context()
@@ -437,9 +430,7 @@ describe('fibonacci', () => {
         )
 
         optimizer = JavaScriptFunctionOptimizer(
-            function_to_optimize=func_to_optimize,
-            test_cfg=test_config,
-            aiservice_client=MagicMock(),
+            function_to_optimize=func_to_optimize, test_cfg=test_config, aiservice_client=MagicMock()
         )
 
         result = optimizer.get_code_optimization_context()
@@ -486,16 +477,11 @@ module.exports = { main };
         )
 
         test_config = TestConfig(
-            tests_root=tmp_path,
-            tests_project_rootdir=tmp_path,
-            project_root_path=tmp_path,
-            pytest_cmd="jest",
+            tests_root=tmp_path, tests_project_rootdir=tmp_path, project_root_path=tmp_path, pytest_cmd="jest"
         )
 
         optimizer = JavaScriptFunctionOptimizer(
-            function_to_optimize=func_to_optimize,
-            test_cfg=test_config,
-            aiservice_client=MagicMock(),
+            function_to_optimize=func_to_optimize, test_cfg=test_config, aiservice_client=MagicMock()
         )
 
         result = optimizer.get_code_optimization_context()
@@ -535,16 +521,11 @@ export function main(): number {
         )
 
         test_config = TestConfig(
-            tests_root=tmp_path,
-            tests_project_rootdir=tmp_path,
-            project_root_path=tmp_path,
-            pytest_cmd="vitest",
+            tests_root=tmp_path, tests_project_rootdir=tmp_path, project_root_path=tmp_path, pytest_cmd="vitest"
         )
 
         optimizer = JavaScriptFunctionOptimizer(
-            function_to_optimize=func_to_optimize,
-            test_cfg=test_config,
-            aiservice_client=MagicMock(),
+            function_to_optimize=func_to_optimize, test_cfg=test_config, aiservice_client=MagicMock()
         )
 
         result = optimizer.get_code_optimization_context()

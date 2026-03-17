@@ -15,8 +15,9 @@ from codeflash.code_utils.instrument_existing_tests import (
     FunctionImportedAsVisitor,
     inject_profiling_into_existing_test,
 )
-from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
+from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports
 from codeflash.models.models import (
     CodeOptimizationContext,
     CodePosition,
@@ -27,7 +28,6 @@ from codeflash.models.models import (
     TestsInFile,
     TestType,
 )
-from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
 codeflash_wrap_string = """def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test_class_name, codeflash_test_name, codeflash_function_name, codeflash_line_id, codeflash_loop_index, codeflash_cur, codeflash_con, *args, **kwargs):

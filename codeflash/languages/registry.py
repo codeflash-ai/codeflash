@@ -48,15 +48,15 @@ def _ensure_languages_registered() -> None:
     # Import support modules to trigger registration
     # These imports are deferred to avoid circular imports
     import contextlib
+    import importlib
 
-    with contextlib.suppress(ImportError):
-        from codeflash.languages.python import support as _
-
-    with contextlib.suppress(ImportError):
-        from codeflash.languages.javascript import support as _
-
-    with contextlib.suppress(ImportError):
-        from codeflash.languages.java import support as _  # noqa: F401
+    for _lang_module in (
+        "codeflash.languages.python.support",
+        "codeflash.languages.javascript.support",
+        "codeflash.languages.java.support",
+    ):
+        with contextlib.suppress(ImportError):
+            importlib.import_module(_lang_module)
 
     _languages_registered = True
 
@@ -272,10 +272,20 @@ def get_language_support_by_framework(test_framework: str) -> LanguageSupport | 
     if test_framework in _FRAMEWORK_CACHE:
         return _FRAMEWORK_CACHE[test_framework]
 
+    # Map of frameworks that should use the same language support
+    # All Java test frameworks (junit4, junit5, testng) use the Java language support
+    framework_aliases = {
+        "junit4": "junit5",  # JUnit 4 uses Java support (which reports junit5 as primary)
+        "testng": "junit5",  # TestNG also uses Java support
+    }
+
+    # Use the canonical framework name for lookup
+    lookup_framework = framework_aliases.get(test_framework, test_framework)
+
     # Search all registered languages for one with matching test framework
     for language in _LANGUAGE_REGISTRY:
         support = get_language_support(language)
-        if hasattr(support, "test_framework") and support.test_framework == test_framework:
+        if hasattr(support, "test_framework") and support.test_framework == lookup_framework:
             _FRAMEWORK_CACHE[test_framework] = support
             return support
 

@@ -2,10 +2,10 @@ import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports, contains_jit_decorator
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import CodeOptimizationContext
 from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
+from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports, contains_jit_decorator
+from codeflash.models.models import CodeOptimizationContext
 from codeflash.verification.verification_utils import TestConfig
 
 

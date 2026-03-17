@@ -10,15 +10,10 @@ from typing import TYPE_CHECKING
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.api.cfapi import send_completion_email
-from codeflash.cli_cmds.console import (  # noqa: F401
-    call_graph_live_display,
-    call_graph_summary,
-    console,
-    logger,
-    progress_bar,
-)
+from codeflash.cli_cmds.console import call_graph_live_display, call_graph_summary, console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import cleanup_paths, get_run_tmp_file
+from codeflash.code_utils.config_consts import HIGH_EFFORT_TOP_N, EffortLevel
 from codeflash.code_utils.env_utils import get_pr_number, is_pr_draft
 from codeflash.code_utils.git_utils import check_running_in_git_repo, git_root_dir
 from codeflash.code_utils.git_worktree_utils import (
@@ -42,8 +37,8 @@ if TYPE_CHECKING:
     from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import DependencyResolver
+    from codeflash.languages.function_optimizer import FunctionOptimizer
     from codeflash.models.models import BenchmarkKey, FunctionCalledInTest, ValidCode
-    from codeflash.optimization.function_optimizer import FunctionOptimizer
 
 
 class Optimizer:
@@ -70,6 +65,7 @@ class Optimizer:
         self.current_worktree: Path | None = None
         self.original_args_and_test_cfg: tuple[Namespace, TestConfig] | None = None
         self.patch_files: list[Path] = []
+        self._cached_callee_counts: dict[tuple[Path, str], int] = {}
 
     def run_benchmarks(
         self, file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]], num_optimizable_functions: int
@@ -194,6 +190,7 @@ class Optimizer:
         function_benchmark_timings: dict[str, dict[BenchmarkKey, float]] | None = None,
         total_benchmark_timings: dict[BenchmarkKey, float] | None = None,
         call_graph: DependencyResolver | None = None,
+        effort_override: str | None = None,
     ) -> FunctionOptimizer | None:
         qualified_name_w_module = function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root)
 
@@ -223,6 +220,7 @@ class Optimizer:
             total_benchmark_timings=total_benchmark_timings if function_specific_timings else None,
             replay_tests_dir=self.replay_tests_dir,
             call_graph=call_graph,
+            effort_override=effort_override,
         )
         if function_optimizer.function_to_optimize_ast is None and function_optimizer.requires_function_ast():
             logger.info(
@@ -334,6 +332,7 @@ class Optimizer:
         file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]],
         trace_file_path: Path | None,
         call_graph: DependencyResolver | None = None,
+        test_count_cache: dict[tuple[Path, str], int] | None = None,
     ) -> list[tuple[Path, FunctionToOptimize]]:
         """Rank all functions globally across all files based on trace data.
 
@@ -356,7 +355,7 @@ class Optimizer:
         # If no trace file, rank by dependency count if call graph is available
         if not trace_file_path or not trace_file_path.exists():
             if call_graph is not None:
-                return self.rank_by_dependency_count(all_functions, call_graph)
+                return self.rank_by_dependency_count(all_functions, call_graph, test_count_cache=test_count_cache)
             logger.debug("No trace file available, using original function order")
             return all_functions
 
@@ -383,12 +382,23 @@ class Optimizer:
                 # Use a tuple of unique identifiers as the key
                 key: tuple[Path, str, int | None] = (func.file_path, func.qualified_name, func.starting_line)
                 func_to_file_map[key] = file_path
-            globally_ranked = []
-            for func in ranked_functions:
+            ranked_with_metadata: list[tuple[Path, FunctionToOptimize, float, int]] = []
+            for rank_index, func in enumerate(ranked_functions):
                 key = (func.file_path, func.qualified_name, func.starting_line)
                 file_path = func_to_file_map.get(key)
                 if file_path:
-                    globally_ranked.append((file_path, func))
+                    ranked_with_metadata.append(
+                        (file_path, func, ranker.get_function_addressable_time(func), rank_index)
+                    )
+
+            if test_count_cache:
+                ranked_with_metadata.sort(
+                    key=lambda item: (-item[2], -test_count_cache.get((item[0], item[1].qualified_name), 0), item[3])
+                )
+
+            globally_ranked = [
+                (file_path, func) for file_path, func, _addressable_time, _rank_index in ranked_with_metadata
+            ]
 
             console.rule()
             logger.info(
@@ -408,15 +418,30 @@ class Optimizer:
             return globally_ranked
 
     def rank_by_dependency_count(
-        self, all_functions: list[tuple[Path, FunctionToOptimize]], call_graph: DependencyResolver
+        self,
+        all_functions: list[tuple[Path, FunctionToOptimize]],
+        call_graph: DependencyResolver,
+        test_count_cache: dict[tuple[Path, str], int] | None = None,
     ) -> list[tuple[Path, FunctionToOptimize]]:
         file_to_qns: dict[Path, set[str]] = defaultdict(set)
         for file_path, func in all_functions:
             file_to_qns[file_path].add(func.qualified_name)
         callee_counts = call_graph.count_callees_per_function(dict(file_to_qns))
-        ranked = sorted(
-            enumerate(all_functions), key=lambda x: (-callee_counts.get((x[1][0], x[1][1].qualified_name), 0), x[0])
-        )
+        self._cached_callee_counts = callee_counts
+
+        if test_count_cache:
+            ranked = sorted(
+                enumerate(all_functions),
+                key=lambda x: (
+                    -callee_counts.get((x[1][0], x[1][1].qualified_name), 0),
+                    -test_count_cache.get((x[1][0], x[1][1].qualified_name), 0),
+                    x[0],
+                ),
+            )
+        else:
+            ranked = sorted(
+                enumerate(all_functions), key=lambda x: (-callee_counts.get((x[1][0], x[1][1].qualified_name), 0), x[0])
+            )
         logger.debug(f"Ranked {len(ranked)} functions by dependency count (most complex first)")
         return [item for _, item in ranked]
 
@@ -473,17 +498,16 @@ class Optimizer:
         # Skip in CI — the cache DB doesn't persist between runs on ephemeral runners
         lang_support = current_language_support()
         resolver = None
-        # CURRENTLY DISABLED: The resolver is currently not used for anything until i clean up the repo structure for python
-        # if lang_support and not env_utils.is_ci():
-        #     resolver = lang_support.create_dependency_resolver(self.args.project_root)
+        if lang_support and not env_utils.is_ci():
+            resolver = lang_support.create_dependency_resolver(self.args.project_root)
 
-        # if resolver is not None and lang_support is not None and file_to_funcs_to_optimize:
-        #     supported_exts = lang_support.file_extensions
-        #     source_files = [f for f in file_to_funcs_to_optimize if f.suffix in supported_exts]
-        #     with call_graph_live_display(len(source_files), project_root=self.args.project_root) as on_progress:
-        #         resolver.build_index(source_files, on_progress=on_progress)
-        #     console.rule()
-        #     call_graph_summary(resolver, file_to_funcs_to_optimize)
+        if resolver is not None and lang_support is not None and file_to_funcs_to_optimize:
+            supported_exts = lang_support.file_extensions
+            source_files = [f for f in file_to_funcs_to_optimize if f.suffix in supported_exts]
+            with call_graph_live_display(len(source_files), project_root=self.args.project_root) as on_progress:
+                resolver.build_index(source_files, on_progress=on_progress)
+            console.rule()
+            call_graph_summary(resolver, file_to_funcs_to_optimize)
 
         optimizations_found: int = 0
         self.test_cfg.concolic_test_root_dir = Path(
@@ -499,12 +523,33 @@ class Optimizer:
             if self.args.all and not self.args.subagent:
                 self.functions_checkpoint = CodeflashRunCheckpoint(self.args.module_root)
 
+            # Pre-compute test counts once for ranking and logging
+            test_count_cache: dict[tuple[Path, str], int]
+            if function_to_tests:
+                from codeflash.discovery.discover_unit_tests import existing_unit_test_count
+
+                test_count_cache = {
+                    (fp, fn.qualified_name): existing_unit_test_count(fn, self.args.project_root, function_to_tests)
+                    for fp, fns in file_to_funcs_to_optimize.items()
+                    for fn in fns
+                }
+            else:
+                test_count_cache = {}
+
             # GLOBAL RANKING: Rank all functions together before optimizing
             globally_ranked_functions = self.rank_all_functions_globally(
-                file_to_funcs_to_optimize, trace_file_path, call_graph=resolver
+                file_to_funcs_to_optimize, trace_file_path, call_graph=resolver, test_count_cache=test_count_cache
             )
             # Cache for module preparation (avoid re-parsing same files)
             prepared_modules: dict[Path, tuple[dict[Path, ValidCode], ast.Module | None]] = {}
+
+            # Reuse callee counts from rank_by_dependency_count if available, otherwise compute
+            callee_counts = self._cached_callee_counts
+            if not callee_counts and resolver is not None:
+                file_to_qns: dict[Path, set[str]] = defaultdict(set)
+                for fp, fn in globally_ranked_functions:
+                    file_to_qns[fp].add(fn.qualified_name)
+                callee_counts = resolver.count_callees_per_function(dict(file_to_qns))
 
             # Optimize functions in globally ranked order
             for i, (original_module_path, function_to_optimize) in enumerate(globally_ranked_functions):
@@ -520,9 +565,24 @@ class Optimizer:
 
                 function_iterator_count = i + 1
                 line_suffix = f":{function_to_optimize.starting_line}" if function_to_optimize.starting_line else ""
+
+                callee_count = callee_counts.get((original_module_path, function_to_optimize.qualified_name), 0)
+                callee_suffix = f", {callee_count} callees" if callee_count else ""
+
+                test_count = test_count_cache.get((original_module_path, function_to_optimize.qualified_name), 0)
+                test_suffix = f", {test_count} tests" if test_count else ""
+
+                effort_override: str | None = None
+                if i < HIGH_EFFORT_TOP_N and self.args.effort == EffortLevel.MEDIUM.value:
+                    effort_override = EffortLevel.HIGH.value
+                    logger.debug(
+                        f"Escalating effort for {function_to_optimize.qualified_name} from medium to high"
+                        f" (top {HIGH_EFFORT_TOP_N} ranked)"
+                    )
+
                 logger.info(
                     f"Optimizing function {function_iterator_count} of {len(globally_ranked_functions)}: "
-                    f"{function_to_optimize.qualified_name} (in {original_module_path}{line_suffix})"
+                    f"{function_to_optimize.qualified_name} (in {original_module_path}{line_suffix}{callee_suffix}{test_suffix})"
                 )
                 console.rule()
                 function_optimizer = None
@@ -534,6 +594,7 @@ class Optimizer:
                         function_benchmark_timings=function_benchmark_timings,
                         total_benchmark_timings=total_benchmark_timings,
                         call_graph=resolver,
+                        effort_override=effort_override,
                     )
                     if function_optimizer is None:
                         continue
@@ -630,7 +691,9 @@ class Optimizer:
             # Python patterns
             r"test.*__perf_test_\d?\.py|test_.*__unit_test_\d?\.py|test_.*__perfinstrumented\.py|test_.*__perfonlyinstrumented\.py|"
             # JavaScript/TypeScript patterns (new naming with .test/.spec preserved)
-            r".*__perfinstrumented\.(?:test|spec)\.(?:js|ts|jsx|tsx)|.*__perfonlyinstrumented\.(?:test|spec)\.(?:js|ts|jsx|tsx)"
+            r".*__perfinstrumented\.(?:test|spec)\.(?:js|ts|jsx|tsx)|.*__perfonlyinstrumented\.(?:test|spec)\.(?:js|ts|jsx|tsx)|"
+            # Java patterns
+            r".*__perfinstrumented(?:_\d+)?\.java|.*__perfonlyinstrumented(?:_\d+)?\.java"
             r")$"
         )
 

@@ -15,6 +15,7 @@ from codeflash.code_utils.config_consts import (
     TOTAL_LOOPING_TIME_EFFECTIVE,
 )
 from codeflash.either import Failure, Success
+from codeflash.languages.function_optimizer import FunctionOptimizer
 from codeflash.models.models import (
     CodeOptimizationContext,
     CodeString,
@@ -23,7 +24,6 @@ from codeflash.models.models import (
     TestingMode,
     TestResults,
 )
-from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.equivalence import compare_test_results
 
 if TYPE_CHECKING:
@@ -54,6 +54,9 @@ class JavaScriptFunctionOptimizer(FunctionOptimizer):
             )
         except ValueError as e:
             return Failure(str(e))
+
+    def should_check_coverage(self) -> bool:
+        return True
 
     @staticmethod
     def _build_optimization_context(

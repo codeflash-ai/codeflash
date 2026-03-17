@@ -60,8 +60,9 @@ class TestTypeScriptFunctionDiscovery:
 
         # Critical: Verify language is "typescript", not "javascript"
         for func in func_list:
-            assert func.language == "typescript", \
+            assert func.language == "typescript", (
                 f"Function {func.function_name} should have language='typescript', got '{func.language}'"
+            )
 
     def test_discover_functions_with_type_annotations(self):
         """Test discovering TypeScript functions with type annotations."""
@@ -176,11 +177,7 @@ function multiply(a: number, b: number): number {
         ts_support = get_language_support(Language.TYPESCRIPT)
 
         func_info = FunctionInfo(
-            function_name="add",
-            file_path=Path("/tmp/test.ts"),
-            starting_line=2,
-            ending_line=4,
-            language="typescript"
+            function_name="add", file_path=Path("/tmp/test.ts"), starting_line=2, ending_line=4, language="typescript"
         )
 
         result = ts_support.replace_function(original_source, func_info, new_function)
@@ -227,7 +224,7 @@ function processConfig(config: Config): string {
             file_path=Path("/tmp/test.ts"),
             starting_line=7,
             ending_line=9,
-            language="typescript"
+            language="typescript",
         )
 
         result = ts_support.replace_function(original_source, func_info, new_function)
@@ -264,11 +261,7 @@ class TestTypeScriptTestDiscovery:
 
         fib_file = ts_project_dir / "fibonacci.ts"
         func_info = FunctionInfo(
-            function_name="fibonacci",
-            file_path=fib_file,
-            starting_line=1,
-            ending_line=7,
-            language="typescript"
+            function_name="fibonacci", file_path=fib_file, starting_line=1, ending_line=7, language="typescript"
         )
 
         tests = ts_support.discover_tests(test_root, [func_info])
@@ -328,7 +321,7 @@ export function standalone(x: number): number {
                 CodeString(
                     code="function add(a: number, b: number): number { return a + b; }",
                     file_path=Path("test.ts"),
-                    language="typescript"
+                    language="typescript",
                 )
             ],
             language="typescript",

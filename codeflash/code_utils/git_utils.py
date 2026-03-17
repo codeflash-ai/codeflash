@@ -59,6 +59,10 @@ def get_git_diff(
 
         logger.debug(f"deleted lines: {del_line_no}")
 
+        if not add_line_no and del_line_no:
+            # Deletion-only changes: use hunk target start lines so we can still
+            # match the surrounding function in the current (target) file.
+            add_line_no = [hunk.target_start for hunk in patched_file]
         change_list[file_path] = add_line_no
     return change_list
 

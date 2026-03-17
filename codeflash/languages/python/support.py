@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import platform
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -180,8 +181,8 @@ class PythonSupport:
         )
 
     @property
-    def default_language_version(self) -> str | None:
-        return None
+    def language_version(self) -> str | None:
+        return platform.python_version()
 
     @property
     def valid_test_frameworks(self) -> tuple[str, ...]:
@@ -190,6 +191,13 @@ class PythonSupport:
     @property
     def test_result_serialization_format(self) -> str:
         return "pickle"
+
+    def parse_test_xml(
+        self, test_xml_file_path: Path, test_files: Any, test_config: Any, run_result: Any = None
+    ) -> Any:
+        from codeflash.languages.python.parse_xml import parse_python_test_xml
+
+        return parse_python_test_xml(test_xml_file_path, test_files, test_config, run_result)
 
     def load_coverage(
         self,
@@ -868,6 +876,17 @@ class PythonSupport:
         """
         return ".py"
 
+    def get_test_dir_for_source(self, test_dir: Path, source_file: Path | None) -> Path | None:
+        return None
+
+    def resolve_test_file_from_class_path(self, test_class_path: str, base_dir: Path) -> Path | None:
+        return None
+
+    def resolve_test_module_path_for_pr(
+        self, test_module_path: str, tests_project_rootdir: Path, non_generated_tests: set[Path]
+    ) -> Path | None:
+        return None
+
     def find_test_root(self, project_root: Path) -> Path | None:
         """Find the test root directory for a Python project.
 
@@ -938,7 +957,7 @@ class PythonSupport:
         try:
             return ReferenceGraph(project_root, language=self.language.value)
         except Exception:
-            logger.debug("Failed to initialize ReferenceGraph, falling back to per-function Jedi analysis")
+            logger.info("Failed to initialize ReferenceGraph, falling back to per-function Jedi analysis")
             return None
 
     def instrument_existing_test(
@@ -1051,8 +1070,8 @@ class PythonSupport:
         from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
         from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
         from codeflash.languages.python.static_analysis.coverage_utils import prepare_coverage_files
+        from codeflash.languages.python.test_runner import execute_test_subprocess
         from codeflash.models.models import TestType
-        from codeflash.verification.test_runner import execute_test_subprocess
 
         blocklisted_plugins = ["benchmark", "codspeed", "xdist", "sugar"]
 
@@ -1156,7 +1175,7 @@ class PythonSupport:
 
         from codeflash.code_utils.code_utils import get_run_tmp_file
         from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
-        from codeflash.verification.test_runner import execute_test_subprocess
+        from codeflash.languages.python.test_runner import execute_test_subprocess
 
         blocklisted_plugins = ["codspeed", "cov", "benchmark", "profiling", "xdist", "sugar"]
 
@@ -1200,7 +1219,7 @@ class PythonSupport:
         from codeflash.code_utils.code_utils import get_run_tmp_file
         from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
         from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
-        from codeflash.verification.test_runner import execute_test_subprocess
+        from codeflash.languages.python.test_runner import execute_test_subprocess
 
         blocklisted_plugins = ["codspeed", "cov", "benchmark", "profiling", "xdist", "sugar"]
 

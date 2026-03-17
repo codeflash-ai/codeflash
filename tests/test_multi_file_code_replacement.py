@@ -1,8 +1,8 @@
 from pathlib import Path
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown
 from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
+from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown
 from codeflash.verification.verification_utils import TestConfig
 
 

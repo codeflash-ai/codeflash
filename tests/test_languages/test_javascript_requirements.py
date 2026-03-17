@@ -4,7 +4,6 @@ Tests the verify_requirements function that checks Node.js, npm, and test framew
 """
 
 import json
-import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -30,14 +29,7 @@ class TestVerifyRequirements:
         (node_modules / "codeflash").mkdir()
 
         package_json = tmp_path / "package.json"
-        package_json.write_text(
-            json.dumps(
-                {
-                    "name": "test-project",
-                    "devDependencies": {"jest": "^29.0.0"},
-                }
-            )
-        )
+        package_json.write_text(json.dumps({"name": "test-project", "devDependencies": {"jest": "^29.0.0"}}))
         return tmp_path
 
     @pytest.fixture
@@ -49,14 +41,7 @@ class TestVerifyRequirements:
         (node_modules / "codeflash").mkdir()
 
         package_json = tmp_path / "package.json"
-        package_json.write_text(
-            json.dumps(
-                {
-                    "name": "test-project",
-                    "devDependencies": {"vitest": "^2.0.0"},
-                }
-            )
-        )
+        package_json.write_text(json.dumps({"name": "test-project", "devDependencies": {"vitest": "^2.0.0"}}))
         return tmp_path
 
     @pytest.fixture

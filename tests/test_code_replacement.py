@@ -7,7 +7,12 @@ from pathlib import Path
 
 import libcst as cst
 
-from codeflash.languages.python.static_analysis.code_extractor import delete___future___aliased_imports, find_preexisting_objects
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
+from codeflash.languages.python.static_analysis.code_extractor import (
+    delete___future___aliased_imports,
+    find_preexisting_objects,
+)
 from codeflash.languages.python.static_analysis.code_replacer import (
     AddRequestArgument,
     AutouseFixtureModifier,
@@ -16,9 +21,7 @@ from codeflash.languages.python.static_analysis.code_replacer import (
     replace_functions_and_add_imports,
     replace_functions_in_file,
 )
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, FunctionParent, FunctionSource
-from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
 os.environ["CODEFLASH_API_KEY"] = "cf-test-key"

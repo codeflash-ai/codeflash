@@ -9,7 +9,6 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-import pytest
 from junitparser import JUnitXml
 
 from codeflash.languages.javascript.parse import jest_end_pattern, jest_start_pattern
@@ -338,9 +337,7 @@ class TestFilenameBasedLookupFallback:
             path2.touch()
 
             test_file1 = TestFile(
-                original_file_path=path1,
-                test_type=TestType.GENERATED_REGRESSION,
-                instrumented_behavior_file_path=path1,
+                original_file_path=path1, test_type=TestType.GENERATED_REGRESSION, instrumented_behavior_file_path=path1
             )
             test_file2 = TestFile(
                 original_file_path=path2,
