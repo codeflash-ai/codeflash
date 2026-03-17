@@ -136,7 +136,7 @@ class TestsCache:
         )
 
         self.memory_cache = {}
-        self.pending_rows: list[tuple[str, str, str, str, str, str, int | str, int, int]] = []
+        self.pending_rows: list[tuple[str, str, str, str, str, str, int | TestType, int, int]] = []
         self.writes_enabled = True
 
     def insert_test(
