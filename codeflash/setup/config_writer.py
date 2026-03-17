@@ -192,44 +192,6 @@ def _write_package_json(project_root: Path, config: CodeflashConfig) -> tuple[bo
         return False, f"Failed to write package.json: {e}"
 
 
-def create_pyproject_toml(project_root: Path) -> tuple[bool, str]:
-    """Create a minimal pyproject.toml file.
-
-    Used when no pyproject.toml exists for a Python project.
-
-    Args:
-        project_root: Project root directory.
-
-    Returns:
-        Tuple of (success, message).
-
-    """
-    pyproject_path = project_root / "pyproject.toml"
-
-    if pyproject_path.exists():
-        return False, f"pyproject.toml already exists at {pyproject_path}"
-
-    try:
-        doc = tomlkit.document()
-        doc.add(tomlkit.comment("Created by Codeflash"))
-        doc.add(tomlkit.nl())
-
-        # Add minimal [tool.codeflash] section
-        tool_table = tomlkit.table()
-        codeflash_table = tomlkit.table()
-        codeflash_table.add(tomlkit.comment("Codeflash configuration - https://docs.codeflash.ai"))
-        tool_table["codeflash"] = codeflash_table
-        doc["tool"] = tool_table
-
-        with pyproject_path.open("w", encoding="utf8") as f:
-            f.write(tomlkit.dumps(doc))
-
-        return True, f"Created {pyproject_path}"
-
-    except Exception as e:
-        return False, f"Failed to create pyproject.toml: {e}"
-
-
 def remove_config(project_root: Path, language: str) -> tuple[bool, str]:
     """Remove Codeflash config from native config file.
 

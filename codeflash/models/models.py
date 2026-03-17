@@ -281,8 +281,6 @@ def get_code_block_splitter(file_path: Path | None) -> str:
 # Pattern to match markdown code blocks with optional language tag and file path
 # Matches: ```language:filepath\ncode\n``` or ```language\ncode\n```
 markdown_pattern = re.compile(r"```(\w+)(?::([^\n]+))?\n(.*?)\n```", re.DOTALL)
-# Legacy pattern for backward compatibility (only python)
-markdown_pattern_python_only = re.compile(r"```python:([^\n]+)\n(.*?)\n```", re.DOTALL)
 
 
 class CodeStringsMarkdown(BaseModel):
@@ -435,9 +433,6 @@ class TestFile(BaseModel):
 
 class TestFiles(BaseModel):
     test_files: list[TestFile]
-
-    def get_by_type(self, test_type: TestType) -> TestFiles:
-        return TestFiles(test_files=[test_file for test_file in self.test_files if test_file.test_type == test_type])
 
     def add(self, test_file: TestFile) -> None:
         if test_file not in self.test_files:
@@ -901,9 +896,6 @@ class TestResults(BaseModel):  # noqa: PLW1641
             return self.test_results[self.test_result_idx[unique_invocation_loop_id]]
         except (IndexError, KeyError):
             return None
-
-    def get_all_ids(self) -> set[InvocationId]:
-        return {test_result.id for test_result in self.test_results}
 
     def get_all_unique_invocation_loop_ids(self) -> set[str]:
         return {test_result.unique_invocation_loop_id for test_result in self.test_results}

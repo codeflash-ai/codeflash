@@ -221,73 +221,6 @@ class AiServiceClient:
         console.rule()
         return []
 
-    # Backward-compatible alias
-    def optimize_python_code(
-        self,
-        source_code: str,
-        dependency_code: str,
-        trace_id: str,
-        experiment_metadata: ExperimentMetadata | None = None,
-        *,
-        is_async: bool = False,
-        n_candidates: int = 5,
-    ) -> list[OptimizedCandidate]:
-        """Backward-compatible alias for optimize_code() with language='python'."""
-        return self.optimize_code(
-            source_code=source_code,
-            dependency_code=dependency_code,
-            trace_id=trace_id,
-            experiment_metadata=experiment_metadata,
-            language="python",
-            is_async=is_async,
-            n_candidates=n_candidates,
-        )
-
-    def get_jit_rewritten_code(self, source_code: str, trace_id: str) -> list[OptimizedCandidate]:
-        """Rewrite the given python code for performance via jit compilation by making a request to the Django endpoint.
-
-        Parameters
-        ----------
-        - source_code (str): The python code to optimize.
-        - trace_id (str): Trace id of optimization run
-
-        Returns
-        -------
-        - List[OptimizationCandidate]: A list of Optimization Candidates.
-
-        """
-        start_time = time.perf_counter()
-        git_repo_owner, git_repo_name = safe_get_repo_owner_and_name()
-
-        payload = {
-            "source_code": source_code,
-            "trace_id": trace_id,
-            "dependency_code": "",  # dummy value to please the api endpoint
-            "python_version": platform.python_version(),  # backward compat
-            "current_username": get_last_commit_author_if_pr_exists(None),
-            "repo_owner": git_repo_owner,
-            "repo_name": git_repo_name,
-        }
-
-        logger.info("!lsp|Rewriting as a JIT function…")
-        console.rule()
-        try:
-            response = self.make_ai_service_request("/rewrite_jit", payload=payload, timeout=self.timeout)
-        except requests.exceptions.RequestException as e:
-            logger.exception(f"Error generating jit rewritten candidate: {e}")
-            ph("cli-jit-rewrite-error-caught", {"error": str(e)})
-            return []
-
-        if response.status_code == 200:
-            optimizations_json = response.json()["optimizations"]
-            console.rule()
-            end_time = time.perf_counter()
-            logger.debug(f"!lsp|Generating jit rewritten code took {end_time - start_time:.2f} seconds.")
-            return self._get_valid_candidates(optimizations_json, OptimizedCandidateSource.JIT_REWRITE)
-        self.log_error_response(response, "generating jit rewritten candidate", "cli-jit-rewrite-error-response")
-        console.rule()
-        return []
-
     def optimize_python_code_line_profiler(
         self,
         source_code: str,
@@ -441,20 +374,7 @@ class AiServiceClient:
         console.rule()
         return []
 
-    # Alias for backward compatibility
-    optimize_python_code_refinement = optimize_code_refinement
-
     def code_repair(self, request: AIServiceCodeRepairRequest) -> OptimizedCandidate | None:
-        """Repair the optimization candidate that is not matching the test result of the original code.
-
-        Args:
-        request: candidate details for repair
-
-        Returns:
-        -------
-        - OptimizedCandidate: new fixed candidate.
-
-        """
         console.rule()
         try:
             payload = {
