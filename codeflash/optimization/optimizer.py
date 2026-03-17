@@ -524,16 +524,17 @@ class Optimizer:
                 self.functions_checkpoint = CodeflashRunCheckpoint(self.args.module_root)
 
             # Pre-compute test counts once for ranking and logging
+            test_count_cache: dict[tuple[Path, str], int]
             if function_to_tests:
                 from codeflash.discovery.discover_unit_tests import existing_unit_test_count
 
-                test_count_cache: dict[tuple[Path, str], int] = {
+                test_count_cache = {
                     (fp, fn.qualified_name): existing_unit_test_count(fn, self.args.project_root, function_to_tests)
                     for fp, fns in file_to_funcs_to_optimize.items()
                     for fn in fns
                 }
             else:
-                test_count_cache: dict[tuple[Path, str], int] = {}
+                test_count_cache = {}
 
             # GLOBAL RANKING: Rank all functions together before optimizing
             globally_ranked_functions = self.rank_all_functions_globally(

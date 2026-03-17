@@ -753,7 +753,19 @@ def _collect_import_aliases(module_tree: ast.Module) -> dict[str, str]:
 
 
 def _find_class_node_by_name(class_name: str, module_tree: ast.Module) -> ast.ClassDef | None:
-    return next((n for n in ast.walk(module_tree) if isinstance(n, ast.ClassDef) and n.name == class_name), None)
+    stack: list[ast.AST] = [module_tree]
+    while stack:
+        node = stack.pop()
+        body = getattr(node, "body", None)
+        if body:
+            for item in body:
+                if isinstance(item, ast.ClassDef):
+                    if item.name == class_name:
+                        return item
+                    stack.append(item)
+                elif isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    stack.append(item)
+    return None
 
 
 def _expr_matches_name(node: ast.AST | None, import_aliases: dict[str, str], suffix: str) -> bool:

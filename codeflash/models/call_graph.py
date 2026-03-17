@@ -101,17 +101,17 @@ class CallGraph:
         visited: set[FunctionNode] = set()
         reverse_map = self._reverse
         if max_depth is None:
-            queue: deque[FunctionNode] = deque([node])
+            queue: list[FunctionNode] = [node]
             while queue:
-                current = queue.popleft()
+                current = queue.pop()
                 for edge in reverse_map.get(current, []):
                     if edge.caller not in visited:
                         visited.add(edge.caller)
                         queue.append(edge.caller)
         else:
-            depth_queue: deque[tuple[FunctionNode, int]] = deque([(node, 0)])
+            depth_queue: list[tuple[FunctionNode, int]] = [(node, 0)]
             while depth_queue:
-                current, depth = depth_queue.popleft()
+                current, depth = depth_queue.pop()
                 if depth >= max_depth:
                     continue
                 for edge in reverse_map.get(current, []):
