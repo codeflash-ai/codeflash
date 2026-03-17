@@ -1,0 +1,79 @@
+# Getting Started
+
+This guide walks you through installing the Codeflash Claude Code plugin and running your first optimization.
+
+## Prerequisites
+
+- **Claude Code** v2.1.38 or later
+- **Python projects**: [codeflash](https://pypi.org/project/codeflash/) installed in a virtual environment
+- **JS/TS projects**: [codeflash](https://www.npmjs.com/package/codeflash) installed as a dev dependency
+
+## Installation
+
+### 1. Add the marketplace and install
+
+```bash
+/plugin marketplace add codeflash-ai/codeflash-cc-plugin
+/plugin install codeflash
+```
+
+Or from a local clone:
+
+```bash
+git clone https://github.com/codeflash-ai/codeflash-cc-plugin.git
+/plugin marketplace add ./codeflash-cc-plugin
+/plugin install codeflash
+```
+
+### 2. Choose installation scope
+
+By default, plugins install at the **user** level (available across all projects). You can change this:
+
+| Scope | Flag | Effect |
+|-------|------|--------|
+| User (default) | _(none)_ | Available in all your projects |
+| Project | `--scope project` | Shared with team via `.claude/settings.json` |
+| Local | `--scope local` | This project only, gitignored |
+
+```bash
+/plugin install codeflash --scope project
+```
+
+### 3. Verify installation
+
+Run `/plugin` to open the plugin manager. Confirm **codeflash** appears under the **Installed** tab.
+
+## First optimization
+
+Run the `/optimize` skill with a target file:
+
+```
+/optimize src/utils.py
+```
+
+What happens behind the scenes:
+
+1. The skill forks a background **optimizer agent**
+2. The agent walks upward from CWD to the git root, looking for `pyproject.toml` (Python) or `package.json` (JS/TS)
+3. It verifies codeflash is installed and configured
+4. If configuration is missing, it auto-discovers your module root and tests directory and writes the config for you
+5. It runs `codeflash --subagent` in the background with a 10-minute timeout
+6. Results are reported when optimization completes
+
+You can continue working while codeflash optimizes in the background.
+
+## Set up auto-permissions
+
+Run `/setup` to allow codeflash to execute automatically without permission prompts:
+
+```
+/setup
+```
+
+This adds `Bash(*codeflash*)` to the `permissions.allow` array in `.claude/settings.json`. After this, the post-commit hook can trigger optimizations without asking each time.
+
+## Next steps
+
+- [Usage Guide](usage-guide.md) -- all commands, flags, and workflows
+- [Configuration](configuration.md) -- config reference for Python and JS/TS projects
+- [Troubleshooting](troubleshooting.md) -- common problems and fixes

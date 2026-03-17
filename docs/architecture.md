@@ -1,0 +1,133 @@
+# Architecture
+
+This document describes the plugin's components, data flow, and internal protocols.
+
+## Data flow
+
+```
+User types /optimize          User commits code
+       |                              |
+       v                              v
+  SKILL.md                     hooks.json
+  (fork context)               (Stop event, * matcher)
+       |                              |
+       v                              v
+  optimizer agent              suggest-optimize.sh
+  (15 turns, inherited model)  (bash, 30s timeout)
+       |                              |
+       v                              v
+  Verify env & config          Detect new commits
+       |                       with .py/.js/.ts files
+       v                              |
+  codeflash CLI                       v
+  (background, 10min timeout)  Block Claude's stop
+       |                       with suggestion message
+       v                              |
+  Results reported             Claude acts on suggestion
+  to user                      (install / configure / run)
+```
+
+## Component inventory
+
+| File | Type | Purpose |
+|------|------|---------|
+| `.claude-plugin/plugin.json` | Manifest | Plugin identity, version, metadata |
+| `.claude-plugin/marketplace.json` | Manifest | Marketplace listing, owner info |
+| `skills/optimize/SKILL.md` | Skill | `/optimize` slash command definition |
+| `commands/setup.md` | Command | `/setup` slash command for auto-permissions |
+| `agents/optimizer.md` | Agent | Background optimization agent with full workflow |
+| `hooks/hooks.json` | Hook config | Registers the Stop hook |
+| `scripts/suggest-optimize.sh` | Hook script | Commit detection, dedup, project discovery |
+| `scripts/find-venv.sh` | Helper script | Python venv auto-discovery |
+
+## Skill format
+
+Skills use YAML frontmatter in a Markdown file:
+
+```yaml
+---
+name: optimize
+description: Optimize Python, JavaScript, or TypeScript code for performance using Codeflash
+user-invocable: true
+argument-hint: "[--file] [--function] [--subagent]"
+context: fork          # Forks context so optimization doesn't pollute main conversation
+agent: codeflash:optimizer  # Delegates to the optimizer agent
+allowed-tools: Task
+---
+```
+
+The `context: fork` setting means the skill runs in a forked context -- the optimizer agent gets its own conversation branch, keeping the main session clean.
+
+## Agent format
+
+Agents use YAML frontmatter followed by a system prompt:
+
+```yaml
+---
+name: optimizer
+description: |
+  Optimizes Python and JavaScript/TypeScript code for performance...
+model: inherit        # Uses the same model as the parent conversation
+maxTurns: 15          # Maximum number of agent turns
+color: cyan           # Status line color
+tools: Read, Glob, Grep, Bash, Write, Edit
+---
+```
+
+The agent body contains the full workflow: project detection, environment verification, configuration setup, running codeflash, and error handling.
+
+## Hook system
+
+### `hooks.json` structure
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/suggest-optimize.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+- **Event**: `Stop` -- fires every time Claude finishes a response
+- **Matcher**: `*` -- matches all stops (no filtering by tool or content)
+- **Timeout**: 30 seconds for the hook script to complete
+- **`${CLAUDE_PLUGIN_ROOT}`**: Resolved by Claude Code to the plugin's install directory
+
+### Hook stdin/stdout protocol
+
+**Input** (JSON on stdin):
+```json
+{
+  "stop_hook_active": false,
+  "transcript_path": "/path/to/transcript.jsonl"
+}
+```
+
+**Output** (JSON on stdout):
+```json
+{"decision": "block", "reason": "message for Claude to act on"}
+```
+
+Or no output / exit 0 to allow the stop (no blocking).
+
+The `decision` field can be:
+- `"block"` -- prevents Claude from stopping, injects `reason` as a new prompt for Claude to act on
+- Absent / script exits 0 without output -- allows the stop
+
+## State files
+
+| File | Purpose | Lifetime |
+|------|---------|----------|
+| `/tmp/codeflash-hook-debug.log` | Debug output from the hook script (`set -x` stderr) | Persists across sessions until manually cleared |
+| `$TRANSCRIPT_DIR/codeflash-seen` | SHA-256 hashes of already-processed commit sets | Per-session (lives alongside the transcript file) |

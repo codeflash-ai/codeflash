@@ -1,0 +1,117 @@
+# Configuration
+
+This document covers all configuration surfaces: plugin manifests, project-level codeflash config, and Claude Code permissions.
+
+## Plugin manifests
+
+These files live in `.claude-plugin/` and define the plugin for Claude Code's plugin system. You generally don't need to modify them.
+
+### `plugin.json`
+
+```json
+{
+  "name": "codeflash",
+  "description": "Run codeflash as a background agent to optimize code for performance",
+  "version": "0.1.10",
+  "author": { "name": "Codeflash", "url": "https://codeflash.ai" },
+  "repository": "https://github.com/codeflash-ai/codeflash-cc-plugin",
+  "license": "MIT",
+  "keywords": ["python", "javascript", "typescript", "optimization", "performance"]
+}
+```
+
+### `marketplace.json`
+
+Defines the plugin for the Claude Code marketplace. Contains owner info, metadata, and a `plugins` array with the same fields as `plugin.json` plus `source` (relative path) and `category`.
+
+## Python project configuration
+
+Codeflash reads its configuration from `[tool.codeflash]` in `pyproject.toml`.
+
+### Full reference
+
+```toml
+[tool.codeflash]
+# All paths are relative to this pyproject.toml's directory.
+module-root = "src"            # Root of your Python module (where tests import from)
+tests-root = "tests"           # Directory containing your test files
+ignore-paths = []              # Paths to exclude from optimization
+formatter-cmds = ["disabled"]  # Formatter commands, or ["disabled"] to skip formatting
+```
+
+### Fields
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `module-root` | Yes | -- | Relative path to the module root. If your tests do `from mypackage import ...`, then `mypackage/` is the module root |
+| `tests-root` | Yes | -- | Relative path to the tests directory |
+| `ignore-paths` | No | `[]` | List of paths to exclude from optimization |
+| `formatter-cmds` | No | `["disabled"]` | List of formatter commands. Each can include flags, e.g. `"black --line-length 88 {file}"`. Use `["disabled"]` to skip formatting |
+
+### Auto-discovery
+
+When configuration is missing, the optimizer agent discovers values automatically:
+
+- **module-root**: Uses Glob and Read to find the Python package directory (the one tests import from)
+- **tests-root**: Looks for directories named `tests` or `test`, or folders containing `test_*.py` files. Falls back to `tests` (creates it if needed)
+
+## JS/TS project configuration
+
+Codeflash reads its configuration from a `"codeflash"` key at the root level of `package.json`.
+
+### Full reference
+
+```json
+{
+  "codeflash": {
+    "moduleRoot": "src",
+    "testsRoot": "tests",
+    "formatterCmds": ["disabled"],
+    "ignorePaths": ["dist", "**/node_modules", "**/__tests__"]
+  }
+}
+```
+
+### Fields
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `moduleRoot` | Yes | -- | Relative path to the JS/TS module root (e.g. `.` or `src`) |
+| `testsRoot` | Yes | -- | Relative path to the tests directory |
+| `formatterCmds` | No | `["disabled"]` | Formatter commands. Use `npx` prefix for project-local tools, e.g. `"npx prettier --write {file}"` |
+| `ignorePaths` | No | `[]` | Glob patterns to exclude from optimization |
+
+### Auto-discovery
+
+When configuration is missing, the optimizer agent:
+
+- **moduleRoot**: Inspects the project structure; typically `.` or `src`
+- **testsRoot**: Looks for `tests`, `test`, `__tests__`, or directories with `*.test.js`/`*.spec.ts` files. Falls back to `tests`
+
+## Claude Code permissions
+
+To allow codeflash to run without permission prompts, add the following to `.claude/settings.json` in your project root:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(*codeflash*)"
+    ]
+  }
+}
+```
+
+This can be set up automatically by running `/setup`.
+
+### Scope options
+
+The permission can be placed at different levels:
+
+| File | Scope |
+|------|-------|
+| `.claude/settings.json` | Project-wide, shared with team (committed to git) |
+| `.claude/settings.local.json` | Project-wide, personal (gitignored) |
+| `~/.claude/settings.json` | User-wide, all projects |
+
+The stop hook checks `.claude/settings.json` in the repo root to determine if auto-allow is already configured. If the `permissions.allow` array contains any entry matching `codeflash`, the hook skips adding auto-allow instructions to its suggestions.
