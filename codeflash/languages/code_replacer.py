@@ -162,9 +162,14 @@ def _rediscover_function(
     try:
         current_functions = lang_support.discover_functions(source_code, file_path, _SOURCE_CRITERIA)
         target_name = function_to_optimize.function_name
-        for func in current_functions:
-            if func.function_name == target_name:
-                return func
+        original_start = function_to_optimize.starting_line or 0
+        candidates = [func for func in current_functions if func.function_name == target_name]
+        if len(candidates) == 1:
+            return candidates[0]
+        if candidates:
+            # For overloaded methods, pick the one closest to the original line position.
+            # Global declarations shift lines down, so the new start >= original start.
+            return min(candidates, key=lambda f: abs((f.starting_line or 0) - original_start))
     except Exception as e:
         logger.debug(f"Error rediscovering function {function_to_optimize.function_name}: {e}")
 
