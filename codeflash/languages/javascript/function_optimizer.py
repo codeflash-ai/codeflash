@@ -55,6 +55,9 @@ class JavaScriptFunctionOptimizer(FunctionOptimizer):
         except ValueError as e:
             return Failure(str(e))
 
+    def should_check_coverage(self) -> bool:
+        return True
+
     @staticmethod
     def _build_optimization_context(
         code_context: CodeContext,
