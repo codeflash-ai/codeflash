@@ -1583,20 +1583,6 @@ def collect_names_from_annotation(node: ast.expr, names: set[str]) -> None:
         names.add(node.value.id)
 
 
-def remove_docstring_from_body(indented_block: cst.IndentedBlock) -> cst.CSTNode:
-    if not isinstance(indented_block.body[0], cst.SimpleStatementLine):
-        return indented_block
-    first_stmt = indented_block.body[0].body[0]
-    if isinstance(first_stmt, cst.Expr) and isinstance(first_stmt.value, cst.SimpleString):
-        return indented_block.with_changes(body=indented_block.body[1:])
-    return indented_block
-
-
-def _maybe_strip_docstring(node: cst.FunctionDef | cst.ClassDef, cfg: PruneConfig) -> cst.FunctionDef | cst.ClassDef:
-    if cfg.remove_docstrings and isinstance(node.body, cst.IndentedBlock):
-        return node.with_changes(body=remove_docstring_from_body(node.body))
-    return node
-
 
 class ImportCollector(ast.NodeVisitor):
     def __init__(self) -> None:
