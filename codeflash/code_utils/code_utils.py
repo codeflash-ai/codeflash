@@ -17,7 +17,7 @@ import tomlkit
 
 from codeflash.cli_cmds.console import logger, paneled_text
 from codeflash.code_utils.config_parser import find_pyproject_toml, get_all_closest_config_files
-from codeflash.lsp.helpers import is_LSP_enabled
+from codeflash.lsp.helpers import is_LSP_enabled, is_subagent_mode
 
 _INVALID_CHARS_NT = {"<", ">", ":", '"', "|", "?", "*"}
 
@@ -458,6 +458,11 @@ def exit_with_message(message: str, *, error_on_exit: bool = False) -> None:
     if is_LSP_enabled():
         logger.error(message)
         return
+    if is_subagent_mode():
+        from xml.sax.saxutils import escape
+
+        sys.stdout.write(f"<codeflash-error>{escape(message)}</codeflash-error>\n")
+        sys.exit(1 if error_on_exit else 0)
     paneled_text(message, panel_args={"style": "red"})
 
     sys.exit(1 if error_on_exit else 0)
