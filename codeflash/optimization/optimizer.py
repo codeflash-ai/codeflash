@@ -15,7 +15,7 @@ from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import cleanup_paths, get_run_tmp_file
 from codeflash.code_utils.config_consts import HIGH_EFFORT_TOP_N, EffortLevel
 from codeflash.code_utils.env_utils import get_pr_number, is_pr_draft
-from codeflash.code_utils.git_utils import check_running_in_git_repo, git_root_dir
+from codeflash.code_utils.git_utils import check_running_in_git_repo, git_root_dir, mirror_path
 from codeflash.code_utils.git_worktree_utils import (
     create_detached_worktree,
     create_diff_patch_from_worktree,
@@ -477,7 +477,7 @@ class Optimizer:
                 if funcs and funcs[0].language:
                     set_current_language(funcs[0].language)
                     self.test_cfg.set_language(funcs[0].language)
-                    current_language_support().setup_test_config(self.test_cfg, file_path)
+                    current_language_support().setup_test_config(self.test_cfg, file_path, self.current_worktree)
                     break
 
         if self.args.all:
@@ -790,11 +790,6 @@ class Optimizer:
             self.test_cfg.benchmark_tests_root = mirror_path(
                 self.test_cfg.benchmark_tests_root, original_git_root, worktree_dir
             )
-
-
-def mirror_path(path: Path, src_root: Path, dest_root: Path) -> Path:
-    relative_path = path.resolve().relative_to(src_root.resolve())
-    return Path(dest_root / relative_path)
 
 
 def run_with_args(args: Namespace) -> None:

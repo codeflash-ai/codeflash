@@ -716,7 +716,7 @@ class LanguageSupport(Protocol):
         """Parse/validate a module before optimization."""
         ...
 
-    def setup_test_config(self, test_cfg: TestConfig, file_path: Path) -> None:
+    def setup_test_config(self, test_cfg: TestConfig, file_path: Path, current_worktree: Path | None = None) -> None:
         """One-time project setup after language detection. Default: no-op."""
 
     def adjust_test_config_for_discovery(self, test_cfg: TestConfig) -> None:
