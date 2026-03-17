@@ -236,6 +236,37 @@ def _extract_props_type(func: FunctionNode, source: str, analyzer: TreeSitterAna
     return None
 
 
+# Virtualization library imports that require real layout for meaningful benchmarks
+_VIRTUALIZATION_IMPORTS = re.compile(
+    r"""(?:from|import)\s+['"](?:"""
+    r"react-window|react-virtuoso|react-virtual|@tanstack/react-virtual"
+    r"|react-virtualized|@tanstack/virtual-core"
+    r""")['"]""",
+)
+
+# Layout APIs that return zeros in jsdom
+_LAYOUT_API_USAGE = re.compile(
+    r"\b(?:getBoundingClientRect|offsetWidth|offsetHeight|clientWidth|clientHeight"
+    r"|scrollTop|scrollHeight|scrollWidth|scrollLeft"
+    r"|IntersectionObserver|ResizeObserver)\b"
+)
+
+
+def needs_real_layout(source: str) -> bool:
+    """Detect whether a component depends on real layout APIs unavailable in jsdom.
+
+    Returns True if the source imports virtualization libraries or uses layout
+    measurement APIs (getBoundingClientRect, offsetWidth, IntersectionObserver, etc.)
+    that return zeros/stubs in jsdom.
+
+    When True, jsdom-based render benchmarks may be inaccurate. Callers should
+    log a warning; Playwright support is deferred.
+    """
+    if _VIRTUALIZATION_IMPORTS.search(source):
+        return True
+    return bool(_LAYOUT_API_USAGE.search(source))
+
+
 def _is_wrapped_in_memo(func: FunctionNode, source: str) -> bool:
     """Check if the component is already wrapped in React.memo or memo()."""
     # Check if the variable declaration wrapping this function uses memo()

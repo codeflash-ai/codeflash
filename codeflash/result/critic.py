@@ -73,6 +73,7 @@ def speedup_critic(
     original_concurrency_metrics: ConcurrencyMetrics | None = None,
     best_concurrency_ratio_until_now: float | None = None,
     original_render_profiles: list | None = None,
+    render_count_low_confidence: bool = False,
 ) -> bool:
     """Take in a correct optimized Test Result and decide if the optimization should actually be surfaced to the user.
 
@@ -131,6 +132,7 @@ def speedup_critic(
                 original_interaction_duration_ms=benchmark.original_interaction_duration_ms,
                 optimized_interaction_duration_ms=benchmark.optimized_interaction_duration_ms,
                 trust_duration=False,
+                low_confidence=render_count_low_confidence,
             )
 
     throughput_improved = True  # Default to True if no throughput data
@@ -312,6 +314,7 @@ def render_efficiency_critic(
     original_interaction_duration_ms: float = 0.0,
     optimized_interaction_duration_ms: float = 0.0,
     trust_duration: bool = True,
+    low_confidence: bool = False,
 ) -> bool:
     """Evaluate whether a React optimization reduces re-renders, render time, or DOM mutations sufficiently.
 
@@ -322,8 +325,12 @@ def render_efficiency_critic(
     When ``trust_duration`` is False (e.g. jsdom where actualDuration is noise),
     render duration is excluded from the acceptance criteria.
 
+    When ``low_confidence`` is True (render counts varied across validation
+    runs), the render count reduction threshold is raised from 20% to 30%
+    to reduce false positives from measurement noise.
+
     Accepts if:
-    - Update render count reduced by >= 20% (primary), OR total render count reduced by >= 20% (fallback)
+    - Update render count reduced by >= threshold (primary), OR total render count reduced by >= threshold (fallback)
     - OR render duration reduced by >= MIN_IMPROVEMENT_THRESHOLD (when trust_duration=True)
     - OR DOM mutations reduced by >= 20%
     - OR child component render reduction >= MIN_CHILD_RENDER_REDUCTION (captures useCallback/memo optimizations)
@@ -333,16 +340,38 @@ def render_efficiency_critic(
     if original_render_count == 0 and original_dom_mutations == 0 and child_render_reduction == 0:
         return False
 
-    # Use update-phase counts as primary signal when available
+    # Use update-phase counts as primary signal when available.
+    # When the ONLY signal is mount-phase render count (no update-phase data, no DOM mutations,
+    # no child reduction, no interaction data), we cannot meaningfully evaluate the optimization.
+    # Mount count reductions are not a valid React optimization signal — memoization optimizations
+    # often *increase* mount cost while reducing update-phase renders.
+    # When update-phase data exists, ONLY use it for render count acceptance —
+    # total count (which includes mount) dilutes the signal.
     has_update_data = original_update_render_count > 0 or optimized_update_render_count > 0
-    effective_orig_count = original_update_render_count if has_update_data else original_render_count
-    effective_opt_count = optimized_update_render_count if has_update_data else optimized_render_count
+    has_dom_signal = original_dom_mutations > 0
+    has_child_signal = child_render_reduction > 0
+    has_interaction_signal = original_interaction_duration_ms > 0
 
-    # Check render count reduction
+    if not has_update_data and not has_dom_signal and not has_child_signal and not has_interaction_signal:
+        return False
+
+    # Check render count reduction (higher threshold when confidence is low)
+    render_count_threshold = 0.30 if low_confidence else MIN_RENDER_COUNT_REDUCTION_PCT
     count_improved = False
-    if effective_orig_count > 0:
-        count_reduction = (effective_orig_count - effective_opt_count) / effective_orig_count
-        count_improved = count_reduction >= MIN_RENDER_COUNT_REDUCTION_PCT
+    if has_update_data:
+        # Primary: update-phase only — do NOT fall through to total count
+        if original_update_render_count > 0:
+            count_reduction = (
+                (original_update_render_count - optimized_update_render_count) / original_update_render_count
+            )
+            count_improved = count_reduction >= render_count_threshold
+    elif original_render_count > 0:
+        # Fallback: total count when zero update-phase data exists
+        count_reduction = (original_render_count - optimized_render_count) / original_render_count
+        count_improved = count_reduction >= render_count_threshold
+
+    # Determine effective counts for best-candidate tracking
+    effective_opt_count = optimized_update_render_count if has_update_data else optimized_render_count
 
     # Check render duration reduction (prefer update-phase duration)
     # Skipped when trust_duration=False (jsdom actualDuration is noise)

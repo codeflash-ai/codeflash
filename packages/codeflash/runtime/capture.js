@@ -1114,6 +1114,7 @@ function captureRenderPerf(funcName, lineId, renderFn, Component, ...createEleme
     const React = _getReact();
 
     let renderCount = 0;
+    let renderCountAtLastBoundary = 0;
     function onRender(id, phase, actualDuration, baseDuration) {
         renderCount++;
         console.log(`!######REACT_RENDER:${funcName}:${phase}:${actualDuration}:${baseDuration}:${renderCount}######!`);
@@ -1152,6 +1153,17 @@ function captureRenderPerf(funcName, lineId, renderFn, Component, ...createEleme
             observer.disconnect();
             console.log(`!######DOM_MUTATIONS:${funcName}:${mutationCount}######!`);
             return mutationCount;
+        };
+    }
+
+    // Per-interaction render tracking: records renders since last boundary
+    // and emits a REACT_INTERACTION_RENDERS marker for A/B comparison.
+    if (result) {
+        result._codeflashMarkInteraction = (label) => {
+            const rendersSinceLast = renderCount - renderCountAtLastBoundary;
+            console.log(`!######REACT_INTERACTION_RENDERS:${funcName}:${label}:${rendersSinceLast}######!`);
+            renderCountAtLastBoundary = renderCount;
+            return rendersSinceLast;
         };
     }
 

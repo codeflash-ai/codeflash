@@ -47,7 +47,7 @@ class TestPostProcessReactTests:
         assert result.count("@testing-library/react") == 1
 
     def test_adds_user_event_for_click(self):
-        source = "import { render } from '@testing-library/react';\ntest('clicks button', () => { click(button); });"
+        source = "import { render } from '@testing-library/react';\ntest('clicks button', () => { userEvent.click(button); });"
         result = post_process_react_tests(source, _make_info())
         assert "@testing-library/user-event" in result
 

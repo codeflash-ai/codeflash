@@ -15,7 +15,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from codeflash.languages.javascript.parse import DomMutationProfile, InteractionDurationProfile, RenderProfile
+    from codeflash.languages.javascript.parse import (
+        DomMutationProfile,
+        InteractionDurationProfile,
+        InteractionRenderProfile,
+        RenderProfile,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +58,29 @@ def _aggregate_avg_duration(profiles: list[RenderProfile]) -> float:
 
 
 @dataclass(frozen=True)
+class InteractionComparison:
+    """Per-interaction render count comparison."""
+
+    interaction_label: str
+    original_render_count: int
+    optimized_render_count: int
+
+    @property
+    def reduction_pct(self) -> float:
+        if self.original_render_count == 0:
+            return 0.0
+        return (
+            (self.original_render_count - self.optimized_render_count)
+            / self.original_render_count
+            * 100
+        )
+
+    @property
+    def improved(self) -> bool:
+        return self.optimized_render_count < self.original_render_count
+
+
+@dataclass(frozen=True)
 class RenderBenchmark:
     """Comparison of original vs optimized render metrics.
 
@@ -83,6 +111,12 @@ class RenderBenchmark:
     optimized_interaction_duration_ms: float = 0.0
     original_burst_count: int = 0
     optimized_burst_count: int = 0
+    # Per-interaction render comparisons
+    per_interaction_comparisons: tuple[InteractionComparison, ...] = ()
+
+    @property
+    def has_per_interaction_data(self) -> bool:
+        return len(self.per_interaction_comparisons) > 0
 
     @property
     def render_count_reduction_pct(self) -> float:
@@ -161,6 +195,81 @@ class RenderBenchmark:
         return self.original_interaction_duration_ms > 0 or self.optimized_interaction_duration_ms > 0
 
 
+def validate_render_count_stability(runs: list[list[RenderProfile]]) -> str:
+    """Compare render counts across multiple runs to assess measurement confidence.
+
+    Args:
+        runs: List of render profile lists, one per validation run.
+
+    Returns:
+        "high" if counts are identical across all runs,
+        "low" if any component's render count varies by >= 2 across runs.
+        Falls back to "high" if there's only 1 run or no profiles.
+    """
+    if len(runs) <= 1:
+        return "high"
+
+    # Group by component across runs: {component_name: [max_render_count_per_run]}
+    per_component_counts: dict[str, list[int]] = {}
+    for run_profiles in runs:
+        by_comp = _group_by_component(run_profiles)
+        seen_components = set()
+        for comp_name, profiles in by_comp.items():
+            seen_components.add(comp_name)
+            count = _aggregate_render_count(profiles)
+            per_component_counts.setdefault(comp_name, []).append(count)
+        # Components not seen in this run get 0
+        for comp_name in per_component_counts:
+            if comp_name not in seen_components:
+                per_component_counts[comp_name].append(0)
+
+    for comp_name, counts in per_component_counts.items():
+        spread = max(counts) - min(counts)
+        if spread >= 2:
+            logger.warning(
+                "[REACT] Unstable render count for %s across %d runs: %s (spread=%d)",
+                comp_name,
+                len(runs),
+                counts,
+                spread,
+            )
+            return "low"
+        if spread == 1:
+            logger.info(
+                "[REACT] Minor render count variance for %s across %d runs: %s (±1)",
+                comp_name,
+                len(runs),
+                counts,
+            )
+
+    return "high"
+
+
+def _build_interaction_comparisons(
+    original_profiles: list[InteractionRenderProfile],
+    optimized_profiles: list[InteractionRenderProfile],
+) -> tuple[InteractionComparison, ...]:
+    """Build per-interaction render comparisons from original and optimized profiles."""
+    orig_by_label: dict[str, int] = {}
+    for p in original_profiles:
+        orig_by_label[p.interaction_label] = orig_by_label.get(p.interaction_label, 0) + p.render_count
+    opt_by_label: dict[str, int] = {}
+    for p in optimized_profiles:
+        opt_by_label[p.interaction_label] = opt_by_label.get(p.interaction_label, 0) + p.render_count
+
+    all_labels = list(dict.fromkeys(list(orig_by_label.keys()) + list(opt_by_label.keys())))
+    comparisons: list[InteractionComparison] = []
+    for label in all_labels:
+        comparisons.append(
+            InteractionComparison(
+                interaction_label=label,
+                original_render_count=orig_by_label.get(label, 0),
+                optimized_render_count=opt_by_label.get(label, 0),
+            )
+        )
+    return tuple(comparisons)
+
+
 def compare_render_benchmarks(
     original_profiles: list[RenderProfile],
     optimized_profiles: list[RenderProfile],
@@ -169,6 +278,8 @@ def compare_render_benchmarks(
     target_component_name: str | None = None,
     original_interaction_durations: list[InteractionDurationProfile] | None = None,
     optimized_interaction_durations: list[InteractionDurationProfile] | None = None,
+    original_interaction_renders: list[InteractionRenderProfile] | None = None,
+    optimized_interaction_renders: list[InteractionRenderProfile] | None = None,
 ) -> RenderBenchmark | None:
     """Compare original and optimized render profiles with phase awareness.
 
@@ -252,6 +363,13 @@ def compare_render_benchmarks(
         )
         opt_bursts = max((d.burst_count for d in optimized_interaction_durations), default=0)
 
+    # Build per-interaction render comparisons
+    interaction_comparisons: tuple[InteractionComparison, ...] = ()
+    if original_interaction_renders and optimized_interaction_renders:
+        interaction_comparisons = _build_interaction_comparisons(
+            original_interaction_renders, optimized_interaction_renders
+        )
+
     return RenderBenchmark(
         component_name=component_name,
         original_render_count=orig_count,
@@ -271,6 +389,7 @@ def compare_render_benchmarks(
         optimized_interaction_duration_ms=opt_interaction_ms,
         original_burst_count=orig_bursts,
         optimized_burst_count=opt_bursts,
+        per_interaction_comparisons=interaction_comparisons,
     )
 
 
@@ -324,5 +443,19 @@ def format_render_benchmark_for_pr(benchmark: RenderBenchmark) -> str:
 
     if benchmark.render_speedup_x > 1:
         lines.append(f"\nRender time improved **{benchmark.render_speedup_x:.1f}x**.")
+
+    # Per-interaction breakdown table
+    if benchmark.has_per_interaction_data:
+        lines.append("")
+        lines.append("#### Per-Interaction Breakdown")
+        lines.append("")
+        lines.append("| Interaction | Before | After | Change |")
+        lines.append("|-------------|--------|-------|--------|")
+        for ic in benchmark.per_interaction_comparisons:
+            change = f"{ic.reduction_pct:.1f}% fewer" if ic.improved else "no change"
+            lines.append(
+                f"| {ic.interaction_label} | {ic.original_render_count} renders "
+                f"| {ic.optimized_render_count} renders | {change} |"
+            )
 
     return "\n".join(lines)

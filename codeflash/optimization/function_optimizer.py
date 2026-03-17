@@ -575,7 +575,7 @@ class FunctionOptimizer:
         if not self.is_react_component or not test_results.perf_stdout:
             return None
         try:
-            from codeflash.languages.javascript.parse import parse_react_render_markers
+            from codeflash.languages.javascript.parse import parse_react_render_markers  # noqa: PLC0415
 
             profiles = parse_react_render_markers(test_results.perf_stdout)
             if profiles:
@@ -588,6 +588,26 @@ class FunctionOptimizer:
         except Exception:
             logger.debug("Failed to parse React render markers", exc_info=True)
         return None
+
+    def compute_render_count_confidence(self, test_results: TestResults) -> str:
+        """Compute render count confidence from multi-run validation output.
+
+        Splits stdout by validation run boundaries and compares render counts
+        across runs. Returns "high" if identical, "low" if unstable.
+        """
+        if not self.is_react_component or not test_results.perf_stdout:
+            return "high"
+        try:
+            from codeflash.languages.javascript.frameworks.react.benchmarking import validate_render_count_stability  # noqa: PLC0415
+            from codeflash.languages.javascript.parse import parse_per_run_render_profiles  # noqa: PLC0415
+
+            per_run_profiles = parse_per_run_render_profiles(test_results.perf_stdout)
+            if len(per_run_profiles) <= 1:
+                return "high"
+            return validate_render_count_stability(per_run_profiles)
+        except Exception:
+            logger.debug("Failed to compute render count confidence", exc_info=True)
+            return "high"
 
     def parse_dom_mutations_from_results(self, test_results: TestResults) -> list | None:
         """Parse DOM mutation markers from test stdout."""
@@ -618,6 +638,21 @@ class FunctionOptimizer:
                 return profiles
         except Exception:
             logger.debug("Failed to parse interaction duration markers", exc_info=True)
+        return None
+
+    def parse_interaction_render_profiles_from_results(self, test_results: TestResults) -> list | None:
+        """Parse per-interaction render count markers from test stdout."""
+        if not self.is_react_component or not test_results.perf_stdout:
+            return None
+        try:
+            from codeflash.languages.javascript.parse import parse_interaction_render_markers  # noqa: PLC0415
+
+            profiles = parse_interaction_render_markers(test_results.perf_stdout)
+            if profiles:
+                logger.debug(f"Parsed {len(profiles)} per-interaction render profiles from test output")
+                return profiles
+        except Exception:
+            logger.debug("Failed to parse interaction render markers", exc_info=True)
         return None
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
@@ -1022,6 +1057,8 @@ class FunctionOptimizer:
                 target_component_name=self.function_to_optimize.function_name,
                 original_interaction_durations=original_code_baseline.interaction_durations,
                 optimized_interaction_durations=candidate_result.interaction_durations,
+                original_interaction_renders=original_code_baseline.interaction_render_profiles,
+                optimized_interaction_renders=candidate_result.interaction_render_profiles,
             )
 
         best_optimization = BestOptimization(
@@ -1228,6 +1265,10 @@ class FunctionOptimizer:
         eval_ctx.record_successful_candidate(candidate.optimization_id, candidate_result.best_test_runtime, perf_gain)
 
         # Check if this is a successful optimization
+        low_confidence = (
+            original_code_baseline.render_count_confidence == "low"
+            or candidate_result.render_count_confidence == "low"
+        )
         is_successful_opt = speedup_critic(
             candidate_result,
             original_code_baseline.runtime,
@@ -1237,6 +1278,7 @@ class FunctionOptimizer:
             original_concurrency_metrics=original_code_baseline.concurrency_metrics,
             best_concurrency_ratio_until_now=None,
             original_render_profiles=original_code_baseline.render_profiles,
+            render_count_low_confidence=low_confidence,
         ) and quantity_of_tests_critic(candidate_result)
 
         tree = self.build_runtime_info_tree(
@@ -1974,6 +2016,27 @@ class FunctionOptimizer:
                             f"[REACT-TESTGEN] {len(tests_without_interactions)} tests still lack interactions after retries"
                         )
 
+                # Check interaction density across all perf tests — if total interaction calls
+                # are below the minimum, preemptively flag low confidence.
+                from codeflash.languages.javascript.frameworks.react.testgen import (  # noqa: PLC0415
+                    MIN_INTERACTION_CALLS,
+                    count_interaction_calls,
+                )
+
+                total_interactions = sum(
+                    count_interaction_calls(t.instrumented_perf_test_source) for t in tests
+                )
+                if total_interactions < MIN_INTERACTION_CALLS:
+                    logger.error(
+                        "[REACT-TESTGEN] Total interaction calls across all perf tests: %d (minimum %d). "
+                        "Render count confidence will be set to low.",
+                        total_interactions,
+                        MIN_INTERACTION_CALLS,
+                    )
+                    self.insufficient_test_interactions = True
+                else:
+                    self.insufficient_test_interactions = False
+
             if not tests:
                 logger.warning(f"Failed to generate and instrument tests for {self.function_to_optimize.function_name}")
                 return Failure(f"/!\\ NO TESTS GENERATED for {self.function_to_optimize.function_name}")
@@ -2619,6 +2682,7 @@ class FunctionOptimizer:
                     enable_coverage=False,
                     code_context=code_context,
                     is_react_component=self.is_react_component,
+                    n_validation_runs=3 if self.is_react_component else 1,
                 )
                 logger.debug(f"[BENCHMARK-DONE] Got {len(benchmarking_results.test_results)} benchmark results")
             finally:
@@ -2629,10 +2693,41 @@ class FunctionOptimizer:
                         self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                     )
 
-        # Parse React render profiles, DOM mutations, and interaction durations from performance test stdout
+        # Parse React render profiles, DOM mutations, interaction durations, and per-interaction renders
         original_render_profiles = self.parse_render_profiles_from_results(benchmarking_results)
         original_dom_mutations = self.parse_dom_mutations_from_results(benchmarking_results)
         original_interaction_durations = self.parse_interaction_durations_from_results(benchmarking_results)
+        original_interaction_renders = self.parse_interaction_render_profiles_from_results(benchmarking_results)
+        original_render_confidence = self.compute_render_count_confidence(benchmarking_results)
+
+        # Validate that baseline render profiles contain update-phase markers.
+        # Tests that only produce mount-phase markers cannot measure optimization effectiveness.
+        if self.is_react_component and original_render_profiles:
+            has_update_phase = any(p.phase == "update" for p in original_render_profiles)
+            if not has_update_phase:
+                logger.error(
+                    "[REACT] Baseline render profiles contain zero update-phase markers. "
+                    "Perf tests may lack interactions — render-based acceptance will require 30%% threshold."
+                )
+                original_render_confidence = "low"
+
+        # Propagate insufficient interaction count from testgen phase
+        if self.is_react_component and getattr(self, "insufficient_test_interactions", False):
+            original_render_confidence = "low"
+
+        # Warn if the component uses layout APIs that jsdom cannot measure
+        if self.is_react_component:
+            try:
+                source = self.function_to_optimize.file_path.read_text("utf-8")
+                from codeflash.languages.javascript.frameworks.react.discovery import needs_real_layout  # noqa: PLC0415
+
+                if needs_real_layout(source):
+                    logger.warning(
+                        "[REACT] Component uses layout APIs (virtualization, getBoundingClientRect, etc.) "
+                        "— jsdom benchmarks may be inaccurate. Playwright support is planned."
+                    )
+            except Exception:
+                logger.debug("Failed to check layout API usage", exc_info=True)
 
         console.print(
             TestResults.report_to_tree(
@@ -2702,6 +2797,8 @@ class FunctionOptimizer:
                     render_profiles=original_render_profiles,
                     dom_mutations=original_dom_mutations,
                     interaction_durations=original_interaction_durations,
+                    interaction_render_profiles=original_interaction_renders,
+                    render_count_confidence=original_render_confidence,
                 ),
                 functions_to_remove,
             )
@@ -2891,6 +2988,7 @@ class FunctionOptimizer:
                     testing_time=total_looping_time,
                     enable_coverage=False,
                     is_react_component=self.is_react_component,
+                    n_validation_runs=3 if self.is_react_component else 1,
                 )
             finally:
                 self.restore_source_after_profiler(pre_profiler_source)
@@ -2901,10 +2999,21 @@ class FunctionOptimizer:
                         candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
                     )
 
-            # Parse React render profiles, DOM mutations, and interaction durations from candidate performance test stdout
+            # Parse React render profiles, DOM mutations, interaction durations, and per-interaction renders
             candidate_render_profiles = self.parse_render_profiles_from_results(candidate_benchmarking_results)
             candidate_dom_mutations = self.parse_dom_mutations_from_results(candidate_benchmarking_results)
             candidate_interaction_durations = self.parse_interaction_durations_from_results(candidate_benchmarking_results)
+            candidate_interaction_renders = self.parse_interaction_render_profiles_from_results(candidate_benchmarking_results)
+            candidate_render_confidence = self.compute_render_count_confidence(candidate_benchmarking_results)
+
+            if self.is_react_component and candidate_render_profiles:
+                has_update_phase = any(p.phase == "update" for p in candidate_render_profiles)
+                if not has_update_phase:
+                    logger.error(
+                        "[REACT] Candidate render profiles contain zero update-phase markers. "
+                        "Render-based acceptance will require 30%% threshold."
+                    )
+                    candidate_render_confidence = "low"
             # Use effective_loop_count which represents the minimum number of timing samples
             # across all test cases. This is more accurate for JavaScript tests where
             # capturePerf does internal looping with potentially different iteration counts per test.
@@ -2958,6 +3067,8 @@ class FunctionOptimizer:
                     render_profiles=candidate_render_profiles,
                     dom_mutations=candidate_dom_mutations,
                     interaction_durations=candidate_interaction_durations,
+                    interaction_render_profiles=candidate_interaction_renders,
+                    render_count_confidence=candidate_render_confidence,
                 )
             )
 
@@ -2975,6 +3086,7 @@ class FunctionOptimizer:
         code_context: CodeOptimizationContext | None = None,
         line_profiler_output_file: Path | None = None,
         is_react_component: bool = False,
+        n_validation_runs: int = 1,
     ) -> tuple[TestResults | dict, CoverageData | None]:
         coverage_database_file = None
         coverage_config_file = None
@@ -3017,6 +3129,7 @@ class FunctionOptimizer:
                     test_framework=self.test_cfg.test_framework,
                     js_project_root=self.test_cfg.js_project_root,
                     is_react_component=is_react_component,
+                    n_validation_runs=n_validation_runs,
                 )
             else:
                 msg = f"Unexpected testing type: {testing_type}"

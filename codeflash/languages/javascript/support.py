@@ -2432,6 +2432,7 @@ class JavaScriptSupport:
         target_duration_seconds: float = 10.0,
         test_framework: str | None = None,
         is_react_component: bool = False,
+        n_validation_runs: int = 1,
     ) -> tuple[Path, Any]:
         """Run benchmarking tests using the detected test framework.
 
@@ -2482,6 +2483,7 @@ class JavaScriptSupport:
             max_loops=max_loops,
             target_duration_ms=int(target_duration_seconds * 1000),
             is_react_component=is_react_component,
+            n_validation_runs=n_validation_runs,
         )
 
     def run_line_profile_tests(

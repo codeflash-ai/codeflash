@@ -164,6 +164,10 @@ def post_process_react_tests(test_source: str, component_info: ReactComponentInf
             count=1,
         )
 
+    # Auto-inject per-interaction render tracking markers around fireEvent/userEvent calls.
+    # This gives per-interaction A/B signal without the LLM needing to know about it.
+    result = inject_interaction_markers(result)
+
     # Warn if no tests contain interaction calls — mount-phase only markers are
     # not useful for measuring optimization effectiveness.
     if not has_react_test_interactions(result):
@@ -171,6 +175,18 @@ def post_process_react_tests(test_source: str, component_info: ReactComponentInf
             "[REACT] Generated tests for %s contain no interactions (fireEvent, userEvent, rerender). "
             "Tests will produce only mount-phase markers which cannot measure optimization improvements.",
             component_info.function_name,
+        )
+
+    # Check interaction density — fewer than MIN_INTERACTION_CALLS total interactions
+    # means the test is unlikely to produce enough update-phase renders for reliable measurement.
+    interaction_count = count_interaction_calls(result)
+    if interaction_count < MIN_INTERACTION_CALLS:
+        logger.error(
+            "[REACT] Generated tests for %s have only %d interaction calls (minimum %d). "
+            "Render count measurement will have low confidence.",
+            component_info.function_name,
+            interaction_count,
+            MIN_INTERACTION_CALLS,
         )
 
     # Warn if tests lack high-density interaction patterns (loops or 3+ sequential calls)
@@ -182,6 +198,75 @@ def post_process_react_tests(test_source: str, component_info: ReactComponentInf
         )
 
     return result
+
+
+# Pattern to find the variable assigned from captureRenderPerf (await or sync)
+# Matches: const result = await codeflash.captureRenderPerf(...)
+#          const { container } = await codeflash.captureRenderPerf(...)
+#          let result = codeflash.captureRenderPerf(...)
+_CAPTURE_RENDER_RESULT_PATTERN = re.compile(
+    r"(?:const|let|var)\s+(?:\{[^}]+\}|(\w+))\s*=\s*(?:await\s+)?(?:\w+\.)?captureRenderPerf\(",
+)
+
+# Pattern matching fireEvent.* or userEvent.* standalone calls (not in comments)
+_INTERACTION_CALL_PATTERN = re.compile(
+    r"^(\s*)((?:await\s+)?(?:fireEvent\.\w+|userEvent\.\w+)\s*\([^)]*\))\s*;",
+    re.MULTILINE,
+)
+
+
+def _extract_interaction_label(call_text: str) -> str:
+    """Extract a short label from an interaction call, e.g. 'click' from 'fireEvent.click(...)'."""
+    m = re.search(r"(?:fireEvent|userEvent)\.(\w+)", call_text)
+    return m.group(1) if m else "interaction"
+
+
+def inject_interaction_markers(test_source: str) -> str:
+    """Inject _codeflashMarkInteraction() calls before each fireEvent/userEvent call.
+
+    Only injects when captureRenderPerf is used (the result object has the method).
+    Assigns a label derived from the interaction type (click, change, type, etc.)
+    and a sequential counter for uniqueness.
+    """
+    if "captureRenderPerf" not in test_source:
+        return test_source
+
+    # Find the result variable name from captureRenderPerf assignment
+    # Support both: const result = ... and const { container, ...rest } = ...
+    result_var = None
+    capture_match = _CAPTURE_RENDER_RESULT_PATTERN.search(test_source)
+    if capture_match:
+        # Group 1 is the simple variable name; for destructuring we need a different approach
+        result_var = capture_match.group(1)
+    if not result_var:
+        # Look for destructuring pattern and use the first variable
+        destr_match = re.search(
+            r"(?:const|let|var)\s+(\w+)\s*=\s*(?:await\s+)?(?:\w+\.)?captureRenderPerf\(",
+            test_source,
+        )
+        if destr_match:
+            result_var = destr_match.group(1)
+    if not result_var:
+        # Can't determine result variable — skip injection
+        return test_source
+
+    # Find all interaction calls and inject marker before each
+    interaction_counter: dict[str, int] = {}
+    lines = test_source.split("\n")
+    new_lines: list[str] = []
+    for line in lines:
+        m = _INTERACTION_CALL_PATTERN.match(line)
+        if m:
+            indent = m.group(1)
+            call_text = m.group(2)
+            label = _extract_interaction_label(call_text)
+            interaction_counter[label] = interaction_counter.get(label, 0) + 1
+            unique_label = f"{label}_{interaction_counter[label]}"
+            marker_line = f"{indent}{result_var}._codeflashMarkInteraction('{unique_label}');"
+            new_lines.append(marker_line)
+        new_lines.append(line)
+
+    return "\n".join(new_lines)
 
 
 # Patterns that indicate a test triggers user interactions causing re-renders
@@ -198,6 +283,24 @@ def has_react_test_interactions(test_source: str) -> bool:
     that the Profiler can measure.
     """
     return bool(_INTERACTION_PATTERNS.search(test_source))
+
+
+# Minimum interaction calls for reliable render count measurement
+MIN_INTERACTION_CALLS = 3
+
+# Pattern matching individual interaction calls (fireEvent.*, userEvent.*, .rerender(), rerender())
+_INTERACTION_CALL_COUNT_PATTERN = re.compile(
+    r"(?:fireEvent\.\w+|userEvent\.\w+|\.rerender\(|(?<!\.)rerender\()\s*\(",
+)
+
+
+def count_interaction_calls(test_source: str) -> int:
+    """Count the number of interaction calls in a test source.
+
+    Counts fireEvent.*, userEvent.*, and rerender() calls. Used to assess
+    whether tests produce enough update-phase renders for reliable measurement.
+    """
+    return len(_INTERACTION_CALL_COUNT_PATTERN.findall(test_source))
 
 
 # Patterns for loops containing interaction calls

@@ -329,6 +329,7 @@ def run_benchmarking_tests(
     pytest_max_loops: int = 100_000,
     js_project_root: Path | None = None,
     is_react_component: bool = False,
+    n_validation_runs: int = 1,
 ) -> tuple[Path, subprocess.CompletedProcess]:
     logger.debug(f"run_benchmarking_tests called: framework={test_framework}, num_files={len(test_paths.test_files)}")
     # Check if there's a language support for this test framework that implements run_benchmarking_tests
@@ -344,6 +345,7 @@ def run_benchmarking_tests(
             max_loops=pytest_max_loops,
             target_duration_seconds=pytest_target_runtime_seconds,
             is_react_component=is_react_component,
+            n_validation_runs=n_validation_runs,
         )
     if is_python():  # pytest runs both pytest and unittest tests
         pytest_cmd_list = (

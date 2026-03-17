@@ -153,6 +153,8 @@ class TestRenderEfficiencyCritic:
             optimized_render_count=10,
             original_render_duration=100.0,
             optimized_render_duration=100.0,
+            original_update_render_count=48,
+            optimized_update_render_count=8,
         ) is True
 
     def test_rejects_insignificant_reduction(self):
@@ -169,6 +171,8 @@ class TestRenderEfficiencyCritic:
             optimized_render_count=10,
             original_render_duration=100.0,
             optimized_render_duration=10.0,
+            original_update_render_count=8,
+            optimized_update_render_count=8,
         ) is True
 
     def test_rejects_worse_than_best(self):
@@ -187,6 +191,8 @@ class TestRenderEfficiencyCritic:
             original_render_duration=100.0,
             optimized_render_duration=10.0,
             best_render_count_until_now=5,
+            original_update_render_count=48,
+            optimized_update_render_count=1,
         ) is True
 
     def test_uses_update_phase_counts_when_available(self):
@@ -202,8 +208,8 @@ class TestRenderEfficiencyCritic:
             optimized_update_duration=10.0,
         ) is True
 
-    def test_falls_back_to_total_when_no_update_data(self):
-        # No update-phase data → uses total counts
+    def test_rejects_mount_only_when_no_secondary_signals(self):
+        # No update-phase data AND no DOM/child/interaction signals → rejected
         assert render_efficiency_critic(
             original_render_count=50,
             optimized_render_count=10,
@@ -211,6 +217,19 @@ class TestRenderEfficiencyCritic:
             optimized_render_duration=100.0,
             original_update_render_count=0,
             optimized_update_render_count=0,
+        ) is False
+
+    def test_falls_back_to_total_with_dom_signal(self):
+        # No update-phase data but DOM mutations present → uses total counts
+        assert render_efficiency_critic(
+            original_render_count=50,
+            optimized_render_count=10,
+            original_render_duration=100.0,
+            optimized_render_duration=100.0,
+            original_update_render_count=0,
+            optimized_update_render_count=0,
+            original_dom_mutations=100,
+            optimized_dom_mutations=20,
         ) is True
 
 
@@ -427,6 +446,8 @@ class TestRenderEfficiencyCriticTrustDuration:
             optimized_render_count=10,
             original_render_duration=100.0,
             optimized_render_duration=10.0,
+            original_update_render_count=8,
+            optimized_update_render_count=8,
             trust_duration=True,
         ) is True
 
@@ -437,6 +458,8 @@ class TestRenderEfficiencyCriticTrustDuration:
             optimized_render_count=10,
             original_render_duration=100.0,
             optimized_render_duration=100.0,
+            original_update_render_count=48,
+            optimized_update_render_count=8,
             trust_duration=False,
         ) is True
 

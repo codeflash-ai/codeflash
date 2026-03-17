@@ -37,6 +37,9 @@ jest_end_pattern = re.compile(r"!######([^:]+):([^:]+):([^:]+):([^:]+):([^:]+):(
 # Format: !######REACT_RENDER:{component}:{phase}:{actualDuration}:{baseDuration}:{renderCount}######!
 REACT_RENDER_MARKER_PATTERN = re.compile(r"!######REACT_RENDER:([^:]+):([^:]+):([^:]+):([^:]+):(\d+)######!")
 
+# Validation run boundary marker (separates output from multiple validation runs)
+REACT_VALIDATION_RUN_BOUNDARY = "!######REACT_VALIDATION_RUN_BOUNDARY######!"
+
 # DOM mutation marker pattern
 # Format: !######DOM_MUTATIONS:{component}:{mutationCount}######!
 DOM_MUTATION_MARKER_PATTERN = re.compile(r"!######DOM_MUTATIONS:([^:]+):(\d+)######!")
@@ -44,6 +47,10 @@ DOM_MUTATION_MARKER_PATTERN = re.compile(r"!######DOM_MUTATIONS:([^:]+):(\d+)###
 # React interaction duration marker pattern
 # Format: !######REACT_INTERACTION_DURATION:{component}:{durationMs}:{burstCount}######!
 REACT_INTERACTION_DURATION_PATTERN = re.compile(r"!######REACT_INTERACTION_DURATION:([^:]+):([^:]+):(\d+)######!")
+
+# Per-interaction render count marker pattern
+# Format: !######REACT_INTERACTION_RENDERS:{component}:{label}:{renderCount}######!
+REACT_INTERACTION_RENDERS_PATTERN = re.compile(r"!######REACT_INTERACTION_RENDERS:([^:]+):([^:]+):(\d+)######!")
 
 
 @dataclass(frozen=True)
@@ -145,6 +152,50 @@ def parse_interaction_duration_markers(stdout: str) -> list[InteractionDurationP
         except (ValueError, IndexError) as e:
             logger.debug("Failed to parse interaction duration marker: %s", e)
     return profiles
+
+
+@dataclass(frozen=True)
+class InteractionRenderProfile:
+    """Per-interaction render count from a single boundary marker."""
+
+    component_name: str
+    interaction_label: str
+    render_count: int
+
+
+def parse_interaction_render_markers(stdout: str) -> list[InteractionRenderProfile]:
+    """Parse per-interaction render count markers from test output.
+
+    Returns a list of InteractionRenderProfile instances, one per marker found.
+    """
+    profiles: list[InteractionRenderProfile] = []
+    for match in REACT_INTERACTION_RENDERS_PATTERN.finditer(stdout):
+        try:
+            profiles.append(
+                InteractionRenderProfile(
+                    component_name=match.group(1),
+                    interaction_label=match.group(2),
+                    render_count=int(match.group(3)),
+                )
+            )
+        except (ValueError, IndexError) as e:
+            logger.debug("Failed to parse interaction render marker: %s", e)
+    return profiles
+
+
+def parse_per_run_render_profiles(stdout: str) -> list[list[RenderProfile]]:
+    """Split multi-run stdout by boundary markers and parse render profiles per run.
+
+    When ``n_validation_runs > 1``, the test runner inserts
+    ``REACT_VALIDATION_RUN_BOUNDARY`` markers between runs. This function
+    splits on those boundaries and parses each segment independently.
+
+    Returns a list of render profile lists (one per validation run).
+    If no boundary markers are found, returns a single-element list with
+    the profiles from the entire stdout.
+    """
+    segments = stdout.split(REACT_VALIDATION_RUN_BOUNDARY)
+    return [parse_react_render_markers(segment) for segment in segments]
 
 
 def _extract_jest_console_output(suite_elem: Any) -> str:

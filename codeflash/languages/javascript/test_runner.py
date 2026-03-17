@@ -1064,6 +1064,7 @@ def run_jest_benchmarking_tests(
     target_duration_ms: int = 10_000,  # 10 seconds for benchmarking tests
     stability_check: bool = True,
     is_react_component: bool = False,
+    n_validation_runs: int = 1,
 ) -> tuple[Path, subprocess.CompletedProcess[str]]:
     """Run Jest benchmarking tests with in-process session-level looping.
 
@@ -1075,6 +1076,11 @@ def run_jest_benchmarking_tests(
     - Timing data is collected per iteration
     - Stability is checked within the runner
 
+    For React components with n_validation_runs > 1, runs the test suite
+    multiple times and concatenates all stdout. Each run's render markers
+    are separated by ``!######REACT_VALIDATION_RUN_BOUNDARY######!`` markers
+    so the caller can split and compare render counts across runs.
+
     Args:
         test_paths: TestFiles object containing test file information.
         test_env: Environment variables for the test run.
@@ -1085,6 +1091,10 @@ def run_jest_benchmarking_tests(
         max_loops: Maximum number of loop iterations.
         target_duration_ms: Target TOTAL duration in milliseconds for all loops.
         stability_check: Whether to enable stability-based early stopping.
+        is_react_component: Whether the target is a React component.
+        n_validation_runs: Number of times to run the test suite for render
+            count validation (React only). Each run's output is concatenated
+            with boundary markers.
 
     Returns:
         Tuple of (result_file_path, subprocess_result with stdout from all iterations).
@@ -1211,25 +1221,70 @@ def run_jest_benchmarking_tests(
         f"target_duration={target_duration_ms}ms, stability_check={stability_check}"
     )
 
+    # Determine effective number of validation runs (only >1 for React)
+    effective_validation_runs = n_validation_runs if is_react_component and n_validation_runs > 1 else 1
+
     total_start_time = time.time()
 
     try:
         run_args = get_cross_platform_subprocess_run_args(
             cwd=effective_cwd, env=jest_env, timeout=total_timeout, check=False, text=True, capture_output=True
         )
-        result = subprocess.run(jest_cmd, **run_args)  # noqa: PLW1510
 
-        # Combine stderr into stdout for timing markers
-        stdout = result.stdout or ""
-        if result.stderr:
-            stdout = stdout + "\n" + result.stderr if stdout else result.stderr
+        if effective_validation_runs == 1:
+            result = subprocess.run(jest_cmd, **run_args)  # noqa: PLW1510
 
-        # Create result with combined stdout
-        result = subprocess.CompletedProcess(args=result.args, returncode=result.returncode, stdout=stdout, stderr="")
-        if result.returncode != 0:
-            logger.debug(f"Jest benchmarking failed with return code {result.returncode}")
-            logger.debug(f"Jest benchmarking stdout: {result.stdout}")
-            logger.debug(f"Jest benchmarking stderr: {result.stderr}")
+            stdout = result.stdout or ""
+            if result.stderr:
+                stdout = stdout + "\n" + result.stderr if stdout else result.stderr
+
+            result = subprocess.CompletedProcess(
+                args=result.args, returncode=result.returncode, stdout=stdout, stderr=""
+            )
+            if result.returncode != 0:
+                logger.debug(f"Jest benchmarking failed with return code {result.returncode}")
+                logger.debug(f"Jest benchmarking stdout: {result.stdout}")
+                logger.debug(f"Jest benchmarking stderr: {result.stderr}")
+        else:
+            # Multi-run validation for React: run N times, concatenate output with boundary markers
+            logger.debug(
+                f"Running {effective_validation_runs} validation runs for React render count stability"
+            )
+            combined_stdout_parts: list[str] = []
+            last_returncode = 0
+            last_args = jest_cmd
+
+            for run_idx in range(effective_validation_runs):
+                run_result = subprocess.run(jest_cmd, **run_args)  # noqa: PLW1510
+
+                run_stdout = run_result.stdout or ""
+                if run_result.stderr:
+                    run_stdout = run_stdout + "\n" + run_result.stderr if run_stdout else run_result.stderr
+
+                combined_stdout_parts.append(run_stdout)
+                # Add boundary marker between runs (not after the last one)
+                if run_idx < effective_validation_runs - 1:
+                    combined_stdout_parts.append(
+                        "\n!######REACT_VALIDATION_RUN_BOUNDARY######!\n"
+                    )
+
+                last_returncode = run_result.returncode
+                last_args = run_result.args
+
+                if run_result.returncode != 0:
+                    logger.debug(
+                        f"Jest benchmarking run {run_idx + 1}/{effective_validation_runs} "
+                        f"failed with return code {run_result.returncode}"
+                    )
+
+                logger.debug(
+                    f"Validation run {run_idx + 1}/{effective_validation_runs} complete"
+                )
+
+            combined_stdout = "".join(combined_stdout_parts)
+            result = subprocess.CompletedProcess(
+                args=last_args, returncode=last_returncode, stdout=combined_stdout, stderr=""
+            )
 
     except subprocess.TimeoutExpired:
         logger.warning(f"Jest benchmarking timed out after {total_timeout}s")

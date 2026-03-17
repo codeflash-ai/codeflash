@@ -404,6 +404,8 @@ class OptimizedCandidateResult(BaseModel):
     render_profiles: Optional[list[Any]] = None
     dom_mutations: Optional[list[Any]] = None
     interaction_durations: Optional[list[Any]] = None
+    interaction_render_profiles: Optional[list[Any]] = None
+    render_count_confidence: str = "high"
 
 
 class GeneratedTests(BaseModel):
@@ -640,6 +642,8 @@ class OriginalCodeBaseline(BaseModel):
     render_profiles: Optional[list[Any]] = None
     dom_mutations: Optional[list[Any]] = None
     interaction_durations: Optional[list[Any]] = None
+    interaction_render_profiles: Optional[list[Any]] = None
+    render_count_confidence: str = "high"
 
 
 class CoverageStatus(Enum):
