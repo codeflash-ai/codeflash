@@ -7,7 +7,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from functools import cache
 from itertools import chain
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import libcst as cst
 
@@ -49,7 +49,7 @@ if TYPE_CHECKING:
 
 
 @cache
-def get_jedi_project(project_root_path: str) -> object:
+def get_jedi_project(project_root_path: str) -> Any:
     import jedi
 
     return jedi.Project(path=project_root_path)

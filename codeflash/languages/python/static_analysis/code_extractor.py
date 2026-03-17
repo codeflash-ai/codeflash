@@ -558,7 +558,7 @@ def add_needed_imports_from_module(
         dst_code_fallback = dst_module_code
         parsed_dst_module = None
     else:
-        dst_code_fallback = dst_module_code.code.lstrip("\n")
+        dst_code_fallback = dst_module_code.code
         parsed_dst_module = dst_module_code
 
     src_module_and_package: ModuleNameAndPackage = calculate_module_and_package(project_root, src_path)
@@ -616,7 +616,7 @@ def add_needed_imports_from_module(
         return dst_code_fallback
 
     dotted_import_collector = DottedImportCollector()
-    if parsed_dst_module is None:
+    if isinstance(dst_module_code, str):
         try:
             parsed_dst_module = cst.parse_module(dst_module_code)
         except cst.ParserSyntaxError as e:
