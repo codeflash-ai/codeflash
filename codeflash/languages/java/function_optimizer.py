@@ -341,6 +341,8 @@ class JavaFunctionOptimizer(FunctionOptimizer):
             match, diffs = compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
         return match, diffs
 
+    _cached_project_classpath: str | None
+
     def _get_project_classpath(self) -> str | None:
         """Get the project's full classpath from the build tool strategy.
 
