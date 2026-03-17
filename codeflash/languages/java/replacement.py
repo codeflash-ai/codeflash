@@ -873,15 +873,35 @@ def add_runtime_comments(
     if not original_runtimes or not optimized_runtimes:
         return test_source
 
+    # Extract class names declared in this test source to filter runtime keys.
+    # Only annotations whose "ClassName.method" prefix references a class in this file should be applied.
+    source_class_names: set[str] = set()
+    for source_line in test_source.splitlines():
+        stripped_line = source_line.strip()
+        if stripped_line.startswith(("public class ", "class ")):
+            # Extract class name: "public class FooTest {" -> "FooTest"
+            parts = stripped_line.split()
+            class_idx = parts.index("class") + 1 if "class" in parts else -1
+            if 0 < class_idx < len(parts):
+                class_name = parts[class_idx].rstrip("{").strip()
+                if class_name:
+                    source_class_names.add(class_name)
+
     # Build a map of line_number -> (original_ns, optimized_ns) from runtime keys.
     # Keys look like "ClassName.methodName#L15" — extract the line number after "#L".
+    # Only include keys whose class name matches a class declared in this source file.
     line_runtimes: dict[int, tuple[int, int]] = {}
     for key in original_runtimes:
         if "#L" not in key:
             continue
-        line_str = key.split("#L", 1)[1]
+        prefix, line_part = key.split("#L", 1)
+        # Filter by class name: prefix is "ClassName.methodName", extract the class
+        if source_class_names:
+            key_class = prefix.split(".")[0] if "." in prefix else prefix
+            if key_class not in source_class_names:
+                continue
         try:
-            line_num = int(line_str)
+            line_num = int(line_part)
         except ValueError:
             continue
         orig_ns = original_runtimes[key]

@@ -2426,9 +2426,6 @@ class FunctionOptimizer:
             else "Coverage data not available"
         )
 
-        generated_tests = self.language_support.remove_test_functions_from_generated_tests(
-            generated_tests, test_functions_to_remove
-        )
         map_gen_test_file_to_no_of_tests = original_code_baseline.behavior_test_results.file_to_no_of_tests(
             test_functions_to_remove
         )
@@ -2438,8 +2435,15 @@ class FunctionOptimizer:
             best_optimization.winning_benchmarking_test_results.usable_runtime_data_by_test_case()
         )
 
+        # Add runtime comments BEFORE removing test functions, so line numbers from
+        # instrumentation match the original source. Removing functions afterward
+        # correctly shifts annotations along with their associated lines.
         generated_tests = self.language_support.add_runtime_comments_to_generated_tests(
             generated_tests, original_runtime_by_test, optimized_runtime_by_test, self.test_cfg.tests_project_rootdir
+        )
+
+        generated_tests = self.language_support.remove_test_functions_from_generated_tests(
+            generated_tests, test_functions_to_remove
         )
 
         generated_tests_str = ""
