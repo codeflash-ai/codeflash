@@ -347,13 +347,18 @@ class JavaFunctionOptimizer(FunctionOptimizer):
         The classpath is cached by the strategy after the first test run,
         so this is a cheap dict lookup.
         """
+        if hasattr(self, "_cached_project_classpath"):
+            return self._cached_project_classpath
+
         try:
             import os
 
             from codeflash.languages.java.build_tool_strategy import get_strategy
 
             strategy = get_strategy(self.project_root)
-            return strategy.get_classpath(self.project_root, os.environ.copy(), None, timeout=60)
+            classpath = strategy.get_classpath(self.project_root, os.environ.copy(), None, timeout=60)
+            self._cached_project_classpath = classpath
+            return classpath
         except Exception:
             logger.debug("Could not get project classpath for Comparator", exc_info=True)
             return None
