@@ -137,9 +137,7 @@ class InitDecorator(ast.NodeTransformer):
             for stmt in node.body:
                 new_body.append(stmt)
                 if isinstance(stmt, ast.ClassDef) and stmt.name in self._attrs_classes_to_patch:
-                    new_body.extend(
-                        self._build_attrs_patch_block(stmt.name, self._attrs_classes_to_patch[stmt.name])
-                    )
+                    new_body.extend(self._build_attrs_patch_block(stmt.name, self._attrs_classes_to_patch[stmt.name]))
             node.body = new_body
 
         # Add import statement
@@ -246,11 +244,7 @@ class InitDecorator(ast.NodeTransformer):
         # _codeflash_orig_ClassName_init = ClassName.__init__
         save_orig = ast.Assign(
             targets=[ast.Name(id=orig_name, ctx=ast.Store())],
-            value=ast.Attribute(
-                value=ast.Name(id=class_name, ctx=ast.Load()),
-                attr="__init__",
-                ctx=ast.Load(),
-            ),
+            value=ast.Attribute(value=ast.Name(id=class_name, ctx=ast.Load()), attr="__init__", ctx=ast.Load()),
         )
 
         # def _codeflash_patched_ClassName_init(self, *args, **kwargs):
@@ -284,18 +278,8 @@ class InitDecorator(ast.NodeTransformer):
 
         # ClassName.__init__ = codeflash_capture(...)(_codeflash_patched_ClassName_init)
         assign_patched = ast.Assign(
-            targets=[
-                ast.Attribute(
-                    value=ast.Name(id=class_name, ctx=ast.Load()),
-                    attr="__init__",
-                    ctx=ast.Store(),
-                )
-            ],
-            value=ast.Call(
-                func=decorator,
-                args=[ast.Name(id=patched_name, ctx=ast.Load())],
-                keywords=[],
-            ),
+            targets=[ast.Attribute(value=ast.Name(id=class_name, ctx=ast.Load()), attr="__init__", ctx=ast.Store())],
+            value=ast.Call(func=decorator, args=[ast.Name(id=patched_name, ctx=ast.Load())], keywords=[]),
         )
 
         return [save_orig, patched_func, assign_patched]
