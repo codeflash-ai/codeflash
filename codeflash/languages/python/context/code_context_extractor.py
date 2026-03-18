@@ -5,7 +5,7 @@ import hashlib
 import os
 from collections import defaultdict
 from dataclasses import dataclass, field
-from functools import cache
+from functools import cache, lru_cache
 from itertools import chain
 from typing import TYPE_CHECKING, Any
 
@@ -820,7 +820,15 @@ def _expr_matches_name(node: ast.AST | None, import_aliases: dict[str, str], suf
 def _get_node_source(node: ast.AST | None, module_source: str, fallback: str = "...") -> str:
     if node is None:
         return fallback
-    source_segment = ast.get_source_segment(module_source, node)
+
+    source_segment = None
+    try:
+        source_segment = _get_source_segment_cached(
+            module_source, node.lineno, node.col_offset, node.end_lineno, node.end_col_offset
+        )
+    except AttributeError:
+        pass
+
     if source_segment is not None:
         return source_segment
     try:
@@ -959,17 +967,20 @@ def _extract_synthetic_init_parameters(
         if item.value is not None:
             if isinstance(item.value, ast.Call) and _expr_matches_name(item.value.func, import_aliases, "field"):
                 for keyword in item.value.keywords:
-                    if keyword.arg == "init":
+                    kw_arg = keyword.arg
+                    if kw_arg == "init":
                         literal_value = _bool_literal(keyword.value)
                         if literal_value is not None:
                             include_in_init = literal_value
-                    elif keyword.arg == "kw_only":
+                    elif kw_arg == "kw_only":
                         literal_value = _bool_literal(keyword.value)
                         if literal_value is not None:
                             kw_only = literal_value
-                    elif keyword.arg == "default":
+                    elif kw_arg == "default":
                         default_value = _get_node_source(keyword.value, module_source)
-                    elif keyword.arg in {"default_factory", "factory"}:
+                    elif kw_arg in {"default_factory", "factory"}:
+                        # Default factories (dataclass default_factory= / attrs factory=) still imply
+                        # an optional constructor parameter.
                         # Default factories (dataclass default_factory= / attrs factory=) still imply
                         # an optional constructor parameter.
                         default_value = "..."
@@ -1628,6 +1639,10 @@ class ImportCollector(ast.NodeVisitor):
                     self.imported_names[alias.asname if alias.asname else alias.name] = node.module
 
 
+class _NodePos:
+    __slots__ = ("col_offset", "end_col_offset", "end_lineno", "lineno")
+
+
 @dataclass(frozen=True)
 class PruneConfig:
     defs_with_usages: dict[str, UsageInfo] | None = None
@@ -1808,3 +1823,27 @@ def _maybe_strip_docstring(node: cst.FunctionDef | cst.ClassDef, cfg: PruneConfi
             return node.with_changes(body=node.body.with_changes(body=new_body))
 
     return node
+
+
+@lru_cache(maxsize=2048)
+def _get_source_segment_cached(
+    module_source: str, lineno: int, col_offset: int, end_lineno: int, end_col_offset: int
+) -> str | None:
+    node_pos = _NodePos()
+    node_pos.lineno = lineno
+    node_pos.col_offset = col_offset
+    node_pos.end_lineno = end_lineno
+    node_pos.end_col_offset = end_col_offset
+    return ast.get_source_segment(module_source, node_pos)
+
+
+@lru_cache(maxsize=2048)
+def _get_source_segment_cached(
+    module_source: str, lineno: int, col_offset: int, end_lineno: int, end_col_offset: int
+) -> str | None:
+    node_pos = _NodePos()
+    node_pos.lineno = lineno
+    node_pos.col_offset = col_offset
+    node_pos.end_lineno = end_lineno
+    node_pos.end_col_offset = end_col_offset
+    return ast.get_source_segment(module_source, node_pos)
