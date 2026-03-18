@@ -35,9 +35,11 @@ function average(numbers) {
 function findMax(numbers) {
     if (numbers.length === 0) return -Infinity;
 
-    // Intentionally inefficient - sorting instead of linear scan
-    const sorted = [...numbers].sort((a, b) => b - a);
-    return sorted[0];
+    let max = numbers[0];
+    for (let i = 1, len = numbers.length; i < len; i++) {
+        if (numbers[i] > max) max = numbers[i];
+    }
+    return max;
 }
 
 /**
@@ -48,9 +50,11 @@ function findMax(numbers) {
 function findMin(numbers) {
     if (numbers.length === 0) return Infinity;
 
-    // Intentionally inefficient - sorting instead of linear scan
-    const sorted = [...numbers].sort((a, b) => a - b);
-    return sorted[0];
+    let min = numbers[0];
+    for (let i = 1, len = numbers.length; i < len; i++) {
+        if (numbers[i] < min) min = numbers[i];
+    }
+    return min;
 }
 
 module.exports = {

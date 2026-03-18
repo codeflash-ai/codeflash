@@ -45,8 +45,16 @@ function calculateStats(numbers) {
 function normalizeArray(numbers) {
     if (numbers.length === 0) return [];
 
-    const min = findMin(numbers);
-    const max = findMax(numbers);
+    // Find min and max in a single pass instead of two separate calls
+    let min = numbers[0];
+    let max = numbers[0];
+    
+    for (let i = 1, len = numbers.length; i < len; i++) {
+        const num = numbers[i];
+        if (num < min) min = num;
+        else if (num > max) max = num;
+    }
+    
     const range = max - min;
 
     if (range === 0) {
