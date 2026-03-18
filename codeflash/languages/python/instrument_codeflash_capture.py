@@ -132,6 +132,9 @@ class InitDecorator(ast.NodeTransformer):
         self._starred_args = ast.Starred(value=self._args_name_load, ctx=self._load_ctx)
         self._kwargs_keyword = ast.keyword(arg=None, value=self._kwargs_name_load)
 
+        # Pre-parse the import statement to avoid repeated parsing in visit_Module
+        self._import_stmt = ast.parse("from codeflash.verification.codeflash_capture import codeflash_capture").body[0]
+
     def visit_ImportFrom(self, node: ast.ImportFrom) -> ast.ImportFrom:
         # Check if our import already exists
         if node.module == "codeflash.verification.codeflash_capture" and any(
@@ -155,8 +158,7 @@ class InitDecorator(ast.NodeTransformer):
 
         # Add import statement
         if not self.has_import and self.inserted_decorator:
-            import_stmt = ast.parse("from codeflash.verification.codeflash_capture import codeflash_capture").body[0]
-            node.body.insert(0, import_stmt)
+            node.body.insert(0, self._import_stmt)
 
         return node
 
