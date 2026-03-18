@@ -269,8 +269,9 @@ class TestMultiLanguageOrchestration:
     @patch("codeflash.main.parse_args")
     @patch("codeflash.main.print_codeflash_banner")
     @patch("codeflash.main.check_for_newer_minor_version")
+    @patch("codeflash.main.get_changed_file_paths", return_value=[])
     def test_fallback_to_single_config_when_no_multi_configs(
-        self, _ver, _banner, mock_parse_args, mock_handle_config, mock_run, _fmt, _ckpt, tmp_path: Path
+        self, _changed, _ver, _banner, mock_parse_args, mock_handle_config, mock_run, _fmt, _ckpt, tmp_path: Path
     ) -> None:
         base = make_base_args(
             disable_telemetry=False, formatter_cmds=[], module_root=str(tmp_path), tests_root=str(tmp_path)
