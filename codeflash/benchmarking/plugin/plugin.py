@@ -267,9 +267,9 @@ class CodeFlashBenchmarkPlugin:
             os.environ["CODEFLASH_BENCHMARK_LINE_NUMBER"] = str(line_number)
             os.environ["CODEFLASH_BENCHMARKING"] = "True"
             # Run the function
-            start = time.time_ns()
+            start = time.perf_counter_ns()
             result = func(*args, **kwargs)
-            end = time.time_ns()
+            end = time.perf_counter_ns()
             # Reset the environment variable
             os.environ["CODEFLASH_BENCHMARKING"] = "False"
 
