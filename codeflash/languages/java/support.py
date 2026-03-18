@@ -403,7 +403,7 @@ class JavaSupport(LanguageSupport):
     ) -> None:
         return None
 
-    def setup_test_config(self, test_cfg: Any, file_path: Path) -> None:
+    def setup_test_config(self, test_cfg: Any, file_path: Path, current_worktree: Path | None = None) -> None:
         """Detect test framework from project build config (pom.xml / build.gradle)."""
         config = detect_java_project(test_cfg.project_root_path)
         if config is not None:
