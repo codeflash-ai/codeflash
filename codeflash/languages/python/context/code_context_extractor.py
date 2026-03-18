@@ -1811,44 +1811,6 @@ def _maybe_strip_docstring(node: cst.FunctionDef | cst.ClassDef, cfg: PruneConfi
 
 
 def _get_last_two_names(node: ast.AST | None) -> tuple[str | None, str | None]:
-    """Extract only the last two identifier parts from a decorator expression.
-
-    Returns (second_last, last) or (None, None) when fewer than two parts exist.
-    Avoids building full dotted strings for performance.
-    """
-    if node is None:
-        return None, None
-    attrs_rev: list[str] = []
-    current = node
-    while True:
-        if isinstance(current, ast.Attribute):
-            attrs_rev.append(current.attr)
-            current = current.value
-            continue
-        if isinstance(current, ast.Call):
-            current = current.func
-            continue
-        if isinstance(current, ast.Name):
-            base_name = current.id
-        else:
-            base_name = None
-        break
-
-    total_parts = len(attrs_rev) + (1 if base_name is not None else 0)
-    if total_parts < 2:
-        return None, None
-
-    if len(attrs_rev) >= 2:
-        return attrs_rev[1], attrs_rev[0]
-    return base_name, attrs_rev[0]
-
-
-def _get_last_two_names(node: ast.AST | None) -> tuple[str | None, str | None]:
-    """Extract only the last two identifier parts from a decorator expression.
-
-    Returns (second_last, last) or (None, None) when fewer than two parts exist.
-    Avoids building full dotted strings for performance.
-    """
     if node is None:
         return None, None
     attrs_rev: list[str] = []
