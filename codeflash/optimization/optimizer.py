@@ -158,6 +158,7 @@ class Optimizer:
             project_root=project_root,
             module_root=module_root,
             previous_checkpoint_functions=self.args.previous_checkpoint_functions,
+            since_commit=getattr(self.args, "since_commit", None),
         )
 
         # Remap discovered file paths from the original repo to the worktree so

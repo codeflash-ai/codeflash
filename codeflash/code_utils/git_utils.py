@@ -20,7 +20,11 @@ if TYPE_CHECKING:
 
 
 def get_git_diff(
-    repo_directory: Path | None = None, *, only_this_commit: Optional[str] = None, uncommitted_changes: bool = False
+    repo_directory: Path | None = None,
+    *,
+    only_this_commit: Optional[str] = None,
+    uncommitted_changes: bool = False,
+    since_commit: Optional[str] = None,
 ) -> dict[str, list[int]]:
     from codeflash.languages.current import current_language_support
 
@@ -29,7 +33,12 @@ def get_git_diff(
     repository = git.Repo(repo_directory, search_parent_directories=True)
     commit = repository.head.commit
     supported_extensions = current_language_support().file_extensions
-    if only_this_commit:
+    if since_commit:
+        # Diff from a base commit to HEAD — captures all changes across multiple commits
+        uni_diff_text = repository.git.diff(
+            since_commit, commit.hexsha, ignore_blank_lines=True, ignore_space_at_eol=True
+        )
+    elif only_this_commit:
         uni_diff_text = repository.git.diff(
             only_this_commit + "^1", only_this_commit, ignore_blank_lines=True, ignore_space_at_eol=True
         )
