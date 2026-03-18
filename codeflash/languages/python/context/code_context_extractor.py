@@ -720,14 +720,14 @@ def collect_type_names_from_annotation(node: ast.expr | None) -> set[str]:
         return {node.id}
     if isinstance(node, ast.Subscript):
         names = collect_type_names_from_annotation(node.value)
-        names |= collect_type_names_from_annotation(node.slice)
+        names.update(collect_type_names_from_annotation(node.slice))
         return names
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
         return collect_type_names_from_annotation(node.left) | collect_type_names_from_annotation(node.right)
     if isinstance(node, ast.Tuple):
         names = set[str]()
         for elt in node.elts:
-            names |= collect_type_names_from_annotation(elt)
+            names.update(collect_type_names_from_annotation(elt))
         return names
     return set()
 
@@ -810,8 +810,10 @@ def _expr_matches_name(node: ast.AST | None, import_aliases: dict[str, str], suf
         return False
 
     # Precompute ".suffix" to avoid repeated f-string allocations.
+    if expr_name == suffix:
+        return True
     suffix_dot = "." + suffix
-    if expr_name == suffix or expr_name.endswith(suffix_dot):
+    if expr_name.endswith(suffix_dot):
         return True
     resolved_name = import_aliases.get(expr_name)
     return resolved_name is not None and (resolved_name == suffix or resolved_name.endswith(suffix_dot))
@@ -890,6 +892,16 @@ def _get_attrs_config(class_node: ast.ClassDef, import_aliases: dict[str, str]) 
 
 def _is_classvar_annotation(annotation: ast.expr, import_aliases: dict[str, str]) -> bool:
     annotation_root = annotation.value if isinstance(annotation, ast.Subscript) else annotation
+    if isinstance(annotation_root, ast.Name):
+        expr_name = annotation_root.id
+        suffix = "ClassVar"
+        if expr_name == suffix:
+            return True
+        resolved_name = import_aliases.get(expr_name)
+        if resolved_name is None:
+            return False
+        suffix_dot = "." + suffix
+        return resolved_name == suffix or resolved_name.endswith(suffix_dot)
     return _expr_matches_name(annotation_root, import_aliases, "ClassVar")
 
 
@@ -938,7 +950,7 @@ def _collect_synthetic_constructor_type_names(class_node: ast.ClassDef, import_a
                 break
 
         if include_in_init:
-            names |= collect_type_names_from_annotation(item.annotation)
+            names.update(collect_type_names_from_annotation(item.annotation))
 
     return names
 
