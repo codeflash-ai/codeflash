@@ -457,6 +457,142 @@ class TestOrchestrationSummaryLogging:
             assert mock_run.call_count == 1
 
 
+class TestCLIPathRouting:
+    @patch("codeflash.main.ask_should_use_checkpoint_get_functions", return_value=[])
+    @patch("codeflash.main.env_utils.check_formatter_installed", return_value=True)
+    @patch("codeflash.main.handle_optimize_all_arg_parsing", side_effect=lambda args: args)
+    @patch("codeflash.optimization.optimizer.run_with_args")
+    @patch("codeflash.main.find_all_config_files")
+    @patch("codeflash.main.parse_args")
+    @patch("codeflash.main.print_codeflash_banner")
+    @patch("codeflash.main.check_for_newer_minor_version")
+    def test_file_flag_filters_to_matching_language(
+        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+    ) -> None:
+        py_config = make_lang_config(tmp_path, Language.PYTHON)
+        java_config = make_lang_config(tmp_path, Language.JAVA)
+        mock_find_configs.return_value = [py_config, java_config]
+        mock_parse_args.return_value = make_base_args(file="path/to/Foo.java", disable_telemetry=False)
+
+        from codeflash.main import main
+
+        main()
+
+        assert mock_run.call_count == 1
+
+    @patch("codeflash.main.ask_should_use_checkpoint_get_functions", return_value=[])
+    @patch("codeflash.main.env_utils.check_formatter_installed", return_value=True)
+    @patch("codeflash.main.handle_optimize_all_arg_parsing", side_effect=lambda args: args)
+    @patch("codeflash.optimization.optimizer.run_with_args")
+    @patch("codeflash.main.find_all_config_files")
+    @patch("codeflash.main.parse_args")
+    @patch("codeflash.main.print_codeflash_banner")
+    @patch("codeflash.main.check_for_newer_minor_version")
+    def test_file_flag_python_file_filters_to_python(
+        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+    ) -> None:
+        py_config = make_lang_config(tmp_path, Language.PYTHON)
+        java_config = make_lang_config(tmp_path, Language.JAVA)
+        mock_find_configs.return_value = [py_config, java_config]
+        mock_parse_args.return_value = make_base_args(file="module.py", disable_telemetry=False)
+
+        from codeflash.main import main
+
+        main()
+
+        assert mock_run.call_count == 1
+
+    @patch("codeflash.main.ask_should_use_checkpoint_get_functions", return_value=[])
+    @patch("codeflash.main.env_utils.check_formatter_installed", return_value=True)
+    @patch("codeflash.main.handle_optimize_all_arg_parsing", side_effect=lambda args: args)
+    @patch("codeflash.optimization.optimizer.run_with_args")
+    @patch("codeflash.main.find_all_config_files")
+    @patch("codeflash.main.parse_args")
+    @patch("codeflash.main.print_codeflash_banner")
+    @patch("codeflash.main.check_for_newer_minor_version")
+    def test_file_flag_unknown_extension_runs_all(
+        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+    ) -> None:
+        py_config = make_lang_config(tmp_path, Language.PYTHON)
+        java_config = make_lang_config(tmp_path, Language.JAVA)
+        mock_find_configs.return_value = [py_config, java_config]
+        mock_parse_args.return_value = make_base_args(file="Foo.rs", disable_telemetry=False)
+
+        from codeflash.main import main
+
+        main()
+
+        assert mock_run.call_count == 2
+
+    @patch("codeflash.main.ask_should_use_checkpoint_get_functions", return_value=[])
+    @patch("codeflash.main.env_utils.check_formatter_installed", return_value=True)
+    @patch("codeflash.main.handle_optimize_all_arg_parsing", side_effect=lambda args: args)
+    @patch("codeflash.optimization.optimizer.run_with_args")
+    @patch("codeflash.main.find_all_config_files")
+    @patch("codeflash.main.parse_args")
+    @patch("codeflash.main.print_codeflash_banner")
+    @patch("codeflash.main.check_for_newer_minor_version")
+    def test_file_flag_no_matching_config_runs_all(
+        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+    ) -> None:
+        py_config = make_lang_config(tmp_path, Language.PYTHON)
+        mock_find_configs.return_value = [py_config]
+        mock_parse_args.return_value = make_base_args(file="Foo.java", disable_telemetry=False)
+
+        from codeflash.main import main
+
+        main()
+
+        assert mock_run.call_count == 1
+
+    @patch("codeflash.main.ask_should_use_checkpoint_get_functions", return_value=[])
+    @patch("codeflash.main.env_utils.check_formatter_installed", return_value=True)
+    @patch("codeflash.main.handle_optimize_all_arg_parsing", side_effect=lambda args: args)
+    @patch("codeflash.optimization.optimizer.run_with_args")
+    @patch("codeflash.main.find_all_config_files")
+    @patch("codeflash.main.parse_args")
+    @patch("codeflash.main.print_codeflash_banner")
+    @patch("codeflash.main.check_for_newer_minor_version")
+    def test_all_flag_sets_module_root_per_language(
+        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+    ) -> None:
+        py_config = make_lang_config(tmp_path, Language.PYTHON)
+        java_config = make_lang_config(tmp_path, Language.JAVA)
+        mock_find_configs.return_value = [py_config, java_config]
+        mock_parse_args.return_value = make_base_args(all="", disable_telemetry=False)
+
+        from codeflash.main import main
+
+        main()
+
+        assert mock_run.call_count == 2
+        for call in mock_run.call_args_list:
+            passed_args = call[0][0]
+            assert passed_args.all == passed_args.module_root
+
+    @patch("codeflash.main.ask_should_use_checkpoint_get_functions", return_value=[])
+    @patch("codeflash.main.env_utils.check_formatter_installed", return_value=True)
+    @patch("codeflash.main.handle_optimize_all_arg_parsing", side_effect=lambda args: args)
+    @patch("codeflash.optimization.optimizer.run_with_args")
+    @patch("codeflash.main.find_all_config_files")
+    @patch("codeflash.main.parse_args")
+    @patch("codeflash.main.print_codeflash_banner")
+    @patch("codeflash.main.check_for_newer_minor_version")
+    def test_no_flags_runs_all_language_passes(
+        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+    ) -> None:
+        py_config = make_lang_config(tmp_path, Language.PYTHON)
+        java_config = make_lang_config(tmp_path, Language.JAVA)
+        mock_find_configs.return_value = [py_config, java_config]
+        mock_parse_args.return_value = make_base_args(disable_telemetry=False)
+
+        from codeflash.main import main
+
+        main()
+
+        assert mock_run.call_count == 2
+
+
 class TestNormalizeTomlConfig:
     def test_converts_hyphenated_keys_to_underscored(self, tmp_path: Path) -> None:
         config = {"module-root": "src", "tests-root": "tests"}
