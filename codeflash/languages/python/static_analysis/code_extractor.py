@@ -556,11 +556,9 @@ def add_needed_imports_from_module(
     # Cache the fallback early to avoid repeated isinstance checks
     if isinstance(dst_module_code, str):
         dst_code_fallback = dst_module_code
-        parsed_dst_module = None
     else:
         # Keep Module-input fallback formatting aligned with transformed_module.code.lstrip("\n").
         dst_code_fallback = dst_module_code.code.lstrip("\n")
-        parsed_dst_module = dst_module_code
 
     src_module_and_package: ModuleNameAndPackage = calculate_module_and_package(project_root, src_path)
     dst_module_and_package: ModuleNameAndPackage = calculate_module_and_package(project_root, dst_path)
@@ -623,6 +621,8 @@ def add_needed_imports_from_module(
         except cst.ParserSyntaxError as e:
             logger.exception(f"Syntax error in destination module code: {e}")
             return dst_code_fallback
+    else:
+        parsed_dst_module = dst_module_code
 
     parsed_dst_module.visit(dotted_import_collector)
 
