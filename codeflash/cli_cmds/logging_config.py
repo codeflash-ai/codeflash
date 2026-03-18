@@ -1,5 +1,4 @@
 VERBOSE_LOGGING_FORMAT = "%(asctime)s [%(pathname)s:%(lineno)s in function %(funcName)s] %(message)s"
-LOGGING_FORMAT = "[%(levelname)s] %(message)s"
 BARE_LOGGING_FORMAT = "%(message)s"
 
 

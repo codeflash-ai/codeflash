@@ -251,5 +251,102 @@ class TestGetGitDiffDeletionOnly(unittest.TestCase):
         assert len(result[key]) > 0
 
 
+JAVA_ADDITION_DIFF = """\
+--- a/src/main/java/com/example/Fibonacci.java
++++ b/src/main/java/com/example/Fibonacci.java
+@@ -5,5 +5,7 @@ public class Fibonacci {
+     public static int fibonacci(int n) {
+         if (n <= 1) return n;
++        int[] memo = new int[n + 1];
++        memo[0] = 0; memo[1] = 1;
+         return fibonacci(n - 1) + fibonacci(n - 2);
+     }
+
+"""
+
+MIXED_LANG_DIFF = """\
+--- a/src/utils.py
++++ b/src/utils.py
+@@ -1,3 +1,4 @@
+ def helper():
++    x = 1
+     return True
+
+--- a/src/main/java/com/example/App.java
++++ b/src/main/java/com/example/App.java
+@@ -1,3 +1,4 @@
+ public class App {
++    int x = 1;
+     public static void main(String[] args) {}
+
+"""
+
+
+class TestGetGitDiffMultiLanguage(unittest.TestCase):
+    @patch("codeflash.code_utils.git_utils.git.Repo")
+    def test_java_diff_found_when_language_is_java(self, mock_repo_cls):
+        from codeflash.languages.current import reset_current_language, set_current_language
+
+        repo = mock_repo_cls.return_value
+        repo.head.commit.hexsha = "abc123"
+        repo.working_dir = "/repo"
+        repo.git.diff.return_value = JAVA_ADDITION_DIFF
+
+        set_current_language("java")
+        try:
+            result = get_git_diff(repo_directory=None, uncommitted_changes=True)
+            assert len(result) == 1
+            key = list(result.keys())[0]
+            assert str(key).endswith("Fibonacci.java")
+            assert result[key] == [7, 8]
+        finally:
+            reset_current_language()
+
+    @patch("codeflash.code_utils.git_utils.git.Repo")
+    def test_java_diff_ignored_when_language_is_python(self, mock_repo_cls):
+        from codeflash.languages.current import reset_current_language, set_current_language
+
+        repo = mock_repo_cls.return_value
+        repo.head.commit.hexsha = "abc123"
+        repo.working_dir = "/repo"
+        repo.git.diff.return_value = JAVA_ADDITION_DIFF
+
+        set_current_language("python")
+        try:
+            result = get_git_diff(repo_directory=None, uncommitted_changes=True)
+            assert len(result) == 0
+        finally:
+            reset_current_language()
+
+    @patch("codeflash.code_utils.git_utils.git.Repo")
+    def test_mixed_lang_diff_filters_by_current_language(self, mock_repo_cls):
+        from codeflash.languages.current import reset_current_language, set_current_language
+
+        repo = mock_repo_cls.return_value
+        repo.head.commit.hexsha = "abc123"
+        repo.working_dir = "/repo"
+        repo.git.diff.return_value = MIXED_LANG_DIFF
+
+        # When language is Python, only .py file should be found
+        set_current_language("python")
+        try:
+            result = get_git_diff(repo_directory=None, uncommitted_changes=True)
+            assert len(result) == 1
+            key = list(result.keys())[0]
+            assert str(key).endswith("utils.py")
+        finally:
+            reset_current_language()
+
+        # When language is Java, only .java file should be found
+        set_current_language("java")
+        try:
+            result = get_git_diff(repo_directory=None, uncommitted_changes=True)
+            assert len(result) == 1
+            key = list(result.keys())[0]
+            assert str(key).endswith("App.java")
+        finally:
+            reset_current_language()
+
+
 if __name__ == "__main__":
     unittest.main()

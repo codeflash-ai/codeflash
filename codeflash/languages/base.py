@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.models.call_graph import CallGraph
     from codeflash.models.models import FunctionSource, GeneratedTestsList, InvocationId, ValidCode
     from codeflash.verification.verification_utils import TestConfig
 
@@ -248,6 +249,12 @@ class DependencyResolver(Protocol):
         self, file_path_to_qualified_names: dict[Path, set[str]]
     ) -> dict[tuple[Path, str], int]:
         """Return the number of callees for each (file_path, qualified_name) pair."""
+        ...
+
+    def get_call_graph(
+        self, file_path_to_qualified_names: dict[Path, set[str]], *, include_metadata: bool = False
+    ) -> CallGraph:
+        """Return a CallGraph with full caller→callee edges for the given functions."""
         ...
 
     def close(self) -> None:
@@ -716,7 +723,7 @@ class LanguageSupport(Protocol):
         """Parse/validate a module before optimization."""
         ...
 
-    def setup_test_config(self, test_cfg: TestConfig, file_path: Path) -> None:
+    def setup_test_config(self, test_cfg: TestConfig, file_path: Path, current_worktree: Path | None = None) -> None:
         """One-time project setup after language detection. Default: no-op."""
 
     def adjust_test_config_for_discovery(self, test_cfg: TestConfig) -> None:

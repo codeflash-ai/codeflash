@@ -2411,3 +2411,199 @@ export const fetchData = async (url) => {
 
         assert "return (await fetch(url)).json();" in result
         assert js_support.validate_syntax(result) is True
+
+
+class TestNewGlobalDeclarationsShiftArrowFunctionLines:
+    """Tests for the bug where add_global_declarations shifts arrow function line numbers.
+
+    When optimized code introduces new global declarations (const, let, etc.) that get
+    added to the original source via add_global_declarations, the target arrow function's
+    line number shifts. But replace_function still uses the old starting_line, so
+    _replace_function_body fails to find the function.
+
+    Reproduces: bytesToHumanReadable, isSelectable, and similar failures from Strapi logs.
+    """
+
+    def test_arrow_function_replacement_after_new_global_const(self, ts_support, temp_project):
+        """Test replacing an arrow function when optimized code adds new global constants.
+
+        The optimized code adds new module-level constants (SIZES, LOG_1000) that get
+        inserted before the arrow function via add_global_declarations, shifting its line.
+        The replacement must still find and update the function body.
+
+        Uses function_to_optimize (the if-branch in replace_function_definitions_for_language)
+        to reproduce the real pipeline where stale starting_line causes failures.
+        """
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash.models.models import CodeString, CodeStringsMarkdown
+
+        original_source = """\
+import { Writable, WritableOptions } from 'node:stream';
+
+const bytesToHumanReadable = (bytes: number) => {
+  if (bytes === 0) return '0 Bytes';
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1000));
+  return `${Math.round(bytes / Math.pow(1000, i))} ${sizes[i]}`;
+};
+
+export { bytesToHumanReadable };
+"""
+        file_path = temp_project / "file.ts"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        # Discover the function to get real starting_line/ending_line
+        source = file_path.read_text(encoding="utf-8")
+        functions = ts_support.discover_functions(
+            source, file_path, FunctionFilterCriteria(require_return=False, require_export=False)
+        )
+        target = next(f for f in functions if f.function_name == "bytesToHumanReadable")
+
+        func_to_optimize = FunctionToOptimize(
+            function_name=target.function_name,
+            file_path=file_path,
+            parents=target.parents,
+            starting_line=target.starting_line,
+            ending_line=target.ending_line,
+            starting_col=target.starting_col,
+            ending_col=target.ending_col,
+            is_async=target.is_async,
+            is_method=target.is_method,
+            language=target.language,
+        )
+
+        # Optimized code hoists constant arrays and precomputes LOG_1000
+        optimized_code = """\
+const SIZES = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB'];
+const LOG_1000 = Math.log(1000);
+
+const bytesToHumanReadable = (bytes: number) => {
+  if (bytes === 0) return '0 Bytes';
+  const i = Math.floor(Math.log(bytes) / LOG_1000);
+  return `${Math.round(bytes / 1000 ** i)} ${SIZES[i]}`;
+};
+"""
+
+        code_markdown = CodeStringsMarkdown(
+            code_strings=[CodeString(code=optimized_code, file_path=Path("file.ts"), language="typescript")],
+            language="typescript",
+        )
+
+        replaced = replace_function_definitions_for_language(
+            ["bytesToHumanReadable"],
+            code_markdown,
+            file_path,
+            temp_project,
+            lang_support=ts_support,
+            function_to_optimize=func_to_optimize,
+        )
+
+        assert replaced, "Expected code to be replaced"
+        result = file_path.read_text(encoding="utf-8")
+
+        expected = """\
+import { Writable, WritableOptions } from 'node:stream';
+
+const LOG_1000 = Math.log(1000);
+
+const SIZES = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB'];
+
+const bytesToHumanReadable = (bytes: number) => {
+  if (bytes === 0) return '0 Bytes';
+  const i = Math.floor(Math.log(bytes) / LOG_1000);
+  return `${Math.round(bytes / 1000 ** i)} ${SIZES[i]}`;
+};
+
+export { bytesToHumanReadable };
+"""
+        assert result == expected, f"Result does not match expected output.\nExpected:\n{expected}\n\nGot:\n{result}"
+
+    def test_arrow_function_with_new_set_declaration(self, ts_support, temp_project):
+        """Test replacing arrow function when optimized code adds a Set declaration.
+
+        Reproduces the isSelectable failure pattern from Strapi logs where optimized code
+        introduces a new Set (NON_FILE_TYPES/MEDIA_TYPES) above the arrow function.
+        Uses function_to_optimize to trigger the stale-line-number bug.
+        """
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash.models.models import CodeString, CodeStringsMarkdown
+
+        original_source = """\
+export const isSelectable = (allowedTypes: string[], mime = '') => {
+  if (!mime) return false;
+  const fileType = mime.split('/')[0];
+  if (allowedTypes.includes(fileType)) return true;
+  if (allowedTypes.includes('file') && !['video', 'image', 'audio'].includes(fileType)) return true;
+  return false;
+};
+"""
+        file_path = temp_project / "isSelectable.ts"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        # Discover the function to get real starting_line/ending_line
+        source = file_path.read_text(encoding="utf-8")
+        functions = ts_support.discover_functions(source, file_path)
+        target = next(f for f in functions if f.function_name == "isSelectable")
+
+        func_to_optimize = FunctionToOptimize(
+            function_name=target.function_name,
+            file_path=file_path,
+            parents=target.parents,
+            starting_line=target.starting_line,
+            ending_line=target.ending_line,
+            starting_col=target.starting_col,
+            ending_col=target.ending_col,
+            is_async=target.is_async,
+            is_method=target.is_method,
+            language=target.language,
+        )
+
+        # Optimized code extracts the type set into a module-level constant
+        optimized_code = """\
+const NON_FILE_TYPES = new Set(['video', 'image', 'audio']);
+
+export const isSelectable = (allowedTypes: string[], mime = '') => {
+  if (!mime) return false;
+  const slashIndex = mime.indexOf('/');
+  const fileType = slashIndex === -1 ? mime : mime.substring(0, slashIndex);
+  for (let i = 0, len = allowedTypes.length; i < len; i++) {
+    const t = allowedTypes[i];
+    if (t === fileType) return true;
+    if (t === 'file' && !NON_FILE_TYPES.has(fileType)) return true;
+  }
+  return false;
+};
+"""
+
+        code_markdown = CodeStringsMarkdown(
+            code_strings=[CodeString(code=optimized_code, file_path=Path("isSelectable.ts"), language="typescript")],
+            language="typescript",
+        )
+
+        replaced = replace_function_definitions_for_language(
+            ["isSelectable"],
+            code_markdown,
+            file_path,
+            temp_project,
+            lang_support=ts_support,
+            function_to_optimize=func_to_optimize,
+        )
+
+        assert replaced, "Expected code to be replaced"
+        result = file_path.read_text(encoding="utf-8")
+
+        expected = """\
+const NON_FILE_TYPES = new Set(['video', 'image', 'audio']);
+export const isSelectable = (allowedTypes: string[], mime = '') => {
+  if (!mime) return false;
+  const slashIndex = mime.indexOf('/');
+  const fileType = slashIndex === -1 ? mime : mime.substring(0, slashIndex);
+  for (let i = 0, len = allowedTypes.length; i < len; i++) {
+    const t = allowedTypes[i];
+    if (t === fileType) return true;
+    if (t === 'file' && !NON_FILE_TYPES.has(fileType)) return true;
+  }
+  return false;
+};
+"""
+        assert result == expected, f"Result does not match expected output.\nExpected:\n{expected}\n\nGot:\n{result}"

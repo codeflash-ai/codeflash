@@ -527,3 +527,23 @@ def parse():
     return PATTERN.findall("")
 """
     assert result == expected
+
+
+def test_module_input_fallback_strips_leading_newlines() -> None:
+    src_code = """
+def parse():
+    return helper()
+
+def helper():
+    return 1
+"""
+    parsed_module = cst.parse_module(src_code)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        file_path = project_root / "mod.py"
+        file_path.write_text(src_code)
+
+        result = add_needed_imports_from_module(src_code, parsed_module, file_path, file_path, project_root)
+
+    assert result == src_code.lstrip("\n")

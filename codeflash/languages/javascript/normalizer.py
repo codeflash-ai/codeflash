@@ -8,42 +8,10 @@ The old CodeNormalizer ABC (deleted from base.py) is preserved below for referen
 from __future__ import annotations
 
 import re
-from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from tree_sitter import Node
-
-
-# ---------------------------------------------------------------------------
-# Reference: the old CodeNormalizer ABC that was deleted from base.py.
-# Kept here so the interface contract is visible if we re-introduce a
-# normalizer hierarchy later.
-# ---------------------------------------------------------------------------
-class CodeNormalizer(ABC):
-    @property
-    @abstractmethod
-    def language(self) -> str: ...
-
-    @abstractmethod
-    def normalize(self, code: str) -> str: ...
-
-    @abstractmethod
-    def normalize_for_hash(self, code: str) -> str: ...
-
-    def are_duplicates(self, code1: str, code2: str) -> bool:
-        try:
-            return self.normalize_for_hash(code1) == self.normalize_for_hash(code2)
-        except Exception:
-            return False
-
-    def get_fingerprint(self, code: str) -> str:
-        import hashlib
-
-        return hashlib.sha256(self.normalize_for_hash(code).encode()).hexdigest()
-
-
-# ---------------------------------------------------------------------------
 
 
 class JavaScriptVariableNormalizer:

@@ -33,5 +33,4 @@ codeflash/languages/python/static_analysis/edit_generated_tests.py
 codeflash/cli_cmds/console_constants.py
 codeflash/cli_cmds/logging_config.py
 codeflash/cli_cmds/__init__.py
-codeflash/cli_cmds/cli_common.py
 codeflash/cli_cmds/cli.py

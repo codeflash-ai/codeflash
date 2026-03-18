@@ -21,10 +21,13 @@ if TYPE_CHECKING:
 def get_git_diff(
     repo_directory: Path | None = None, *, only_this_commit: Optional[str] = None, uncommitted_changes: bool = False
 ) -> dict[str, list[int]]:
+    from codeflash.languages.current import current_language_support
+
     if repo_directory is None:
         repo_directory = Path.cwd()
     repository = git.Repo(repo_directory, search_parent_directories=True)
     commit = repository.head.commit
+    supported_extensions = current_language_support().file_extensions
     if only_this_commit:
         uni_diff_text = repository.git.diff(
             only_this_commit + "^1", only_this_commit, ignore_blank_lines=True, ignore_space_at_eol=True
@@ -39,7 +42,7 @@ def get_git_diff(
     change_list: dict[str, list[int]] = {}  # list of changes
     for patched_file in patch_set:
         file_path: Path = Path(patched_file.path)
-        if file_path.suffix != ".py":
+        if file_path.suffix not in supported_extensions:
             continue
         file_path = Path(repository.working_dir) / file_path
         logger.debug(f"file name: {file_path}")
@@ -134,6 +137,11 @@ def get_repo_owner_and_name(repo: Repo | None = None, git_remote: str | None = "
 def git_root_dir(repo: Repo | None = None) -> Path:
     repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
     return Path(repository.working_dir)
+
+
+def mirror_path(path: Path, src_root: Path, dest_root: Path) -> Path:
+    relative_path = path.resolve().relative_to(src_root.resolve())
+    return Path(dest_root / relative_path)
 
 
 def check_running_in_git_repo(module_root: str) -> bool:

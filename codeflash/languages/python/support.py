@@ -962,7 +962,7 @@ class PythonSupport:
         try:
             return ReferenceGraph(project_root, language=self.language.value)
         except Exception:
-            logger.debug("Failed to initialize ReferenceGraph, falling back to per-function Jedi analysis")
+            logger.info("Failed to initialize ReferenceGraph, falling back to per-function Jedi analysis")
             return None
 
     def instrument_existing_test(
@@ -1044,7 +1044,7 @@ class PythonSupport:
 
     pytest_cmd: str = "pytest"
 
-    def setup_test_config(self, test_cfg: TestConfig, file_path: Path) -> None:
+    def setup_test_config(self, test_cfg: TestConfig, file_path: Path, current_worktree: Path | None = None) -> None:
         self.pytest_cmd = test_cfg.pytest_cmd or "pytest"
 
     def pytest_cmd_tokens(self, is_posix: bool) -> list[str]:

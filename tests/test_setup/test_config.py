@@ -8,7 +8,6 @@ from codeflash.setup.config_schema import CodeflashConfig
 from codeflash.setup.config_writer import (
     _write_package_json,
     _write_pyproject_toml,
-    create_pyproject_toml,
     remove_config,
     write_config,
 )
@@ -339,26 +338,3 @@ class TestRemoveConfig:
             data = json.load(f)
         assert data["name"] == "test"  # Preserved
         assert "codeflash" not in data
-
-
-class TestCreatePyprojectToml:
-    """Tests for create_pyproject_toml function."""
-
-    def test_creates_minimal_pyproject(self, tmp_path):
-        """Should create minimal pyproject.toml."""
-        success, message = create_pyproject_toml(tmp_path)
-
-        assert success is True
-        assert (tmp_path / "pyproject.toml").exists()
-
-        content = (tmp_path / "pyproject.toml").read_text()
-        assert "codeflash" in content.lower()
-
-    def test_fails_if_already_exists(self, tmp_path):
-        """Should fail if pyproject.toml already exists."""
-        (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"')
-
-        success, message = create_pyproject_toml(tmp_path)
-
-        assert success is False
-        assert message == f"pyproject.toml already exists at {tmp_path / 'pyproject.toml'}"
