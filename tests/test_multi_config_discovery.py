@@ -65,3 +65,14 @@ class TestFindAllConfigFiles:
         assert len(result) == 1
         assert result[0].language == Language.PYTHON
         assert result[0].config_path == subdir / "pyproject.toml"
+
+
+def test_find_all_functions_uses_registry_not_singleton() -> None:
+    """DISC-04: Verify find_all_functions_in_file uses per-file registry lookup."""
+    import inspect
+
+    from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
+
+    source = inspect.getsource(find_all_functions_in_file)
+    assert "get_language_support" in source
+    assert "current_language_support" not in source
