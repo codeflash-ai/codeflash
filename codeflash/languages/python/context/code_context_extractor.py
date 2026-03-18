@@ -869,12 +869,12 @@ def _resolve_decorator_name(expr_name: str, import_aliases: dict[str, str]) -> s
     resolved = import_aliases.get(expr_name)
     if resolved is not None:
         return resolved
-    parts = expr_name.split(".")
-    if len(parts) >= 2:
-        root_resolved = import_aliases.get(parts[0])
+    first_part, sep, rest = expr_name.partition(".")
+    if sep:
+        root_resolved = import_aliases.get(first_part)
         if root_resolved is not None:
-            parts[0] = root_resolved
-            return ".".join(parts)
+            return f"{root_resolved}.{rest}"
+
     return expr_name
 
 
