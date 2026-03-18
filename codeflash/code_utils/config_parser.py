@@ -99,6 +99,51 @@ def find_conftest_files(test_paths: list[Path]) -> list[Path]:
     return list(list_of_conftest_files)
 
 
+def normalize_toml_config(config: dict[str, Any], config_file_path: Path) -> dict[str, Any]:
+    path_keys = ["module-root", "tests-root", "benchmarks-root"]
+    path_list_keys = ["ignore-paths"]
+    str_keys = {"pytest-cmd": "pytest", "git-remote": "origin"}
+    bool_keys = {
+        "override-fixtures": False,
+        "disable-telemetry": False,
+        "disable-imports-sorting": False,
+        "benchmark": False,
+    }
+    list_str_keys = {"formatter-cmds": []}
+
+    for key, default_value in str_keys.items():
+        if key in config:
+            config[key] = str(config[key])
+        else:
+            config[key] = default_value
+    for key, default_value in bool_keys.items():
+        if key in config:
+            config[key] = bool(config[key])
+        else:
+            config[key] = default_value
+    for key in path_keys:
+        if key in config:
+            config[key] = str((config_file_path.parent / Path(config[key])).resolve())
+    for key, default_value in list_str_keys.items():
+        if key in config:
+            config[key] = [str(cmd) for cmd in config[key]]
+        else:
+            config[key] = default_value
+    for key in path_list_keys:
+        if key in config:
+            config[key] = [str((config_file_path.parent / path).resolve()) for path in config[key]]
+        else:
+            config[key] = []
+
+    # Convert hyphenated keys to underscored keys
+    for key in list(config.keys()):
+        if "-" in key:
+            config[key.replace("-", "_")] = config[key]
+            del config[key]
+
+    return config
+
+
 def find_all_config_files(start_dir: Path | None = None) -> list[LanguageConfig]:
     if start_dir is None:
         start_dir = Path.cwd()
@@ -120,9 +165,11 @@ def find_all_config_files(start_dir: Path | None = None) -> list[LanguageConfig]
                         data = tomlkit.parse(f.read())
                     tool = data.get("tool", {})
                     if isinstance(tool, dict) and "codeflash" in tool:
+                        raw_config = dict(tool["codeflash"])
+                        normalized = normalize_toml_config(raw_config, config_file)
                         seen_languages.add(language)
                         configs.append(
-                            LanguageConfig(config=dict(tool["codeflash"]), config_path=config_file, language=language)
+                            LanguageConfig(config=normalized, config_path=config_file, language=language)
                         )
                 except Exception:
                     continue
@@ -222,54 +269,13 @@ def parse_config_file(
     if "language" not in config:
         config["language"] = "java" if config_file_path.name == "codeflash.toml" else "python"
 
-    # default values:
-    path_keys = ["module-root", "tests-root", "benchmarks-root"]
-    path_list_keys = ["ignore-paths"]
-    str_keys = {"pytest-cmd": "pytest", "git-remote": "origin"}
-    bool_keys = {
-        "override-fixtures": False,
-        "disable-telemetry": False,
-        "disable-imports-sorting": False,
-        "benchmark": False,
-    }
-    # Note: formatter-cmds defaults to empty list. For Python projects, black is typically
-    # detected by the project detector. For Java projects, no formatter is supported yet.
-    list_str_keys = {"formatter-cmds": []}
-
-    for key, default_value in str_keys.items():
-        if key in config:
-            config[key] = str(config[key])
-        else:
-            config[key] = default_value
-    for key, default_value in bool_keys.items():
-        if key in config:
-            config[key] = bool(config[key])
-        else:
-            config[key] = default_value
-    for key in path_keys:
-        if key in config:
-            config[key] = str((Path(config_file_path).parent / Path(config[key])).resolve())
-    for key, default_value in list_str_keys.items():
-        if key in config:
-            config[key] = [str(cmd) for cmd in config[key]]
-        else:
-            config[key] = default_value
-
-    for key in path_list_keys:
-        if key in config:
-            config[key] = [str((Path(config_file_path).parent / path).resolve()) for path in config[key]]
-        else:
-            config[key] = []
+    config = normalize_toml_config(config, config_file_path)
 
     # see if this is happening during GitHub actions setup
-    if config.get("formatter-cmds") and len(config.get("formatter-cmds")) > 0 and not override_formatter_check:
-        assert config.get("formatter-cmds")[0] != "your-formatter $file", (
+    if config.get("formatter_cmds") and len(config.get("formatter_cmds")) > 0 and not override_formatter_check:
+        assert config.get("formatter_cmds")[0] != "your-formatter $file", (
             "The formatter command is not set correctly in pyproject.toml. Please set the "
             "formatter command in the 'formatter-cmds' key. More info - https://docs.codeflash.ai/configuration"
         )
-    for key in list(config.keys()):
-        if "-" in key:
-            config[key.replace("-", "_")] = config[key]
-            del config[key]
 
     return config, config_file_path

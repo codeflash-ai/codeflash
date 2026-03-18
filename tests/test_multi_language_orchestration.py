@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import tomlkit
 
-from codeflash.code_utils.config_parser import LanguageConfig
+from codeflash.code_utils.config_parser import LanguageConfig, normalize_toml_config
 from codeflash.languages.language_enum import Language
 
 
@@ -311,3 +311,50 @@ class TestMultiLanguageOrchestration:
         assert call1_args is not call2_args
         # Module roots should differ between Python and Java configs
         assert call1_args.module_root != call2_args.module_root
+
+
+class TestNormalizeTomlConfig:
+    def test_converts_hyphenated_keys_to_underscored(self, tmp_path: Path) -> None:
+        config = {"module-root": "src", "tests-root": "tests"}
+        (tmp_path / "src").mkdir()
+        (tmp_path / "tests").mkdir()
+        result = normalize_toml_config(config, tmp_path / "codeflash.toml")
+        assert "module_root" in result
+        assert "tests_root" in result
+        assert "module-root" not in result
+        assert "tests-root" not in result
+
+    def test_resolves_paths_relative_to_config_parent(self, tmp_path: Path) -> None:
+        src = tmp_path / "src"
+        src.mkdir()
+        config = {"module-root": "src"}
+        result = normalize_toml_config(config, tmp_path / "codeflash.toml")
+        assert result["module_root"] == str(src.resolve())
+
+    def test_applies_default_values(self, tmp_path: Path) -> None:
+        config: dict = {}
+        result = normalize_toml_config(config, tmp_path / "codeflash.toml")
+        assert result["formatter_cmds"] == []
+        assert result["disable_telemetry"] is False
+        assert result["override_fixtures"] is False
+        assert result["git_remote"] == "origin"
+        assert result["pytest_cmd"] == "pytest"
+
+    def test_preserves_explicit_values(self, tmp_path: Path) -> None:
+        config = {"disable-telemetry": True, "formatter-cmds": ["prettier $file"]}
+        result = normalize_toml_config(config, tmp_path / "codeflash.toml")
+        assert result["disable_telemetry"] is True
+        assert result["formatter_cmds"] == ["prettier $file"]
+
+    def test_resolves_ignore_paths(self, tmp_path: Path) -> None:
+        config = {"ignore-paths": ["build", "dist"]}
+        result = normalize_toml_config(config, tmp_path / "codeflash.toml")
+        assert result["ignore_paths"] == [
+            str((tmp_path / "build").resolve()),
+            str((tmp_path / "dist").resolve()),
+        ]
+
+    def test_empty_ignore_paths_default(self, tmp_path: Path) -> None:
+        config: dict = {}
+        result = normalize_toml_config(config, tmp_path / "codeflash.toml")
+        assert result["ignore_paths"] == []
