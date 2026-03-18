@@ -145,17 +145,28 @@ class JavaFunctionOptimizer(FunctionOptimizer):
     def _get_java_sources_root(self) -> Path:
         """Get the Java sources root directory for test files.
 
-        For Java projects, tests_root might include the package path
-        (e.g., test/src/com/aerospike/test). We need to find the base directory
-        that should contain the package directories, not the tests_root itself.
+        For multi-module projects (Kafka, OpenSearch, Spring Boot), the test
+        directory must correspond to the same module as the source file, not
+        the globally configured tests_root. When the source file follows the
+        standard Maven/Gradle ``src/main/java`` layout we derive the test root
+        by replacing ``main`` with ``test`` in the same module prefix.
 
-        This method looks for standard Java package prefixes (com, org, net, io, edu, gov)
-        in the tests_root path and returns everything before that prefix.
+        Falls back to the existing tests_root-based heuristics for non-standard
+        layouts or single-module projects.
 
         Returns:
             Path to the Java sources root directory.
 
         """
+        file_path_str = str(self.function_to_optimize.file_path)
+        src_main_java_marker = str(Path("src") / "main" / "java")
+        idx = file_path_str.find(src_main_java_marker)
+        if idx != -1:
+            module_prefix = Path(file_path_str[:idx])
+            derived_test_root = module_prefix / "src" / "test" / "java"
+            if derived_test_root.exists():
+                return derived_test_root
+
         tests_root = self.test_cfg.tests_root
         parts = tests_root.parts
 
@@ -326,14 +337,44 @@ class JavaFunctionOptimizer(FunctionOptimizer):
         original_sqlite = get_run_tmp_file(Path("test_return_values_0.sqlite"))
         candidate_sqlite = get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite"))
 
+        if len(baseline_results.behavior_test_results) == 0 or len(candidate_behavior_results) == 0:
+            return False, []
+
         if original_sqlite.exists() and candidate_sqlite.exists():
             match, diffs = self.language_support.compare_test_results(
-                original_sqlite, candidate_sqlite, project_root=self.project_root
+                original_sqlite,
+                candidate_sqlite,
+                project_root=self.project_root,
+                project_classpath=self._get_project_classpath(),
             )
             candidate_sqlite.unlink(missing_ok=True)
         else:
             match, diffs = compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
         return match, diffs
+
+    _cached_project_classpath: str | None
+
+    def _get_project_classpath(self) -> str | None:
+        """Get the project's full classpath from the build tool strategy.
+
+        The classpath is cached by the strategy after the first test run,
+        so this is a cheap dict lookup.
+        """
+        if hasattr(self, "_cached_project_classpath"):
+            return self._cached_project_classpath
+
+        try:
+            import os
+
+            from codeflash.languages.java.build_tool_strategy import get_strategy
+
+            strategy = get_strategy(self.project_root)
+            classpath = strategy.get_classpath(self.project_root, os.environ.copy(), None, timeout=60)
+            self._cached_project_classpath = classpath
+            return classpath
+        except Exception:
+            logger.debug("Could not get project classpath for Comparator", exc_info=True)
+            return None
 
     def should_skip_sqlite_cleanup(self, testing_type: TestingMode, optimization_iteration: int) -> bool:
         return testing_type == TestingMode.BEHAVIOR or optimization_iteration == 0

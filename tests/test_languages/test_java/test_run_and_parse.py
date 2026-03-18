@@ -90,9 +90,10 @@ POM_CONTENT = """<?xml version="1.0" encoding="UTF-8"?>
 
 
 def skip_if_maven_not_available():
-    from codeflash.languages.java.build_tools import find_maven_executable
+    from codeflash.languages.java.maven_strategy import MavenStrategy
 
-    if not find_maven_executable():
+    if not MavenStrategy().find_executable(Path(".")):
+
         pytest.skip("Maven not available")
 
 

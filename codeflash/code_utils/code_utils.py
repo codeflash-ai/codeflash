@@ -338,6 +338,19 @@ def get_qualified_name(module_name: str, full_qualified_name: str) -> str:
     return full_qualified_name[len(module_name) + 1 :]
 
 
+_PARAMETERIZED_INDEX_RE = re.compile(r"\[(\d+)")
+
+
+def extract_parameterized_test_index(test_name: str) -> int:
+    """Extract the numeric index from a parameterized test name.
+
+    Handles formats like ``test[ 0 ]``, ``test[1]``, and
+    ``test[1] input=foo, expected=bar``.  Returns 1 when no numeric index is found.
+    """
+    m = _PARAMETERIZED_INDEX_RE.search(test_name)
+    return int(m.group(1)) if m else 1
+
+
 def module_name_from_file_path(file_path: Path, project_root_path: Path, *, traverse_up: bool = False) -> str:
     try:
         relative_path = file_path.resolve().relative_to(project_root_path.resolve())

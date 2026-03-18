@@ -54,8 +54,8 @@ class ComparatorCorrectnessTest {
             KryoPlaceholder.create(new Object(), "unserializable", "root")
         );
 
-        insertRow(originalDb, "iter_1_0", 1, placeholderBytes);
-        insertRow(candidateDb, "iter_1_1", 1, placeholderBytes);
+        insertRow(originalDb, "1", 1, placeholderBytes);
+        insertRow(candidateDb, "1", 1, placeholderBytes);
 
         String json = Comparator.compareDatabases(originalDb.toString(), candidateDb.toString());
         Map<String, Object> result = parseJson(json);
@@ -74,8 +74,8 @@ class ComparatorCorrectnessTest {
         // Insert corrupted byte data that will fail Kryo deserialization
         byte[] corruptedBytes = new byte[]{0x01, 0x02, 0x03, (byte) 0xFF, (byte) 0xFE};
 
-        insertRow(originalDb, "iter_1_0", 1, corruptedBytes);
-        insertRow(candidateDb, "iter_1_1", 1, corruptedBytes);
+        insertRow(originalDb, "1", 1, corruptedBytes);
+        insertRow(candidateDb, "1", 1, corruptedBytes);
 
         String json = Comparator.compareDatabases(originalDb.toString(), candidateDb.toString());
         Map<String, Object> result = parseJson(json);
@@ -97,12 +97,12 @@ class ComparatorCorrectnessTest {
             KryoPlaceholder.create(new Object(), "unserializable", "root")
         );
 
-        insertRow(originalDb, "iter_1_0", 1, realBytes1);
-        insertRow(candidateDb, "iter_1_1", 1, realBytes1);
-        insertRow(originalDb, "iter_2_0", 1, realBytes2);
-        insertRow(candidateDb, "iter_2_1", 1, realBytes2);
-        insertRow(originalDb, "iter_3_0", 1, placeholderBytes);
-        insertRow(candidateDb, "iter_3_1", 1, placeholderBytes);
+        insertRow(originalDb, "1", 1, realBytes1);
+        insertRow(candidateDb, "1", 1, realBytes1);
+        insertRow(originalDb, "2", 1, realBytes2);
+        insertRow(candidateDb, "2", 1, realBytes2);
+        insertRow(originalDb, "3", 1, placeholderBytes);
+        insertRow(candidateDb, "3", 1, placeholderBytes);
 
         String json = Comparator.compareDatabases(originalDb.toString(), candidateDb.toString());
         Map<String, Object> result = parseJson(json);
@@ -121,10 +121,10 @@ class ComparatorCorrectnessTest {
         byte[] bytes1 = Serializer.serialize(100);
         byte[] bytes2 = Serializer.serialize("world");
 
-        insertRow(originalDb, "iter_1_0", 1, bytes1);
-        insertRow(candidateDb, "iter_1_1", 1, bytes1);
-        insertRow(originalDb, "iter_2_0", 1, bytes2);
-        insertRow(candidateDb, "iter_2_1", 1, bytes2);
+        insertRow(originalDb, "1", 1, bytes1);
+        insertRow(candidateDb, "1", 1, bytes1);
+        insertRow(originalDb, "2", 1, bytes2);
+        insertRow(candidateDb, "2", 1, bytes2);
 
         String json = Comparator.compareDatabases(originalDb.toString(), candidateDb.toString());
         Map<String, Object> result = parseJson(json);
@@ -144,8 +144,8 @@ class ComparatorCorrectnessTest {
         byte[] origBytes = Serializer.serialize(42);
         byte[] candBytes = Serializer.serialize(99);
 
-        insertRow(originalDb, "iter_1_0", 1, origBytes);
-        insertRow(candidateDb, "iter_1_1", 1, candBytes);
+        insertRow(originalDb, "1", 1, origBytes);
+        insertRow(candidateDb, "1", 1, candBytes);
 
         String json = Comparator.compareDatabases(originalDb.toString(), candidateDb.toString());
         Map<String, Object> result = parseJson(json);
@@ -161,8 +161,8 @@ class ComparatorCorrectnessTest {
         createTestDb(candidateDb);
 
         // Insert rows with NULL return_value (void methods)
-        insertRow(originalDb, "iter_1_0", 1, null);
-        insertRow(candidateDb, "iter_1_1", 1, null);
+        insertRow(originalDb, "1", 1, null);
+        insertRow(candidateDb, "1", 1, null);
 
         String json = Comparator.compareDatabases(originalDb.toString(), candidateDb.toString());
         Map<String, Object> result = parseJson(json);
@@ -178,7 +178,7 @@ class ComparatorCorrectnessTest {
         createTestDb(candidateDb);
 
         byte[] bytes = Serializer.serialize(42);
-        insertRow(originalDb, "iter_1_0", 1, bytes);
+        insertRow(originalDb, "1", 1, bytes);
         // candidateDb has no rows
 
         String json = Comparator.compareDatabases(originalDb.toString(), candidateDb.toString());
@@ -222,7 +222,7 @@ class ComparatorCorrectnessTest {
                 + "iteration_id TEXT NOT NULL, "
                 + "loop_index INTEGER NOT NULL, "
                 + "return_value BLOB, "
-                + "PRIMARY KEY (iteration_id, loop_index))");
+                + "verification_type TEXT)");
         }
     }
 

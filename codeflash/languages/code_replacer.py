@@ -23,13 +23,18 @@ if TYPE_CHECKING:
 _SOURCE_CRITERIA = FunctionFilterCriteria(require_return=False, require_export=False)
 
 
-def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStringsMarkdown) -> str:
+def get_optimized_code_for_module(
+    relative_path: Path, optimized_code: CodeStringsMarkdown, allow_fallback: bool = True
+) -> str:
     from codeflash.languages.current import is_python
 
     file_to_code_context = optimized_code.file_to_path()
     module_optimized_code = file_to_code_context.get(str(relative_path))
     if module_optimized_code is not None:
         return module_optimized_code
+
+    if not allow_fallback:
+        return ""
 
     # Fallback 1: single code block with no file path
     if "None" in file_to_code_context and len(file_to_code_context) == 1:
@@ -72,7 +77,10 @@ def replace_function_definitions_for_language(
     and LanguageSupport.discover_functions.
     """
     original_source_code: str = module_abspath.read_text(encoding="utf8")
-    code_to_apply = get_optimized_code_for_module(module_abspath.relative_to(project_root_path), optimized_code)
+    is_target_file = function_to_optimize is not None and function_to_optimize.file_path == module_abspath
+    code_to_apply = get_optimized_code_for_module(
+        module_abspath.relative_to(project_root_path), optimized_code, allow_fallback=is_target_file
+    )
 
     if not code_to_apply.strip():
         return False
