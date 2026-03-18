@@ -30,10 +30,15 @@ from codeflash.code_utils import env_utils
 from codeflash.code_utils.checkpoint import ask_should_use_checkpoint_get_functions
 from codeflash.code_utils.config_parser import find_all_config_files, parse_config_file
 from codeflash.code_utils.version_check import check_for_newer_minor_version
-from codeflash.languages.registry import get_language_support, UnsupportedLanguageError
+from codeflash.languages.registry import UnsupportedLanguageError, get_language_support
+from codeflash.setup.config_writer import write_config
 
 if TYPE_CHECKING:
     from argparse import Namespace
+
+    from codeflash.code_utils.config_parser import LanguageConfig
+    from codeflash.languages.language_enum import Language
+    from codeflash.setup.detector import DetectedProject
 
 
 def main() -> None:
@@ -82,6 +87,20 @@ def main() -> None:
     else:
         language_configs = find_all_config_files()
 
+        # Auto-configure unconfigured languages detected from changed files
+        # Only for subagent/no-flags path (not --file which targets a specific file)
+        logger = logging.getLogger("codeflash")
+        if not (hasattr(args, "file") and args.file):
+            changed_files = get_changed_file_paths()
+            if changed_files:
+                unconfigured = detect_unconfigured_languages(language_configs, changed_files)
+                if unconfigured:
+                    project_root = Path.cwd()
+                    for lang in unconfigured:
+                        new_config = auto_configure_language(lang, project_root, logger)
+                        if new_config is not None:
+                            language_configs.append(new_config)
+
         if not language_configs:
             # Fallback: no multi-config found, use existing single-config path
             loaded_args = _handle_config_loading(args)
@@ -115,7 +134,6 @@ def main() -> None:
         # Multi-language path: run git/GitHub checks ONCE before the loop
         args = handle_optimize_all_arg_parsing(args)
 
-        logger = logging.getLogger("codeflash")
         results: dict[str, str] = {}
         for lang_config in language_configs:
             lang_name = lang_config.language.value
@@ -153,6 +171,97 @@ def _log_orchestration_summary(logger: logging.Logger, results: dict[str, str]) 
         return
     parts = [f"{lang}: {status}" for lang, status in results.items()]
     logger.info("Multi-language orchestration complete: %s", ", ".join(parts))
+
+
+def detect_unconfigured_languages(language_configs: list[LanguageConfig], changed_files: list[Path]) -> set[Language]:
+    configured = {lc.language for lc in language_configs}
+    changed_languages: set[Language] = set()
+    for f in changed_files:
+        try:
+            lang_support = get_language_support(f)
+            changed_languages.add(lang_support.language)
+        except UnsupportedLanguageError:
+            pass
+    return changed_languages - configured
+
+
+def get_changed_file_paths() -> list[Path]:
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--name-only", "HEAD~1"], capture_output=True, text=True, timeout=10, check=False
+        )
+        if result.returncode == 0:
+            return [Path(line) for line in result.stdout.strip().splitlines() if line]
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+    return []
+
+
+def detect_project_for_language(language: Language, project_root: Path) -> DetectedProject:
+    from codeflash.setup.detector import (
+        DetectedProject,
+        _detect_formatter,
+        _detect_ignore_paths,
+        _detect_java_module_root,
+        _detect_js_module_root,
+        _detect_python_module_root,
+        _detect_test_runner,
+        _detect_tests_root,
+    )
+
+    lang_str = language.value
+
+    module_root_detectors = {
+        "python": _detect_python_module_root,
+        "java": _detect_java_module_root,
+        "javascript": _detect_js_module_root,
+    }
+
+    detector = module_root_detectors.get(lang_str)
+    if detector is None:
+        msg = f"No auto-detection available for {lang_str}"
+        raise ValueError(msg)
+
+    module_root, _ = detector(project_root)
+    tests_root, _ = _detect_tests_root(project_root, lang_str)
+    test_runner, _ = _detect_test_runner(project_root, lang_str)
+    formatter_cmds, _ = _detect_formatter(project_root, lang_str)
+    ignore_paths, _ = _detect_ignore_paths(project_root, lang_str)
+
+    return DetectedProject(
+        language=lang_str,
+        project_root=project_root,
+        module_root=module_root,
+        tests_root=tests_root,
+        test_runner=test_runner,
+        formatter_cmds=formatter_cmds,
+        ignore_paths=ignore_paths,
+    )
+
+
+def auto_configure_language(language: Language, project_root: Path, logger: logging.Logger) -> LanguageConfig | None:
+    lang_str = language.value
+    try:
+        detected = detect_project_for_language(language, project_root)
+        success, msg = write_config(detected)
+        if success:
+            logger.info("Auto-created config for %s: %s", lang_str, msg)
+            logger.info("Review the generated config file to verify paths are correct.")
+            new_configs = find_all_config_files()
+            for nc in new_configs:
+                if nc.language == language:
+                    return nc
+            logger.warning("Config was created for %s but could not be re-discovered.", lang_str)
+            return None
+        logger.warning("Could not auto-configure %s: %s. Skipping.", lang_str, msg)
+        logger.info("Run 'codeflash init' to set up %s manually.", lang_str)
+        return None
+    except Exception:
+        logger.exception("Auto-detection failed for %s. Skipping.", lang_str)
+        logger.info("Run 'codeflash init' to set up %s manually.", lang_str)
+        return None
 
 
 def _handle_config_loading(args: Namespace) -> Namespace | None:
