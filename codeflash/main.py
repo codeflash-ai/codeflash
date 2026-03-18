@@ -30,6 +30,7 @@ from codeflash.code_utils import env_utils
 from codeflash.code_utils.checkpoint import ask_should_use_checkpoint_get_functions
 from codeflash.code_utils.config_parser import find_all_config_files, parse_config_file
 from codeflash.code_utils.version_check import check_for_newer_minor_version
+from codeflash.languages.registry import get_language_support, UnsupportedLanguageError
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -98,6 +99,18 @@ def main() -> None:
 
             optimizer.run_with_args(args)
             return
+
+        # Filter to single language when --file is specified
+        if hasattr(args, "file") and args.file:
+            try:
+                file_lang_support = get_language_support(Path(args.file))
+                file_language = file_lang_support.language
+                matching_configs = [lc for lc in language_configs if lc.language == file_language]
+                if matching_configs:
+                    language_configs = matching_configs
+                # If no matching config found, let all configs run (existing behavior handles it)
+            except UnsupportedLanguageError:
+                pass  # Unknown extension, let all configs run
 
         # Multi-language path: run git/GitHub checks ONCE before the loop
         args = handle_optimize_all_arg_parsing(args)
