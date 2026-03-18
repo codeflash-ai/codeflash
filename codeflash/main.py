@@ -6,6 +6,8 @@ solved problem, please reach out to us at careers@codeflash.ai. We're hiring!
 
 from __future__ import annotations
 
+import copy
+import logging
 import os
 import sys
 from pathlib import Path
@@ -17,11 +19,16 @@ if "--subagent" in sys.argv:
 
     warnings.filterwarnings("ignore")
 
-from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
+from codeflash.cli_cmds.cli import (
+    apply_language_config,
+    handle_optimize_all_arg_parsing,
+    parse_args,
+    process_pyproject_config,
+)
 from codeflash.cli_cmds.console import paneled_text
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.checkpoint import ask_should_use_checkpoint_get_functions
-from codeflash.code_utils.config_parser import parse_config_file
+from codeflash.code_utils.config_parser import find_all_config_files, parse_config_file
 from codeflash.code_utils.version_check import check_for_newer_minor_version
 
 if TYPE_CHECKING:
@@ -72,21 +79,50 @@ def main() -> None:
 
         ask_run_end_to_end_test(args)
     else:
-        # Check for first-run experience (no config exists)
-        loaded_args = _handle_config_loading(args)
-        if loaded_args is None:
-            sys.exit(0)
-        args = loaded_args
+        language_configs = find_all_config_files()
 
-        if not env_utils.check_formatter_installed(args.formatter_cmds):
+        if not language_configs:
+            # Fallback: no multi-config found, use existing single-config path
+            loaded_args = _handle_config_loading(args)
+            if loaded_args is None:
+                sys.exit(0)
+            args = loaded_args
+
+            if not env_utils.check_formatter_installed(args.formatter_cmds):
+                return
+            args.previous_checkpoint_functions = ask_should_use_checkpoint_get_functions(args)
+            init_sentry(enabled=not args.disable_telemetry, exclude_errors=True)
+            posthog_cf.initialize_posthog(enabled=not args.disable_telemetry)
+
+            from codeflash.optimization import optimizer
+
+            optimizer.run_with_args(args)
             return
-        args.previous_checkpoint_functions = ask_should_use_checkpoint_get_functions(args)
-        init_sentry(enabled=not args.disable_telemetry, exclude_errors=True)
-        posthog_cf.initialize_posthog(enabled=not args.disable_telemetry)
 
-        from codeflash.optimization import optimizer
+        # Multi-language path: run git/GitHub checks ONCE before the loop
+        args = handle_optimize_all_arg_parsing(args)
 
-        optimizer.run_with_args(args)
+        logger = logging.getLogger("codeflash")
+        for lang_config in language_configs:
+            pass_args = copy.deepcopy(args)
+            pass_args = apply_language_config(pass_args, lang_config)
+
+            if hasattr(pass_args, "all") and pass_args.all is not None:
+                pass_args.all = pass_args.module_root
+
+            if not env_utils.check_formatter_installed(pass_args.formatter_cmds):
+                logger.info("Skipping %s: formatter not installed", lang_config.language.value)
+                continue
+
+            pass_args.previous_checkpoint_functions = ask_should_use_checkpoint_get_functions(pass_args)
+            init_sentry(enabled=not pass_args.disable_telemetry, exclude_errors=True)
+            posthog_cf.initialize_posthog(enabled=not pass_args.disable_telemetry)
+
+            logger.info("Processing %s (config: %s)", lang_config.language.value, lang_config.config_path)
+
+            from codeflash.optimization import optimizer
+
+            optimizer.run_with_args(pass_args)
 
 
 def _handle_config_loading(args: Namespace) -> Namespace | None:
