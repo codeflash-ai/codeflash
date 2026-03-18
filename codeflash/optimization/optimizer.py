@@ -137,11 +137,6 @@ class Optimizer:
         # (via get_git_diff using cwd), but module_root/project_root have been mirrored to
         # the worktree. Use the original roots for filtering so path comparisons match,
         # then remap the discovered file paths to the worktree.
-
-        # In worktree mode for git-diff discovery, file paths come from the original repo
-        # (via get_git_diff using cwd), but module_root/project_root have been mirrored to
-        # the worktree. Use the original roots for filtering so path comparisons match,
-        # then remap the discovered file paths to the worktree.
         project_root = self.args.project_root
         module_root = self.args.module_root
         use_original_roots = (
