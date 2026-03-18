@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import logging
 from argparse import Namespace
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import tomlkit
 
@@ -638,3 +639,87 @@ class TestNormalizeTomlConfig:
         config: dict = {}
         result = normalize_toml_config(config, tmp_path / "codeflash.toml")
         assert result["ignore_paths"] == []
+
+
+class TestUnconfiguredLanguageDetection:
+    def test_detects_unconfigured_java_from_changed_files(self) -> None:
+        from codeflash.main import detect_unconfigured_languages
+
+        configs = [LanguageConfig(config={}, config_path=Path("pyproject.toml"), language=Language.PYTHON)]
+        changed = [Path("src/main/java/Foo.java"), Path("src/Bar.py")]
+        result = detect_unconfigured_languages(configs, changed)
+        assert Language.JAVA in result
+        assert Language.PYTHON not in result
+
+    def test_no_unconfigured_when_all_configured(self) -> None:
+        from codeflash.main import detect_unconfigured_languages
+
+        configs = [
+            LanguageConfig(config={}, config_path=Path("pyproject.toml"), language=Language.PYTHON),
+            LanguageConfig(config={}, config_path=Path("codeflash.toml"), language=Language.JAVA),
+        ]
+        changed = [Path("Foo.java"), Path("bar.py")]
+        result = detect_unconfigured_languages(configs, changed)
+        assert result == set()
+
+    def test_ignores_unsupported_extensions(self) -> None:
+        from codeflash.main import detect_unconfigured_languages
+
+        changed = [Path("main.rs"), Path("lib.go")]
+        result = detect_unconfigured_languages([], changed)
+        assert result == set()
+
+    @patch("codeflash.main.find_all_config_files")
+    def test_auto_config_adds_language_config_on_success(self, mock_find_configs, tmp_path: Path) -> None:
+        from codeflash.main import auto_configure_language
+
+        new_lc = LanguageConfig(config={}, config_path=tmp_path / "codeflash.toml", language=Language.JAVA)
+        mock_find_configs.return_value = [new_lc]
+
+        logger = logging.getLogger("codeflash.test")
+        with (
+            patch("codeflash.main.write_config", return_value=(True, "Created codeflash.toml")) as mock_write,
+            patch("codeflash.main.detect_project_for_language") as mock_detect,
+        ):
+            mock_detect.return_value = MagicMock()
+            result = auto_configure_language(Language.JAVA, tmp_path, logger)
+
+        assert result is not None
+        assert result.language == Language.JAVA
+        mock_write.assert_called_once()
+
+    def test_auto_config_failure_logs_warning(self, tmp_path: Path, caplog: object) -> None:
+        from codeflash.main import auto_configure_language
+
+        logger = logging.getLogger("codeflash.test")
+        with (
+            patch("codeflash.main.detect_project_for_language", side_effect=RuntimeError("detection failed")),
+            caplog.at_level(logging.WARNING),  # type: ignore[union-attr]
+        ):
+            result = auto_configure_language(Language.JAVA, tmp_path, logger)
+
+        assert result is None
+
+    @patch("codeflash.main.ask_should_use_checkpoint_get_functions", return_value=[])
+    @patch("codeflash.main.env_utils.check_formatter_installed", return_value=True)
+    @patch("codeflash.main.handle_optimize_all_arg_parsing", side_effect=lambda args: args)
+    @patch("codeflash.optimization.optimizer.run_with_args")
+    @patch("codeflash.main.find_all_config_files")
+    @patch("codeflash.main.parse_args")
+    @patch("codeflash.main.print_codeflash_banner")
+    @patch("codeflash.main.check_for_newer_minor_version")
+    def test_per_language_logging_shows_config_path(
+        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+    ) -> None:
+        py_config = make_lang_config(tmp_path, Language.PYTHON)
+        mock_find_configs.return_value = [py_config]
+        mock_parse_args.return_value = make_base_args(disable_telemetry=False)
+
+        with patch("codeflash.main._log_orchestration_summary"):
+            from codeflash.main import main
+
+            with patch("logging.Logger.info") as mock_log_info:
+                main()
+                logged_messages = [str(call) for call in mock_log_info.call_args_list]
+                processing_logs = [m for m in logged_messages if "Processing" in m and "config:" in m]
+                assert len(processing_logs) >= 1
