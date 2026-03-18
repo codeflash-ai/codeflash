@@ -867,18 +867,18 @@ _ATTRS_DECORATOR_NAMES = frozenset({"define", "mutable", "frozen", "s", "attrs"}
 
 def _get_attrs_config(class_node: ast.ClassDef, import_aliases: dict[str, str]) -> tuple[bool, bool, bool]:
     for decorator in class_node.decorator_list:
-        expr_name = _get_expr_name(decorator)
-        if expr_name is None:
+        part_before_last, last_part = _get_last_two_names(decorator)
+        if part_before_last is None:
             continue
-        parts = expr_name.split(".")
-        if len(parts) < 2 or parts[-2] not in _ATTRS_NAMESPACES or parts[-1] not in _ATTRS_DECORATOR_NAMES:
+        if part_before_last not in _ATTRS_NAMESPACES or last_part not in _ATTRS_DECORATOR_NAMES:
             continue
         init_enabled = True
         kw_only = False
         if isinstance(decorator, ast.Call):
             for keyword in decorator.keywords:
-                literal_value = _bool_literal(keyword.value)
-                if literal_value is None:
+                if isinstance(keyword.value, ast.Constant) and isinstance(keyword.value.value, bool):
+                    literal_value = keyword.value.value
+                else:
                     continue
                 if keyword.arg == "init":
                     init_enabled = literal_value
@@ -1808,3 +1808,69 @@ def _maybe_strip_docstring(node: cst.FunctionDef | cst.ClassDef, cfg: PruneConfi
             return node.with_changes(body=node.body.with_changes(body=new_body))
 
     return node
+
+
+def _get_last_two_names(node: ast.AST | None) -> tuple[str | None, str | None]:
+    """Extract only the last two identifier parts from a decorator expression.
+
+    Returns (second_last, last) or (None, None) when fewer than two parts exist.
+    Avoids building full dotted strings for performance.
+    """
+    if node is None:
+        return None, None
+    attrs_rev: list[str] = []
+    current = node
+    while True:
+        if isinstance(current, ast.Attribute):
+            attrs_rev.append(current.attr)
+            current = current.value
+            continue
+        if isinstance(current, ast.Call):
+            current = current.func
+            continue
+        if isinstance(current, ast.Name):
+            base_name = current.id
+        else:
+            base_name = None
+        break
+
+    total_parts = len(attrs_rev) + (1 if base_name is not None else 0)
+    if total_parts < 2:
+        return None, None
+
+    if len(attrs_rev) >= 2:
+        return attrs_rev[1], attrs_rev[0]
+    return base_name, attrs_rev[0]
+
+
+def _get_last_two_names(node: ast.AST | None) -> tuple[str | None, str | None]:
+    """Extract only the last two identifier parts from a decorator expression.
+
+    Returns (second_last, last) or (None, None) when fewer than two parts exist.
+    Avoids building full dotted strings for performance.
+    """
+    if node is None:
+        return None, None
+    attrs_rev: list[str] = []
+    current = node
+    while True:
+        if isinstance(current, ast.Attribute):
+            attrs_rev.append(current.attr)
+            current = current.value
+            continue
+        if isinstance(current, ast.Call):
+            current = current.func
+            continue
+        if isinstance(current, ast.Name):
+            base_name = current.id
+        else:
+            base_name = None
+        break
+
+    total_parts = len(attrs_rev) + (1 if base_name is not None else 0)
+    if total_parts < 2:
+        return None, None
+
+    if len(attrs_rev) >= 2:
+        return attrs_rev[1], attrs_rev[0]
+    return base_name, attrs_rev[0]
