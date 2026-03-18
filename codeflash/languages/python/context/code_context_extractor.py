@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import contextlib
 import hashlib
 import os
 from collections import defaultdict
@@ -822,12 +823,11 @@ def _get_node_source(node: ast.AST | None, module_source: str, fallback: str = "
         return fallback
 
     source_segment = None
-    try:
+    with contextlib.suppress(AttributeError):
+        node_any: Any = node  # ast.AST base doesn't expose position attrs; duck-typing via Any
         source_segment = _get_source_segment_cached(
-            module_source, node.lineno, node.col_offset, node.end_lineno, node.end_col_offset
+            module_source, node_any.lineno, node_any.col_offset, node_any.end_lineno, node_any.end_col_offset
         )
-    except AttributeError:
-        pass
 
     if source_segment is not None:
         return source_segment
@@ -979,8 +979,6 @@ def _extract_synthetic_init_parameters(
                     elif kw_arg == "default":
                         default_value = _get_node_source(keyword.value, module_source)
                     elif kw_arg in {"default_factory", "factory"}:
-                        # Default factories (dataclass default_factory= / attrs factory=) still imply
-                        # an optional constructor parameter.
                         # Default factories (dataclass default_factory= / attrs factory=) still imply
                         # an optional constructor parameter.
                         default_value = "..."
@@ -1639,8 +1637,12 @@ class ImportCollector(ast.NodeVisitor):
                     self.imported_names[alias.asname if alias.asname else alias.name] = node.module
 
 
-class _NodePos:
-    __slots__ = ("col_offset", "end_col_offset", "end_lineno", "lineno")
+class _NodePos(ast.AST):
+    lineno: int
+    col_offset: int
+    end_lineno: int
+    end_col_offset: int
+    _attributes = ("lineno", "col_offset", "end_lineno", "end_col_offset")
 
 
 @dataclass(frozen=True)
@@ -1823,18 +1825,6 @@ def _maybe_strip_docstring(node: cst.FunctionDef | cst.ClassDef, cfg: PruneConfi
             return node.with_changes(body=node.body.with_changes(body=new_body))
 
     return node
-
-
-@lru_cache(maxsize=2048)
-def _get_source_segment_cached(
-    module_source: str, lineno: int, col_offset: int, end_lineno: int, end_col_offset: int
-) -> str | None:
-    node_pos = _NodePos()
-    node_pos.lineno = lineno
-    node_pos.col_offset = col_offset
-    node_pos.end_lineno = end_lineno
-    node_pos.end_col_offset = end_col_offset
-    return ast.get_source_segment(module_source, node_pos)
 
 
 @lru_cache(maxsize=2048)
