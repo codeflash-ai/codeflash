@@ -5,8 +5,9 @@ import hashlib
 import os
 from collections import defaultdict
 from dataclasses import dataclass, field
+from functools import cache
 from itertools import chain
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import libcst as cst
 
@@ -45,6 +46,13 @@ if TYPE_CHECKING:
 
     from codeflash.languages.base import DependencyResolver
     from codeflash.languages.python.context.unused_definition_remover import UsageInfo
+
+
+@cache
+def get_jedi_project(project_root_path: str) -> Any:
+    import jedi
+
+    return jedi.Project(path=project_root_path)
 
 
 @dataclass
@@ -102,15 +110,21 @@ def get_code_optimization_context(
     testgen_token_limit: int = TESTGEN_CONTEXT_TOKEN_LIMIT,
     call_graph: DependencyResolver | None = None,
 ) -> CodeOptimizationContext:
+    jedi_project = get_jedi_project(str(project_root_path))
+
     # Get FunctionSource representation of helpers of FTO
     fto_input = {function_to_optimize.file_path: {function_to_optimize.qualified_name}}
     if call_graph is not None:
         helpers_of_fto_dict, helpers_of_fto_list = call_graph.get_callees(fto_input)
     else:
-        helpers_of_fto_dict, helpers_of_fto_list = get_function_sources_from_jedi(fto_input, project_root_path)
+        helpers_of_fto_dict, helpers_of_fto_list = get_function_sources_from_jedi(
+            fto_input, project_root_path, jedi_project=jedi_project
+        )
 
     # Add function to optimize into helpers of FTO dict, as they'll be processed together
-    fto_as_function_source = get_function_to_optimize_as_function_source(function_to_optimize, project_root_path)
+    fto_as_function_source = get_function_to_optimize_as_function_source(
+        function_to_optimize, project_root_path, jedi_project=jedi_project
+    )
     helpers_of_fto_dict[function_to_optimize.file_path].add(fto_as_function_source)
 
     # Format data to search for helpers of helpers using get_function_sources_from_jedi
@@ -124,7 +138,7 @@ def get_code_optimization_context(
         qualified_names.update({f"{qn.rsplit('.', 1)[0]}.__init__" for qn in qualified_names if "." in qn})
 
     helpers_of_helpers_dict, helpers_of_helpers_list = get_function_sources_from_jedi(
-        helpers_of_fto_qualified_names_dict, project_root_path
+        helpers_of_fto_qualified_names_dict, project_root_path, jedi_project=jedi_project
     )
 
     # Extract all code contexts in a single pass (one CST parse per file)
@@ -133,11 +147,14 @@ def get_code_optimization_context(
     final_read_writable_code = all_ctx.read_writable
 
     # Ensure the target file is first in the code blocks so the LLM knows which file to optimize
-    target_relative = function_to_optimize.file_path.resolve().relative_to(project_root_path.resolve())
-    target_blocks = [cs for cs in final_read_writable_code.code_strings if cs.file_path == target_relative]
-    other_blocks = [cs for cs in final_read_writable_code.code_strings if cs.file_path != target_relative]
-    if target_blocks:
-        final_read_writable_code.code_strings = target_blocks + other_blocks
+    try:
+        target_relative = function_to_optimize.file_path.resolve().relative_to(project_root_path.resolve())
+        target_blocks = [cs for cs in final_read_writable_code.code_strings if cs.file_path == target_relative]
+        other_blocks = [cs for cs in final_read_writable_code.code_strings if cs.file_path != target_relative]
+        if target_blocks:
+            final_read_writable_code.code_strings = target_blocks + other_blocks
+    except ValueError:
+        pass
 
     read_only_code_markdown = all_ctx.read_only
 
@@ -434,13 +451,13 @@ def re_extract_from_cache(
 ) -> CodeStringsMarkdown:
     """Re-extract context from cached modules without file I/O or CST parsing."""
     result = CodeStringsMarkdown()
-    for cache in file_caches:
+    for file_cache in file_caches:
         try:
             pruned = parse_code_and_prune_cst(
-                cache.cleaned_module,
+                file_cache.cleaned_module,
                 code_context_type,
-                cache.fto_names,
-                cache.hoh_names,
+                file_cache.fto_names,
+                file_cache.hoh_names,
                 remove_docstrings=remove_docstrings,
             )
         except ValueError:
@@ -450,24 +467,25 @@ def re_extract_from_cache(
                 code = ast.unparse(ast.parse(pruned.code))
             else:
                 code = add_needed_imports_from_module(
-                    src_module_code=cache.original_module,
+                    src_module_code=file_cache.original_module,
                     dst_module_code=pruned,
-                    src_path=cache.file_path,
-                    dst_path=cache.file_path,
+                    src_path=file_cache.file_path,
+                    dst_path=file_cache.file_path,
                     project_root=project_root_path,
-                    helper_functions=cache.helper_functions,
+                    helper_functions=file_cache.helper_functions,
                 )
-            result.code_strings.append(CodeString(code=code, file_path=cache.relative_path))
+            result.code_strings.append(CodeString(code=code, file_path=file_cache.relative_path))
     return result
 
 
 def get_function_to_optimize_as_function_source(
-    function_to_optimize: FunctionToOptimize, project_root_path: Path
+    function_to_optimize: FunctionToOptimize, project_root_path: Path, *, jedi_project: object | None = None
 ) -> FunctionSource:
     import jedi
 
     # Use jedi to find function to optimize
-    script = jedi.Script(path=function_to_optimize.file_path, project=jedi.Project(path=project_root_path))
+    project = jedi_project if jedi_project is not None else get_jedi_project(str(project_root_path))
+    script = jedi.Script(path=function_to_optimize.file_path, project=project)
 
     # Get all names in the file
     names = script.get_names(all_scopes=True, definitions=True, references=False)
@@ -498,22 +516,40 @@ def get_function_to_optimize_as_function_source(
 
 
 def get_function_sources_from_jedi(
-    file_path_to_qualified_function_names: dict[Path, set[str]], project_root_path: Path
+    file_path_to_qualified_function_names: dict[Path, set[str]],
+    project_root_path: Path,
+    *,
+    jedi_project: object | None = None,
 ) -> tuple[dict[Path, set[FunctionSource]], list[FunctionSource]]:
     import jedi
 
+    project = jedi_project if jedi_project is not None else get_jedi_project(str(project_root_path))
     file_path_to_function_source = defaultdict(set)
     function_source_list: list[FunctionSource] = []
     for file_path, qualified_function_names in file_path_to_qualified_function_names.items():
-        script = jedi.Script(path=file_path, project=jedi.Project(path=project_root_path))
+        script = jedi.Script(path=file_path, project=project)
         file_refs = script.get_names(all_scopes=True, definitions=False, references=True)
 
+        # Pre-group references by their parent function's qualified name for O(1) lookup
+        refs_by_parent: dict[str, list[Name]] = defaultdict(list)
+        for ref in file_refs:
+            if not ref.full_name:
+                continue
+            try:
+                parent = ref.parent()
+                if parent is None or parent.type != "function":
+                    continue
+                parent_qn = get_qualified_name(parent.module_name, parent.full_name)
+                # Exclude self-references (recursive calls) — the ref's own qualified name matches the parent
+                ref_qn = get_qualified_name(ref.module_name, ref.full_name)
+                if ref_qn == parent_qn:
+                    continue
+                refs_by_parent[parent_qn].append(ref)
+            except (AttributeError, ValueError):
+                continue
+
         for qualified_function_name in qualified_function_names:
-            names = [
-                ref
-                for ref in file_refs
-                if ref.full_name and belongs_to_function_qualified(ref, qualified_function_name)
-            ]
+            names = refs_by_parent.get(qualified_function_name, [])
             for name in names:
                 try:
                     definitions: list[Name] = name.goto(follow_imports=True, follow_builtin_imports=False)
@@ -1103,7 +1139,7 @@ def _resolve_imported_class_reference(
     module_name, class_name = resolved_name.rsplit(".", 1)
     try:
         script_code = f"from {module_name} import {class_name}"
-        script = jedi.Script(script_code, project=jedi.Project(path=project_root_path))
+        script = jedi.Script(script_code, project=get_jedi_project(str(project_root_path)))
         definitions = script.goto(1, len(f"from {module_name} import ") + len(class_name), follow_imports=True)
     except Exception:
         return None
@@ -1263,7 +1299,7 @@ def extract_parameter_type_constructors(
     def append_type_context(type_name: str, module_name: str, *, transitive: bool = False) -> None:
         try:
             script_code = f"from {module_name} import {type_name}"
-            script = jedi.Script(script_code, project=jedi.Project(path=project_root_path))
+            script = jedi.Script(script_code, project=get_jedi_project(str(project_root_path)))
             definitions = script.goto(1, len(f"from {module_name} import ") + len(type_name), follow_imports=True)
             if not definitions:
                 return
@@ -1429,7 +1465,7 @@ def enrich_testgen_context(code_context: CodeStringsMarkdown, project_root_path:
             continue
         try:
             test_code = f"import {module_name}"
-            script = jedi.Script(test_code, project=jedi.Project(path=project_root_path))
+            script = jedi.Script(test_code, project=get_jedi_project(str(project_root_path)))
             completions = script.goto(1, len(test_code))
 
             if not completions:
@@ -1545,21 +1581,6 @@ def collect_names_from_annotation(node: ast.expr, names: set[str]) -> None:
         collect_names_from_annotation(node.right, names)
     elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
         names.add(node.value.id)
-
-
-def remove_docstring_from_body(indented_block: cst.IndentedBlock) -> cst.CSTNode:
-    if not isinstance(indented_block.body[0], cst.SimpleStatementLine):
-        return indented_block
-    first_stmt = indented_block.body[0].body[0]
-    if isinstance(first_stmt, cst.Expr) and isinstance(first_stmt.value, cst.SimpleString):
-        return indented_block.with_changes(body=indented_block.body[1:])
-    return indented_block
-
-
-def _maybe_strip_docstring(node: cst.FunctionDef | cst.ClassDef, cfg: PruneConfig) -> cst.FunctionDef | cst.ClassDef:
-    if cfg.remove_docstrings and isinstance(node.body, cst.IndentedBlock):
-        return node.with_changes(body=remove_docstring_from_body(node.body))
-    return node
 
 
 class ImportCollector(ast.NodeVisitor):
@@ -1734,3 +1755,22 @@ def belongs_to_function_qualified(name: Name, qualified_function_name: str) -> b
         return False
     except ValueError:
         return False
+
+
+def _maybe_strip_docstring(node: cst.FunctionDef | cst.ClassDef, cfg: PruneConfig) -> cst.FunctionDef | cst.ClassDef:
+    """Strip docstring from function or class if configured to do so."""
+    if not cfg.remove_docstrings or not isinstance(node.body, cst.IndentedBlock):
+        return node
+
+    body_stmts = node.body.body
+    if not body_stmts:
+        return node
+
+    first_stmt = body_stmts[0]
+    if isinstance(first_stmt, cst.SimpleStatementLine) and len(first_stmt.body) == 1:
+        expr_stmt = first_stmt.body[0]
+        if isinstance(expr_stmt, cst.Expr) and isinstance(expr_stmt.value, (cst.SimpleString, cst.ConcatenatedString)):
+            new_body = body_stmts[1:] or [cst.SimpleStatementLine(body=[cst.Pass()])]
+            return node.with_changes(body=node.body.with_changes(body=new_body))
+
+    return node
