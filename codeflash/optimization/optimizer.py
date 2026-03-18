@@ -137,6 +137,11 @@ class Optimizer:
         # (via get_git_diff using cwd), but module_root/project_root have been mirrored to
         # the worktree. Use the original roots for filtering so path comparisons match,
         # then remap the discovered file paths to the worktree.
+
+        # In worktree mode for git-diff discovery, file paths come from the original repo
+        # (via get_git_diff using cwd), but module_root/project_root have been mirrored to
+        # the worktree. Use the original roots for filtering so path comparisons match,
+        # then remap the discovered file paths to the worktree.
         project_root = self.args.project_root
         module_root = self.args.module_root
         use_original_roots = (
@@ -169,15 +174,16 @@ class Optimizer:
             assert self.current_worktree is not None
             original_git_root = git_root_dir()
             file_to_funcs, count, trace = result
+
+            # Resolve roots once to avoid repeated filesystem resolves in the loop
+            original_root_resolved = original_git_root.resolve()
+            worktree_resolved = self.current_worktree.resolve()
+
             remapped: dict[Path, list[FunctionToOptimize]] = {}
             for file_path, funcs in file_to_funcs.items():
-                new_path = mirror_path(Path(file_path), original_git_root, self.current_worktree)
-                remapped[new_path] = [
-                    dataclasses.replace(
-                        func, file_path=mirror_path(func.file_path, original_git_root, self.current_worktree)
-                    )
-                    for func in funcs
-                ]
+                relative_path = file_path.resolve().relative_to(original_root_resolved)
+                new_path = worktree_resolved / relative_path
+                remapped[new_path] = [dataclasses.replace(func, file_path=new_path) for func in funcs]
             return remapped, count, trace
 
         return result
