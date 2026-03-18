@@ -499,10 +499,10 @@ class MyTuple(typing.NamedTuple):
         test_path.unlink(missing_ok=True)
 
 
-def test_attrs_define_no_init_skipped():
-    """@attrs.define classes have auto-generated __init__; synthesizing super().__init__() breaks
-    because attrs.define(slots=True) creates a new class whose instances fail the __class__ cell
-    check.  Instrumentation must skip them."""
+def test_attrs_define_patched_via_module_wrapper():
+    """@attrs.define classes must NOT get a synthetic body __init__; instead a module-level
+    monkey-patch block is emitted after the class to avoid the __class__ cell TypeError
+    that arises when attrs.define(slots=True) replaces the original class object."""
     original_code = """
 import attrs
 from attrs.validators import instance_of
@@ -515,8 +515,11 @@ class MyAttrsClass:
     def compute(self):
         return self.x
 """
-    expected = """import attrs
+    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
+    expected = f"""import attrs
 from attrs.validators import instance_of
+
+from codeflash.verification.codeflash_capture import codeflash_capture
 
 
 @attrs.define
@@ -526,8 +529,12 @@ class MyAttrsClass:
 
     def compute(self):
         return self.x
+_codeflash_orig_MyAttrsClass_init = MyAttrsClass.__init__
+
+def _codeflash_patched_MyAttrsClass_init(self, *args, **kwargs):
+    return _codeflash_orig_MyAttrsClass_init(self, *args, **kwargs)
+MyAttrsClass.__init__ = codeflash_capture(function_name='MyAttrsClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values")).as_posix()}', tests_root='{test_path.parent.as_posix()}', is_fto=True)(_codeflash_patched_MyAttrsClass_init)
 """
-    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
     test_path.write_text(original_code)
 
     function = FunctionToOptimize(
@@ -542,8 +549,8 @@ class MyAttrsClass:
         test_path.unlink(missing_ok=True)
 
 
-def test_attrs_define_frozen_no_init_skipped():
-    """@attrs.define(frozen=True) should also be skipped."""
+def test_attrs_define_frozen_patched_via_module_wrapper():
+    """@attrs.define(frozen=True) should also be monkey-patched at module level."""
     original_code = """
 import attrs
 
@@ -555,7 +562,10 @@ class FrozenPoint:
     def distance(self):
         return (self.x ** 2 + self.y ** 2) ** 0.5
 """
-    expected = """import attrs
+    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
+    expected = f"""import attrs
+
+from codeflash.verification.codeflash_capture import codeflash_capture
 
 
 @attrs.define(frozen=True)
@@ -565,8 +575,12 @@ class FrozenPoint:
 
     def distance(self):
         return (self.x ** 2 + self.y ** 2) ** 0.5
+_codeflash_orig_FrozenPoint_init = FrozenPoint.__init__
+
+def _codeflash_patched_FrozenPoint_init(self, *args, **kwargs):
+    return _codeflash_orig_FrozenPoint_init(self, *args, **kwargs)
+FrozenPoint.__init__ = codeflash_capture(function_name='FrozenPoint.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values")).as_posix()}', tests_root='{test_path.parent.as_posix()}', is_fto=True)(_codeflash_patched_FrozenPoint_init)
 """
-    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
     test_path.write_text(original_code)
 
     function = FunctionToOptimize(
@@ -581,8 +595,8 @@ class FrozenPoint:
         test_path.unlink(missing_ok=True)
 
 
-def test_attr_s_no_init_skipped():
-    """@attr.s classes should also be skipped."""
+def test_attr_s_patched_via_module_wrapper():
+    """@attr.s classes should also be monkey-patched at module level."""
     original_code = """
 import attr
 
@@ -593,7 +607,10 @@ class MyAttrClass:
     def display(self):
         return self.x
 """
-    expected = """import attr
+    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
+    expected = f"""import attr
+
+from codeflash.verification.codeflash_capture import codeflash_capture
 
 
 @attr.s
@@ -602,8 +619,12 @@ class MyAttrClass:
 
     def display(self):
         return self.x
+_codeflash_orig_MyAttrClass_init = MyAttrClass.__init__
+
+def _codeflash_patched_MyAttrClass_init(self, *args, **kwargs):
+    return _codeflash_orig_MyAttrClass_init(self, *args, **kwargs)
+MyAttrClass.__init__ = codeflash_capture(function_name='MyAttrClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values")).as_posix()}', tests_root='{test_path.parent.as_posix()}', is_fto=True)(_codeflash_patched_MyAttrClass_init)
 """
-    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
     test_path.write_text(original_code)
 
     function = FunctionToOptimize(
