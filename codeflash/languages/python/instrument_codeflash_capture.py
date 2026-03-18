@@ -119,6 +119,18 @@ class InitDecorator(ast.NodeTransformer):
             defaults=[],
         )
 
+        # Pre-build reusable AST nodes for _build_attrs_patch_block
+        self._load_ctx = ast.Load()
+        self._store_ctx = ast.Store()
+        self._args_name_load = ast.Name(id="args", ctx=self._load_ctx)
+        self._kwargs_name_load = ast.Name(id="kwargs", ctx=self._load_ctx)
+        self._self_arg_node = ast.arg(arg="self")
+        self._args_arg_node = ast.arg(arg="args")
+        self._kwargs_arg_node = ast.arg(arg="kwargs")
+        self._self_name_load = ast.Name(id="self", ctx=self._load_ctx)
+        self._starred_args = ast.Starred(value=self._args_name_load, ctx=self._load_ctx)
+        self._kwargs_keyword = ast.keyword(arg=None, value=self._kwargs_name_load)
+
     def visit_ImportFrom(self, node: ast.ImportFrom) -> ast.ImportFrom:
         # Check if our import already exists
         if node.module == "codeflash.verification.codeflash_capture" and any(
@@ -242,9 +254,14 @@ class InitDecorator(ast.NodeTransformer):
         patched_name = f"_codeflash_patched_{class_name}_init"
 
         # _codeflash_orig_ClassName_init = ClassName.__init__
+
+        # Create class name nodes once
+        class_name_load = ast.Name(id=class_name, ctx=self._load_ctx)
+
+        # _codeflash_orig_ClassName_init = ClassName.__init__
         save_orig = ast.Assign(
-            targets=[ast.Name(id=orig_name, ctx=ast.Store())],
-            value=ast.Attribute(value=ast.Name(id=class_name, ctx=ast.Load()), attr="__init__", ctx=ast.Load()),
+            targets=[ast.Name(id=orig_name, ctx=self._store_ctx)],
+            value=ast.Attribute(value=class_name_load, attr="__init__", ctx=self._load_ctx),
         )
 
         # def _codeflash_patched_ClassName_init(self, *args, **kwargs):
@@ -253,22 +270,19 @@ class InitDecorator(ast.NodeTransformer):
             name=patched_name,
             args=ast.arguments(
                 posonlyargs=[],
-                args=[ast.arg(arg="self")],
-                vararg=ast.arg(arg="args"),
+                args=[self._self_arg_node],
+                vararg=self._args_arg_node,
                 kwonlyargs=[],
                 kw_defaults=[],
-                kwarg=ast.arg(arg="kwargs"),
+                kwarg=self._kwargs_arg_node,
                 defaults=[],
             ),
             body=[
                 ast.Return(
                     value=ast.Call(
-                        func=ast.Name(id=orig_name, ctx=ast.Load()),
-                        args=[
-                            ast.Name(id="self", ctx=ast.Load()),
-                            ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load()),
-                        ],
-                        keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
+                        func=ast.Name(id=orig_name, ctx=self._load_ctx),
+                        args=[self._self_name_load, self._starred_args],
+                        keywords=[self._kwargs_keyword],
                     )
                 )
             ],
@@ -278,8 +292,10 @@ class InitDecorator(ast.NodeTransformer):
 
         # ClassName.__init__ = codeflash_capture(...)(_codeflash_patched_ClassName_init)
         assign_patched = ast.Assign(
-            targets=[ast.Attribute(value=ast.Name(id=class_name, ctx=ast.Load()), attr="__init__", ctx=ast.Store())],
-            value=ast.Call(func=decorator, args=[ast.Name(id=patched_name, ctx=ast.Load())], keywords=[]),
+            targets=[
+                ast.Attribute(value=ast.Name(id=class_name, ctx=self._load_ctx), attr="__init__", ctx=self._store_ctx)
+            ],
+            value=ast.Call(func=decorator, args=[ast.Name(id=patched_name, ctx=self._load_ctx)], keywords=[]),
         )
 
         return [save_orig, patched_func, assign_patched]
