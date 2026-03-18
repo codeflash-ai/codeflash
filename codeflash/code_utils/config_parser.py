@@ -1,15 +1,24 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import tomlkit
 
 from codeflash.code_utils.config_js import find_package_json, parse_package_json_config
+from codeflash.languages.language_enum import Language
 from codeflash.lsp.helpers import is_LSP_enabled
 
 PYPROJECT_TOML_CACHE: dict[Path, Path] = {}
 ALL_CONFIG_FILES: dict[Path, dict[str, Path]] = {}
+
+
+@dataclass
+class LanguageConfig:
+    config: dict[str, Any]
+    config_path: Path
+    language: Language
 
 
 def _try_parse_java_build_config() -> tuple[dict[str, Any], Path] | None:
@@ -101,6 +110,55 @@ def find_conftest_files(test_paths: list[Path]) -> list[Path]:
             # Search for conftest.py in the parent directories
             cur_path = cur_path.parent
     return list(list_of_conftest_files)
+
+
+def find_all_config_files(start_dir: Path | None = None) -> list[LanguageConfig]:
+    if start_dir is None:
+        start_dir = Path.cwd()
+
+    configs: list[LanguageConfig] = []
+    seen_languages: set[Language] = set()
+
+    toml_configs = {"pyproject.toml": Language.PYTHON, "codeflash.toml": Language.JAVA}
+
+    dir_path = start_dir.resolve()
+    while True:
+        for config_name, language in toml_configs.items():
+            if language in seen_languages:
+                continue
+            config_file = dir_path / config_name
+            if config_file.exists():
+                try:
+                    with config_file.open("rb") as f:
+                        data = tomlkit.parse(f.read())
+                    tool = data.get("tool", {})
+                    if isinstance(tool, dict) and "codeflash" in tool:
+                        seen_languages.add(language)
+                        configs.append(
+                            LanguageConfig(config=dict(tool["codeflash"]), config_path=config_file, language=language)
+                        )
+                except Exception:
+                    continue
+
+        if Language.JAVASCRIPT not in seen_languages:
+            package_json = dir_path / "package.json"
+            if package_json.exists():
+                try:
+                    result = parse_package_json_config(package_json)
+                    if result is not None:
+                        config, path = result
+                        seen_languages.add(Language.JAVASCRIPT)
+                        configs.append(LanguageConfig(config=config, config_path=path, language=Language.JAVASCRIPT))
+                except Exception:
+                    pass
+
+        parent = dir_path.parent
+        if parent == dir_path:
+            break
+        dir_path = parent
+
+    return configs
+
 
 
 def parse_config_file(
