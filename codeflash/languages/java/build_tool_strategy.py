@@ -8,6 +8,7 @@ live in maven_strategy.py and gradle_strategy.py.
 from __future__ import annotations
 
 import logging
+import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -19,6 +20,16 @@ logger = logging.getLogger(__name__)
 
 _RUNTIME_JAR_NAME = "codeflash-runtime-1.0.0.jar"
 _JAVA_RUNTIME_DIR = Path(__file__).parent.parent.parent.parent / "codeflash-java-runtime"
+
+
+def module_to_dir(test_module: str) -> str:
+    """Convert a build-tool module name to a filesystem-relative path.
+
+    Gradle uses ``:`` as the module separator (``connect:runtime``), while Maven
+    uses the directory name directly.  On the filesystem the separator is always
+    ``/`` (or ``os.sep``).
+    """
+    return test_module.replace(":", os.sep)
 
 
 class BuildToolStrategy(ABC):

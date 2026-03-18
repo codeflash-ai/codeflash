@@ -249,6 +249,26 @@ def _is_build_root(directory: Path) -> bool:
     )
 
 
+def _match_module_from_rel_path(rel_path: Path, modules: list[str]) -> str | None:
+    """Match a relative file path against a list of build-tool module names.
+
+    Handles both simple modules (``streams``) and nested Gradle modules where
+    the ``:`` separator maps to ``/`` on the filesystem (``connect:runtime`` →
+    ``connect/runtime``).
+
+    Returns the module name as declared in the build config (e.g.
+    ``"connect:runtime"``), or ``None`` if no module matches.
+    """
+    rel_str = str(rel_path)
+    # Build a mapping: filesystem prefix → module name
+    for module in modules:
+        # Gradle uses ":" as separator; filesystem uses "/"
+        dir_prefix = module.replace(":", os.sep)
+        if rel_str == dir_prefix or rel_str.startswith(dir_prefix + os.sep):
+            return module
+    return None
+
+
 def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, str | None]:
     """Find the multi-module parent root if tests are in a different module.
 
@@ -286,17 +306,28 @@ def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, 
     if not test_outside_project:
         modules = _detect_modules(project_root)
         if modules:
+            # Count how many test files map to each module so we can pick the
+            # most common one (generated tests for the target module usually
+            # outnumber pre-existing cross-module tests).
+            module_counts: dict[str, int] = {}
             for test_path in test_file_paths:
                 try:
                     rel_path = test_path.relative_to(project_root)
-                    first_component = rel_path.parts[0] if rel_path.parts else None
-                    if first_component and first_component in modules:
-                        logger.debug(
-                            "Detected multi-module project. Root: %s, Test module: %s", project_root, first_component
-                        )
-                        return project_root, first_component
                 except ValueError:
-                    pass
+                    continue
+                matched = _match_module_from_rel_path(rel_path, modules)
+                if matched:
+                    module_counts[matched] = module_counts.get(matched, 0) + 1
+
+            if module_counts:
+                best_module = max(module_counts, key=lambda m: module_counts[m])
+                logger.debug(
+                    "Detected multi-module project. Root: %s, Module votes: %s, Selected: %s",
+                    project_root,
+                    module_counts,
+                    best_module,
+                )
+                return project_root, best_module
         return project_root, None
 
     current = project_root.parent
@@ -305,10 +336,11 @@ def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, 
             modules = _detect_modules(current)
             if modules and test_dir:
                 try:
-                    test_module = test_dir.relative_to(current)
-                    test_module_name = test_module.parts[0] if test_module.parts else None
-                    logger.debug("Detected multi-module project. Root: %s, Test module: %s", current, test_module_name)
-                    return current, test_module_name
+                    rel_path = test_dir.relative_to(current)
+                    matched = _match_module_from_rel_path(rel_path, modules)
+                    if matched:
+                        logger.debug("Detected multi-module project. Root: %s, Test module: %s", current, matched)
+                        return current, matched
                 except ValueError:
                     pass
         current = current.parent

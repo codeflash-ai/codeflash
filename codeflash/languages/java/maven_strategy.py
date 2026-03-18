@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
-from codeflash.languages.java.build_tool_strategy import BuildToolStrategy
+from codeflash.languages.java.build_tool_strategy import BuildToolStrategy, module_to_dir
 from codeflash.languages.java.build_tools import CODEFLASH_RUNTIME_JAR_NAME, CODEFLASH_RUNTIME_VERSION
 
 _TARGET = "target"
@@ -416,7 +416,7 @@ class MavenStrategy(BuildToolStrategy):
                     return False
 
         if test_module:
-            pom_path = build_root / test_module / "pom.xml"
+            pom_path = build_root / module_to_dir(test_module) / "pom.xml"
         else:
             pom_path = build_root / "pom.xml"
 
@@ -563,7 +563,7 @@ class MavenStrategy(BuildToolStrategy):
             classpath = cp_file.read_text(encoding="utf-8").strip()
 
             if test_module:
-                module_path = build_root / test_module
+                module_path = build_root / module_to_dir(test_module)
             else:
                 module_path = build_root
 
@@ -577,8 +577,9 @@ class MavenStrategy(BuildToolStrategy):
                 cp_parts.append(str(main_classes))
 
             if test_module:
+                module_dir_name = module_to_dir(test_module)
                 for module_dir in build_root.iterdir():
-                    if module_dir.is_dir() and module_dir.name != test_module:
+                    if module_dir.is_dir() and module_dir.name != module_dir_name:
                         module_classes = module_dir / "target" / "classes"
                         if module_classes.exists():
                             logger.debug("Adding multi-module classpath: %s", module_classes)
@@ -605,7 +606,7 @@ class MavenStrategy(BuildToolStrategy):
 
     def get_build_output_dir(self, build_root: Path, test_module: str | None) -> Path:
         if test_module:
-            return build_root.joinpath(test_module, _TARGET)
+            return build_root.joinpath(module_to_dir(test_module), _TARGET)
         return build_root.joinpath(_TARGET)
 
     def run_tests_via_build_tool(
@@ -833,12 +834,12 @@ class MavenStrategy(BuildToolStrategy):
 
     def setup_coverage(self, build_root: Path, test_module: str | None, project_root: Path) -> Path | None:
         if test_module:
-            test_module_pom = build_root / test_module / "pom.xml"
+            test_module_pom = build_root / module_to_dir(test_module) / "pom.xml"
             if test_module_pom.exists():
                 if not is_jacoco_configured(test_module_pom):
                     logger.info("Adding JaCoCo plugin to test module pom.xml: %s", test_module_pom)
                     add_jacoco_plugin(test_module_pom)
-                return get_jacoco_report_path(build_root / test_module)
+                return get_jacoco_report_path(build_root / module_to_dir(test_module))
         else:
             pom_path = project_root / "pom.xml"
             if pom_path.exists():

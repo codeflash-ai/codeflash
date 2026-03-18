@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
-from codeflash.languages.java.build_tool_strategy import BuildToolStrategy
+from codeflash.languages.java.build_tool_strategy import BuildToolStrategy, module_to_dir
 
 _BUILD = "build"
 
@@ -286,7 +286,7 @@ class GradleStrategy(BuildToolStrategy):
             return False
 
         if test_module:
-            module_root = build_root / test_module
+            module_root = build_root / module_to_dir(test_module)
         else:
             module_root = build_root
 
@@ -446,7 +446,7 @@ class GradleStrategy(BuildToolStrategy):
                 return None
 
             if test_module:
-                module_path = build_root / test_module
+                module_path = build_root / module_to_dir(test_module)
             else:
                 module_path = build_root
 
@@ -460,8 +460,9 @@ class GradleStrategy(BuildToolStrategy):
                 cp_parts.append(str(main_classes))
 
             if test_module:
+                module_dir_name = module_to_dir(test_module)
                 for module_dir in build_root.iterdir():
-                    if module_dir.is_dir() and module_dir.name != test_module:
+                    if module_dir.is_dir() and module_dir.name != module_dir_name:
                         module_classes = module_dir / "build" / "classes" / "java" / "main"
                         if module_classes.exists():
                             logger.debug("Adding multi-module classpath: %s", module_classes)
@@ -500,7 +501,7 @@ class GradleStrategy(BuildToolStrategy):
 
     def get_build_output_dir(self, build_root: Path, test_module: str | None) -> Path:
         if test_module:
-            return build_root.joinpath(test_module, _BUILD)
+            return build_root.joinpath(module_to_dir(test_module), _BUILD)
         return build_root.joinpath(_BUILD)
 
     def run_tests_via_build_tool(
@@ -759,7 +760,7 @@ class GradleStrategy(BuildToolStrategy):
 
     def setup_coverage(self, build_root: Path, test_module: str | None, project_root: Path) -> Path | None:
         if test_module:
-            module_root = build_root / test_module
+            module_root = build_root / module_to_dir(test_module)
         else:
             module_root = project_root
 

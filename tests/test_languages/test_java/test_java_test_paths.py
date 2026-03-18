@@ -3,7 +3,14 @@
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from codeflash.languages.java.test_runner import _extract_custom_source_dirs, _path_to_class_name
+from codeflash.languages.java.build_tool_strategy import module_to_dir
+from codeflash.languages.java.test_runner import (
+    _extract_custom_source_dirs,
+    _extract_modules_from_settings_gradle,
+    _find_multi_module_root,
+    _match_module_from_rel_path,
+    _path_to_class_name,
+)
 
 
 class TestGetJavaSourcesRoot:
@@ -383,3 +390,185 @@ class TestExtractSourceDirsFromPom:
         (tmp_path / "pom.xml").write_text("this is not valid xml <<<<")
         dirs = _extract_custom_source_dirs(tmp_path)
         assert dirs == []
+
+
+class TestMatchModuleFromRelPath:
+    """Tests for _match_module_from_rel_path."""
+
+    def test_simple_module(self):
+        assert _match_module_from_rel_path(Path("streams/src/test/java/Test.java"), ["streams", "clients"]) == "streams"
+
+    def test_nested_module(self):
+        result = _match_module_from_rel_path(
+            Path("connect/runtime/src/test/java/Test.java"), ["connect:runtime", "streams"]
+        )
+        assert result == "connect:runtime"
+
+    def test_no_match(self):
+        assert _match_module_from_rel_path(Path("unknown/src/Test.java"), ["streams", "clients"]) is None
+
+    def test_partial_name_no_false_match(self):
+        """'streams-ng' should not match module 'streams'."""
+        assert _match_module_from_rel_path(Path("streams-ng/src/Test.java"), ["streams"]) is None
+
+
+class TestModuleToDir:
+    """Tests for module_to_dir."""
+
+    def test_simple(self):
+        assert module_to_dir("streams") == "streams"
+
+    def test_nested(self):
+        result = module_to_dir("connect:runtime")
+        assert result == "connect" + "/" + "runtime" or result == "connect" + "\\" + "runtime"
+
+
+class TestExtractModulesFromSettingsGradle:
+    """Tests for _extract_modules_from_settings_gradle."""
+
+    def test_simple_top_level_modules(self):
+        content = """include("streams", "clients", "tools")"""
+        modules = _extract_modules_from_settings_gradle(content)
+        assert "streams" in modules
+        assert "clients" in modules
+        assert "tools" in modules
+
+    def test_nested_gradle_modules(self):
+        """Nested modules like connect:runtime should be extracted."""
+        content = """include("connect:runtime", "connect:api", "streams")"""
+        modules = _extract_modules_from_settings_gradle(content)
+        assert "connect:runtime" in modules
+        assert "connect:api" in modules
+        assert "streams" in modules
+
+    def test_leading_colon_stripped(self):
+        content = """include(":streams", ":clients")"""
+        modules = _extract_modules_from_settings_gradle(content)
+        assert "streams" in modules
+        assert "clients" in modules
+
+
+class TestFindMultiModuleRoot:
+    """Tests for _find_multi_module_root with Gradle multi-module projects."""
+
+    def _make_kafka_like_project(self, tmp_path):
+        """Create a Kafka-like multi-module Gradle project structure."""
+        # Root build files
+        (tmp_path / "build.gradle.kts").write_text("// root build", encoding="utf-8")
+        (tmp_path / "settings.gradle.kts").write_text(
+            'include("clients", "streams", "tools", "connect:runtime")',
+            encoding="utf-8",
+        )
+        # Module build files and source/test dirs
+        for module in ["clients", "streams", "tools"]:
+            (tmp_path / module / "src" / "main" / "java").mkdir(parents=True)
+            (tmp_path / module / "src" / "test" / "java").mkdir(parents=True)
+            (tmp_path / module / "build.gradle.kts").write_text(f"// {module} build", encoding="utf-8")
+        # Nested module
+        (tmp_path / "connect" / "runtime" / "src" / "main" / "java").mkdir(parents=True)
+        (tmp_path / "connect" / "runtime" / "src" / "test" / "java").mkdir(parents=True)
+        (tmp_path / "connect" / "runtime" / "build.gradle.kts").write_text("// connect:runtime build", encoding="utf-8")
+
+    def _make_test_paths_mock(self, file_paths: list[Path]):
+        """Create a mock test_paths object with test_files."""
+        mock = MagicMock()
+        mock.test_files = []
+        for fp in file_paths:
+            tf = MagicMock()
+            tf.benchmarking_file_path = None
+            tf.instrumented_behavior_file_path = fp
+            mock.test_files.append(tf)
+        return mock
+
+    def test_streams_tests_return_streams_module(self, tmp_path):
+        """When ALL test files are in streams/, should return 'streams' module."""
+        self._make_kafka_like_project(tmp_path)
+        test_file = tmp_path / "streams" / "src" / "test" / "java" / "org" / "apache" / "kafka" / "StreamsTest.java"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.touch()
+
+        test_paths = self._make_test_paths_mock([test_file])
+        build_root, test_module = _find_multi_module_root(tmp_path, test_paths)
+
+        assert build_root == tmp_path
+        assert test_module == "streams", f"Expected 'streams' but got '{test_module}'"
+
+    def test_tools_tests_return_tools_module(self, tmp_path):
+        """When test files are in tools/, should return 'tools' module."""
+        self._make_kafka_like_project(tmp_path)
+        test_file = tmp_path / "tools" / "src" / "test" / "java" / "org" / "apache" / "kafka" / "ToolsTest.java"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.touch()
+
+        test_paths = self._make_test_paths_mock([test_file])
+        build_root, test_module = _find_multi_module_root(tmp_path, test_paths)
+
+        assert build_root == tmp_path
+        assert test_module == "tools", f"Expected 'tools' but got '{test_module}'"
+
+    def test_mixed_modules_majority_wins(self, tmp_path):
+        """When tests span multiple modules, the module with the most test files wins."""
+        self._make_kafka_like_project(tmp_path)
+        clients_test = tmp_path / "clients" / "src" / "test" / "java" / "com" / "ClientsTest.java"
+        clients_test.parent.mkdir(parents=True, exist_ok=True)
+        clients_test.touch()
+        streams_test_1 = tmp_path / "streams" / "src" / "test" / "java" / "com" / "StreamsTest1.java"
+        streams_test_1.parent.mkdir(parents=True, exist_ok=True)
+        streams_test_1.touch()
+        streams_test_2 = tmp_path / "streams" / "src" / "test" / "java" / "com" / "StreamsTest2.java"
+        streams_test_2.touch()
+
+        # 1 clients test + 2 streams tests → streams wins by majority
+        test_paths = self._make_test_paths_mock([clients_test, streams_test_1, streams_test_2])
+        build_root, test_module = _find_multi_module_root(tmp_path, test_paths)
+
+        assert build_root == tmp_path
+        assert test_module == "streams"
+
+    def test_mixed_modules_equal_count_deterministic(self, tmp_path):
+        """When modules are tied, a module is still selected (not None)."""
+        self._make_kafka_like_project(tmp_path)
+        clients_test = tmp_path / "clients" / "src" / "test" / "java" / "com" / "ClientsTest.java"
+        clients_test.parent.mkdir(parents=True, exist_ok=True)
+        clients_test.touch()
+        streams_test = tmp_path / "streams" / "src" / "test" / "java" / "com" / "StreamsTest.java"
+        streams_test.parent.mkdir(parents=True, exist_ok=True)
+        streams_test.touch()
+
+        test_paths = self._make_test_paths_mock([clients_test, streams_test])
+        build_root, test_module = _find_multi_module_root(tmp_path, test_paths)
+
+        assert build_root == tmp_path
+        assert test_module in ("clients", "streams")
+
+    def test_nested_module_connect_runtime(self, tmp_path):
+        """Nested Gradle module 'connect:runtime' (dir connect/runtime/) is matched."""
+        self._make_kafka_like_project(tmp_path)
+        test_file = (
+            tmp_path / "connect" / "runtime" / "src" / "test" / "java" / "org" / "kafka" / "ConnectRuntimeTest.java"
+        )
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.touch()
+
+        test_paths = self._make_test_paths_mock([test_file])
+        build_root, test_module = _find_multi_module_root(tmp_path, test_paths)
+
+        assert build_root == tmp_path
+        assert test_module == "connect:runtime"
+
+    def test_project_root_is_submodule_test_outside(self, tmp_path):
+        """When project_root is a submodule (e.g., kafka/clients) and generated
+        tests are placed in a sibling module (kafka/streams), the function should
+        walk up to find the repo root and return the correct module.
+        """
+        self._make_kafka_like_project(tmp_path)
+        submodule_root = tmp_path / "clients"
+        test_file = tmp_path / "streams" / "src" / "test" / "java" / "com" / "StreamsTest.java"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.touch()
+
+        test_paths = self._make_test_paths_mock([test_file])
+        build_root, test_module = _find_multi_module_root(submodule_root, test_paths)
+
+        assert build_root == tmp_path
+        assert test_module == "streams"
