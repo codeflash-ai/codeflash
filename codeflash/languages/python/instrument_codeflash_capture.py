@@ -230,11 +230,7 @@ class InitDecorator(ast.NodeTransformer):
                     if len(parts) >= 2 and parts[-2] in _ATTRS_NAMESPACES and parts[-1] in _ATTRS_DECORATOR_NAMES:
                         if isinstance(dec, ast.Call):
                             for kw in dec.keywords:
-                                if (
-                                    kw.arg == "init"
-                                    and isinstance(kw.value, ast.Constant)
-                                    and kw.value.value is False
-                                ):
+                                if kw.arg == "init" and isinstance(kw.value, ast.Constant) and kw.value.value is False:
                                     return node
                         self._attrs_classes_to_patch[node.name] = decorator
                         self.inserted_decorator = True
