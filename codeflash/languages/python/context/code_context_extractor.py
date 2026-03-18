@@ -1818,6 +1818,8 @@ def _get_last_two_names(node: ast.AST | None) -> tuple[str | None, str | None]:
     while True:
         if isinstance(current, ast.Attribute):
             attrs_rev.append(current.attr)
+            if len(attrs_rev) >= 2:
+                return attrs_rev[1], attrs_rev[0]
             current = current.value
             continue
         if isinstance(current, ast.Call):
@@ -1832,7 +1834,4 @@ def _get_last_two_names(node: ast.AST | None) -> tuple[str | None, str | None]:
     total_parts = len(attrs_rev) + (1 if base_name is not None else 0)
     if total_parts < 2:
         return None, None
-
-    if len(attrs_rev) >= 2:
-        return attrs_rev[1], attrs_rev[0]
     return base_name, attrs_rev[0]
