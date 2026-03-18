@@ -2105,9 +2105,14 @@ class FunctionOptimizer:
                         },
                     )
 
-                    test_module_path = Path(
-                        module_name_from_file_path(gt.behavior_file_path, self.test_cfg.tests_project_rootdir)
-                    )
+                    try:
+                        test_module_path = Path(
+                            module_name_from_file_path(gt.behavior_file_path, self.test_cfg.tests_project_rootdir)
+                        )
+                    except ValueError:
+                        test_module_path = Path(
+                            module_name_from_file_path(gt.behavior_file_path, self.test_cfg.project_root_path)
+                        )
                     repair_result = self.aiservice_client.repair_generated_tests(
                         test_source=gt.generated_original_test_source,
                         functions_to_repair=review.functions_to_repair,

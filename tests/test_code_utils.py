@@ -99,6 +99,19 @@ def test_module_name_from_file_path_with_root_as_file() -> None:
     assert module_name == "code_utils"
 
 
+def test_module_name_from_file_path_not_under_root() -> None:
+    project_root_path = Path("/project/tests")
+    file_path = Path("/project/code_to_optimize/js/tests/codeflash-generated/test_calc.test.js")
+
+    with pytest.raises(ValueError, match="is not within the project root"):
+        module_name_from_file_path(file_path, project_root_path)
+
+    # But it should work with the actual project root
+    broader_root = Path("/project")
+    module_name = module_name_from_file_path(file_path, broader_root)
+    assert module_name == "code_to_optimize.js.tests.codeflash-generated.test_calc.test"
+
+
 def test_get_imports_from_file_with_file_path(tmp_path: Path) -> None:
     test_file = tmp_path / "test_file.py"
     test_file.write_text("import os\nfrom sys import path\n")
