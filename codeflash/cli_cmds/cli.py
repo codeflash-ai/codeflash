@@ -9,8 +9,9 @@ from codeflash.cli_cmds import logging_config
 from codeflash.cli_cmds.console import apologize_and_exit, logger
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import exit_with_message, normalize_ignore_paths
-from codeflash.code_utils.config_parser import parse_config_file
+from codeflash.code_utils.config_parser import LanguageConfig, parse_config_file
 from codeflash.languages import set_current_language
+from codeflash.languages.language_enum import Language
 from codeflash.languages.test_framework import set_current_test_framework
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.version import __version__ as version
@@ -251,6 +252,78 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
         args.all = args.module_root
     else:
         args.all = Path(args.all).resolve()
+    return args
+
+
+def apply_language_config(args: Namespace, lang_config: LanguageConfig) -> Namespace:
+    config = lang_config.config
+    config_path = lang_config.config_path
+
+    supported_keys = [
+        "module_root",
+        "tests_root",
+        "benchmarks_root",
+        "ignore_paths",
+        "pytest_cmd",
+        "formatter_cmds",
+        "disable_telemetry",
+        "disable_imports_sorting",
+        "git_remote",
+        "override_fixtures",
+    ]
+    for key in supported_keys:
+        if key in config and ((hasattr(args, key) and getattr(args, key) is None) or not hasattr(args, key)):
+            setattr(args, key, config[key])
+
+    assert args.module_root is not None, "--module-root must be specified"
+    assert Path(args.module_root).is_dir(), f"--module-root {args.module_root} must be a valid directory"
+
+    set_current_language(lang_config.language)
+
+    is_js_ts = lang_config.language in (Language.JAVASCRIPT, Language.TYPESCRIPT)
+    if is_js_ts and config.get("test_framework"):
+        set_current_test_framework(config["test_framework"])
+
+    is_java = lang_config.language == Language.JAVA
+    if args.tests_root is None:
+        if is_java:
+            for test_dir in ["src/test/java", "test", "tests"]:
+                test_path = Path(args.module_root).parent / test_dir if "/" in test_dir else Path(test_dir)
+                if not test_path.is_absolute():
+                    test_path = Path.cwd() / test_path
+                if test_path.is_dir():
+                    args.tests_root = str(test_path)
+                    break
+            if args.tests_root is None:
+                args.tests_root = str(Path.cwd() / "src" / "test" / "java")
+        elif is_js_ts:
+            for test_dir in ["test", "tests", "__tests__"]:
+                if Path(test_dir).is_dir():
+                    args.tests_root = test_dir
+                    break
+            if args.tests_root is None and args.module_root:
+                module_root_path = Path(args.module_root)
+                for test_dir in ["test", "tests", "__tests__"]:
+                    test_path = module_root_path / test_dir
+                    if test_path.is_dir():
+                        args.tests_root = str(test_path)
+                        break
+            if args.tests_root is None:
+                args.tests_root = args.module_root
+        else:
+            raise AssertionError("--tests-root must be specified")
+
+    assert Path(args.tests_root).is_dir(), f"--tests-root {args.tests_root} must be a valid directory"
+
+    args.module_root = Path(args.module_root).resolve()
+    if hasattr(args, "ignore_paths") and args.ignore_paths is not None:
+        args.ignore_paths = normalize_ignore_paths(args.ignore_paths, base_path=args.module_root)
+    args.project_root = project_root_from_module_root(args.module_root, config_path)
+    args.tests_root = Path(args.tests_root).resolve()
+    if args.benchmarks_root:
+        args.benchmarks_root = Path(args.benchmarks_root).resolve()
+    args.test_project_root = project_root_from_module_root(args.tests_root, config_path)
+
     return args
 
 
