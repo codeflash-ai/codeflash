@@ -10,6 +10,7 @@ from codeflash.cli_cmds.console import apologize_and_exit, logger
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import exit_with_message, normalize_ignore_paths
 from codeflash.code_utils.config_parser import parse_config_file
+from codeflash.languages import set_current_language
 from codeflash.languages.test_framework import set_current_test_framework
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.version import __version__ as version
@@ -108,10 +109,18 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     assert args.module_root is not None, "--module-root must be specified"
     assert Path(args.module_root).is_dir(), f"--module-root {args.module_root} must be a valid directory"
 
-    # For JS/TS projects, tests_root is optional (Jest auto-discovers tests)
-    # Default to module_root if not specified
-    is_js_ts_project = pyproject_config.get("language") in ("javascript", "typescript")
-    is_java_project = pyproject_config.get("language") == "java"
+    # Determine project language from explicit config or config file name.
+    # Java projects use codeflash.toml but don't always have an explicit language field.
+    config_language = pyproject_config.get("language")
+    if config_language is None and pyproject_file_path.name == "codeflash.toml":
+        config_language = "java"
+    is_js_ts_project = config_language in ("javascript", "typescript")
+    is_java_project = config_language == "java"
+
+    # Set the language singleton early so downstream code (e.g. get_git_diff)
+    # can use current_language_support() before function discovery.
+    if config_language:
+        set_current_language(config_language)
 
     # Set the test framework singleton for JS/TS projects
     if is_js_ts_project and pyproject_config.get("test_framework"):
