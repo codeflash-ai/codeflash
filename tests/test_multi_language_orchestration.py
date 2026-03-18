@@ -313,6 +313,83 @@ class TestMultiLanguageOrchestration:
         assert call1_args.module_root != call2_args.module_root
 
 
+    @patch("codeflash.main.ask_should_use_checkpoint_get_functions", return_value=[])
+    @patch("codeflash.main.env_utils.check_formatter_installed", return_value=True)
+    @patch("codeflash.main.handle_optimize_all_arg_parsing", side_effect=lambda args: args)
+    @patch("codeflash.optimization.optimizer.run_with_args")
+    @patch("codeflash.main.find_all_config_files")
+    @patch("codeflash.main.parse_args")
+    @patch("codeflash.main.print_codeflash_banner")
+    @patch("codeflash.main.check_for_newer_minor_version")
+    def test_error_in_one_language_does_not_block_others(
+        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+    ) -> None:
+        py_config = make_lang_config(tmp_path, Language.PYTHON)
+        java_config = make_lang_config(tmp_path, Language.JAVA)
+        mock_find_configs.return_value = [py_config, java_config]
+        mock_parse_args.return_value = make_base_args(disable_telemetry=False)
+        # First call (Python) raises, second call (Java) succeeds
+        mock_run.side_effect = [RuntimeError("Python optimizer crashed"), None]
+
+        from codeflash.main import main
+
+        main()
+
+        assert mock_run.call_count == 2
+
+    @patch("codeflash.main.ask_should_use_checkpoint_get_functions", return_value=[])
+    @patch("codeflash.main.env_utils.check_formatter_installed", return_value=True)
+    @patch("codeflash.main.handle_optimize_all_arg_parsing", side_effect=lambda args: args)
+    @patch("codeflash.optimization.optimizer.run_with_args")
+    @patch("codeflash.main.find_all_config_files")
+    @patch("codeflash.main.parse_args")
+    @patch("codeflash.main.print_codeflash_banner")
+    @patch("codeflash.main.check_for_newer_minor_version")
+    def test_orchestration_summary_logged(
+        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+    ) -> None:
+        py_config = make_lang_config(tmp_path, Language.PYTHON)
+        java_config = make_lang_config(tmp_path, Language.JAVA)
+        mock_find_configs.return_value = [py_config, java_config]
+        mock_parse_args.return_value = make_base_args(disable_telemetry=False)
+
+        with patch("codeflash.main._log_orchestration_summary") as mock_summary:
+            from codeflash.main import main
+
+            main()
+
+            mock_summary.assert_called_once()
+            results = mock_summary.call_args[0][1]
+            assert results["python"] == "success"
+            assert results["java"] == "success"
+
+    @patch("codeflash.main.ask_should_use_checkpoint_get_functions", return_value=[])
+    @patch("codeflash.main.env_utils.check_formatter_installed", return_value=True)
+    @patch("codeflash.main.handle_optimize_all_arg_parsing", side_effect=lambda args: args)
+    @patch("codeflash.optimization.optimizer.run_with_args")
+    @patch("codeflash.main.find_all_config_files")
+    @patch("codeflash.main.parse_args")
+    @patch("codeflash.main.print_codeflash_banner")
+    @patch("codeflash.main.check_for_newer_minor_version")
+    def test_summary_reports_failure_status(
+        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+    ) -> None:
+        py_config = make_lang_config(tmp_path, Language.PYTHON)
+        java_config = make_lang_config(tmp_path, Language.JAVA)
+        mock_find_configs.return_value = [py_config, java_config]
+        mock_parse_args.return_value = make_base_args(disable_telemetry=False)
+        mock_run.side_effect = [RuntimeError("boom"), None]
+
+        with patch("codeflash.main._log_orchestration_summary") as mock_summary:
+            from codeflash.main import main
+
+            main()
+
+            results = mock_summary.call_args[0][1]
+            assert results["python"] == "failed"
+            assert results["java"] == "success"
+
+
 class TestNormalizeTomlConfig:
     def test_converts_hyphenated_keys_to_underscored(self, tmp_path: Path) -> None:
         config = {"module-root": "src", "tests-root": "tests"}

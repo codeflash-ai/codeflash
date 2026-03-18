@@ -103,26 +103,43 @@ def main() -> None:
         args = handle_optimize_all_arg_parsing(args)
 
         logger = logging.getLogger("codeflash")
+        results: dict[str, str] = {}
         for lang_config in language_configs:
-            pass_args = copy.deepcopy(args)
-            pass_args = apply_language_config(pass_args, lang_config)
+            lang_name = lang_config.language.value
+            try:
+                pass_args = copy.deepcopy(args)
+                pass_args = apply_language_config(pass_args, lang_config)
 
-            if hasattr(pass_args, "all") and pass_args.all is not None:
-                pass_args.all = pass_args.module_root
+                if hasattr(pass_args, "all") and pass_args.all is not None:
+                    pass_args.all = pass_args.module_root
 
-            if not env_utils.check_formatter_installed(pass_args.formatter_cmds):
-                logger.info("Skipping %s: formatter not installed", lang_config.language.value)
-                continue
+                if not env_utils.check_formatter_installed(pass_args.formatter_cmds):
+                    logger.info("Skipping %s: formatter not installed", lang_name)
+                    results[lang_name] = "skipped"
+                    continue
 
-            pass_args.previous_checkpoint_functions = ask_should_use_checkpoint_get_functions(pass_args)
-            init_sentry(enabled=not pass_args.disable_telemetry, exclude_errors=True)
-            posthog_cf.initialize_posthog(enabled=not pass_args.disable_telemetry)
+                pass_args.previous_checkpoint_functions = ask_should_use_checkpoint_get_functions(pass_args)
+                init_sentry(enabled=not pass_args.disable_telemetry, exclude_errors=True)
+                posthog_cf.initialize_posthog(enabled=not pass_args.disable_telemetry)
 
-            logger.info("Processing %s (config: %s)", lang_config.language.value, lang_config.config_path)
+                logger.info("Processing %s (config: %s)", lang_name, lang_config.config_path)
 
-            from codeflash.optimization import optimizer
+                from codeflash.optimization import optimizer
 
-            optimizer.run_with_args(pass_args)
+                optimizer.run_with_args(pass_args)
+                results[lang_name] = "success"
+            except Exception:
+                logger.exception("Error processing %s, continuing with remaining languages", lang_name)
+                results[lang_name] = "failed"
+
+        _log_orchestration_summary(logger, results)
+
+
+def _log_orchestration_summary(logger: logging.Logger, results: dict[str, str]) -> None:
+    if not results:
+        return
+    parts = [f"{lang}: {status}" for lang, status in results.items()]
+    logger.info("Multi-language orchestration complete: %s", ", ".join(parts))
 
 
 def _handle_config_loading(args: Namespace) -> Namespace | None:
