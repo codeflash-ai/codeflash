@@ -13,12 +13,12 @@ class TestGetJavaSourcesRoot:
         """Create a mock FunctionOptimizer with the given tests_root."""
         from codeflash.languages.java.function_optimizer import JavaFunctionOptimizer
 
-        # Create a minimal mock
         mock_optimizer = MagicMock(spec=JavaFunctionOptimizer)
         mock_optimizer.test_cfg = MagicMock()
         mock_optimizer.test_cfg.tests_root = Path(tests_root)
+        mock_optimizer.function_to_optimize = MagicMock()
+        mock_optimizer.function_to_optimize.file_path = Path("/nonexistent/Foo.java")
 
-        # Bind the actual method to the mock
         mock_optimizer._get_java_sources_root = lambda: JavaFunctionOptimizer._get_java_sources_root(mock_optimizer)
 
         return mock_optimizer
@@ -87,6 +87,108 @@ class TestGetJavaSourcesRoot:
         assert result == Path("/Users/test/Work/aerospike-client-java/test/src")
 
 
+class TestGetJavaSourcesRootMultiModule:
+    """Tests for _get_java_sources_root with multi-module projects."""
+
+    def _create_mock_optimizer(self, tests_root: str, file_path: str):
+        from codeflash.languages.java.function_optimizer import JavaFunctionOptimizer
+
+        mock_optimizer = MagicMock(spec=JavaFunctionOptimizer)
+        mock_optimizer.test_cfg = MagicMock()
+        mock_optimizer.test_cfg.tests_root = Path(tests_root)
+        mock_optimizer.function_to_optimize = MagicMock()
+        mock_optimizer.function_to_optimize.file_path = Path(file_path)
+        mock_optimizer._get_java_sources_root = lambda: JavaFunctionOptimizer._get_java_sources_root(mock_optimizer)
+        return mock_optimizer
+
+    def test_kafka_streams_module(self, tmp_path):
+        """Kafka: function in streams module should use streams test dir, not clients."""
+        (tmp_path / "streams" / "src" / "main" / "java").mkdir(parents=True)
+        (tmp_path / "streams" / "src" / "test" / "java").mkdir(parents=True)
+        (tmp_path / "clients" / "src" / "test" / "java").mkdir(parents=True)
+
+        optimizer = self._create_mock_optimizer(
+            tests_root=str(tmp_path / "clients" / "src" / "test" / "java"),
+            file_path=str(tmp_path / "streams" / "src" / "main" / "java" / "org" / "apache" / "kafka" / "streams" / "query" / "QueryConfig.java"),
+        )
+        result = optimizer._get_java_sources_root()
+        assert result == tmp_path / "streams" / "src" / "test" / "java"
+
+    def test_kafka_connect_module(self, tmp_path):
+        """Kafka: function in connect/runtime should use connect/runtime test dir."""
+        (tmp_path / "connect" / "runtime" / "src" / "main" / "java").mkdir(parents=True)
+        (tmp_path / "connect" / "runtime" / "src" / "test" / "java").mkdir(parents=True)
+        (tmp_path / "clients" / "src" / "test" / "java").mkdir(parents=True)
+
+        optimizer = self._create_mock_optimizer(
+            tests_root=str(tmp_path / "clients" / "src" / "test" / "java"),
+            file_path=str(tmp_path / "connect" / "runtime" / "src" / "main" / "java" / "org" / "apache" / "kafka" / "connect" / "runtime" / "Worker.java"),
+        )
+        result = optimizer._get_java_sources_root()
+        assert result == tmp_path / "connect" / "runtime" / "src" / "test" / "java"
+
+    def test_kafka_clients_module_same_as_config(self, tmp_path):
+        """Kafka: function in clients module should still use clients test dir."""
+        (tmp_path / "clients" / "src" / "main" / "java").mkdir(parents=True)
+        (tmp_path / "clients" / "src" / "test" / "java").mkdir(parents=True)
+
+        optimizer = self._create_mock_optimizer(
+            tests_root=str(tmp_path / "clients" / "src" / "test" / "java"),
+            file_path=str(tmp_path / "clients" / "src" / "main" / "java" / "org" / "apache" / "kafka" / "common" / "utils" / "Bytes.java"),
+        )
+        result = optimizer._get_java_sources_root()
+        assert result == tmp_path / "clients" / "src" / "test" / "java"
+
+    def test_opensearch_libs_module(self, tmp_path):
+        """OpenSearch: function in libs/core should use libs/core test dir."""
+        (tmp_path / "libs" / "core" / "src" / "main" / "java").mkdir(parents=True)
+        (tmp_path / "libs" / "core" / "src" / "test" / "java").mkdir(parents=True)
+        (tmp_path / "server" / "src" / "test" / "java").mkdir(parents=True)
+
+        optimizer = self._create_mock_optimizer(
+            tests_root=str(tmp_path / "server" / "src" / "test" / "java"),
+            file_path=str(tmp_path / "libs" / "core" / "src" / "main" / "java" / "org" / "opensearch" / "core" / "common" / "Strings.java"),
+        )
+        result = optimizer._get_java_sources_root()
+        assert result == tmp_path / "libs" / "core" / "src" / "test" / "java"
+
+    def test_spring_boot_subproject(self, tmp_path):
+        """Spring Boot: function in autoconfigure should use autoconfigure test dir."""
+        (tmp_path / "spring-boot-autoconfigure" / "src" / "main" / "java").mkdir(parents=True)
+        (tmp_path / "spring-boot-autoconfigure" / "src" / "test" / "java").mkdir(parents=True)
+        (tmp_path / "spring-boot" / "src" / "test" / "java").mkdir(parents=True)
+
+        optimizer = self._create_mock_optimizer(
+            tests_root=str(tmp_path / "spring-boot" / "src" / "test" / "java"),
+            file_path=str(tmp_path / "spring-boot-autoconfigure" / "src" / "main" / "java" / "org" / "springframework" / "boot" / "autoconfigure" / "web" / "ServerProperties.java"),
+        )
+        result = optimizer._get_java_sources_root()
+        assert result == tmp_path / "spring-boot-autoconfigure" / "src" / "test" / "java"
+
+    def test_fallback_when_derived_test_dir_missing(self, tmp_path):
+        """When derived test dir doesn't exist, fall back to tests_root logic."""
+        (tmp_path / "module-a" / "src" / "main" / "java").mkdir(parents=True)
+        # Deliberately NOT creating module-a/src/test/java
+        tests_root = tmp_path / "src" / "test" / "java"
+        tests_root.mkdir(parents=True)
+
+        optimizer = self._create_mock_optimizer(
+            tests_root=str(tests_root),
+            file_path=str(tmp_path / "module-a" / "src" / "main" / "java" / "com" / "example" / "Foo.java"),
+        )
+        result = optimizer._get_java_sources_root()
+        assert result == tests_root
+
+    def test_non_standard_layout_falls_through(self, tmp_path):
+        """Non-standard layout (no src/main/java) falls through to existing logic."""
+        optimizer = self._create_mock_optimizer(
+            tests_root=str(tmp_path / "custom" / "tests"),
+            file_path=str(tmp_path / "custom" / "src" / "Foo.java"),
+        )
+        result = optimizer._get_java_sources_root()
+        assert result == tmp_path / "custom" / "tests"
+
+
 class TestFixJavaTestPathsIntegration:
     """Integration tests for _fix_java_test_paths with the path fix."""
 
@@ -97,8 +199,9 @@ class TestFixJavaTestPathsIntegration:
         mock_optimizer = MagicMock(spec=JavaFunctionOptimizer)
         mock_optimizer.test_cfg = MagicMock()
         mock_optimizer.test_cfg.tests_root = Path(tests_root)
+        mock_optimizer.function_to_optimize = MagicMock()
+        mock_optimizer.function_to_optimize.file_path = Path("/nonexistent/Foo.java")
 
-        # Bind the actual methods
         mock_optimizer._get_java_sources_root = lambda: JavaFunctionOptimizer._get_java_sources_root(mock_optimizer)
         mock_optimizer._fix_java_test_paths = lambda behavior_source, perf_source, used_paths, display_source="": (
             JavaFunctionOptimizer._fix_java_test_paths(
