@@ -109,18 +109,13 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     assert args.module_root is not None, "--module-root must be specified"
     assert Path(args.module_root).is_dir(), f"--module-root {args.module_root} must be a valid directory"
 
-    # Determine project language from explicit config or config file name.
-    # Java projects use codeflash.toml but don't always have an explicit language field.
-    config_language = pyproject_config.get("language")
-    if config_language is None and pyproject_file_path.name == "codeflash.toml":
-        config_language = "java"
-    is_js_ts_project = config_language in ("javascript", "typescript")
-    is_java_project = config_language == "java"
+    is_js_ts_project = pyproject_config.get("language") in ("javascript", "typescript")
+    is_java_project = pyproject_config.get("language") == "java"
 
     # Set the language singleton early so downstream code (e.g. get_git_diff)
     # can use current_language_support() before function discovery.
-    if config_language:
-        set_current_language(config_language)
+    if pyproject_config.get("language"):
+        set_current_language(pyproject_config["language"])
 
     # Set the test framework singleton for JS/TS projects
     if is_js_ts_project and pyproject_config.get("test_framework"):

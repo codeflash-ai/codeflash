@@ -160,7 +160,11 @@ def parse_config_file(
     if config == {} and lsp_mode:
         return {}, config_file_path
 
-    # Preserve language field if present (important for Java/JS projects using codeflash.toml)
+    # Set language based on config file type if not already present.
+    # JS/TS projects set this in parse_package_json_config; for toml projects we infer it here.
+    if "language" not in config:
+        config["language"] = "java" if config_file_path.name == "codeflash.toml" else "python"
+
     # default values:
     path_keys = ["module-root", "tests-root", "benchmarks-root"]
     path_list_keys = ["ignore-paths"]
