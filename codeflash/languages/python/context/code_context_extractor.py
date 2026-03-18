@@ -861,6 +861,33 @@ def _get_dataclass_config(class_node: ast.ClassDef, import_aliases: dict[str, st
     return False, False, False
 
 
+_ATTRS_NAMESPACES = frozenset({"attrs", "attr"})
+_ATTRS_DECORATOR_NAMES = frozenset({"define", "mutable", "frozen", "s", "attrs"})
+
+
+def _get_attrs_config(class_node: ast.ClassDef, import_aliases: dict[str, str]) -> tuple[bool, bool, bool]:
+    for decorator in class_node.decorator_list:
+        expr_name = _get_expr_name(decorator)
+        if expr_name is None:
+            continue
+        parts = expr_name.split(".")
+        if len(parts) < 2 or parts[-2] not in _ATTRS_NAMESPACES or parts[-1] not in _ATTRS_DECORATOR_NAMES:
+            continue
+        init_enabled = True
+        kw_only = False
+        if isinstance(decorator, ast.Call):
+            for keyword in decorator.keywords:
+                literal_value = _bool_literal(keyword.value)
+                if literal_value is None:
+                    continue
+                if keyword.arg == "init":
+                    init_enabled = literal_value
+                elif keyword.arg == "kw_only":
+                    kw_only = literal_value
+        return True, init_enabled, kw_only
+    return False, False, False
+
+
 def _is_classvar_annotation(annotation: ast.expr, import_aliases: dict[str, str]) -> bool:
     annotation_root = annotation.value if isinstance(annotation, ast.Subscript) else annotation
     return _expr_matches_name(annotation_root, import_aliases, "ClassVar")
@@ -885,9 +912,12 @@ def _class_has_explicit_init(class_node: ast.ClassDef) -> bool:
 
 def _collect_synthetic_constructor_type_names(class_node: ast.ClassDef, import_aliases: dict[str, str]) -> set[str]:
     is_dataclass, dataclass_init_enabled, _ = _get_dataclass_config(class_node, import_aliases)
-    if not _is_namedtuple_class(class_node, import_aliases) and not is_dataclass:
+    is_attrs, attrs_init_enabled, _ = _get_attrs_config(class_node, import_aliases)
+    if not _is_namedtuple_class(class_node, import_aliases) and not is_dataclass and not is_attrs:
         return set()
     if is_dataclass and not dataclass_init_enabled:
+        return set()
+    if is_attrs and not attrs_init_enabled:
         return set()
 
     names = set[str]()
@@ -939,9 +969,9 @@ def _extract_synthetic_init_parameters(
                             kw_only = literal_value
                     elif keyword.arg == "default":
                         default_value = _get_node_source(keyword.value, module_source)
-                    elif keyword.arg == "default_factory":
-                        # Default factories still imply an optional constructor parameter, but
-                        # the generated __init__ does not use the field() call directly.
+                    elif keyword.arg in {"default_factory", "factory"}:
+                        # Default factories (dataclass default_factory= / attrs factory=) still imply
+                        # an optional constructor parameter.
                         default_value = "..."
             else:
                 default_value = _get_node_source(item.value, module_source)
@@ -960,13 +990,17 @@ def _build_synthetic_init_stub(
 ) -> str | None:
     is_namedtuple = _is_namedtuple_class(class_node, import_aliases)
     is_dataclass, dataclass_init_enabled, dataclass_kw_only = _get_dataclass_config(class_node, import_aliases)
-    if not is_namedtuple and not is_dataclass:
+    is_attrs, attrs_init_enabled, attrs_kw_only = _get_attrs_config(class_node, import_aliases)
+    if not is_namedtuple and not is_dataclass and not is_attrs:
         return None
     if is_dataclass and not dataclass_init_enabled:
         return None
+    if is_attrs and not attrs_init_enabled:
+        return None
 
+    kw_only_by_default = dataclass_kw_only or attrs_kw_only
     parameters = _extract_synthetic_init_parameters(
-        class_node, module_source, import_aliases, kw_only_by_default=dataclass_kw_only
+        class_node, module_source, import_aliases, kw_only_by_default=kw_only_by_default
     )
     if not parameters:
         return None

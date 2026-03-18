@@ -499,6 +499,125 @@ class MyTuple(typing.NamedTuple):
         test_path.unlink(missing_ok=True)
 
 
+def test_attrs_define_no_init_skipped():
+    """@attrs.define classes have auto-generated __init__; synthesizing super().__init__() breaks
+    because attrs.define(slots=True) creates a new class whose instances fail the __class__ cell
+    check.  Instrumentation must skip them."""
+    original_code = """
+import attrs
+from attrs.validators import instance_of
+
+@attrs.define
+class MyAttrsClass:
+    x: int = attrs.field(validator=[instance_of(int)])
+    y: str = attrs.field(default="hello")
+
+    def compute(self):
+        return self.x
+"""
+    expected = """import attrs
+from attrs.validators import instance_of
+
+
+@attrs.define
+class MyAttrsClass:
+    x: int = attrs.field(validator=[instance_of(int)])
+    y: str = attrs.field(default='hello')
+
+    def compute(self):
+        return self.x
+"""
+    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
+    test_path.write_text(original_code)
+
+    function = FunctionToOptimize(
+        function_name="compute", file_path=test_path, parents=[FunctionParent(type="ClassDef", name="MyAttrsClass")]
+    )
+
+    try:
+        instrument_codeflash_capture(function, {}, test_path.parent)
+        modified_code = test_path.read_text()
+        assert modified_code.strip() == expected.strip()
+    finally:
+        test_path.unlink(missing_ok=True)
+
+
+def test_attrs_define_frozen_no_init_skipped():
+    """@attrs.define(frozen=True) should also be skipped."""
+    original_code = """
+import attrs
+
+@attrs.define(frozen=True)
+class FrozenPoint:
+    x: float = attrs.field()
+    y: float = attrs.field()
+
+    def distance(self):
+        return (self.x ** 2 + self.y ** 2) ** 0.5
+"""
+    expected = """import attrs
+
+
+@attrs.define(frozen=True)
+class FrozenPoint:
+    x: float = attrs.field()
+    y: float = attrs.field()
+
+    def distance(self):
+        return (self.x ** 2 + self.y ** 2) ** 0.5
+"""
+    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
+    test_path.write_text(original_code)
+
+    function = FunctionToOptimize(
+        function_name="distance", file_path=test_path, parents=[FunctionParent(type="ClassDef", name="FrozenPoint")]
+    )
+
+    try:
+        instrument_codeflash_capture(function, {}, test_path.parent)
+        modified_code = test_path.read_text()
+        assert modified_code.strip() == expected.strip()
+    finally:
+        test_path.unlink(missing_ok=True)
+
+
+def test_attr_s_no_init_skipped():
+    """@attr.s classes should also be skipped."""
+    original_code = """
+import attr
+
+@attr.s
+class MyAttrClass:
+    x: int = attr.ib()
+
+    def display(self):
+        return self.x
+"""
+    expected = """import attr
+
+
+@attr.s
+class MyAttrClass:
+    x: int = attr.ib()
+
+    def display(self):
+        return self.x
+"""
+    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
+    test_path.write_text(original_code)
+
+    function = FunctionToOptimize(
+        function_name="display", file_path=test_path, parents=[FunctionParent(type="ClassDef", name="MyAttrClass")]
+    )
+
+    try:
+        instrument_codeflash_capture(function, {}, test_path.parent)
+        modified_code = test_path.read_text()
+        assert modified_code.strip() == expected.strip()
+    finally:
+        test_path.unlink(missing_ok=True)
+
+
 def test_dataclass_with_explicit_init_still_instrumented():
     """A dataclass that defines its own __init__ should still be instrumented normally."""
     original_code = """
