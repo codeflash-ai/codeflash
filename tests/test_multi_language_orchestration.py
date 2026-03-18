@@ -390,6 +390,73 @@ class TestMultiLanguageOrchestration:
             assert results["java"] == "success"
 
 
+class TestOrchestrationSummaryLogging:
+    def test_summary_format_all_success(self) -> None:
+        import logging
+
+        from codeflash.main import _log_orchestration_summary
+
+        with patch.object(logging.Logger, "info") as mock_info:
+            logger = logging.getLogger("codeflash.test")
+            _log_orchestration_summary(logger, {"python": "success", "java": "success"})
+            mock_info.assert_called_once()
+            msg = mock_info.call_args[0][0] % mock_info.call_args[0][1:]
+            assert "python: success" in msg
+            assert "java: success" in msg
+
+    def test_summary_format_mixed_statuses(self) -> None:
+        import logging
+
+        from codeflash.main import _log_orchestration_summary
+
+        with patch.object(logging.Logger, "info") as mock_info:
+            logger = logging.getLogger("codeflash.test")
+            _log_orchestration_summary(logger, {"python": "failed", "java": "success", "javascript": "skipped"})
+            mock_info.assert_called_once()
+            msg = mock_info.call_args[0][0] % mock_info.call_args[0][1:]
+            assert "python: failed" in msg
+            assert "java: success" in msg
+            assert "javascript: skipped" in msg
+
+    def test_summary_no_results_no_log(self) -> None:
+        import logging
+
+        from codeflash.main import _log_orchestration_summary
+
+        with patch.object(logging.Logger, "info") as mock_info:
+            logger = logging.getLogger("codeflash.test")
+            _log_orchestration_summary(logger, {})
+            mock_info.assert_not_called()
+
+    @patch("codeflash.main.ask_should_use_checkpoint_get_functions", return_value=[])
+    @patch("codeflash.main.env_utils.check_formatter_installed")
+    @patch("codeflash.main.handle_optimize_all_arg_parsing", side_effect=lambda args: args)
+    @patch("codeflash.optimization.optimizer.run_with_args")
+    @patch("codeflash.main.find_all_config_files")
+    @patch("codeflash.main.parse_args")
+    @patch("codeflash.main.print_codeflash_banner")
+    @patch("codeflash.main.check_for_newer_minor_version")
+    def test_summary_reports_skipped_status(
+        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, mock_fmt, _ckpt, tmp_path: Path
+    ) -> None:
+        py_config = make_lang_config(tmp_path, Language.PYTHON)
+        java_config = make_lang_config(tmp_path, Language.JAVA)
+        mock_find_configs.return_value = [py_config, java_config]
+        mock_parse_args.return_value = make_base_args(disable_telemetry=False)
+        # Python formatter check fails (skipped), Java succeeds
+        mock_fmt.side_effect = [False, True]
+
+        with patch("codeflash.main._log_orchestration_summary") as mock_summary:
+            from codeflash.main import main
+
+            main()
+
+            results = mock_summary.call_args[0][1]
+            assert results["python"] == "skipped"
+            assert results["java"] == "success"
+            assert mock_run.call_count == 1
+
+
 class TestNormalizeTomlConfig:
     def test_converts_hyphenated_keys_to_underscored(self, tmp_path: Path) -> None:
         config = {"module-root": "src", "tests-root": "tests"}
