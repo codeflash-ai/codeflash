@@ -116,7 +116,19 @@ class TestGetJavaSourcesRootMultiModule:
 
         optimizer = self._create_mock_optimizer(
             tests_root=str(tmp_path / "clients" / "src" / "test" / "java"),
-            file_path=str(tmp_path / "streams" / "src" / "main" / "java" / "org" / "apache" / "kafka" / "streams" / "query" / "QueryConfig.java"),
+            file_path=str(
+                tmp_path
+                / "streams"
+                / "src"
+                / "main"
+                / "java"
+                / "org"
+                / "apache"
+                / "kafka"
+                / "streams"
+                / "query"
+                / "QueryConfig.java"
+            ),
         )
         result = optimizer._get_java_sources_root()
         assert result == tmp_path / "streams" / "src" / "test" / "java"
@@ -129,7 +141,20 @@ class TestGetJavaSourcesRootMultiModule:
 
         optimizer = self._create_mock_optimizer(
             tests_root=str(tmp_path / "clients" / "src" / "test" / "java"),
-            file_path=str(tmp_path / "connect" / "runtime" / "src" / "main" / "java" / "org" / "apache" / "kafka" / "connect" / "runtime" / "Worker.java"),
+            file_path=str(
+                tmp_path
+                / "connect"
+                / "runtime"
+                / "src"
+                / "main"
+                / "java"
+                / "org"
+                / "apache"
+                / "kafka"
+                / "connect"
+                / "runtime"
+                / "Worker.java"
+            ),
         )
         result = optimizer._get_java_sources_root()
         assert result == tmp_path / "connect" / "runtime" / "src" / "test" / "java"
@@ -141,7 +166,19 @@ class TestGetJavaSourcesRootMultiModule:
 
         optimizer = self._create_mock_optimizer(
             tests_root=str(tmp_path / "clients" / "src" / "test" / "java"),
-            file_path=str(tmp_path / "clients" / "src" / "main" / "java" / "org" / "apache" / "kafka" / "common" / "utils" / "Bytes.java"),
+            file_path=str(
+                tmp_path
+                / "clients"
+                / "src"
+                / "main"
+                / "java"
+                / "org"
+                / "apache"
+                / "kafka"
+                / "common"
+                / "utils"
+                / "Bytes.java"
+            ),
         )
         result = optimizer._get_java_sources_root()
         assert result == tmp_path / "clients" / "src" / "test" / "java"
@@ -154,7 +191,19 @@ class TestGetJavaSourcesRootMultiModule:
 
         optimizer = self._create_mock_optimizer(
             tests_root=str(tmp_path / "server" / "src" / "test" / "java"),
-            file_path=str(tmp_path / "libs" / "core" / "src" / "main" / "java" / "org" / "opensearch" / "core" / "common" / "Strings.java"),
+            file_path=str(
+                tmp_path
+                / "libs"
+                / "core"
+                / "src"
+                / "main"
+                / "java"
+                / "org"
+                / "opensearch"
+                / "core"
+                / "common"
+                / "Strings.java"
+            ),
         )
         result = optimizer._get_java_sources_root()
         assert result == tmp_path / "libs" / "core" / "src" / "test" / "java"
@@ -167,7 +216,19 @@ class TestGetJavaSourcesRootMultiModule:
 
         optimizer = self._create_mock_optimizer(
             tests_root=str(tmp_path / "spring-boot" / "src" / "test" / "java"),
-            file_path=str(tmp_path / "spring-boot-autoconfigure" / "src" / "main" / "java" / "org" / "springframework" / "boot" / "autoconfigure" / "web" / "ServerProperties.java"),
+            file_path=str(
+                tmp_path
+                / "spring-boot-autoconfigure"
+                / "src"
+                / "main"
+                / "java"
+                / "org"
+                / "springframework"
+                / "boot"
+                / "autoconfigure"
+                / "web"
+                / "ServerProperties.java"
+            ),
         )
         result = optimizer._get_java_sources_root()
         assert result == tmp_path / "spring-boot-autoconfigure" / "src" / "test" / "java"
@@ -189,8 +250,7 @@ class TestGetJavaSourcesRootMultiModule:
     def test_non_standard_layout_falls_through(self, tmp_path):
         """Non-standard layout (no src/main/java) falls through to existing logic."""
         optimizer = self._create_mock_optimizer(
-            tests_root=str(tmp_path / "custom" / "tests"),
-            file_path=str(tmp_path / "custom" / "src" / "Foo.java"),
+            tests_root=str(tmp_path / "custom" / "tests"), file_path=str(tmp_path / "custom" / "src" / "Foo.java")
         )
         result = optimizer._get_java_sources_root()
         assert result == tmp_path / "custom" / "tests"
@@ -456,8 +516,7 @@ class TestFindMultiModuleRoot:
         # Root build files
         (tmp_path / "build.gradle.kts").write_text("// root build", encoding="utf-8")
         (tmp_path / "settings.gradle.kts").write_text(
-            'include("clients", "streams", "tools", "connect:runtime")',
-            encoding="utf-8",
+            'include("clients", "streams", "tools", "connect:runtime")', encoding="utf-8"
         )
         # Module build files and source/test dirs
         for module in ["clients", "streams", "tools"]:

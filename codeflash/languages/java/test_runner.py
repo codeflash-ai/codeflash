@@ -812,7 +812,9 @@ def _run_direct_or_fallback(
         return result, result_xml_path
 
     # Step 3: Run tests directly via JVM
-    working_dir = build_root / test_module if test_module else build_root
+    from codeflash.languages.java.build_tool_strategy import module_to_dir as _module_to_dir
+
+    working_dir = build_root / _module_to_dir(test_module) if test_module else build_root
     reports_dir = strategy.get_reports_dir(build_root, test_module)
     reports_dir.mkdir(parents=True, exist_ok=True)
 

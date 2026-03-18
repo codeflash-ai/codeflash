@@ -446,7 +446,7 @@ class MavenStrategy(BuildToolStrategy):
             logger.error("Maven not found — cannot pre-install multi-module dependencies")
             return False
 
-        cmd = [mvn, "install", "-DskipTests", "-B", "-pl", test_module, "-am"]
+        cmd = [mvn, "install", "-DskipTests", "-B", "-pl", module_to_dir(test_module), "-am"]
         cmd.extend(_MAVEN_VALIDATION_SKIP_FLAGS)
 
         logger.info("Pre-installing multi-module dependencies: %s (module: %s)", build_root, test_module)
@@ -484,7 +484,7 @@ class MavenStrategy(BuildToolStrategy):
         cmd.extend(_MAVEN_VALIDATION_SKIP_FLAGS)
 
         if test_module:
-            cmd.extend(["-pl", test_module])
+            cmd.extend(["-pl", module_to_dir(test_module)])
 
         logger.debug("Compiling tests: %s in %s", " ".join(cmd), build_root)
 
@@ -508,7 +508,7 @@ class MavenStrategy(BuildToolStrategy):
         cmd.extend(_MAVEN_VALIDATION_SKIP_FLAGS)
 
         if test_module:
-            cmd.extend(["-pl", test_module])
+            cmd.extend(["-pl", module_to_dir(test_module)])
 
         logger.debug("Compiling source only: %s in %s", " ".join(cmd), build_root)
 
@@ -545,7 +545,7 @@ class MavenStrategy(BuildToolStrategy):
         cmd = [mvn, "dependency:build-classpath", "-DincludeScope=test", f"-Dmdep.outputFile={cp_file}", "-q", "-B"]
 
         if test_module:
-            cmd.extend(["-pl", test_module])
+            cmd.extend(["-pl", module_to_dir(test_module)])
 
         logger.debug("Getting classpath: %s", " ".join(cmd))
 
@@ -662,7 +662,7 @@ class MavenStrategy(BuildToolStrategy):
             cmd.extend(
                 [
                     "-pl",
-                    test_module,
+                    module_to_dir(test_module),
                     "-DfailIfNoTests=false",
                     "-Dsurefire.failIfNoSpecifiedTests=false",
                     "-DskipTests=false",
