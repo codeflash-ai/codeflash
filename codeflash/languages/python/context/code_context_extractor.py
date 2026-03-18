@@ -865,12 +865,26 @@ _ATTRS_NAMESPACES = frozenset({"attrs", "attr"})
 _ATTRS_DECORATOR_NAMES = frozenset({"define", "mutable", "frozen", "s", "attrs"})
 
 
+def _resolve_decorator_name(expr_name: str, import_aliases: dict[str, str]) -> str:
+    resolved = import_aliases.get(expr_name)
+    if resolved is not None:
+        return resolved
+    parts = expr_name.split(".")
+    if len(parts) >= 2:
+        root_resolved = import_aliases.get(parts[0])
+        if root_resolved is not None:
+            parts[0] = root_resolved
+            return ".".join(parts)
+    return expr_name
+
+
 def _get_attrs_config(class_node: ast.ClassDef, import_aliases: dict[str, str]) -> tuple[bool, bool, bool]:
     for decorator in class_node.decorator_list:
         expr_name = _get_expr_name(decorator)
         if expr_name is None:
             continue
-        parts = expr_name.split(".")
+        resolved = _resolve_decorator_name(expr_name, import_aliases)
+        parts = resolved.split(".")
         if len(parts) < 2 or parts[-2] not in _ATTRS_NAMESPACES or parts[-1] not in _ATTRS_DECORATOR_NAMES:
             continue
         init_enabled = True

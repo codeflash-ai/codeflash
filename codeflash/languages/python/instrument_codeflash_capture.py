@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.formatter import sort_imports
+from codeflash.languages.python.context.code_context_extractor import _ATTRS_DECORATOR_NAMES, _ATTRS_NAMESPACES
 
 if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -226,11 +227,15 @@ class InitDecorator(ast.NodeTransformer):
                 dec_name = self._expr_name(dec)
                 if dec_name is not None:
                     parts = dec_name.split(".")
-                    if (
-                        len(parts) >= 2
-                        and parts[-2] in {"attrs", "attr"}
-                        and parts[-1] in {"define", "mutable", "frozen", "s", "attrs"}
-                    ):
+                    if len(parts) >= 2 and parts[-2] in _ATTRS_NAMESPACES and parts[-1] in _ATTRS_DECORATOR_NAMES:
+                        if isinstance(dec, ast.Call):
+                            for kw in dec.keywords:
+                                if (
+                                    kw.arg == "init"
+                                    and isinstance(kw.value, ast.Constant)
+                                    and kw.value.value is False
+                                ):
+                                    return node
                         self._attrs_classes_to_patch[node.name] = decorator
                         self.inserted_decorator = True
                         return node

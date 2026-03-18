@@ -2,8 +2,8 @@ from pathlib import Path
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import FunctionParent
 from codeflash.languages.python.instrument_codeflash_capture import instrument_codeflash_capture
+from codeflash.models.models import FunctionParent
 
 
 def test_add_codeflash_capture():
@@ -502,7 +502,8 @@ class MyTuple(typing.NamedTuple):
 def test_attrs_define_patched_via_module_wrapper():
     """@attrs.define classes must NOT get a synthetic body __init__; instead a module-level
     monkey-patch block is emitted after the class to avoid the __class__ cell TypeError
-    that arises when attrs.define(slots=True) replaces the original class object."""
+    that arises when attrs.define(slots=True) replaces the original class object.
+    """
     original_code = """
 import attrs
 from attrs.validators import instance_of
@@ -629,6 +630,43 @@ MyAttrClass.__init__ = codeflash_capture(function_name='MyAttrClass.__init__', t
 
     function = FunctionToOptimize(
         function_name="display", file_path=test_path, parents=[FunctionParent(type="ClassDef", name="MyAttrClass")]
+    )
+
+    try:
+        instrument_codeflash_capture(function, {}, test_path.parent)
+        modified_code = test_path.read_text()
+        assert modified_code.strip() == expected.strip()
+    finally:
+        test_path.unlink(missing_ok=True)
+
+
+def test_attrs_define_init_false_skipped():
+    """@attrs.define(init=False) should NOT be monkey-patched because attrs won't generate an __init__."""
+    original_code = """
+import attrs
+
+@attrs.define(init=False)
+class ManualInit:
+    x: int = attrs.field()
+
+    def compute(self):
+        return self.x
+"""
+    expected = """import attrs
+
+
+@attrs.define(init=False)
+class ManualInit:
+    x: int = attrs.field()
+
+    def compute(self):
+        return self.x
+"""
+    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
+    test_path.write_text(original_code)
+
+    function = FunctionToOptimize(
+        function_name="compute", file_path=test_path, parents=[FunctionParent(type="ClassDef", name="ManualInit")]
     )
 
     try:
