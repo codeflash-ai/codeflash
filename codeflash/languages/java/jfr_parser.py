@@ -4,6 +4,7 @@ import json
 import logging
 import shutil
 import subprocess
+from operator import itemgetter
 from pathlib import Path
 from typing import Any
 
@@ -156,14 +157,29 @@ class JfrProfile:
             return []
 
         ranking = []
-        for method_key, sample_count in sorted(self._method_samples.items(), key=lambda x: x[1], reverse=True):
-            info = self._method_info.get(method_key, {})
+        inv_total = 100.0 / self._total_samples
+        for method_key, sample_count in sorted(self._method_samples.items(), key=itemgetter(1), reverse=True):
+            info = self._method_info.get(method_key)
+            if info:
+                class_name = info.get("class_name")
+                method_name = info.get("method_name")
+                if class_name is None or method_name is None:
+                    parts = method_key.rsplit(".", 1)
+                    if class_name is None:
+                        class_name = parts[0]
+                    if method_name is None:
+                        method_name = parts[-1]
+            else:
+                parts = method_key.rsplit(".", 1)
+                class_name = parts[0]
+                method_name = parts[-1]
+
             ranking.append(
                 {
-                    "class_name": info.get("class_name", method_key.rsplit(".", 1)[0]),
-                    "method_name": info.get("method_name", method_key.rsplit(".", 1)[-1]),
+                    "class_name": class_name,
+                    "method_name": method_name,
                     "sample_count": sample_count,
-                    "pct_of_total": (sample_count / self._total_samples) * 100,
+                    "pct_of_total": sample_count * inv_total,
                 }
             )
         return ranking
