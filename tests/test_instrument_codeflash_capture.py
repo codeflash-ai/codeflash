@@ -2,8 +2,8 @@ from pathlib import Path
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import FunctionParent
 from codeflash.languages.python.instrument_codeflash_capture import instrument_codeflash_capture
+from codeflash.models.models import FunctionParent
 
 
 def test_add_codeflash_capture():
@@ -495,6 +495,184 @@ class MyTuple(typing.NamedTuple):
         modified_code = test_path.read_text()
         assert "super().__init__" not in modified_code
         assert "codeflash_capture" not in modified_code
+    finally:
+        test_path.unlink(missing_ok=True)
+
+
+def test_attrs_define_patched_via_module_wrapper():
+    """@attrs.define classes must NOT get a synthetic body __init__; instead a module-level
+    monkey-patch block is emitted after the class to avoid the __class__ cell TypeError
+    that arises when attrs.define(slots=True) replaces the original class object.
+    """
+    original_code = """
+import attrs
+from attrs.validators import instance_of
+
+@attrs.define
+class MyAttrsClass:
+    x: int = attrs.field(validator=[instance_of(int)])
+    y: str = attrs.field(default="hello")
+
+    def compute(self):
+        return self.x
+"""
+    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
+    expected = f"""import attrs
+from attrs.validators import instance_of
+
+from codeflash.verification.codeflash_capture import codeflash_capture
+
+
+@attrs.define
+class MyAttrsClass:
+    x: int = attrs.field(validator=[instance_of(int)])
+    y: str = attrs.field(default='hello')
+
+    def compute(self):
+        return self.x
+_codeflash_orig_MyAttrsClass_init = MyAttrsClass.__init__
+
+def _codeflash_patched_MyAttrsClass_init(self, *args, **kwargs):
+    return _codeflash_orig_MyAttrsClass_init(self, *args, **kwargs)
+MyAttrsClass.__init__ = codeflash_capture(function_name='MyAttrsClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values")).as_posix()}', tests_root='{test_path.parent.as_posix()}', is_fto=True)(_codeflash_patched_MyAttrsClass_init)
+"""
+    test_path.write_text(original_code)
+
+    function = FunctionToOptimize(
+        function_name="compute", file_path=test_path, parents=[FunctionParent(type="ClassDef", name="MyAttrsClass")]
+    )
+
+    try:
+        instrument_codeflash_capture(function, {}, test_path.parent)
+        modified_code = test_path.read_text()
+        assert modified_code.strip() == expected.strip()
+    finally:
+        test_path.unlink(missing_ok=True)
+
+
+def test_attrs_define_frozen_patched_via_module_wrapper():
+    """@attrs.define(frozen=True) should also be monkey-patched at module level."""
+    original_code = """
+import attrs
+
+@attrs.define(frozen=True)
+class FrozenPoint:
+    x: float = attrs.field()
+    y: float = attrs.field()
+
+    def distance(self):
+        return (self.x ** 2 + self.y ** 2) ** 0.5
+"""
+    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
+    expected = f"""import attrs
+
+from codeflash.verification.codeflash_capture import codeflash_capture
+
+
+@attrs.define(frozen=True)
+class FrozenPoint:
+    x: float = attrs.field()
+    y: float = attrs.field()
+
+    def distance(self):
+        return (self.x ** 2 + self.y ** 2) ** 0.5
+_codeflash_orig_FrozenPoint_init = FrozenPoint.__init__
+
+def _codeflash_patched_FrozenPoint_init(self, *args, **kwargs):
+    return _codeflash_orig_FrozenPoint_init(self, *args, **kwargs)
+FrozenPoint.__init__ = codeflash_capture(function_name='FrozenPoint.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values")).as_posix()}', tests_root='{test_path.parent.as_posix()}', is_fto=True)(_codeflash_patched_FrozenPoint_init)
+"""
+    test_path.write_text(original_code)
+
+    function = FunctionToOptimize(
+        function_name="distance", file_path=test_path, parents=[FunctionParent(type="ClassDef", name="FrozenPoint")]
+    )
+
+    try:
+        instrument_codeflash_capture(function, {}, test_path.parent)
+        modified_code = test_path.read_text()
+        assert modified_code.strip() == expected.strip()
+    finally:
+        test_path.unlink(missing_ok=True)
+
+
+def test_attr_s_patched_via_module_wrapper():
+    """@attr.s classes should also be monkey-patched at module level."""
+    original_code = """
+import attr
+
+@attr.s
+class MyAttrClass:
+    x: int = attr.ib()
+
+    def display(self):
+        return self.x
+"""
+    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
+    expected = f"""import attr
+
+from codeflash.verification.codeflash_capture import codeflash_capture
+
+
+@attr.s
+class MyAttrClass:
+    x: int = attr.ib()
+
+    def display(self):
+        return self.x
+_codeflash_orig_MyAttrClass_init = MyAttrClass.__init__
+
+def _codeflash_patched_MyAttrClass_init(self, *args, **kwargs):
+    return _codeflash_orig_MyAttrClass_init(self, *args, **kwargs)
+MyAttrClass.__init__ = codeflash_capture(function_name='MyAttrClass.__init__', tmp_dir_path='{get_run_tmp_file(Path("test_return_values")).as_posix()}', tests_root='{test_path.parent.as_posix()}', is_fto=True)(_codeflash_patched_MyAttrClass_init)
+"""
+    test_path.write_text(original_code)
+
+    function = FunctionToOptimize(
+        function_name="display", file_path=test_path, parents=[FunctionParent(type="ClassDef", name="MyAttrClass")]
+    )
+
+    try:
+        instrument_codeflash_capture(function, {}, test_path.parent)
+        modified_code = test_path.read_text()
+        assert modified_code.strip() == expected.strip()
+    finally:
+        test_path.unlink(missing_ok=True)
+
+
+def test_attrs_define_init_false_skipped():
+    """@attrs.define(init=False) should NOT be monkey-patched because attrs won't generate an __init__."""
+    original_code = """
+import attrs
+
+@attrs.define(init=False)
+class ManualInit:
+    x: int = attrs.field()
+
+    def compute(self):
+        return self.x
+"""
+    expected = """import attrs
+
+
+@attrs.define(init=False)
+class ManualInit:
+    x: int = attrs.field()
+
+    def compute(self):
+        return self.x
+"""
+    test_path = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/test_file.py").resolve()
+    test_path.write_text(original_code)
+
+    function = FunctionToOptimize(
+        function_name="compute", file_path=test_path, parents=[FunctionParent(type="ClassDef", name="ManualInit")]
+    )
+
+    try:
+        instrument_codeflash_capture(function, {}, test_path.parent)
+        modified_code = test_path.read_text()
+        assert modified_code.strip() == expected.strip()
     finally:
         test_path.unlink(missing_ok=True)
 

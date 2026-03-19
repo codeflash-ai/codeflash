@@ -5013,6 +5013,68 @@ def process(cfg: ChildConfig) -> str:
     assert "qualified_name: str" in combined
 
 
+def test_extract_init_stub_attrs_define(tmp_path: Path) -> None:
+    """extract_init_stub_from_class produces a synthetic __init__ stub for @attrs.define classes."""
+    source = """
+import attrs
+from attrs.validators import instance_of
+
+@attrs.define(frozen=True)
+class ImportCST:
+    module: str = attrs.field(converter=str.lower)
+    name: str = attrs.field(validator=[instance_of(str)])
+    as_name: str = attrs.field(validator=[instance_of(str)])
+
+    def to_str(self) -> str:
+        return f"from {self.module} import {self.name}"
+"""
+    expected = "class ImportCST:\n    def __init__(self, module: str, name: str, as_name: str):\n        ..."
+    tree = ast.parse(source)
+    stub = extract_init_stub_from_class("ImportCST", source, tree)
+    assert stub == expected
+
+
+def test_extract_init_stub_attrs_factory_fields(tmp_path: Path) -> None:
+    """Fields using attrs factory= keyword should appear as optional (= ...) in the stub."""
+    source = """
+import attrs
+
+@attrs.define
+class ClassCST:
+    name: str = attrs.field()
+    methods: list = attrs.field(factory=list)
+    imports: set = attrs.field(factory=set)
+
+    def compute(self) -> int:
+        return len(self.methods)
+"""
+    expected = "class ClassCST:\n    def __init__(self, name: str, methods: list = ..., imports: set = ...):\n        ..."
+    tree = ast.parse(source)
+    stub = extract_init_stub_from_class("ClassCST", source, tree)
+    assert stub == expected
+
+
+def test_extract_init_stub_attrs_init_disabled(tmp_path: Path) -> None:
+    """When @attrs.define(init=False) but with explicit __init__, the explicit body is returned."""
+    source = """
+import attrs
+
+@attrs.define(init=False)
+class NoAutoInit:
+    x: int = attrs.field()
+
+    def __init__(self, x: int):
+        self.x = x * 2
+
+    def get(self) -> int:
+        return self.x
+"""
+    expected = "class NoAutoInit:\n    def __init__(self, x: int):\n        self.x = x * 2"
+    tree = ast.parse(source)
+    stub = extract_init_stub_from_class("NoAutoInit", source, tree)
+    assert stub == expected
+
+
 def test_enrich_testgen_context_third_party_uses_stubs(tmp_path: Path) -> None:
     """Third-party classes should produce compact __init__ stubs, not full class source."""
     # Use a real third-party package (pydantic) so jedi can actually resolve it

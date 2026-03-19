@@ -9,7 +9,6 @@ from codeflash.languages.java.line_profiler import JavaLineProfiler
 
 def test_parse_line_profile_results_non_python_java_json():
     set_current_language(Language.JAVA)
-
     with TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir)
         source_file = tmp_path / "Util.java"
