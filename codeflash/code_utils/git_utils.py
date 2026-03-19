@@ -13,7 +13,6 @@ from rich.prompt import Confirm
 from unidiff import PatchSet
 
 from codeflash.cli_cmds.console import logger
-from codeflash.languages.registry import get_supported_extensions
 
 if TYPE_CHECKING:
     from git import Repo
@@ -26,13 +25,15 @@ def get_git_diff(
     uncommitted_changes: bool = False,
     since_commit: Optional[str] = None,
 ) -> dict[str, list[int]]:
-    from codeflash.languages.current import current_language_support
+    from codeflash.languages.registry import get_supported_extensions
 
     if repo_directory is None:
         repo_directory = Path.cwd()
     repository = git.Repo(repo_directory, search_parent_directories=True)
     commit = repository.head.commit
-    supported_extensions = current_language_support().file_extensions
+    # Use all registered extensions (Python + JS/TS + Java etc.) rather than
+    # current_language_support() which defaults to Python before language detection runs.
+    supported_extensions = set(get_supported_extensions())
     if since_commit:
         # Diff from a base commit to HEAD — captures all changes across multiple commits
         uni_diff_text = repository.git.diff(
@@ -48,7 +49,6 @@ def get_git_diff(
         uni_diff_text = repository.git.diff(
             commit.hexsha + "^1", commit.hexsha, ignore_blank_lines=True, ignore_space_at_eol=True
         )
-    supported_extensions = set(get_supported_extensions())
     patch_set = PatchSet(StringIO(uni_diff_text))
     change_list: dict[str, list[int]] = {}  # list of changes
     for patched_file in patch_set:

@@ -136,6 +136,7 @@ def compare_test_results(
     candidate_sqlite_path: Path,
     comparator_jar: Path | None = None,
     project_root: Path | None = None,
+    project_classpath: str | None = None,
 ) -> tuple[bool, list]:
     """Compare Java test results using the codeflash-runtime Comparator.
 
@@ -150,6 +151,10 @@ def compare_test_results(
         candidate_sqlite_path: Path to SQLite database with candidate code results.
         comparator_jar: Optional path to the codeflash-runtime JAR.
         project_root: Project root directory.
+        project_classpath: Full project classpath from the build tool. When provided,
+            the Comparator JVM uses this classpath so Kryo can resolve project-specific
+            classes during deserialization. Without it, only the runtime JAR is on the
+            classpath and any project class causes ClassNotFoundException.
 
     Returns:
         Tuple of (all_equivalent, list of TestDiff objects).
@@ -180,6 +185,16 @@ def compare_test_results(
 
     cwd = project_root or Path.cwd()
 
+    # Build classpath: runtime JAR + project classpath (if available).
+    # The project classpath is needed so Kryo can resolve project-specific classes
+    # during deserialization. Without it, Class.forName() fails for any type not
+    # bundled in the runtime JAR.
+    cp_separator = ";" if platform.system() == "Windows" else ":"
+    if project_classpath:
+        full_cp = f"{jar_path}{cp_separator}{project_classpath}"
+    else:
+        full_cp = str(jar_path)
+
     try:
         result = subprocess.run(
             [
@@ -200,7 +215,7 @@ def compare_test_results(
                 "--add-opens",
                 "java.base/java.util.zip=ALL-UNNAMED",
                 "-cp",
-                str(jar_path),
+                full_cp,
                 "com.codeflash.Comparator",
                 str(original_sqlite_path),
                 str(candidate_sqlite_path),

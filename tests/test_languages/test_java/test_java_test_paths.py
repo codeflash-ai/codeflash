@@ -3,7 +3,14 @@
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from codeflash.languages.java.test_runner import _extract_source_dirs_from_pom, _path_to_class_name
+from codeflash.languages.java.build_tool_strategy import module_to_dir
+from codeflash.languages.java.test_runner import (
+    _extract_custom_source_dirs,
+    _extract_modules_from_settings_gradle,
+    _find_multi_module_root,
+    _match_module_from_rel_path,
+    _path_to_class_name,
+)
 
 
 class TestGetJavaSourcesRoot:
@@ -13,12 +20,12 @@ class TestGetJavaSourcesRoot:
         """Create a mock FunctionOptimizer with the given tests_root."""
         from codeflash.languages.java.function_optimizer import JavaFunctionOptimizer
 
-        # Create a minimal mock
         mock_optimizer = MagicMock(spec=JavaFunctionOptimizer)
         mock_optimizer.test_cfg = MagicMock()
         mock_optimizer.test_cfg.tests_root = Path(tests_root)
+        mock_optimizer.function_to_optimize = MagicMock()
+        mock_optimizer.function_to_optimize.file_path = Path("/nonexistent/Foo.java")
 
-        # Bind the actual method to the mock
         mock_optimizer._get_java_sources_root = lambda: JavaFunctionOptimizer._get_java_sources_root(mock_optimizer)
 
         return mock_optimizer
@@ -87,6 +94,168 @@ class TestGetJavaSourcesRoot:
         assert result == Path("/Users/test/Work/aerospike-client-java/test/src")
 
 
+class TestGetJavaSourcesRootMultiModule:
+    """Tests for _get_java_sources_root with multi-module projects."""
+
+    def _create_mock_optimizer(self, tests_root: str, file_path: str):
+        from codeflash.languages.java.function_optimizer import JavaFunctionOptimizer
+
+        mock_optimizer = MagicMock(spec=JavaFunctionOptimizer)
+        mock_optimizer.test_cfg = MagicMock()
+        mock_optimizer.test_cfg.tests_root = Path(tests_root)
+        mock_optimizer.function_to_optimize = MagicMock()
+        mock_optimizer.function_to_optimize.file_path = Path(file_path)
+        mock_optimizer._get_java_sources_root = lambda: JavaFunctionOptimizer._get_java_sources_root(mock_optimizer)
+        return mock_optimizer
+
+    def test_kafka_streams_module(self, tmp_path):
+        """Kafka: function in streams module should use streams test dir, not clients."""
+        (tmp_path / "streams" / "src" / "main" / "java").mkdir(parents=True)
+        (tmp_path / "streams" / "src" / "test" / "java").mkdir(parents=True)
+        (tmp_path / "clients" / "src" / "test" / "java").mkdir(parents=True)
+
+        optimizer = self._create_mock_optimizer(
+            tests_root=str(tmp_path / "clients" / "src" / "test" / "java"),
+            file_path=str(
+                tmp_path
+                / "streams"
+                / "src"
+                / "main"
+                / "java"
+                / "org"
+                / "apache"
+                / "kafka"
+                / "streams"
+                / "query"
+                / "QueryConfig.java"
+            ),
+        )
+        result = optimizer._get_java_sources_root()
+        assert result == tmp_path / "streams" / "src" / "test" / "java"
+
+    def test_kafka_connect_module(self, tmp_path):
+        """Kafka: function in connect/runtime should use connect/runtime test dir."""
+        (tmp_path / "connect" / "runtime" / "src" / "main" / "java").mkdir(parents=True)
+        (tmp_path / "connect" / "runtime" / "src" / "test" / "java").mkdir(parents=True)
+        (tmp_path / "clients" / "src" / "test" / "java").mkdir(parents=True)
+
+        optimizer = self._create_mock_optimizer(
+            tests_root=str(tmp_path / "clients" / "src" / "test" / "java"),
+            file_path=str(
+                tmp_path
+                / "connect"
+                / "runtime"
+                / "src"
+                / "main"
+                / "java"
+                / "org"
+                / "apache"
+                / "kafka"
+                / "connect"
+                / "runtime"
+                / "Worker.java"
+            ),
+        )
+        result = optimizer._get_java_sources_root()
+        assert result == tmp_path / "connect" / "runtime" / "src" / "test" / "java"
+
+    def test_kafka_clients_module_same_as_config(self, tmp_path):
+        """Kafka: function in clients module should still use clients test dir."""
+        (tmp_path / "clients" / "src" / "main" / "java").mkdir(parents=True)
+        (tmp_path / "clients" / "src" / "test" / "java").mkdir(parents=True)
+
+        optimizer = self._create_mock_optimizer(
+            tests_root=str(tmp_path / "clients" / "src" / "test" / "java"),
+            file_path=str(
+                tmp_path
+                / "clients"
+                / "src"
+                / "main"
+                / "java"
+                / "org"
+                / "apache"
+                / "kafka"
+                / "common"
+                / "utils"
+                / "Bytes.java"
+            ),
+        )
+        result = optimizer._get_java_sources_root()
+        assert result == tmp_path / "clients" / "src" / "test" / "java"
+
+    def test_opensearch_libs_module(self, tmp_path):
+        """OpenSearch: function in libs/core should use libs/core test dir."""
+        (tmp_path / "libs" / "core" / "src" / "main" / "java").mkdir(parents=True)
+        (tmp_path / "libs" / "core" / "src" / "test" / "java").mkdir(parents=True)
+        (tmp_path / "server" / "src" / "test" / "java").mkdir(parents=True)
+
+        optimizer = self._create_mock_optimizer(
+            tests_root=str(tmp_path / "server" / "src" / "test" / "java"),
+            file_path=str(
+                tmp_path
+                / "libs"
+                / "core"
+                / "src"
+                / "main"
+                / "java"
+                / "org"
+                / "opensearch"
+                / "core"
+                / "common"
+                / "Strings.java"
+            ),
+        )
+        result = optimizer._get_java_sources_root()
+        assert result == tmp_path / "libs" / "core" / "src" / "test" / "java"
+
+    def test_spring_boot_subproject(self, tmp_path):
+        """Spring Boot: function in autoconfigure should use autoconfigure test dir."""
+        (tmp_path / "spring-boot-autoconfigure" / "src" / "main" / "java").mkdir(parents=True)
+        (tmp_path / "spring-boot-autoconfigure" / "src" / "test" / "java").mkdir(parents=True)
+        (tmp_path / "spring-boot" / "src" / "test" / "java").mkdir(parents=True)
+
+        optimizer = self._create_mock_optimizer(
+            tests_root=str(tmp_path / "spring-boot" / "src" / "test" / "java"),
+            file_path=str(
+                tmp_path
+                / "spring-boot-autoconfigure"
+                / "src"
+                / "main"
+                / "java"
+                / "org"
+                / "springframework"
+                / "boot"
+                / "autoconfigure"
+                / "web"
+                / "ServerProperties.java"
+            ),
+        )
+        result = optimizer._get_java_sources_root()
+        assert result == tmp_path / "spring-boot-autoconfigure" / "src" / "test" / "java"
+
+    def test_fallback_when_derived_test_dir_missing(self, tmp_path):
+        """When derived test dir doesn't exist, fall back to tests_root logic."""
+        (tmp_path / "module-a" / "src" / "main" / "java").mkdir(parents=True)
+        # Deliberately NOT creating module-a/src/test/java
+        tests_root = tmp_path / "src" / "test" / "java"
+        tests_root.mkdir(parents=True)
+
+        optimizer = self._create_mock_optimizer(
+            tests_root=str(tests_root),
+            file_path=str(tmp_path / "module-a" / "src" / "main" / "java" / "com" / "example" / "Foo.java"),
+        )
+        result = optimizer._get_java_sources_root()
+        assert result == tests_root
+
+    def test_non_standard_layout_falls_through(self, tmp_path):
+        """Non-standard layout (no src/main/java) falls through to existing logic."""
+        optimizer = self._create_mock_optimizer(
+            tests_root=str(tmp_path / "custom" / "tests"), file_path=str(tmp_path / "custom" / "src" / "Foo.java")
+        )
+        result = optimizer._get_java_sources_root()
+        assert result == tmp_path / "custom" / "tests"
+
+
 class TestFixJavaTestPathsIntegration:
     """Integration tests for _fix_java_test_paths with the path fix."""
 
@@ -97,8 +266,9 @@ class TestFixJavaTestPathsIntegration:
         mock_optimizer = MagicMock(spec=JavaFunctionOptimizer)
         mock_optimizer.test_cfg = MagicMock()
         mock_optimizer.test_cfg.tests_root = Path(tests_root)
+        mock_optimizer.function_to_optimize = MagicMock()
+        mock_optimizer.function_to_optimize.file_path = Path("/nonexistent/Foo.java")
 
-        # Bind the actual methods
         mock_optimizer._get_java_sources_root = lambda: JavaFunctionOptimizer._get_java_sources_root(mock_optimizer)
         mock_optimizer._fix_java_test_paths = lambda behavior_source, perf_source, used_paths, display_source="": (
             JavaFunctionOptimizer._fix_java_test_paths(
@@ -245,7 +415,7 @@ class TestExtractSourceDirsFromPom:
 </project>
 """
         (tmp_path / "pom.xml").write_text(pom_content)
-        dirs = _extract_source_dirs_from_pom(tmp_path)
+        dirs = _extract_custom_source_dirs(tmp_path)
         assert "src/main/custom" in dirs
         assert "src/test/custom" in dirs
 
@@ -259,11 +429,11 @@ class TestExtractSourceDirsFromPom:
 </project>
 """
         (tmp_path / "pom.xml").write_text(pom_content)
-        dirs = _extract_source_dirs_from_pom(tmp_path)
+        dirs = _extract_custom_source_dirs(tmp_path)
         assert dirs == []
 
     def test_no_pom_returns_empty(self, tmp_path):
-        dirs = _extract_source_dirs_from_pom(tmp_path)
+        dirs = _extract_custom_source_dirs(tmp_path)
         assert dirs == []
 
     def test_pom_without_build_section(self, tmp_path):
@@ -273,10 +443,191 @@ class TestExtractSourceDirsFromPom:
 </project>
 """
         (tmp_path / "pom.xml").write_text(pom_content)
-        dirs = _extract_source_dirs_from_pom(tmp_path)
+        dirs = _extract_custom_source_dirs(tmp_path)
         assert dirs == []
 
     def test_malformed_xml(self, tmp_path):
         (tmp_path / "pom.xml").write_text("this is not valid xml <<<<")
-        dirs = _extract_source_dirs_from_pom(tmp_path)
+        dirs = _extract_custom_source_dirs(tmp_path)
         assert dirs == []
+
+
+class TestMatchModuleFromRelPath:
+    """Tests for _match_module_from_rel_path."""
+
+    def test_simple_module(self):
+        assert _match_module_from_rel_path(Path("streams/src/test/java/Test.java"), ["streams", "clients"]) == "streams"
+
+    def test_nested_module(self):
+        result = _match_module_from_rel_path(
+            Path("connect/runtime/src/test/java/Test.java"), ["connect:runtime", "streams"]
+        )
+        assert result == "connect:runtime"
+
+    def test_no_match(self):
+        assert _match_module_from_rel_path(Path("unknown/src/Test.java"), ["streams", "clients"]) is None
+
+    def test_partial_name_no_false_match(self):
+        """'streams-ng' should not match module 'streams'."""
+        assert _match_module_from_rel_path(Path("streams-ng/src/Test.java"), ["streams"]) is None
+
+
+class TestModuleToDir:
+    """Tests for module_to_dir."""
+
+    def test_simple(self):
+        assert module_to_dir("streams") == "streams"
+
+    def test_nested(self):
+        result = module_to_dir("connect:runtime")
+        assert result == "connect" + "/" + "runtime" or result == "connect" + "\\" + "runtime"
+
+
+class TestExtractModulesFromSettingsGradle:
+    """Tests for _extract_modules_from_settings_gradle."""
+
+    def test_simple_top_level_modules(self):
+        content = """include("streams", "clients", "tools")"""
+        modules = _extract_modules_from_settings_gradle(content)
+        assert "streams" in modules
+        assert "clients" in modules
+        assert "tools" in modules
+
+    def test_nested_gradle_modules(self):
+        """Nested modules like connect:runtime should be extracted."""
+        content = """include("connect:runtime", "connect:api", "streams")"""
+        modules = _extract_modules_from_settings_gradle(content)
+        assert "connect:runtime" in modules
+        assert "connect:api" in modules
+        assert "streams" in modules
+
+    def test_leading_colon_stripped(self):
+        content = """include(":streams", ":clients")"""
+        modules = _extract_modules_from_settings_gradle(content)
+        assert "streams" in modules
+        assert "clients" in modules
+
+
+class TestFindMultiModuleRoot:
+    """Tests for _find_multi_module_root with Gradle multi-module projects."""
+
+    def _make_kafka_like_project(self, tmp_path):
+        """Create a Kafka-like multi-module Gradle project structure."""
+        # Root build files
+        (tmp_path / "build.gradle.kts").write_text("// root build", encoding="utf-8")
+        (tmp_path / "settings.gradle.kts").write_text(
+            'include("clients", "streams", "tools", "connect:runtime")', encoding="utf-8"
+        )
+        # Module build files and source/test dirs
+        for module in ["clients", "streams", "tools"]:
+            (tmp_path / module / "src" / "main" / "java").mkdir(parents=True)
+            (tmp_path / module / "src" / "test" / "java").mkdir(parents=True)
+            (tmp_path / module / "build.gradle.kts").write_text(f"// {module} build", encoding="utf-8")
+        # Nested module
+        (tmp_path / "connect" / "runtime" / "src" / "main" / "java").mkdir(parents=True)
+        (tmp_path / "connect" / "runtime" / "src" / "test" / "java").mkdir(parents=True)
+        (tmp_path / "connect" / "runtime" / "build.gradle.kts").write_text("// connect:runtime build", encoding="utf-8")
+
+    def _make_test_paths_mock(self, file_paths: list[Path]):
+        """Create a mock test_paths object with test_files."""
+        mock = MagicMock()
+        mock.test_files = []
+        for fp in file_paths:
+            tf = MagicMock()
+            tf.benchmarking_file_path = None
+            tf.instrumented_behavior_file_path = fp
+            mock.test_files.append(tf)
+        return mock
+
+    def test_streams_tests_return_streams_module(self, tmp_path):
+        """When ALL test files are in streams/, should return 'streams' module."""
+        self._make_kafka_like_project(tmp_path)
+        test_file = tmp_path / "streams" / "src" / "test" / "java" / "org" / "apache" / "kafka" / "StreamsTest.java"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.touch()
+
+        test_paths = self._make_test_paths_mock([test_file])
+        build_root, test_module = _find_multi_module_root(tmp_path, test_paths)
+
+        assert build_root == tmp_path
+        assert test_module == "streams", f"Expected 'streams' but got '{test_module}'"
+
+    def test_tools_tests_return_tools_module(self, tmp_path):
+        """When test files are in tools/, should return 'tools' module."""
+        self._make_kafka_like_project(tmp_path)
+        test_file = tmp_path / "tools" / "src" / "test" / "java" / "org" / "apache" / "kafka" / "ToolsTest.java"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.touch()
+
+        test_paths = self._make_test_paths_mock([test_file])
+        build_root, test_module = _find_multi_module_root(tmp_path, test_paths)
+
+        assert build_root == tmp_path
+        assert test_module == "tools", f"Expected 'tools' but got '{test_module}'"
+
+    def test_mixed_modules_majority_wins(self, tmp_path):
+        """When tests span multiple modules, the module with the most test files wins."""
+        self._make_kafka_like_project(tmp_path)
+        clients_test = tmp_path / "clients" / "src" / "test" / "java" / "com" / "ClientsTest.java"
+        clients_test.parent.mkdir(parents=True, exist_ok=True)
+        clients_test.touch()
+        streams_test_1 = tmp_path / "streams" / "src" / "test" / "java" / "com" / "StreamsTest1.java"
+        streams_test_1.parent.mkdir(parents=True, exist_ok=True)
+        streams_test_1.touch()
+        streams_test_2 = tmp_path / "streams" / "src" / "test" / "java" / "com" / "StreamsTest2.java"
+        streams_test_2.touch()
+
+        # 1 clients test + 2 streams tests → streams wins by majority
+        test_paths = self._make_test_paths_mock([clients_test, streams_test_1, streams_test_2])
+        build_root, test_module = _find_multi_module_root(tmp_path, test_paths)
+
+        assert build_root == tmp_path
+        assert test_module == "streams"
+
+    def test_mixed_modules_equal_count_deterministic(self, tmp_path):
+        """When modules are tied, a module is still selected (not None)."""
+        self._make_kafka_like_project(tmp_path)
+        clients_test = tmp_path / "clients" / "src" / "test" / "java" / "com" / "ClientsTest.java"
+        clients_test.parent.mkdir(parents=True, exist_ok=True)
+        clients_test.touch()
+        streams_test = tmp_path / "streams" / "src" / "test" / "java" / "com" / "StreamsTest.java"
+        streams_test.parent.mkdir(parents=True, exist_ok=True)
+        streams_test.touch()
+
+        test_paths = self._make_test_paths_mock([clients_test, streams_test])
+        build_root, test_module = _find_multi_module_root(tmp_path, test_paths)
+
+        assert build_root == tmp_path
+        assert test_module in ("clients", "streams")
+
+    def test_nested_module_connect_runtime(self, tmp_path):
+        """Nested Gradle module 'connect:runtime' (dir connect/runtime/) is matched."""
+        self._make_kafka_like_project(tmp_path)
+        test_file = (
+            tmp_path / "connect" / "runtime" / "src" / "test" / "java" / "org" / "kafka" / "ConnectRuntimeTest.java"
+        )
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.touch()
+
+        test_paths = self._make_test_paths_mock([test_file])
+        build_root, test_module = _find_multi_module_root(tmp_path, test_paths)
+
+        assert build_root == tmp_path
+        assert test_module == "connect:runtime"
+
+    def test_project_root_is_submodule_test_outside(self, tmp_path):
+        """When project_root is a submodule (e.g., kafka/clients) and generated
+        tests are placed in a sibling module (kafka/streams), the function should
+        walk up to find the repo root and return the correct module.
+        """
+        self._make_kafka_like_project(tmp_path)
+        submodule_root = tmp_path / "clients"
+        test_file = tmp_path / "streams" / "src" / "test" / "java" / "com" / "StreamsTest.java"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.touch()
+
+        test_paths = self._make_test_paths_mock([test_file])
+        build_root, test_module = _find_multi_module_root(submodule_root, test_paths)
+
+        assert build_root == tmp_path
+        assert test_module == "streams"

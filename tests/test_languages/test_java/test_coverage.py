@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codeflash.languages.java.build_tools import (
+from codeflash.languages.java.maven_strategy import (
     JACOCO_PLUGIN_VERSION,
-    add_jacoco_plugin_to_pom,
-    get_jacoco_xml_path,
+    add_jacoco_plugin,
+    get_jacoco_report_path,
     is_jacoco_configured,
 )
 from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, CoverageStatus, FunctionSource
@@ -470,7 +470,7 @@ class TestJacocoPluginAddition:
         pom_path.write_text(POM_MINIMAL)
 
         # Add JaCoCo plugin
-        result = add_jacoco_plugin_to_pom(pom_path)
+        result = add_jacoco_plugin(pom_path)
         assert result is True
 
         # Verify it's now configured
@@ -483,13 +483,13 @@ class TestJacocoPluginAddition:
         assert "prepare-agent" in content
         assert "report" in content
 
-    def test_add_jacoco_plugin_to_pom_with_build(self, tmp_path: Path) -> None:
+    def test_add_jacoco_plugin_with_build(self, tmp_path: Path) -> None:
         """Test adding JaCoCo to pom.xml that has a build section."""
         pom_path = tmp_path / "pom.xml"
         pom_path.write_text(POM_WITHOUT_JACOCO)
 
         # Add JaCoCo plugin
-        result = add_jacoco_plugin_to_pom(pom_path)
+        result = add_jacoco_plugin(pom_path)
         assert result is True
 
         # Verify it's now configured
@@ -501,7 +501,7 @@ class TestJacocoPluginAddition:
         pom_path.write_text(POM_WITH_JACOCO)
 
         # Try to add JaCoCo plugin
-        result = add_jacoco_plugin_to_pom(pom_path)
+        result = add_jacoco_plugin(pom_path)
         assert result is True  # Should succeed (already present)
 
         # Verify it's still configured
@@ -513,7 +513,7 @@ class TestJacocoPluginAddition:
         pom_path.write_text(POM_NO_NAMESPACE)
 
         # Add JaCoCo plugin
-        result = add_jacoco_plugin_to_pom(pom_path)
+        result = add_jacoco_plugin(pom_path)
         assert result is True
 
         # Verify it's now configured
@@ -523,7 +523,7 @@ class TestJacocoPluginAddition:
         """Test adding JaCoCo when pom.xml doesn't exist."""
         pom_path = tmp_path / "pom.xml"
 
-        result = add_jacoco_plugin_to_pom(pom_path)
+        result = add_jacoco_plugin(pom_path)
         assert result is False
 
     def test_add_jacoco_plugin_invalid_xml(self, tmp_path: Path) -> None:
@@ -531,16 +531,16 @@ class TestJacocoPluginAddition:
         pom_path = tmp_path / "pom.xml"
         pom_path.write_text("this is not valid xml")
 
-        result = add_jacoco_plugin_to_pom(pom_path)
+        result = add_jacoco_plugin(pom_path)
         assert result is False
 
 
 class TestJacocoXmlPath:
     """Tests for JaCoCo XML path resolution."""
 
-    def test_get_jacoco_xml_path(self, tmp_path: Path) -> None:
+    def test_get_jacoco_report_path(self, tmp_path: Path) -> None:
         """Test getting the expected JaCoCo XML path."""
-        path = get_jacoco_xml_path(tmp_path)
+        path = get_jacoco_report_path(tmp_path)
 
         assert path == tmp_path / "target" / "site" / "jacoco" / "jacoco.xml"
 

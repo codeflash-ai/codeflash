@@ -714,6 +714,10 @@ class Optimizer:
             cleanup_paths(paths_to_cleanup)
 
     def cleanup_temporary_paths(self) -> None:
+        from codeflash.languages.java.test_runner import CompilationCache
+
+        CompilationCache.clear()
+
         if hasattr(get_run_tmp_file, "tmpdir"):
             get_run_tmp_file.tmpdir.cleanup()
             del get_run_tmp_file.tmpdir

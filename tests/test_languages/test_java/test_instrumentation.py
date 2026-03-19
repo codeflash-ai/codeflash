@@ -22,7 +22,7 @@ os.environ["CODEFLASH_API_KEY"] = "cf-test-key"
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import Language
 from codeflash.languages.current import set_current_language
-from codeflash.languages.java.build_tools import find_maven_executable
+from codeflash.languages.java.maven_strategy import MavenStrategy
 from codeflash.languages.java.discovery import discover_functions_from_source
 from codeflash.languages.java.instrumentation import (
     _add_behavior_instrumentation,
@@ -1968,7 +1968,7 @@ public class AccentTest {
 
 # Skip all E2E tests if Maven is not available
 requires_maven = pytest.mark.skipif(
-    find_maven_executable() is None, reason="Maven not found - skipping execution tests"
+    MavenStrategy().find_executable(Path(".")) is None, reason="Maven not found - skipping execution tests"
 )
 
 
