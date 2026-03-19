@@ -2,6 +2,7 @@ import logging
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import time
 
@@ -9,6 +10,18 @@ import time
 def run_test(expected_improvement_pct: int) -> bool:
     logging.basicConfig(level=logging.INFO)
     fixture_dir = (pathlib.Path(__file__).parent.parent / "test_languages" / "fixtures" / "java_tracer_e2e").resolve()
+
+    # Clean up leftover replay tests from previous runs
+    replay_dir = fixture_dir / "src" / "test" / "java" / "codeflash" / "replay"
+    if replay_dir.exists():
+        shutil.rmtree(replay_dir, ignore_errors=True)
+    # Also clean up any instrumented test files
+    test_java_dir = fixture_dir / "src" / "test" / "java"
+    if test_java_dir.exists():
+        for f in test_java_dir.rglob("*__perfinstrumented*.java"):
+            f.unlink(missing_ok=True)
+        for f in test_java_dir.rglob("*__perfonlyinstrumented*.java"):
+            f.unlink(missing_ok=True)
 
     # Compile the workload
     classes_dir = fixture_dir / "target" / "classes"
@@ -30,14 +43,13 @@ def run_test(expected_improvement_pct: int) -> bool:
         return False
 
     # Run the Java tracer + optimizer
-    repo_root = pathlib.Path(__file__).parent.parent.parent
     command = [
         "uv",
         "run",
         "--no-project",
-        str(repo_root / "codeflash" / "main.py"),
+        "-m",
+        "codeflash.main",
         "optimize",
-        "--no-pr",
         "java",
         "-cp",
         str(classes_dir),
@@ -46,6 +58,8 @@ def run_test(expected_improvement_pct: int) -> bool:
 
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
+    logging.info(f"Running command: {' '.join(command)}")
+    logging.info(f"Working directory: {fixture_dir}")
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
@@ -63,6 +77,8 @@ def run_test(expected_improvement_pct: int) -> bool:
 
     return_code = process.wait()
     stdout = "".join(output)
+    if return_code != 0:
+        logging.error(f"Full output:\n{stdout}")
 
     if return_code != 0:
         logging.error(f"Command returned exit code {return_code}")
