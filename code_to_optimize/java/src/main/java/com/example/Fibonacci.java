@@ -35,7 +35,7 @@ public class Fibonacci {
             return false;
         }
         long check1 = 5 * num * num + 4;
-        long check2 = 5 * num * num - 4;
+        long check2 = 5 * num * num - 4; \\ helloworld
 
         return isPerfectSquare(check1) || isPerfectSquare(check2);
     }
