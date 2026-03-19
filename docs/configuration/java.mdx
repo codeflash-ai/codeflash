@@ -1,0 +1,153 @@
+---
+title: "Java Configuration"
+description: "Configure Codeflash for Java projects using codeflash.toml"
+icon: "java"
+sidebarTitle: "Java (codeflash.toml)"
+keywords:
+  [
+    "configuration",
+    "codeflash.toml",
+    "java",
+    "maven",
+    "gradle",
+    "junit",
+  ]
+---
+
+# Java Configuration
+
+Codeflash stores its configuration in `codeflash.toml` under the `[tool.codeflash]` section.
+
+## Full Reference
+
+```toml
+[tool.codeflash]
+# Required
+module-root = "src/main/java"
+tests-root = "src/test/java"
+language = "java"
+
+# Optional
+test-framework = "junit5"        # "junit5", "junit4", or "testng"
+disable-telemetry = false
+git-remote = "origin"
+ignore-paths = ["src/main/java/generated/"]
+```
+
+All file paths are relative to the directory containing `codeflash.toml`.
+
+<Info>
+Codeflash auto-detects most settings from your project structure. Running `codeflash init` will set up the correct config — manual configuration is usually not needed.
+</Info>
+
+## Auto-Detection
+
+When you run `codeflash init`, Codeflash inspects your project and auto-detects:
+
+| Setting | Detection logic |
+|---------|----------------|
+| `module-root` | Looks for `src/main/java` (Maven/Gradle standard layout) |
+| `tests-root` | Looks for `src/test/java`, `test/`, `tests/` |
+| `language` | Detected from build files (`pom.xml`, `build.gradle`) and `.java` files |
+| `test-framework` | Checks build file dependencies for JUnit 5, JUnit 4, or TestNG |
+
+## Required Options
+
+- **`module-root`**: The source directory to optimize. Only code under this directory is discovered for optimization. For standard Maven/Gradle projects, this is `src/main/java`.
+- **`tests-root`**: The directory where your tests are located. Codeflash discovers existing tests and places generated replay tests here.
+- **`language`**: Must be set to `"java"` for Java projects.
+
+## Optional Options
+
+- **`test-framework`**: Test framework. Auto-detected from build dependencies. Supported values: `"junit5"` (default), `"junit4"`, `"testng"`.
+- **`disable-telemetry`**: Disable anonymized telemetry. Defaults to `false`.
+- **`git-remote`**: Git remote for pull requests. Defaults to `"origin"`.
+- **`ignore-paths`**: Paths within `module-root` to skip during optimization.
+
+## Multi-Module Projects
+
+For multi-module Maven/Gradle projects, place `codeflash.toml` at the project root and set `module-root` to the module you want to optimize:
+
+```text
+my-project/
+|- client/
+|  |- src/main/java/com/example/client/
+|  |- src/test/java/com/example/client/
+|- server/
+|  |- src/main/java/com/example/server/
+|- pom.xml
+|- codeflash.toml
+```
+
+```toml
+[tool.codeflash]
+module-root = "client/src/main/java"
+tests-root = "client/src/test/java"
+language = "java"
+```
+
+For non-standard layouts (like the Aerospike client where source is under `client/src/`), adjust paths accordingly:
+
+```toml
+[tool.codeflash]
+module-root = "client/src"
+tests-root = "test/src"
+language = "java"
+```
+
+## Tracer Options
+
+When using `codeflash optimize` to trace a Java program, these CLI options are available:
+
+| Option | Description | Default |
+|--------|------------|---------|
+| `--timeout` | Maximum time (seconds) for each tracing stage | No limit |
+| `--max-function-count` | Maximum captures per method | 100 |
+| `--trace-only` | Trace and generate replay tests without optimizing | `false` |
+
+Example with timeout:
+
+```bash
+codeflash optimize --timeout 30 java -jar target/my-app.jar --app-args
+```
+
+## Example
+
+### Standard Maven project
+
+```text
+my-app/
+|- src/
+|  |- main/java/com/example/
+|  |  |- App.java
+|  |  |- Utils.java
+|  |- test/java/com/example/
+|     |- AppTest.java
+|- pom.xml
+|- codeflash.toml
+```
+
+```toml
+[tool.codeflash]
+module-root = "src/main/java"
+tests-root = "src/test/java"
+language = "java"
+```
+
+### Gradle project
+
+```text
+my-lib/
+|- src/
+|  |- main/java/com/example/
+|  |- test/java/com/example/
+|- build.gradle
+|- codeflash.toml
+```
+
+```toml
+[tool.codeflash]
+module-root = "src/main/java"
+tests-root = "src/test/java"
+language = "java"
+```

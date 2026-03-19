@@ -1,0 +1,131 @@
+---
+title: "Java Installation"
+description: "Install and configure Codeflash for your Java project"
+icon: "java"
+sidebarTitle: "Java Setup"
+keywords:
+  [
+    "installation",
+    "java",
+    "maven",
+    "gradle",
+    "junit",
+    "junit5",
+    "tracing",
+  ]
+---
+
+Codeflash supports Java projects using Maven or Gradle build systems. It uses a two-stage tracing approach to capture method arguments and profiling data from running Java programs, then optimizes the hottest functions.
+
+### Prerequisites
+
+Before installing Codeflash, ensure you have:
+
+1. **Java 11 or above** installed
+2. **Maven or Gradle** as your build tool
+3. **A Java project** with source code under a standard directory layout
+
+Good to have (optional):
+
+1. **Unit tests** (JUnit 5 or JUnit 4) — Codeflash uses them alongside traced replay tests to verify correctness
+
+<Steps>
+<Step title="Install Codeflash CLI">
+
+Codeflash CLI is a Python tool. Install it with pip:
+
+```bash
+pip install codeflash
+```
+
+Or with uv:
+
+```bash
+uv pip install codeflash
+```
+
+</Step>
+<Step title="Initialize your project">
+
+Navigate to your Java project root (where `pom.xml` or `build.gradle` is) and run:
+
+```bash
+codeflash init
+```
+
+This will:
+- Detect your build tool (Maven/Gradle)
+- Find your source and test directories
+- Create a `codeflash.toml` configuration file
+
+</Step>
+<Step title="Verify setup">
+
+Check that the configuration looks correct:
+
+```bash
+cat codeflash.toml
+```
+
+You should see something like:
+
+```toml
+[tool.codeflash]
+module-root = "src/main/java"
+tests-root = "src/test/java"
+language = "java"
+```
+
+</Step>
+<Step title="Run your first optimization">
+
+Trace and optimize a running Java program:
+
+```bash
+codeflash optimize java -jar target/my-app.jar
+```
+
+Or with Maven:
+
+```bash
+codeflash optimize mvn exec:java -Dexec.mainClass="com.example.Main"
+```
+
+Codeflash will:
+1. Profile your program using JFR (Java Flight Recorder)
+2. Capture method arguments using a bytecode instrumentation agent
+3. Generate JUnit replay tests from the captured data
+4. Rank functions by performance impact
+5. Optimize the most impactful functions
+
+</Step>
+</Steps>
+
+## How it works
+
+Codeflash uses a **two-stage tracing** approach for Java:
+
+1. **Stage 1 — JFR Profiling**: Runs your program with Java Flight Recorder enabled to collect accurate method-level CPU profiling data. JFR has ~1% overhead and doesn't affect JIT compilation.
+
+2. **Stage 2 — Argument Capture**: Runs your program again with a bytecode instrumentation agent that captures method arguments using Kryo serialization. Arguments are stored in an SQLite database.
+
+The traced data is used to generate **JUnit replay tests** that exercise your functions with real-world inputs. Codeflash uses these tests alongside any existing unit tests to verify correctness and benchmark optimization candidates.
+
+<Info>
+Your program runs **twice** — once for profiling, once for argument capture. This separation ensures profiling data isn't distorted by serialization overhead.
+</Info>
+
+## Supported build tools
+
+| Build Tool | Detection | Test Execution |
+|-----------|-----------|---------------|
+| **Maven** | `pom.xml` | Maven Surefire plugin |
+| **Gradle** | `build.gradle` / `build.gradle.kts` | Gradle test task |
+
+## Supported test frameworks
+
+| Framework | Support Level |
+|-----------|-------------|
+| **JUnit 5** | Full support (default) |
+| **JUnit 4** | Full support |
+| **TestNG** | Basic support |
