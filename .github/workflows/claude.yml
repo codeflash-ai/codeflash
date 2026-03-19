@@ -92,14 +92,14 @@ jobs:
             Before doing any work, assess the PR scope:
 
             1. Run `gh pr diff ${{ github.event.pull_request.number }} --name-only` to get changed files.
-            2. Classify as TRIVIAL if ALL changed files are:
-               - Config/CI files (.github/, .tessl/, *.toml, *.lock, *.json, *.yml, *.yaml)
-               - Documentation (*.md, docs/)
-               - Non-production code (demos/, experiments/, code_to_optimize/)
-               - Only whitespace, formatting, or comment changes
+            2. Run `gh pr diff ${{ github.event.pull_request.number }} --stat` to get the total lines changed.
+            3. Classify the PR into one of these categories:
+               - TRIVIAL: ALL changed files are config/CI (.github/, .tessl/, *.toml, *.lock, *.json, *.yml, *.yaml), documentation (*.md, docs/), non-production code (demos/, experiments/, code_to_optimize/), or only whitespace/formatting/comment changes.
+               - SMALL: ≤ 50 lines of production code changed (excluding tests, config, lock files)
+               - LARGE: > 50 lines of production code changed
 
             If TRIVIAL: post a single comment "No substantive code changes to review." and stop — do not execute any further steps.
-            Otherwise: continue with the full review below.
+            Otherwise: record the size (SMALL or LARGE) and continue. Later steps will adapt their depth based on this.
             </step>
 
             <step name="lint_and_typecheck">
@@ -127,24 +127,47 @@ jobs:
 
             2. For each unresolved thread:
                a. Read the file at that path to check if the issue still exists
-               b. If fixed → resolve it: `gh api graphql -f query='mutation { resolveReviewThread(input: {threadId: "<THREAD_ID>"}) { thread { isResolved } } }'`
+               b. If fixed → resolve the thread silently (do NOT post a reply comment like "✅ Fixed"):
+                  `gh api graphql -f query='mutation { resolveReviewThread(input: {threadId: "<THREAD_ID>"}) { thread { isResolved } } }'`
                c. If still present → leave it
 
             Read the actual code before deciding. If there are no unresolved threads, skip to the next step.
             </step>
 
             <step name="review">
-            Review the diff (`gh pr diff ${{ github.event.pull_request.number }}`) for:
+            Review the diff (`gh pr diff ${{ github.event.pull_request.number }}`).
+
+            SCOPE RULES:
+            - Only read files that appear in the diff. Do NOT explore the broader codebase unless a specific function call in the diff requires understanding its definition.
+            - Match review depth to PR size: SMALL PRs get a focused correctness check; LARGE PRs get the full review below.
+            - For codeflash-ai[bot] optimization PRs: focus on whether the optimization is correct and the speedup claim is credible. Keep the review concise — a short correctness verdict, not a multi-paragraph essay.
+
+            Check for:
             1. Bugs that will crash at runtime
             2. Security vulnerabilities
             3. Breaking API changes
+            4. Design issues (LARGE PRs only):
+               - Is logic placed in the right module? (e.g., language-specific logic belongs in `languages/<lang>/`, not in the base optimizer)
+               - Are fixes addressing the root cause or just papering over symptoms? (e.g., hardcoding a list of imports vs having the AI service handle it)
+               - Is language-agnostic config being stored in a language-specific file? (e.g., storing general config in `pyproject.toml` which is Python-exclusive)
+            5. Accidental file inclusions — flag if the diff contains:
+               - Binary files (`.jar`, `.whl`, `.so`, `.dll`, `.exe`)
+               - Version file changes (`version.py`) that look auto-generated (e.g., `.post<N>.dev0+<hash>`)
+               - Internal planning/design docs committed to `docs/` (those belong in Linear or a separate location)
+               - Changes to `codeflash-benchmark/` version files
 
             Ignore style issues, type hints, and log message wording.
             Record findings for the summary comment. Refer to CLAUDE.md for project conventions.
             </step>
 
             <step name="duplicate_detection">
-            Check whether this PR introduces code that duplicates logic already present elsewhere in the repository — including across languages. Focus on finding true duplicates, not just similar-looking code.
+            Check whether this PR introduces code that duplicates logic already present elsewhere in the repository.
+
+            Depth depends on PR size:
+            - SMALL PRs: Quick check — search for any new function names defined elsewhere using Grep. Only flag exact or near-exact duplicates. Skip the cross-module deep dive.
+            - LARGE PRs: Full analysis as described below.
+
+            Full analysis (LARGE PRs only):
 
             1. Get changed source files (excluding tests and config):
                `git diff --name-only origin/main...HEAD -- '*.py' '*.js' '*.ts' '*.java' | grep -v -E '(test_|_test\.(py|js|ts)|\.test\.(js|ts)|\.spec\.(js|ts)|conftest\.py|/tests/|/test/|/__tests__/)' | grep -v -E '^(\.github/|code_to_optimize/|\.tessl/|node_modules/)'`
@@ -171,6 +194,8 @@ jobs:
             </step>
 
             <step name="coverage">
+            Skip this step for SMALL PRs — only run for LARGE PRs.
+
             Analyze test coverage for changed files:
 
             1. Get changed Python files (excluding tests): `git diff --name-only origin/main...HEAD -- '*.py' | grep -v test`
@@ -178,6 +203,7 @@ jobs:
             3. Get per-file coverage: `uv run coverage report --include="<changed_files>"`
             4. Compare with main: checkout main, run coverage, checkout back
             5. Flag: new files below 75%, decreased coverage, untested changed lines
+            6. If the PR adds new public functions or methods without any corresponding tests, explicitly call this out and request tests be added. New production logic should have tests.
             </step>
 
             <step name="summary_comment">
@@ -186,6 +212,7 @@ jobs:
             ## PR Review Summary
             ### Prek Checks
             ### Code Review
+            (Include bugs, security, breaking changes, and design issues. Omit subsections with no findings.)
             ### Duplicate Detection
             ### Test Coverage
             ---
@@ -198,20 +225,25 @@ jobs:
 
             For each PR:
             - If CI passes and the PR is mergeable → merge with `--squash --delete-branch`
-            - If CI is failing:
-              1. Check out the PR branch and inspect the failing tests
-              2. Attempt to fix the failures (the optimization may have broken tests or introduced issues)
-              3. If fixed: commit, push, and leave a comment explaining what was fixed
-              4. If unfixable: close with `gh pr close <number> --comment "Closing: CI checks are failing — <describe the specific failures and why they can't be auto-fixed>." --delete-branch`
-            - Close the PR (without attempting fixes) if ANY of these apply:
-              - Older than 7 days
-              - Has merge conflicts (mergeable state is "CONFLICTING")
+            - If CI is failing, first determine whether the failures are CAUSED BY the PR or PRE-EXISTING on the base branch:
+              1. Run `gh pr checks <number>` to identify failing checks
+              2. Check out the PR's BASE branch and check if the same tests/checks fail there too
+              3. If failures are PRE-EXISTING on the base branch (not caused by the PR):
+                 - Do NOT close the PR
+                 - Leave a comment: "CI failures are pre-existing on the base branch (not caused by this PR): <list failing checks>. Leaving open for merge once base branch CI is fixed."
+              4. If failures are CAUSED BY the PR's changes:
+                 a. Check out the PR branch and attempt to fix (lint issues, duplicate definitions, type errors, etc.)
+                 b. If fixed: commit, push, and leave a comment explaining what was fixed
+                 c. If unfixable: close with `gh pr close <number> --comment "Closing: this PR introduces CI failures that cannot be auto-fixed — <describe the specific failures>." --delete-branch`
+            - Close the PR (without attempting fixes) ONLY if ANY of these apply:
               - The optimized function no longer exists in the target file (check the diff)
+              - Has merge conflicts (mergeable state is "CONFLICTING") AND the PR is older than 3 days (to give time for the base branch to stabilize before giving up)
               Close with: `gh pr close <number> --comment "<reason>" --delete-branch`
               where <reason> explains WHY the PR is being closed. Examples:
-              - "Closing: PR is older than 7 days without being merged."
-              - "Closing: merge conflicts with the target branch."
+              - "Closing: merge conflicts with the target branch and PR is older than 3 days."
               - "Closing: the optimized function no longer exists in the target file."
+            - NEVER close a PR solely because it is old. Age alone is not a valid reason to close.
+            - NEVER mass-close multiple PRs without individually evaluating each one.
             </step>
 
             <verification>
