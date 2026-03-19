@@ -19,10 +19,7 @@ if TYPE_CHECKING:
 
 
 def get_git_diff(
-    repo_directory: Path | None = None,
-    *,
-    only_this_commit: Optional[str] = None,
-    uncommitted_changes: bool = False
+    repo_directory: Path | None = None, *, only_this_commit: Optional[str] = None, uncommitted_changes: bool = False
 ) -> dict[str, list[int]]:
     from codeflash.languages.registry import get_supported_extensions
 
