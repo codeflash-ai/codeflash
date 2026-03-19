@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.config_consts import DEFAULT_IMPORTANCE_THRESHOLD
@@ -62,13 +62,13 @@ class JavaFunctionRanker:
     def __init__(self, jfr_profile: JfrProfile) -> None:
         self._jfr_profile = jfr_profile
         self._ranking = jfr_profile.get_method_ranking()
-        self._ranking_by_name: dict[str, dict] = {}
+        self._ranking_by_name: dict[str, dict[str, Any]] = {}
         for entry in self._ranking:
             name = entry["method_name"]
             if name not in self._ranking_by_name:
                 self._ranking_by_name[name] = entry
 
-    def get_function_stats_summary(self, function_to_optimize: FunctionToOptimize) -> dict | None:
+    def get_function_stats_summary(self, function_to_optimize: FunctionToOptimize) -> dict[str, Any] | None:
         for entry in self._ranking:
             if entry["method_name"] == function_to_optimize.function_name:
                 return {

@@ -5,6 +5,7 @@ import logging
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +127,7 @@ class JfrProfile:
             if len(timestamps) >= 2:
                 self._recording_duration_ns = max(timestamps) - min(timestamps)
 
-    def _frame_to_key(self, frame: dict) -> str | None:
+    def _frame_to_key(self, frame: dict[str, Any]) -> str | None:
         method = frame.get("method", {})
         class_name = method.get("type", {}).get("name", "")
         method_name = method.get("name", "")
@@ -134,7 +135,7 @@ class JfrProfile:
             return None
         return f"{class_name}.{method_name}"
 
-    def _store_method_info(self, key: str, frame: dict) -> None:
+    def _store_method_info(self, key: str, frame: dict[str, Any]) -> None:
         if key in self._method_info:
             return
         method = frame.get("method", {})
@@ -150,7 +151,7 @@ class JfrProfile:
             return True
         return any(method_key.startswith(pkg) for pkg in self.packages)
 
-    def get_method_ranking(self) -> list[dict]:
+    def get_method_ranking(self) -> list[dict[str, Any]]:
         if not self._method_samples or self._total_samples == 0:
             return []
 

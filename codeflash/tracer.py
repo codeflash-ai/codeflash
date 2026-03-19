@@ -32,15 +32,17 @@ from codeflash.tracing.pytest_parallelization import pytest_split
 if TYPE_CHECKING:
     from argparse import Namespace
 
+    from codeflash.languages import Language
+
 logger = logging.getLogger(__name__)
 
 
-def _detect_non_python_language(args: Namespace | None) -> object | None:
+def _detect_non_python_language(args: Namespace | None) -> Language | None:
     """Detect if the project uses a non-Python language from --file or config.
 
     Returns a Language enum value if non-Python detected, None otherwise.
     """
-    from codeflash.languages.base import Language
+    from codeflash.languages import Language
 
     # Method 1: Check --file argument for non-Python file extension
     file_path_to_check: Path | None = None
@@ -91,7 +93,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
     # 2. language field in project config (codeflash.toml or pyproject.toml)
     detected_language = _detect_non_python_language(args)
     if detected_language is not None:
-        from codeflash.languages.base import Language
+        from codeflash.languages import Language
 
         if detected_language in (Language.JAVASCRIPT, Language.TYPESCRIPT):
             from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
@@ -179,16 +181,18 @@ def main(args: Namespace | None = None) -> ArgumentParser:
             "module": parsed_args.module,
         }
         try:
-            pytest_splits = []
-            test_paths = []
-            replay_test_paths = []
+            pytest_splits: list[list[str]] = []
+            test_paths: list[str] = []
+            replay_test_paths: list[str] = []
             if parsed_args.module and unknown_args[0] == "pytest":
-                pytest_splits, test_paths = pytest_split(unknown_args[1:], limit=parsed_args.limit)
-                if pytest_splits is None or test_paths is None:
+                result_splits, result_paths = pytest_split(unknown_args[1:], limit=parsed_args.limit)
+                if result_splits is None or result_paths is None:
                     console.print(f"❌ Could not find test files in the specified paths: {unknown_args[1:]}")
                     console.print(f"Current working directory: {Path.cwd()}")
                     console.print("Please ensure the test directory exists and contains test files.")
                     sys.exit(1)
+                pytest_splits = result_splits
+                test_paths = result_paths
 
             if len(pytest_splits) > 1:
                 processes = []
@@ -276,7 +280,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                 from codeflash.cli_cmds.console import paneled_text
                 from codeflash.cli_cmds.console_constants import CODEFLASH_LOGO
                 from codeflash.languages import set_current_language
-                from codeflash.languages.base import Language
+                from codeflash.languages import Language
                 from codeflash.telemetry import posthog_cf
                 from codeflash.telemetry.sentry import init_sentry
 
@@ -375,7 +379,7 @@ def _run_java_tracer(existing_args: Namespace | None = None) -> ArgumentParser:
     if not trace_only and test_count > 0:
         from codeflash.code_utils.config_consts import EffortLevel
         from codeflash.languages import set_current_language
-        from codeflash.languages.base import Language
+        from codeflash.languages import Language
         from codeflash.optimization import optimizer
 
         set_current_language(Language.JAVA)
