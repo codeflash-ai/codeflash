@@ -118,17 +118,25 @@ class JavaTracer:
         packages: set[str] = set()
         for java_file in module_root.rglob("*.java"):
             try:
+                in_block_comment = False
                 with java_file.open("r", encoding="utf-8") as f:
                     for line in f:
                         stripped = line.strip()
+                        if in_block_comment:
+                            if "*/" in stripped:
+                                in_block_comment = False
+                            continue
+                        if stripped.startswith("/*"):
+                            if "*/" not in stripped:
+                                in_block_comment = True
+                            continue
                         if stripped.startswith("package "):
                             pkg = stripped[8:].rstrip(";").strip()
-                            # Use top two levels as prefix (e.g., "com.aerospike")
                             parts = pkg.split(".")
                             prefix = ".".join(parts[: min(2, len(parts))])
                             packages.add(prefix)
                             break
-                        if stripped and not stripped.startswith("//") and not stripped.startswith("/*"):
+                        if stripped and not stripped.startswith("//"):
                             break
             except (OSError, UnicodeDecodeError):
                 continue

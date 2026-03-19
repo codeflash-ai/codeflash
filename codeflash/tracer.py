@@ -331,7 +331,7 @@ def _run_java_tracer(existing_args: Namespace | None = None) -> ArgumentParser:
     project_root = Path(getattr(config, "project_root", ".")).resolve()
     module_root = Path(getattr(config, "module_root", project_root)).resolve()
     max_function_count = getattr(config, "max_function_count", 256)
-    timeout = int(getattr(config, "tracer_timeout", 0) or 0)
+    timeout = int(getattr(config, "timeout", None) or getattr(config, "tracer_timeout", 0) or 0)
 
     from codeflash.code_utils.code_utils import get_run_tmp_file
     from codeflash.languages.java.build_tools import find_test_root
