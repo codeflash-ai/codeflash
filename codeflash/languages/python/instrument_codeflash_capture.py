@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.formatter import sort_imports
@@ -271,16 +271,19 @@ class InitDecorator(ast.NodeTransformer):
                 kwarg=self._kwargs_arg_node,
                 defaults=[],
             ),
-            body=[
-                ast.Return(
-                    value=ast.Call(
-                        func=ast.Name(id=orig_name, ctx=self._load_ctx),
-                        args=[self._self_name_load, self._starred_args],
-                        keywords=[self._kwargs_keyword],
+            body=cast(
+                list[ast.stmt],
+                [
+                    ast.Return(
+                        value=ast.Call(
+                            func=ast.Name(id=orig_name, ctx=self._load_ctx),
+                            args=[self._self_name_load, self._starred_args],
+                            keywords=[self._kwargs_keyword],
+                        )
                     )
-                )
-            ],
-            decorator_list=[],
+                ],
+            ),
+            decorator_list=cast(list[ast.expr], []),
             returns=None,
         )
 
