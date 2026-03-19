@@ -648,26 +648,32 @@ def discover_tests_for_language(
     # Convert TestInfo back to FunctionCalledInTest format
     # Use the full qualified name (with modules) as the key for consistency with Python
     function_to_tests: dict[str, set[FunctionCalledInTest]] = defaultdict(set)
-    num_tests = 0
+    num_unit_tests = 0
+    num_replay_tests = 0
 
     for qualified_name, test_infos in test_map.items():
         # Convert simple qualified_name to full qualified_name_with_modules
         full_qualified_name = simple_to_full_name.get(qualified_name, qualified_name)
         for test_info in test_infos:
+            is_replay = getattr(test_info, "is_replay", False)
+            test_type = TestType.REPLAY_TEST if is_replay else TestType.EXISTING_UNIT_TEST
             function_to_tests[full_qualified_name].add(
                 FunctionCalledInTest(
                     tests_in_file=TestsInFile(
                         test_file=test_info.test_file,
                         test_class=test_info.test_class,
                         test_function=test_info.test_name,
-                        test_type=TestType.EXISTING_UNIT_TEST,
+                        test_type=test_type,
                     ),
                     position=CodePosition(line_no=0, col_no=0),
                 )
             )
-            num_tests += 1
+            if is_replay:
+                num_replay_tests += 1
+            else:
+                num_unit_tests += 1
 
-    return dict(function_to_tests), num_tests, 0
+    return dict(function_to_tests), num_unit_tests, num_replay_tests
 
 
 def discover_unit_tests(

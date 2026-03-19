@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.config_consts import DEFAULT_IMPORTANCE_THRESHOLD
@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.languages.java.jfr_parser import JfrProfile
 
 pytest_patterns = {
     "<frozen",  # Frozen modules like runpy
@@ -22,6 +23,19 @@ pytest_patterns = {
     "runpy.py",  # Python module runner
 }
 pytest_func_patterns = {"pytest_", "_pytest", "runtest"}
+
+java_infra_patterns = {
+    "org.junit.",
+    "org.gradle.",
+    "org.apache.maven.",
+    "org.jacoco.",
+    "com.codeflash.",
+    "sun.",
+    "jdk.",
+    "java.lang.reflect.",
+    "org.mockito.",
+    "org.assertj.",
+}
 
 
 def is_pytest_infrastructure(filename: str, function_name: str) -> bool:
@@ -36,6 +50,97 @@ def is_pytest_infrastructure(filename: str, function_name: str) -> bool:
             return True
 
     return any(pattern in function_name.lower() for pattern in pytest_func_patterns)
+
+
+def is_java_infrastructure(class_name: str) -> bool:
+    return any(class_name.startswith(pattern) for pattern in java_infra_patterns)
+
+
+class JavaFunctionRanker:
+    """Ranks Java functions using JFR profiling data."""
+
+    def __init__(self, jfr_profile: JfrProfile) -> None:
+        self._jfr_profile = jfr_profile
+        self._ranking = jfr_profile.get_method_ranking()
+        self._ranking_by_name: dict[str, dict[str, Any]] = {}
+        for entry in self._ranking:
+            name = entry["method_name"]
+            if name not in self._ranking_by_name:
+                self._ranking_by_name[name] = entry
+
+    def get_function_stats_summary(self, function_to_optimize: FunctionToOptimize) -> dict[str, Any] | None:
+        for entry in self._ranking:
+            if entry["method_name"] == function_to_optimize.function_name:
+                return {
+                    "filename": "",
+                    "function_name": entry["method_name"],
+                    "qualified_name": f"{entry['class_name']}.{entry['method_name']}",
+                    "class_name": entry["class_name"],
+                    "line_number": 0,
+                    "call_count": entry["sample_count"],
+                    "own_time_ns": self._jfr_profile.get_addressable_time_ns(entry["class_name"], entry["method_name"]),
+                    "addressable_time_ns": self._jfr_profile.get_addressable_time_ns(
+                        entry["class_name"], entry["method_name"]
+                    ),
+                }
+        return None
+
+    def get_function_addressable_time(self, function_to_optimize: FunctionToOptimize) -> float:
+        entry = self._ranking_by_name.get(function_to_optimize.function_name)
+        if entry is None:
+            return 0.0
+        return self._jfr_profile.get_addressable_time_ns(entry["class_name"], entry["method_name"])
+
+    def rank_functions(
+        self, functions_to_optimize: list[FunctionToOptimize], min_functions: int = 5
+    ) -> list[FunctionToOptimize]:
+        if not self._ranking:
+            logger.warning("No JFR profiling data available to rank functions.")
+            return functions_to_optimize
+
+        total_time = sum(
+            self._jfr_profile.get_addressable_time_ns(e["class_name"], e["method_name"])
+            for e in self._ranking
+            if not is_java_infrastructure(e["class_name"])
+        )
+
+        if total_time == 0:
+            return functions_to_optimize
+
+        functions_with_time = []
+        functions_without_time = []
+        for func in functions_to_optimize:
+            addr_time = self.get_function_addressable_time(func)
+            if addr_time > 0:
+                importance = addr_time / total_time
+                if importance >= DEFAULT_IMPORTANCE_THRESHOLD:
+                    functions_with_time.append(func)
+                else:
+                    logger.debug(
+                        f"Filtering out Java function {func.qualified_name} with importance "
+                        f"{importance:.2%} (below threshold {DEFAULT_IMPORTANCE_THRESHOLD:.2%})"
+                    )
+                    functions_without_time.append(func)
+            else:
+                functions_without_time.append(func)
+
+        ranked = sorted(functions_with_time, key=self.get_function_addressable_time, reverse=True)
+
+        # Guarantee at least min_functions pass through even when JFR data is sparse.
+        # Functions without JFR samples may still benefit from optimization.
+        if len(ranked) < min_functions:
+            shortfall = min_functions - len(ranked)
+            ranked_set = {id(f) for f in ranked}
+            for func in functions_without_time[:shortfall]:
+                if id(func) not in ranked_set:
+                    ranked.append(func)
+            if shortfall > 0:
+                logger.info(
+                    f"JFR data only covered {len(functions_with_time)} functions; "
+                    f"added {min(shortfall, len(functions_without_time))} more to meet minimum of {min_functions}"
+                )
+
+        return ranked
 
 
 class FunctionRanker:

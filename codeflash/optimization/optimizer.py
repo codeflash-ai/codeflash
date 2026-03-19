@@ -41,6 +41,18 @@ if TYPE_CHECKING:
     from codeflash.models.models import BenchmarkKey, FunctionCalledInTest, ValidCode
 
 
+def _extract_java_package_from_path(file_path: Path) -> str | None:
+    """Extract Java package from file path by finding src/main/java or src/test/java marker."""
+    parts = file_path.parts
+    for i, part in enumerate(parts):
+        if part == "java" and i >= 2 and parts[i - 1] in ("main", "test") and parts[i - 2] == "src":
+            package_parts = parts[i + 1 : -1]  # After java/, exclude filename
+            if package_parts:
+                return ".".join(package_parts)
+            return None
+    return None
+
+
 class Optimizer:
     def __init__(self, args: Namespace) -> None:
         self.args = args
@@ -360,16 +372,39 @@ class Optimizer:
             return all_functions
 
         try:
-            from codeflash.benchmarking.function_ranker import FunctionRanker
+            from codeflash.benchmarking.function_ranker import FunctionRanker, JavaFunctionRanker
 
             console.rule()
             logger.info("loading|Ranking functions globally by performance impact...")
             console.rule()
-            # Create ranker with trace data
-            ranker = FunctionRanker(trace_file_path)
 
             # Extract just the functions for ranking (without file paths)
             functions_only = [func for _, func in all_functions]
+
+            # Detect if functions are Java and use appropriate ranker
+            if functions_only and functions_only[0].language == "java":
+                from codeflash.languages.java.jfr_parser import JfrProfile
+
+                # JFR file is alongside the trace DB with .jfr extension
+                jfr_file_path = trace_file_path.with_suffix(".jfr")
+                if not jfr_file_path.exists():
+                    logger.warning(f"JFR file not found: {jfr_file_path}, falling back to original order")
+                    return all_functions
+
+                # Extract packages from file paths (e.g., src/main/java/com/example/Workload.java → "com.example")
+                packages = set()
+                for func in functions_only:
+                    package = _extract_java_package_from_path(func.file_path)
+                    if package:
+                        # Use top two levels as filter prefix (e.g., "com.example" from "com.example.sub")
+                        parts = package.split(".")
+                        packages.add(".".join(parts[: min(2, len(parts))]))
+
+                jfr_profile = JfrProfile(jfr_file_path, list(packages))
+                ranker = JavaFunctionRanker(jfr_profile)
+            else:
+                # Python ranker with trace data
+                ranker = FunctionRanker(trace_file_path)
 
             # Rank globally
             ranked_functions = ranker.rank_functions(functions_only)

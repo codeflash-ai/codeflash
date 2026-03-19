@@ -26,7 +26,8 @@
             "group": "Getting Started",
             "pages": [
               "getting-started/local-installation",
-              "getting-started/javascript-installation"
+              "getting-started/javascript-installation",
+              "getting-started/java-installation"
             ]
           },
           {
@@ -45,6 +46,7 @@
             "pages": [
               "configuration/python",
               "configuration/javascript",
+              "configuration/java",
               "getting-the-best-out-of-codeflash"
             ]
           },
