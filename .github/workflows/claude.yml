@@ -127,7 +127,8 @@ jobs:
 
             2. For each unresolved thread:
                a. Read the file at that path to check if the issue still exists
-               b. If fixed → resolve it: `gh api graphql -f query='mutation { resolveReviewThread(input: {threadId: "<THREAD_ID>"}) { thread { isResolved } } }'`
+               b. If fixed → resolve the thread silently (do NOT post a reply comment like "✅ Fixed"):
+                  `gh api graphql -f query='mutation { resolveReviewThread(input: {threadId: "<THREAD_ID>"}) { thread { isResolved } } }'`
                c. If still present → leave it
 
             Read the actual code before deciding. If there are no unresolved threads, skip to the next step.
@@ -138,6 +139,15 @@ jobs:
             1. Bugs that will crash at runtime
             2. Security vulnerabilities
             3. Breaking API changes
+            4. Design issues:
+               - Is logic placed in the right module? (e.g., language-specific logic belongs in `languages/<lang>/`, not in the base optimizer)
+               - Are fixes addressing the root cause or just papering over symptoms? (e.g., hardcoding a list of imports vs having the AI service handle it)
+               - Is language-agnostic config being stored in a language-specific file? (e.g., storing general config in `pyproject.toml` which is Python-exclusive)
+            5. Accidental file inclusions — flag if the diff contains:
+               - Binary files (`.jar`, `.whl`, `.so`, `.dll`, `.exe`)
+               - Version file changes (`version.py`) that look auto-generated (e.g., `.post<N>.dev0+<hash>`)
+               - Internal planning/design docs committed to `docs/` (those belong in Linear or a separate location)
+               - Changes to `codeflash-benchmark/` version files
 
             Ignore style issues, type hints, and log message wording.
             Record findings for the summary comment. Refer to CLAUDE.md for project conventions.
@@ -178,6 +188,7 @@ jobs:
             3. Get per-file coverage: `uv run coverage report --include="<changed_files>"`
             4. Compare with main: checkout main, run coverage, checkout back
             5. Flag: new files below 75%, decreased coverage, untested changed lines
+            6. If the PR adds new public functions or methods without any corresponding tests, explicitly call this out and request tests be added. New production logic should have tests.
             </step>
 
             <step name="summary_comment">
@@ -186,6 +197,7 @@ jobs:
             ## PR Review Summary
             ### Prek Checks
             ### Code Review
+            (Include bugs, security, breaking changes, and design issues. Omit subsections with no findings.)
             ### Duplicate Detection
             ### Test Coverage
             ---
@@ -198,20 +210,25 @@ jobs:
 
             For each PR:
             - If CI passes and the PR is mergeable → merge with `--squash --delete-branch`
-            - If CI is failing:
-              1. Check out the PR branch and inspect the failing tests
-              2. Attempt to fix the failures (the optimization may have broken tests or introduced issues)
-              3. If fixed: commit, push, and leave a comment explaining what was fixed
-              4. If unfixable: close with `gh pr close <number> --comment "Closing: CI checks are failing — <describe the specific failures and why they can't be auto-fixed>." --delete-branch`
-            - Close the PR (without attempting fixes) if ANY of these apply:
-              - Older than 7 days
-              - Has merge conflicts (mergeable state is "CONFLICTING")
+            - If CI is failing, first determine whether the failures are CAUSED BY the PR or PRE-EXISTING on the base branch:
+              1. Run `gh pr checks <number>` to identify failing checks
+              2. Check out the PR's BASE branch and check if the same tests/checks fail there too
+              3. If failures are PRE-EXISTING on the base branch (not caused by the PR):
+                 - Do NOT close the PR
+                 - Leave a comment: "CI failures are pre-existing on the base branch (not caused by this PR): <list failing checks>. Leaving open for merge once base branch CI is fixed."
+              4. If failures are CAUSED BY the PR's changes:
+                 a. Check out the PR branch and attempt to fix (lint issues, duplicate definitions, type errors, etc.)
+                 b. If fixed: commit, push, and leave a comment explaining what was fixed
+                 c. If unfixable: close with `gh pr close <number> --comment "Closing: this PR introduces CI failures that cannot be auto-fixed — <describe the specific failures>." --delete-branch`
+            - Close the PR (without attempting fixes) ONLY if ANY of these apply:
               - The optimized function no longer exists in the target file (check the diff)
+              - Has merge conflicts (mergeable state is "CONFLICTING") AND the PR is older than 3 days (to give time for the base branch to stabilize before giving up)
               Close with: `gh pr close <number> --comment "<reason>" --delete-branch`
               where <reason> explains WHY the PR is being closed. Examples:
-              - "Closing: PR is older than 7 days without being merged."
-              - "Closing: merge conflicts with the target branch."
+              - "Closing: merge conflicts with the target branch and PR is older than 3 days."
               - "Closing: the optimized function no longer exists in the target file."
+            - NEVER close a PR solely because it is old. Age alone is not a valid reason to close.
+            - NEVER mass-close multiple PRs without individually evaluating each one.
             </step>
 
             <verification>
