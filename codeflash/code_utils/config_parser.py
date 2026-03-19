@@ -181,9 +181,7 @@ def find_all_config_files(start_dir: Path | None = None) -> list[LanguageConfig]
                         raw_config = dict(tool["codeflash"])
                         normalized = normalize_toml_config(raw_config, config_file)
                         seen_languages.add(language)
-                        configs.append(
-                            LanguageConfig(config=normalized, config_path=config_file, language=language)
-                        )
+                        configs.append(LanguageConfig(config=normalized, config_path=config_file, language=language))
                 except Exception:
                     continue
 
