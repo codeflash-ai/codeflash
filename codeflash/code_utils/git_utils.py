@@ -22,13 +22,13 @@ if TYPE_CHECKING:
 def get_git_diff(
     repo_directory: Path | None = None, *, only_this_commit: Optional[str] = None, uncommitted_changes: bool = False
 ) -> dict[str, list[int]]:
-    from codeflash.languages.current import current_language_support
+    from codeflash.languages.registry import get_supported_extensions
 
     if repo_directory is None:
         repo_directory = Path.cwd()
     repository = git.Repo(repo_directory, search_parent_directories=True)
     commit = repository.head.commit
-    supported_extensions = current_language_support().file_extensions
+    supported_extensions = tuple(get_supported_extensions())
     if only_this_commit:
         uni_diff_text = repository.git.diff(
             only_this_commit + "^1", only_this_commit, ignore_blank_lines=True, ignore_space_at_eol=True
