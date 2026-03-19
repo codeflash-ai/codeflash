@@ -221,8 +221,10 @@ class TestMultiLanguageOrchestration:
     @patch("codeflash.main.parse_args")
     @patch("codeflash.main.print_codeflash_banner")
     @patch("codeflash.main.check_for_newer_minor_version")
+    @patch("codeflash.telemetry.posthog_cf.initialize_posthog")
+    @patch("codeflash.telemetry.sentry.init_sentry")
     def test_sequential_passes_calls_optimizer_per_language(
-        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+        self, _sentry, _posthog, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
     ) -> None:
         py_config = make_lang_config(tmp_path, Language.PYTHON)
         java_config = make_lang_config(tmp_path, Language.JAVA)
@@ -243,10 +245,14 @@ class TestMultiLanguageOrchestration:
     @patch("codeflash.main.parse_args")
     @patch("codeflash.main.print_codeflash_banner")
     @patch("codeflash.main.check_for_newer_minor_version")
+    @patch("codeflash.telemetry.posthog_cf.initialize_posthog")
+    @patch("codeflash.telemetry.sentry.init_sentry")
     @patch("codeflash.cli_cmds.cli.set_current_language")
     def test_singleton_set_per_pass(
         self,
         mock_set_lang,
+        _sentry,
+        _posthog,
         _ver,
         _banner,
         mock_parse_args,
@@ -281,9 +287,11 @@ class TestMultiLanguageOrchestration:
     @patch("codeflash.main.parse_args")
     @patch("codeflash.main.print_codeflash_banner")
     @patch("codeflash.main.check_for_newer_minor_version")
+    @patch("codeflash.telemetry.posthog_cf.initialize_posthog")
+    @patch("codeflash.telemetry.sentry.init_sentry")
     @patch("codeflash.main.get_changed_file_paths", return_value=[])
     def test_fallback_to_single_config_when_no_multi_configs(
-        self, _changed, _ver, _banner, mock_parse_args, mock_handle_config, mock_run, _fmt, _ckpt, tmp_path: Path
+        self, _changed, _sentry, _posthog, _ver, _banner, mock_parse_args, mock_handle_config, mock_run, _fmt, _ckpt, tmp_path: Path
     ) -> None:
         base = make_base_args(
             disable_telemetry=False, formatter_cmds=[], module_root=str(tmp_path), tests_root=str(tmp_path)
@@ -306,8 +314,10 @@ class TestMultiLanguageOrchestration:
     @patch("codeflash.main.parse_args")
     @patch("codeflash.main.print_codeflash_banner")
     @patch("codeflash.main.check_for_newer_minor_version")
+    @patch("codeflash.telemetry.posthog_cf.initialize_posthog")
+    @patch("codeflash.telemetry.sentry.init_sentry")
     def test_args_deep_copied_between_passes(
-        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+        self, _sentry, _posthog, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
     ) -> None:
         py_config = make_lang_config(tmp_path, Language.PYTHON)
         java_config = make_lang_config(tmp_path, Language.JAVA)
@@ -335,8 +345,10 @@ class TestMultiLanguageOrchestration:
     @patch("codeflash.main.parse_args")
     @patch("codeflash.main.print_codeflash_banner")
     @patch("codeflash.main.check_for_newer_minor_version")
+    @patch("codeflash.telemetry.posthog_cf.initialize_posthog")
+    @patch("codeflash.telemetry.sentry.init_sentry")
     def test_error_in_one_language_does_not_block_others(
-        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+        self, _sentry, _posthog, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
     ) -> None:
         py_config = make_lang_config(tmp_path, Language.PYTHON)
         java_config = make_lang_config(tmp_path, Language.JAVA)
@@ -359,8 +371,10 @@ class TestMultiLanguageOrchestration:
     @patch("codeflash.main.parse_args")
     @patch("codeflash.main.print_codeflash_banner")
     @patch("codeflash.main.check_for_newer_minor_version")
+    @patch("codeflash.telemetry.posthog_cf.initialize_posthog")
+    @patch("codeflash.telemetry.sentry.init_sentry")
     def test_orchestration_summary_logged(
-        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+        self, _sentry, _posthog, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
     ) -> None:
         py_config = make_lang_config(tmp_path, Language.PYTHON)
         java_config = make_lang_config(tmp_path, Language.JAVA)
@@ -385,8 +399,10 @@ class TestMultiLanguageOrchestration:
     @patch("codeflash.main.parse_args")
     @patch("codeflash.main.print_codeflash_banner")
     @patch("codeflash.main.check_for_newer_minor_version")
+    @patch("codeflash.telemetry.posthog_cf.initialize_posthog")
+    @patch("codeflash.telemetry.sentry.init_sentry")
     def test_summary_reports_failure_status(
-        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+        self, _sentry, _posthog, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
     ) -> None:
         py_config = make_lang_config(tmp_path, Language.PYTHON)
         java_config = make_lang_config(tmp_path, Language.JAVA)
@@ -450,8 +466,10 @@ class TestOrchestrationSummaryLogging:
     @patch("codeflash.main.parse_args")
     @patch("codeflash.main.print_codeflash_banner")
     @patch("codeflash.main.check_for_newer_minor_version")
+    @patch("codeflash.telemetry.posthog_cf.initialize_posthog")
+    @patch("codeflash.telemetry.sentry.init_sentry")
     def test_summary_reports_skipped_status(
-        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, mock_fmt, _ckpt, tmp_path: Path
+        self, _sentry, _posthog, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, mock_fmt, _ckpt, tmp_path: Path
     ) -> None:
         py_config = make_lang_config(tmp_path, Language.PYTHON)
         java_config = make_lang_config(tmp_path, Language.JAVA)
@@ -480,8 +498,10 @@ class TestCLIPathRouting:
     @patch("codeflash.main.parse_args")
     @patch("codeflash.main.print_codeflash_banner")
     @patch("codeflash.main.check_for_newer_minor_version")
+    @patch("codeflash.telemetry.posthog_cf.initialize_posthog")
+    @patch("codeflash.telemetry.sentry.init_sentry")
     def test_file_flag_filters_to_matching_language(
-        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+        self, _sentry, _posthog, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
     ) -> None:
         py_config = make_lang_config(tmp_path, Language.PYTHON)
         java_config = make_lang_config(tmp_path, Language.JAVA)
@@ -502,8 +522,10 @@ class TestCLIPathRouting:
     @patch("codeflash.main.parse_args")
     @patch("codeflash.main.print_codeflash_banner")
     @patch("codeflash.main.check_for_newer_minor_version")
+    @patch("codeflash.telemetry.posthog_cf.initialize_posthog")
+    @patch("codeflash.telemetry.sentry.init_sentry")
     def test_file_flag_python_file_filters_to_python(
-        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+        self, _sentry, _posthog, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
     ) -> None:
         py_config = make_lang_config(tmp_path, Language.PYTHON)
         java_config = make_lang_config(tmp_path, Language.JAVA)
@@ -524,8 +546,10 @@ class TestCLIPathRouting:
     @patch("codeflash.main.parse_args")
     @patch("codeflash.main.print_codeflash_banner")
     @patch("codeflash.main.check_for_newer_minor_version")
+    @patch("codeflash.telemetry.posthog_cf.initialize_posthog")
+    @patch("codeflash.telemetry.sentry.init_sentry")
     def test_file_flag_unknown_extension_runs_all(
-        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+        self, _sentry, _posthog, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
     ) -> None:
         py_config = make_lang_config(tmp_path, Language.PYTHON)
         java_config = make_lang_config(tmp_path, Language.JAVA)
@@ -546,8 +570,10 @@ class TestCLIPathRouting:
     @patch("codeflash.main.parse_args")
     @patch("codeflash.main.print_codeflash_banner")
     @patch("codeflash.main.check_for_newer_minor_version")
+    @patch("codeflash.telemetry.posthog_cf.initialize_posthog")
+    @patch("codeflash.telemetry.sentry.init_sentry")
     def test_file_flag_no_matching_config_runs_all(
-        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+        self, _sentry, _posthog, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
     ) -> None:
         py_config = make_lang_config(tmp_path, Language.PYTHON)
         mock_find_configs.return_value = [py_config]
@@ -567,8 +593,10 @@ class TestCLIPathRouting:
     @patch("codeflash.main.parse_args")
     @patch("codeflash.main.print_codeflash_banner")
     @patch("codeflash.main.check_for_newer_minor_version")
+    @patch("codeflash.telemetry.posthog_cf.initialize_posthog")
+    @patch("codeflash.telemetry.sentry.init_sentry")
     def test_all_flag_sets_module_root_per_language(
-        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+        self, _sentry, _posthog, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
     ) -> None:
         py_config = make_lang_config(tmp_path, Language.PYTHON)
         java_config = make_lang_config(tmp_path, Language.JAVA)
@@ -592,8 +620,10 @@ class TestCLIPathRouting:
     @patch("codeflash.main.parse_args")
     @patch("codeflash.main.print_codeflash_banner")
     @patch("codeflash.main.check_for_newer_minor_version")
+    @patch("codeflash.telemetry.posthog_cf.initialize_posthog")
+    @patch("codeflash.telemetry.sentry.init_sentry")
     def test_no_flags_runs_all_language_passes(
-        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+        self, _sentry, _posthog, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
     ) -> None:
         py_config = make_lang_config(tmp_path, Language.PYTHON)
         java_config = make_lang_config(tmp_path, Language.JAVA)
@@ -614,8 +644,10 @@ class TestCLIPathRouting:
     @patch("codeflash.main.parse_args")
     @patch("codeflash.main.print_codeflash_banner")
     @patch("codeflash.main.check_for_newer_minor_version")
+    @patch("codeflash.telemetry.posthog_cf.initialize_posthog")
+    @patch("codeflash.telemetry.sentry.init_sentry")
     def test_file_flag_typescript_extension(
-        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+        self, _sentry, _posthog, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
     ) -> None:
         # .tsx maps to Language.TYPESCRIPT, which is distinct from Language.JAVASCRIPT.
         # When no TYPESCRIPT config exists, all configs run (fallback behavior).
@@ -639,8 +671,10 @@ class TestCLIPathRouting:
     @patch("codeflash.main.parse_args")
     @patch("codeflash.main.print_codeflash_banner")
     @patch("codeflash.main.check_for_newer_minor_version")
+    @patch("codeflash.telemetry.posthog_cf.initialize_posthog")
+    @patch("codeflash.telemetry.sentry.init_sentry")
     def test_file_flag_jsx_extension(
-        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+        self, _sentry, _posthog, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
     ) -> None:
         # .jsx maps to Language.JAVASCRIPT, so it correctly filters to the JS config.
         py_config = make_lang_config(tmp_path, Language.PYTHON)
@@ -827,8 +861,10 @@ class TestUnconfiguredLanguageDetection:
     @patch("codeflash.main.parse_args")
     @patch("codeflash.main.print_codeflash_banner")
     @patch("codeflash.main.check_for_newer_minor_version")
+    @patch("codeflash.telemetry.posthog_cf.initialize_posthog")
+    @patch("codeflash.telemetry.sentry.init_sentry")
     def test_per_language_logging_shows_config_path(
-        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+        self, _sentry, _posthog, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
     ) -> None:
         py_config = make_lang_config(tmp_path, Language.PYTHON)
         mock_find_configs.return_value = [py_config]
