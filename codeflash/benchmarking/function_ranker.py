@@ -62,6 +62,11 @@ class JavaFunctionRanker:
     def __init__(self, jfr_profile: JfrProfile) -> None:
         self._jfr_profile = jfr_profile
         self._ranking = jfr_profile.get_method_ranking()
+        self._ranking_by_name: dict[str, dict] = {}
+        for entry in self._ranking:
+            name = entry["method_name"]
+            if name not in self._ranking_by_name:
+                self._ranking_by_name[name] = entry
 
     def get_function_stats_summary(self, function_to_optimize: FunctionToOptimize) -> dict | None:
         for entry in self._ranking:
@@ -81,8 +86,10 @@ class JavaFunctionRanker:
         return None
 
     def get_function_addressable_time(self, function_to_optimize: FunctionToOptimize) -> float:
-        stats = self.get_function_stats_summary(function_to_optimize)
-        return stats["addressable_time_ns"] if stats else 0.0
+        entry = self._ranking_by_name.get(function_to_optimize.function_name)
+        if entry is None:
+            return 0.0
+        return self._jfr_profile.get_addressable_time_ns(entry["class_name"], entry["method_name"])
 
     def rank_functions(
         self, functions_to_optimize: list[FunctionToOptimize], min_functions: int = 5
