@@ -100,9 +100,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
             full_args = parse_args()
             full_args = process_pyproject_config(full_args)
             full_args.previous_checkpoint_functions = None
-            logger.info(
-                "Detected %s project, routing to Optimizer instead of Python tracer", detected_language.value
-            )
+            logger.info("Detected %s project, routing to Optimizer instead of Python tracer", detected_language.value)
             optimizer.run_with_args(full_args)
             return ArgumentParser()
 
