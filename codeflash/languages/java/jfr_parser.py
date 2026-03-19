@@ -4,6 +4,7 @@ import json
 import logging
 import shutil
 import subprocess
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -81,6 +82,16 @@ class JfrProfile:
         if not events:
             events = data.get("events", [])
 
+        # Cache package matching results to avoid repeated checks
+        package_match_cache: dict[str, bool] = {}
+
+        def matches_packages_cached(method_key: str | None) -> bool:
+            if method_key is None:
+                return False
+            if method_key not in package_match_cache:
+                package_match_cache[method_key] = self._matches_packages(method_key)
+            return package_match_cache[method_key]
+
         for event in events:
             if event.get("type") != "jdk.ExecutionSample":
                 continue
@@ -92,40 +103,48 @@ class JfrProfile:
 
             self._total_samples += 1
 
+            # Precompute keys for all frames in this stack to avoid repeated conversions
+            keys = [self._frame_to_key(f) for f in frames]
+
             # Top-of-stack = own time
-            top_frame = frames[0]
-            top_method_key = self._frame_to_key(top_frame)
-            if top_method_key and self._matches_packages(top_method_key):
+            top_method_key = keys[0] if keys else None
+            if matches_packages_cached(top_method_key):
                 self._method_samples[top_method_key] = self._method_samples.get(top_method_key, 0) + 1
-                self._store_method_info(top_method_key, top_frame)
+                self._store_method_info(top_method_key, frames[0])
 
             # Build caller-callee relationships from adjacent frames
-            for i in range(len(frames) - 1):
-                callee_key = self._frame_to_key(frames[i])
-                caller_key = self._frame_to_key(frames[i + 1])
-                if callee_key and caller_key and self._matches_packages(callee_key):
+            for i in range(len(keys) - 1):
+                callee_key = keys[i]
+                caller_key = keys[i + 1]
+                if callee_key and caller_key and matches_packages_cached(callee_key):
                     callee_callers = self._caller_map.setdefault(callee_key, {})
                     callee_callers[caller_key] = callee_callers.get(caller_key, 0) + 1
 
         # Estimate recording duration from event timestamps
         if events:
-            timestamps = []
+            min_ts = None
+            max_ts = None
             for event in events:
-                start_time = event.get("values", {}).get("startTime")
-                if start_time:
-                    try:
-                        # JFR timestamps are in ISO format or epoch nanos
-                        if isinstance(start_time, str):
-                            from datetime import datetime
-
-                            dt = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
-                            timestamps.append(int(dt.timestamp() * 1_000_000_000))
-                        elif isinstance(start_time, (int, float)):
-                            timestamps.append(int(start_time))
-                    except (ValueError, TypeError):
+                try:
+                    start_time = event.get("values", {}).get("startTime")
+                    if not start_time:
                         continue
-            if len(timestamps) >= 2:
-                self._recording_duration_ns = max(timestamps) - min(timestamps)
+                    # JFR timestamps are in ISO format or epoch nanos
+                    if isinstance(start_time, str):
+                        dt = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+                        ts = int(dt.timestamp() * 1_000_000_000)
+                    elif isinstance(start_time, (int, float)):
+                        ts = int(start_time)
+                    else:
+                        continue
+                    if min_ts is None or ts < min_ts:
+                        min_ts = ts
+                    if max_ts is None or ts > max_ts:
+                        max_ts = ts
+                except (ValueError, TypeError):
+                    continue
+            if min_ts is not None and max_ts is not None:
+                self._recording_duration_ns = max_ts - min_ts
 
     def _frame_to_key(self, frame: dict[str, Any]) -> str | None:
         method = frame.get("method", {})
