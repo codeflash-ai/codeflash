@@ -6,57 +6,33 @@ import java.util.List;
 public class Workload {
 
     public static int computeSum(int n) {
-        if (n <= 0) {
-            return 0;
+        int sum = 0;
+        for (int i = 0; i < n; i++) {
+            sum += i;
         }
-        long nl = n;
-        long result = (nl * (nl - 1)) / 2;
-        return (int) result;
+        return sum;
     }
 
     public static String repeatString(String s, int count) {
-        StringBuilder sb = new StringBuilder();
+        String result = "";
         for (int i = 0; i < count; i++) {
-            sb.append(s);
+            result = result + s;
         }
-        return sb.toString();
+        return result;
     }
 
     public static List<Integer> filterEvens(List<Integer> numbers) {
-        // Pre-size result to avoid repeated resizes. Keep same behavior for null input (will NPE).
-        List<Integer> result = new ArrayList<>(numbers.size());
-
-        // Use indexed loop for RandomAccess lists (e.g., ArrayList) to avoid iterator allocation,
-        // but fall back to iterator-based (enhanced for) loop for non-random-access lists
-        // to prevent O(n^2) behavior on LinkedList.
-        if (numbers instanceof java.util.RandomAccess) {
-            for (int i = 0, sz = numbers.size(); i < sz; i++) {
-                Integer num = numbers.get(i);
-                if ((num & 1) == 0) { // faster parity check than modulus
-                    result.add(num);
-                }
-            }
-        } else {
-            for (Integer n : numbers) {
-                if ((n & 1) == 0) {
-                    result.add(n);
-                }
+        List<Integer> result = new ArrayList<>();
+        for (int n : numbers) {
+            if (n % 2 == 0) {
+                result.add(n);
             }
         }
         return result;
     }
 
     public int instanceMethod(int x, int y) {
-        // Inline computeSum logic to avoid the static method call overhead on the hot path.
-        int sum;
-        if (x <= 0) {
-            sum = 0;
-        } else {
-            long nl = x;
-            long result = (nl * (nl - 1)) >> 1;
-            sum = (int) result;
-        }
-        return x * y + sum;
+        return x * y + computeSum(x);
     }
 
     public static void main(String[] args) {
