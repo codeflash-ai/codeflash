@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import tomlkit
@@ -65,6 +66,38 @@ class TestFindAllConfigFiles:
         assert len(result) == 1
         assert result[0].language == Language.PYTHON
         assert result[0].config_path == subdir / "pyproject.toml"
+
+    def test_finds_package_json_with_codeflash_section(self, tmp_path: Path, monkeypatch) -> None:
+        pkg = {"codeflash": {"moduleRoot": "src"}}
+        (tmp_path / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        result = find_all_config_files()
+        assert len(result) == 1
+        assert result[0].language == Language.JAVASCRIPT
+        assert result[0].config_path == tmp_path / "package.json"
+
+    def test_finds_all_three_config_types(self, tmp_path: Path, monkeypatch) -> None:
+        write_toml(tmp_path / "pyproject.toml", {"tool": {"codeflash": {"module-root": "src"}}})
+        write_toml(tmp_path / "codeflash.toml", {"tool": {"codeflash": {"module-root": "src/main/java"}}})
+        pkg = {"codeflash": {"moduleRoot": "src"}}
+        (tmp_path / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        result = find_all_config_files()
+        assert len(result) == 3
+        languages = {r.language for r in result}
+        assert languages == {Language.PYTHON, Language.JAVA, Language.JAVASCRIPT}
+
+    def test_malformed_toml_skipped(self, tmp_path: Path, monkeypatch) -> None:
+        (tmp_path / "codeflash.toml").write_text("not valid [toml", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        result = find_all_config_files()
+        assert len(result) == 0
+
+    def test_missing_codeflash_section_skipped(self, tmp_path: Path, monkeypatch) -> None:
+        write_toml(tmp_path / "codeflash.toml", {"tool": {"other": {"key": "value"}}})
+        monkeypatch.chdir(tmp_path)
+        result = find_all_config_files()
+        assert len(result) == 0
 
 
 def test_find_all_functions_uses_registry_not_singleton() -> None:

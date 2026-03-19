@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from argparse import Namespace
 from pathlib import Path
@@ -187,6 +188,17 @@ def make_lang_config(tmp_path: Path, language: Language, subdir: str = "") -> La
             config={"module_root": str(src), "tests_root": str(tests)},
             config_path=config_path,
             language=Language.PYTHON,
+        )
+    if language == Language.JAVASCRIPT:
+        src = tmp_path / subdir / "src" if subdir else tmp_path / "src"
+        tests = tmp_path / subdir / "tests" if subdir else tmp_path / "tests"
+        src.mkdir(parents=True, exist_ok=True)
+        tests.mkdir(parents=True, exist_ok=True)
+        config_path = tmp_path / subdir / "package.json" if subdir else tmp_path / "package.json"
+        return LanguageConfig(
+            config={"module_root": str(src), "tests_root": str(tests)},
+            config_path=config_path,
+            language=Language.JAVASCRIPT,
         )
     src = tmp_path / subdir / "src" / "main" / "java" if subdir else tmp_path / "src" / "main" / "java"
     tests = tmp_path / subdir / "src" / "test" / "java" if subdir else tmp_path / "src" / "test" / "java"
@@ -593,6 +605,112 @@ class TestCLIPathRouting:
         main()
 
         assert mock_run.call_count == 2
+
+    @patch("codeflash.main.ask_should_use_checkpoint_get_functions", return_value=[])
+    @patch("codeflash.main.env_utils.check_formatter_installed", return_value=True)
+    @patch("codeflash.main.handle_optimize_all_arg_parsing", side_effect=lambda args: args)
+    @patch("codeflash.optimization.optimizer.run_with_args")
+    @patch("codeflash.main.find_all_config_files")
+    @patch("codeflash.main.parse_args")
+    @patch("codeflash.main.print_codeflash_banner")
+    @patch("codeflash.main.check_for_newer_minor_version")
+    def test_file_flag_typescript_extension(
+        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+    ) -> None:
+        # .tsx maps to Language.TYPESCRIPT, which is distinct from Language.JAVASCRIPT.
+        # When no TYPESCRIPT config exists, all configs run (fallback behavior).
+        py_config = make_lang_config(tmp_path, Language.PYTHON)
+        js_config = make_lang_config(tmp_path, Language.JAVASCRIPT, subdir="js-proj")
+        mock_find_configs.return_value = [py_config, js_config]
+        mock_parse_args.return_value = make_base_args(file="path/to/Component.tsx", disable_telemetry=False)
+
+        from codeflash.main import main
+
+        main()
+
+        # No TYPESCRIPT config exists, so all configs run (same as unknown extension)
+        assert mock_run.call_count == 2
+
+    @patch("codeflash.main.ask_should_use_checkpoint_get_functions", return_value=[])
+    @patch("codeflash.main.env_utils.check_formatter_installed", return_value=True)
+    @patch("codeflash.main.handle_optimize_all_arg_parsing", side_effect=lambda args: args)
+    @patch("codeflash.optimization.optimizer.run_with_args")
+    @patch("codeflash.main.find_all_config_files")
+    @patch("codeflash.main.parse_args")
+    @patch("codeflash.main.print_codeflash_banner")
+    @patch("codeflash.main.check_for_newer_minor_version")
+    def test_file_flag_jsx_extension(
+        self, _ver, _banner, mock_parse_args, mock_find_configs, mock_run, _handle_all, _fmt, _ckpt, tmp_path: Path
+    ) -> None:
+        # .jsx maps to Language.JAVASCRIPT, so it correctly filters to the JS config.
+        py_config = make_lang_config(tmp_path, Language.PYTHON)
+        js_config = make_lang_config(tmp_path, Language.JAVASCRIPT, subdir="js-proj")
+        mock_find_configs.return_value = [py_config, js_config]
+        mock_parse_args.return_value = make_base_args(file="path/to/Widget.jsx", disable_telemetry=False)
+
+        from codeflash.main import main
+
+        main()
+
+        assert mock_run.call_count == 1
+
+
+class TestDirectFunctionCoverage:
+    @patch("subprocess.run")
+    def test_get_changed_file_paths_returns_diff_files(self, mock_subprocess) -> None:
+        from codeflash.main import get_changed_file_paths
+
+        mock_subprocess.return_value = MagicMock(returncode=0, stdout="src/main.py\nsrc/App.java\n")
+        result = get_changed_file_paths()
+        assert len(result) == 2
+        assert Path("src/main.py") in result
+        assert Path("src/App.java") in result
+
+    @patch("subprocess.run")
+    def test_get_changed_file_paths_returns_empty_on_failure(self, mock_subprocess) -> None:
+        from codeflash.main import get_changed_file_paths
+
+        mock_subprocess.return_value = MagicMock(returncode=1, stdout="")
+        result = get_changed_file_paths()
+        assert result == []
+
+    def test_detect_project_for_language_java(self, tmp_path: Path) -> None:
+        from codeflash.main import detect_project_for_language
+
+        with (
+            patch(
+                "codeflash.setup.detector._detect_java_module_root",
+                return_value=(tmp_path / "src/main/java", "pom.xml"),
+            ),
+            patch(
+                "codeflash.setup.detector._detect_tests_root",
+                return_value=(tmp_path / "src/test/java", "maven"),
+            ),
+            patch("codeflash.setup.detector._detect_test_runner", return_value=("maven", "pom.xml")),
+            patch("codeflash.setup.detector._detect_formatter", return_value=([], None)),
+            patch("codeflash.setup.detector._detect_ignore_paths", return_value=([], None)),
+        ):
+            result = detect_project_for_language(Language.JAVA, tmp_path)
+            assert result is not None
+            assert result.language == "java"
+
+    def test_detect_project_for_language_unsupported(self) -> None:
+        from codeflash.main import detect_project_for_language
+
+        mock_lang = MagicMock()
+        mock_lang.value = "rust"
+        try:
+            detect_project_for_language(mock_lang, Path("/tmp"))
+            assert False, "Should have raised ValueError"
+        except ValueError as e:
+            assert "No auto-detection available" in str(e)
+
+    def test_empty_config_no_module_root(self, tmp_path: Path) -> None:
+        config: dict = {}
+        result = normalize_toml_config(config, tmp_path / "codeflash.toml")
+        assert result["formatter_cmds"] == []
+        assert result["disable_telemetry"] is False
+        assert "module_root" not in result
 
 
 class TestNormalizeTomlConfig:
