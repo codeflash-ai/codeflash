@@ -272,7 +272,7 @@ class InitDecorator(ast.NodeTransformer):
                 defaults=[],
             ),
             body=cast(
-                list[ast.stmt],
+                "list[ast.stmt]",
                 [
                     ast.Return(
                         value=ast.Call(
@@ -283,7 +283,7 @@ class InitDecorator(ast.NodeTransformer):
                     )
                 ],
             ),
-            decorator_list=cast(list[ast.expr], []),
+            decorator_list=cast("list[ast.expr]", []),
             returns=None,
         )
 
