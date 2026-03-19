@@ -92,14 +92,14 @@ jobs:
             Before doing any work, assess the PR scope:
 
             1. Run `gh pr diff ${{ github.event.pull_request.number }} --name-only` to get changed files.
-            2. Classify as TRIVIAL if ALL changed files are:
-               - Config/CI files (.github/, .tessl/, *.toml, *.lock, *.json, *.yml, *.yaml)
-               - Documentation (*.md, docs/)
-               - Non-production code (demos/, experiments/, code_to_optimize/)
-               - Only whitespace, formatting, or comment changes
+            2. Run `gh pr diff ${{ github.event.pull_request.number }} --stat` to get the total lines changed.
+            3. Classify the PR into one of these categories:
+               - TRIVIAL: ALL changed files are config/CI (.github/, .tessl/, *.toml, *.lock, *.json, *.yml, *.yaml), documentation (*.md, docs/), non-production code (demos/, experiments/, code_to_optimize/), or only whitespace/formatting/comment changes.
+               - SMALL: ≤ 50 lines of production code changed (excluding tests, config, lock files)
+               - LARGE: > 50 lines of production code changed
 
             If TRIVIAL: post a single comment "No substantive code changes to review." and stop — do not execute any further steps.
-            Otherwise: continue with the full review below.
+            Otherwise: record the size (SMALL or LARGE) and continue. Later steps will adapt their depth based on this.
             </step>
 
             <step name="lint_and_typecheck">
@@ -135,11 +135,18 @@ jobs:
             </step>
 
             <step name="review">
-            Review the diff (`gh pr diff ${{ github.event.pull_request.number }}`) for:
+            Review the diff (`gh pr diff ${{ github.event.pull_request.number }}`).
+
+            SCOPE RULES:
+            - Only read files that appear in the diff. Do NOT explore the broader codebase unless a specific function call in the diff requires understanding its definition.
+            - Match review depth to PR size: SMALL PRs get a focused correctness check; LARGE PRs get the full review below.
+            - For codeflash-ai[bot] optimization PRs: focus on whether the optimization is correct and the speedup claim is credible. Keep the review concise — a short correctness verdict, not a multi-paragraph essay.
+
+            Check for:
             1. Bugs that will crash at runtime
             2. Security vulnerabilities
             3. Breaking API changes
-            4. Design issues:
+            4. Design issues (LARGE PRs only):
                - Is logic placed in the right module? (e.g., language-specific logic belongs in `languages/<lang>/`, not in the base optimizer)
                - Are fixes addressing the root cause or just papering over symptoms? (e.g., hardcoding a list of imports vs having the AI service handle it)
                - Is language-agnostic config being stored in a language-specific file? (e.g., storing general config in `pyproject.toml` which is Python-exclusive)
@@ -154,7 +161,13 @@ jobs:
             </step>
 
             <step name="duplicate_detection">
-            Check whether this PR introduces code that duplicates logic already present elsewhere in the repository — including across languages. Focus on finding true duplicates, not just similar-looking code.
+            Check whether this PR introduces code that duplicates logic already present elsewhere in the repository.
+
+            Depth depends on PR size:
+            - SMALL PRs: Quick check — search for any new function names defined elsewhere using Grep. Only flag exact or near-exact duplicates. Skip the cross-module deep dive.
+            - LARGE PRs: Full analysis as described below.
+
+            Full analysis (LARGE PRs only):
 
             1. Get changed source files (excluding tests and config):
                `git diff --name-only origin/main...HEAD -- '*.py' '*.js' '*.ts' '*.java' | grep -v -E '(test_|_test\.(py|js|ts)|\.test\.(js|ts)|\.spec\.(js|ts)|conftest\.py|/tests/|/test/|/__tests__/)' | grep -v -E '^(\.github/|code_to_optimize/|\.tessl/|node_modules/)'`
@@ -181,6 +194,8 @@ jobs:
             </step>
 
             <step name="coverage">
+            Skip this step for SMALL PRs — only run for LARGE PRs.
+
             Analyze test coverage for changed files:
 
             1. Get changed Python files (excluding tests): `git diff --name-only origin/main...HEAD -- '*.py' | grep -v test`
