@@ -11,17 +11,18 @@ def run_test(expected_improvement_pct: int) -> bool:
     logging.basicConfig(level=logging.INFO)
     fixture_dir = (pathlib.Path(__file__).parent.parent / "test_languages" / "fixtures" / "java_tracer_e2e").resolve()
 
+    # Ensure test directory exists (git doesn't track empty dirs)
+    test_java_dir = fixture_dir / "src" / "test" / "java"
+    test_java_dir.mkdir(parents=True, exist_ok=True)
+
     # Clean up leftover replay tests from previous runs
-    replay_dir = fixture_dir / "src" / "test" / "java" / "codeflash" / "replay"
+    replay_dir = test_java_dir / "codeflash" / "replay"
     if replay_dir.exists():
         shutil.rmtree(replay_dir, ignore_errors=True)
-    # Also clean up any instrumented test files
-    test_java_dir = fixture_dir / "src" / "test" / "java"
-    if test_java_dir.exists():
-        for f in test_java_dir.rglob("*__perfinstrumented*.java"):
-            f.unlink(missing_ok=True)
-        for f in test_java_dir.rglob("*__perfonlyinstrumented*.java"):
-            f.unlink(missing_ok=True)
+    for f in test_java_dir.rglob("*__perfinstrumented*.java"):
+        f.unlink(missing_ok=True)
+    for f in test_java_dir.rglob("*__perfonlyinstrumented*.java"):
+        f.unlink(missing_ok=True)
 
     # Compile the workload
     classes_dir = fixture_dir / "target" / "classes"
