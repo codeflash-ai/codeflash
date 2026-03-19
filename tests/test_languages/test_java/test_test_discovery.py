@@ -557,3 +557,87 @@ public class CalculatorTests {
         # CalculatorTests should match Calculator class
         assert len(result) > 0
         assert "Calculator.add" in result
+
+
+class TestReplayTestDiscovery:
+    """Tests for replay test file discovery."""
+
+    def test_discover_replay_tests(self, tmp_path: Path):
+        """Test that replay test files are discovered and mapped to source functions."""
+        src_file = tmp_path / "Calculator.java"
+        src_file.write_text(
+            """
+public class Calculator {
+    public int add(int a, int b) { return a + b; }
+    public int multiply(int a, int b) { return a * b; }
+}
+"""
+        )
+
+        test_dir = tmp_path / "test"
+        test_dir.mkdir()
+        replay_test = test_dir / "ReplayTest_Calculator.java"
+        replay_test.write_text(
+            """// codeflash:functions=add,multiply
+// codeflash:trace_file=/tmp/trace.db
+// codeflash:classname=Calculator
+package codeflash.replay;
+
+import org.junit.jupiter.api.Test;
+import com.codeflash.ReplayHelper;
+
+class ReplayTest_Calculator {
+    private static final ReplayHelper helper =
+        new ReplayHelper("/tmp/trace.db");
+
+    @Test void replay_add_0() throws Exception {
+        helper.replay("Calculator", "add", "(II)I", 0);
+    }
+
+    @Test void replay_multiply_0() throws Exception {
+        helper.replay("Calculator", "multiply", "(II)I", 0);
+    }
+}
+"""
+        )
+
+        source_functions = discover_functions_from_source(src_file.read_text(), file_path=src_file)
+        result = discover_tests(test_dir, source_functions)
+
+        assert "Calculator.add" in result
+        assert "Calculator.multiply" in result
+        assert len(result["Calculator.add"]) == 2  # Both replay_add_0 and replay_multiply_0 mapped
+        assert len(result["Calculator.multiply"]) == 2
+
+    def test_replay_tests_not_confused_with_regular_tests(self, tmp_path: Path):
+        """Test that files without codeflash metadata are not treated as replay tests."""
+        src_file = tmp_path / "Calculator.java"
+        src_file.write_text(
+            """
+public class Calculator {
+    public int add(int a, int b) { return a + b; }
+}
+"""
+        )
+
+        test_dir = tmp_path / "test"
+        test_dir.mkdir()
+        regular_test = test_dir / "CalculatorTest.java"
+        regular_test.write_text(
+            """
+import org.junit.jupiter.api.Test;
+public class CalculatorTest {
+    @Test
+    public void testAdd() {
+        Calculator calc = new Calculator();
+        calc.add(1, 2);
+    }
+}
+"""
+        )
+
+        source_functions = discover_functions_from_source(src_file.read_text(), file_path=src_file)
+        result = discover_tests(test_dir, source_functions)
+
+        # Should find through regular static analysis, not replay metadata
+        assert "Calculator.add" in result

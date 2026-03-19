@@ -465,6 +465,10 @@ def find_all_functions_in_file(file_path: Path) -> dict[Path, list[FunctionToOpt
 def get_all_replay_test_functions(
     replay_test: list[Path], test_cfg: TestConfig, project_root_path: Path
 ) -> tuple[dict[Path, list[FunctionToOptimize]], Path]:
+    # Check if these are Java replay tests
+    if replay_test and replay_test[0].suffix == ".java":
+        return _get_java_replay_test_functions(replay_test, test_cfg, project_root_path)
+
     trace_file_path: Path | None = None
     for replay_test_file in replay_test:
         try:
@@ -547,6 +551,75 @@ def get_all_replay_test_functions(
             filtered_valid_functions[file_path] = filtered_list
 
     return dict(filtered_valid_functions), trace_file_path
+
+
+def _get_java_replay_test_functions(
+    replay_test: list[Path], test_cfg: TestConfig, project_root_path: Path
+) -> tuple[dict[Path, list[FunctionToOptimize]], Path]:
+    """Parse Java replay test files to extract functions and trace file path."""
+    from codeflash.languages.java.replay_test import parse_replay_test_metadata
+
+    trace_file_path: Path | None = None
+    functions: dict[Path, list[FunctionToOptimize]] = defaultdict(list)
+
+    for test_file in replay_test:
+        metadata = parse_replay_test_metadata(test_file)
+
+        if trace_file_path is None and "trace_file" in metadata:
+            trace_file_path = Path(metadata["trace_file"])
+
+        classname = metadata.get("classname", "")
+        function_names = metadata.get("functions", "").split(",")
+
+        if not classname or not function_names:
+            continue
+
+        # Resolve the source file from the classname (e.g., "com.aerospike.benchmarks.Main")
+        class_parts = classname.split(".")
+        # Try matching by full package path first (e.g., com/aerospike/benchmarks/Main.java)
+        expected_path_suffix = "/".join(class_parts) + ".java"
+        source_file = None
+        for java_file in project_root_path.rglob("*.java"):
+            if java_file.as_posix().endswith(expected_path_suffix):
+                source_file = java_file
+                break
+        # Fall back to simple name match
+        if source_file is None:
+            for java_file in project_root_path.rglob("*.java"):
+                if java_file.stem == class_parts[-1]:
+                    source_file = java_file
+                    break
+
+        if source_file is None:
+            logger.warning(f"Could not find source file for class {classname}")
+            continue
+
+        # Use Java discovery to find functions in the source file
+        from codeflash.languages.registry import get_language_support
+
+        lang_support = get_language_support(source_file)
+        source_code = source_file.read_text(encoding="utf-8")
+        all_functions = lang_support.discover_functions(source_code, source_file)
+
+        for func in all_functions:
+            if func.function_name in function_names:
+                functions[source_file].append(func)
+
+    if trace_file_path is None:
+        logger.error("Could not find trace_file_path in Java replay test files.")
+        from codeflash.code_utils.code_utils import exit_with_message
+
+        exit_with_message("Could not find trace_file_path in Java replay test files.")
+        raise AssertionError("Unreachable")
+
+    if not trace_file_path.exists():
+        from codeflash.code_utils.code_utils import exit_with_message
+
+        exit_with_message(
+            f"Trace file not found: {trace_file_path}\nPlease regenerate the replay test by re-running the tracer."
+        )
+
+    return dict(functions), trace_file_path
 
 
 def is_git_repo(file_path: str) -> bool:

@@ -1,0 +1,167 @@
+from __future__ import annotations
+
+import json
+import logging
+import os
+import subprocess
+from typing import TYPE_CHECKING
+
+from codeflash.languages.java.line_profiler import find_agent_jar
+from codeflash.languages.java.replay_test import generate_replay_tests
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+# --add-opens flags needed for Kryo serialization on Java 16+
+ADD_OPENS_FLAGS = (
+    "--add-opens=java.base/java.util=ALL-UNNAMED "
+    "--add-opens=java.base/java.lang=ALL-UNNAMED "
+    "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED "
+    "--add-opens=java.base/java.math=ALL-UNNAMED "
+    "--add-opens=java.base/java.io=ALL-UNNAMED "
+    "--add-opens=java.base/java.net=ALL-UNNAMED "
+    "--add-opens=java.base/java.time=ALL-UNNAMED"
+)
+
+
+class JavaTracer:
+    """Orchestrates two-stage Java tracing: JFR profiling + argument capture."""
+
+    def trace(
+        self,
+        java_command: list[str],
+        trace_db_path: Path,
+        packages: list[str],
+        project_root: Path | None = None,
+        max_function_count: int = 256,
+        timeout: int = 0,
+    ) -> tuple[Path, Path]:
+        """Run the Java program twice: once for profiling, once for arg capture.
+
+        Returns (trace_db_path, jfr_file_path).
+        """
+        jfr_file = trace_db_path.with_suffix(".jfr")
+        trace_db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Stage 1: JFR Profiling
+        logger.info("Stage 1: Running JFR profiling...")
+        jfr_env = self.build_jfr_env(jfr_file)
+        try:
+            subprocess.run(java_command, env=jfr_env, check=False, timeout=timeout or None)
+        except subprocess.TimeoutExpired:
+            logger.warning("JFR profiling stage timed out after %d seconds", timeout)
+
+        if not jfr_file.exists():
+            logger.warning("JFR file was not created at %s", jfr_file)
+
+        # Stage 2: Argument Capture via Tracing Agent
+        logger.info("Stage 2: Running argument capture...")
+        config_path = self.create_tracer_config(
+            trace_db_path, packages, project_root=project_root, max_function_count=max_function_count, timeout=timeout
+        )
+        agent_env = self.build_agent_env(config_path)
+        try:
+            subprocess.run(java_command, env=agent_env, check=False, timeout=timeout or None)
+        except subprocess.TimeoutExpired:
+            logger.warning("Argument capture stage timed out after %d seconds", timeout)
+
+        if not trace_db_path.exists():
+            logger.error("Trace database was not created at %s", trace_db_path)
+
+        return trace_db_path, jfr_file
+
+    def create_tracer_config(
+        self,
+        trace_db_path: Path,
+        packages: list[str],
+        project_root: Path | None = None,
+        max_function_count: int = 256,
+        timeout: int = 0,
+    ) -> Path:
+        config = {
+            "dbPath": str(trace_db_path.resolve()),
+            "packages": packages,
+            "excludePackages": [],
+            "maxFunctionCount": max_function_count,
+            "timeout": timeout,
+            "projectRoot": str(project_root.resolve()) if project_root else "",
+        }
+
+        config_path = trace_db_path.with_suffix(".config.json")
+        config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
+        return config_path
+
+    def build_jfr_env(self, jfr_file: Path) -> dict[str, str]:
+        env = os.environ.copy()
+        jfr_opts = f"-XX:StartFlightRecording=filename={jfr_file.resolve()},settings=profile,dumponexit=true"
+        existing = env.get("JAVA_TOOL_OPTIONS", "")
+        env["JAVA_TOOL_OPTIONS"] = f"{existing} {jfr_opts}".strip()
+        return env
+
+    def build_agent_env(self, config_path: Path) -> dict[str, str]:
+        env = os.environ.copy()
+        agent_jar = find_agent_jar()
+        if agent_jar is None:
+            msg = "codeflash-runtime JAR not found, cannot run tracing agent"
+            raise FileNotFoundError(msg)
+
+        agent_opts = f"{ADD_OPENS_FLAGS} -javaagent:{agent_jar}=trace={config_path.resolve()}"
+        existing = env.get("JAVA_TOOL_OPTIONS", "")
+        env["JAVA_TOOL_OPTIONS"] = f"{existing} {agent_opts}".strip()
+        return env
+
+    @staticmethod
+    def detect_packages_from_source(module_root: Path) -> list[str]:
+        """Scan Java files for package declarations and return unique package prefixes."""
+        packages: set[str] = set()
+        for java_file in module_root.rglob("*.java"):
+            try:
+                with java_file.open("r", encoding="utf-8") as f:
+                    for line in f:
+                        stripped = line.strip()
+                        if stripped.startswith("package "):
+                            pkg = stripped[8:].rstrip(";").strip()
+                            # Use top two levels as prefix (e.g., "com.aerospike")
+                            parts = pkg.split(".")
+                            prefix = ".".join(parts[: min(2, len(parts))])
+                            packages.add(prefix)
+                            break
+                        if stripped and not stripped.startswith("//") and not stripped.startswith("/*"):
+                            break
+            except (OSError, UnicodeDecodeError):
+                continue
+
+        return sorted(packages)
+
+
+def run_java_tracer(
+    java_command: list[str],
+    trace_db_path: Path,
+    packages: list[str],
+    project_root: Path,
+    output_dir: Path,
+    max_function_count: int = 256,
+    timeout: int = 0,
+    max_run_count: int = 256,
+) -> tuple[Path, Path, int]:
+    """High-level entry point: trace a Java command and generate replay tests.
+
+    Returns (trace_db_path, jfr_file, test_count).
+    """
+    tracer = JavaTracer()
+    trace_db, jfr_file = tracer.trace(
+        java_command=java_command,
+        trace_db_path=trace_db_path,
+        packages=packages,
+        project_root=project_root,
+        max_function_count=max_function_count,
+        timeout=timeout,
+    )
+
+    test_count = generate_replay_tests(
+        trace_db_path=trace_db, output_dir=output_dir, project_root=project_root, max_run_count=max_run_count
+    )
+
+    return trace_db, jfr_file, test_count

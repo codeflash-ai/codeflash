@@ -19,13 +19,20 @@ import java.lang.instrument.Instrumentation;
  */
 public class AgentDispatcher {
 
+    static boolean isTracerMode(String agentArgs) {
+        return agentArgs != null
+                && (agentArgs.startsWith("trace=") || agentArgs.contains(",trace="));
+    }
+
     static boolean isProfilerMode(String agentArgs) {
         return agentArgs != null
                 && (agentArgs.startsWith("config=") || agentArgs.contains(",config="));
     }
 
     public static void premain(String agentArgs, Instrumentation inst) throws Exception {
-        if (isProfilerMode(agentArgs)) {
+        if (isTracerMode(agentArgs)) {
+            com.codeflash.tracer.TracerAgent.premain(agentArgs, inst);
+        } else if (isProfilerMode(agentArgs)) {
             com.codeflash.profiler.ProfilerAgent.premain(agentArgs, inst);
         } else {
             org.jacoco.agent.rt.internal_0e20598.PreMain.premain(agentArgs, inst);

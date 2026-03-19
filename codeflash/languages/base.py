@@ -115,6 +115,7 @@ class TestInfo:
     test_name: str
     test_file: Path
     test_class: str | None = None
+    is_replay: bool = False
 
     @property
     def full_test_path(self) -> str:

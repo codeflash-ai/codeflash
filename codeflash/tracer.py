@@ -35,39 +35,79 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def main(args: Namespace | None = None) -> ArgumentParser:
-    # For non-Python languages, detect early and route to Optimizer
-    # Java, JavaScript, and TypeScript use their own test runners (Maven/JUnit, Jest)
-    # and should not go through Python tracing
-    if args is None and "--file" in sys.argv:
+def _detect_non_python_language(args: Namespace | None) -> object | None:
+    """Detect if the project uses a non-Python language from --file or config.
+
+    Returns a Language enum value if non-Python detected, None otherwise.
+    """
+    from codeflash.languages.base import Language
+
+    # Method 1: Check --file argument for non-Python file extension
+    file_path_to_check: Path | None = None
+    if args is not None and getattr(args, "file", None):
+        file_path_to_check = Path(args.file)
+    elif args is None and "--file" in sys.argv:
         try:
             file_idx = sys.argv.index("--file")
             if file_idx + 1 < len(sys.argv):
-                file_path = Path(sys.argv[file_idx + 1])
-                if file_path.exists():
-                    from codeflash.languages import Language, get_language_support
+                file_path_to_check = Path(sys.argv[file_idx + 1])
+        except (IndexError, ValueError):
+            pass
 
-                    lang_support = get_language_support(file_path)
-                    detected_language = lang_support.language
+    if file_path_to_check is not None and file_path_to_check.exists():
+        try:
+            from codeflash.languages import get_language_support
 
-                    if detected_language in (Language.JAVA, Language.JAVASCRIPT, Language.TYPESCRIPT):
-                        # Parse and process args like main.py does
-                        from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
+            lang_support = get_language_support(file_path_to_check)
+            if lang_support.language != Language.PYTHON:
+                return lang_support.language
+        except Exception:
+            pass
 
-                        full_args = parse_args()
-                        full_args = process_pyproject_config(full_args)
-                        # Set checkpoint functions to None (no checkpoint for single-file optimization)
-                        full_args.previous_checkpoint_functions = None
+    # Method 2: Check project config for language field
+    try:
+        from codeflash.code_utils.config_parser import parse_config_file
 
-                        from codeflash.optimization import optimizer
+        config_file = getattr(args, "config_file_path", None) if args else None
+        config, _ = parse_config_file(config_file)
+        lang_str = config.get("language", "")
+        if lang_str == "java":
+            return Language.JAVA
+        if lang_str in ("javascript", "typescript"):
+            return Language(lang_str)
+    except Exception:
+        pass
 
-                        logger.info(
-                            "Detected %s file, routing to Optimizer instead of Python tracer", detected_language.value
-                        )
-                        optimizer.run_with_args(full_args)
-                        return ArgumentParser()  # Return dummy parser since we're done
-        except (IndexError, OSError, Exception):
-            pass  # Fall through to normal tracing if detection fails
+    return None
+
+
+def main(args: Namespace | None = None) -> ArgumentParser:
+    # For non-Python languages, detect early and route to the appropriate handler.
+    # Java, JavaScript, and TypeScript use their own test runners (Maven/JUnit, Jest)
+    # and should not go through Python tracing.
+    #
+    # Detection methods (in priority order):
+    # 1. --file pointing to a .java/.js/.ts file
+    # 2. language field in project config (codeflash.toml or pyproject.toml)
+    detected_language = _detect_non_python_language(args)
+    if detected_language is not None:
+        from codeflash.languages.base import Language
+
+        if detected_language in (Language.JAVASCRIPT, Language.TYPESCRIPT):
+            from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
+            from codeflash.optimization import optimizer
+
+            full_args = parse_args()
+            full_args = process_pyproject_config(full_args)
+            full_args.previous_checkpoint_functions = None
+            logger.info(
+                "Detected %s project, routing to Optimizer instead of Python tracer", detected_language.value
+            )
+            optimizer.run_with_args(full_args)
+            return ArgumentParser()
+
+        if detected_language == Language.JAVA:
+            return _run_java_tracer(args)
 
     parser = ArgumentParser(allow_abbrev=False)
     parser.add_argument("-o", "--outfile", dest="outfile", help="Save trace to <outfile>", default="codeflash.trace")
@@ -276,6 +316,93 @@ def main(args: Namespace | None = None) -> ArgumentParser:
     else:
         parser.print_usage()
     return parser
+
+
+def _run_java_tracer(existing_args: Namespace | None = None) -> ArgumentParser:
+    """Run the Java two-stage tracer (JFR + argument capture) and optionally optimize."""
+    from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
+
+    if existing_args is not None:
+        full_args = process_pyproject_config(existing_args)
+    else:
+        full_args = parse_args()
+        full_args = process_pyproject_config(full_args)
+    config = full_args
+
+    trace_only = getattr(config, "trace_only", False)
+    project_root = Path(getattr(config, "project_root", ".")).resolve()
+    module_root = Path(getattr(config, "module_root", project_root)).resolve()
+    max_function_count = getattr(config, "max_function_count", 256)
+    timeout = int(getattr(config, "tracer_timeout", 0) or 0)
+
+    from codeflash.code_utils.code_utils import get_run_tmp_file
+    from codeflash.languages.java.build_tools import find_test_root
+    from codeflash.languages.java.tracer import JavaTracer, run_java_tracer
+
+    tracer = JavaTracer()
+    packages = tracer.detect_packages_from_source(module_root)
+    if not packages:
+        logger.warning("No Java packages detected in %s, will trace all non-JDK classes", module_root)
+
+    trace_db_path = get_run_tmp_file(Path("java_trace.db"))
+
+    # Place replay tests in the project's test source tree so Maven/Gradle can compile them
+    test_root = find_test_root(project_root)
+    if test_root:
+        output_dir = test_root / "codeflash" / "replay"
+    else:
+        output_dir = project_root / "src" / "test" / "java" / "codeflash" / "replay"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Remaining args after our flags are the Java command
+    remaining = sys.argv[sys.argv.index("--file") + 2 :] if "--file" in sys.argv else sys.argv[1:]
+    java_command = remaining if remaining else ["java", "-jar", "app.jar"]
+
+    trace_db, jfr_file, test_count = run_java_tracer(
+        java_command=java_command,
+        trace_db_path=trace_db_path,
+        packages=packages,
+        project_root=project_root,
+        output_dir=output_dir,
+        max_function_count=max_function_count,
+        timeout=timeout,
+    )
+
+    console.print(f"[bold green]Java tracing complete:[/] {test_count} replay test files generated")
+    if jfr_file.exists():
+        console.print(f"  JFR profile: {jfr_file}")
+    if trace_db.exists():
+        console.print(f"  Trace DB: {trace_db}")
+
+    if not trace_only and test_count > 0:
+        from codeflash.code_utils.config_consts import EffortLevel
+        from codeflash.languages import set_current_language
+        from codeflash.languages.base import Language
+        from codeflash.optimization import optimizer
+
+        set_current_language(Language.JAVA)
+
+        replay_test_paths = [p.resolve() for p in output_dir.glob("*.java")]
+        config.replay_test = replay_test_paths
+        config.previous_checkpoint_functions = None
+        config.effort = EffortLevel.HIGH.value
+        config.no_pr = True
+        config.file = None
+        config.function = None
+        config.test_project_root = project_root
+        optimizer.run_with_args(config)
+
+        # Clean up generated replay tests
+        for replay_test_path in replay_test_paths:
+            Path(replay_test_path).unlink(missing_ok=True)
+        # Clean up codeflash/replay directory if empty
+        if output_dir.exists() and not any(output_dir.iterdir()):
+            output_dir.rmdir()
+            codeflash_dir = output_dir.parent
+            if codeflash_dir.exists() and codeflash_dir.name == "codeflash" and not any(codeflash_dir.iterdir()):
+                codeflash_dir.rmdir()
+
+    return ArgumentParser()
 
 
 if __name__ == "__main__":
