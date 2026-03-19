@@ -100,9 +100,15 @@ def parse_config_file(
 
     # Pick the closest toml config (pyproject.toml or codeflash.toml).
     # Java projects use codeflash.toml; Python projects use pyproject.toml.
+    # When both exist at the same depth, prefer codeflash.toml (dedicated config).
     closest_toml_path = None
     if pyproject_toml_path and codeflash_toml_path:
-        closest_toml_path = max(pyproject_toml_path, codeflash_toml_path, key=lambda p: len(p.parent.parts))
+        pyproject_depth = len(pyproject_toml_path.parent.parts)
+        codeflash_depth = len(codeflash_toml_path.parent.parts)
+        if codeflash_depth >= pyproject_depth:
+            closest_toml_path = codeflash_toml_path
+        else:
+            closest_toml_path = pyproject_toml_path
     else:
         closest_toml_path = pyproject_toml_path or codeflash_toml_path
 
@@ -134,8 +140,13 @@ def parse_config_file(
                     )
             return config, path
 
-    # Fall back to pyproject.toml
-    config_file_path = find_pyproject_toml(config_file_path)
+    # Fall back to the closest toml config file (pyproject.toml or codeflash.toml).
+    # Use closest_toml_path when available to respect codeflash.toml over pyproject.toml
+    # when codeflash.toml is closer to CWD (e.g., Java projects in a Python repo).
+    if config_file_path is None and closest_toml_path is not None:
+        config_file_path = closest_toml_path
+    else:
+        config_file_path = find_pyproject_toml(config_file_path)
     try:
         with config_file_path.open("rb") as f:
             data = tomlkit.parse(f.read())
