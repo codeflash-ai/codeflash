@@ -279,8 +279,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                 from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
                 from codeflash.cli_cmds.console import paneled_text
                 from codeflash.cli_cmds.console_constants import CODEFLASH_LOGO
-                from codeflash.languages import set_current_language
-                from codeflash.languages import Language
+                from codeflash.languages import Language, set_current_language
                 from codeflash.telemetry import posthog_cf
                 from codeflash.telemetry.sentry import init_sentry
 
@@ -358,7 +357,12 @@ def _run_java_tracer(existing_args: Namespace | None = None) -> ArgumentParser:
 
     # Remaining args after our flags are the Java command
     remaining = sys.argv[sys.argv.index("--file") + 2 :] if "--file" in sys.argv else sys.argv[1:]
-    java_command = remaining if remaining else ["java", "-jar", "app.jar"]
+    if not remaining:
+        console.print("[bold red]Error:[/] No Java command provided.")
+        console.print("Usage: codeflash optimize java -jar target/my-app.jar [args...]")
+        console.print("       codeflash optimize java -cp target/classes com.example.Main [args...]")
+        sys.exit(1)
+    java_command = remaining
 
     trace_db, jfr_file, test_count = run_java_tracer(
         java_command=java_command,
@@ -378,8 +382,7 @@ def _run_java_tracer(existing_args: Namespace | None = None) -> ArgumentParser:
 
     if not trace_only and test_count > 0:
         from codeflash.code_utils.config_consts import EffortLevel
-        from codeflash.languages import set_current_language
-        from codeflash.languages import Language
+        from codeflash.languages import Language, set_current_language
         from codeflash.optimization import optimizer
 
         set_current_language(Language.JAVA)

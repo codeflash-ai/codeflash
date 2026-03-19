@@ -120,22 +120,10 @@ def _parse_replay_metadata(test_file: Path) -> dict[str, str] | None:
 
     Returns metadata dict if it's a replay test, None otherwise.
     """
-    try:
-        metadata: dict[str, str] = {}
-        with test_file.open("r", encoding="utf-8") as f:
-            for line in f:
-                stripped = line.strip()
-                if not stripped.startswith("// codeflash:"):
-                    if stripped and not stripped.startswith("//"):
-                        break
-                    continue
-                key_value = stripped[len("// codeflash:") :]
-                if "=" in key_value:
-                    key, value = key_value.split("=", 1)
-                    metadata[key] = value
-        return metadata if "functions" in metadata else None
-    except Exception:
-        return None
+    from codeflash.languages.java.replay_test import parse_replay_test_metadata
+
+    metadata = parse_replay_test_metadata(test_file)
+    return metadata if "functions" in metadata else None
 
 
 def _discover_replay_tests(

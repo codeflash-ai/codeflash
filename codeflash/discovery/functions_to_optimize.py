@@ -569,7 +569,7 @@ def _get_java_replay_test_functions(
             trace_file_path = Path(metadata["trace_file"])
 
         classname = metadata.get("classname", "")
-        function_names = metadata.get("functions", "").split(",")
+        function_names = [f.strip() for f in metadata.get("functions", "").split(",") if f.strip()]
 
         if not classname or not function_names:
             continue
