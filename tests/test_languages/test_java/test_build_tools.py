@@ -2,16 +2,17 @@
 
 import os
 from pathlib import Path
+from unittest.mock import patch
 
 from codeflash.languages.java.build_tools import (
     BuildTool,
-    add_codeflash_dependency_to_pom,
     detect_build_tool,
-    find_maven_executable,
     find_source_root,
     find_test_root,
     get_project_info,
 )
+from codeflash.languages.java.gradle_strategy import GradleStrategy
+from codeflash.languages.java.maven_strategy import MavenStrategy, add_codeflash_dependency
 from codeflash.languages.java.test_runner import _extract_modules_from_pom_content
 
 
@@ -175,8 +176,8 @@ class TestMavenExecutable:
 
     def test_find_maven_executable_system(self):
         """Test finding system Maven."""
-        # This test may pass or fail depending on whether Maven is installed
-        mvn = find_maven_executable()
+        strategy = MavenStrategy()
+        mvn = strategy.find_executable(Path())
         # We can't assert it exists, just that the function doesn't crash
         if mvn:
             assert "mvn" in mvn.lower() or "maven" in mvn.lower()
@@ -188,10 +189,8 @@ class TestMavenExecutable:
         mvnw_path.write_text("#!/bin/bash\necho 'Maven Wrapper'")
         mvnw_path.chmod(0o755)
 
-        # Change to tmp_path
-        monkeypatch.chdir(tmp_path)
-
-        mvn = find_maven_executable()
+        strategy = MavenStrategy()
+        mvn = strategy.find_executable(tmp_path)
         # Should find the wrapper
         assert mvn is not None
 
@@ -377,24 +376,27 @@ class TestMavenProfiles:
 
 
 class TestMavenExecutableWithProjectRoot:
-    """Tests for find_maven_executable with project_root parameter."""
+    """Tests for MavenStrategy.find_executable with project_root parameter."""
 
     def test_find_wrapper_in_project_root(self, tmp_path):
         mvnw_path = tmp_path / "mvnw"
         mvnw_path.write_text("#!/bin/bash\necho Maven Wrapper")
         mvnw_path.chmod(0o755)
 
-        result = find_maven_executable(project_root=tmp_path)
+        strategy = MavenStrategy()
+        result = strategy.find_executable(tmp_path)
         assert result is not None
         assert str(tmp_path / "mvnw") in result
 
-    def test_fallback_to_cwd_when_no_project_root(self):
-        result = find_maven_executable()
-        # Should not crash even without project_root
+    def test_fallback_to_cwd(self, tmp_path):
+        strategy = MavenStrategy()
+        result = strategy.find_executable(tmp_path)
+        # Should not crash even with a dir that has no wrapper
 
-    def test_project_root_none_uses_cwd(self):
-        result = find_maven_executable(project_root=None)
-        # Should not crash
+    def test_with_nonexistent_wrapper(self, tmp_path):
+        strategy = MavenStrategy()
+        result = strategy.find_executable(tmp_path)
+        # Should not crash, may return system mvn or None
 
 
 class TestCustomSourceDirectoryDetection:
@@ -460,7 +462,7 @@ class TestCustomSourceDirectoryDetection:
 
 
 class TestAddCodeflashDependencyToPom:
-    """Tests for add_codeflash_dependency_to_pom, including stale system-scope replacement."""
+    """Tests for add_codeflash_dependency, including stale system-scope replacement."""
 
     def test_adds_dependency_to_clean_pom(self, tmp_path):
         pom = tmp_path / "pom.xml"
@@ -477,7 +479,7 @@ class TestAddCodeflashDependencyToPom:
             "</project>\n",
             encoding="utf-8",
         )
-        assert add_codeflash_dependency_to_pom(pom) is True
+        assert add_codeflash_dependency(pom) is True
         content = pom.read_text(encoding="utf-8")
         assert "codeflash-runtime" in content
         assert "<scope>test</scope>" in content
@@ -499,7 +501,7 @@ class TestAddCodeflashDependencyToPom:
             "</project>\n",
             encoding="utf-8",
         )
-        assert add_codeflash_dependency_to_pom(pom) is True
+        assert add_codeflash_dependency(pom) is True
         content = pom.read_text(encoding="utf-8")
         assert "<scope>test</scope>" in content
         assert "<scope>system</scope>" not in content
@@ -523,7 +525,7 @@ class TestAddCodeflashDependencyToPom:
             "</project>\n",
             encoding="utf-8",
         )
-        assert add_codeflash_dependency_to_pom(pom) is True
+        assert add_codeflash_dependency(pom) is True
         content = pom.read_text(encoding="utf-8")
         assert "<scope>test</scope>" in content
         assert "<scope>system</scope>" not in content
@@ -545,17 +547,97 @@ class TestAddCodeflashDependencyToPom:
             "</project>\n",
             encoding="utf-8",
         )
-        assert add_codeflash_dependency_to_pom(pom) is True
+        assert add_codeflash_dependency(pom) is True
         content = pom.read_text(encoding="utf-8")
         assert content.count("codeflash-runtime") == 1
 
     def test_returns_false_for_missing_pom(self, tmp_path):
         pom = tmp_path / "pom.xml"
-        assert add_codeflash_dependency_to_pom(pom) is False
+        assert add_codeflash_dependency(pom) is False
 
     def test_returns_false_when_no_dependencies_tag(self, tmp_path):
         pom = tmp_path / "pom.xml"
         pom.write_text(
             '<?xml version="1.0"?>\n<project><modelVersion>4.0.0</modelVersion></project>\n', encoding="utf-8"
         )
-        assert add_codeflash_dependency_to_pom(pom) is False
+        assert add_codeflash_dependency(pom) is False
+
+
+class TestGradleEnsureRuntimeMultiModule:
+    """Tests that ensure_runtime adds the dependency to the correct module build file."""
+
+    def _make_multi_module_project(self, tmp_path):
+        """Create a multi-module Gradle project with submodule build files."""
+        # Root
+        (tmp_path / "build.gradle.kts").write_text("// root build\n", encoding="utf-8")
+        (tmp_path / "settings.gradle.kts").write_text('include("clients", "streams")', encoding="utf-8")
+        (tmp_path / "gradlew").write_text("#!/bin/sh\necho gradle", encoding="utf-8")
+        (tmp_path / "gradlew").chmod(0o755)
+        # Submodule build files with a dependencies block
+        for module in ["clients", "streams"]:
+            module_dir = tmp_path / module
+            module_dir.mkdir()
+            (module_dir / "build.gradle.kts").write_text(
+                'plugins {\n    java\n}\n\ndependencies {\n    testImplementation("junit:junit:4.13.2")\n}\n',
+                encoding="utf-8",
+            )
+        return tmp_path
+
+    def test_adds_dependency_to_correct_module_build_file(self, tmp_path):
+        """When test_module='streams', the dependency must be added to streams/build.gradle.kts."""
+        project = self._make_multi_module_project(tmp_path)
+
+        strategy = GradleStrategy()
+        # Provide a fake runtime JAR
+        fake_jar = tmp_path / "fake-runtime.jar"
+        fake_jar.write_bytes(b"PK\x03\x04")  # minimal zip header
+
+        with patch.object(strategy, "find_runtime_jar", return_value=fake_jar):
+            result = strategy.ensure_runtime(project, test_module="streams")
+
+        assert result is True
+        # Dependency should be in streams/build.gradle.kts
+        streams_build = (project / "streams" / "build.gradle.kts").read_text(encoding="utf-8")
+        assert "codeflash-runtime" in streams_build
+        # And NOT in clients/build.gradle.kts or root build.gradle.kts
+        clients_build = (project / "clients" / "build.gradle.kts").read_text(encoding="utf-8")
+        assert "codeflash-runtime" not in clients_build
+        root_build = (project / "build.gradle.kts").read_text(encoding="utf-8")
+        assert "codeflash-runtime" not in root_build
+
+    def test_adds_dependency_to_root_when_no_module(self, tmp_path):
+        """When test_module=None, the dependency is added to the root build file."""
+        project = self._make_multi_module_project(tmp_path)
+
+        strategy = GradleStrategy()
+        fake_jar = tmp_path / "fake-runtime.jar"
+        fake_jar.write_bytes(b"PK\x03\x04")
+
+        with patch.object(strategy, "find_runtime_jar", return_value=fake_jar):
+            result = strategy.ensure_runtime(project, test_module=None)
+
+        assert result is True
+        root_build = (project / "build.gradle.kts").read_text(encoding="utf-8")
+        assert "codeflash-runtime" in root_build
+
+    def test_adds_dependency_to_nested_module(self, tmp_path):
+        """When test_module='connect:runtime', the dep goes to connect/runtime/build.gradle.kts."""
+        project = self._make_multi_module_project(tmp_path)
+        # Add nested module
+        nested = tmp_path / "connect" / "runtime"
+        nested.mkdir(parents=True)
+        (nested / "build.gradle.kts").write_text(
+            'plugins {\n    java\n}\n\ndependencies {\n    testImplementation("junit:junit:4.13.2")\n}\n',
+            encoding="utf-8",
+        )
+
+        strategy = GradleStrategy()
+        fake_jar = tmp_path / "fake-runtime.jar"
+        fake_jar.write_bytes(b"PK\x03\x04")
+
+        with patch.object(strategy, "find_runtime_jar", return_value=fake_jar):
+            result = strategy.ensure_runtime(project, test_module="connect:runtime")
+
+        assert result is True
+        nested_build = (nested / "build.gradle.kts").read_text(encoding="utf-8")
+        assert "codeflash-runtime" in nested_build
