@@ -47,9 +47,10 @@ def generate_replay_tests(
 
             test_methods_code: list[str] = []
             class_function_names: list[str] = []
+            # Global test counter to avoid duplicate method names for overloaded Java methods
+            method_name_counters: dict[str, int] = {}
 
             for method_name, descriptor in method_list:
-                # Count invocations for this method
                 count_result = conn.execute(
                     "SELECT COUNT(*) FROM function_calls WHERE classname = ? AND function = ? AND descriptor = ?",
                     (classname, method_name, descriptor),
@@ -60,21 +61,18 @@ def generate_replay_tests(
                 safe_method = _sanitize_identifier(method_name)
 
                 for i in range(invocation_count):
+                    # Use a global counter per method name to avoid collisions on overloaded methods
+                    test_idx = method_name_counters.get(safe_method, 0)
+                    method_name_counters[safe_method] = test_idx + 1
+
                     escaped_descriptor = descriptor.replace('"', '\\"')
-                    if test_framework == "junit4":
-                        test_methods_code.append(
-                            f"    @Test public void replay_{safe_method}_{i}() throws Exception {{\n"
-                            f'        helper.replay("{classname}", "{method_name}", '
-                            f'"{escaped_descriptor}", {i});\n'
-                            f"    }}"
-                        )
-                    else:
-                        test_methods_code.append(
-                            f"    @Test void replay_{safe_method}_{i}() throws Exception {{\n"
-                            f'        helper.replay("{classname}", "{method_name}", '
-                            f'"{escaped_descriptor}", {i});\n'
-                            f"    }}"
-                        )
+                    access = "public " if test_framework == "junit4" else ""
+                    test_methods_code.append(
+                        f"    @Test {access}void replay_{safe_method}_{test_idx}() throws Exception {{\n"
+                        f'        helper.replay("{classname}", "{method_name}", '
+                        f'"{escaped_descriptor}", {i});\n'
+                        f"    }}"
+                    )
 
             all_function_names.extend(class_function_names)
 
