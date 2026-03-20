@@ -59,6 +59,7 @@ def run_test(expected_improvement_pct: int) -> bool:
 
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUNBUFFERED"] = "1"
     logging.info(f"Running command: {' '.join(command)}")
     logging.info(f"Working directory: {fixture_dir}")
     process = subprocess.Popen(
@@ -73,13 +74,11 @@ def run_test(expected_improvement_pct: int) -> bool:
 
     output = []
     for line in process.stdout:
-        logging.info(line.strip())
+        print(line, end="", flush=True)
         output.append(line)
 
     return_code = process.wait()
     stdout = "".join(output)
-    if return_code != 0:
-        logging.error(f"Full output:\n{stdout}")
 
     if return_code != 0:
         logging.error(f"Command returned exit code {return_code}")
