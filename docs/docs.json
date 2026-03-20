@@ -71,9 +71,6 @@
             "pages": [
               "claude-code-plugin/getting-started",
               "claude-code-plugin/usage-guide",
-              "claude-code-plugin/configuration",
-              "claude-code-plugin/architecture",
-              "claude-code-plugin/hook-lifecycle",
               "claude-code-plugin/troubleshooting"
             ]
           }
