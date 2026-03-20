@@ -122,7 +122,12 @@ class JavaTracer:
 
     def build_jfr_env(self, jfr_file: Path) -> dict[str, str]:
         env = os.environ.copy()
-        jfr_opts = f"-XX:StartFlightRecording=filename={jfr_file.resolve()},settings=profile,dumponexit=true"
+        # Use profile settings with increased sampling frequency (1ms instead of default 10ms)
+        # This captures more samples for short-running programs
+        jfr_opts = (
+            f"-XX:StartFlightRecording=filename={jfr_file.resolve()},settings=profile,dumponexit=true"
+            ",jdk.ExecutionSample#period=1ms"
+        )
         existing = env.get("JAVA_TOOL_OPTIONS", "")
         env["JAVA_TOOL_OPTIONS"] = f"{existing} {jfr_opts}".strip()
         return env
