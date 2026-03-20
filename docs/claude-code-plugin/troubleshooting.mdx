@@ -1,0 +1,114 @@
+---
+title: "Troubleshooting"
+description: "Common problems and fixes for the Codeflash Claude Code plugin"
+icon: "wrench"
+sidebarTitle: "Troubleshooting"
+---
+
+## Plugin not appearing after install
+
+**Symptom**: `/plugin` doesn't show codeflash in the Installed tab.
+
+**Fix**:
+1. Verify the marketplace was added: `/plugin marketplace add codeflash-ai/codeflash-cc-plugin`
+2. Install again: `/plugin install codeflash`
+3. Check you're running Claude Code v2.1.38 or later
+
+## `/optimize` does nothing
+
+**Symptom**: Running `/optimize` produces no output or immediately returns.
+
+**Possible causes**:
+- No project config found. The agent walks from CWD to the git root looking for `pyproject.toml` or `package.json`. Make sure you're inside a git repository.
+- Codeflash CLI not installed. For Python: `pip install codeflash` in your venv. For JS/TS: `npm install --save-dev codeflash`.
+- The agent is running in the background. Check if you see "Codeflash is optimizing in the background" — results appear when the background task completes.
+
+## Permission prompts every time
+
+**Symptom**: Claude asks for permission to run codeflash on every invocation.
+
+**Fix**: Run `/setup` to add `Bash(*codeflash*)` to `.claude/settings.json`. Or add it manually:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(*codeflash*)"
+    ]
+  }
+}
+```
+
+## No venv found (Python)
+
+**Symptom**: Hook or agent reports "No Python virtual environment was found."
+
+**Fix**:
+1. Create a venv: `python3 -m venv .venv`
+2. Activate it: `source .venv/bin/activate`
+3. Install codeflash: `pip install codeflash`
+4. Restart Claude Code from within the activated venv
+
+The plugin searches for venvs in this order:
+1. `<project_dir>/.venv`
+2. `<project_dir>/venv`
+3. `<repo_root>/.venv`
+4. `<repo_root>/venv`
+
+## Codeflash not installed (JS/TS)
+
+**Symptom**: `npx codeflash --version` fails or package not found.
+
+**Fix**:
+
+```bash
+npm install --save-dev codeflash
+```
+
+Run this in the directory containing your `package.json`.
+
+## Hook not triggering after commits
+
+**Symptom**: You commit Python/JS/TS files but don't see optimization suggestions.
+
+**Check**:
+1. Verify the hook is registered: look for `hooks/hooks.json` in the plugin directory
+2. Check the debug log: `cat /tmp/codeflash-hook-debug.log`
+3. Ensure commits touch `.py`, `.js`, `.ts`, `.jsx`, or `.tsx` files
+4. The hook only detects commits made **during the current session** (after the transcript file was created). Commits from before starting Claude Code won't trigger it.
+
+## Hook triggering repeatedly
+
+**Symptom**: The hook keeps suggesting optimization for the same commits.
+
+This shouldn't happen due to deduplication (the hook tracks seen commit hashes in `$TRANSCRIPT_DIR/codeflash-seen`). If it does:
+
+1. Check the seen-marker file exists in the transcript directory
+2. Look at `/tmp/codeflash-hook-debug.log` for the dedup logic trace
+3. If commit hashes changed (e.g., amended commits), the hook treats them as new
+
+## "Attempting to repair broken tests..."
+
+<Info>
+This is **normal codeflash behavior**, not an error. Codeflash generates tests and sometimes needs to fix them. Let it continue.
+</Info>
+
+## 10-minute timeout exceeded
+
+**Symptom**: Codeflash background task times out.
+
+This can happen on large projects or with `--all`. Options:
+- Optimize specific files instead of the entire project: `/optimize src/specific_file.py`
+- Target individual functions: `/optimize src/utils.py my_function`
+- The `--all` flag scans every function, which naturally takes longer
+
+## Formatter errors
+
+**Symptom**: Codeflash fails with formatter-related errors.
+
+**Check**:
+1. Read the `formatter-cmds` (Python) or `formatterCmds` (JS/TS) in your config
+2. Verify each formatter is installed:
+   - Python: `which black` (or whichever formatter)
+   - JS/TS: `npx prettier --version` (or whichever formatter)
+3. Set `formatter-cmds = ["disabled"]` or `"formatterCmds": ["disabled"]` to skip formatting entirely
