@@ -8,7 +8,7 @@ This module writes Codeflash configuration to native config files:
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import tomlkit
 
@@ -124,7 +124,7 @@ def _write_java_build_config(project_root: Path, config: CodeflashConfig) -> tup
     return _write_gradle_properties(gradle_props_path, non_default)
 
 
-def _write_maven_properties(pom_path: Path, config: dict) -> tuple[bool, str]:
+def _write_maven_properties(pom_path: Path, config: dict[str, Any]) -> tuple[bool, str]:
     """Add codeflash.* properties to pom.xml <properties> section."""
     import xml.etree.ElementTree as ET
 
@@ -171,7 +171,7 @@ def _write_maven_properties(pom_path: Path, config: dict) -> tuple[bool, str]:
         return False, f"Failed to write Maven properties: {e}"
 
 
-def _write_gradle_properties(props_path: Path, config: dict) -> tuple[bool, str]:
+def _write_gradle_properties(props_path: Path, config: dict[str, Any]) -> tuple[bool, str]:
     """Add codeflash.* entries to gradle.properties."""
     key_map = {
         "module-root": "moduleRoot",
