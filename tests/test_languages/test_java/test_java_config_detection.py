@@ -136,7 +136,7 @@ class TestParseJavaProjectConfigStandard:
         config = parse_java_project_config(tmp_path)
         assert config is not None
         # Falls back to default paths even if they don't exist
-        assert "src/main/java" in config["module_root"]
+        assert str(tmp_path / "src" / "main" / "java") == config["module_root"]
         assert config["language"] == "java"
 
 
@@ -185,7 +185,7 @@ class TestMavenCodeflashProperties:
         config = parse_java_project_config(tmp_path)
         assert config is not None
         # Should use custom paths from properties, not auto-detected standard paths
-        assert "custom/src" in config["module_root"]
+        assert config["module_root"] == str((tmp_path / "custom" / "src").resolve())
 
     def test_no_properties_uses_defaults(self, tmp_path: Path) -> None:
         (tmp_path / "pom.xml").write_text(

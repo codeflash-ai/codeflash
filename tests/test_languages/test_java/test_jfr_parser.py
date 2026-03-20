@@ -277,6 +277,8 @@ class TestProjectRootResolution:
 
     def test_project_root_is_path_not_string(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """project_root from process_pyproject_config should be a Path for Java projects."""
+        from argparse import Namespace
+
         (tmp_path / "pom.xml").write_text("<project/>", encoding="utf-8")
         src = tmp_path / "src" / "main" / "java"
         src.mkdir(parents=True)
@@ -284,16 +286,15 @@ class TestProjectRootResolution:
         test.mkdir(parents=True)
         monkeypatch.chdir(tmp_path)
 
-        import sys
-        from argparse import Namespace
+        from codeflash.cli_cmds.cli import process_pyproject_config
 
-        sys.argv = ["codeflash", "optimize", "java", "-jar", "app.jar"]
-        from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
-
-        from codeflash.cli_cmds.cli import _build_parser
-        _build_parser.cache_clear()
-
-        args = parse_args()
+        # Create a minimal args namespace matching what parse_args produces
+        args = Namespace(
+            config_file=None, module_root=None, tests_root=None, benchmarks_root=None,
+            ignore_paths=None, pytest_cmd=None, formatter_cmds=None, disable_telemetry=None,
+            disable_imports_sorting=None, git_remote=None, override_fixtures=None,
+            benchmark=False, verbose=False, version=False, show_config=False, reset_config=False,
+        )
         args = process_pyproject_config(args)
 
         assert hasattr(args, "project_root")
