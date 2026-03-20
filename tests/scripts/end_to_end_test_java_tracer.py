@@ -59,6 +59,7 @@ def run_test(expected_improvement_pct: int) -> bool:
 
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUNBUFFERED"] = "1"
     logging.info(f"Running command: {' '.join(command)}")
     logging.info(f"Working directory: {fixture_dir}")
     process = subprocess.Popen(
@@ -73,13 +74,11 @@ def run_test(expected_improvement_pct: int) -> bool:
 
     output = []
     for line in process.stdout:
-        logging.info(line.strip())
+        print(line, end="", flush=True)
         output.append(line)
 
     return_code = process.wait()
     stdout = "".join(output)
-    if return_code != 0:
-        logging.error(f"Full output:\n{stdout}")
 
     if return_code != 0:
         logging.error(f"Command returned exit code {return_code}")
@@ -90,7 +89,7 @@ def run_test(expected_improvement_pct: int) -> bool:
         logging.error("Failed to find replay test generation message")
         return False
 
-    # Validate: replay tests were discovered
+    # Validate: replay tests were discovered (global count)
     replay_match = re.search(r"Discovered \d+ existing unit tests? and (\d+) replay tests?", stdout)
     if not replay_match:
         logging.error("Failed to find replay test discovery message")
@@ -100,6 +99,17 @@ def run_test(expected_improvement_pct: int) -> bool:
         logging.error("No replay tests discovered")
         return False
     logging.info(f"Replay tests discovered: {num_replay}")
+
+    # Validate: replay test files were used per-function
+    replay_file_match = re.search(r"Discovered \d+ existing unit test files?, (\d+) replay test files?", stdout)
+    if not replay_file_match:
+        logging.error("Failed to find per-function replay test file discovery message")
+        return False
+    num_replay_files = int(replay_file_match.group(1))
+    if num_replay_files == 0:
+        logging.error("No replay test files discovered per-function")
+        return False
+    logging.info(f"Replay test files per-function: {num_replay_files}")
 
     # Validate: at least one optimization was found
     if "⚡️ Optimization successful! 📄 " not in stdout:

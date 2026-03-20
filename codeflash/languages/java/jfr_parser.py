@@ -152,6 +152,8 @@ class JfrProfile:
         method_name = method.get("name", "")
         if not class_name or not method_name:
             return None
+        # JFR uses / separators (JVM internal format), normalize to dots for package matching
+        class_name = class_name.replace("/", ".")
         return f"{class_name}.{method_name}"
 
     def _store_method_info(self, key: str, frame: dict[str, Any]) -> None:
@@ -159,7 +161,7 @@ class JfrProfile:
             return
         method = frame.get("method", {})
         self._method_info[key] = {
-            "class_name": method.get("type", {}).get("name", ""),
+            "class_name": method.get("type", {}).get("name", "").replace("/", "."),
             "method_name": method.get("name", ""),
             "descriptor": method.get("descriptor", ""),
             "line_number": str(frame.get("lineNumber", 0)),
