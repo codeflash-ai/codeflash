@@ -12,10 +12,11 @@ keywords:
     "junit",
     "junit5",
     "tracing",
+    "zero-config",
   ]
 ---
 
-Codeflash supports Java projects using Maven or Gradle build systems. It uses a two-stage tracing approach to capture method arguments and profiling data from running Java programs, then optimizes the hottest functions.
+Codeflash supports Java projects using Maven or Gradle build systems. **No configuration file is needed** — Codeflash auto-detects your project structure from `pom.xml` or `build.gradle`.
 
 ### Prerequisites
 
@@ -23,7 +24,7 @@ Before installing Codeflash, ensure you have:
 
 1. **Java 11 or above** installed
 2. **Maven or Gradle** as your build tool
-3. **A Java project** with source code under a standard directory layout
+3. **A Java project** with source code
 
 Good to have (optional):
 
@@ -45,51 +46,15 @@ uv pip install codeflash
 ```
 
 </Step>
-<Step title="Initialize your project">
-
-Navigate to your Java project root (where `pom.xml` or `build.gradle` is) and run:
-
-```bash
-codeflash init
-```
-
-This will:
-- Detect your build tool (Maven/Gradle)
-- Find your source and test directories
-- Create a `codeflash.toml` configuration file
-
-</Step>
-<Step title="Verify setup">
-
-Check that the configuration looks correct:
-
-```bash
-cat codeflash.toml
-```
-
-You should see something like:
-
-```toml
-[tool.codeflash]
-module-root = "src/main/java"
-tests-root = "src/test/java"
-language = "java"
-```
-
-</Step>
 <Step title="Run your first optimization">
 
-Trace and optimize a running Java program:
+Navigate to your Java project root (where `pom.xml` or `build.gradle` is) and run:
 
 ```bash
 codeflash optimize java -jar target/my-app.jar
 ```
 
-Or with Maven:
-
-```bash
-codeflash optimize mvn exec:java -Dexec.mainClass="com.example.Main"
-```
+That's it — no `init` step, no config file. Codeflash detects Maven/Gradle automatically and infers source and test directories from your build files.
 
 Codeflash will:
 1. Profile your program using JFR (Java Flight Recorder)
@@ -100,6 +65,29 @@ Codeflash will:
 
 </Step>
 </Steps>
+
+<Info>
+**Zero config for standard projects.** If your project uses the standard Maven/Gradle layout (`src/main/java`, `src/test/java`), everything is auto-detected. For non-standard layouts, see the [configuration guide](/configuration/java).
+</Info>
+
+## Usage examples
+
+**Trace and optimize a JAR application:**
+```bash
+codeflash optimize java -jar target/my-app.jar --app-args
+```
+
+**Optimize a specific file and function:**
+```bash
+codeflash --file src/main/java/com/example/Utils.java --function computeHash
+```
+
+**Trace a long-running program with a timeout:**
+```bash
+codeflash optimize --timeout 30 java -jar target/my-server.jar
+```
+
+Each tracing stage runs for at most 30 seconds, then the captured data is processed.
 
 ## How it works
 

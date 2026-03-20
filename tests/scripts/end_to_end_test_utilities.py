@@ -149,8 +149,8 @@ def build_command(
     if config.function_name:
         base_command.extend(["--function", config.function_name])
 
-    # Check if config exists (pyproject.toml or codeflash.toml) - if so, don't override it
-    has_codeflash_config = (cwd / "codeflash.toml").exists()
+    # Check if config exists (pyproject.toml, pom.xml, build.gradle) - if so, don't override it
+    has_codeflash_config = (cwd / "pom.xml").exists() or (cwd / "build.gradle").exists() or (cwd / "build.gradle.kts").exists()
     if not has_codeflash_config:
         pyproject_path = cwd / "pyproject.toml"
         if pyproject_path.exists():

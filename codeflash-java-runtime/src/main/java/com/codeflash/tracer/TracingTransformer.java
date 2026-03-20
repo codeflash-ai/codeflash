@@ -22,11 +22,6 @@ public class TracingTransformer implements ClassFileTransformer {
             return null;
         }
 
-        // Skip instrumentation if we're inside a recording call (e.g., during Kryo serialization)
-        if (TraceRecorder.isRecording()) {
-            return null;
-        }
-
         // Skip internal JDK, framework, and synthetic classes
         if (className.startsWith("java/")
                 || className.startsWith("javax/")
