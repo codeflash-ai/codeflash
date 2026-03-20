@@ -380,6 +380,12 @@ def _run_java_tracer(existing_args: Namespace | None = None) -> ArgumentParser:
         sys.exit(1)
     java_command = remaining
 
+    # Detect test framework for replay test generation
+    from codeflash.languages.java.config import detect_java_project
+
+    java_config = detect_java_project(project_root)
+    test_framework = java_config.test_framework if java_config else "junit5"
+
     trace_db, jfr_file, test_count = run_java_tracer(
         java_command=java_command,
         trace_db_path=trace_db_path,
@@ -388,6 +394,7 @@ def _run_java_tracer(existing_args: Namespace | None = None) -> ArgumentParser:
         output_dir=output_dir,
         max_function_count=max_function_count,
         timeout=timeout,
+        test_framework=test_framework,
     )
 
     console.print(f"[bold green]Java tracing complete:[/] {test_count} replay test files generated")

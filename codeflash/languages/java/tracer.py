@@ -180,6 +180,7 @@ def run_java_tracer(
     max_function_count: int = 256,
     timeout: int = 0,
     max_run_count: int = 256,
+    test_framework: str = "junit5",
 ) -> tuple[Path, Path, int]:
     """High-level entry point: trace a Java command and generate replay tests.
 
@@ -196,7 +197,11 @@ def run_java_tracer(
     )
 
     test_count = generate_replay_tests(
-        trace_db_path=trace_db, output_dir=output_dir, project_root=project_root, max_run_count=max_run_count
+        trace_db_path=trace_db,
+        output_dir=output_dir,
+        project_root=project_root,
+        max_run_count=max_run_count,
+        test_framework=test_framework,
     )
 
     return trace_db, jfr_file, test_count
