@@ -151,6 +151,8 @@ def process_pyproject_config(args: Namespace) -> Namespace:
         else:
             raise AssertionError("--tests-root must be specified")
     assert Path(args.tests_root).is_dir(), f"--tests-root {args.tests_root} must be a valid directory"
+    if getattr(args, "trace_tests", False) and args.benchmark:
+        exit_with_message("--trace-tests and --benchmark are mutually exclusive", error_on_exit=True)
     if args.benchmark:
         assert args.benchmarks_root is not None, "--benchmarks-root must be specified when running with --benchmark"
         assert Path(args.benchmarks_root).is_dir(), (
@@ -440,6 +442,11 @@ def _build_parser() -> ArgumentParser:
         "--benchmarks-root",
         type=str,
         help="Path to the directory of the project, where all the pytest-benchmark tests are located.",
+    )
+    parser.add_argument(
+        "--trace-tests",
+        action="store_true",
+        help="Trace top-ranked functions via existing unit tests and optimize with high effort",
     )
     parser.add_argument("--no-draft", default=False, action="store_true", help="Skip optimization for draft PRs")
     parser.add_argument("--worktree", default=False, action="store_true", help="Use worktree for optimization")

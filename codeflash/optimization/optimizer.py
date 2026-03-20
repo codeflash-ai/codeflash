@@ -141,6 +141,153 @@ class Optimizer:
         console.rule()
         return function_benchmark_timings, total_benchmark_timings
 
+    def run_trace_tests(
+        self,
+        file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]],
+        globally_ranked_functions: list[tuple[Path, FunctionToOptimize]],
+        function_to_tests: dict[str, set[FunctionCalledInTest]],
+    ) -> tuple[dict[str, dict[BenchmarkKey, float]], dict[BenchmarkKey, float], dict[str, int]]:
+        from codeflash.benchmarking.instrument_codeflash_trace import instrument_codeflash_trace_decorator
+        from codeflash.benchmarking.plugin.plugin import CodeFlashBenchmarkPlugin
+        from codeflash.benchmarking.replay_test import generate_replay_test
+        from codeflash.benchmarking.trace_unit_tests import time_unit_tests_pytest, trace_unit_tests_pytest
+
+        function_benchmark_timings: dict[str, dict[BenchmarkKey, float]] = {}
+        total_benchmark_timings: dict[BenchmarkKey, float] = {}
+        baseline_timings: dict[str, int] = {}
+
+        top_functions = globally_ranked_functions[:HIGH_EFFORT_TOP_N]
+
+        # Collect test files for the top functions
+        test_files: set[Path] = set()
+        for _fp, fn in top_functions:
+            qn = fn.qualified_name
+            if qn in function_to_tests:
+                for called_in_test in function_to_tests[qn]:
+                    test_files.add(called_in_test.tests_in_file.test_file)
+
+        if not test_files:
+            logger.warning("No unit tests found for top-ranked functions, skipping trace-tests instrumentation")
+            return function_benchmark_timings, total_benchmark_timings, baseline_timings
+
+        console.rule()
+        logger.info(f"Running trace-tests mode on top {len(top_functions)} functions with {len(test_files)} test files")
+
+        # Baseline timing run (clean, no instrumentation)
+        baseline_output = get_run_tmp_file(suffix=".json")
+        try:
+            with progress_bar(
+                "Collecting baseline test timings", transient=True, revert_to_print=bool(get_pr_number())
+            ):
+                baseline_timings = time_unit_tests_pytest(
+                    sorted(test_files), self.args.project_root, baseline_output, timeout=300
+                )
+            if baseline_timings:
+                logger.info(f"Collected baseline timings for {len(baseline_timings)} tests")
+            else:
+                logger.warning("No baseline timings collected")
+        finally:
+            if baseline_output.exists():
+                baseline_output.unlink()
+
+        # Build subset of functions for instrumentation
+        top_func_set = {(fp, fn.qualified_name) for fp, fn in top_functions}
+        subset_file_to_funcs: dict[Path, list[FunctionToOptimize]] = defaultdict(list)
+        for fp, fns in file_to_funcs_to_optimize.items():
+            for fn in fns:
+                if (fp, fn.qualified_name) in top_func_set:
+                    subset_file_to_funcs[fp].append(fn)
+
+        # Back up original source code
+        file_path_to_source_code: dict[Path, str] = {}
+        for file_path in subset_file_to_funcs:
+            file_path_to_source_code[file_path] = file_path.read_text(encoding="utf-8")
+
+        try:
+            with progress_bar(
+                "Tracing unit tests for replay test generation", transient=True, revert_to_print=bool(get_pr_number())
+            ):
+                instrument_codeflash_trace_decorator(dict(subset_file_to_funcs))
+
+                self.trace_file = get_run_tmp_file(suffix=".trace")
+                if self.trace_file.exists():
+                    self.trace_file.unlink()
+
+                self.replay_tests_dir = Path(
+                    tempfile.mkdtemp(prefix="codeflash_replay_tests_", dir=self.args.tests_root)
+                )
+
+                trace_unit_tests_pytest(self.args.tests_root, self.args.project_root, self.trace_file, timeout=600)
+
+                replay_count = generate_replay_test(self.trace_file, self.replay_tests_dir)
+
+                if replay_count == 0:
+                    logger.info("No valid trace data captured from unit tests, continuing optimization")
+                else:
+                    logger.info(f"Generated {replay_count} replay tests from unit test traces")
+                    function_benchmark_timings = CodeFlashBenchmarkPlugin.get_function_benchmark_timings(
+                        self.trace_file
+                    )
+                    total_benchmark_timings = CodeFlashBenchmarkPlugin.get_benchmark_timings(self.trace_file)
+        except Exception as e:
+            logger.info(f"Error while tracing unit tests: {e}")
+            logger.info("Trace data will not be available for this run.")
+        finally:
+            for file_path, source_code in file_path_to_source_code.items():
+                file_path.write_text(source_code, encoding="utf-8")
+
+        console.rule()
+        return function_benchmark_timings, total_benchmark_timings, baseline_timings
+
+    def run_after_timing(
+        self, function_to_optimize: FunctionToOptimize, function_to_tests: dict[str, set[FunctionCalledInTest]]
+    ) -> dict[str, int]:
+        from codeflash.benchmarking.trace_unit_tests import time_unit_tests_pytest
+
+        qn = function_to_optimize.qualified_name
+        test_files: set[Path] = set()
+        if qn in function_to_tests:
+            for called_in_test in function_to_tests[qn]:
+                test_files.add(called_in_test.tests_in_file.test_file)
+
+        if not test_files:
+            return {}
+
+        output_json = get_run_tmp_file(suffix=".json")
+        try:
+            after_timings = time_unit_tests_pytest(sorted(test_files), self.args.project_root, output_json, timeout=300)
+        finally:
+            if output_json.exists():
+                output_json.unlink()
+
+        return after_timings
+
+    def report_trace_test_speedup(
+        self, function_to_optimize: FunctionToOptimize, baseline_timings: dict[str, int], after_timings: dict[str, int]
+    ) -> None:
+        overlapping = set(baseline_timings.keys()) & set(after_timings.keys())
+        if not overlapping:
+            logger.info(
+                f"No overlapping test timings for {function_to_optimize.qualified_name}, cannot compute speedup"
+            )
+            return
+
+        total_baseline_ns = 0
+        total_after_ns = 0
+        for node_id in overlapping:
+            total_baseline_ns += baseline_timings[node_id]
+            total_after_ns += after_timings[node_id]
+
+        if total_baseline_ns > 0:
+            speedup = (total_baseline_ns - total_after_ns) / total_baseline_ns
+            speedup_ratio = total_baseline_ns / total_after_ns if total_after_ns > 0 else float("inf")
+            logger.info(
+                f"Unit test speedup for {function_to_optimize.qualified_name}: "
+                f"{speedup:.1%} faster ({speedup_ratio:.2f}x) across {len(overlapping)} tests"
+            )
+        else:
+            logger.info(f"Baseline timing is zero for {function_to_optimize.qualified_name}, cannot compute speedup")
+
     def get_optimizable_functions(self) -> tuple[dict[Path, list[FunctionToOptimize]], int, Path | None]:
         """Discover functions to optimize."""
         from codeflash.discovery.functions_to_optimize import get_functions_to_optimize
@@ -575,6 +722,16 @@ class Optimizer:
             globally_ranked_functions = self.rank_all_functions_globally(
                 file_to_funcs_to_optimize, trace_file_path, call_graph=resolver, test_count_cache=test_count_cache
             )
+
+            # TRACE-TESTS MODE: trace top functions via unit tests, collect baseline timings
+            baseline_timings: dict[str, int] = {}
+            if getattr(self.args, "trace_tests", False):
+                function_benchmark_timings, total_benchmark_timings, baseline_timings = self.run_trace_tests(
+                    file_to_funcs_to_optimize, globally_ranked_functions, function_to_tests
+                )
+                globally_ranked_functions = globally_ranked_functions[:HIGH_EFFORT_TOP_N]
+                self.args.benchmark = True
+
             # Cache for module preparation (avoid re-parsing same files)
             prepared_modules: dict[Path, tuple[dict[Path, ValidCode], ast.Module | None]] = {}
 
@@ -608,7 +765,9 @@ class Optimizer:
                 test_suffix = f", {test_count} tests" if test_count else ""
 
                 effort_override: str | None = None
-                if i < HIGH_EFFORT_TOP_N and self.args.effort == EffortLevel.MEDIUM.value:
+                if getattr(self.args, "trace_tests", False):
+                    effort_override = EffortLevel.HIGH.value
+                elif i < HIGH_EFFORT_TOP_N and self.args.effort == EffortLevel.MEDIUM.value:
                     effort_override = EffortLevel.HIGH.value
                     logger.debug(
                         f"Escalating effort for {function_to_optimize.qualified_name} from medium to high"
@@ -644,6 +803,10 @@ class Optimizer:
                         )
                     if is_successful(best_optimization):
                         optimizations_found += 1
+                        # Trace-tests: measure post-optimization timing and report speedup
+                        if getattr(self.args, "trace_tests", False) and baseline_timings:
+                            after_timings = self.run_after_timing(function_to_optimize, function_to_tests)
+                            self.report_trace_test_speedup(function_to_optimize, baseline_timings, after_timings)
                         # create a diff patch for successful optimization
                         if self.current_worktree and not is_subagent_mode():
                             best_opt = best_optimization.unwrap()
