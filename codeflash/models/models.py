@@ -741,7 +741,7 @@ class VerificationType(str, Enum):
     INIT_STATE_HELPER = "init_state_helper"  # Correctness verification for helper class instance attributes after init
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class InvocationId:
     test_module_path: str  # The fully qualified name of the test module
     test_class_name: Optional[str]  # The name of the class where the test is defined
@@ -821,7 +821,7 @@ class InvocationId:
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FunctionTestInvocation:
     loop_index: int  # The loop index of the function invocation, starts at 1
     id: InvocationId  # The fully qualified name of the function invocation (id)

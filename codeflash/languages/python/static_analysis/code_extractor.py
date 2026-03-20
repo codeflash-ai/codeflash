@@ -25,6 +25,9 @@ if TYPE_CHECKING:
     from codeflash.models.models import FunctionSource
 
 
+_SENTINEL = object()
+
+
 class GlobalFunctionCollector(cst.CSTVisitor):
     """Collects all module-level function definitions (not inside classes or other functions)."""
 
@@ -540,6 +543,59 @@ def resolve_star_import(module_name: str, project_root: Path) -> set[str]:
         return set()
 
 
+def gather_source_imports(
+    src_module_code: str | cst.Module, src_path: Path, project_root: Path
+) -> GatherImportsVisitor | None:
+    """Pre-process source module to gather its imports. Returns None if no imports found.
+
+    This is the expensive part of add_needed_imports_from_module (CST traversal of src).
+    When adding imports from the same source to multiple destinations, call this once
+    and pass the result to add_needed_imports_from_module via gathered_imports.
+    """
+    src_module_and_package: ModuleNameAndPackage = calculate_module_and_package(project_root, src_path)
+    try:
+        if isinstance(src_module_code, cst.Module):
+            src_module = src_module_code.visit(FutureAliasedImportTransformer())
+        else:
+            src_module = cst.parse_module(src_module_code).visit(FutureAliasedImportTransformer())
+
+        has_module_level_imports = any(
+            isinstance(s, (cst.Import, cst.ImportFrom))
+            for stmt in src_module.body
+            if isinstance(stmt, cst.SimpleStatementLine)
+            for s in stmt.body
+        )
+
+        if not has_module_level_imports:
+            return None
+
+        gatherer: GatherImportsVisitor = GatherImportsVisitor(
+            CodemodContext(
+                filename=src_path.name,
+                full_module_name=src_module_and_package.name,
+                full_package_name=src_module_and_package.package,
+            )
+        )
+
+        module_level_only = src_module.with_changes(
+            body=[stmt for stmt in src_module.body if not isinstance(stmt, (cst.FunctionDef, cst.ClassDef))]
+        )
+        module_level_only.visit(gatherer)
+
+        if (
+            not gatherer.module_imports
+            and not gatherer.object_mapping
+            and not gatherer.module_aliases
+            and not gatherer.alias_mapping
+        ):
+            return None
+
+        return gatherer
+    except Exception as e:
+        logger.error(f"Error parsing source module code: {e}")
+        return None
+
+
 def add_needed_imports_from_module(
     src_module_code: str | cst.Module,
     dst_module_code: str | cst.Module,
@@ -548,6 +604,7 @@ def add_needed_imports_from_module(
     project_root: Path,
     helper_functions: list[FunctionSource] | None = None,
     helper_functions_fqn: set[str] | None = None,
+    gathered_imports: GatherImportsVisitor | None | object = _SENTINEL,
 ) -> str:
     """Add all needed and used source module code imports to the destination module code, and return it."""
     if not helper_functions_fqn:
@@ -560,7 +617,6 @@ def add_needed_imports_from_module(
         # Keep Module-input fallback formatting aligned with transformed_module.code.lstrip("\n").
         dst_code_fallback = dst_module_code.code.lstrip("\n")
 
-    src_module_and_package: ModuleNameAndPackage = calculate_module_and_package(project_root, src_path)
     dst_module_and_package: ModuleNameAndPackage = calculate_module_and_package(project_root, dst_path)
 
     dst_context: CodemodContext = CodemodContext(
@@ -568,50 +624,14 @@ def add_needed_imports_from_module(
         full_module_name=dst_module_and_package.name,
         full_package_name=dst_module_and_package.package,
     )
-    try:
-        if isinstance(src_module_code, cst.Module):
-            src_module = src_module_code.visit(FutureAliasedImportTransformer())
-        else:
-            src_module = cst.parse_module(src_module_code).visit(FutureAliasedImportTransformer())
 
-        # Early exit: check if source has any imports at module level
-        has_module_level_imports = any(
-            isinstance(s, (cst.Import, cst.ImportFrom))
-            for stmt in src_module.body
-            if isinstance(stmt, cst.SimpleStatementLine)
-            for s in stmt.body
-        )
+    # Use pre-computed gatherer if provided, otherwise compute on the fly
+    if gathered_imports is _SENTINEL:
+        gatherer = gather_source_imports(src_module_code, src_path, project_root)
+    else:
+        gatherer = gathered_imports
 
-        if not has_module_level_imports:
-            return dst_code_fallback
-
-        gatherer: GatherImportsVisitor = GatherImportsVisitor(
-            CodemodContext(
-                filename=src_path.name,
-                full_module_name=src_module_and_package.name,
-                full_package_name=src_module_and_package.package,
-            )
-        )
-
-        # Exclude function/class bodies so GatherImportsVisitor only sees module-level imports.
-        # Nested imports (inside functions) are part of function logic and must not be
-        # scheduled for add/remove — RemoveImportsVisitor would strip them as "unused".
-        module_level_only = src_module.with_changes(
-            body=[stmt for stmt in src_module.body if not isinstance(stmt, (cst.FunctionDef, cst.ClassDef))]
-        )
-        module_level_only.visit(gatherer)
-
-        # Early exit: if no imports were gathered, return destination as-is
-        if (
-            not gatherer.module_imports
-            and not gatherer.object_mapping
-            and not gatherer.module_aliases
-            and not gatherer.alias_mapping
-        ):
-            return dst_code_fallback
-
-    except Exception as e:
-        logger.error(f"Error parsing source module code: {e}")
+    if gatherer is None:
         return dst_code_fallback
 
     dotted_import_collector = DottedImportCollector()
