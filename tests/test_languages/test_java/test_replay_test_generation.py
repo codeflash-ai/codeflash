@@ -157,62 +157,72 @@ class TestOverloadedMethods:
         assert len(method_names) == len(set(method_names)), f"Duplicate methods: {method_names}"
 
 
-class TestReplayTestInstrumentationSkip:
-    def test_skip_instrumentation_for_replay_tests(self, trace_db: Path, tmp_path: Path) -> None:
+class TestReplayTestInstrumentation:
+    def test_replay_tests_instrumented_correctly(self, trace_db: Path, tmp_path: Path) -> None:
+        """Replay tests with compact @Test lines should be instrumented without orphaned code."""
+        from codeflash.languages.java.discovery import discover_functions_from_source
+
         output_dir = tmp_path / "output"
         generate_replay_tests(trace_db, output_dir, tmp_path)
 
         test_file = list(output_dir.glob("*.java"))[0]
 
+        src = "public class Calculator { public int add(int a, int b) { return a + b; } }"
+        funcs = discover_functions_from_source(src, tmp_path / "Calculator.java")
+        target = funcs[0]
+
         from codeflash.languages.java.support import JavaSupport
 
         support = JavaSupport()
-
-        # Instrument in behavior mode
         success, instrumented = support.instrument_existing_test(
             test_path=test_file,
             call_positions=[],
-            function_to_optimize=None,
+            function_to_optimize=target,
             tests_project_root=tmp_path,
             mode="behavior",
         )
         assert success
         assert instrumented is not None
-
-        # Should just rename the class, no behavior setup code
         assert "__perfinstrumented" in instrumented
-        assert "CODEFLASH_LOOP_INDEX" not in instrumented
-        assert "// Codeflash behavior instrumentation" not in instrumented
 
-    def test_skip_instrumentation_for_perf_mode(self, trace_db: Path, tmp_path: Path) -> None:
+        # Verify no code outside class body
+        lines = instrumented.splitlines()
+        class_closed = False
+        for line in lines:
+            if line.strip() == "}" and not line.startswith(" "):
+                class_closed = True
+            elif class_closed and line.strip() and not line.strip().startswith("//"):
+                pytest.fail(f"Orphaned code outside class: {line}")
+
+    def test_replay_tests_perf_instrumented(self, trace_db: Path, tmp_path: Path) -> None:
+        from codeflash.languages.java.discovery import discover_functions_from_source
+
         output_dir = tmp_path / "output"
         generate_replay_tests(trace_db, output_dir, tmp_path)
 
         test_file = list(output_dir.glob("*.java"))[0]
 
+        src = "public class Calculator { public int add(int a, int b) { return a + b; } }"
+        funcs = discover_functions_from_source(src, tmp_path / "Calculator.java")
+        target = funcs[0]
+
         from codeflash.languages.java.support import JavaSupport
 
         support = JavaSupport()
-
         success, instrumented = support.instrument_existing_test(
             test_path=test_file,
             call_positions=[],
-            function_to_optimize=None,
+            function_to_optimize=target,
             tests_project_root=tmp_path,
             mode="performance",
         )
         assert success
         assert "__perfonlyinstrumented" in instrumented
 
-    def test_regular_tests_still_get_instrumented(self, tmp_path: Path) -> None:
-        """Non-replay test files should still be instrumented normally."""
+    def test_regular_tests_still_instrumented(self, tmp_path: Path) -> None:
         from codeflash.languages.java.discovery import discover_functions_from_source
 
-        src = """
-public class Calculator {
-    public int add(int a, int b) { return a + b; }
-}
-"""
+        src = "public class Calculator { public int add(int a, int b) { return a + b; } }"
         funcs = discover_functions_from_source(src, tmp_path / "Calculator.java")
         target = funcs[0]
 
@@ -242,5 +252,4 @@ public class CalculatorTest {
             mode="behavior",
         )
         assert success
-        # Regular tests should have behavior instrumentation
         assert "CODEFLASH_LOOP_INDEX" in instrumented
