@@ -699,14 +699,21 @@ def _ensure_runtime_files(project_root: Path) -> None:
     The package provides all runtime files needed for test instrumentation.
     Uses the project's detected package manager (npm, pnpm, yarn, or bun).
 
+    In monorepos, node_modules may be hoisted to the repo root, so we walk
+    upward from project_root to find an existing codeflash installation.
+
     Args:
         project_root: The project root directory.
 
     """
-    node_modules_pkg = project_root / "node_modules" / "codeflash"
-    if node_modules_pkg.exists():
-        logger.debug("codeflash already installed")
-        return
+    # Walk upward to find codeflash in any ancestor node_modules (monorepo hoisting)
+    current = project_root
+    while current != current.parent:
+        node_modules_pkg = current / "node_modules" / "codeflash"
+        if node_modules_pkg.exists():
+            logger.debug(f"codeflash already installed at {node_modules_pkg}")
+            return
+        current = current.parent
 
     install_cmd = get_package_install_command(project_root, "codeflash", dev=True)
     try:
