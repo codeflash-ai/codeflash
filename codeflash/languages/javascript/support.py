@@ -1951,6 +1951,13 @@ class JavaScriptSupport:
             )
             if original_node_modules.exists() and not worktree_node_modules.exists():
                 worktree_node_modules.symlink_to(original_node_modules)
+            # In monorepos, node_modules lives at the repo root, not the package level.
+            # Symlink the root-level node_modules into the worktree so Vitest/npx can resolve deps.
+            if not worktree_node_modules.exists():
+                worktree_root_node_modules = current_worktree / "node_modules"
+                original_root_node_modules = original_js_root / "node_modules"
+                if original_root_node_modules.exists() and not worktree_root_node_modules.exists():
+                    worktree_root_node_modules.symlink_to(original_root_node_modules)
         verify_js_requirements(test_cfg)
 
     def adjust_test_config_for_discovery(self, test_cfg: TestConfig) -> None:
