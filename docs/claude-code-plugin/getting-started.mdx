@@ -69,10 +69,10 @@ You can continue working while codeflash optimizes in the background.
 
 ## Set up auto-permissions
 
-Run `/setup` to allow codeflash to execute automatically without permission prompts:
+Run `/codeflash:setup` to allow codeflash to execute automatically without permission prompts:
 
 ```
-/setup
+/codeflash:setup
 ```
 
 This adds `Bash(*codeflash*)` to the `permissions.allow` array in `.claude/settings.json`. After this, the post-commit hook can trigger optimizations without asking each time.
