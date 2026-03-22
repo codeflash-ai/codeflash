@@ -8,6 +8,7 @@ from itertools import count
 from typing import TYPE_CHECKING, Any, cast
 
 import requests
+from pydantic import ValidationError
 from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
@@ -127,16 +128,19 @@ class AiServiceClient:
             code = CodeStringsMarkdown.parse_markdown_code(opt["source_code"], expected_language=language)
             if not code.code_strings:
                 continue
-            candidates.append(
-                OptimizedCandidate(
-                    source_code=code,
-                    explanation=opt["explanation"],
-                    optimization_id=opt["optimization_id"],
-                    source=source,
-                    parent_id=opt.get("parent_id", None),
-                    model=opt.get("model"),
+            try:
+                candidates.append(
+                    OptimizedCandidate(
+                        source_code=code,
+                        explanation=opt["explanation"],
+                        optimization_id=opt["optimization_id"],
+                        source=source,
+                        parent_id=opt.get("parent_id", None),
+                        model=opt.get("model"),
+                    )
                 )
-            )
+            except (ValidationError, KeyError, TypeError) as e:
+                logger.warning(f"Skipping invalid optimization candidate: {e}")
         return candidates
 
     def optimize_code(
