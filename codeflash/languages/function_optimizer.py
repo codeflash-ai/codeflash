@@ -273,8 +273,8 @@ class CandidateProcessor:
         self.normalized_original = normalized_original
         self.original_flat_code = original_flat_code
         self.seen_normalized: set[str] = set()
+        self.normalized_cache: dict[str, str] = {}  # optimization_id -> normalized_code
 
-        # Dedup initial candidates before queuing
         deduped = self.dedup_candidates(initial_candidates)
         self.candidate_len = len(deduped)
         for candidate in deduped:
@@ -287,17 +287,6 @@ class CandidateProcessor:
         self.future_adaptive_optimizations = future_adaptive_optimizations
 
     def dedup_candidates(self, candidates: list[OptimizedCandidate]) -> list[OptimizedCandidate]:
-        """Remove duplicates from a batch of candidates before queuing.
-
-        Filters out candidates that are:
-        - Identical to the original code
-        - Duplicates of previously-registered candidates in eval_ctx.ast_code_to_id
-          (called when the queue is empty, after all prior candidates have been
-          both registered and benchmarked)
-        - Duplicates of candidates already queued from prior batches
-          (tracked in self.seen_normalized which persists across calls)
-        - Intra-batch duplicates
-        """
         unique: list[OptimizedCandidate] = []
         removed_original = 0
         removed_cross_batch = 0
@@ -320,6 +309,7 @@ class CandidateProcessor:
                 continue
 
             self.seen_normalized.add(normalized)
+            self.normalized_cache[candidate.optimization_id] = normalized
             unique.append(candidate)
 
         total_removed = removed_original + removed_cross_batch + removed_duplicate
@@ -1140,6 +1130,7 @@ class FunctionOptimizer:
         exp_type: str,
         function_references: str,
         normalized_original: str,
+        cached_normalized_code: str | None = None,
     ) -> BestOptimization | None:
         """Process a single optimization candidate.
 
@@ -1152,7 +1143,9 @@ class FunctionOptimizer:
 
         candidate = candidate_node.candidate
 
-        normalized_code = self.language_support.normalize_code(candidate.source_code.flat.strip())
+        normalized_code = cached_normalized_code or self.language_support.normalize_code(
+            candidate.source_code.flat.strip()
+        )
 
         if normalized_code == normalized_original:
             logger.info(f"h3|Candidate {candidate_index}/{total_candidates}: Identical to original code, skipping.")
@@ -1392,6 +1385,7 @@ class FunctionOptimizer:
                     exp_type=exp_type,
                     function_references=function_references,
                     normalized_original=normalized_original,
+                    cached_normalized_code=processor.normalized_cache.get(candidate_node.candidate.optimization_id),
                 )
             except KeyboardInterrupt as e:
                 logger.exception(f"Optimization interrupted: {e}")
