@@ -547,10 +547,11 @@ class CandidateEvaluationContext:
         """Handle a candidate that has been seen before."""
         past_opt_id = self.ast_code_to_id[normalized_code]["optimization_id"]
 
-        # Copy results from the previous evaluation
-        self.speedup_ratios[candidate.optimization_id] = self.speedup_ratios[past_opt_id]
-        self.is_correct[candidate.optimization_id] = self.is_correct[past_opt_id]
-        self.optimized_runtimes[candidate.optimization_id] = self.optimized_runtimes[past_opt_id]
+        # Copy results from the previous evaluation (use .get() in case past_opt_id was registered
+        # but never benchmarked due to an unhandled exception in process_single_candidate)
+        self.speedup_ratios[candidate.optimization_id] = self.speedup_ratios.get(past_opt_id)
+        self.is_correct[candidate.optimization_id] = self.is_correct.get(past_opt_id)
+        self.optimized_runtimes[candidate.optimization_id] = self.optimized_runtimes.get(past_opt_id)
 
         # Line profiler results only available for successful runs
         if past_opt_id in self.optimized_line_profiler_results:

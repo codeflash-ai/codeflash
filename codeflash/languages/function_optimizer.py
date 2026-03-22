@@ -305,6 +305,8 @@ class CandidateProcessor:
                 continue
 
             if normalized in self.seen_normalized:
+                # Intra-batch duplicate: no results exist yet to copy, so just drop it.
+                # Its optimization_id will be absent from eval_ctx results — this is intentional.
                 removed_duplicate += 1
                 continue
 
@@ -1147,6 +1149,9 @@ class FunctionOptimizer:
             candidate.source_code.flat.strip()
         )
 
+        # Defensive fallbacks: dedup_candidates filters these before the benchmark loop,
+        # so these checks should not fire in normal operation. They remain as safety nets
+        # for any future code path that bypasses dedup_candidates.
         if normalized_code == normalized_original:
             logger.info(f"h3|Candidate {candidate_index}/{total_candidates}: Identical to original code, skipping.")
             console.rule()
