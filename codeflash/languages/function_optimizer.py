@@ -337,6 +337,11 @@ class CandidateProcessor:
 
     def _handle_empty_queue(self) -> CandidateNode | None:
         """Handle empty queue by checking for pending async results."""
+        logger.info(
+            f"DEBUG: _handle_empty_queue: lp_done={self.line_profiler_done}, ref_done={self.refinement_done}, "
+            f"repair={len(self.future_all_code_repair)}, refinements={len(self.future_all_refinements)}, "
+            f"adaptive={len(self.future_adaptive_optimizations)}, queue_empty={self.candidate_queue.empty()}"
+        )
         if not self.line_profiler_done:
             return self._process_candidates(
                 [self.future_line_profile_results],
@@ -394,7 +399,9 @@ class CandidateProcessor:
                     candidates.append(candidate_result)
 
             candidates = filter_candidates_func(candidates) if filter_candidates_func else candidates
+            logger.info(f"DEBUG: before dedup: {len(candidates)} candidates")
             candidates = self.dedup_candidates(candidates)
+            logger.info(f"DEBUG: after dedup: {len(candidates)} candidates, queuing")
             for candidate in candidates:
                 self.forest.add(candidate)
                 self.candidate_queue.put(candidate)
@@ -403,7 +410,9 @@ class CandidateProcessor:
             if len(candidates) > 0:
                 logger.info(success_msg.format(len(candidates), self.candidate_len))
 
+            logger.info("DEBUG: calling callback")
             callback()
+            logger.info("DEBUG: callback done, calling get_next_candidate")
             return self.get_next_candidate()
 
     def _filter_refined_candidates(self, candidates: list[OptimizedCandidate]) -> list[OptimizedCandidate]:
