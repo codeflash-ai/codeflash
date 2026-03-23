@@ -21,15 +21,18 @@ from codeflash.code_utils.config_consts import (
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize  # noqa: TC001
 from codeflash.languages.python.context.unused_definition_remover import (
+    collect_top_level_defs_with_dependencies,
     collect_top_level_defs_with_usages,
     get_section_names,
     is_assignment_used,
+    mark_defs_for_functions,
     recurse_sections,
     remove_unused_definitions_by_function_names,
 )
 from codeflash.languages.python.static_analysis.code_extractor import (
     add_needed_imports_from_module,
     find_preexisting_objects,
+    gather_source_imports,
 )
 from codeflash.models.models import (
     CodeContextType,
@@ -64,6 +67,7 @@ class FileContextCache:
     helper_functions: list[FunctionSource]
     file_path: Path
     relative_path: Path
+    gathered_imports: Any = None
 
 
 @dataclass
@@ -265,15 +269,23 @@ def extract_all_contexts_from_files(
         except ValueError:
             relative_path = file_path
 
-        # Compute defs once for fto_names and reuse across remove + prune
-        fto_defs = collect_top_level_defs_with_usages(original_module, fto_names)
+        # Collect definitions + dependencies once (expensive CST traversal), reuse for both mark passes
+        base_defs = collect_top_level_defs_with_dependencies(original_module)
+        fto_defs = mark_defs_for_functions(base_defs, fto_names)
         # Clean by fto_names only (for RW)
         rw_cleaned = remove_unused_definitions_by_function_names(original_module, fto_names, defs_with_usages=fto_defs)
-        # Clean by all names (for RO/HASH/TESTGEN) — reuse rw_cleaned if no extra HoH names
+        # Clean by all names (for RO/HASH/TESTGEN) — reuse base_defs to avoid re-traversal
         all_names = fto_names | hoh_names
-        all_cleaned = (
-            remove_unused_definitions_by_function_names(original_module, all_names) if hoh_names else rw_cleaned
-        )
+        if hoh_names:
+            all_defs = mark_defs_for_functions(base_defs, all_names)
+            all_cleaned = remove_unused_definitions_by_function_names(
+                original_module, all_names, defs_with_usages=all_defs
+            )
+        else:
+            all_cleaned = rw_cleaned
+
+        # Pre-compute source imports once for this file (avoids 3x CST traversal of original_module)
+        src_gathered = gather_source_imports(original_module, file_path, project_root_path)
 
         # READ_WRITABLE
         try:
@@ -293,6 +305,7 @@ def extract_all_contexts_from_files(
                     dst_path=file_path,
                     project_root=project_root_path,
                     helper_functions=rw_helper_functions,
+                    gathered_imports=src_gathered,
                 )
                 rw.code_strings.append(CodeString(code=rw_code, file_path=relative_path))
         except ValueError as e:
@@ -311,6 +324,7 @@ def extract_all_contexts_from_files(
                     dst_path=file_path,
                     project_root=project_root_path,
                     helper_functions=all_helper_functions,
+                    gathered_imports=src_gathered,
                 )
                 ro.code_strings.append(CodeString(code=ro_code, file_path=relative_path))
         except ValueError as e:
@@ -340,6 +354,7 @@ def extract_all_contexts_from_files(
                     dst_path=file_path,
                     project_root=project_root_path,
                     helper_functions=all_helper_functions,
+                    gathered_imports=src_gathered,
                 )
                 testgen.code_strings.append(CodeString(code=testgen_code, file_path=relative_path))
         except ValueError as e:
@@ -354,6 +369,7 @@ def extract_all_contexts_from_files(
                 helper_functions=all_helper_functions,
                 file_path=file_path,
                 relative_path=relative_path,
+                gathered_imports=src_gathered,
             )
         )
 
@@ -381,6 +397,9 @@ def extract_all_contexts_from_files(
 
         cleaned = remove_unused_definitions_by_function_names(original_module, hoh_names)
 
+        # Pre-compute source imports once for this file
+        src_gathered = gather_source_imports(original_module, file_path, project_root_path)
+
         # READ_ONLY
         try:
             ro_pruned = parse_code_and_prune_cst(
@@ -394,6 +413,7 @@ def extract_all_contexts_from_files(
                     dst_path=file_path,
                     project_root=project_root_path,
                     helper_functions=helper_functions,
+                    gathered_imports=src_gathered,
                 )
                 ro.code_strings.append(CodeString(code=ro_code, file_path=relative_path))
         except ValueError as e:
@@ -423,6 +443,7 @@ def extract_all_contexts_from_files(
                     dst_path=file_path,
                     project_root=project_root_path,
                     helper_functions=helper_functions,
+                    gathered_imports=src_gathered,
                 )
                 testgen.code_strings.append(CodeString(code=testgen_code, file_path=relative_path))
         except ValueError as e:
@@ -437,6 +458,7 @@ def extract_all_contexts_from_files(
                 helper_functions=helper_functions,
                 file_path=file_path,
                 relative_path=relative_path,
+                gathered_imports=src_gathered,
             )
         )
 
@@ -473,6 +495,7 @@ def re_extract_from_cache(
                     dst_path=file_cache.file_path,
                     project_root=project_root_path,
                     helper_functions=file_cache.helper_functions,
+                    gathered_imports=file_cache.gathered_imports,
                 )
             result.code_strings.append(CodeString(code=code, file_path=file_cache.relative_path))
     return result

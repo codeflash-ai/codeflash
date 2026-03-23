@@ -586,8 +586,8 @@ def merge_test_results(
 ) -> TestResults:
     merged_test_results = TestResults()
 
-    grouped_xml_results: defaultdict[str, TestResults] = defaultdict(TestResults)
-    grouped_bin_results: defaultdict[str, TestResults] = defaultdict(TestResults)
+    grouped_xml_results: defaultdict[tuple[str, str, str, int], TestResults] = defaultdict(TestResults)
+    grouped_bin_results: defaultdict[tuple[str, str, str, int], TestResults] = defaultdict(TestResults)
 
     # This is done to match the right iteration_id which might not be available in the xml
     for result in xml_test_results:
@@ -606,24 +606,22 @@ def merge_test_results(
             test_function_name = result.id.test_function_name
 
         grouped_xml_results[
-            (result.id.test_module_path or "")
-            + ":"
-            + (result.id.test_class_name or "")
-            + ":"
-            + (test_function_name or "")
-            + ":"
-            + str(result.loop_index)
+            (
+                result.id.test_module_path or "",
+                result.id.test_class_name or "",
+                test_function_name or "",
+                result.loop_index,
+            )
         ].add(result)
 
     for result in bin_test_results:
         grouped_bin_results[
-            (result.id.test_module_path or "")
-            + ":"
-            + (result.id.test_class_name or "")
-            + ":"
-            + (result.id.test_function_name or "")
-            + ":"
-            + str(result.loop_index)
+            (
+                result.id.test_module_path or "",
+                result.id.test_class_name or "",
+                result.id.test_function_name or "",
+                result.loop_index,
+            )
         ].add(result)
 
     for result_id in grouped_xml_results:
