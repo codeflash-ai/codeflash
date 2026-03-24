@@ -19,7 +19,7 @@ import pytest
 # Set API key for tests that instantiate Optimizer
 os.environ["CODEFLASH_API_KEY"] = "cf-test-key"
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.base import Language
 from codeflash.languages.current import set_current_language
 from codeflash.languages.java.maven_strategy import MavenStrategy
@@ -2064,7 +2064,7 @@ class TestRunAndParseTests:
         """Test run_and_parse_tests in BEHAVIOR mode."""
         from argparse import Namespace
 
-        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash_core.models import FunctionToOptimize
         from codeflash.models.models import TestFile, TestFiles, TestingMode, TestType
         from codeflash.optimization.optimizer import Optimizer
 
@@ -2129,7 +2129,7 @@ public class CalculatorTest {
                 disable_telemetry=True,
                 tests_root=test_dir,
                 test_project_root=project_root,
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
             )
         )
@@ -2180,7 +2180,7 @@ public class CalculatorTest {
         """
         from argparse import Namespace
 
-        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash_core.models import FunctionToOptimize
         from codeflash.models.models import TestFile, TestFiles, TestingMode, TestType
         from codeflash.optimization.optimizer import Optimizer
 
@@ -2284,7 +2284,7 @@ public class MathUtilsTest__perfonlyinstrumented {
                 disable_telemetry=True,
                 tests_root=test_dir,
                 test_project_root=project_root,
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
             )
         )
@@ -2343,7 +2343,7 @@ public class MathUtilsTest__perfonlyinstrumented {
         """Test run_and_parse_tests with multiple test methods."""
         from argparse import Namespace
 
-        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash_core.models import FunctionToOptimize
         from codeflash.models.models import TestFile, TestFiles, TestingMode, TestType
         from codeflash.optimization.optimizer import Optimizer
 
@@ -2416,7 +2416,7 @@ public class StringUtilsTest {
                 disable_telemetry=True,
                 tests_root=test_dir,
                 test_project_root=project_root,
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
             )
         )
@@ -2458,7 +2458,7 @@ public class StringUtilsTest {
         """Test run_and_parse_tests correctly reports failing tests."""
         from argparse import Namespace
 
-        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash_core.models import FunctionToOptimize
         from codeflash.models.models import TestFile, TestFiles, TestingMode, TestType
         from codeflash.optimization.optimizer import Optimizer
 
@@ -2522,7 +2522,7 @@ public class BrokenCalcTest {
                 disable_telemetry=True,
                 tests_root=test_dir,
                 test_project_root=project_root,
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
             )
         )
@@ -2563,7 +2563,7 @@ public class BrokenCalcTest {
         from argparse import Namespace
 
         from codeflash.code_utils.code_utils import get_run_tmp_file
-        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash_core.models import FunctionToOptimize
         from codeflash.models.models import TestFile, TestFiles, TestingMode, TestType
         from codeflash.optimization.optimizer import Optimizer
 
@@ -2709,7 +2709,7 @@ public class CounterTest__perfinstrumented {
                 disable_telemetry=True,
                 tests_root=test_dir,
                 test_project_root=project_root,
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
             )
         )

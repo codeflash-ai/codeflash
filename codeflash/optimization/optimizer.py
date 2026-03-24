@@ -27,7 +27,7 @@ from codeflash.either import is_successful
 from codeflash.languages import current_language_support, set_current_language
 from codeflash.lsp.helpers import is_subagent_mode
 from codeflash.telemetry.posthog_cf import ph
-from codeflash.verification.verification_utils import TestConfig
+from codeflash_core.config import TestConfig
 
 if TYPE_CHECKING:
     import ast
@@ -35,10 +35,10 @@ if TYPE_CHECKING:
 
     from codeflash.benchmarking.function_ranker import FunctionRanker
     from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import DependencyResolver
     from codeflash.languages.function_optimizer import FunctionOptimizer
     from codeflash.models.models import BenchmarkKey, FunctionCalledInTest, ValidCode
+    from codeflash_core.models import FunctionToOptimize
 
 
 def _extract_java_package_from_path(file_path: Path) -> str | None:
@@ -60,9 +60,8 @@ class Optimizer:
         self.test_cfg = TestConfig(
             tests_root=args.tests_root,
             tests_project_rootdir=args.test_project_root,
-            project_root_path=args.project_root,
-            # TODO: Can rename it for language agnostic
-            pytest_cmd=args.pytest_cmd if hasattr(args, "pytest_cmd") and args.pytest_cmd else "pytest",
+            project_root=args.project_root,
+            test_command=args.pytest_cmd if hasattr(args, "pytest_cmd") and args.pytest_cmd else "pytest",
             benchmark_tests_root=args.benchmarks_root if "benchmark" in args and "benchmarks_root" in args else None,
         )
 
@@ -506,12 +505,11 @@ class Optimizer:
         function_optimizer = None
         file_to_funcs_to_optimize, num_optimizable_functions, trace_file_path = self.get_optimizable_functions()
 
-        # Set language on TestConfig and global singleton based on discovered functions
+        # Set language global singleton based on discovered functions
         if file_to_funcs_to_optimize:
             for file_path, funcs in file_to_funcs_to_optimize.items():
                 if funcs and funcs[0].language:
                     set_current_language(funcs[0].language)
-                    self.test_cfg.set_language(funcs[0].language)
                     current_language_support().setup_test_config(self.test_cfg, file_path, self.current_worktree)
                     break
 
@@ -799,7 +797,7 @@ class Optimizer:
 
         # mirror project_root
         self.args.project_root = mirror_path(self.args.project_root, original_git_root, worktree_dir)
-        self.test_cfg.project_root_path = mirror_path(self.test_cfg.project_root_path, original_git_root, worktree_dir)
+        self.test_cfg.project_root = mirror_path(self.test_cfg.project_root, original_git_root, worktree_dir)
 
         # mirror module_root
         self.args.module_root = mirror_path(self.args.module_root, original_git_root, worktree_dir)

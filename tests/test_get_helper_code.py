@@ -4,12 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.either import is_successful
 from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 from codeflash.models.models import FunctionParent, get_code_block_splitter
 from codeflash.optimization.optimizer import Optimizer
-from codeflash.verification.verification_utils import TestConfig
+from codeflash_core.config import TestConfig
 
 
 class HelperClass:
@@ -30,7 +30,7 @@ def test_get_outside_method_helper() -> None:
             disable_telemetry=True,
             tests_root="tests",
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
             experiment_id=None,
         )
     )
@@ -229,9 +229,9 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         test_config = TestConfig(
             tests_root="tests",
             tests_project_rootdir=Path.cwd(),
-            project_root_path=project_root_path,
+            project_root=project_root_path,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
         func_optimizer = PythonFunctionOptimizer(function_to_optimize=function_to_optimize, test_cfg=test_config)
         with open(file_path) as f:
@@ -400,9 +400,9 @@ def test_bubble_sort_deps() -> None:
     test_config = TestConfig(
         tests_root=str(file_path.parent / "tests"),
         tests_project_rootdir=file_path.parent.resolve(),
-        project_root_path=project_root,
+        project_root=project_root,
         test_framework="pytest",
-        pytest_cmd="pytest",
+        test_command="pytest",
     )
     func_optimizer = PythonFunctionOptimizer(function_to_optimize=function_to_optimize, test_cfg=test_config)
     with open(file_path) as f:

@@ -1,0 +1,50 @@
+from __future__ import annotations
+
+import logging
+import re
+import subprocess
+from pathlib import Path
+
+from codeflash_python.code_utils.compat import SAFE_SYS_EXECUTABLE
+from codeflash_python.code_utils.shell_utils import get_cross_platform_subprocess_run_args, make_env_with_project_root
+
+logger = logging.getLogger("codeflash_python")
+
+
+def trace_benchmarks_pytest(
+    benchmarks_root: Path, tests_root: Path, project_root: Path, trace_file: Path, timeout: int = 300
+) -> None:
+    benchmark_env = make_env_with_project_root(project_root)
+    run_args = get_cross_platform_subprocess_run_args(
+        cwd=project_root, env=benchmark_env, timeout=timeout, check=False, text=True, capture_output=True
+    )
+    result = subprocess.run(  # type: ignore[no-matching-overload]  # noqa: PLW1510
+        [
+            SAFE_SYS_EXECUTABLE,
+            Path(__file__).parent / "pytest_new_process_trace_benchmarks.py",
+            benchmarks_root,
+            tests_root,
+            trace_file,
+        ],
+        **run_args,
+    )
+    if result.returncode != 0:
+        # Combine stdout and stderr for error reporting (errors often go to stderr)
+        combined_output = result.stdout
+        if result.stderr:
+            combined_output = combined_output + "\n" + result.stderr if combined_output else result.stderr
+
+        if "ERROR collecting" in combined_output:
+            # Pattern matches "===== ERRORS =====" (any number of =) and captures everything after
+            error_pattern = r"={3,}\s*ERRORS\s*={3,}\n([\s\S]*?)(?:={3,}|$)"
+            match = re.search(error_pattern, combined_output)
+            error_section = match.group(1) if match else combined_output
+        elif "FAILURES" in combined_output:
+            # Pattern matches "===== FAILURES =====" (any number of =) and captures everything after
+            error_pattern = r"={3,}\s*FAILURES\s*={3,}\n([\s\S]*?)(?:={3,}|$)"
+            match = re.search(error_pattern, combined_output)
+            error_section = match.group(1) if match else combined_output
+        else:
+            error_section = combined_output
+        logger.warning("Error collecting benchmarks - Pytest Exit code: %s, %s", result.returncode, error_section)
+        logger.debug("Full pytest output:\n%s", combined_output)

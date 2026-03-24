@@ -1805,8 +1805,8 @@ class TestExtractCodeContextEdgeCases:
 
     def test_file_not_found(self, tmp_path: Path):
         """Test context extraction for missing file."""
-        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-        from codeflash.models.function_types import FunctionParent
+        from codeflash_core.models import FunctionToOptimize
+        from codeflash_core.models import FunctionParent
 
         missing_file = tmp_path / "NonExistent.java"
         func = FunctionToOptimize(

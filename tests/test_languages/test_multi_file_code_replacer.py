@@ -81,11 +81,11 @@ function findMin(numbers) {
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
 from codeflash.languages.registry import get_language_support
 from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown
-from codeflash.verification.verification_utils import TestConfig
+from codeflash_core.config import TestConfig
 
 
 class Args:
@@ -132,8 +132,8 @@ def test_js_replcement() -> None:
         test_config = TestConfig(
             tests_root=root_dir / "code_to_optimize/js/code_to_optimize_js/tests",
             tests_project_rootdir=root_dir,
-            project_root_path=root_dir,
-            pytest_cmd="jest",
+            project_root=root_dir,
+            test_command="jest",
         )
         func_optimizer = JavaScriptFunctionOptimizer(
             function_to_optimize=func, test_cfg=test_config, aiservice_client=MagicMock()

@@ -21,7 +21,7 @@ from codeflash.result.critic import performance_gain
 if TYPE_CHECKING:
     from codeflash.models.models import FunctionCalledInTest, InvocationId, TestFiles
     from codeflash.result.explanation import Explanation
-    from codeflash.verification.verification_utils import TestConfig
+    from codeflash_core.config import TestConfig
 
 
 def existing_tests_source_for(
@@ -117,7 +117,7 @@ def existing_tests_source_for(
             if test_module_path.endswith(ext):
                 matched_ext = ext
                 break
-        if matched_ext:
+        if matched_ext and test_cfg.tests_project_rootdir is not None:
             # JavaScript/TypeScript: convert module-style path to file path
             # "tests.fibonacci__perfinstrumented.test.ts" -> "tests/fibonacci__perfinstrumented.test.ts"
             base_path = test_module_path[: -len(matched_ext)]
@@ -143,7 +143,7 @@ def existing_tests_source_for(
             lang = current_language_support()
             # Let language-specific resolution handle non-Python module paths
             lang_result = lang.resolve_test_module_path_for_pr(
-                test_module_path, test_cfg.tests_project_rootdir, non_generated_tests
+                test_module_path, test_cfg.tests_project_rootdir or test_cfg.project_root, non_generated_tests
             )
             if lang_result is not None:
                 abs_path = lang_result

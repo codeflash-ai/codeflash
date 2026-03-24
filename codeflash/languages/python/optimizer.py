@@ -9,7 +9,7 @@ from codeflash.models.models import ValidCode
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from codeflash.models.function_types import FunctionParent
+    from codeflash_core.models import FunctionParent
 
 
 def prepare_python_module(

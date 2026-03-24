@@ -42,8 +42,8 @@ if TYPE_CHECKING:
 
     from lsprotocol import types
 
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.lsp.server import WrappedInitializationResultT
+    from codeflash_core.models import FunctionToOptimize
 
 
 @dataclass

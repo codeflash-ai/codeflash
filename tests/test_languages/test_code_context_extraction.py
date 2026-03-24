@@ -24,11 +24,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.base import Language
 from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
 from codeflash.languages.javascript.support import JavaScriptSupport, TypeScriptSupport
-from codeflash.verification.verification_utils import TestConfig
+from codeflash_core.config import TestConfig
 
 
 @pytest.fixture
@@ -1838,7 +1838,7 @@ export const sendSlackMessage = async (
         )
 
         test_config = TestConfig(
-            tests_root=temp_project, tests_project_rootdir=temp_project, project_root_path=temp_project
+            tests_root=temp_project, tests_project_rootdir=temp_project, project_root=temp_project
         )
         func_optimizer = JavaScriptFunctionOptimizer(
             function_to_optimize=fto, test_cfg=test_config, aiservice_client=MagicMock()

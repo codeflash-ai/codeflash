@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from codeflash.languages.javascript.support import JavaScriptSupport
-from codeflash.verification.verification_utils import TestConfig
+from codeflash_core.config import TestConfig
 
 
 @pytest.fixture
@@ -15,7 +15,7 @@ def js_support() -> JavaScriptSupport:
 def make_test_config(project_root: Path) -> TestConfig:
     return TestConfig(
         tests_root=project_root / "tests",
-        project_root_path=project_root,
+        project_root=project_root,
         tests_project_rootdir=project_root,
     )
 

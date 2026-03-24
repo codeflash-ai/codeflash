@@ -1,7 +1,7 @@
 from argparse import Namespace
 from pathlib import Path
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.python.context.code_context_extractor import get_code_optimization_context
 from codeflash.models.models import FunctionParent
 from codeflash.optimization.optimizer import Optimizer
@@ -15,7 +15,7 @@ def test_benchmark_extract(benchmark) -> None:
             disable_telemetry=True,
             tests_root=(file_path / "tests").resolve(),
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
             experiment_id=None,
             test_project_root=Path.cwd(),
         )

@@ -5,14 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.python.context.unused_definition_remover import (
     detect_unused_helper_functions,
     revert_unused_helper_functions,
 )
 from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 from codeflash.models.models import CodeStringsMarkdown
-from codeflash.verification.verification_utils import TestConfig
+from codeflash_core.config import TestConfig
 
 
 @pytest.fixture
@@ -42,9 +42,9 @@ def helper_function_2(x):
     test_cfg = TestConfig(
         tests_root=temp_dir / "tests",
         tests_project_rootdir=temp_dir,
-        project_root_path=temp_dir,
+        project_root=temp_dir,
         test_framework="pytest",
-        pytest_cmd="pytest",
+        test_command="pytest",
     )
 
     yield temp_dir, main_file, test_cfg
@@ -79,7 +79,7 @@ def helper_function_2(x):
 
     # Create FunctionToOptimize instance
     function_to_optimize = FunctionToOptimize(
-        file_path=main_file, function_name="entrypoint_function", qualified_name="entrypoint_function", parents=[]
+        file_path=main_file, function_name="entrypoint_function", parents=[]
     )
 
     # Create function optimizer
@@ -190,7 +190,7 @@ def helper_function_2(x):
 
     # Create FunctionToOptimize instance
     function_to_optimize = FunctionToOptimize(
-        file_path=main_file, function_name="entrypoint_function", qualified_name="entrypoint_function", parents=[]
+        file_path=main_file, function_name="entrypoint_function", parents=[]
     )
 
     # Create function optimizer
@@ -265,7 +265,7 @@ def helper_function_2(x):
 
     # Create FunctionToOptimize instance
     function_to_optimize = FunctionToOptimize(
-        file_path=main_file, function_name="entrypoint_function", qualified_name="entrypoint_function", parents=[]
+        file_path=main_file, function_name="entrypoint_function", parents=[]
     )
 
     # Create function optimizer
@@ -354,14 +354,14 @@ def entrypoint_function(n):
         test_cfg = TestConfig(
             tests_root=temp_dir / "tests",
             tests_project_rootdir=temp_dir,
-            project_root_path=temp_dir,
+            project_root=temp_dir,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
 
         # Create FunctionToOptimize instance
         function_to_optimize = FunctionToOptimize(
-            file_path=main_file, function_name="entrypoint_function", qualified_name="entrypoint_function", parents=[]
+            file_path=main_file, function_name="entrypoint_function", parents=[]
         )
 
         # Create function optimizer
@@ -543,9 +543,9 @@ class Calculator:
         test_cfg = TestConfig(
             tests_root=temp_dir / "tests",
             tests_project_rootdir=temp_dir,
-            project_root_path=temp_dir,
+            project_root=temp_dir,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
 
         # Create FunctionToOptimize instance for class method
@@ -554,7 +554,6 @@ class Calculator:
         function_to_optimize = FunctionToOptimize(
             file_path=main_file,
             function_name="entrypoint_method",
-            qualified_name="Calculator.entrypoint_method",
             parents=[FunctionParent(name="Calculator", type="ClassDef")],
         )
 
@@ -694,9 +693,9 @@ class Processor:
         test_cfg = TestConfig(
             tests_root=temp_dir / "tests",
             tests_project_rootdir=temp_dir,
-            project_root_path=temp_dir,
+            project_root=temp_dir,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
 
         # Create FunctionToOptimize instance for class method
@@ -705,7 +704,6 @@ class Processor:
         function_to_optimize = FunctionToOptimize(
             file_path=main_file,
             function_name="process_data",
-            qualified_name="Processor.process_data",
             parents=[FunctionParent(name="Processor", type="ClassDef")],
         )
 
@@ -875,9 +873,9 @@ class OuterClass:
         test_cfg = TestConfig(
             tests_root=temp_dir / "tests",
             tests_project_rootdir=temp_dir,
-            project_root_path=temp_dir,
+            project_root=temp_dir,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
 
         # Note: In practice, codeflash might not handle deeply nested classes,
@@ -887,7 +885,6 @@ class OuterClass:
         function_to_optimize = FunctionToOptimize(
             file_path=main_file,
             function_name="compute",
-            qualified_name="OuterClass.InnerProcessor.compute",
             parents=[
                 FunctionParent(name="OuterClass", type="ClassDef"),
                 FunctionParent(name="InnerProcessor", type="ClassDef"),
@@ -1040,14 +1037,14 @@ def entrypoint_function(n):
         test_cfg = TestConfig(
             tests_root=temp_dir / "tests",
             tests_project_rootdir=temp_dir,
-            project_root_path=temp_dir,
+            project_root=temp_dir,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
 
         # Create FunctionToOptimize instance
         function_to_optimize = FunctionToOptimize(
-            file_path=main_file, function_name="entrypoint_function", qualified_name="entrypoint_function", parents=[]
+            file_path=main_file, function_name="entrypoint_function", parents=[]
         )
 
         # Create function optimizer
@@ -1204,14 +1201,14 @@ def entrypoint_function(n):
         test_cfg = TestConfig(
             tests_root=temp_dir / "tests",
             tests_project_rootdir=temp_dir,
-            project_root_path=temp_dir,
+            project_root=temp_dir,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
 
         # Create FunctionToOptimize instance
         function_to_optimize = FunctionToOptimize(
-            file_path=main_file, function_name="entrypoint_function", qualified_name="entrypoint_function", parents=[]
+            file_path=main_file, function_name="entrypoint_function", parents=[]
         )
 
         # Create function optimizer
@@ -1426,9 +1423,9 @@ class MathUtils:
         test_cfg = TestConfig(
             tests_root=temp_dir / "tests",
             tests_project_rootdir=temp_dir,
-            project_root_path=temp_dir,
+            project_root=temp_dir,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
 
         # Test static method optimization
@@ -1437,7 +1434,6 @@ class MathUtils:
         function_to_optimize = FunctionToOptimize(
             file_path=main_file,
             function_name="calculate_static",
-            qualified_name="MathUtils.calculate_static",
             parents=[FunctionParent(name="MathUtils", type="ClassDef")],
         )
 
@@ -1565,9 +1561,9 @@ async def async_entrypoint(n):
         test_cfg = TestConfig(
             tests_root=temp_dir / "tests",
             tests_project_rootdir=temp_dir,
-            project_root_path=temp_dir,
+            project_root=temp_dir,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
 
         # Create FunctionToOptimize instance for async function
@@ -1655,9 +1651,9 @@ def sync_entrypoint(n):
         test_cfg = TestConfig(
             tests_root=temp_dir / "tests",
             tests_project_rootdir=temp_dir,
-            project_root_path=temp_dir,
+            project_root=temp_dir,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
 
         # Create FunctionToOptimize instance for sync function
@@ -1762,9 +1758,9 @@ async def mixed_entrypoint(n):
         test_cfg = TestConfig(
             tests_root=temp_dir / "tests",
             tests_project_rootdir=temp_dir,
-            project_root_path=temp_dir,
+            project_root=temp_dir,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
 
         # Create FunctionToOptimize instance for async function
@@ -1858,9 +1854,9 @@ class AsyncProcessor:
         test_cfg = TestConfig(
             tests_root=temp_dir / "tests",
             tests_project_rootdir=temp_dir,
-            project_root_path=temp_dir,
+            project_root=temp_dir,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
 
         # Create FunctionToOptimize instance for async class method
@@ -1949,9 +1945,9 @@ async def async_entrypoint(n):
         test_cfg = TestConfig(
             tests_root=temp_dir / "tests",
             tests_project_rootdir=temp_dir,
-            project_root_path=temp_dir,
+            project_root=temp_dir,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
 
         # Create FunctionToOptimize instance for async function
@@ -2030,9 +2026,9 @@ def gcd_recursive(a: int, b: int) -> int:
         test_cfg = TestConfig(
             tests_root=temp_dir / "tests",
             tests_project_rootdir=temp_dir,
-            project_root_path=temp_dir,
+            project_root=temp_dir,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
 
         # Create FunctionToOptimize instance
@@ -2141,9 +2137,9 @@ async def async_entrypoint_with_generators(n):
         test_cfg = TestConfig(
             tests_root=temp_dir / "tests",
             tests_project_rootdir=temp_dir,
-            project_root_path=temp_dir,
+            project_root=temp_dir,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
 
         # Create FunctionToOptimize instance for async function

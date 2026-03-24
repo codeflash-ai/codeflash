@@ -18,7 +18,7 @@ class TestExistingTestsSourceFor:
         # Mock test config
         self.test_cfg = Mock()
         self.test_cfg.tests_root = Path(__file__).resolve().parent
-        self.test_cfg.project_root_path = Path(__file__).resolve().parent.parent
+        self.test_cfg.project_root = Path(__file__).resolve().parent.parent
 
         # Mock invocation ID
         self.mock_invocation_id = Mock()
@@ -31,7 +31,7 @@ class TestExistingTestsSourceFor:
         self.mock_function_called_in_test.tests_in_file = Mock()
         self.mock_function_called_in_test.tests_in_file.test_file = Path(__file__).resolve().parent / "test_module.py"
         # Path to pyproject.toml
-        os.chdir(self.test_cfg.project_root_path)
+        os.chdir(self.test_cfg.project_root)
 
     def test_no_test_files_returns_empty_string(self):
         """Test that function returns empty string when no test files exist."""

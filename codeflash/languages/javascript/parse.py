@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     import subprocess
 
     from codeflash.models.models import TestFiles
-    from codeflash.verification.verification_utils import TestConfig
+    from codeflash_core.config import TestConfig
 
 
 # Jest timing marker patterns (from codeflash-jest-helper.js console.log output)

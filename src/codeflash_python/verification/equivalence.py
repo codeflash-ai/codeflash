@@ -1,0 +1,204 @@
+from __future__ import annotations
+
+import logging
+import re
+import reprlib
+import sys
+from typing import TYPE_CHECKING
+
+import libcst as cst
+
+from codeflash_python.api.types import TestDiff, TestDiffScope
+from codeflash_python.models.models import TestResults, TestType, VerificationType
+from codeflash_python.verification.comparator import comparator
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from codeflash_python.models.models import InvocationId, TestResults
+
+
+logger = logging.getLogger("codeflash_python")
+
+
+def shorten_pytest_error(pytest_error_string: str) -> str:
+    return "\n".join(re.findall(r"^[E>] +(.*)$", pytest_error_string, re.MULTILINE))
+
+
+INCREASED_RECURSION_LIMIT = 5000
+
+
+def get_test_src_code(invocation_id: InvocationId, test_path: Path) -> str | None:
+    """Extract the source code of a test function from a test file using CST parsing."""
+    if not test_path.exists():
+        return None
+    try:
+        test_src = test_path.read_text(encoding="utf-8")
+        module_node = cst.parse_module(test_src)
+    except Exception:
+        # Handle case where test_function_name might be None
+        test_fn_name = invocation_id.test_function_name if invocation_id.test_function_name else "unknown"
+        return (
+            f"// Test: {test_fn_name}\n"
+            f"// File: {test_path.name}\n"
+            f"// Testing function: {invocation_id.function_getting_tested}"
+        )
+
+    if invocation_id.test_class_name:
+        for stmt in module_node.body:
+            if isinstance(stmt, cst.ClassDef) and stmt.name.value == invocation_id.test_class_name:
+                for member in stmt.body.body:
+                    if (
+                        isinstance(member, cst.FunctionDef)
+                        and invocation_id.test_function_name
+                        and member.name.value == invocation_id.test_function_name
+                    ):
+                        return module_node.code_for_node(member).strip()
+        return None
+
+    if invocation_id.test_function_name:
+        for stmt in module_node.body:
+            if isinstance(stmt, cst.FunctionDef) and stmt.name.value == invocation_id.test_function_name:
+                return module_node.code_for_node(stmt).strip()
+    return None
+
+
+reprlib_repr = reprlib.Repr()
+reprlib_repr.maxstring = 1500
+test_diff_repr = reprlib_repr.repr
+
+
+def safe_repr(obj: object) -> str:
+    """Safely get repr of an object, handling Mock objects with corrupted state."""
+    try:
+        return repr(obj)
+    except (AttributeError, TypeError, RecursionError) as e:
+        return f"<repr failed: {type(e).__name__}: {e}>"
+
+
+def compare_test_results(
+    original_results: TestResults, candidate_results: TestResults, pass_fail_only: bool = False
+) -> tuple[bool, list[TestDiff]]:
+    # This is meant to be only called with test results for the first loop index
+    if len(original_results) == 0 or len(candidate_results) == 0:
+        return False, []  # empty test results are not equal
+    original_recursion_limit = sys.getrecursionlimit()
+    if original_recursion_limit < INCREASED_RECURSION_LIMIT:
+        sys.setrecursionlimit(INCREASED_RECURSION_LIMIT)  # Increase recursion limit to avoid RecursionError
+    test_ids_superset = original_results.get_all_unique_invocation_loop_ids().union(
+        set(candidate_results.get_all_unique_invocation_loop_ids())
+    )
+    test_diffs: list[TestDiff] = []
+    did_all_timeout: bool = True
+    for test_id in test_ids_superset:
+        original_test_result = original_results.get_by_unique_invocation_loop_id(test_id)
+        cdd_test_result = candidate_results.get_by_unique_invocation_loop_id(test_id)
+
+        if cdd_test_result is not None and original_test_result is None:
+            continue
+        # If helper function instance_state verification is not present, that's ok. continue
+        if (
+            original_test_result is not None
+            and original_test_result.verification_type
+            and original_test_result.verification_type == VerificationType.INIT_STATE_HELPER
+            and cdd_test_result is None
+        ):
+            continue
+        if original_test_result is None or cdd_test_result is None:
+            continue
+        did_all_timeout = did_all_timeout and (original_test_result.timed_out or False)
+        if original_test_result.timed_out:
+            continue
+        superset_obj = False
+        if original_test_result.verification_type and (
+            original_test_result.verification_type
+            in {VerificationType.INIT_STATE_HELPER, VerificationType.INIT_STATE_FTO}
+        ):
+            superset_obj = True
+
+        candidate_test_failures = candidate_results.test_failures
+        original_test_failures = original_results.test_failures
+        cdd_pytest_error = (
+            candidate_test_failures.get(original_test_result.id.test_fn_qualified_name(), "")
+            if candidate_test_failures
+            else ""
+        )
+        if cdd_pytest_error:
+            cdd_pytest_error = shorten_pytest_error(cdd_pytest_error)
+        original_pytest_error = (
+            original_test_failures.get(original_test_result.id.test_fn_qualified_name(), "")
+            if original_test_failures
+            else ""
+        )
+        if original_pytest_error:
+            original_pytest_error = shorten_pytest_error(original_pytest_error)
+
+        if original_test_result.test_type in {
+            TestType.EXISTING_UNIT_TEST,
+            TestType.CONCOLIC_COVERAGE_TEST,
+            TestType.GENERATED_REGRESSION,
+            TestType.REPLAY_TEST,
+        } and (cdd_test_result.did_pass != original_test_result.did_pass):
+            test_diffs.append(
+                TestDiff(
+                    scope=TestDiffScope.DID_PASS,
+                    original_value=str(original_test_result.did_pass),
+                    candidate_value=str(cdd_test_result.did_pass),
+                    test_src_code=get_test_src_code(original_test_result.id, original_test_result.file_name),
+                    candidate_pytest_error=cdd_pytest_error,
+                    original_pass=original_test_result.did_pass,
+                    candidate_pass=cdd_test_result.did_pass,
+                    original_pytest_error=original_pytest_error,
+                )
+            )
+
+        elif not pass_fail_only and not comparator(
+            original_test_result.return_value, cdd_test_result.return_value, superset_obj=superset_obj
+        ):
+            test_diffs.append(
+                TestDiff(
+                    scope=TestDiffScope.RETURN_VALUE,
+                    original_value=test_diff_repr(safe_repr(original_test_result.return_value)),
+                    candidate_value=test_diff_repr(safe_repr(cdd_test_result.return_value)),
+                    test_src_code=get_test_src_code(original_test_result.id, original_test_result.file_name),
+                    candidate_pytest_error=cdd_pytest_error,
+                    original_pass=original_test_result.did_pass,
+                    candidate_pass=cdd_test_result.did_pass,
+                    original_pytest_error=original_pytest_error,
+                )
+            )
+
+            try:
+                logger.debug(
+                    "File Name: %s\nTest Type: %s\nVerification Type: %s\nInvocation ID: %s\nOriginal return value: %r\nCandidate return value: %r\n",
+                    original_test_result.file_name,
+                    original_test_result.test_type,
+                    original_test_result.verification_type,
+                    original_test_result.id,
+                    original_test_result.return_value,
+                    cdd_test_result.return_value,
+                )
+            except Exception as e:
+                logger.exception(e)
+        elif (
+            not pass_fail_only
+            and (original_test_result.stdout and cdd_test_result.stdout)
+            and not comparator(original_test_result.stdout, cdd_test_result.stdout)
+        ):
+            test_diffs.append(
+                TestDiff(
+                    scope=TestDiffScope.STDOUT,
+                    original_value=str(original_test_result.stdout),
+                    candidate_value=str(cdd_test_result.stdout),
+                    test_src_code=get_test_src_code(original_test_result.id, original_test_result.file_name),
+                    candidate_pytest_error=cdd_pytest_error,
+                    original_pass=original_test_result.did_pass,
+                    candidate_pass=cdd_test_result.did_pass,
+                    original_pytest_error=original_pytest_error,
+                )
+            )
+
+    sys.setrecursionlimit(original_recursion_limit)
+    if did_all_timeout:
+        return False, test_diffs
+    return len(test_diffs) == 0, test_diffs

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.languages.base import Language
 from codeflash.languages.current import reset_current_language, set_current_language
-from codeflash.verification.verification_utils import TestConfig
+from codeflash_core.config import TestConfig
 
 
 def test_java_tests_project_rootdir_set_to_tests_root(tmp_path):
@@ -23,7 +23,7 @@ def test_java_tests_project_rootdir_set_to_tests_root(tmp_path):
     # (simulating what happens before the fix)
     test_cfg = TestConfig(
         tests_root=tests_root,
-        project_root_path=project_root,
+        project_root=project_root,
         tests_project_rootdir=project_root,  # Initially set to project root
     )
 
@@ -67,7 +67,7 @@ def test_python_tests_project_rootdir_unchanged(tmp_path):
     # Create test config
     original_tests_project_rootdir = project_root / "some" / "other" / "dir"
     test_cfg = TestConfig(
-        tests_root=tests_root, project_root_path=project_root, tests_project_rootdir=original_tests_project_rootdir
+        tests_root=tests_root, project_root=project_root, tests_project_rootdir=original_tests_project_rootdir
     )
 
     # Mock pytest discovery

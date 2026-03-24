@@ -1,0 +1,216 @@
+from __future__ import annotations
+
+import logging
+import os
+import sys
+import time
+from functools import cache
+from io import StringIO
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+import git
+from unidiff import PatchSet
+
+if TYPE_CHECKING:
+    from git import Repo
+
+
+logger = logging.getLogger("codeflash_python")
+
+
+def get_git_diff(
+    repo_directory: Path | None = None, *, only_this_commit: str | None = None, uncommitted_changes: bool = False
+) -> dict[str, list[int]]:
+    if repo_directory is None:
+        repo_directory = Path.cwd()
+    repository = git.Repo(repo_directory, search_parent_directories=True)
+    commit = repository.head.commit
+    if only_this_commit:
+        uni_diff_text = repository.git.diff(
+            only_this_commit + "^1", only_this_commit, ignore_blank_lines=True, ignore_space_at_eol=True
+        )
+    elif uncommitted_changes:
+        uni_diff_text = repository.git.diff("HEAD", ignore_blank_lines=True, ignore_space_at_eol=True)
+    else:
+        uni_diff_text = repository.git.diff(
+            commit.hexsha + "^1", commit.hexsha, ignore_blank_lines=True, ignore_space_at_eol=True
+        )
+    patch_set = PatchSet(StringIO(uni_diff_text))
+    change_list: dict[str, list[int]] = {}  # list of changes
+    for patched_file in patch_set:
+        file_path: Path = Path(patched_file.path)
+        if file_path.suffix != ".py":
+            continue
+        file_path = Path(repository.working_dir) / file_path
+        logger.debug("file name: %s", file_path)
+
+        add_line_no: list[int] = [
+            line.target_line_no for hunk in patched_file for line in hunk if line.is_added and line.value.strip() != ""
+        ]  # the row number of deleted lines
+
+        logger.debug("added lines: %s", add_line_no)
+
+        del_line_no: list[int] = [
+            line.source_line_no
+            for hunk in patched_file
+            for line in hunk
+            if line.is_removed and line.value.strip() != ""
+        ]  # the row number of added lines
+
+        logger.debug("deleted lines: %s", del_line_no)
+
+        if not add_line_no and del_line_no:
+            # Deletion-only changes: use hunk target start lines so we can still
+            # match the surrounding function in the current (target) file.
+            add_line_no = [hunk.target_start for hunk in patched_file]
+        change_list[str(file_path)] = add_line_no
+    return change_list
+
+
+def get_current_branch(repo: Repo | None = None) -> str:
+    """Return the name of the current branch in the given repository.
+
+    Handles detached HEAD state and other edge cases by falling back to
+    the default branch (main or master) or "main" if no default branch exists.
+
+    :param repo: An optional Repo object. If not provided, the function will
+                 search for a repository in the current and parent directories.
+    :return: The name of the current branch, or "main" if HEAD is detached or
+             the branch cannot be determined.
+    """
+    repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
+
+    # Check if HEAD is detached (active_branch will be None)
+    if repository.head.is_detached:
+        logger.warning(
+            "HEAD is detached. Cannot determine current branch. Falling back to 'main'. "
+            "Consider checking out a branch before running Codeflash."
+        )
+        # Try to find the default branch (main or master)
+        for default_branch in ["main", "master"]:
+            try:
+                if default_branch in repository.branches:
+                    logger.info("Using '%s' as fallback branch.", default_branch)
+                    return default_branch
+            except Exception as e:
+                logger.debug("Error checking for branch '%s': %s", default_branch, e)
+                continue
+        # If no default branch found, return "main" as a safe default
+        return "main"
+
+    # HEAD is not detached, safe to access active_branch
+    try:
+        return repository.active_branch.name
+    except (AttributeError, TypeError) as e:
+        logger.warning(
+            "Could not determine active branch: %s. Falling back to 'main'. "
+            "This may indicate the repository is in an unusual state.",
+            e,
+        )
+        return "main"
+
+
+def get_remote_url(repo: Repo | None = None, git_remote: str | None = "origin") -> str:
+    repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
+    remote_name = git_remote if git_remote is not None else "origin"
+    return repository.remote(name=remote_name).url
+
+
+def get_git_remotes(repo: Repo) -> list[str]:
+    repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
+    return [remote.name for remote in repository.remotes]
+
+
+@cache
+def get_repo_owner_and_name(repo: Repo | None = None, git_remote: str | None = "origin") -> tuple[str, str]:
+    remote_url = get_remote_url(repo, git_remote)  # call only once
+    remote_url = remote_url.removesuffix(".git") if remote_url.endswith(".git") else remote_url
+    # remote_url = get_remote_url(repo, git_remote).removesuffix(".git") if remote_url.endswith(".git") else remote_url
+    remote_url = remote_url.rstrip("/")
+    split_url = remote_url.split("/")
+    repo_owner_with_github, repo_name = split_url[-2], split_url[-1]
+    repo_owner = repo_owner_with_github.split(":")[1] if ":" in repo_owner_with_github else repo_owner_with_github
+    return repo_owner, repo_name
+
+
+def git_root_dir(repo: Repo | None = None) -> Path:
+    repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
+    return Path(repository.working_dir)
+
+
+def check_running_in_git_repo(module_root: str) -> bool:
+    try:
+        _ = git.Repo(module_root, search_parent_directories=True).git_dir
+    except git.InvalidGitRepositoryError:
+        return False
+    else:
+        return True
+
+
+def confirm_proceeding_with_no_git_repo() -> str | bool:
+    assert sys.__stdin__ is not None
+    if sys.__stdin__.isatty():
+        return input(
+            "WARNING: I did not find a git repository for your code. If you proceed with running codeflash, "
+            "optimized code will be written over your current code and you could irreversibly lose your current code. Proceed? [y/N] "
+        ).strip().lower() in ("y", "yes")
+    # continue running on non-interactive environments, important for GitHub actions
+    return True
+
+
+def check_and_push_branch(repo: git.Repo, git_remote: str | None = "origin", *, wait_for_push: bool = False) -> bool:
+    # Check if HEAD is detached
+    if repo.head.is_detached:
+        logger.warning("HEAD is detached. Cannot push branch. Please check out a branch before creating a PR.")
+        return False
+
+    # Safe to access active_branch when HEAD is not detached
+    try:
+        current_branch = repo.active_branch
+        current_branch_name = current_branch.name
+    except (AttributeError, TypeError) as e:
+        logger.warning("Could not determine active branch: %s. Cannot push branch.", e)
+        return False
+
+    remote_name = git_remote if git_remote is not None else "origin"
+    remote = repo.remote(name=remote_name)
+
+    # Check if the branch is pushed
+    if f"{git_remote}/{current_branch_name}" not in repo.refs:
+        logger.warning("The branch '%s' is not pushed to the remote repository.", current_branch_name)
+        assert sys.__stdin__ is not None
+        if not sys.__stdin__.isatty():
+            logger.warning("Non-interactive shell detected. Branch will not be pushed.")
+            return False
+        if sys.__stdin__.isatty() and input(
+            f"In order for me to create PRs, your current branch needs to be pushed. Do you want to push "
+            f"the branch '{current_branch_name}' to the remote repository? [y/N] "
+        ).strip().lower() in ("y", "yes"):
+            remote.push(current_branch)  # type: ignore[arg-type]
+            logger.info("Branch '%s' has been pushed to %s.", current_branch_name, git_remote)
+            if wait_for_push:
+                time.sleep(3)  # adding this to give time for the push to register with GitHub,
+                # so that our modifications to it are not rejected
+            return True
+        logger.info("Branch '%s' has not been pushed to %s.", current_branch_name, git_remote)
+        return False
+    logger.debug("The branch '%s' is present in the remote repository.", current_branch_name)
+    return True
+
+
+def get_last_commit_author_if_pr_exists(repo: Repo | None = None) -> str | None:
+    """Return the author's name of the last commit in the current branch if PR_NUMBER is set.
+
+    Otherwise, return None.
+    """
+    if "PR_NUMBER" not in os.environ:
+        return None
+    try:
+        repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
+        last_commit = repository.head.commit
+    except Exception:
+        logger.exception("Failed to get last commit author.")
+        return None
+    else:
+        return last_commit.author.name

@@ -20,7 +20,7 @@ from codeflash.languages.java.test_discovery import (
     get_test_class_for_source_class,
     is_test_file,
 )
-from codeflash.models.function_types import FunctionParent, FunctionToOptimize
+from codeflash_core.models import FunctionParent, FunctionToOptimize
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -10,7 +10,7 @@ import isort
 from code_to_optimize.bubble_sort_method import BubbleSorter
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.formatter import sort_imports
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.models.models import FunctionParent, TestFile, TestFiles, TestingMode, TestType, VerificationType
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.equivalence import compare_test_results
@@ -150,7 +150,7 @@ def test_single_element_list():
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )
@@ -293,7 +293,7 @@ def test_single_element_list():
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )
@@ -384,7 +384,7 @@ class BubbleSorter:
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )
@@ -438,7 +438,7 @@ class BubbleSorter:
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )

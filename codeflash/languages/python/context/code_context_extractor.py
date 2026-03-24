@@ -19,7 +19,6 @@ from codeflash.code_utils.config_consts import (
     TESTGEN_CONTEXT_TOKEN_LIMIT,
     TESTGEN_LIMIT_ERROR,
 )
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize  # noqa: TC001
 from codeflash.languages.python.context.unused_definition_remover import (
     collect_top_level_defs_with_dependencies,
     collect_top_level_defs_with_usages,
@@ -41,6 +40,7 @@ from codeflash.models.models import (
     CodeStringsMarkdown,
     FunctionSource,
 )
+from codeflash_core.models import FunctionToOptimize  # noqa: TC001
 
 if TYPE_CHECKING:
     from pathlib import Path

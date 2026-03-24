@@ -7,7 +7,7 @@ from codeflash.benchmarking.instrument_codeflash_trace import (
     add_codeflash_decorator_to_code,
     instrument_codeflash_trace_decorator,
 )
-from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+from codeflash_core.models import FunctionParent, FunctionToOptimize
 
 
 def test_add_decorator_to_normal_function() -> None:

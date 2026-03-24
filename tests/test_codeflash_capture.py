@@ -6,13 +6,13 @@ from pathlib import Path
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 from codeflash.models.models import FunctionParent, TestFile, TestFiles, TestingMode, TestType, VerificationType
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.languages.python.instrument_codeflash_capture import instrument_codeflash_capture
 from codeflash.languages.python.test_runner import execute_test_subprocess
-from codeflash.verification.verification_utils import TestConfig
+from codeflash_core.config import TestConfig
 
 
 # Tests for get_stack_info. Ensures that when a test is run via pytest, the correct test information is extracted
@@ -450,9 +450,9 @@ class MyClass:
         test_config = TestConfig(
             tests_root=tests_root,
             tests_project_rootdir=project_root_path,
-            project_root_path=project_root_path,
+            project_root=project_root_path,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
         fto = FunctionToOptimize(
             function_name="some_function",
@@ -573,9 +573,9 @@ class MyClass(ParentClass):
         test_config = TestConfig(
             tests_root=tests_root,
             tests_project_rootdir=project_root_path,
-            project_root_path=project_root_path,
+            project_root=project_root_path,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
         fto = FunctionToOptimize(
             function_name="some_function",
@@ -700,9 +700,9 @@ class MyClass:
         test_config = TestConfig(
             tests_root=tests_root,
             tests_project_rootdir=project_root_path,
-            project_root_path=project_root_path,
+            project_root=project_root_path,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
         fto = FunctionToOptimize(
             function_name="some_function",
@@ -863,9 +863,9 @@ class AnotherHelperClass:
         test_config = TestConfig(
             tests_root=tests_root,
             tests_project_rootdir=project_root_path,
-            project_root_path=project_root_path,
+            project_root=project_root_path,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
         fto = FunctionToOptimize(
             function_name="target_function",
@@ -1017,9 +1017,9 @@ class AnotherHelperClass:
         test_config = TestConfig(
             tests_root=tests_root,
             tests_project_rootdir=project_root_path,
-            project_root_path=project_root_path,
+            project_root=project_root_path,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
         func_optimizer = PythonFunctionOptimizer(function_to_optimize=fto, test_cfg=test_config)
         func_optimizer.test_files = TestFiles(
@@ -1442,9 +1442,9 @@ def calculate_portfolio_metrics(
         test_config = TestConfig(
             tests_root=tests_root,
             tests_project_rootdir=project_root_path,
-            project_root_path=project_root_path,
+            project_root=project_root_path,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
         func_optimizer = PythonFunctionOptimizer(function_to_optimize=fto, test_cfg=test_config)
         func_optimizer.test_files = TestFiles(
@@ -1662,9 +1662,9 @@ class SlotsClass:
         test_config = TestConfig(
             tests_root=tests_root,
             tests_project_rootdir=project_root_path,
-            project_root_path=project_root_path,
+            project_root=project_root_path,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
         fto = FunctionToOptimize(
             function_name="__init__",

@@ -59,7 +59,7 @@ class TestFunctionDiscoveryFromReplayTests:
         _trace_db, _jfr_file, output_dir, _test_count = traced_workload
 
         from codeflash.discovery.functions_to_optimize import _get_java_replay_test_functions
-        from codeflash.verification.verification_utils import TestConfig
+        from codeflash_core.config import TestConfig
 
         replay_test_paths = list(output_dir.glob("*.java"))
         assert len(replay_test_paths) >= 1
@@ -67,8 +67,8 @@ class TestFunctionDiscoveryFromReplayTests:
         test_cfg = TestConfig(
             tests_root=FIXTURE_DIR / "src" / "test" / "java",
             tests_project_rootdir=FIXTURE_DIR,
-            project_root_path=FIXTURE_DIR,
-            pytest_cmd="pytest",
+            project_root=FIXTURE_DIR,
+            test_command="pytest",
         )
 
         functions, trace_file_path = _get_java_replay_test_functions(replay_test_paths, test_cfg, FIXTURE_DIR)
@@ -189,14 +189,14 @@ class TestFullDiscoveryPipeline:
 
             # Step 1: Discover functions from replay tests (like get_optimizable_functions)
             from codeflash.discovery.functions_to_optimize import _get_java_replay_test_functions
-            from codeflash.verification.verification_utils import TestConfig
+            from codeflash_core.config import TestConfig
 
             replay_test_paths = list(output_dir.glob("*.java"))
             test_cfg = TestConfig(
                 tests_root=test_root,
                 tests_project_rootdir=FIXTURE_DIR,
-                project_root_path=FIXTURE_DIR,
-                pytest_cmd="pytest",
+                project_root=FIXTURE_DIR,
+                test_command="pytest",
             )
 
             file_to_funcs, trace_file_path = _get_java_replay_test_functions(replay_test_paths, test_cfg, FIXTURE_DIR)

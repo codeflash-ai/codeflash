@@ -64,7 +64,7 @@ from codeflash.languages.test_framework import (
 # Lazy imports to avoid circular imports
 def __getattr__(name: str):
     if name == "FunctionInfo":
-        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash_core.models import FunctionToOptimize
 
         return FunctionToOptimize
     if name == "JavaScriptSupport":

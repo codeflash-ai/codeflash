@@ -104,7 +104,7 @@ tests = [
 ]
 
 [tool.hatch.build.targets.sdist]
-include = ["codeflash", "src/codeflash_core"]
+include = ["codeflash", "src/codeflash_core", "src/codeflash_python"]
 exclude = [
     "docs/*",
     "experiments/*",
@@ -154,6 +154,7 @@ exclude = [
 ]
 
 [tool.hatch.build.targets.wheel]
+packages = ["codeflash", "src/codeflash_core", "src/codeflash_python"]
 exclude = [
     "docs/*",
     "experiments/*",
@@ -204,6 +205,7 @@ exclude = [
 ]
 
 [tool.mypy]
+mypy_path = ["src"]
 show_error_code_links = true
 pretty = true
 show_absolute_path = true

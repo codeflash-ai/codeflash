@@ -22,8 +22,8 @@ if TYPE_CHECKING:
 
     from tree_sitter import Node
 
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.javascript.treesitter import ImportInfo, TreeSitterAnalyzer
+    from codeflash_core.models import FunctionToOptimize
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +70,7 @@ class ReferenceFinder:
     Example usage:
         ```python
         from codeflash.languages.javascript.find_references import ReferenceFinder
-        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash_core.models import FunctionToOptimize
 
         func = FunctionToOptimize(
             function_name="myHelper", file_path=Path("/my/project/src/utils.ts"), parents=[], language="javascript"
@@ -827,7 +827,7 @@ def find_references(
         ```python
         from pathlib import Path
         from codeflash.languages.javascript.find_references import find_references
-        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash_core.models import FunctionToOptimize
 
         func = FunctionToOptimize(
             function_name="myHelper", file_path=Path("/my/project/src/utils.ts"), parents=[], language="javascript"

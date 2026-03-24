@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.base import Language
 from codeflash.languages.current import set_current_language
 from codeflash.languages.java.instrumentation import instrument_existing_test
@@ -126,7 +126,7 @@ def _make_optimizer(project_root: Path, test_dir: Path, function_name: str, src_
             disable_telemetry=True,
             tests_root=test_dir,
             test_project_root=project_root,
-            pytest_cmd="pytest",
+            test_command="pytest",
             experiment_id=None,
         )
     )

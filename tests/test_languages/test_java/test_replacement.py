@@ -1607,7 +1607,7 @@ public final class Buffer {{
         optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
 
         # Create FunctionToOptimize with line info for the 3-arg version (lines 13-18)
-        from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+        from codeflash_core.models import FunctionParent, FunctionToOptimize
 
         function_to_optimize = FunctionToOptimize(
             function_name="bytesToHexString",
@@ -1615,7 +1615,6 @@ public final class Buffer {{
             starting_line=13,  # Line where 3-arg version starts (1-indexed)
             ending_line=18,
             parents=[FunctionParent(name="Buffer", type="ClassDef")],
-            qualified_name="Buffer.bytesToHexString",
             is_method=True,
         )
 
@@ -1678,7 +1677,7 @@ class TestWrongMethodNameGeneration:
         Applying that would create a duplicate ``unpackMap`` and delete
         ``unpackObjectMap``, causing compilation failures.
         """
-        from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+        from codeflash_core.models import FunctionParent, FunctionToOptimize
 
         java_file = tmp_path / "Unpacker.java"
         original_code = """\
@@ -1710,7 +1709,6 @@ public final Object unpackMap() {{
             starting_line=2,
             ending_line=4,
             parents=[FunctionParent(name="Unpacker", type="ClassDef")],
-            qualified_name="Unpacker.unpackObjectMap",
             is_method=True,
         )
 
@@ -1733,7 +1731,7 @@ public final Object unpackMap() {{
         contained only ``sizeTxn`` (a helper) and did not include ``estimateKeySize``
         (the target).  Applying it would duplicate ``sizeTxn`` in the source.
         """
-        from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+        from codeflash_core.models import FunctionParent, FunctionToOptimize
 
         java_file = tmp_path / "Command.java"
         original_code = """\
@@ -1767,7 +1765,6 @@ public class Command {{
             starting_line=2,
             ending_line=4,
             parents=[FunctionParent(name="Command", type="ClassDef")],
-            qualified_name="Command.estimateKeySize",
             is_method=True,
         )
 
@@ -1803,7 +1800,7 @@ class TestAnonymousInnerClassMethods:
         Those three methods must remain inside the anonymous class body and
         must NOT be added as top-level members of the outer class.
         """
-        from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+        from codeflash_core.models import FunctionParent, FunctionToOptimize
 
         java_file = tmp_path / "LuaMap.java"
         original_code = """\
@@ -1876,7 +1873,6 @@ public final class LuaMap {{
             starting_line=11,
             ending_line=13,
             parents=[FunctionParent(name="LuaMap", type="ClassDef")],
-            qualified_name="LuaMap.keySetIterator",
             is_method=True,
         )
 

@@ -15,7 +15,7 @@ from codeflash.benchmarking.replay_test import generate_replay_test
 from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
 from codeflash.benchmarking.utils import validate_and_format_benchmark_table
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.models.models import CodePosition, TestFile, TestFiles, TestingMode, TestsInFile, TestType
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.equivalence import compare_test_results
@@ -361,7 +361,7 @@ def test_run_and_parse_picklepatch() -> None:
                 project_root=project_root,
                 disable_telemetry=True,
                 tests_root=tests_root,
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root,
             )

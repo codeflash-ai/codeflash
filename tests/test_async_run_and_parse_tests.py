@@ -13,7 +13,7 @@ from codeflash.code_utils.instrument_existing_tests import (
     get_decorator_name_for_mode,
     inject_profiling_into_existing_test,
 )
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.models.models import CodePosition, FunctionParent, TestFile, TestFiles, TestingMode, TestType
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.languages.python.instrument_codeflash_capture import instrument_codeflash_capture
@@ -85,7 +85,7 @@ async def test_async_sort():
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )
@@ -212,7 +212,7 @@ async def test_async_class_sort():
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )
@@ -337,7 +337,7 @@ async def test_async_perf():
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )
@@ -457,7 +457,7 @@ async def async_error_function(lst):
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )
@@ -562,7 +562,7 @@ async def test_async_multi():
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )
@@ -682,7 +682,7 @@ async def test_async_edge_cases():
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )
@@ -827,7 +827,7 @@ def test_sync_sort():
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )
@@ -1002,7 +1002,7 @@ async def test_mixed_sorting():
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )

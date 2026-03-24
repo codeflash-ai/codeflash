@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     import subprocess
 
     from codeflash.models.models import CodeOptimizationContext, CoverageData, TestFiles
-    from codeflash.verification.verification_utils import TestConfig
+    from codeflash_core.config import TestConfig
 
 
 def parse_func(file_path: Path) -> XMLParser:

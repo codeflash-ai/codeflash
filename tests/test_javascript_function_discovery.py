@@ -13,7 +13,7 @@ from codeflash.discovery.functions_to_optimize import (
     get_functions_to_optimize,
 )
 from codeflash.languages.base import Language
-from codeflash.verification.verification_utils import TestConfig
+from codeflash_core.config import TestConfig
 
 
 class TestJavaScriptFunctionDiscovery:
@@ -322,7 +322,7 @@ export function capitalize(str) {
 """)
         test_config = TestConfig(
             tests_root=str(tmp_path / "tests"),
-            project_root_path=str(tmp_path),
+            project_root=str(tmp_path),
             tests_project_rootdir=tmp_path / "tests",
         )
 
@@ -356,7 +356,7 @@ export function subtract(a, b) {
 """)
         test_config = TestConfig(
             tests_root=str(tmp_path / "tests"),
-            project_root_path=str(tmp_path),
+            project_root=str(tmp_path),
             tests_project_rootdir=tmp_path / "tests",
         )
 
@@ -394,7 +394,7 @@ export function standaloneFunc() {
 """)
         test_config = TestConfig(
             tests_root=str(tmp_path / "tests"),
-            project_root_path=str(tmp_path),
+            project_root=str(tmp_path),
             tests_project_rootdir=tmp_path / "tests",
         )
 

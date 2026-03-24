@@ -9,13 +9,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.base import Language
 from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
 from codeflash.languages.javascript.support import JavaScriptSupport, TypeScriptSupport
 from codeflash.languages.registry import get_language_support
 from codeflash.models.models import FunctionParent
-from codeflash.verification.verification_utils import TestConfig
+from codeflash_core.config import TestConfig
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -1098,8 +1098,8 @@ class TestCodeExtractorIntegration:
         test_config = TestConfig(
             tests_root=cjs_project / "tests",
             tests_project_rootdir=cjs_project,
-            project_root_path=cjs_project,
-            pytest_cmd="jest",
+            project_root=cjs_project,
+            test_command="jest",
         )
 
         func_optimizer = JavaScriptFunctionOptimizer(

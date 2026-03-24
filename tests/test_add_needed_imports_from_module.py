@@ -24,7 +24,7 @@ from jedi.api.classes import Name
 from pydantic.dataclasses import dataclass
 from codeflash.languages.python.static_analysis.code_extractor import get_code, get_code_no_skeleton
 from codeflash.code_utils.code_utils import path_belongs_to_site_packages
-from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+from codeflash_core.models import FunctionParent, FunctionToOptimize
 
 def belongs_to_class(name: Name, class_name: str) -> bool:
     """Check if the given name belongs to the specified class."""
@@ -78,7 +78,7 @@ from pydantic.dataclasses import dataclass
 
 from codeflash.languages.python.static_analysis.code_extractor import get_code, get_code_no_skeleton
 from codeflash.code_utils.code_utils import path_belongs_to_site_packages
-from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+from codeflash_core.models import FunctionParent, FunctionToOptimize
 
 
 def belongs_to_class(name: Name, class_name: str) -> bool:

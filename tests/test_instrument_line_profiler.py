@@ -2,11 +2,11 @@ import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports, contains_jit_decorator
 from codeflash.models.models import CodeOptimizationContext
-from codeflash.verification.verification_utils import TestConfig
+from codeflash_core.config import TestConfig
 
 
 def test_add_decorator_imports_helper_in_class():
@@ -17,9 +17,9 @@ def test_add_decorator_imports_helper_in_class():
     test_config = TestConfig(
         tests_root=tests_root,
         tests_project_rootdir=project_root_path,
-        project_root_path=project_root_path,
+        project_root=project_root_path,
         test_framework="pytest",
-        pytest_cmd="pytest",
+        test_command="pytest",
     )
     func = FunctionToOptimize(function_name="sort_classmethod", parents=[], file_path=code_path)
     func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
@@ -89,9 +89,9 @@ def test_add_decorator_imports_helper_in_nested_class():
     test_config = TestConfig(
         tests_root=tests_root,
         tests_project_rootdir=project_root_path,
-        project_root_path=project_root_path,
+        project_root=project_root_path,
         test_framework="pytest",
-        pytest_cmd="pytest",
+        test_command="pytest",
     )
     func = FunctionToOptimize(function_name="sort_classmethod", parents=[], file_path=code_path)
     func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
@@ -138,9 +138,9 @@ def test_add_decorator_imports_nodeps():
     test_config = TestConfig(
         tests_root=tests_root,
         tests_project_rootdir=project_root_path,
-        project_root_path=project_root_path,
+        project_root=project_root_path,
         test_framework="pytest",
-        pytest_cmd="pytest",
+        test_command="pytest",
     )
     func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
     func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
@@ -189,9 +189,9 @@ def test_add_decorator_imports_helper_outside():
     test_config = TestConfig(
         tests_root=tests_root,
         tests_project_rootdir=project_root_path,
-        project_root_path=project_root_path,
+        project_root=project_root_path,
         test_framework="pytest",
-        pytest_cmd="pytest",
+        test_command="pytest",
     )
     func = FunctionToOptimize(function_name="sorter_deps", parents=[], file_path=code_path)
     func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
@@ -266,9 +266,9 @@ class helper:
     test_config = TestConfig(
         tests_root=tests_root,
         tests_project_rootdir=project_root_path,
-        project_root_path=project_root_path,
+        project_root=project_root_path,
         test_framework="pytest",
-        pytest_cmd="pytest",
+        test_command="pytest",
     )
     func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_write_path)
     func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)

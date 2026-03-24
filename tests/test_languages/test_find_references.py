@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.base import Language, ReferenceInfo
 from codeflash.languages.javascript.find_references import (
     ExportedFunction,

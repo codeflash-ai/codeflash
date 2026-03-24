@@ -4,14 +4,14 @@ from typing import TYPE_CHECKING, Any
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.config_consts import DEFAULT_IMPORTANCE_THRESHOLD
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.tracing.profile_stats import ProfileStats
+from codeflash_core.models import FunctionToOptimize
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.java.jfr_parser import JfrProfile
+    from codeflash_core.models import FunctionToOptimize
 
 pytest_patterns = {
     "<frozen",  # Frozen modules like runpy

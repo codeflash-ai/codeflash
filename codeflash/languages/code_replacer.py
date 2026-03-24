@@ -15,9 +15,9 @@ from codeflash.languages.base import FunctionFilterCriteria, Language
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.base import LanguageSupport
     from codeflash.models.models import CodeStringsMarkdown
+    from codeflash_core.models import FunctionToOptimize
 
 # Permissive criteria for discovering functions in code snippets (no export/return filtering)
 _SOURCE_CRITERIA = FunctionFilterCriteria(require_return=False, require_export=False)

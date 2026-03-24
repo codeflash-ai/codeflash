@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any
 
 import libcst as cst
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import (
     CodeContext,
     FunctionFilterCriteria,
@@ -20,7 +19,7 @@ from codeflash.languages.base import (
     TestResult,
 )
 from codeflash.languages.registry import register_language
-from codeflash.models.function_types import FunctionParent
+from codeflash_core.models import FunctionParent, FunctionToOptimize
 
 if TYPE_CHECKING:
     import ast
@@ -31,7 +30,7 @@ if TYPE_CHECKING:
 
     from codeflash.languages.base import DependencyResolver
     from codeflash.models.models import FunctionSource, GeneratedTestsList, InvocationId, ValidCode
-    from codeflash.verification.verification_utils import TestConfig
+    from codeflash_core.config import TestConfig
 
 logger = logging.getLogger(__name__)
 
@@ -1045,7 +1044,7 @@ class PythonSupport:
     pytest_cmd: str = "pytest"
 
     def setup_test_config(self, test_cfg: TestConfig, file_path: Path, current_worktree: Path | None = None) -> None:
-        self.pytest_cmd = test_cfg.pytest_cmd or "pytest"
+        self.pytest_cmd = test_cfg.test_command or "pytest"
 
     def pytest_cmd_tokens(self, is_posix: bool) -> list[str]:
         import shlex
@@ -1274,7 +1273,7 @@ class PythonSupport:
         from codeflash.languages.python.static_analysis.static_analysis import has_typed_parameters
         from codeflash.lsp.helpers import is_LSP_enabled
         from codeflash.telemetry.posthog_cf import ph
-        from codeflash.verification.verification_utils import TestConfig
+        from codeflash_core.config import TestConfig
 
         crosshair_available = importlib.util.find_spec("crosshair") is not None
 
@@ -1342,7 +1341,7 @@ class PythonSupport:
                 concolic_test_cfg = TestConfig(
                     tests_root=concolic_test_suite_dir,
                     tests_project_rootdir=test_cfg.concolic_test_root_dir,
-                    project_root_path=project_root,
+                    project_root=project_root,
                 )
                 function_to_concolic_tests, num_discovered_concolic_tests, _ = discover_unit_tests(concolic_test_cfg)
                 logger.info(

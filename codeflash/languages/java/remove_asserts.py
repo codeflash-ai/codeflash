@@ -25,8 +25,8 @@ from codeflash.languages.java.parser import get_java_analyzer
 if TYPE_CHECKING:
     from tree_sitter import Node
 
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.java.parser import JavaAnalyzer
+    from codeflash_core.models import FunctionToOptimize
 
 _ASSIGN_RE = re.compile(r"(\w+(?:<[^>]+>)?)\s+(\w+)\s*=\s*$")
 

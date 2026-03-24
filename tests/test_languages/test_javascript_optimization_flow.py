@@ -13,10 +13,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.base import Language
 from codeflash.models.models import CodeString, FunctionParent
-from codeflash.verification.verification_utils import TestConfig
+from codeflash_core.config import TestConfig
 
 
 def skip_if_js_not_supported():
@@ -322,8 +322,8 @@ describe('fibonacci', () => {
         test_config = TestConfig(
             tests_root=js_project / "tests",
             tests_project_rootdir=js_project,
-            project_root_path=js_project,
-            pytest_cmd="jest",
+            project_root=js_project,
+            test_command="jest",
         )
 
         optimizer = FunctionOptimizer(
@@ -355,8 +355,8 @@ describe('fibonacci', () => {
         test_config = TestConfig(
             tests_root=ts_project / "tests",
             tests_project_rootdir=ts_project,
-            project_root_path=ts_project,
-            pytest_cmd="vitest",
+            project_root=ts_project,
+            test_command="vitest",
         )
 
         optimizer = FunctionOptimizer(
@@ -388,8 +388,8 @@ describe('fibonacci', () => {
         test_config = TestConfig(
             tests_root=js_project / "tests",
             tests_project_rootdir=js_project,
-            project_root_path=js_project,
-            pytest_cmd="jest",
+            project_root=js_project,
+            test_command="jest",
         )
 
         optimizer = JavaScriptFunctionOptimizer(
@@ -425,8 +425,8 @@ describe('fibonacci', () => {
         test_config = TestConfig(
             tests_root=ts_project / "tests",
             tests_project_rootdir=ts_project,
-            project_root_path=ts_project,
-            pytest_cmd="vitest",
+            project_root=ts_project,
+            test_command="vitest",
         )
 
         optimizer = JavaScriptFunctionOptimizer(
@@ -477,7 +477,7 @@ module.exports = { main };
         )
 
         test_config = TestConfig(
-            tests_root=tmp_path, tests_project_rootdir=tmp_path, project_root_path=tmp_path, pytest_cmd="jest"
+            tests_root=tmp_path, tests_project_rootdir=tmp_path, project_root=tmp_path, test_command="jest"
         )
 
         optimizer = JavaScriptFunctionOptimizer(
@@ -521,7 +521,7 @@ export function main(): number {
         )
 
         test_config = TestConfig(
-            tests_root=tmp_path, tests_project_rootdir=tmp_path, project_root_path=tmp_path, pytest_cmd="vitest"
+            tests_root=tmp_path, tests_project_rootdir=tmp_path, project_root=tmp_path, test_command="vitest"
         )
 
         optimizer = JavaScriptFunctionOptimizer(

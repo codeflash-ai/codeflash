@@ -30,7 +30,6 @@ if TYPE_CHECKING:
 
     from codeflash.either import Result
     from codeflash.languages.base import Language
-    from codeflash.models.function_types import FunctionParent
     from codeflash.models.models import (
         CodeOptimizationContext,
         CodeStringsMarkdown,
@@ -41,6 +40,7 @@ if TYPE_CHECKING:
         TestDiff,
         TestFileReview,
     )
+    from codeflash_core.models import FunctionParent
 
 
 class PythonFunctionOptimizer(FunctionOptimizer):

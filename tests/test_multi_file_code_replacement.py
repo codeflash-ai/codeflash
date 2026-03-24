@@ -1,9 +1,9 @@
 from pathlib import Path
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown
-from codeflash.verification.verification_utils import TestConfig
+from codeflash_core.config import TestConfig
 
 
 class Args:
@@ -102,9 +102,9 @@ def _get_string_usage(text: str) -> Usage:
     test_config = TestConfig(
         tests_root=root_dir / "tests/pytest",
         tests_project_rootdir=root_dir,
-        project_root_path=root_dir,
+        project_root=root_dir,
         test_framework="pytest",
-        pytest_cmd="pytest",
+        test_command="pytest",
     )
     func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()

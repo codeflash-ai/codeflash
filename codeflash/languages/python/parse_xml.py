@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from codeflash.models.models import TestFiles
-    from codeflash.verification.verification_utils import TestConfig
+    from codeflash_core.config import TestConfig
 
 matches_re_start = re.compile(
     r"!\$######([^:]*)"  # group 1: module path
