@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+from functools import lru_cache
 
 
 class VariableNormalizer(ast.NodeTransformer):
@@ -162,6 +163,7 @@ def _remove_docstrings_from_ast(node: ast.AST) -> None:
             stack.extend([child for child in body if isinstance(child, node_types)])
 
 
+@lru_cache(maxsize=512)
 def normalize_python_code(code: str, remove_docstrings: bool = True) -> str:
     """Normalize Python code to a canonical form for comparison.
 
