@@ -32,7 +32,7 @@ from codeflash.version import __version__ as codeflash_version
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash_core.models import FunctionToOptimize
     from codeflash.models.ExperimentMetadata import ExperimentMetadata
     from codeflash.models.models import (
         AIServiceAdaptiveOptimizeRequest,

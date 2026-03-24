@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional, final
 
 if TYPE_CHECKING:
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash_core.models import FunctionToOptimize
 from pydantic.dataclasses import dataclass
 from rich.panel import Panel
 from rich.text import Text

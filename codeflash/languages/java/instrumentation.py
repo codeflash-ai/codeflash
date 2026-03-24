@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from pathlib import Path
     from typing import Any
 
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash_core.models import FunctionToOptimize
     from codeflash.languages.java.parser import JavaAnalyzer
 
 _WORD_RE = re.compile(r"^\w+$")

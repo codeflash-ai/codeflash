@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.base import Language
 from codeflash.languages.current import set_current_language
 from codeflash.languages.java.instrumentation import instrument_existing_test

@@ -1,7 +1,7 @@
 from argparse import Namespace
 from pathlib import Path
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.python.context.code_context_extractor import get_code_optimization_context
 from codeflash.models.models import FunctionParent
 from codeflash.optimization.optimizer import Optimizer

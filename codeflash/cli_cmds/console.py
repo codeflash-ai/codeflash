@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
     from rich.progress import TaskID
 
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash_core.models import FunctionToOptimize
     from codeflash.languages.base import DependencyResolver, IndexResult
     from codeflash.lsp.lsp_message import LspMessage
     from codeflash.models.models import TestResults

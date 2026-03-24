@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports, contains_jit_decorator
 from codeflash.models.models import CodeOptimizationContext

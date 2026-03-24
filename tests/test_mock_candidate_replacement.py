@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.python.context.unused_definition_remover import detect_unused_helper_functions
-from codeflash.models.function_types import FunctionParent
+from codeflash_core.models import FunctionParent
 from codeflash.models.models import CodeStringsMarkdown
 from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig

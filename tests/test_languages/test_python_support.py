@@ -567,7 +567,7 @@ def test_find_references_simple_function(python_support, tmp_path):
     This test specifically exercises the code path that was fixed in the
     regression where function.name was used instead of function.function_name.
     """
-    from codeflash.models.function_types import FunctionToOptimize
+    from codeflash_core.models import FunctionToOptimize
 
     # Create source file with function definition
     source_file = tmp_path / "utils.py"
@@ -597,7 +597,7 @@ def test_find_references_class_method(python_support, tmp_path):
 
     This verifies the class_name attribute is correctly used to disambiguate methods.
     """
-    from codeflash.models.function_types import FunctionParent, FunctionToOptimize
+    from codeflash_core.models import FunctionParent, FunctionToOptimize
 
     # Create source file with class and method
     source_file = tmp_path / "calculator.py"
@@ -633,7 +633,7 @@ def compute():
 
 def test_find_references_no_references(python_support, tmp_path):
     """Test that find_references returns empty list when no references exist."""
-    from codeflash.models.function_types import FunctionToOptimize
+    from codeflash_core.models import FunctionToOptimize
 
     source_file = tmp_path / "isolated.py"
     source_file.write_text("""def isolated_function():
@@ -649,7 +649,7 @@ def test_find_references_no_references(python_support, tmp_path):
 
 def test_find_references_nonexistent_function(python_support, tmp_path):
     """Test that find_references handles nonexistent functions gracefully."""
-    from codeflash.models.function_types import FunctionToOptimize
+    from codeflash_core.models import FunctionToOptimize
 
     source_file = tmp_path / "source.py"
     source_file.write_text("""def existing_function():

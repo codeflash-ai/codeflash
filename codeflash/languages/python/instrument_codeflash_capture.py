@@ -9,7 +9,7 @@ from codeflash.code_utils.formatter import sort_imports
 from codeflash.languages.python.context.code_context_extractor import _ATTRS_DECORATOR_NAMES, _ATTRS_NAMESPACES
 
 if TYPE_CHECKING:
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash_core.models import FunctionToOptimize
 
 
 def instrument_codeflash_capture(

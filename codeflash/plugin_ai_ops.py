@@ -9,7 +9,7 @@ from codeflash.plugin_helpers import format_speedup_pct, map_candidate_source
 from codeflash_core.models import Candidate
 
 if TYPE_CHECKING:
-    from codeflash.plugin import PythonPlugin as _Base
+    from codeflash.plugin import PythonPlugin as _Base  # type: ignore[attr-defined]
     from codeflash_core.models import BenchmarkResults, CodeContext, ScoredCandidate, TestDiff
 else:
     _Base = object
@@ -17,7 +17,7 @@ else:
 logger = logging.getLogger(__name__)
 
 
-class PluginAiOpsMixin(_Base):  # type: ignore[cyclic-class-definition]
+class PluginAiOpsMixin(_Base):  # type: ignore[misc]
     def get_candidates(self, context: CodeContext, trace_id: str = "") -> list[Candidate]:
         client = self.get_ai_client()
         assert trace_id, "trace_id must be provided"

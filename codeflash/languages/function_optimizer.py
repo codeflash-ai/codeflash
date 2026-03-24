@@ -115,10 +115,10 @@ if TYPE_CHECKING:
     from argparse import Namespace
     from typing import Any
 
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash_core.models import FunctionToOptimize
     from codeflash.either import Result
     from codeflash.languages.base import DependencyResolver
-    from codeflash.models.function_types import FunctionParent
+    from codeflash_core.models import FunctionParent
     from codeflash.models.models import (
         BenchmarkKey,
         CodeOptimizationContext,

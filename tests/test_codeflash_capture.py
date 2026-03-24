@@ -6,7 +6,7 @@ from pathlib import Path
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 from codeflash.models.models import FunctionParent, TestFile, TestFiles, TestingMode, TestType, VerificationType
 from codeflash.verification.equivalence import compare_test_results

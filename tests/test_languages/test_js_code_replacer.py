@@ -2434,7 +2434,7 @@ class TestNewGlobalDeclarationsShiftArrowFunctionLines:
         Uses function_to_optimize (the if-branch in replace_function_definitions_for_language)
         to reproduce the real pipeline where stale starting_line causes failures.
         """
-        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash_core.models import FunctionToOptimize
         from codeflash.models.models import CodeString, CodeStringsMarkdown
 
         original_source = """\
@@ -2525,7 +2525,7 @@ export { bytesToHumanReadable };
         introduces a new Set (NON_FILE_TYPES/MEDIA_TYPES) above the arrow function.
         Uses function_to_optimize to trigger the stale-line-number bug.
         """
-        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash_core.models import FunctionToOptimize
         from codeflash.models.models import CodeString, CodeStringsMarkdown
 
         original_source = """\

@@ -15,7 +15,7 @@ from codeflash.code_utils.instrument_existing_tests import (
     FunctionImportedAsVisitor,
     inject_profiling_into_existing_test,
 )
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 from codeflash.languages.python.static_analysis.line_profile_utils import add_decorator_imports
 from codeflash.models.models import (

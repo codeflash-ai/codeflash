@@ -24,7 +24,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.base import Language
 from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
 from codeflash.languages.javascript.support import JavaScriptSupport, TypeScriptSupport

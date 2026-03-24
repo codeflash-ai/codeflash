@@ -16,7 +16,7 @@ from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash_core.models import FunctionToOptimize
 
 logger = logging.getLogger(__name__)
 

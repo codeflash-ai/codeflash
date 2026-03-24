@@ -11,7 +11,7 @@ from codeflash.code_utils.instrument_existing_tests import (
     get_decorator_name_for_mode,
     inject_profiling_into_existing_test,
 )
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.models.models import CodePosition, TestingMode
 
 

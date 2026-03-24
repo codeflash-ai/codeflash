@@ -13,7 +13,7 @@ from codeflash.code_utils.instrument_existing_tests import (
     get_decorator_name_for_mode,
     inject_profiling_into_existing_test,
 )
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.models.models import CodePosition, FunctionParent, TestFile, TestFiles, TestingMode, TestType
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.languages.python.instrument_codeflash_capture import instrument_codeflash_capture

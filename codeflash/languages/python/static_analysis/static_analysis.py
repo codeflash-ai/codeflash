@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, TypeVar
 from pydantic import BaseModel, ConfigDict, field_validator
 
 if TYPE_CHECKING:
-    from codeflash.models.function_types import FunctionParent
+    from codeflash_core.models import FunctionParent
 
 
 ObjectDefT = TypeVar("ObjectDefT", ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)

@@ -17,13 +17,13 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
     from pathlib import Path
 
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash_core.models import FunctionToOptimize
     from codeflash.models.call_graph import CallGraph
     from codeflash.models.models import FunctionSource, GeneratedTestsList, InvocationId, ValidCode
     from codeflash.verification.verification_utils import TestConfig
 
 from codeflash.languages.language_enum import Language
-from codeflash.models.function_types import FunctionParent
+from codeflash_core.models import FunctionParent as FunctionParent, HelperFunction as HelperFunction
 
 # Backward compatibility aliases - ParentInfo is now FunctionParent
 ParentInfo = FunctionParent
@@ -33,7 +33,7 @@ ParentInfo = FunctionParent
 # This allows `from codeflash.languages.base import FunctionInfo` to work at runtime
 def __getattr__(name: str) -> Any:
     if name == "FunctionInfo":
-        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash_core.models import FunctionToOptimize
 
         return FunctionToOptimize
     msg = f"module {__name__!r} has no attribute {name!r}"
@@ -49,30 +49,6 @@ class IndexResult:
     cross_file_edges: int
     error: bool
 
-
-@dataclass
-class HelperFunction:
-    """A helper function that is a dependency of the target function.
-
-    Helper functions are functions called by the target function that are
-    within the same module/project (not external libraries).
-
-    Attributes:
-        name: The simple function name.
-        qualified_name: Full qualified name including parent scopes.
-        file_path: Path to the file containing the helper.
-        source_code: The source code of the helper function.
-        start_line: Starting line number.
-        end_line: Ending line number.
-
-    """
-
-    name: str
-    qualified_name: str
-    file_path: Path
-    source_code: str
-    start_line: int
-    end_line: int
 
 
 @dataclass

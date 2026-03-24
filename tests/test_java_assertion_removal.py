@@ -8,7 +8,7 @@ All tests assert for full string equality, no substring matching.
 
 from pathlib import Path
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.java.remove_asserts import JavaAssertTransformer, transform_java_assertions
 
 

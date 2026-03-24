@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from codeflash.discovery.discover_unit_tests import existing_unit_test_count
-from codeflash.models.function_types import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInFile
 from codeflash.models.test_type import TestType
 from codeflash.optimization.optimizer import Optimizer

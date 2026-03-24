@@ -7,7 +7,7 @@ from pathlib import Path
 
 import libcst as cst
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 from codeflash.languages.python.static_analysis.code_extractor import (
     delete___future___aliased_imports,

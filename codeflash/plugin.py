@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     import threading
 
     from codeflash.api.aiservice import AiServiceClient
+    from codeflash.models.models import CodeOptimizationContext
     from codeflash_core.config import TestConfig
     from codeflash_core.models import CoverageData, FunctionToOptimize
 
@@ -33,7 +34,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-class PythonPlugin(PluginAiOpsMixin, PluginTestLifecycleMixin, PluginResultsMixin):  # type: ignore[cyclic-class-definition]
+class PythonPlugin(PluginAiOpsMixin, PluginTestLifecycleMixin, PluginResultsMixin):
     """Implements the codeflash_core LanguagePlugin protocol for Python.
 
     Converts between core types and internal types at the boundary.
@@ -41,11 +42,11 @@ class PythonPlugin(PluginAiOpsMixin, PluginTestLifecycleMixin, PluginResultsMixi
 
     def __init__(self, project_root: Path) -> None:
         self.project_root = project_root
-        self.last_internal_context = None  # cache for get_candidates
+        self.last_internal_context: CodeOptimizationContext | None = None  # cache for get_candidates
         self.current_function: FunctionToOptimize | None = None  # cache for coverage
         self.tests_project_rootdir: Path | None = None  # cached from test_config
         self.is_numerical_code: bool | None = None  # cached from generate_tests
-        self.ai_client = None
+        self.ai_client: AiServiceClient | None = None
         self.pending_code_markdown: str = ""  # set by optimizer before replace_function
         self.cancel_event: threading.Event | None = None  # set by optimizer for cooperative cancellation
         self.dependency_counts: dict[str, int] = {}
@@ -54,11 +55,13 @@ class PythonPlugin(PluginAiOpsMixin, PluginTestLifecycleMixin, PluginResultsMixi
         return self.cancel_event is not None and self.cancel_event.is_set()
 
     def get_ai_client(self) -> AiServiceClient:
-        if self.ai_client is None:
-            from codeflash.api.aiservice import AiServiceClient
+        if self.ai_client is not None:
+            return self.ai_client
+        from codeflash.api.aiservice import AiServiceClient
 
-            self.ai_client = AiServiceClient()
-        return self.ai_client
+        client = AiServiceClient()
+        self.ai_client = client
+        return client
 
     # -- cleanup, comparison, environment validation --------------------------
 
@@ -97,7 +100,7 @@ class PythonPlugin(PluginAiOpsMixin, PluginTestLifecycleMixin, PluginResultsMixi
         from codeflash.code_utils.env_utils import check_formatter_installed
 
         if hasattr(config, "formatter_cmds") and config.formatter_cmds:
-            return check_formatter_installed(config.formatter_cmds)  # type: ignore[arg-type]
+            return check_formatter_installed(config.formatter_cmds)
         return True
 
     # -- discover_functions --------------------------------------------------
@@ -129,7 +132,7 @@ class PythonPlugin(PluginAiOpsMixin, PluginTestLifecycleMixin, PluginResultsMixi
 
     # -- build_index / rank_functions -----------------------------------------
 
-    def build_index(self, files: list[Path], on_progress=None) -> None:
+    def build_index(self, files: list[Path], on_progress: object = None) -> None:
         # CallGraphIndex not available in main repo — no-op for now
         pass
 
@@ -335,7 +338,7 @@ class PythonPlugin(PluginAiOpsMixin, PluginTestLifecycleMixin, PluginResultsMixi
         modified = replace_function_simple(source, internal_fn, new_code)
         file.write_text(modified, encoding="utf-8")
 
-    def replace_function_full(self, function: FunctionToOptimize, internal_ctx: object, code_markdown: str) -> None:
+    def replace_function_full(self, function: FunctionToOptimize, internal_ctx: CodeOptimizationContext, code_markdown: str) -> None:
         """Port of FunctionOptimizer.replace_function_and_helpers_with_optimized_code."""
         from collections import defaultdict
 
@@ -353,7 +356,7 @@ class PythonPlugin(PluginAiOpsMixin, PluginTestLifecycleMixin, PluginResultsMixi
         # Group functions by file (target + helpers where definition_type in ("function", None))
         functions_by_file: dict[Path, set[str]] = defaultdict(set)
         functions_by_file[function.file_path].add(internal_fn.qualified_name)
-        for helper in internal_ctx.helper_functions:  # type: ignore[attr-defined]
+        for helper in internal_ctx.helper_functions:
             if helper.definition_type in ("function", None):
                 functions_by_file[helper.file_path].add(helper.qualified_name)
 
@@ -369,12 +372,12 @@ class PythonPlugin(PluginAiOpsMixin, PluginTestLifecycleMixin, PluginResultsMixi
                 function_names=list(qualified_names),
                 optimized_code=optimized_code,
                 module_abspath=module_abspath,
-                preexisting_objects=internal_ctx.preexisting_objects,  # type: ignore[attr-defined]
+                preexisting_objects=internal_ctx.preexisting_objects,
                 project_root_path=self.project_root,
             )
 
         # Detect and revert unused helpers
-        unused_helpers = detect_unused_helper_functions(internal_fn, internal_ctx, optimized_code)  # type: ignore[arg-type]
+        unused_helpers = detect_unused_helper_functions(internal_fn, internal_ctx, optimized_code)
         if unused_helpers:
             revert_unused_helper_functions(self.project_root, unused_helpers, original_helper_code)
 
@@ -455,7 +458,7 @@ class PythonPlugin(PluginAiOpsMixin, PluginTestLifecycleMixin, PluginResultsMixi
     def run_behavioral_tests(self, test_files: list[Path], test_config: TestConfig) -> TestResults:
         result = self.run_tests(test_config, test_files=test_files)
         if isinstance(result, tuple):
-            return result[0]  # type: ignore[return-value]
+            return result[0]
         return result
 
     def run_performance_tests(
@@ -536,7 +539,7 @@ class PythonPlugin(PluginAiOpsMixin, PluginTestLifecycleMixin, PluginResultsMixi
 
             # Parse line profiler results from .lprof file
             results, _ = parse_line_profile_results(lprof_output_file)
-            return results.get("str_out", "")
+            return str(results.get("str_out", ""))
         except Exception:
             logger.debug("Line profiler failed for %s", function.function_name, exc_info=True)
             return ""

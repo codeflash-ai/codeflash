@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.python.context.code_context_extractor import (
     collect_type_names_from_annotation,
     enrich_testgen_context,

@@ -227,7 +227,7 @@ def execute_test_subprocess(
     env: dict[str, str] | None,
     timeout: int = 600,
     cancel_event: threading.Event | None = None,
-) -> subprocess.CompletedProcess:
+) -> subprocess.CompletedProcess[str]:
     """Execute a subprocess with the given command list, working directory, environment variables, and timeout.
 
     If *cancel_event* is provided and becomes set while the process is running,
@@ -242,7 +242,8 @@ def execute_test_subprocess(
             run_args = get_cross_platform_subprocess_run_args(
                 cwd=cwd, env=env, timeout=timeout, check=False, text=True, capture_output=True
             )
-            return subprocess.run(cmd_list, **run_args)  # type: ignore[no-matching-overload]  # noqa: PLW1510
+            result: subprocess.CompletedProcess[str] = subprocess.run(cmd_list, **run_args)  # type: ignore[call-overload]  # noqa: PLW1510
+            return result
 
         # Use Popen so we can poll for cancellation
         run_args = get_cross_platform_subprocess_run_args(
@@ -252,7 +253,7 @@ def execute_test_subprocess(
         run_args.pop("check", None)
         run_args.pop("timeout", None)
         run_args.pop("capture_output", None)
-        proc = subprocess.Popen(cmd_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **run_args)  # type: ignore[no-matching-overload]
+        proc = subprocess.Popen(cmd_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **run_args)  # type: ignore[call-overload]
         deadline = time.monotonic() + timeout
         try:
             while proc.poll() is None:

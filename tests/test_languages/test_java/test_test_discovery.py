@@ -165,7 +165,7 @@ public class StringUtilsTest {
 """)
 
         # Create source function
-        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash_core.models import FunctionToOptimize
 
         func = FunctionToOptimize(
             function_name="reverse",

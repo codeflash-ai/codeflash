@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from pathlib import Path
 
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash_core.models import FunctionToOptimize
     from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, TestInfo, TestResult
     from codeflash.languages.java.concurrency_analyzer import ConcurrencyInfo
     from codeflash.models.models import GeneratedTestsList, InvocationId

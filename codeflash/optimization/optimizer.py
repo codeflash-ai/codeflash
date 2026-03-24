@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 
     from codeflash.benchmarking.function_ranker import FunctionRanker
     from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash_core.models import FunctionToOptimize
     from codeflash.languages.base import DependencyResolver
     from codeflash.languages.function_optimizer import FunctionOptimizer
     from codeflash.models.models import BenchmarkKey, FunctionCalledInTest, ValidCode

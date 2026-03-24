@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 import libcst as cst
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.base import (
     CodeContext,
     FunctionFilterCriteria,
@@ -20,7 +20,7 @@ from codeflash.languages.base import (
     TestResult,
 )
 from codeflash.languages.registry import register_language
-from codeflash.models.function_types import FunctionParent
+from codeflash_core.models import FunctionParent
 
 if TYPE_CHECKING:
     import ast

@@ -15,7 +15,7 @@ from codeflash.languages.base import FunctionFilterCriteria, Language
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash_core.models import FunctionToOptimize
     from codeflash.languages.base import LanguageSupport
     from codeflash.models.models import CodeStringsMarkdown
 

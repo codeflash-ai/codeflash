@@ -17,7 +17,7 @@ from codeflash_core.models import (
 )
 
 if TYPE_CHECKING:
-    from codeflash.plugin import PythonPlugin as _Base
+    from codeflash.plugin import PythonPlugin as _Base  # type: ignore[attr-defined]
     from codeflash_core.config import TestConfig
     from codeflash_core.models import CodeContext, CoverageData, FunctionToOptimize, TestResults
 else:
@@ -26,7 +26,7 @@ else:
 logger = logging.getLogger(__name__)
 
 
-class PluginTestLifecycleMixin(_Base):  # type: ignore[cyclic-class-definition]
+class PluginTestLifecycleMixin(_Base):  # type: ignore[misc]
     def generate_tests(
         self, function: FunctionToOptimize, context: CodeContext, test_config: TestConfig, trace_id: str = ""
     ) -> GeneratedTestSuite | None:
@@ -61,7 +61,7 @@ class PluginTestLifecycleMixin(_Base):  # type: ignore[cyclic-class-definition]
 
         # Cache tests_project_rootdir for use in repair_generated_tests
         tests_project_rootdir = test_config.tests_project_rootdir or test_config.project_root
-        self.tests_project_rootdir = tests_project_rootdir
+        self.tests_project_rootdir: Path | None = tests_project_rootdir
 
         module_path = Path(module_name_from_file_path(function.file_path, test_config.project_root))
         helper_names = [h.qualified_name for h in context.helper_functions]
@@ -83,7 +83,7 @@ class PluginTestLifecycleMixin(_Base):  # type: ignore[cyclic-class-definition]
                     function_to_optimize=internal_fn,
                     helper_function_names=helper_names,
                     module_path=module_path,
-                    test_cfg_project_root=tests_project_rootdir,
+                    test_cfg=test_config,  # type: ignore[arg-type]  # core TestConfig vs internal TestConfig
                     test_timeout=int(test_config.timeout),
                     function_trace_id=trace_id,
                     test_index=i,

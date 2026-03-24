@@ -15,7 +15,7 @@ from codeflash.cli_cmds.console import logger
 
 if TYPE_CHECKING:
     from codeflash.code_utils.code_position import CodePosition
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash_core.models import FunctionToOptimize
 
 
 class TestingMode:

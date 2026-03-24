@@ -10,10 +10,10 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.base import FunctionFilterCriteria
 from codeflash.languages.java.parser import get_java_analyzer
-from codeflash.models.function_types import FunctionParent
+from codeflash_core.models import FunctionParent
 
 if TYPE_CHECKING:
     from tree_sitter import Node

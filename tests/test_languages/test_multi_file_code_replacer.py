@@ -81,7 +81,7 @@ function findMin(numbers) {
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.javascript.function_optimizer import JavaScriptFunctionOptimizer
 from codeflash.languages.registry import get_language_support
 from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown

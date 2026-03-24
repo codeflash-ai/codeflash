@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
     from libcst.helpers import ModuleNameAndPackage
 
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash_core.models import FunctionToOptimize
     from codeflash.models.models import FunctionSource
 
 
@@ -953,7 +953,7 @@ def get_opt_review_metrics(
     source_code: str, file_path: Path, qualified_name: str, project_root: Path, tests_root: Path, language: Language
 ) -> str:
     """Get markdown-formatted calling function context for optimization review."""
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash_core.models import FunctionToOptimize
     from codeflash.languages.registry import get_language_support
     from codeflash.models.models import FunctionParent
 

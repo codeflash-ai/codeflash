@@ -7,7 +7,7 @@ from codeflash.discovery.discover_unit_tests import (
     discover_unit_tests,
     filter_test_files_by_imports,
 )
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.models.models import FunctionParent, TestsInFile, TestType
 from codeflash.verification.verification_utils import TestConfig
 

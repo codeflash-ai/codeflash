@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.either import is_successful
 from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 from codeflash.models.models import FunctionParent, get_code_block_splitter

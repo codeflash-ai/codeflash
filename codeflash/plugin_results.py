@@ -9,7 +9,7 @@ from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.plugin_helpers import format_speedup_pct, replace_function_simple
 
 if TYPE_CHECKING:
-    from codeflash.plugin import PythonPlugin as _Base
+    from codeflash.plugin import PythonPlugin as _Base  # type: ignore[attr-defined]
     from codeflash_core.models import CodeContext, GeneratedTestSuite, OptimizationResult, ScoredCandidate
 else:
     _Base = object
@@ -17,7 +17,7 @@ else:
 logger = logging.getLogger(__name__)
 
 
-class PluginResultsMixin(_Base):  # type: ignore[cyclic-class-definition]
+class PluginResultsMixin(_Base):  # type: ignore[misc]
     def rank_candidates(
         self, scored: list[ScoredCandidate], context: CodeContext, trace_id: str = ""
     ) -> list[int] | None:
@@ -35,9 +35,10 @@ class PluginResultsMixin(_Base):  # type: ignore[cyclic-class-definition]
         speedups = [sc.speedup for sc in scored]
 
         try:
-            return client.generate_ranking(
+            ranking: list[int] | None = client.generate_ranking(
                 trace_id=trace_id, diffs=diffs, optimization_ids=optimization_ids, speedups=speedups
             )
+            return ranking
         except Exception:
             logger.exception("Ranking API call failed")
             return None
@@ -58,7 +59,7 @@ class PluginResultsMixin(_Base):  # type: ignore[cyclic-class-definition]
         baseline_ns = int(optimized_ns * result.speedup) if result.speedup > 0 else 0
 
         try:
-            return client.get_new_explanation(
+            explanation: str = client.get_new_explanation(
                 source_code=context.target_code,
                 optimized_code=result.optimized_code,
                 dependency_code=context.read_only_context,
@@ -72,6 +73,7 @@ class PluginResultsMixin(_Base):  # type: ignore[cyclic-class-definition]
                 optimization_id=result.candidate.candidate_id,
                 original_explanation=result.candidate.explanation,
             )
+            return explanation
         except Exception:
             logger.exception("Explanation generation API call failed")
             return ""

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.javascript.instrument import TestingMode, instrument_generated_js_test, transform_expect_calls
 from codeflash.models.models import FunctionParent
 

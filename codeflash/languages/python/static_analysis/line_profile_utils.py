@@ -13,7 +13,7 @@ from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.formatter import sort_imports
 
 if TYPE_CHECKING:
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash_core.models import FunctionToOptimize
     from codeflash.models.models import CodeOptimizationContext
 
 # Known JIT decorators organized by module

@@ -18,7 +18,7 @@ from codeflash.models.models import CodeString, CodeStringsMarkdown
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash_core.models import FunctionToOptimize
     from codeflash.models.models import CodeOptimizationContext, FunctionSource
 
 

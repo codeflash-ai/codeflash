@@ -10,7 +10,7 @@ import isort
 from code_to_optimize.bubble_sort_method import BubbleSorter
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.formatter import sort_imports
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.models.models import FunctionParent, TestFile, TestFiles, TestingMode, TestType, VerificationType
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.equivalence import compare_test_results

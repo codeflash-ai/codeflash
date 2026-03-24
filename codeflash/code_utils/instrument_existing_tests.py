@@ -10,7 +10,7 @@ import libcst as cst
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
 from codeflash.code_utils.formatter import sort_imports
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.models.models import FunctionParent, TestingMode, VerificationType
 
 if TYPE_CHECKING:

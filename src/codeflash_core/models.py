@@ -19,7 +19,7 @@ class TestOutcomeStatus(Enum):
 @dataclass(frozen=True)
 class FunctionParent:
     name: str
-    type: str = "ClassDef"
+    type: str
 
     def __str__(self) -> str:
         return f"{self.type}:{self.name}"
@@ -36,7 +36,7 @@ class FunctionToOptimize:
     ending_col: int | None = None
     is_async: bool = False
     is_method: bool = False
-    language: str = ""
+    language: str = "python"
     doc_start_line: int | None = None
     source_code: str = ""
 
@@ -57,6 +57,16 @@ class FunctionToOptimize:
             if parent.type == "ClassDef":
                 return parent.name
         return None
+
+    def qualified_name_with_modules_from_root(self, project_root_path: Path) -> str:
+        from codeflash.code_utils.code_utils import module_name_from_file_path
+
+        return f"{module_name_from_file_path(self.file_path, project_root_path)}.{self.qualified_name}"
+
+    def __str__(self) -> str:
+        qualified = f"{'.'.join([p.name for p in self.parents])}{'.' if self.parents else ''}{self.function_name}"
+        line_info = f":{self.starting_line}-{self.ending_line}" if self.starting_line and self.ending_line else ""
+        return f"{self.file_path}:{qualified}{line_info}"
 
 
 @dataclass

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.python.instrument_codeflash_capture import instrument_codeflash_capture
 from codeflash.models.models import FunctionParent
 

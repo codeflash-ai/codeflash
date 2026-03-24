@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.python.context.unused_definition_remover import (
     detect_unused_helper_functions,
     revert_unused_helper_functions,
