@@ -304,6 +304,14 @@ ignore = [
     "PTH119",  # os.path.basename — faster than Path().name for string paths
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"src/codeflash_python/**" = [
+    "PTH110",  # os.path.exists — used deliberately for performance in hot paths
+    "PTH123",  # open() — pre-existing, not worth churning
+    "PD011",   # .values — false positive on non-pandas objects
+    "E721",    # type() == — intentional for MappingProxyType checks
+]
+
 [tool.ruff.lint.flake8-type-checking]
 strict = true
 runtime-evaluated-base-classes = ["pydantic.BaseModel"]

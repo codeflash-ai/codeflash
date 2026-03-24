@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import configparser
 import logging
-from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import tomlkit
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 from codeflash_python.code_utils.config_parser import get_all_closest_config_files
 
