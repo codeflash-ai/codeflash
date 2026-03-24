@@ -9,6 +9,7 @@ from codeflash_core.config import MAX_TEST_REPAIR_CYCLES, EffortKeys, get_effort
 from codeflash_core.models import GeneratedTestSuite, ScoredCandidate, TestOutcomeStatus
 from codeflash_core.ranking import compute_speedup, score_candidate, select_best
 from codeflash_core.strategy_utils import MIN_CORRECT_CANDIDATES, compute_test_diffs, restore_test_snapshots
+from codeflash_core.ui import logger as ui_logger, progress_bar
 from codeflash_core.verification import is_equivalent
 
 if TYPE_CHECKING:
@@ -71,18 +72,20 @@ class DefaultStrategyEvaluationMixin(_Base):
                 break
             candidate = queue.pop(0)
             processed += 1
+            ui_logger.info("Testing candidate %d/%d [%s]", processed, len(candidates) + processed - len(queue) - 1, candidate.source)
 
             if hasattr(runtime.plugin, "_pending_code_markdown"):
                 runtime.plugin._pending_code_markdown = candidate.code_markdown  # type: ignore[invalid-assignment]  # noqa: SLF001
             runtime.plugin.replace_function(function.file_path, function, candidate.code)
 
             try:
-                test_results = runtime.plugin.run_tests(
-                    runtime.test_config, test_files=behavior_test_files, test_iteration=processed
-                )
+                with progress_bar(f"Running tests for candidate {processed}...", transient=True):
+                    test_results = runtime.plugin.run_tests(
+                        runtime.test_config, test_files=behavior_test_files, test_iteration=processed
+                    )
 
                 if not is_equivalent(baseline_tests, test_results, comparator=runtime.output_comparator):
-                    logger.info("Candidate %s failed equivalence check", candidate.candidate_id)
+                    ui_logger.info("Candidate %s failed equivalence check", candidate.candidate_id)
                     all_correct[candidate.candidate_id] = False
                     # Phase 3: Try repair if test diffs are manageable
                     # Only repair first-pass candidates (optimize, line_profiler)
@@ -104,10 +107,12 @@ class DefaultStrategyEvaluationMixin(_Base):
                                 queue.append(repaired)
                     continue
 
-                bench = runtime.plugin.run_benchmarks(
-                    function, runtime.test_config, test_files=perf_test_files, test_iteration=processed
-                )
+                with progress_bar(f"Benchmarking candidate {processed}...", transient=True):
+                    bench = runtime.plugin.run_benchmarks(
+                        function, runtime.test_config, test_files=perf_test_files, test_iteration=processed
+                    )
                 speedup = compute_speedup(baseline_bench, bench)
+                ui_logger.info("Candidate %s passed — %.2fx speedup", candidate.candidate_id, speedup)
 
                 all_correct[candidate.candidate_id] = True
                 all_speedups[candidate.candidate_id] = speedup
@@ -163,12 +168,12 @@ class DefaultStrategyEvaluationMixin(_Base):
         queue: list[Candidate] = []
         for c in candidates:
             if not runtime.plugin.validate_candidate(c.code):
-                logger.info("Candidate %s has invalid syntax, skipping", c.candidate_id)
+                ui_logger.info("Candidate %s has invalid syntax, skipping", c.candidate_id)
                 continue
             c.code = runtime.plugin.format_code(c.code, function.file_path)
             norm = runtime.plugin.normalize_code(c.code.strip())
             if norm in seen_normalized:
-                logger.info("Candidate %s is identical/duplicate, skipping", c.candidate_id)
+                ui_logger.info("Candidate %s is identical/duplicate, skipping", c.candidate_id)
                 continue
             seen_normalized.add(norm)
             queue.append(c)
@@ -254,7 +259,7 @@ class DefaultStrategyEvaluationMixin(_Base):
             if run_result.passed:
                 passing_files.append(tf)
             else:
-                logger.info("Dropping failing test file: %s", tf.behavior_test_path)
+                ui_logger.info("Dropping failing test file: %s", tf.behavior_test_path)
 
         if not passing_files:
             return None

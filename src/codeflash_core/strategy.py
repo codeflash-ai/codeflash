@@ -17,6 +17,7 @@ from codeflash_core.diff import unified_diff
 from codeflash_core.models import OptimizationResult
 from codeflash_core.strategy_evaluation import DefaultStrategyEvaluationMixin
 from codeflash_core.strategy_utils import StageSpec, cleanup_generated_tests, log_optimization_run
+from codeflash_core.ui import code_print, logger as ui_logger, progress_bar
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -71,7 +72,8 @@ class DefaultStrategy(DefaultStrategyEvaluationMixin):
 
             # Phase 2: Review and repair generated tests
             stage = "test_review"
-            generated_tests = self.review_and_repair_tests(generated_tests, context, runtime)
+            with progress_bar("Reviewing and repairing tests..."):
+                generated_tests = self.review_and_repair_tests(generated_tests, context, runtime)
             if runtime.is_cancelled():
                 exit_reason = "cancelled"
                 return None
@@ -85,18 +87,20 @@ class DefaultStrategy(DefaultStrategyEvaluationMixin):
 
             # Run baseline tests
             stage = "baseline"
-            baseline_tests = runtime.plugin.run_tests(runtime.test_config, test_files=behavior_files)
+            with progress_bar("Running baseline tests..."):
+                baseline_tests = runtime.plugin.run_tests(runtime.test_config, test_files=behavior_files)
             if runtime.is_cancelled():
                 exit_reason = "cancelled"
                 return None
 
             if not baseline_tests.passed:
                 exit_reason = "baseline_failed"
-                logger.warning("Baseline tests failed for %s, skipping", function.qualified_name)
+                ui_logger.warning("Baseline tests failed for %s, skipping", function.qualified_name)
                 return None
 
             # Run baseline benchmarks
-            baseline_bench = runtime.plugin.run_benchmarks(function, runtime.test_config, test_files=perf_files)
+            with progress_bar("Running baseline benchmarks..."):
+                baseline_bench = runtime.plugin.run_benchmarks(function, runtime.test_config, test_files=perf_files)
             if runtime.is_cancelled():
                 exit_reason = "cancelled"
                 return None
@@ -111,6 +115,7 @@ class DefaultStrategy(DefaultStrategyEvaluationMixin):
 
             # Phase 3: Multi-round candidate evaluation
             stage = "evaluating"
+            ui_logger.info("Evaluating %d candidates...", len(candidates))
             scored, all_speedups, all_runtimes, all_correct = self.evaluate_candidates(
                 function,
                 context,
@@ -127,12 +132,14 @@ class DefaultStrategy(DefaultStrategyEvaluationMixin):
 
             # Phase 4+5: Rank, explain, log, finish
             stage = "ranking"
-            result = self.rank_explain_finish(
-                function, context, scored, generated_tests, runtime, all_speedups, all_runtimes, all_correct
-            )
+            with progress_bar("Ranking results..."):
+                result = self.rank_explain_finish(
+                    function, context, scored, generated_tests, runtime, all_speedups, all_runtimes, all_correct
+                )
             if result:
                 stage = "done"
                 exit_reason = "optimized"
+                code_print(result.diff)
             else:
                 exit_reason = "cancelled" if runtime.is_cancelled() else "no_improvement"
             return result
@@ -160,19 +167,21 @@ class DefaultStrategy(DefaultStrategyEvaluationMixin):
 
         Returns (context, candidates, generated_tests) or None if cancelled/no candidates.
         """
-        context = runtime.plugin.extract_context(function)
+        with progress_bar("Extracting context...", transient=True):
+            context = runtime.plugin.extract_context(function)
         if runtime.is_cancelled():
             return None
 
-        generated_tests, candidates = self.generate_tests_and_candidates(function, context, runtime)
+        with progress_bar("Generating tests and candidates..."):
+            generated_tests, candidates = self.generate_tests_and_candidates(function, context, runtime)
 
         if runtime.is_cancelled():
             return None
         if not candidates:
-            logger.info("No candidates returned for %s", function.qualified_name)
+            ui_logger.info("No candidates returned for %s", function.qualified_name)
             return None
 
-        logger.info("Received %d candidates for %s", len(candidates), function.qualified_name)
+        ui_logger.info("Received %d candidates for %s", len(candidates), function.qualified_name)
         return context, candidates, generated_tests
 
     def rank_explain_finish(

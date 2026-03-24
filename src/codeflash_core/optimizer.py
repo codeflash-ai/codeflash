@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from codeflash_core.config import HIGH_EFFORT_TOP_N, EffortLevel
 from codeflash_core.strategy import DefaultStrategy
 from codeflash_core.strategy_utils import OptimizationRuntime
+from codeflash_core.ui import console, logger as ui_logger, paneled_text, progress_bar
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -61,16 +62,17 @@ class Optimizer:
         self.plugin_cleanup()
         self.cleanup_leftover_trace_files()
 
-        functions = self.plugin.discover_functions(files)
+        with progress_bar("Discovering functions...", transient=True):
+            functions = self.plugin.discover_functions(files)
 
         if function_filter:
             functions = [f for f in functions if function_filter in (f.function_name, f.qualified_name)]
 
         if not functions:
-            logger.info("No optimizable functions found.")
+            ui_logger.info("No optimizable functions found.")
             return []
 
-        logger.info("Found %d functions to optimize.", len(functions))
+        ui_logger.info("Found %d functions to optimize.", len(functions))
 
         # Pre-index source files for dependency analysis (call graph)
         source_files = list({f.file_path for f in functions})
@@ -78,7 +80,8 @@ class Optimizer:
         def on_index_progress(result: object) -> None:
             pass
 
-        self.plugin.build_index(source_files, on_progress=on_index_progress)
+        with progress_bar("Building call graph...", transient=True):
+            self.plugin.build_index(source_files, on_progress=on_index_progress)
 
         # Rank functions by impact (e.g. dependency count)
         functions = self.plugin.rank_functions(functions)
@@ -93,6 +96,8 @@ class Optimizer:
                     cancelled = True
                     break
 
+                console.rule(f"[bold][{i + 1}/{len(functions)}] {function.qualified_name}[/bold]")
+
                 # Escalate top-N functions to HIGH effort when running at MEDIUM
                 original_effort = self.config.effort
                 if i < HIGH_EFFORT_TOP_N and self.config.effort == EffortLevel.MEDIUM.value:
@@ -103,19 +108,23 @@ class Optimizer:
 
                 if result is not None:
                     results.append(result)
-                    logger.info("Optimized %s — %.2fx speedup", function.qualified_name, result.speedup)
+                    ui_logger.info("Optimized %s — %.2fx speedup", function.qualified_name, result.speedup)
                 else:
                     skipped += 1
-                    logger.info("No improvement found for %s", function.qualified_name)
+                    ui_logger.info("No improvement found for %s", function.qualified_name)
         except KeyboardInterrupt:
-            logger.warning("Keyboard interrupt received. Cleaning up…")
+            ui_logger.warning("Keyboard interrupt received. Cleaning up…")
             cancelled = True
             self.cancel_event.set()
         finally:
             self.plugin_cleanup()
             self.cleanup_leftover_trace_files()
 
-        logger.info("Summary: %d analyzed, %d optimized, %d skipped", len(functions), len(results), skipped)
+        console.rule()
+        paneled_text(
+            f"{len(functions)} analyzed, {len(results)} optimized, {skipped} skipped",
+            title="Summary",
+        )
         return results
 
     def optimize_function(self, function: FunctionToOptimize) -> OptimizationResult | None:
