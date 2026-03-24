@@ -26,8 +26,8 @@ if TYPE_CHECKING:
 
     from tree_sitter import Node
 
-    from codeflash_core.models import FunctionToOptimize
     from codeflash.languages.java.parser import JavaAnalyzer
+    from codeflash_core.models import FunctionToOptimize
 
 logger = logging.getLogger(__name__)
 

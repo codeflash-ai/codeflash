@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from codeflash_core.models import FunctionToOptimize
     from codeflash.languages.base import HelperFunction
     from codeflash.languages.javascript.treesitter import ImportInfo, TreeSitterAnalyzer
+    from codeflash_core.models import FunctionToOptimize
 
 logger = logging.getLogger(__name__)
 
@@ -544,9 +544,9 @@ class MultiFileHelperFinder:
             Dictionary mapping file paths to lists of helper functions.
 
         """
-        from codeflash_core.models import FunctionToOptimize
         from codeflash.languages.javascript.treesitter import get_analyzer_for_file
         from codeflash.languages.registry import get_language_support
+        from codeflash_core.models import FunctionToOptimize
 
         if context.current_depth >= context.max_depth:
             return {}

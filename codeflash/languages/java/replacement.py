@@ -18,8 +18,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.java.parser import get_java_analyzer
+from codeflash_core.models import FunctionToOptimize
 
 if TYPE_CHECKING:
     from codeflash.languages.java.parser import JavaAnalyzer

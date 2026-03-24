@@ -28,8 +28,8 @@ if TYPE_CHECKING:
     from pathlib import Path
     from typing import Any
 
-    from codeflash_core.models import FunctionToOptimize
     from codeflash.languages.java.parser import JavaAnalyzer
+    from codeflash_core.models import FunctionToOptimize
 
 _WORD_RE = re.compile(r"^\w+$")
 

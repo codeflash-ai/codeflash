@@ -338,7 +338,9 @@ class PythonPlugin(PluginAiOpsMixin, PluginTestLifecycleMixin, PluginResultsMixi
         modified = replace_function_simple(source, internal_fn, new_code)
         file.write_text(modified, encoding="utf-8")
 
-    def replace_function_full(self, function: FunctionToOptimize, internal_ctx: CodeOptimizationContext, code_markdown: str) -> None:
+    def replace_function_full(
+        self, function: FunctionToOptimize, internal_ctx: CodeOptimizationContext, code_markdown: str
+    ) -> None:
         """Port of FunctionOptimizer.replace_function_and_helpers_with_optimized_code."""
         from collections import defaultdict
 

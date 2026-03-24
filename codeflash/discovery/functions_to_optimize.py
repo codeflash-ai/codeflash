@@ -30,13 +30,13 @@ from codeflash.languages.language_enum import Language
 from codeflash.languages.registry import get_language_support, get_supported_extensions, is_language_supported
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.telemetry.posthog_cf import ph
-from codeflash_core.models import FunctionToOptimize
 
 if TYPE_CHECKING:
     from argparse import Namespace
 
     from codeflash.models.models import CodeOptimizationContext
     from codeflash_core.config import TestConfig
+    from codeflash_core.models import FunctionToOptimize
 
 
 @dataclass(frozen=True)
