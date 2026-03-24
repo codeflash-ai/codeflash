@@ -11,6 +11,7 @@ from codeflash_python.verification.test_runner import process_generated_test_str
 from codeflash_python.verification.verification_utils import ModifyInspiredTests, delete_multiple_if_name_main
 
 if TYPE_CHECKING:
+    from codeflash_core.config import TestConfig
     from codeflash_core.models import FunctionToOptimize
     from codeflash_python.api.aiservice import AiServiceClient
 
@@ -24,7 +25,7 @@ def generate_tests(
     function_to_optimize: FunctionToOptimize,
     helper_function_names: list[str],
     module_path: Path,
-    test_cfg_project_root: Path,
+    test_cfg: TestConfig,
     test_timeout: int,
     function_trace_id: str,
     test_index: int,
@@ -38,7 +39,7 @@ def generate_tests(
     the returned test strings.
     """
     start_time = time.perf_counter()
-    test_module_path = Path(module_name_from_file_path(test_path, test_cfg_project_root))
+    test_module_path = Path(module_name_from_file_path(test_path, test_cfg.tests_project_rootdir))
 
     response = aiservice_client.generate_regression_tests(
         source_code_being_tested=source_code_being_tested,
