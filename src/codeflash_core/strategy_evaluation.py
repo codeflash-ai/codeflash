@@ -26,12 +26,12 @@ if TYPE_CHECKING:
     )
     from codeflash_core.strategy_utils import OptimizationRuntime
 
-_Base = object
+StrategyBase = object
 
 logger = logging.getLogger(__name__)
 
 
-class DefaultStrategyEvaluationMixin(_Base):
+class DefaultStrategyEvaluationMixin(StrategyBase):
     def evaluate_candidates(
         self,
         function: FunctionToOptimize,
@@ -80,8 +80,8 @@ class DefaultStrategyEvaluationMixin(_Base):
                 candidate.source,
             )
 
-            if hasattr(runtime.plugin, "_pending_code_markdown"):
-                runtime.plugin._pending_code_markdown = candidate.code_markdown  # type: ignore[invalid-assignment]  # noqa: SLF001
+            if hasattr(runtime.plugin, "pending_code_markdown"):
+                runtime.plugin.pending_code_markdown = candidate.code_markdown  # type: ignore[union-attr]
             runtime.plugin.replace_function(function.file_path, function, candidate.code)
 
             try:
@@ -217,15 +217,11 @@ class DefaultStrategyEvaluationMixin(_Base):
 
             # Collect coverage on first iteration for repair guidance
             if iteration == 0:
-                run_result = runtime.plugin.run_tests(
+                test_results, cov_data = runtime.plugin.run_tests(
                     runtime.test_config, test_files=behavior_files, enable_coverage=True
                 )
-                if isinstance(run_result, tuple):
-                    test_results, cov_data = run_result
-                    if cov_data is not None:
-                        coverage_data = cov_data
-                else:
-                    test_results = run_result
+                if cov_data is not None:
+                    coverage_data = cov_data
             else:
                 test_results = runtime.plugin.run_tests(runtime.test_config, test_files=behavior_files)
 

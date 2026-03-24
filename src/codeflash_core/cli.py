@@ -49,10 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
     opt.add_argument("--pytest-cmd", default=None, help="Override the pytest command to use.")
     opt.add_argument("--disable-telemetry", action="store_true", help="Disable telemetry.")
     opt.add_argument(
-        "--strategy",
-        choices=["default", "k8bot"],
-        default="default",
-        help="Optimization strategy to use (default: default).",
+        "--strategy", choices=["default"], default="default", help="Optimization strategy to use (default: default)."
     )
     opt.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging.")
 
@@ -115,9 +112,9 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     # -- Logging -------------------------------------------------------------
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.WARNING, format="%(name)s %(levelname)s: %(message)s"
-    )
+    from codeflash_core.ui import setup_logging
+
+    setup_logging(level=logging.DEBUG if args.verbose else logging.WARNING)
 
     # CLI overrides
     if args.project_root:
@@ -167,9 +164,13 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     # -- Build plugin & validate environment ---------------------------------
-    from codeflash_python.plugin import PythonPlugin
-
     from codeflash_core.optimizer import Optimizer
+
+    try:
+        from codeflash.plugin import PythonPlugin
+    except ImportError:
+        print("Error: codeflash package not installed. Install it to use the Python plugin.")
+        return 1
 
     plugin = PythonPlugin(config.project_root)
 
@@ -193,10 +194,6 @@ def _resolve_strategy(name: str) -> OptimizationStrategy:
     """Return the strategy instance for the given CLI name."""
     from codeflash_core.strategy import DefaultStrategy
 
-    if name == "k8bot":
-        from codeflash_core.k8bot import K8BotStrategy
-
-        return K8BotStrategy()
     return DefaultStrategy()
 
 

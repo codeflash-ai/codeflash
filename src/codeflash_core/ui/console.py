@@ -36,23 +36,26 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 console = Console(highlighter=NullHighlighter())
-
-logging.basicConfig(
-    level=logging.INFO,
-    handlers=[
-        RichHandler(
-            rich_tracebacks=True,
-            markup=False,
-            highlighter=NullHighlighter(),
-            console=console,
-            show_path=False,
-            show_time=False,
-        )
-    ],
-    format="%(message)s",
-)
-
 logger = logging.getLogger("codeflash")
+
+
+def setup_logging(level: int = logging.INFO) -> None:
+    """Configure root logger with Rich handler. Call from CLI, not at import time."""
+    logging.basicConfig(
+        level=level,
+        handlers=[
+            RichHandler(
+                rich_tracebacks=True,
+                markup=False,
+                highlighter=NullHighlighter(),
+                console=console,
+                show_path=False,
+                show_time=False,
+            )
+        ],
+        format="%(message)s",
+    )
+
 
 # ---------------------------------------------------------------------------
 # Spinners
@@ -84,19 +87,19 @@ SPINNER_TYPES = [
     "betaWave",
 ]
 
-_spinners = cycle(SPINNER_TYPES)
+spinner_cycle = cycle(SPINNER_TYPES)
 
 # ---------------------------------------------------------------------------
 # Dummy types for fallback
 # ---------------------------------------------------------------------------
 
 
-class _DummyTask:
+class DummyTask:
     def __init__(self) -> None:
         self.id = 0
 
 
-class _DummyProgress:
+class DummyProgress:
     def advance(self, task_id: TaskID, advance: int = 1) -> None:
         pass
 
@@ -105,22 +108,22 @@ class _DummyProgress:
 # Progress bars
 # ---------------------------------------------------------------------------
 
-_progress_bar_active = False
+progress_bar_active = False
 
 
 @contextmanager
 def progress_bar(message: str, *, transient: bool = False) -> Generator[TaskID, None, None]:
     """Spinner with elapsed time. Avoids nesting Rich Live displays."""
-    global _progress_bar_active
+    global progress_bar_active
 
-    if _progress_bar_active:
-        yield _DummyTask().id
+    if progress_bar_active:
+        yield DummyTask().id
         return
 
-    _progress_bar_active = True
+    progress_bar_active = True
     try:
         progress = Progress(
-            SpinnerColumn(next(_spinners)),
+            SpinnerColumn(next(spinner_cycle)),
             *Progress.get_default_columns(),
             TimeElapsedColumn(),
             console=console,
@@ -130,14 +133,14 @@ def progress_bar(message: str, *, transient: bool = False) -> Generator[TaskID, 
         with progress:
             yield task
     finally:
-        _progress_bar_active = False
+        progress_bar_active = False
 
 
 @contextmanager
 def test_files_progress_bar(total: int, description: str) -> Generator[tuple[Progress, TaskID], None, None]:
     """Progress bar with M/N counter for test files."""
     with Progress(
-        SpinnerColumn(next(_spinners)),
+        SpinnerColumn(next(spinner_cycle)),
         TextColumn("[progress.description]{task.description}"),
         BarColumn(complete_style="cyan", finished_style="green", pulse_style="yellow"),
         MofNCompleteColumn(),
