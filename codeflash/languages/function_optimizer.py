@@ -115,10 +115,8 @@ if TYPE_CHECKING:
     from argparse import Namespace
     from typing import Any
 
-    from codeflash_core.models import FunctionToOptimize
     from codeflash.either import Result
     from codeflash.languages.base import DependencyResolver
-    from codeflash_core.models import FunctionParent
     from codeflash.models.models import (
         BenchmarkKey,
         CodeOptimizationContext,
@@ -130,7 +128,8 @@ if TYPE_CHECKING:
         TestDiff,
         TestFileReview,
     )
-    from codeflash.verification.verification_utils import TestConfig
+    from codeflash_core.config import TestConfig
+    from codeflash_core.models import FunctionParent, FunctionToOptimize
 
 
 def log_optimization_context(function_name: str, code_context: CodeOptimizationContext) -> None:
@@ -475,7 +474,7 @@ class FunctionOptimizer:
         call_graph: DependencyResolver | None = None,
         effort_override: str | None = None,
     ) -> None:
-        self.project_root = test_cfg.project_root_path.resolve()
+        self.project_root = test_cfg.project_root.resolve()
         self.test_cfg = test_cfg
         self.aiservice_client = aiservice_client if aiservice_client else AiServiceClient()
         resolved_file_path = function_to_optimize.file_path.resolve()

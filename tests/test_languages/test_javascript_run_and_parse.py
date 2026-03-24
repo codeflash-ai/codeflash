@@ -25,7 +25,7 @@ import pytest
 from codeflash_core.models import FunctionToOptimize
 from codeflash.languages.base import Language
 from codeflash.models.models import FunctionParent
-from codeflash.verification.verification_utils import TestConfig
+from codeflash_core.config import TestConfig
 
 
 def is_node_available():
@@ -373,8 +373,8 @@ class TestRunAndParseJavaScriptTests:
         test_config = TestConfig(
             tests_root=vitest_project / "tests",
             tests_project_rootdir=vitest_project,
-            project_root_path=vitest_project,
-            pytest_cmd="vitest",
+            project_root=vitest_project,
+            test_command="vitest",
             test_framework="vitest",
         )
 

@@ -83,7 +83,7 @@ class PluginTestLifecycleMixin(_Base):  # type: ignore[misc]
                     function_to_optimize=internal_fn,
                     helper_function_names=helper_names,
                     module_path=module_path,
-                    test_cfg=test_config,  # type: ignore[arg-type]  # core TestConfig vs internal TestConfig
+                    test_cfg=test_config,
                     test_timeout=int(test_config.timeout),
                     function_trace_id=trace_id,
                     test_index=i,

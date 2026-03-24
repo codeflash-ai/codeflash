@@ -22,7 +22,7 @@ from codeflash.languages.python.static_analysis.code_replacer import (
     replace_functions_in_file,
 )
 from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, FunctionParent, FunctionSource
-from codeflash.verification.verification_utils import TestConfig
+from codeflash_core.config import TestConfig
 
 os.environ["CODEFLASH_API_KEY"] = "cf-test-key"
 
@@ -53,9 +53,9 @@ def sorter(arr):
     test_config = TestConfig(
         tests_root=tests_root,
         tests_project_rootdir=project_root_path,
-        project_root_path=project_root_path,
+        project_root=project_root_path,
         test_framework="pytest",
-        pytest_cmd="pytest",
+        test_command="pytest",
     )
     func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
@@ -833,9 +833,9 @@ class MainClass:
     test_config = TestConfig(
         tests_root=file_path.parent,
         tests_project_rootdir=file_path.parent,
-        project_root_path=file_path.parent,
+        project_root=file_path.parent,
         test_framework="pytest",
-        pytest_cmd="pytest",
+        test_command="pytest",
     )
     func_optimizer = PythonFunctionOptimizer(function_to_optimize=func_top_optimize, test_cfg=test_config)
     code_context = func_optimizer.get_code_optimization_context().unwrap()
@@ -1744,9 +1744,9 @@ class NewClass:
     test_config = TestConfig(
         tests_root=tests_root,
         tests_project_rootdir=project_root_path,
-        project_root_path=project_root_path,
+        project_root=project_root_path,
         test_framework="pytest",
-        pytest_cmd="pytest",
+        test_command="pytest",
     )
     func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
@@ -1823,9 +1823,9 @@ a=2
     test_config = TestConfig(
         tests_root=tests_root,
         tests_project_rootdir=project_root_path,
-        project_root_path=project_root_path,
+        project_root=project_root_path,
         test_framework="pytest",
-        pytest_cmd="pytest",
+        test_command="pytest",
     )
     func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
@@ -1903,9 +1903,9 @@ class NewClass:
     test_config = TestConfig(
         tests_root=tests_root,
         tests_project_rootdir=project_root_path,
-        project_root_path=project_root_path,
+        project_root=project_root_path,
         test_framework="pytest",
-        pytest_cmd="pytest",
+        test_command="pytest",
     )
     func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
@@ -1982,9 +1982,9 @@ class NewClass:
     test_config = TestConfig(
         tests_root=tests_root,
         tests_project_rootdir=project_root_path,
-        project_root_path=project_root_path,
+        project_root=project_root_path,
         test_framework="pytest",
-        pytest_cmd="pytest",
+        test_command="pytest",
     )
     func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
@@ -2062,9 +2062,9 @@ class NewClass:
     test_config = TestConfig(
         tests_root=tests_root,
         tests_project_rootdir=project_root_path,
-        project_root_path=project_root_path,
+        project_root=project_root_path,
         test_framework="pytest",
-        pytest_cmd="pytest",
+        test_command="pytest",
     )
     func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
@@ -2152,9 +2152,9 @@ class NewClass:
     test_config = TestConfig(
         tests_root=tests_root,
         tests_project_rootdir=project_root_path,
-        project_root_path=project_root_path,
+        project_root=project_root_path,
         test_framework="pytest",
-        pytest_cmd="pytest",
+        test_command="pytest",
     )
     func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
@@ -3452,9 +3452,9 @@ def hydrate_input_text_actions_with_field_names(
     test_config = TestConfig(
         tests_root=root_dir / "tests/pytest",
         tests_project_rootdir=root_dir,
-        project_root_path=root_dir,
+        project_root=root_dir,
         test_framework="pytest",
-        pytest_cmd="pytest",
+        test_command="pytest",
     )
     func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()

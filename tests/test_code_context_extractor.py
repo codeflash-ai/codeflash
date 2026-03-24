@@ -458,7 +458,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
             disable_telemetry=True,
             tests_root="tests",
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
             experiment_id=None,
             test_project_root=Path().resolve(),
         )
@@ -708,7 +708,7 @@ class HelperClass:
             disable_telemetry=True,
             tests_root="tests",
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
             experiment_id=None,
             test_project_root=Path().resolve(),
         )
@@ -806,7 +806,7 @@ class HelperClass:
             disable_telemetry=True,
             tests_root="tests",
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
             experiment_id=None,
             test_project_root=Path().resolve(),
         )
@@ -902,7 +902,7 @@ class HelperClass:
             disable_telemetry=True,
             tests_root="tests",
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
             experiment_id=None,
             test_project_root=Path().resolve(),
         )
@@ -998,7 +998,7 @@ class HelperClass:
             disable_telemetry=True,
             tests_root="tests",
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
             experiment_id=None,
             test_project_root=Path().resolve(),
         )
@@ -1050,7 +1050,7 @@ class HelperClass:
             disable_telemetry=True,
             tests_root="tests",
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
             experiment_id=None,
             test_project_root=Path().resolve(),
         )
@@ -1102,7 +1102,7 @@ class HelperClass:
             disable_telemetry=True,
             tests_root="tests",
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
             experiment_id=None,
             test_project_root=Path().resolve(),
         )
@@ -1691,7 +1691,7 @@ def outside_method():
             disable_telemetry=True,
             tests_root="tests",
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
             experiment_id=None,
             test_project_root=Path().resolve(),
         )
@@ -1962,7 +1962,7 @@ def get_system_details():
                 disable_telemetry=True,
                 tests_root="tests",
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=Path().resolve(),
             )
@@ -2223,7 +2223,7 @@ def get_system_details():
                 disable_telemetry=True,
                 tests_root="tests",
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=Path().resolve(),
             )
@@ -2383,7 +2383,7 @@ def standalone_function():
             disable_telemetry=True,
             tests_root="tests",
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
             experiment_id=None,
             test_project_root=Path().resolve(),
         )
@@ -2461,7 +2461,7 @@ class OuterClass:
             disable_telemetry=True,
             tests_root="tests",
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
             experiment_id=None,
             test_project_root=Path().resolve(),
         )
@@ -2513,7 +2513,7 @@ class TestClass:
             disable_telemetry=True,
             tests_root="tests",
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
             experiment_id=None,
             test_project_root=Path().resolve(),
         )
@@ -2566,7 +2566,7 @@ class TestClass:
             disable_telemetry=True,
             tests_root="tests",
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
             experiment_id=None,
             test_project_root=Path().resolve(),
         )
@@ -2577,7 +2577,7 @@ class TestClass:
             disable_telemetry=True,
             tests_root="tests",
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
             experiment_id=None,
             test_project_root=Path().resolve(),
         )
@@ -2622,7 +2622,7 @@ class SimpleClass:
             disable_telemetry=True,
             tests_root="tests",
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
             experiment_id=None,
             test_project_root=Path().resolve(),
         )
@@ -3236,7 +3236,7 @@ def target_function():
             disable_telemetry=True,
             tests_root="tests",
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
             experiment_id=None,
             test_project_root=Path().resolve(),
         )
@@ -3308,7 +3308,7 @@ def dump_layout(layout_type, layout):
             disable_telemetry=True,
             tests_root="tests",
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
             experiment_id=None,
             test_project_root=Path().resolve(),
         )

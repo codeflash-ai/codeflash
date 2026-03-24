@@ -6,7 +6,7 @@ from codeflash.code_utils.code_utils import ImportErrorPattern
 from codeflash.languages import current_language_support
 from codeflash.models.models import TestFile, TestFiles, TestType
 from codeflash.verification.parse_test_output import parse_test_xml
-from codeflash.verification.verification_utils import TestConfig
+from codeflash_core.config import TestConfig
 
 
 def test_unittest_runner():
@@ -29,7 +29,7 @@ class TestUnittestRunnerSorter(unittest.TestCase):
     cur_dir_path = Path(__file__).resolve().parent
     config = TestConfig(
         tests_root=cur_dir_path,
-        project_root_path=cur_dir_path,
+        project_root=cur_dir_path,
         test_framework="unittest",
         tests_project_rootdir=cur_dir_path.parent,
     )
@@ -38,9 +38,9 @@ class TestUnittestRunnerSorter(unittest.TestCase):
     test_env["CODEFLASH_TEST_ITERATION"] = "0"
     test_env["CODEFLASH_TRACER_DISABLE"] = "1"
     if "PYTHONPATH" not in test_env:
-        test_env["PYTHONPATH"] = str(config.project_root_path)
+        test_env["PYTHONPATH"] = str(config.project_root)
     else:
-        test_env["PYTHONPATH"] += os.pathsep + str(config.project_root_path)
+        test_env["PYTHONPATH"] += os.pathsep + str(config.project_root)
 
     with tempfile.TemporaryDirectory(dir=cur_dir_path) as temp_dir:
         test_file_path = Path(temp_dir) / "test_xx.py"
@@ -49,7 +49,7 @@ class TestUnittestRunnerSorter(unittest.TestCase):
         )
         test_file_path.write_text(code, encoding="utf-8")
         result_file, process, _, _ = current_language_support().run_behavioral_tests(
-            test_paths=test_files, test_env=test_env, cwd=Path(config.project_root_path)
+            test_paths=test_files, test_env=test_env, cwd=Path(config.project_root)
         )
         results = parse_test_xml(result_file, test_files, config, process)
     assert results[0].did_pass, "Test did not pass as expected"
@@ -70,7 +70,7 @@ def test_sort():
     cur_dir_path = Path(__file__).resolve().parent
     config = TestConfig(
         tests_root=cur_dir_path,
-        project_root_path=cur_dir_path,
+        project_root=cur_dir_path,
         test_framework="pytest",
         tests_project_rootdir=cur_dir_path.parent,
     )
@@ -79,9 +79,9 @@ def test_sort():
     test_env["CODEFLASH_TEST_ITERATION"] = "0"
     test_env["CODEFLASH_TRACER_DISABLE"] = "1"
     if "PYTHONPATH" not in test_env:
-        test_env["PYTHONPATH"] = str(config.project_root_path)
+        test_env["PYTHONPATH"] = str(config.project_root)
     else:
-        test_env["PYTHONPATH"] += os.pathsep + str(config.project_root_path)
+        test_env["PYTHONPATH"] += os.pathsep + str(config.project_root)
 
     with tempfile.TemporaryDirectory(dir=cur_dir_path) as temp_dir:
         test_file_path = Path(temp_dir) / "test_xx.py"
@@ -90,7 +90,7 @@ def test_sort():
         )
         test_file_path.write_text(code, encoding="utf-8")
         result_file, process, _, _ = current_language_support().run_behavioral_tests(
-            test_paths=test_files, test_env=test_env, cwd=Path(config.project_root_path), timeout=1
+            test_paths=test_files, test_env=test_env, cwd=Path(config.project_root), timeout=1
         )
         results = parse_test_xml(
             test_xml_file_path=result_file, test_files=test_files, test_config=config, run_result=process
@@ -112,7 +112,7 @@ def test_sort():
     cur_dir_path = Path(__file__).resolve().parent
     config = TestConfig(
         tests_root=cur_dir_path,
-        project_root_path=cur_dir_path,
+        project_root=cur_dir_path,
         test_framework="pytest",
         tests_project_rootdir=cur_dir_path.parent,
     )
@@ -121,9 +121,9 @@ def test_sort():
     test_env["CODEFLASH_TEST_ITERATION"] = "0"
     test_env["CODEFLASH_TRACER_DISABLE"] = "1"
     if "PYTHONPATH" not in test_env:
-        test_env["PYTHONPATH"] = str(config.project_root_path)
+        test_env["PYTHONPATH"] = str(config.project_root)
     else:
-        test_env["PYTHONPATH"] += os.pathsep + str(config.project_root_path)
+        test_env["PYTHONPATH"] += os.pathsep + str(config.project_root)
 
     with tempfile.TemporaryDirectory(dir=cur_dir_path) as temp_dir:
         test_file_path = Path(temp_dir) / "test_xx.py"
@@ -132,7 +132,7 @@ def test_sort():
         )
         test_file_path.write_text(code, encoding="utf-8")
         result_file, process, _, _ = current_language_support().run_behavioral_tests(
-            test_paths=test_files, test_env=test_env, cwd=Path(config.project_root_path), timeout=1
+            test_paths=test_files, test_env=test_env, cwd=Path(config.project_root), timeout=1
         )
         results = parse_test_xml(
             test_xml_file_path=result_file, test_files=test_files, test_config=config, run_result=process

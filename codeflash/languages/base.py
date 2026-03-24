@@ -17,13 +17,14 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
     from pathlib import Path
 
-    from codeflash_core.models import FunctionToOptimize
     from codeflash.models.call_graph import CallGraph
     from codeflash.models.models import FunctionSource, GeneratedTestsList, InvocationId, ValidCode
-    from codeflash.verification.verification_utils import TestConfig
+    from codeflash_core.config import TestConfig
+    from codeflash_core.models import FunctionToOptimize
 
 from codeflash.languages.language_enum import Language
-from codeflash_core.models import FunctionParent as FunctionParent, HelperFunction as HelperFunction
+from codeflash_core.models import FunctionParent as FunctionParent
+from codeflash_core.models import HelperFunction as HelperFunction
 
 # Backward compatibility aliases - ParentInfo is now FunctionParent
 ParentInfo = FunctionParent
@@ -48,7 +49,6 @@ class IndexResult:
     edges: tuple[tuple[str, str, bool], ...]  # (caller_qn, callee_name, is_cross_file)
     cross_file_edges: int
     error: bool
-
 
 
 @dataclass

@@ -361,7 +361,7 @@ def test_run_and_parse_picklepatch() -> None:
                 project_root=project_root,
                 disable_telemetry=True,
                 tests_root=tests_root,
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root,
             )

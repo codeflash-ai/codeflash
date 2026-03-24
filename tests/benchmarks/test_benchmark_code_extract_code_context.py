@@ -15,7 +15,7 @@ def test_benchmark_extract(benchmark) -> None:
             disable_telemetry=True,
             tests_root=(file_path / "tests").resolve(),
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
             experiment_id=None,
             test_project_root=Path.cwd(),
         )

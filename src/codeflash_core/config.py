@@ -63,9 +63,19 @@ def get_effort_value(key: EffortKeys, effort: EffortLevel | str) -> Any:
 class TestConfig:
     tests_root: Path
     project_root: Path
-    test_command: str = ""
-    timeout: float = 60.0
     tests_project_rootdir: Path | None = None
+    concolic_test_root_dir: Path | None = None
+    test_command: str = "pytest"
+    test_framework: str = "pytest"
+    benchmark_tests_root: Path | None = None
+    use_cache: bool = True
+    timeout: float = 60.0
+    js_project_root: Path | None = None
+
+    def __post_init__(self) -> None:
+        self.project_root = self.project_root.resolve()
+        if self.tests_project_rootdir is not None:
+            self.tests_project_rootdir = self.tests_project_rootdir.resolve()
 
 
 @dataclass

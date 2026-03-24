@@ -28,7 +28,7 @@ from codeflash.models.models import (
     TestsInFile,
     TestType,
 )
-from codeflash.verification.verification_utils import TestConfig
+from codeflash_core.config import TestConfig
 
 codeflash_wrap_string = """def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test_class_name, codeflash_test_name, codeflash_function_name, codeflash_line_id, codeflash_loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
     test_id = f'{{codeflash_test_module_name}}:{{codeflash_test_class_name}}:{{codeflash_test_name}}:{{codeflash_line_id}}:{{codeflash_loop_index}}'
@@ -430,9 +430,9 @@ def test_sort():
         test_config = TestConfig(
             tests_root=tests_root,
             tests_project_rootdir=project_root_path,
-            project_root_path=project_root_path,
+            project_root=project_root_path,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
         func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_env = os.environ.copy()
@@ -691,9 +691,9 @@ def test_sort_parametrized(input, expected_output):
         test_config = TestConfig(
             tests_root=tests_root,
             tests_project_rootdir=project_root_path,
-            project_root_path=project_root_path,
+            project_root=project_root_path,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
         func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
@@ -980,9 +980,9 @@ def test_sort_parametrized_loop(input, expected_output):
         test_config = TestConfig(
             tests_root=tests_root,
             tests_project_rootdir=project_root_path,
-            project_root_path=project_root_path,
+            project_root=project_root_path,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
         func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
@@ -1337,9 +1337,9 @@ def test_sort():
         test_config = TestConfig(
             tests_root=tests_root,
             tests_project_rootdir=project_root_path,
-            project_root_path=project_root_path,
+            project_root=project_root_path,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
         func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
@@ -1719,9 +1719,9 @@ class TestPigLatin(unittest.TestCase):
         test_config = TestConfig(
             tests_root=tests_root,
             tests_project_rootdir=project_root_path,
-            project_root_path=project_root_path,
+            project_root=project_root_path,
             test_framework="unittest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
         func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
@@ -1969,9 +1969,9 @@ import unittest
         test_config = TestConfig(
             tests_root=tests_root,
             tests_project_rootdir=project_root_path,
-            project_root_path=project_root_path,
+            project_root=project_root_path,
             test_framework="unittest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
         func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
@@ -2225,9 +2225,9 @@ import unittest
         test_config = TestConfig(
             tests_root=tests_root,
             tests_project_rootdir=project_root_path,
-            project_root_path=project_root_path,
+            project_root=project_root_path,
             test_framework="unittest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
         func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
@@ -2477,9 +2477,9 @@ import unittest
         test_config = TestConfig(
             tests_root=tests_root,
             tests_project_rootdir=project_root_path,
-            project_root_path=project_root_path,
+            project_root=project_root_path,
             test_framework="unittest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
         func_optimizer = PythonFunctionOptimizer(function_to_optimize=f, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(
@@ -2985,7 +2985,7 @@ def test_code_replacement10() -> None:
             disable_telemetry=True,
             tests_root="tests",
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
             experiment_id=None,
         ),
     )
@@ -3140,9 +3140,9 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
         test_config = TestConfig(
             tests_root=tests_root,
             tests_project_rootdir=project_root_path,
-            project_root_path=project_root_path,
+            project_root=project_root_path,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
         func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_files = TestFiles(
@@ -3275,9 +3275,9 @@ import unittest
         test_config = TestConfig(
             tests_root=tests_root,
             tests_project_rootdir=project_root_path,
-            project_root_path=project_root_path,
+            project_root=project_root_path,
             test_framework="unittest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         )
         func_optimizer = PythonFunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         test_results, coverage_data = func_optimizer.run_and_parse_tests(

@@ -14,7 +14,7 @@ from codeflash.models.models import (
     TestType,
     VerificationType,
 )
-from codeflash.verification.verification_utils import TestConfig
+from codeflash_core.config import TestConfig
 
 TestType.__test__ = False
 TestConfig.__test__ = False
@@ -25,7 +25,7 @@ TestResults.__test__ = False
 def test_config():
     """Create a mock TestConfig for testing."""
     config = Mock(spec=TestConfig)
-    config.project_root_path = Path(__file__).resolve().parent.parent
+    config.project_root = Path(__file__).resolve().parent.parent
     config.test_framework = "pytest"
     config.tests_project_rootdir = Path(__file__).resolve().parent
     config.tests_root = Path(__file__).resolve().parent
@@ -61,7 +61,7 @@ class TestAddRuntimeComments:
     def test_basic_runtime_comment_addition(self, test_config):
         """Test basic functionality of adding runtime comments."""
         # Create test source code
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_bubble_sort():
     codeflash_output = bubble_sort([3, 1, 2])
     assert codeflash_output == [1, 2, 3]
@@ -98,7 +98,7 @@ class TestAddRuntimeComments:
 
     def test_multiple_test_functions(self, test_config):
         """Test handling multiple test functions in the same file."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_bubble_sort():
     codeflash_output = quick_sort([3, 1, 2])
     assert codeflash_output == [1, 2, 3]
@@ -151,7 +151,7 @@ def helper_function():
 
     def test_different_time_formats(self, test_config):
         """Test that different time ranges are formatted correctly with new precision rules."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_cases = [
             (999, 500, "999ns -> 500ns"),  # nanoseconds
             (25_000, 18_000, "25.0μs -> 18.0μs"),  # microseconds with precision
@@ -195,7 +195,7 @@ def helper_function():
 
     def test_missing_test_results(self, test_config):
         """Test behavior when test results are missing for a test function."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_bubble_sort():
     codeflash_output = bubble_sort([3, 1, 2])
     assert codeflash_output == [1, 2, 3]
@@ -228,7 +228,7 @@ def helper_function():
 
     def test_partial_test_results(self, test_config):
         """Test behavior when only one set of test results is available."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_bubble_sort():
     codeflash_output = bubble_sort([3, 1, 2])
     assert codeflash_output == [1, 2, 3]
@@ -262,7 +262,7 @@ def helper_function():
 
     def test_multiple_runtimes_uses_minimum(self, test_config):
         """Test that when multiple runtimes exist, the minimum is used."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_bubble_sort():
     codeflash_output = bubble_sort([3, 1, 2])
     assert codeflash_output == [1, 2, 3]
@@ -314,7 +314,7 @@ def helper_function():
 
     def test_no_codeflash_output_assignment(self, test_config):
         """Test behavior when test doesn't have codeflash_output assignment."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_bubble_sort():
     result = bubble_sort([3, 1, 2])
     assert result == [1, 2, 3]
@@ -349,7 +349,7 @@ def helper_function():
 
     def test_invalid_python_code_handling(self, test_config):
         """Test behavior when test source code is invalid Python."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_bubble_sort(:
         codeflash_output = bubble_sort([3, 1, 2])
     assert codeflash_output == [1, 2, 3]
@@ -384,7 +384,7 @@ def helper_function():
 
     def test_multiple_generated_tests(self, test_config):
         """Test handling multiple generated test objects."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source_1 = """def test_bubble_sort():
     codeflash_output = quick_sort([3, 1, 2])
     assert codeflash_output == [1, 2, 3]
@@ -441,7 +441,7 @@ def helper_function():
 
     def test_preserved_test_attributes(self, test_config):
         """Test that other test attributes are preserved during modification."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_bubble_sort():
     codeflash_output = bubble_sort([3, 1, 2])
     assert codeflash_output == [1, 2, 3]
@@ -486,7 +486,7 @@ def helper_function():
 
     def test_multistatement_line_handling(self, test_config):
         """Test that runtime comments work correctly with multiple statements on one line."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_mutation_of_input():
     # Test that the input list is mutated in-place and returned
     arr = [3, 1, 2]
@@ -539,7 +539,7 @@ def helper_function():
 
     def test_add_runtime_comments_simple_function(self, test_config):
         """Test adding runtime comments to a simple test function."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_function():
     codeflash_output = some_function()
     assert codeflash_output == expected
@@ -577,7 +577,7 @@ def helper_function():
 
     def test_add_runtime_comments_class_method(self, test_config):
         """Test adding runtime comments to a test method within a class."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """class TestClass:
     def test_function(self):
         codeflash_output = some_function()
@@ -618,7 +618,7 @@ def helper_function():
 
     def test_add_runtime_comments_multiple_assignments(self, test_config):
         """Test adding runtime comments when there are multiple codeflash_output assignments."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_function():
     setup_data = prepare_test()
     codeflash_output = some_function()
@@ -674,7 +674,7 @@ def helper_function():
 
     def test_add_runtime_comments_no_matching_runtimes(self, test_config):
         """Test that source remains unchanged when no matching runtimes are found."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_function():
     codeflash_output = some_function()
     assert codeflash_output == expected
@@ -710,7 +710,7 @@ def helper_function():
 
     def test_add_runtime_comments_no_codeflash_output(self, test_config):
         """Comments will still be added if codeflash output doesnt exist"""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_function():
     result = some_function()
     assert result == expected
@@ -749,7 +749,7 @@ def helper_function():
 
     def test_add_runtime_comments_multiple_tests(self, test_config):
         """Test adding runtime comments to multiple generated tests."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source1 = """def test_function1():
     codeflash_output = some_function()
     assert codeflash_output == expected
@@ -821,7 +821,7 @@ def helper_function():
 
     def test_add_runtime_comments_performance_regression(self, test_config):
         """Test adding runtime comments when optimized version is slower (negative performance gain)."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_function():
     codeflash_output = some_function()
     assert codeflash_output == expected
@@ -873,7 +873,7 @@ def helper_function():
     def test_basic_runtime_comment_addition_no_cfo(self, test_config):
         """Test basic functionality of adding runtime comments."""
         # Create test source code
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_bubble_sort():
     result = bubble_sort([3, 1, 2])
     assert result == [1, 2, 3]
@@ -911,7 +911,7 @@ def helper_function():
 
     def test_multiple_test_functions_no_cfo(self, test_config):
         """Test handling multiple test functions in the same file."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_bubble_sort():
     result = quick_sort([3, 1, 2])
     assert result == [1, 2, 3]
@@ -963,7 +963,7 @@ def helper_function():
 
     def test_different_time_formats_no_cfo(self, test_config):
         """Test that different time ranges are formatted correctly with new precision rules."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_cases = [
             (999, 500, "999ns -> 500ns"),  # nanoseconds
             (25_000, 18_000, "25.0μs -> 18.0μs"),  # microseconds with precision
@@ -1006,7 +1006,7 @@ def helper_function():
 
     def test_missing_test_results_no_cfo(self, test_config):
         """Test behavior when test results are missing for a test function."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_bubble_sort():
     result = bubble_sort([3, 1, 2])
     assert result == [1, 2, 3]
@@ -1039,7 +1039,7 @@ def helper_function():
 
     def test_partial_test_results_no_cfo(self, test_config):
         """Test behavior when only one set of test results is available."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_bubble_sort():
     result = bubble_sort([3, 1, 2])
     assert result == [1, 2, 3]
@@ -1073,7 +1073,7 @@ def helper_function():
 
     def test_multiple_runtimes_uses_minimum_no_cfo(self, test_config):
         """Test that when multiple runtimes exist, the minimum is used."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_bubble_sort():
     result = bubble_sort([3, 1, 2])
     assert result == [1, 2, 3]
@@ -1125,7 +1125,7 @@ def helper_function():
 
     def test_no_codeflash_output_assignment_invalid_iteration_id(self, test_config):
         """Test behavior when test doesn't have codeflash_output assignment."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_bubble_sort():
     result = bubble_sort([3, 1, 2])
     assert result == [1, 2, 3]
@@ -1160,7 +1160,7 @@ def helper_function():
 
     def test_invalid_python_code_handling_no_cfo(self, test_config):
         """Test behavior when test source code is invalid Python."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_bubble_sort(:
         result = bubble_sort([3, 1, 2])
     assert result == [1, 2, 3]
@@ -1195,7 +1195,7 @@ def helper_function():
 
     def test_multiple_generated_tests_no_cfo(self, test_config):
         """Test handling multiple generated test objects."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source_1 = """def test_bubble_sort():
     codeflash_output = quick_sort([3, 1, 2]); assert codeflash_output == [1, 2, 3]
 """
@@ -1251,7 +1251,7 @@ def helper_function():
 
     def test_preserved_test_attributes_no_cfo(self, test_config):
         """Test that other test attributes are preserved during modification."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_bubble_sort():
     result = bubble_sort([3, 1, 2])
     assert result == [1, 2, 3]
@@ -1296,7 +1296,7 @@ def helper_function():
 
     def test_multistatement_line_handling_no_cfo(self, test_config):
         """Test that runtime comments work correctly with multiple statements on one line."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_mutation_of_input():
     # Test that the input list is mutated in-place and returned
     arr = [3, 1, 2]
@@ -1349,7 +1349,7 @@ def helper_function():
 
     def test_add_runtime_comments_simple_function_no_cfo(self, test_config):
         """Test adding runtime comments to a simple test function."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_function():
     result = some_function(); assert result == expected
 """
@@ -1386,7 +1386,7 @@ def helper_function():
 
     def test_add_runtime_comments_class_method_no_cfo(self, test_config):
         """Test adding runtime comments to a test method within a class."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """class TestClass:
     def test_function(self):
         result = some_function()
@@ -1427,7 +1427,7 @@ def helper_function():
 
     def test_add_runtime_comments_multiple_assignments_no_cfo(self, test_config):
         """Test adding runtime comments when there are multiple codeflash_output assignments."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_function():
     setup_data = prepare_test()
     codeflash_output = some_function(); assert codeflash_output == expected
@@ -1479,7 +1479,7 @@ def helper_function():
 
     def test_add_runtime_comments_no_matching_runtimes_no_cfo(self, test_config):
         """Test that source remains unchanged when no matching runtimes are found."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_function():
     result = some_function()
     assert result == expected
@@ -1515,7 +1515,7 @@ def helper_function():
 
     def test_add_runtime_comments_multiple_tests_no_cfo(self, test_config):
         """Test adding runtime comments to multiple generated tests."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source1 = """def test_function1():
     result = some_function()
     assert result == expected
@@ -1587,7 +1587,7 @@ def helper_function():
 
     def test_add_runtime_comments_performance_regression_no_cfo(self, test_config):
         """Test adding runtime comments when optimized version is slower (negative performance gain)."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_function():
     result = some_function(); assert codeflash_output == expected
     codeflash_output = some_function()
@@ -1637,7 +1637,7 @@ def helper_function():
     def test_runtime_comment_addition_for(self, test_config):
         """Test basic functionality of adding runtime comments."""
         # Create test source code
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_bubble_sort():
     a = 2
     for i in range(3):
@@ -1697,7 +1697,7 @@ def helper_function():
     def test_runtime_comment_addition_while(self, test_config):
         """Test basic functionality of adding runtime comments."""
         # Create test source code
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_bubble_sort():
     i = 0
     while i<3:
@@ -1757,7 +1757,7 @@ def helper_function():
     def test_runtime_comment_addition_with(self, test_config):
         """Test basic functionality of adding runtime comments."""
         # Create test source code
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_bubble_sort():
     i = 0
     with open('a.txt','rb') as f:
@@ -1817,7 +1817,7 @@ def helper_function():
     def test_runtime_comment_addition_lc(self, test_config):
         """Test basic functionality of adding runtime comments for list comprehension."""
         # Create test source code
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_bubble_sort():
     i = 0
     codeflash_output = [bubble_sort([3, 1, 2]) for _ in range(3)]
@@ -1871,7 +1871,7 @@ def helper_function():
     def test_runtime_comment_addition_parameterized(self, test_config):
         """Test basic functionality of adding runtime comments for list comprehension."""
         # Create test source code
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """@pytest.mark.parametrize(
     "input, expected_output",
     [
@@ -1940,7 +1940,7 @@ def test_bubble_sort(input, expected_output):
 
     def test_async_basic_runtime_comment_addition(self, test_config):
         """Test basic functionality of adding runtime comments to async test functions."""
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """async def test_async_bubble_sort():
     codeflash_output = await async_bubble_sort([3, 1, 2])
     assert codeflash_output == [1, 2, 3]
@@ -1972,7 +1972,7 @@ def test_bubble_sort(input, expected_output):
         assert "codeflash_output = await async_bubble_sort([3, 1, 2]) # 500μs -> 300μs" in modified_source
 
     def test_async_multiple_test_functions(self, test_config):
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """async def test_async_bubble_sort():
     codeflash_output = await async_quick_sort([3, 1, 2])
     assert codeflash_output == [1, 2, 3]
@@ -2018,7 +2018,7 @@ def helper_function():
         )
 
     def test_async_class_method(self, test_config):
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """class TestAsyncClass:
     async def test_async_function(self):
         codeflash_output = await some_async_function()
@@ -2057,7 +2057,7 @@ def helper_function():
         assert result.generated_tests[0].generated_original_test_source == expected_source
 
     def test_async_mixed_sync_and_async_functions(self, test_config):
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """def test_sync_function():
     codeflash_output = sync_function([1, 2, 3])
     assert codeflash_output == [1, 2, 3]
@@ -2107,7 +2107,7 @@ def test_another_sync():
         assert "await async_function([4, 5, 6])" in modified_source
 
     def test_async_complex_await_patterns(self, test_config):
-        os.chdir(test_config.project_root_path)
+        os.chdir(test_config.project_root)
         test_source = """async def test_complex_async():
     # Multiple await calls
     result1 = await async_func1()

@@ -10,7 +10,7 @@ from codeflash.discovery.functions_to_optimize import (
     get_functions_to_optimize,
     inspect_top_level_functions_or_methods,
 )
-from codeflash.verification.verification_utils import TestConfig
+from codeflash_core.config import TestConfig
 
 
 def test_function_eligible_for_optimization() -> None:
@@ -144,7 +144,7 @@ def functionA():
             )
 
         test_config = TestConfig(
-            tests_root="tests", project_root_path=".", test_framework="pytest", tests_project_rootdir=Path()
+            tests_root="tests", project_root=".", test_framework="pytest", tests_project_rootdir=Path()
         )
         functions, functions_count, _ = get_functions_to_optimize(
             optimize_all=None,
@@ -247,7 +247,7 @@ def propagate_attributes(
             )
 
         test_config = TestConfig(
-            tests_root="tests", project_root_path=".", test_framework="pytest", tests_project_rootdir=Path()
+            tests_root="tests", project_root=".", test_framework="pytest", tests_project_rootdir=Path()
         )
         functions, functions_count, _ = get_functions_to_optimize(
             optimize_all=None,
@@ -279,7 +279,7 @@ def outer_function():
             )
 
         test_config = TestConfig(
-            tests_root="tests", project_root_path=".", test_framework="pytest", tests_project_rootdir=Path()
+            tests_root="tests", project_root=".", test_framework="pytest", tests_project_rootdir=Path()
         )
         functions, functions_count, _ = get_functions_to_optimize(
             optimize_all=None,
@@ -313,7 +313,7 @@ def outer_function():
             )
 
         test_config = TestConfig(
-            tests_root="tests", project_root_path=".", test_framework="pytest", tests_project_rootdir=Path()
+            tests_root="tests", project_root=".", test_framework="pytest", tests_project_rootdir=Path()
         )
         functions, functions_count, _ = get_functions_to_optimize(
             optimize_all=None,

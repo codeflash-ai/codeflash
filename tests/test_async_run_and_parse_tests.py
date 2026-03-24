@@ -85,7 +85,7 @@ async def test_async_sort():
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )
@@ -212,7 +212,7 @@ async def test_async_class_sort():
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )
@@ -337,7 +337,7 @@ async def test_async_perf():
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )
@@ -457,7 +457,7 @@ async def async_error_function(lst):
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )
@@ -562,7 +562,7 @@ async def test_async_multi():
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )
@@ -682,7 +682,7 @@ async def test_async_edge_cases():
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )
@@ -827,7 +827,7 @@ def test_sync_sort():
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )
@@ -1002,7 +1002,7 @@ async def test_mixed_sorting():
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )

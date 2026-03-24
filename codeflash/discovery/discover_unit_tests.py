@@ -33,7 +33,7 @@ from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_a
 from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInFile, TestType
 
 if TYPE_CHECKING:
-    from codeflash.verification.verification_utils import TestConfig
+    from codeflash_core.config import TestConfig
 
 
 def existing_unit_test_count(
@@ -638,9 +638,7 @@ def discover_tests_for_language(
             for func in funcs:
                 all_functions.append(func)
                 # Map simple qualified_name to full qualified_name_with_modules_from_root
-                simple_to_full_name[func.qualified_name] = func.qualified_name_with_modules_from_root(
-                    cfg.project_root_path
-                )
+                simple_to_full_name[func.qualified_name] = func.qualified_name_with_modules_from_root(cfg.project_root)
 
     # Use language support to discover tests
     test_map = lang_support.discover_tests(cfg.tests_root, all_functions)
@@ -714,7 +712,7 @@ def discover_tests_pytest(
     functions_to_optimize: list[FunctionToOptimize] | None = None,
 ) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
     tests_root = cfg.tests_root
-    project_root = cfg.project_root_path
+    project_root = cfg.project_root
 
     tmp_pickle_path = get_run_tmp_file("collected_tests.pkl")
     with custom_addopts():
@@ -863,7 +861,7 @@ def process_test_files(
 ) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
     import jedi
 
-    project_root_path = cfg.project_root_path
+    project_root_path = cfg.project_root
     test_framework = cfg.test_framework
 
     if functions_to_optimize:

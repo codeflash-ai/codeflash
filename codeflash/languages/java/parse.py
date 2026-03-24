@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from codeflash.models.models import TestFiles
-    from codeflash.verification.verification_utils import TestConfig
+    from codeflash_core.config import TestConfig
 
 start_pattern = re.compile(r"!\$######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+)######\$!")
 end_pattern = re.compile(r"!######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+):([^:]+)######!")

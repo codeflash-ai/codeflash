@@ -38,10 +38,10 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from pathlib import Path
 
-    from codeflash_core.models import FunctionToOptimize
     from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, TestInfo, TestResult
     from codeflash.languages.java.concurrency_analyzer import ConcurrencyInfo
     from codeflash.models.models import GeneratedTestsList, InvocationId
+    from codeflash_core.models import FunctionToOptimize
 
 logger = logging.getLogger(__name__)
 
@@ -405,7 +405,7 @@ class JavaSupport(LanguageSupport):
 
     def setup_test_config(self, test_cfg: Any, file_path: Path, current_worktree: Path | None = None) -> None:
         """Detect test framework from project build config (pom.xml / build.gradle)."""
-        config = detect_java_project(test_cfg.project_root_path)
+        config = detect_java_project(test_cfg.project_root)
         if config is not None:
             self._test_framework = config.test_framework
 

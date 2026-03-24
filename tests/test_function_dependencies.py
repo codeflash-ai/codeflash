@@ -6,7 +6,7 @@ from codeflash_core.models import FunctionToOptimize
 from codeflash.either import is_successful
 from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
 from codeflash.models.models import FunctionParent
-from codeflash.verification.verification_utils import TestConfig
+from codeflash_core.config import TestConfig
 
 
 def calculate_something(data):
@@ -137,9 +137,9 @@ def test_class_method_dependencies() -> None:
         test_cfg=TestConfig(
             tests_root=file_path,
             tests_project_rootdir=file_path.parent,
-            project_root_path=file_path.parent,
+            project_root=file_path.parent,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         ),
     )
     with open(file_path) as f:
@@ -207,9 +207,9 @@ def test_recursive_function_context() -> None:
         test_cfg=TestConfig(
             tests_root=file_path,
             tests_project_rootdir=file_path.parent,
-            project_root_path=file_path.parent,
+            project_root=file_path.parent,
             test_framework="pytest",
-            pytest_cmd="pytest",
+            test_command="pytest",
         ),
     )
     with open(file_path) as f:

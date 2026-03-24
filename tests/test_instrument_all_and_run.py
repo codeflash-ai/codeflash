@@ -138,7 +138,7 @@ def test_sort():
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )
@@ -316,7 +316,7 @@ def test_sort():
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )
@@ -431,7 +431,7 @@ class BubbleSorter:
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )
@@ -586,7 +586,7 @@ def test_sort():
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )
@@ -757,7 +757,7 @@ def test_sort():
                 disable_telemetry=True,
                 tests_root=tests_root,
                 test_framework="pytest",
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
                 test_project_root=project_root_path,
             )

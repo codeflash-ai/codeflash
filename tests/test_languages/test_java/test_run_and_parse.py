@@ -126,7 +126,7 @@ def _make_optimizer(project_root: Path, test_dir: Path, function_name: str, src_
             disable_telemetry=True,
             tests_root=test_dir,
             test_project_root=project_root,
-            pytest_cmd="pytest",
+            test_command="pytest",
             experiment_id=None,
         )
     )

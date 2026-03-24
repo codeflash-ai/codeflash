@@ -12,8 +12,8 @@ from codeflash.verification.verification_utils import ModifyInspiredTests, delet
 
 if TYPE_CHECKING:
     from codeflash.api.aiservice import AiServiceClient
+    from codeflash_core.config import TestConfig
     from codeflash_core.models import FunctionToOptimize
-    from codeflash.verification.verification_utils import TestConfig
 
 
 def generate_tests(

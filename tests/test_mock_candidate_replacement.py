@@ -10,7 +10,7 @@ from codeflash.languages.python.context.unused_definition_remover import detect_
 from codeflash_core.models import FunctionParent
 from codeflash.models.models import CodeStringsMarkdown
 from codeflash.languages.python.function_optimizer import PythonFunctionOptimizer
-from codeflash.verification.verification_utils import TestConfig
+from codeflash_core.config import TestConfig
 
 ORIGINAL_SOURCE = '''\
 import contextlib
@@ -628,9 +628,9 @@ def temp_project():
     test_cfg = TestConfig(
         tests_root=temp_dir / "tests",
         tests_project_rootdir=temp_dir,
-        project_root_path=temp_dir,
+        project_root=temp_dir,
         test_framework="pytest",
-        pytest_cmd="pytest",
+        test_command="pytest",
     )
 
     yield temp_dir, source_file, test_cfg

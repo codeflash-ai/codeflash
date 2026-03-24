@@ -21,7 +21,7 @@ from codeflash.result.critic import performance_gain
 if TYPE_CHECKING:
     from codeflash.models.models import FunctionCalledInTest, InvocationId, TestFiles
     from codeflash.result.explanation import Explanation
-    from codeflash.verification.verification_utils import TestConfig
+    from codeflash_core.config import TestConfig
 
 
 def existing_tests_source_for(

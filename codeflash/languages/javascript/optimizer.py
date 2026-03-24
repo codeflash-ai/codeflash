@@ -8,7 +8,7 @@ from codeflash.models.models import ValidCode
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from codeflash.verification.verification_utils import TestConfig
+    from codeflash_core.config import TestConfig
 
 
 def prepare_javascript_module(

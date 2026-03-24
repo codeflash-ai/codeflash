@@ -2129,7 +2129,7 @@ public class CalculatorTest {
                 disable_telemetry=True,
                 tests_root=test_dir,
                 test_project_root=project_root,
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
             )
         )
@@ -2284,7 +2284,7 @@ public class MathUtilsTest__perfonlyinstrumented {
                 disable_telemetry=True,
                 tests_root=test_dir,
                 test_project_root=project_root,
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
             )
         )
@@ -2416,7 +2416,7 @@ public class StringUtilsTest {
                 disable_telemetry=True,
                 tests_root=test_dir,
                 test_project_root=project_root,
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
             )
         )
@@ -2522,7 +2522,7 @@ public class BrokenCalcTest {
                 disable_telemetry=True,
                 tests_root=test_dir,
                 test_project_root=project_root,
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
             )
         )
@@ -2709,7 +2709,7 @@ public class CounterTest__perfinstrumented {
                 disable_telemetry=True,
                 tests_root=test_dir,
                 test_project_root=project_root,
-                pytest_cmd="pytest",
+                test_command="pytest",
                 experiment_id=None,
             )
         )

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import ast
-from pathlib import Path
-from typing import Optional
-
-from pydantic.dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from codeflash.languages import current_language_support
+from codeflash_core.config import TestConfig
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+__all__ = ["TestConfig"]
 
 
 def get_test_file_path(
@@ -100,40 +103,3 @@ class ModifyInspiredTests(ast.NodeTransformer):
             return node
         node.name = node.name + "Inspired"
         return node
-
-
-@dataclass
-class TestConfig:
-    tests_root: Path
-    project_root_path: Path
-    tests_project_rootdir: Path
-    # tests_project_rootdir corresponds to pytest rootdir
-    concolic_test_root_dir: Optional[Path] = None
-    pytest_cmd: str = "pytest"
-    benchmark_tests_root: Optional[Path] = None
-    use_cache: bool = True
-    _language: Optional[str] = None  # Language identifier for multi-language support
-    js_project_root: Optional[Path] = None  # JavaScript project root (directory containing package.json)
-
-    def __post_init__(self) -> None:
-        self.project_root_path = self.project_root_path.resolve()
-        self.tests_project_rootdir = self.tests_project_rootdir.resolve()
-
-    @property
-    def test_framework(self) -> str:
-        """Returns the appropriate test framework based on language."""
-        return current_language_support().test_framework
-
-    def set_language(self, language: str) -> None:
-        """Set the language for this test config.
-
-        Args:
-            language: Language identifier (e.g., "python", "javascript").
-
-        """
-        self._language = language
-
-    @property
-    def language(self) -> Optional[str]:
-        """Get the current language setting."""
-        return self._language

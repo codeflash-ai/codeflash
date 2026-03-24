@@ -10,7 +10,7 @@ from codeflash.code_utils.formatter import format_code, format_generated_code, s
 from codeflash_core.models import FunctionToOptimize
 from codeflash.models.models import CodeString, CodeStringsMarkdown
 from codeflash.languages.function_optimizer import FunctionOptimizer
-from codeflash.verification.verification_utils import TestConfig
+from codeflash_core.config import TestConfig
 
 
 @pytest.fixture
@@ -226,7 +226,7 @@ def _run_formatting_test(source_code: str, should_content_change: bool, expected
         function_to_optimize = FunctionToOptimize(function_name="process_data", parents=[], file_path=target_path)
 
         test_cfg = TestConfig(
-            tests_root=test_dir, project_root_path=test_dir, test_framework="pytest", tests_project_rootdir=test_dir
+            tests_root=test_dir, project_root=test_dir, test_framework="pytest", tests_project_rootdir=test_dir
         )
 
         args = argparse.Namespace(

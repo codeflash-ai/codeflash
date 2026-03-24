@@ -9,7 +9,7 @@ from codeflash.discovery.discover_unit_tests import (
 )
 from codeflash_core.models import FunctionToOptimize
 from codeflash.models.models import FunctionParent, TestsInFile, TestType
-from codeflash.verification.verification_utils import TestConfig
+from codeflash_core.config import TestConfig
 
 
 def test_unit_test_discovery_pytest():
@@ -17,7 +17,7 @@ def test_unit_test_discovery_pytest():
     tests_path = project_path / "tests" / "pytest"
     test_config = TestConfig(
         tests_root=tests_path,
-        project_root_path=project_path,
+        project_root=project_path,
         test_framework="pytest",
         tests_project_rootdir=tests_path.parent,
     )
@@ -30,7 +30,7 @@ def test_benchmark_test_discovery_pytest():
     tests_path = project_path / "tests" / "pytest" / "benchmarks"
     test_config = TestConfig(
         tests_root=tests_path,
-        project_root_path=project_path,
+        project_root=project_path,
         test_framework="pytest",
         tests_project_rootdir=tests_path.parent,
     )
@@ -43,7 +43,7 @@ def test_unit_test_discovery_unittest():
     test_path = project_path / "tests" / "unittest"
     test_config = TestConfig(
         tests_root=project_path,
-        project_root_path=project_path,
+        project_root=project_path,
         test_framework="unittest",
         tests_project_rootdir=project_path.parent,
     )
@@ -81,7 +81,7 @@ def sorter(arr):
         # Create a TestConfig with the temporary directory as the root
         test_config = TestConfig(
             tests_root=path_obj_tempdirname,
-            project_root_path=path_obj_tempdirname,
+            project_root=path_obj_tempdirname,
             test_framework="pytest",
             tests_project_rootdir=path_obj_tempdirname.parent,
         )
@@ -121,7 +121,7 @@ def test_discover_tests_pytest_with_temp_dir_root():
         # Create a TestConfig with the temporary directory as the root
         test_config = TestConfig(
             tests_root=path_obj_tempdirname,
-            project_root_path=path_obj_tempdirname,
+            project_root=path_obj_tempdirname,
             test_framework="pytest",
             tests_project_rootdir=path_obj_tempdirname.parent,
         )
@@ -194,7 +194,7 @@ def test_discover_tests_pytest_with_multi_level_dirs():
         # Create a TestConfig with the temporary directory as the root
         test_config = TestConfig(
             tests_root=path_obj_tmpdirname,
-            project_root_path=path_obj_tmpdirname,
+            project_root=path_obj_tmpdirname,
             test_framework="pytest",
             tests_project_rootdir=path_obj_tmpdirname.parent,
         )
@@ -286,7 +286,7 @@ def test_discover_tests_pytest_dirs():
         # Create a TestConfig with the temporary directory as the root
         test_config = TestConfig(
             tests_root=path_obj_tmpdirname,
-            project_root_path=path_obj_tmpdirname,
+            project_root=path_obj_tmpdirname,
             test_framework="pytest",
             tests_project_rootdir=path_obj_tmpdirname.parent,
         )
@@ -334,7 +334,7 @@ def test_discover_tests_pytest_with_class():
         # Create a TestConfig with the temporary directory as the root
         test_config = TestConfig(
             tests_root=path_obj_tmpdirname,
-            project_root_path=path_obj_tmpdirname,
+            project_root=path_obj_tmpdirname,
             test_framework="pytest",
             tests_project_rootdir=path_obj_tmpdirname.parent,
         )
@@ -375,7 +375,7 @@ def test_discover_tests_pytest_with_double_nested_directories():
         # Create a TestConfig with the temporary directory as the root
         test_config = TestConfig(
             tests_root=path_obj_tmpdirname,
-            project_root_path=path_obj_tmpdirname,
+            project_root=path_obj_tmpdirname,
             test_framework="pytest",
             tests_project_rootdir=path_obj_tmpdirname.parent,
         )
@@ -423,7 +423,7 @@ def test_discover_tests_with_code_in_dir_and_test_in_subdir():
         # Create a TestConfig with the code directory as the root
         test_config = TestConfig(
             tests_root=test_subdir,
-            project_root_path=path_obj_tmpdirname,
+            project_root=path_obj_tmpdirname,
             test_framework="pytest",
             tests_project_rootdir=test_subdir.parent,
         )
@@ -460,7 +460,7 @@ def test_discover_tests_pytest_with_nested_class():
         # Create a TestConfig with the temporary directory as the root
         test_config = TestConfig(
             tests_root=path_obj_tmpdirname,
-            project_root_path=path_obj_tmpdirname,
+            project_root=path_obj_tmpdirname,
             test_framework="pytest",
             tests_project_rootdir=path_obj_tmpdirname.parent,
         )
@@ -500,7 +500,7 @@ def test_discover_tests_pytest_separate_moduledir():
         # Create a TestConfig with the temporary directory as the root
         test_config = TestConfig(
             tests_root=testdir,
-            project_root_path=codedir.parent.resolve(),
+            project_root=codedir.parent.resolve(),
             test_framework="pytest",
             tests_project_rootdir=testdir.parent,
         )
@@ -543,7 +543,7 @@ class TestCalculator(unittest.TestCase):
         # Configure test discovery
         test_config = TestConfig(
             tests_root=path_obj_tmpdirname,
-            project_root_path=path_obj_tmpdirname,
+            project_root=path_obj_tmpdirname,
             test_framework="pytest",  # Using pytest framework to discover unittest tests
             tests_project_rootdir=path_obj_tmpdirname.parent,
         )
@@ -611,7 +611,7 @@ class TestCalculator(ExtendedTestCase):
         # Configure test discovery
         test_config = TestConfig(
             tests_root=path_obj_tmpdirname,
-            project_root_path=path_obj_tmpdirname,
+            project_root=path_obj_tmpdirname,
             test_framework="pytest",  # Using pytest framework to discover unittest tests
             tests_project_rootdir=path_obj_tmpdirname.parent,
         )
@@ -657,7 +657,7 @@ class TestCalculator(unittest.TestCase):
         # Configure test discovery
         test_config = TestConfig(
             tests_root=path_obj_tmpdirname,
-            project_root_path=path_obj_tmpdirname,
+            project_root=path_obj_tmpdirname,
             test_framework="pytest",  # Using pytest framework to discover unittest tests
             tests_project_rootdir=path_obj_tmpdirname.parent,
         )
@@ -709,7 +709,7 @@ class TestCalculator(unittest.TestCase):
         # Configure test discovery
         test_config = TestConfig(
             tests_root=path_obj_tmpdirname,
-            project_root_path=path_obj_tmpdirname,
+            project_root=path_obj_tmpdirname,
             test_framework="pytest",  # Using pytest framework to discover unittest tests
             tests_project_rootdir=path_obj_tmpdirname.parent,
         )
@@ -769,7 +769,7 @@ def test_topological_sort(g):
         # Configure test discovery
         test_config = TestConfig(
             tests_root=path_obj_tmpdirname,
-            project_root_path=path_obj_tmpdirname,
+            project_root=path_obj_tmpdirname,
             test_framework="pytest",  # Using pytest framework to discover unittest tests
             tests_project_rootdir=path_obj_tmpdirname.parent,
         )
@@ -919,7 +919,7 @@ class TestRouterIndexManagement:
         # Configure test discovery
         test_config = TestConfig(
             tests_root=path_obj_tmpdirname,
-            project_root_path=path_obj_tmpdirname,
+            project_root=path_obj_tmpdirname,
             test_framework="pytest",  # Using pytest framework to discover unittest tests
             tests_project_rootdir=path_obj_tmpdirname.parent,
         )
@@ -1004,7 +1004,7 @@ class TestCalculator(unittest.TestCase):
         # Configure test discovery
         test_config = TestConfig(
             tests_root=path_obj_tmpdirname,
-            project_root_path=path_obj_tmpdirname,
+            project_root=path_obj_tmpdirname,
             test_framework="pytest",
             tests_project_rootdir=path_obj_tmpdirname.parent,
         )
@@ -1373,7 +1373,7 @@ def test_other():
 
         # Configure test discovery
         test_config = TestConfig(
-            tests_root=tmpdir, project_root_path=tmpdir, test_framework="pytest", tests_project_rootdir=tmpdir.parent
+            tests_root=tmpdir, project_root=tmpdir, test_framework="pytest", tests_project_rootdir=tmpdir.parent
         )
 
         all_tests, _, _ = discover_unit_tests(test_config)
@@ -1501,7 +1501,7 @@ def test_unrelated():
 
         # Configure test discovery
         test_config = TestConfig(
-            tests_root=tmpdir, project_root_path=tmpdir, test_framework="pytest", tests_project_rootdir=tmpdir.parent
+            tests_root=tmpdir, project_root=tmpdir, test_framework="pytest", tests_project_rootdir=tmpdir.parent
         )
 
         # Test without filtering
@@ -2024,7 +2024,7 @@ def test_discover_unit_tests_caching():
 
     test_config = TestConfig(
         tests_root=tests_root,
-        project_root_path=project_root_path,
+        project_root=project_root_path,
         test_framework="pytest",
         tests_project_rootdir=project_root_path,
         use_cache=False,
@@ -2035,7 +2035,7 @@ def test_discover_unit_tests_caching():
     )
     cache_config = TestConfig(
         tests_root=tests_root,
-        project_root_path=project_root_path,
+        project_root=project_root_path,
         test_framework="pytest",
         tests_project_rootdir=project_root_path,
         use_cache=True,
