@@ -165,7 +165,7 @@ class JavaTracer:
                         if stripped.startswith("package "):
                             pkg = stripped[8:].rstrip(";").strip()
                             parts = pkg.split(".")
-                            prefix = ".".join(parts[: min(2, len(parts))])
+                            prefix = ".".join(parts[: min(3, len(parts))])
                             packages.add(prefix)
                             break
                         if stripped and not stripped.startswith("//"):
