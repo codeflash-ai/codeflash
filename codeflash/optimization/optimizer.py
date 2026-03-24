@@ -787,7 +787,7 @@ class Optimizer:
 
         worktree_dir = create_detached_worktree()
         if worktree_dir is None:
-            logger.error("Failed to create worktree. Skipping optimization.")
+            logger.error("Failed to create a worktree.")
             sys.exit(1)
 
         self.current_worktree = worktree_dir
