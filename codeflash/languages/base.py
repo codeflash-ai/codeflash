@@ -23,8 +23,9 @@ if TYPE_CHECKING:
     from codeflash_core.models import FunctionToOptimize
 
 from codeflash.languages.language_enum import Language
-from codeflash_core.models import FunctionParent as FunctionParent
-from codeflash_core.models import HelperFunction as HelperFunction
+from codeflash_core.models import FunctionParent, HelperFunction  # noqa: TC001
+
+__all__ = ["FunctionParent", "HelperFunction"]
 
 # Backward compatibility aliases - ParentInfo is now FunctionParent
 ParentInfo = FunctionParent
