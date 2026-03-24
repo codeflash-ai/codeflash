@@ -4,16 +4,18 @@ import logging
 import os
 from collections import defaultdict
 from functools import cache
-from pathlib import Path
 from typing import TYPE_CHECKING
 
-from codeflash_core.models import FunctionToOptimize  # noqa: TC001
+from codeflash.models.models import FunctionSource
 from codeflash_python.code_utils.code_utils import path_belongs_to_site_packages
 from codeflash_python.context.utils import get_qualified_name
-from codeflash_python.models.models import FunctionSource
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from jedi.api.classes import Name
+
+    from codeflash_core.models import FunctionToOptimize
 
 logger = logging.getLogger("codeflash_python")
 

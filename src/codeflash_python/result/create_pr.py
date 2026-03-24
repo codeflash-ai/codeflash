@@ -18,8 +18,8 @@ from codeflash_python.result.pr_comment import FileDiffContent, PrComment
 from codeflash_python.static_analysis.code_replacer import is_zero_diff
 
 if TYPE_CHECKING:
+    from codeflash.models.models import FunctionCalledInTest, InvocationId, TestFiles
     from codeflash_core.config import TestConfig
-    from codeflash_python.models.models import FunctionCalledInTest, InvocationId, TestFiles
     from codeflash_python.result.explanation import Explanation
 
 

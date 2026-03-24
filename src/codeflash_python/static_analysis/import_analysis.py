@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
     from libcst.helpers import ModuleNameAndPackage
 
-    from codeflash_python.models.models import FunctionSource
+    from codeflash.models.models import FunctionSource
 
 logger = logging.getLogger("codeflash_python")
 

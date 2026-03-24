@@ -8,8 +8,8 @@ import sqlite3
 from collections import defaultdict
 from pathlib import Path
 
+from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInFile, TestType
 from codeflash_python.code_utils.compat import codeflash_cache_db
-from codeflash_python.models.models import CodePosition, FunctionCalledInTest, TestsInFile, TestType
 
 logger = logging.getLogger("codeflash_python")
 

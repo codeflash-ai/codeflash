@@ -34,10 +34,10 @@ if TYPE_CHECKING:
     from argparse import Namespace
 
     from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
+    from codeflash.models.models import BenchmarkKey, FunctionCalledInTest, ValidCode
     from codeflash_core.models import FunctionToOptimize
     from codeflash_python.context.types import DependencyResolver
     from codeflash_python.function_optimizer import FunctionOptimizer
-    from codeflash_python.models.models import BenchmarkKey, FunctionCalledInTest, ValidCode
 
 
 class Optimizer:

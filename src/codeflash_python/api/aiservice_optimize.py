@@ -8,20 +8,20 @@ from typing import TYPE_CHECKING, Any
 
 import requests
 
+from codeflash.models.models import OptimizedCandidateSource
 from codeflash_python.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
 from codeflash_python.code_utils.time_utils import humanize_runtime
-from codeflash_python.models.models import OptimizedCandidateSource
 from codeflash_python.telemetry.posthog_cf import ph
 from codeflash_python.version import __version__ as codeflash_version
 
 if TYPE_CHECKING:
+    from codeflash.models.models import OptimizedCandidate
     from codeflash_python.api.types import (
         AIServiceAdaptiveOptimizeRequest,
         AIServiceCodeRepairRequest,
         AIServiceRefinerRequest,
     )
     from codeflash_python.models.experiment_metadata import ExperimentMetadata
-    from codeflash_python.models.models import OptimizedCandidate
 else:
     _Base = object
 

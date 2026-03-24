@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
     from pathlib import Path
 
-    from codeflash_python.models.models import FunctionSource
+    from codeflash.models.models import FunctionSource
 
 from codeflash_core.models import HelperFunction
 

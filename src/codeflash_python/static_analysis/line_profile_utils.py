@@ -13,8 +13,8 @@ from codeflash_python.code_utils.code_utils import get_run_tmp_file
 from codeflash_python.code_utils.formatter import sort_imports
 
 if TYPE_CHECKING:
+    from codeflash.models.models import CodeOptimizationContext
     from codeflash_core.models import FunctionToOptimize
-    from codeflash_python.models.models import CodeOptimizationContext
 
 # Known JIT decorators organized by module
 # Format: {module_path: {decorator_name, ...}}

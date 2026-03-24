@@ -17,12 +17,12 @@ if TYPE_CHECKING:
     from codeflash_core.models import FunctionToOptimize
 from pydantic.dataclasses import dataclass
 
+from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInFile, TestType
 from codeflash_python.code_utils.code_utils import ImportErrorPattern, get_run_tmp_file, module_name_from_file_path
 from codeflash_python.code_utils.compat import SAFE_SYS_EXECUTABLE
 from codeflash_python.code_utils.shell_utils import get_cross_platform_subprocess_run_args
 from codeflash_python.discovery.import_analyzer import filter_test_files_by_imports
 from codeflash_python.discovery.tests_cache import TestsCache
-from codeflash_python.models.models import CodePosition, FunctionCalledInTest, TestsInFile, TestType
 from codeflash_python.verification.addopts import custom_addopts
 
 if TYPE_CHECKING:

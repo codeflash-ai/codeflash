@@ -9,12 +9,12 @@ from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from codeflash_python.models.models import CodeString, CodeStringsMarkdown
+from codeflash.models.models import CodeString, CodeStringsMarkdown
 from codeflash_python.static_analysis.code_replacer import replace_function_definitions_in_module
 
 if TYPE_CHECKING:
+    from codeflash.models.models import CodeOptimizationContext, FunctionSource
     from codeflash_core.models import FunctionToOptimize
-    from codeflash_python.models.models import CodeOptimizationContext, FunctionSource
 
 
 logger = logging.getLogger("codeflash_python")

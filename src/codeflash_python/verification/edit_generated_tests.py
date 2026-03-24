@@ -11,12 +11,12 @@ import libcst as cst
 from libcst import MetadataWrapper
 from libcst.metadata import PositionProvider
 
+from codeflash.models.models import GeneratedTests, GeneratedTestsList
 from codeflash_python.code_utils.time_utils import format_perf, format_time
-from codeflash_python.models.models import GeneratedTests, GeneratedTestsList
 from codeflash_python.result.critic import performance_gain
 
 if TYPE_CHECKING:
-    from codeflash_python.models.models import InvocationId
+    from codeflash.models.models import InvocationId
 
 
 logger = logging.getLogger("codeflash_python")

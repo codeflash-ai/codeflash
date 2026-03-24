@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 import sentry_sdk
 from coverage.exceptions import NoDataError
 
-from codeflash_python.models.models import CoverageData, CoverageStatus, FunctionCoverage
+from codeflash.models.models import CoverageData, CoverageStatus, FunctionCoverage
 from codeflash_python.static_analysis.coverage_utils import (
     build_fully_qualified_name,
     extract_dependent_function,
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from collections.abc import Collection
     from pathlib import Path
 
-    from codeflash_python.models.models import CodeOptimizationContext
+    from codeflash.models.models import CodeOptimizationContext
 
 logger = logging.getLogger("codeflash_python")
 

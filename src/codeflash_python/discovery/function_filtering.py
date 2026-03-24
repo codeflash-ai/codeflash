@@ -21,8 +21,8 @@ from codeflash_python.models.function_types import qualified_name_with_modules_f
 if TYPE_CHECKING:
     from argparse import Namespace
 
+    from codeflash.models.models import CodeOptimizationContext
     from codeflash_core.models import FunctionToOptimize
-    from codeflash_python.models.models import CodeOptimizationContext
 
 logger = logging.getLogger("codeflash_python")
 

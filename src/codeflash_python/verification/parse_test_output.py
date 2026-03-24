@@ -10,16 +10,16 @@ from typing import TYPE_CHECKING
 import dill as pickle
 from lxml.etree import XMLParser, parse  # type: ignore[import-not-found]
 
+from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults, TestType, VerificationType
 from codeflash_python.code_utils.code_utils import get_run_tmp_file
-from codeflash_python.models.models import FunctionTestInvocation, InvocationId, TestResults, TestType, VerificationType
 from codeflash_python.verification.path_utils import file_path_from_module_name
 from codeflash_python.verification.test_output_utils import merge_test_results, parse_test_failures_from_stdout
 
 if TYPE_CHECKING:
     import subprocess
 
+    from codeflash.models.models import CodeOptimizationContext, CoverageData, TestFiles
     from codeflash_core.config import TestConfig
-    from codeflash_python.models.models import CodeOptimizationContext, CoverageData, TestFiles
 
 logger = logging.getLogger("codeflash_python")
 DEBUG_MODE = os.environ.get("CODEFLASH_DEBUG", "").lower() in ("1", "true")

@@ -394,11 +394,11 @@ class PythonPlugin(PluginAiOpsMixin, PluginTestLifecycleMixin, PluginResultsMixi
         """Port of FunctionOptimizer.replace_function_and_helpers_with_optimized_code."""
         from collections import defaultdict
 
+        from codeflash.models.models import CodeStringsMarkdown
         from codeflash_python.context.unused_helper_detection import (
             detect_unused_helper_functions,
             revert_unused_helper_functions,
         )
-        from codeflash_python.models.models import CodeStringsMarkdown
         from codeflash_python.static_analysis.code_replacer import replace_function_definitions_in_module
 
         optimized_code = CodeStringsMarkdown.parse_markdown_code(code_markdown)

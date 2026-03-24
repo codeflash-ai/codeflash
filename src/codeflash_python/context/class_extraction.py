@@ -5,6 +5,7 @@ import logging
 import os
 from typing import TYPE_CHECKING
 
+from codeflash.models.models import CodeString, CodeStringsMarkdown
 from codeflash_python.context.ast_helpers import (
     MAX_RAW_PROJECT_CLASS_BODY_ITEMS,
     MAX_RAW_PROJECT_CLASS_LINES,
@@ -24,7 +25,6 @@ from codeflash_python.context.ast_helpers import (
     parse_and_collect_imports,
 )
 from codeflash_python.context.jedi_helpers import get_jedi_project
-from codeflash_python.models.models import CodeString, CodeStringsMarkdown
 
 if TYPE_CHECKING:
     from pathlib import Path

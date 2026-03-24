@@ -83,7 +83,7 @@ class PluginResultsMixin(_Base):  # type: ignore[cyclic-class-definition]
         trace_id: str = "",
         generated_tests: GeneratedTestSuite | None = None,
     ) -> str | None:
-        from codeflash_python.models.models import TestResults as InternalTestResults
+        from codeflash.models.models import TestResults as InternalTestResults
         from codeflash_python.result.create_pr import check_create_pr
         from codeflash_python.result.explanation import Explanation
 

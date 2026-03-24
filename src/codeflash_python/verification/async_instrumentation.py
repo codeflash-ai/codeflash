@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 
 import libcst as cst
 
+from codeflash.models.models import TestingMode
 from codeflash_python.code_utils.formatter import sort_imports
-from codeflash_python.models.models import TestingMode
 
 if TYPE_CHECKING:
     from pathlib import Path

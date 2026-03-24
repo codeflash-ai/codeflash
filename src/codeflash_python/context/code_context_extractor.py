@@ -5,10 +5,9 @@ import hashlib
 import logging
 from collections import defaultdict
 from itertools import chain
-from pathlib import Path
 from typing import TYPE_CHECKING
 
-from codeflash_core.models import FunctionToOptimize  # noqa: TC001
+from codeflash.models.models import CodeOptimizationContext, CodeString, CodeStringsMarkdown
 from codeflash_python.code_utils.code_utils import encoded_tokens_len
 from codeflash_python.code_utils.config_consts import (
     OPTIMIZATION_CONTEXT_TOKEN_LIMIT,
@@ -26,11 +25,14 @@ from codeflash_python.context.jedi_helpers import (
 from codeflash_python.context.type_extraction import extract_parameter_type_constructors
 from codeflash_python.context.types import CodeContextType
 from codeflash_python.context.unused_definition_remover import remove_unused_definitions_by_function_names
-from codeflash_python.models.models import CodeOptimizationContext, CodeString, CodeStringsMarkdown, FunctionSource
 from codeflash_python.static_analysis.code_extractor import find_preexisting_objects
 from codeflash_python.static_analysis.import_analysis import add_needed_imports_from_module
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
+    from codeflash.models.models import FunctionSource
+    from codeflash_core.models import FunctionToOptimize
     from codeflash_python.context.types import DependencyResolver
 
 logger = logging.getLogger("codeflash_python")

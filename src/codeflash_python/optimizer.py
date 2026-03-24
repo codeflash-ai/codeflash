@@ -4,7 +4,7 @@ import ast
 import logging
 from typing import TYPE_CHECKING
 
-from codeflash_python.models.models import ValidCode
+from codeflash.models.models import ValidCode
 
 if TYPE_CHECKING:
     from pathlib import Path

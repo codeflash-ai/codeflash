@@ -17,7 +17,7 @@ from codeflash_python.optimizer_mixins.scoring import (
 )
 
 if TYPE_CHECKING:
-    from codeflash_python.models.models import CodeOptimizationContext, OptimizedCandidate
+    from codeflash.models.models import CodeOptimizationContext, OptimizedCandidate
 
 logger = logging.getLogger("codeflash_python")
 

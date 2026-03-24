@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from typing import Any
 
+    from codeflash.models.models import OptimizedCandidateSource
     from codeflash_core.models import CoverageData, FunctionToOptimize
-    from codeflash_python.models.models import OptimizedCandidateSource
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +84,7 @@ def read_return_values(test_iteration: int) -> dict[str, list[object]]:
 
 def map_candidate_source(source: str) -> OptimizedCandidateSource:
     """Map core Candidate.source string to OptimizedCandidateSource enum value."""
-    from codeflash_python.models.models import OptimizedCandidateSource
+    from codeflash.models.models import OptimizedCandidateSource
 
     mapping = {
         "optimize": OptimizedCandidateSource.OPTIMIZE,

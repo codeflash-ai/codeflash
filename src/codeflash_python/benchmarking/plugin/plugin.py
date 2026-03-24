@@ -14,7 +14,7 @@ from codeflash_python.benchmarking.codeflash_trace import codeflash_trace
 from codeflash_python.code_utils.code_utils import module_name_from_file_path
 
 if TYPE_CHECKING:
-    from codeflash_python.models.models import BenchmarkKey
+    from codeflash.models.models import BenchmarkKey
 
 PYTEST_BENCHMARK_INSTALLED = importlib.util.find_spec("pytest_benchmark") is not None
 
@@ -85,7 +85,7 @@ class CodeFlashBenchmarkPlugin:
 
     @staticmethod
     def get_function_benchmark_timings(trace_path: Path) -> dict[str, dict[BenchmarkKey, int]]:
-        from codeflash_python.models.models import BenchmarkKey
+        from codeflash.models.models import BenchmarkKey
 
         """Process the trace file and extract timing data for all functions.
 
@@ -147,7 +147,7 @@ class CodeFlashBenchmarkPlugin:
 
     @staticmethod
     def get_benchmark_timings(trace_path: Path) -> dict[BenchmarkKey, int]:
-        from codeflash_python.models.models import BenchmarkKey
+        from codeflash.models.models import BenchmarkKey
 
         """Extract total benchmark timings from trace files.
 

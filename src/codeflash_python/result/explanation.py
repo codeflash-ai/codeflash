@@ -4,8 +4,8 @@ from pathlib import Path
 
 from pydantic.dataclasses import dataclass
 
+from codeflash.models.models import BenchmarkDetail, ConcurrencyMetrics, TestResults
 from codeflash_python.code_utils.time_utils import humanize_runtime
-from codeflash_python.models.models import BenchmarkDetail, ConcurrencyMetrics, TestResults
 from codeflash_python.result.critic import AcceptanceReason, concurrency_gain, throughput_gain
 
 

@@ -7,6 +7,13 @@ from typing import TYPE_CHECKING
 
 import libcst as cst
 
+from codeflash.models.models import (
+    BestOptimization,
+    OptimizedCandidate,
+    OptimizedCandidateResult,
+    OptimizedCandidateSource,
+    TestingMode,
+)
 from codeflash_core.danom import Ok
 from codeflash_python.api.types import AIServiceRefinerRequest
 from codeflash_python.code_utils.code_utils import get_run_tmp_file, unified_diff_strings
@@ -16,21 +23,14 @@ from codeflash_python.code_utils.config_consts import (
     EffortKeys,
     get_effort_value,
 )
-from codeflash_python.models.models import (
-    BestOptimization,
-    OptimizedCandidate,
-    OptimizedCandidateResult,
-    OptimizedCandidateSource,
-    TestingMode,
-)
 from codeflash_python.optimizer_mixins.candidate_structures import CandidateEvaluationContext, CandidateProcessor
 from codeflash_python.optimizer_mixins.scoring import create_rank_dictionary_compact, diff_length
 from codeflash_python.result.critic import performance_gain, quantity_of_tests_critic, speedup_critic
 
 if TYPE_CHECKING:
+    from codeflash.models.models import CodeOptimizationContext, OriginalCodeBaseline
     from codeflash_core.danom import Result
     from codeflash_python.api.aiservice import AiServiceClient
-    from codeflash_python.models.models import CodeOptimizationContext, OriginalCodeBaseline
     from codeflash_python.optimizer_mixins._protocol import FunctionOptimizerProtocol as _Base
     from codeflash_python.optimizer_mixins.candidate_structures import CandidateNode
 else:
@@ -243,7 +243,7 @@ class CandidateEvaluationMixin(_Base):
             )
         finally:
             self.write_code_and_helpers(candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path)
-        from codeflash_python.models.models import TestResults
+        from codeflash.models.models import TestResults
 
         assert isinstance(candidate_behavior_results, TestResults)
         match, diffs = self.compare_candidate_results(
@@ -276,7 +276,7 @@ class CandidateEvaluationMixin(_Base):
                     candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
                 )
         # Use effective_loop_count which represents the number of timing samples across all test cases.
-        from codeflash_python.models.models import TestResults as TestResultsModel
+        from codeflash.models.models import TestResults as TestResultsModel
 
         assert isinstance(candidate_benchmarking_results, TestResultsModel)
         loop_count = candidate_benchmarking_results.effective_loop_count()

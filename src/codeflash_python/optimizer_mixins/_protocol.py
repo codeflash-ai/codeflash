@@ -14,13 +14,7 @@ if TYPE_CHECKING:
     from argparse import Namespace
     from pathlib import Path
 
-    from codeflash_core.config import TestConfig
-    from codeflash_core.danom import Err, Result
-    from codeflash_core.models import FunctionToOptimize
-    from codeflash_python.api.aiservice import AiServiceClient
-    from codeflash_python.api.types import TestDiff, TestFileReview
-    from codeflash_python.context.types import DependencyResolver
-    from codeflash_python.models.models import (
+    from codeflash.models.models import (
         BenchmarkKey,
         BestOptimization,
         CodeOptimizationContext,
@@ -38,6 +32,12 @@ if TYPE_CHECKING:
         TestingMode,
         TestResults,
     )
+    from codeflash_core.config import TestConfig
+    from codeflash_core.danom import Err, Result
+    from codeflash_core.models import FunctionToOptimize
+    from codeflash_python.api.aiservice import AiServiceClient
+    from codeflash_python.api.types import TestDiff, TestFileReview
+    from codeflash_python.context.types import DependencyResolver
     from codeflash_python.optimizer_mixins.candidate_structures import CandidateEvaluationContext, CandidateNode
     from codeflash_python.result.explanation import Explanation
 

@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING
 
 from junitparser.xunit2 import JUnitXml
 
+from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults
 from codeflash_python.code_utils.code_utils import module_name_from_file_path
-from codeflash_python.models.models import FunctionTestInvocation, InvocationId, TestResults
 from codeflash_python.verification.path_utils import file_path_from_module_name
 
 logger = logging.getLogger("codeflash_python")
@@ -26,8 +26,8 @@ if TYPE_CHECKING:
 
     from lxml import etree  # type: ignore[import-not-found]
 
+    from codeflash.models.models import TestFiles
     from codeflash_core.config import TestConfig
-    from codeflash_python.models.models import TestFiles
 
 matches_re_start = re.compile(
     r"!\$######([^:]*)"  # group 1: module path

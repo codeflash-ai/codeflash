@@ -14,12 +14,7 @@ from codeflash_python.code_utils.config_consts import (
 from codeflash_python.models.test_type import TestType
 
 if TYPE_CHECKING:
-    from codeflash_python.models.models import (
-        ConcurrencyMetrics,
-        CoverageData,
-        OptimizedCandidateResult,
-        OriginalCodeBaseline,
-    )
+    from codeflash.models.models import ConcurrencyMetrics, CoverageData, OptimizedCandidateResult, OriginalCodeBaseline
 
 
 class AcceptanceReason(Enum):

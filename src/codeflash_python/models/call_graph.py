@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from codeflash_python.models.models import FunctionSource
+    from codeflash.models.models import FunctionSource
 
 
 class FunctionNode(NamedTuple):
@@ -197,7 +197,7 @@ def augment_with_trace(graph: CallGraph, trace_db_path: Path) -> CallGraph:
 
 def callees_from_graph(graph: CallGraph) -> tuple[dict[Path, set[FunctionSource]], list[FunctionSource]]:
 
-    from codeflash_python.models.models import FunctionSource
+    from codeflash.models.models import FunctionSource
 
     file_path_to_function_source: dict[Path, set[FunctionSource]] = defaultdict(set)
     function_source_list: list[FunctionSource] = []

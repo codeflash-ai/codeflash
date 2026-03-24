@@ -7,8 +7,8 @@ import re
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
+from codeflash.models.models import ConcurrencyMetrics, FunctionTestInvocation, TestResults, VerificationType
 from codeflash_python.discovery.discover_unit_tests import discover_parameters_unittest
-from codeflash_python.models.models import ConcurrencyMetrics, FunctionTestInvocation, TestResults, VerificationType
 from codeflash_python.verification.path_utils import file_name_from_test_module_name
 
 if TYPE_CHECKING:

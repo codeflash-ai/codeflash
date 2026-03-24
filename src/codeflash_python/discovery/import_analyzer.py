@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from codeflash_python.models.models import TestsInFile
+    from codeflash.models.models import TestsInFile
 
 logger = logging.getLogger("codeflash_python")
 

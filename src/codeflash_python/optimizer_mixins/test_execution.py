@@ -6,8 +6,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from codeflash.models.models import TestingMode, TestResults, TestType
 from codeflash_python.code_utils.config_consts import INDIVIDUAL_TESTCASE_TIMEOUT, TOTAL_LOOPING_TIME_EFFECTIVE
-from codeflash_python.models.models import TestingMode, TestResults, TestType
 from codeflash_python.verification.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash_python.verification.parse_test_output import parse_test_results
 from codeflash_python.verification.test_output_utils import parse_concurrency_metrics
@@ -18,7 +18,7 @@ from codeflash_python.verification.test_runner import (
 )
 
 if TYPE_CHECKING:
-    from codeflash_python.models.models import (
+    from codeflash.models.models import (
         CodeOptimizationContext,
         ConcurrencyMetrics,
         CoverageData,
@@ -135,8 +135,8 @@ class TestExecutionMixin(_Base):
         return None
 
     def instrument_existing_tests(self, function_to_all_tests: dict[str, set[FunctionCalledInTest]]) -> set[Path]:
+        from codeflash.models.models import TestFile
         from codeflash_python.models.function_types import qualified_name_with_modules_from_root
-        from codeflash_python.models.models import TestFile
 
         assert self.project_root is not None
         existing_test_files_count = 0
@@ -307,7 +307,7 @@ class TestExecutionMixin(_Base):
             )
 
         # Parse concurrency metrics from stdout
-        from codeflash_python.models.models import TestResults as TestResultsInternal
+        from codeflash.models.models import TestResults as TestResultsInternal
 
         if (
             concurrency_results

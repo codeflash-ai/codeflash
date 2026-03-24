@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from codeflash_python.models.models import CodeStringsMarkdown
+    from codeflash.models.models import CodeStringsMarkdown
 
 
 def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStringsMarkdown) -> str:

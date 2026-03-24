@@ -3,12 +3,12 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from codeflash.models.models import BenchmarkDetail, ProcessedBenchmarkInfo
 from codeflash_python.code_utils.time_utils import humanize_runtime
-from codeflash_python.models.models import BenchmarkDetail, ProcessedBenchmarkInfo
 from codeflash_python.result.critic import performance_gain
 
 if TYPE_CHECKING:
-    from codeflash_python.models.models import BenchmarkKey
+    from codeflash.models.models import BenchmarkKey
 
 
 logger = logging.getLogger("codeflash_python")

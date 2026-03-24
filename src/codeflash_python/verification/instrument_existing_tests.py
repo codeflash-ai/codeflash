@@ -6,17 +6,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from codeflash.models.models import TestingMode
 from codeflash_core.models import FunctionParent, FunctionToOptimize
 from codeflash_python.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
 from codeflash_python.code_utils.formatter import sort_imports
-from codeflash_python.models.models import TestingMode
 from codeflash_python.verification.device_sync import detect_frameworks_from_code
 from codeflash_python.verification.wrapper_generation import create_wrapper_function
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from codeflash_python.models.models import CodePosition
+    from codeflash.models.models import CodePosition
 
 
 logger = logging.getLogger("codeflash_python")

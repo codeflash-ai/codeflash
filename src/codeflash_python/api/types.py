@@ -5,7 +5,7 @@ from typing import NamedTuple
 
 from pydantic.dataclasses import dataclass
 
-from codeflash_python.models.models import OptimizedCandidateSource
+from codeflash.models.models import OptimizedCandidateSource
 
 
 @dataclass(frozen=True)

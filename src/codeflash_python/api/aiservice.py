@@ -9,15 +9,15 @@ from typing import TYPE_CHECKING, Any
 import requests
 from pydantic.json import pydantic_encoder
 
+from codeflash.models.models import CodeStringsMarkdown, OptimizedCandidate
 from codeflash_python.api.aiservice_optimize import AiServiceOptimizeMixin
 from codeflash_python.api.aiservice_results import AiServiceResultsMixin
 from codeflash_python.api.aiservice_testgen import AiServiceTestgenMixin
 from codeflash_python.code_utils.config_consts import PYTHON_LANGUAGE_VERSION
 from codeflash_python.code_utils.env_utils import get_codeflash_api_key
-from codeflash_python.models.models import CodeStringsMarkdown, OptimizedCandidate
 
 if TYPE_CHECKING:
-    from codeflash_python.models.models import OptimizedCandidateSource
+    from codeflash.models.models import OptimizedCandidateSource
 
 logger = logging.getLogger("codeflash_python")
 

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Literal
 from codeflash_python.code_utils.code_utils import get_run_tmp_file
 
 if TYPE_CHECKING:
-    from codeflash_python.models.models import CodeOptimizationContext
+    from codeflash.models.models import CodeOptimizationContext
 
 
 def extract_dependent_function(main_function: str, code_context: CodeOptimizationContext) -> str | Literal[False]:

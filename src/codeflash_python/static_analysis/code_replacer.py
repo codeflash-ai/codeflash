@@ -24,7 +24,7 @@ from codeflash_python.static_analysis.line_profile_utils import ImportAdder
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from codeflash_python.models.models import CodeStringsMarkdown
+    from codeflash.models.models import CodeStringsMarkdown
 
 logger = logging.getLogger("codeflash_python")
 

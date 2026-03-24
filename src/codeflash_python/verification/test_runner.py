@@ -256,10 +256,10 @@ def run_behavioral_tests(
     import shlex
     import sys
 
+    from codeflash.models.models import TestType
     from codeflash_python.code_utils.code_utils import get_run_tmp_file
     from codeflash_python.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
     from codeflash_python.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
-    from codeflash_python.models.models import TestType
     from codeflash_python.static_analysis.coverage_utils import prepare_coverage_files
 
     blocklisted_plugins = ["benchmark", "codspeed", "xdist", "sugar"]

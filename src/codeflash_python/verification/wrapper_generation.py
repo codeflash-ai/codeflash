@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 import logging
 
-from codeflash_python.models.models import TestingMode, VerificationType
+from codeflash.models.models import TestingMode, VerificationType
 from codeflash_python.verification.device_sync import (
     create_device_sync_precompute_statements,
     create_device_sync_statements,

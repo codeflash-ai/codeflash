@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from codeflash.models.models import CodeString, CodeStringsMarkdown
 from codeflash_python.code_utils.code_utils import path_belongs_to_site_packages
 from codeflash_python.context.ast_helpers import (
     BUILTIN_AND_TYPING_NAMES,
@@ -23,7 +24,6 @@ from codeflash_python.context.class_extraction import (
     should_use_raw_project_class_context,
 )
 from codeflash_python.context.jedi_helpers import get_jedi_project
-from codeflash_python.models.models import CodeString, CodeStringsMarkdown
 
 if TYPE_CHECKING:
     from codeflash_core.models import FunctionToOptimize

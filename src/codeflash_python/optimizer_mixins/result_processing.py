@@ -21,7 +21,7 @@ from codeflash_python.verification.edit_generated_tests import (
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from codeflash_python.models.models import (
+    from codeflash.models.models import (
         BestOptimization,
         CodeOptimizationContext,
         FunctionCalledInTest,

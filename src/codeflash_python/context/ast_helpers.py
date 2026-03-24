@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import ast
 import os
-from pathlib import Path
+from typing import TYPE_CHECKING
 
-from codeflash_python.models.models import CodeStringsMarkdown
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from codeflash.models.models import CodeStringsMarkdown
 
 
 def parse_and_collect_imports(code_context: CodeStringsMarkdown) -> tuple[ast.Module, dict[str, str]] | None:

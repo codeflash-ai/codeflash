@@ -4,18 +4,18 @@ import logging
 from collections import defaultdict
 from typing import TYPE_CHECKING, cast
 
+from codeflash.models.models import OriginalCodeBaseline, TestingMode, TestResults, TestType
 from codeflash_core.danom import Err, Ok
 from codeflash_python.code_utils.code_utils import cleanup_paths
 from codeflash_python.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
 from codeflash_python.code_utils.time_utils import humanize_runtime
-from codeflash_python.models.models import OriginalCodeBaseline, TestingMode, TestType
 from codeflash_python.result.critic import coverage_critic, quantity_of_tests_critic
 
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from codeflash.models.models import CodeOptimizationContext, CoverageData, FunctionCalledInTest
     from codeflash_core.danom import Result
-    from codeflash_python.models.models import CodeOptimizationContext, CoverageData, FunctionCalledInTest, TestResults
     from codeflash_python.optimizer_mixins._protocol import FunctionOptimizerProtocol as _Base
 else:
     _Base = object

@@ -17,10 +17,10 @@ if TYPE_CHECKING:
     import ast
     from argparse import Namespace
 
+    from codeflash.models.models import BenchmarkKey, FunctionCalledInTest
     from codeflash_core.models import FunctionToOptimize
     from codeflash_python.context.types import DependencyResolver
     from codeflash_python.function_optimizer import FunctionOptimizer
-    from codeflash_python.models.models import BenchmarkKey, FunctionCalledInTest
 
 try:
     from codeflash_core.config import TestConfig

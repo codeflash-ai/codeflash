@@ -3,15 +3,15 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from codeflash.models.models import OptimizedCandidateSource
 from codeflash_python.code_utils.config_consts import MIN_CORRECT_CANDIDATES, EffortKeys, get_effort_value
-from codeflash_python.models.models import OptimizedCandidateSource
 
 if TYPE_CHECKING:
     import concurrent.futures
 
+    from codeflash.models.models import CodeOptimizationContext, OptimizedCandidate
     from codeflash_python.api.aiservice import AiServiceClient
     from codeflash_python.api.types import TestDiff
-    from codeflash_python.models.models import CodeOptimizationContext, OptimizedCandidate
     from codeflash_python.optimizer_mixins._protocol import FunctionOptimizerProtocol as _Base
     from codeflash_python.optimizer_mixins.candidate_structures import CandidateEvaluationContext
 else:

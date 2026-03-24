@@ -5,19 +5,19 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from codeflash.models.models import GeneratedTests, GeneratedTestsList
 from codeflash_core.danom import Err, Ok
 from codeflash_python.code_utils.config_consts import INDIVIDUAL_TESTCASE_TIMEOUT, EffortKeys, get_effort_value
-from codeflash_python.models.models import GeneratedTests, GeneratedTestsList
 from codeflash_python.verification.verifier import generate_tests
 
 if TYPE_CHECKING:
-    from codeflash_core.danom import Result
-    from codeflash_python.models.models import (
+    from codeflash.models.models import (
         CodeOptimizationContext,
         CodeStringsMarkdown,
         FunctionCalledInTest,
         FunctionSource,
     )
+    from codeflash_core.danom import Result
     from codeflash_python.optimizer_mixins._protocol import FunctionOptimizerProtocol as _Base
 else:
     _Base = object
@@ -151,8 +151,8 @@ class TestGenerationMixin(_Base):
         str,
     ]:
         """Generate and instrument tests for the function."""
+        from codeflash.models.models import TestFile, TestType
         from codeflash_python.code_utils.code_utils import get_run_tmp_file
-        from codeflash_python.models.models import TestFile, TestType
         from codeflash_python.verification.verification_utils import get_test_file_path
 
         n_tests = get_effort_value(EffortKeys.N_GENERATED_TESTS, self.effort)

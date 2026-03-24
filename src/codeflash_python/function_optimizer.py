@@ -10,6 +10,7 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+from codeflash.models.models import OptimizationSet, TestFiles, TestingMode, TestResults
 from codeflash_core.danom import Err, Ok
 from codeflash_python.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path, unified_diff_strings
 from codeflash_python.code_utils.config_consts import (
@@ -27,7 +28,6 @@ from codeflash_python.context.unused_helper_detection import (
 )
 from codeflash_python.discovery.function_filtering import was_function_previously_optimized
 from codeflash_python.models.experiment_metadata import ExperimentMetadata
-from codeflash_python.models.models import OptimizationSet, TestFiles, TestingMode, TestResults
 from codeflash_python.optimizer import resolve_python_function_ast
 from codeflash_python.optimizer_mixins import (
     BaselineEstablishmentMixin,
@@ -52,13 +52,7 @@ if TYPE_CHECKING:
     from argparse import Namespace
     from typing import Any
 
-    from codeflash_core.config import TestConfig
-    from codeflash_core.danom import Result
-    from codeflash_core.models import FunctionToOptimize
-    from codeflash_python.api.aiservice import AiServiceClient
-    from codeflash_python.api.types import TestDiff, TestFileReview
-    from codeflash_python.context.types import DependencyResolver
-    from codeflash_python.models.models import (
+    from codeflash.models.models import (
         BenchmarkKey,
         BestOptimization,
         CodeOptimizationContext,
@@ -69,6 +63,12 @@ if TYPE_CHECKING:
         GeneratedTestsList,
         OriginalCodeBaseline,
     )
+    from codeflash_core.config import TestConfig
+    from codeflash_core.danom import Result
+    from codeflash_core.models import FunctionToOptimize
+    from codeflash_python.api.aiservice import AiServiceClient
+    from codeflash_python.api.types import TestDiff, TestFileReview
+    from codeflash_python.context.types import DependencyResolver
 
 logger = logging.getLogger("codeflash_python")
 

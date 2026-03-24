@@ -5,6 +5,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from codeflash.models.models import TestType
 from codeflash_core.danom import Err, Ok
 from codeflash_python.code_utils.code_utils import encoded_tokens_len, module_name_from_file_path
 from codeflash_python.code_utils.config_consts import (
@@ -13,7 +14,6 @@ from codeflash_python.code_utils.config_consts import (
     MAX_TEST_REPAIR_CYCLES,
     OPTIMIZATION_CONTEXT_TOKEN_LIMIT,
 )
-from codeflash_python.models.models import TestType
 from codeflash_python.telemetry.posthog_cf import ph
 from codeflash_python.verification.edit_generated_tests import remove_test_functions
 from codeflash_python.verification.test_runner import process_generated_test_strings
@@ -21,8 +21,8 @@ from codeflash_python.verification.test_runner import process_generated_test_str
 if TYPE_CHECKING:
     from typing import Any
 
+    from codeflash.models.models import CodeOptimizationContext, CoverageData, GeneratedTestsList, TestResults
     from codeflash_core.danom import Result
-    from codeflash_python.models.models import CodeOptimizationContext, CoverageData, GeneratedTestsList, TestResults
     from codeflash_python.optimizer_mixins._protocol import FunctionOptimizerProtocol as _Base
 else:
     _Base = object

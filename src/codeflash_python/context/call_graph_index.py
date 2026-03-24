@@ -8,10 +8,10 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from codeflash.models.models import FunctionSource
 from codeflash_python.code_utils.code_utils import path_belongs_to_site_packages
 from codeflash_python.context.types import IndexResult
 from codeflash_python.context.utils import get_qualified_name
-from codeflash_python.models.models import FunctionSource
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable

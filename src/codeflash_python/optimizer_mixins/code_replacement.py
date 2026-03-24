@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from codeflash_python.code_utils.formatter import format_code, sort_imports
 
 if TYPE_CHECKING:
-    from codeflash_python.models.models import CodeOptimizationContext, CodeStringsMarkdown, FunctionSource
+    from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, FunctionSource
     from codeflash_python.optimizer_mixins._protocol import FunctionOptimizerProtocol as _Base
 else:
     _Base = object

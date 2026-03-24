@@ -8,14 +8,14 @@ from typing import TYPE_CHECKING
 
 import libcst as cst
 
+from codeflash.models.models import TestResults, TestType, VerificationType
 from codeflash_python.api.types import TestDiff, TestDiffScope
-from codeflash_python.models.models import TestResults, TestType, VerificationType
 from codeflash_python.verification.comparator import comparator
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from codeflash_python.models.models import InvocationId, TestResults
+    from codeflash.models.models import InvocationId, TestResults
 
 
 logger = logging.getLogger("codeflash_python")
