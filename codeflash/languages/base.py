@@ -31,17 +31,6 @@ __all__ = ["FunctionParent", "HelperFunction"]
 ParentInfo = FunctionParent
 
 
-# Lazy import for FunctionInfo to avoid circular imports
-# This allows `from codeflash.languages.base import FunctionInfo` to work at runtime
-def __getattr__(name: str) -> Any:
-    if name == "FunctionInfo":
-        from codeflash_core.models import FunctionToOptimize
-
-        return FunctionToOptimize
-    msg = f"module {__name__!r} has no attribute {name!r}"
-    raise AttributeError(msg)
-
-
 @dataclass(frozen=True)
 class IndexResult:
     file_path: Path
@@ -259,7 +248,7 @@ class LanguageSupport(Protocol):
             def language(self) -> Language:
                 return Language.PYTHON
 
-            def discover_functions(self, source: str, file_path: Path, ...) -> list[FunctionInfo]:
+            def discover_functions(self, source: str, file_path: Path, ...) -> list[FunctionToOptimize]:
                 # Python-specific implementation using LibCST
                 ...
 

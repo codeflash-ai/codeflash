@@ -3,9 +3,10 @@
 import tempfile
 from pathlib import Path
 
-from codeflash.languages.base import FunctionInfo
+
 from codeflash.languages.java.concurrency_analyzer import JavaConcurrencyAnalyzer, analyze_function_concurrency
 from codeflash.languages.language_enum import Language
+from codeflash_core.models import FunctionToOptimize
 
 
 class TestCompletableFutureDetection:
@@ -25,7 +26,7 @@ class TestCompletableFutureDetection:
             file_path = Path(tmpdir) / "AsyncService.java"
             file_path.write_text(source, encoding="utf-8")
 
-            func = FunctionInfo(
+            func = FunctionToOptimize(
                 function_name="fetchData",
                 file_path=file_path,
                 starting_line=2,
@@ -59,7 +60,7 @@ class TestCompletableFutureDetection:
             file_path = Path(tmpdir) / "AsyncService.java"
             file_path.write_text(source, encoding="utf-8")
 
-            func = FunctionInfo(
+            func = FunctionToOptimize(
                 function_name="process",
                 file_path=file_path,
                 starting_line=2,
@@ -98,7 +99,7 @@ class TestParallelStreamDetection:
             file_path = Path(tmpdir) / "DataProcessor.java"
             file_path.write_text(source, encoding="utf-8")
 
-            func = FunctionInfo(
+            func = FunctionToOptimize(
                 function_name="processData",
                 file_path=file_path,
                 starting_line=2,
@@ -129,7 +130,7 @@ class TestParallelStreamDetection:
             file_path = Path(tmpdir) / "DataProcessor.java"
             file_path.write_text(source, encoding="utf-8")
 
-            func = FunctionInfo(
+            func = FunctionToOptimize(
                 function_name="count",
                 file_path=file_path,
                 starting_line=2,
@@ -165,7 +166,7 @@ class TestExecutorServiceDetection:
             file_path = Path(tmpdir) / "TaskRunner.java"
             file_path.write_text(source, encoding="utf-8")
 
-            func = FunctionInfo(
+            func = FunctionToOptimize(
                 function_name="runTasks",
                 file_path=file_path,
                 starting_line=2,
@@ -201,7 +202,7 @@ class TestVirtualThreadDetection:
             file_path = Path(tmpdir) / "VirtualThreadExample.java"
             file_path.write_text(source, encoding="utf-8")
 
-            func = FunctionInfo(
+            func = FunctionToOptimize(
                 function_name="runWithVirtualThreads",
                 file_path=file_path,
                 starting_line=2,
@@ -236,7 +237,7 @@ class TestSynchronizedDetection:
             file_path = Path(tmpdir) / "Counter.java"
             file_path.write_text(source, encoding="utf-8")
 
-            func = FunctionInfo(
+            func = FunctionToOptimize(
                 function_name="increment",
                 file_path=file_path,
                 starting_line=2,
@@ -268,7 +269,7 @@ class TestSynchronizedDetection:
             file_path = Path(tmpdir) / "Counter.java"
             file_path.write_text(source, encoding="utf-8")
 
-            func = FunctionInfo(
+            func = FunctionToOptimize(
                 function_name="increment",
                 file_path=file_path,
                 starting_line=2,
@@ -304,7 +305,7 @@ class TestConcurrentCollectionsDetection:
             file_path = Path(tmpdir) / "Cache.java"
             file_path.write_text(source, encoding="utf-8")
 
-            func = FunctionInfo(
+            func = FunctionToOptimize(
                 function_name="put",
                 file_path=file_path,
                 starting_line=4,
@@ -342,7 +343,7 @@ class TestAtomicOperationsDetection:
             file_path = Path(tmpdir) / "Counter.java"
             file_path.write_text(source, encoding="utf-8")
 
-            func = FunctionInfo(
+            func = FunctionToOptimize(
                 function_name="increment",
                 file_path=file_path,
                 starting_line=4,
@@ -375,7 +376,7 @@ class TestNonConcurrentCode:
             file_path = Path(tmpdir) / "Calculator.java"
             file_path.write_text(source, encoding="utf-8")
 
-            func = FunctionInfo(
+            func = FunctionToOptimize(
                 function_name="add",
                 file_path=file_path,
                 starting_line=2,
@@ -412,7 +413,7 @@ class TestThroughputMeasurement:
             file_path = Path(tmpdir) / "AsyncService.java"
             file_path.write_text(source, encoding="utf-8")
 
-            func = FunctionInfo(
+            func = FunctionToOptimize(
                 function_name="fetchData",
                 file_path=file_path,
                 starting_line=2,
@@ -441,7 +442,7 @@ class TestThroughputMeasurement:
             file_path = Path(tmpdir) / "Calculator.java"
             file_path.write_text(source, encoding="utf-8")
 
-            func = FunctionInfo(
+            func = FunctionToOptimize(
                 function_name="add",
                 file_path=file_path,
                 starting_line=2,
@@ -474,7 +475,7 @@ class TestOptimizationSuggestions:
             file_path = Path(tmpdir) / "AsyncService.java"
             file_path.write_text(source, encoding="utf-8")
 
-            func = FunctionInfo(
+            func = FunctionToOptimize(
                 function_name="fetchData",
                 file_path=file_path,
                 starting_line=2,
@@ -505,7 +506,7 @@ class TestOptimizationSuggestions:
             file_path = Path(tmpdir) / "DataProcessor.java"
             file_path.write_text(source, encoding="utf-8")
 
-            func = FunctionInfo(
+            func = FunctionToOptimize(
                 function_name="processData",
                 file_path=file_path,
                 starting_line=2,

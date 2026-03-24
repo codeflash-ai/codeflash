@@ -22,7 +22,8 @@ from codeflash.languages.java.build_tools import CODEFLASH_RUNTIME_JAR_NAME, COD
 if TYPE_CHECKING:
     from tree_sitter import Node
 
-    from codeflash.languages.base import FunctionInfo
+    from codeflash_core.models import FunctionToOptimize
+
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +75,7 @@ class JavaLineProfiler:
     # === Agent-based profiling (bytecode instrumentation) ===
 
     def generate_agent_config(
-        self, source: str, file_path: Path, functions: list[FunctionInfo], config_output_path: Path
+        self, source: str, file_path: Path, functions: list[FunctionToOptimize], config_output_path: Path
     ) -> Path:
         """Generate config JSON for the profiler agent.
 
@@ -141,7 +142,7 @@ class JavaLineProfiler:
     # === Source-level instrumentation ===
 
     def instrument_source(
-        self, source: str, file_path: Path, functions: list[FunctionInfo], analyzer: Any = None
+        self, source: str, file_path: Path, functions: list[FunctionToOptimize], analyzer: Any = None
     ) -> str:
         """Instrument Java source code with line profiling.
 
@@ -326,7 +327,9 @@ class {self.profiler_class} {{
 }}
 """
 
-    def instrument_function(self, func: FunctionInfo, lines: list[str], file_path: Path, analyzer: Any) -> list[str]:
+    def instrument_function(
+        self, func: FunctionToOptimize, lines: list[str], file_path: Path, analyzer: Any
+    ) -> list[str]:
         """Instrument a single function with line profiling.
 
         Args:

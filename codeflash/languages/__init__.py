@@ -63,10 +63,6 @@ from codeflash.languages.test_framework import (
 
 # Lazy imports to avoid circular imports
 def __getattr__(name: str):
-    if name == "FunctionInfo":
-        from codeflash_core.models import FunctionToOptimize
-
-        return FunctionToOptimize
     if name == "JavaScriptSupport":
         from codeflash.languages.javascript.support import JavaScriptSupport
 
@@ -90,7 +86,6 @@ def __getattr__(name: str):
 __all__ = [
     "CodeContext",
     "DependencyResolver",
-    "FunctionInfo",
     "HelperFunction",
     "IndexResult",
     "Language",

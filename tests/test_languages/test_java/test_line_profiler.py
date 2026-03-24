@@ -15,6 +15,7 @@ from codeflash.languages.java.line_profiler import (
     format_line_profile_results,
     resolve_internal_class_name,
 )
+from codeflash_core.models import FunctionToOptimize
 
 
 class TestAgentConfigGeneration:
@@ -22,7 +23,7 @@ class TestAgentConfigGeneration:
 
     def test_simple_method(self):
         """Test config generation for a simple method."""
-        from codeflash.languages.base import FunctionInfo, Language
+        from codeflash.languages.base import Language
 
         source = """package com.example;
 
@@ -34,7 +35,7 @@ public class Calculator {
 }
 """
         file_path = Path("/tmp/Calculator.java")
-        func = FunctionInfo(
+        func = FunctionToOptimize(
             function_name="add",
             file_path=file_path,
             starting_line=4,
@@ -76,7 +77,7 @@ public class Calculator {
 
     def test_line_contents_extraction(self):
         """Test that line contents are extracted correctly."""
-        from codeflash.languages.base import FunctionInfo, Language
+        from codeflash.languages.base import Language
 
         source = """public class Test {
     public void method() {
@@ -87,7 +88,7 @@ public class Calculator {
 }
 """
         file_path = Path("/tmp/Test.java")
-        func = FunctionInfo(
+        func = FunctionToOptimize(
             function_name="method",
             file_path=file_path,
             starting_line=2,
@@ -118,7 +119,7 @@ public class Calculator {
 
     def test_multiple_functions(self):
         """Test config with multiple target functions."""
-        from codeflash.languages.base import FunctionInfo, Language
+        from codeflash.languages.base import Language
 
         source = """public class Test {
     public void method1() {
@@ -131,7 +132,7 @@ public class Calculator {
 }
 """
         file_path = Path("/tmp/Test.java")
-        func1 = FunctionInfo(
+        func1 = FunctionToOptimize(
             function_name="method1",
             file_path=file_path,
             starting_line=2,
@@ -143,7 +144,7 @@ public class Calculator {
             is_method=True,
             language=Language.JAVA,
         )
-        func2 = FunctionInfo(
+        func2 = FunctionToOptimize(
             function_name="method2",
             file_path=file_path,
             starting_line=6,
@@ -259,11 +260,11 @@ class TestWarmupConfig:
 
     def test_warmup_disabled(self):
         """Test warmup can be disabled by setting to 0."""
-        from codeflash.languages.base import FunctionInfo, Language
+        from codeflash.languages.base import Language
 
         source = "public class Test {\n    public void method() {\n        return;\n    }\n}"
         file_path = Path("/tmp/Test.java")
-        func = FunctionInfo(
+        func = FunctionToOptimize(
             function_name="method",
             file_path=file_path,
             starting_line=2,
@@ -288,11 +289,11 @@ class TestWarmupConfig:
 
     def test_warmup_in_config_json(self):
         """Test that warmupIterations appears in the generated config JSON."""
-        from codeflash.languages.base import FunctionInfo, Language
+        from codeflash.languages.base import Language
 
         source = "package com.example;\npublic class Calc {\n    public int add(int a, int b) {\n        return a + b;\n    }\n}"
         file_path = Path("/tmp/Calc.java")
-        func = FunctionInfo(
+        func = FunctionToOptimize(
             function_name="add",
             file_path=file_path,
             starting_line=3,
@@ -321,7 +322,7 @@ class TestAgentConfigBoundaryConditions:
 
     def test_start_line_beyond_end_line(self):
         """When starting_line > ending_line, no lines are extracted but config is still valid."""
-        from codeflash.languages.base import FunctionInfo, Language
+        from codeflash.languages.base import Language
 
         source = "public class Test {\n    public void foo() { return; }\n}\n"
         file_path = Path("/tmp/Test.java")
@@ -330,7 +331,7 @@ class TestAgentConfigBoundaryConditions:
             output_file = Path(tmpdir) / "profile.json"
             config_path = Path(tmpdir) / "config.json"
 
-            func = FunctionInfo(
+            func = FunctionToOptimize(
                 function_name="foo",
                 file_path=file_path,
                 starting_line=5,
@@ -354,7 +355,7 @@ class TestAgentConfigBoundaryConditions:
 
     def test_line_numbers_beyond_source_length(self):
         """Line numbers beyond the source length are silently skipped."""
-        from codeflash.languages.base import FunctionInfo, Language
+        from codeflash.languages.base import Language
 
         source = "public class Test {\n    public void foo() { return; }\n}\n"
         file_path = Path("/tmp/Test.java")
@@ -363,7 +364,7 @@ class TestAgentConfigBoundaryConditions:
             output_file = Path(tmpdir) / "profile.json"
             config_path = Path(tmpdir) / "config.json"
 
-            func = FunctionInfo(
+            func = FunctionToOptimize(
                 function_name="foo",
                 file_path=file_path,
                 starting_line=100,
@@ -396,7 +397,7 @@ class TestAgentConfigBoundaryConditions:
 
     def test_negative_line_numbers(self):
         """Negative line numbers produce no line contents (range is empty or out of bounds)."""
-        from codeflash.languages.base import FunctionInfo, Language
+        from codeflash.languages.base import Language
 
         source = "public class Test {\n    public void foo() { return; }\n}\n"
         file_path = Path("/tmp/Test.java")
@@ -405,7 +406,7 @@ class TestAgentConfigBoundaryConditions:
             output_file = Path(tmpdir) / "profile.json"
             config_path = Path(tmpdir) / "config.json"
 
-            func = FunctionInfo(
+            func = FunctionToOptimize(
                 function_name="foo",
                 file_path=file_path,
                 starting_line=-5,

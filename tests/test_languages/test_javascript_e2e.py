@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from codeflash.languages.base import Language
+from codeflash_core.models import FunctionToOptimize
 
 
 def skip_if_js_not_supported():
@@ -154,7 +155,7 @@ class TestJavaScriptCodeReplacement:
         """Test replacing a function in a JavaScript file."""
         skip_if_js_not_supported()
         from codeflash.languages import get_language_support
-        from codeflash.languages.base import FunctionInfo
+        
 
         original_source = """
 export function add(a, b) {
@@ -173,7 +174,7 @@ export function multiply(a, b) {
 
         js_support = get_language_support(Language.JAVASCRIPT)
 
-        func_info = FunctionInfo(
+        func_info = FunctionToOptimize(
             function_name="add", file_path=Path("/tmp/test.js"), starting_line=2, ending_line=4, language="javascript"
         )
 
@@ -208,7 +209,7 @@ class TestJavaScriptTestDiscovery:
         """Test discovering Jest tests for JavaScript functions."""
         skip_if_js_not_supported()
         from codeflash.languages import get_language_support
-        from codeflash.languages.base import FunctionInfo
+        
 
         js_support = get_language_support(Language.JAVASCRIPT)
         test_root = js_project_dir / "tests"
@@ -217,7 +218,7 @@ class TestJavaScriptTestDiscovery:
             pytest.skip("tests directory not found")
 
         fib_file = js_project_dir / "fibonacci.js"
-        func_info = FunctionInfo(
+        func_info = FunctionToOptimize(
             function_name="fibonacci", file_path=fib_file, starting_line=11, ending_line=16, language="javascript"
         )
 

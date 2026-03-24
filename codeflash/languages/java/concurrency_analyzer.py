@@ -19,7 +19,8 @@ from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from codeflash.languages.base import FunctionInfo
+    from codeflash_core.models import FunctionToOptimize
+
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +132,7 @@ class JavaConcurrencyAnalyzer:
         """
         self.analyzer = analyzer
 
-    def analyze_function(self, func: FunctionInfo, source: str | None = None) -> ConcurrencyInfo:
+    def analyze_function(self, func: FunctionToOptimize, source: str | None = None) -> ConcurrencyInfo:
         """Analyze a function for concurrency patterns.
 
         Args:
@@ -305,7 +306,7 @@ class JavaConcurrencyAnalyzer:
         return suggestions
 
 
-def analyze_function_concurrency(func: FunctionInfo, source: str | None = None, analyzer=None) -> ConcurrencyInfo:
+def analyze_function_concurrency(func: FunctionToOptimize, source: str | None = None, analyzer=None) -> ConcurrencyInfo:
     """Analyze a function for concurrency patterns.
 
     Convenience function that creates a JavaConcurrencyAnalyzer and analyzes the function.

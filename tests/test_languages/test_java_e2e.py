@@ -14,6 +14,7 @@ import pytest
 
 from codeflash.discovery.functions_to_optimize import find_all_functions_in_file, get_files_for_language
 from codeflash.languages.base import Language
+from codeflash_core.models import FunctionToOptimize
 
 
 class TestJavaFunctionDiscovery:
@@ -128,7 +129,7 @@ class TestJavaCodeReplacement:
     def test_replace_method_in_java_file(self):
         """Test replacing a method in a Java file."""
         from codeflash.languages import get_language_support
-        from codeflash.languages.base import FunctionInfo, Language, ParentInfo
+        from codeflash.languages.base import Language, ParentInfo
 
         original_source = """package com.example;
 
@@ -150,8 +151,8 @@ public class Calculator {
 
         java_support = get_language_support(Language.JAVA)
 
-        # Create FunctionInfo for the add method with parent class
-        func_info = FunctionInfo(
+        # Create FunctionToOptimize for the add method with parent class
+        func_info = FunctionToOptimize(
             function_name="add",
             file_path=Path("/tmp/Calculator.java"),
             starting_line=4,
@@ -182,7 +183,7 @@ class TestJavaTestDiscovery:
     def test_discover_junit_tests(self, java_project_dir):
         """Test discovering JUnit tests for Java methods."""
         from codeflash.languages import get_language_support
-        from codeflash.languages.base import FunctionInfo, Language, ParentInfo
+        from codeflash.languages.base import Language, ParentInfo
 
         java_support = get_language_support(Language.JAVA)
         test_root = java_project_dir / "src" / "test" / "java"
@@ -190,9 +191,9 @@ class TestJavaTestDiscovery:
         if not test_root.exists():
             pytest.skip("test directory not found")
 
-        # Create FunctionInfo for bubbleSort method with parent class
+        # Create FunctionToOptimize for bubbleSort method with parent class
         sort_file = java_project_dir / "src" / "main" / "java" / "com" / "example" / "BubbleSort.java"
-        func_info = FunctionInfo(
+        func_info = FunctionToOptimize(
             function_name="bubbleSort",
             file_path=sort_file,
             starting_line=14,

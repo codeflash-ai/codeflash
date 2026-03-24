@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.languages.base import FunctionFilterCriteria, FunctionInfo, Language, ParentInfo
+from codeflash.languages.base import FunctionFilterCriteria, Language, ParentInfo
 from codeflash.languages.javascript.support import JavaScriptSupport
 
 
@@ -316,7 +316,7 @@ function multiply(a, b) {
     return a * b;
 }
 """
-        func = FunctionInfo(function_name="add", file_path=Path("/test.js"), starting_line=1, ending_line=3)
+        func = FunctionToOptimize(function_name="add", file_path=Path("/test.js"), starting_line=1, ending_line=3)
         new_code = """function add(a, b) {
     // Optimized
     return (a + b) | 0;
@@ -343,7 +343,7 @@ function other() {
 
 // Footer
 """
-        func = FunctionInfo(function_name="target", file_path=Path("/test.js"), starting_line=4, ending_line=6)
+        func = FunctionToOptimize(function_name="target", file_path=Path("/test.js"), starting_line=4, ending_line=6)
         new_code = """function target() {
     return 42;
 }
@@ -364,7 +364,7 @@ function other() {
     }
 }
 """
-        func = FunctionInfo(
+        func = FunctionToOptimize(
             function_name="add",
             file_path=Path("/test.js"),
             starting_line=2,
@@ -391,7 +391,7 @@ function other() {
 
 const multiply = (x, y) => x * y;
 """
-        func = FunctionInfo(function_name="add", file_path=Path("/test.js"), starting_line=1, ending_line=3)
+        func = FunctionToOptimize(function_name="add", file_path=Path("/test.js"), starting_line=1, ending_line=3)
         new_code = """const add = (a, b) => {
     return (a + b) | 0;
 };
@@ -507,7 +507,7 @@ class TestExtractCodeContext:
             f.flush()
             file_path = Path(f.name)
 
-            func = FunctionInfo(function_name="add", file_path=file_path, starting_line=1, ending_line=3)
+            func = FunctionToOptimize(function_name="add", file_path=file_path, starting_line=1, ending_line=3)
 
             context = js_support.extract_code_context(func, file_path.parent, file_path.parent)
 
@@ -950,7 +950,7 @@ class TestClassMethodReplacement:
     }
 }
 """
-        func = FunctionInfo(
+        func = FunctionToOptimize(
             function_name="add",
             file_path=Path("/test.js"),
             starting_line=2,
@@ -991,7 +991,7 @@ class TestClassMethodReplacement:
     }
 }
 """
-        func = FunctionInfo(
+        func = FunctionToOptimize(
             function_name="add",
             file_path=Path("/test.js"),
             starting_line=5,  # Method starts here
@@ -1028,7 +1028,7 @@ class TestClassMethodReplacement:
 }
 """
         # Replace add first
-        add_func = FunctionInfo(
+        add_func = FunctionToOptimize(
             function_name="add",
             file_path=Path("/test.js"),
             starting_line=2,
@@ -1060,7 +1060,7 @@ class TestClassMethodReplacement:
         }
     }
 """
-        func = FunctionInfo(
+        func = FunctionToOptimize(
             function_name="innerMethod",
             file_path=Path("/test.js"),
             starting_line=2,

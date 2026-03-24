@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.languages.base import FunctionFilterCriteria, FunctionInfo, Language, ParentInfo
+from codeflash.languages.base import FunctionFilterCriteria, Language, ParentInfo
 from codeflash.languages.python.support import PythonSupport
 
 
@@ -262,7 +262,7 @@ class TestReplaceFunction:
 def multiply(a, b):
     return a * b
 """
-        func = FunctionInfo(function_name="add", file_path=Path("/test.py"), starting_line=1, ending_line=2)
+        func = FunctionToOptimize(function_name="add", file_path=Path("/test.py"), starting_line=1, ending_line=2)
         new_code = """def add(a, b):
     # Optimized
     return (a + b) | 0
@@ -286,7 +286,7 @@ def other():
 
 # Footer
 """
-        func = FunctionInfo(function_name="target", file_path=Path("/test.py"), starting_line=4, ending_line=5)
+        func = FunctionToOptimize(function_name="target", file_path=Path("/test.py"), starting_line=4, ending_line=5)
         new_code = """def target():
     return 42
 """
@@ -304,7 +304,7 @@ def other():
     def add(self, a, b):
         return a + b
 """
-        func = FunctionInfo(
+        func = FunctionToOptimize(
             function_name="add",
             file_path=Path("/test.py"),
             starting_line=2,
@@ -330,7 +330,7 @@ def other():
 def second():
     return 2
 """
-        func = FunctionInfo(function_name="first", file_path=Path("/test.py"), starting_line=1, ending_line=2)
+        func = FunctionToOptimize(function_name="first", file_path=Path("/test.py"), starting_line=1, ending_line=2)
         new_code = """def first():
     return 100
 """
@@ -347,7 +347,7 @@ def second():
 def last():
     return 999
 """
-        func = FunctionInfo(function_name="last", file_path=Path("/test.py"), starting_line=4, ending_line=5)
+        func = FunctionToOptimize(function_name="last", file_path=Path("/test.py"), starting_line=4, ending_line=5)
         new_code = """def last():
     return 1000
 """
@@ -361,7 +361,7 @@ def last():
         source = """def only():
     return 42
 """
-        func = FunctionInfo(function_name="only", file_path=Path("/test.py"), starting_line=1, ending_line=2)
+        func = FunctionToOptimize(function_name="only", file_path=Path("/test.py"), starting_line=1, ending_line=2)
         new_code = """def only():
     return 100
 """
@@ -473,7 +473,7 @@ class TestExtractCodeContext:
             f.flush()
             file_path = Path(f.name)
 
-            func = FunctionInfo(function_name="add", file_path=file_path, starting_line=1, ending_line=2)
+            func = FunctionToOptimize(function_name="add", file_path=file_path, starting_line=1, ending_line=2)
 
             context = python_support.extract_code_context(func, file_path.parent, file_path.parent)
 

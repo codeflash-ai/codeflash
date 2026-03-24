@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from codeflash.code_utils.config_js import detect_test_runner, get_package_json_data
+from codeflash_core.models import FunctionToOptimize
 
 
 def skip_if_js_not_supported():
@@ -169,7 +170,7 @@ class TestVitestTestDiscovery:
         """Test discovering Vitest tests for TypeScript functions."""
         skip_if_js_not_supported()
         from codeflash.languages import get_language_support
-        from codeflash.languages.base import FunctionInfo, Language
+        from codeflash.languages.base import Language
 
         ts_support = get_language_support(Language.TYPESCRIPT)
         test_root = vitest_project_dir / "tests"
@@ -178,7 +179,7 @@ class TestVitestTestDiscovery:
             pytest.skip("tests directory not found")
 
         fib_file = vitest_project_dir / "fibonacci.ts"
-        func_info = FunctionInfo(
+        func_info = FunctionToOptimize(
             function_name="fibonacci", file_path=fib_file, starting_line=11, ending_line=16, language="typescript"
         )
 

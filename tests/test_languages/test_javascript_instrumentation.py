@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 from codeflash_core.models import FunctionToOptimize
-from codeflash.languages.base import FunctionInfo, Language
+from codeflash.languages.base import Language
 from codeflash.languages.javascript.line_profiler import JavaScriptLineProfiler
 from codeflash.languages.javascript.tracer import JavaScriptTracer
 from codeflash.models.models import FunctionParent
@@ -60,7 +60,7 @@ function add(a, b) {
             f.flush()
             file_path = Path(f.name)
 
-        func_info = FunctionInfo(
+        func_info = FunctionToOptimize(
             function_name="add", file_path=file_path, starting_line=2, ending_line=5, language="javascript"
         )
 
@@ -121,7 +121,7 @@ function multiply(x, y) {
             f.flush()
             file_path = Path(f.name)
 
-        func_info = FunctionInfo(
+        func_info = FunctionToOptimize(
             function_name="multiply", file_path=file_path, starting_line=2, ending_line=4, language="javascript"
         )
 
@@ -165,7 +165,7 @@ function greet(name) {
             f.flush()
             file_path = Path(f.name)
 
-        func_info = FunctionInfo(
+        func_info = FunctionToOptimize(
             function_name="greet", file_path=file_path, starting_line=2, ending_line=4, language="javascript"
         )
 
@@ -196,7 +196,7 @@ function square(n) {
             f.flush()
             file_path = Path(f.name)
 
-        func_info = FunctionInfo(
+        func_info = FunctionToOptimize(
             function_name="square", file_path=file_path, starting_line=2, ending_line=5, language="javascript"
         )
 

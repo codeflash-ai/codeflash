@@ -11,7 +11,6 @@ import pytest
 from codeflash.languages.base import (
     CodeContext,
     FunctionFilterCriteria,
-    FunctionInfo,
     HelperFunction,
     Language,
     ParentInfo,
@@ -19,6 +18,7 @@ from codeflash.languages.base import (
     TestResult,
     convert_parents_to_tuple,
 )
+from codeflash_core.models import FunctionToOptimize
 
 
 class TestLanguageEnum:
@@ -89,12 +89,12 @@ class TestParentInfo:
         assert len(s) == 1
 
 
-class TestFunctionInfo:
-    """Tests for the FunctionInfo dataclass (alias for FunctionToOptimize)."""
+class TestFunctionToOptimize:
+    """Tests for the FunctionToOptimize dataclass (alias for FunctionToOptimize)."""
 
     def test_function_info_creation_minimal(self):
-        """Test creating FunctionInfo with minimal args."""
-        func = FunctionInfo(function_name="add", file_path=Path("/test/example.py"), starting_line=1, ending_line=3)
+        """Test creating FunctionToOptimize with minimal args."""
+        func = FunctionToOptimize(function_name="add", file_path=Path("/test/example.py"), starting_line=1, ending_line=3)
         assert func.function_name == "add"
         assert func.file_path == Path("/test/example.py")
         assert func.starting_line == 1
@@ -105,9 +105,9 @@ class TestFunctionInfo:
         assert func.language == "python"
 
     def test_function_info_creation_full(self):
-        """Test creating FunctionInfo with all args."""
+        """Test creating FunctionToOptimize with all args."""
         parents = [ParentInfo(name="Calculator", type="ClassDef")]
-        func = FunctionInfo(
+        func = FunctionToOptimize(
             function_name="add",
             file_path=Path("/test/example.py"),
             starting_line=10,
@@ -126,20 +126,20 @@ class TestFunctionInfo:
         assert func.starting_col == 4
         assert func.ending_col == 20
 
-    def test_function_info_frozen(self):
-        """Test that FunctionInfo is immutable."""
-        func = FunctionInfo(function_name="add", file_path=Path("/test/example.py"), starting_line=1, ending_line=3)
-        with pytest.raises(AttributeError):
-            func.function_name = "new_name"
+    def test_function_info_mutable(self):
+        """Test that FunctionToOptimize fields can be reassigned (stdlib dataclass, not frozen)."""
+        func = FunctionToOptimize(function_name="add", file_path=Path("/test/example.py"), starting_line=1, ending_line=3)
+        func.function_name = "new_name"
+        assert func.function_name == "new_name"
 
     def test_qualified_name_no_parents(self):
         """Test qualified_name without parents."""
-        func = FunctionInfo(function_name="add", file_path=Path("/test/example.py"), starting_line=1, ending_line=3)
+        func = FunctionToOptimize(function_name="add", file_path=Path("/test/example.py"), starting_line=1, ending_line=3)
         assert func.qualified_name == "add"
 
     def test_qualified_name_with_class(self):
         """Test qualified_name with class parent."""
-        func = FunctionInfo(
+        func = FunctionToOptimize(
             function_name="add",
             file_path=Path("/test/example.py"),
             starting_line=1,
@@ -150,7 +150,7 @@ class TestFunctionInfo:
 
     def test_qualified_name_nested(self):
         """Test qualified_name with nested parents."""
-        func = FunctionInfo(
+        func = FunctionToOptimize(
             function_name="inner",
             file_path=Path("/test/example.py"),
             starting_line=1,
@@ -161,7 +161,7 @@ class TestFunctionInfo:
 
     def test_class_name_with_class(self):
         """Test class_name property with class parent."""
-        func = FunctionInfo(
+        func = FunctionToOptimize(
             function_name="add",
             file_path=Path("/test/example.py"),
             starting_line=1,
@@ -172,12 +172,12 @@ class TestFunctionInfo:
 
     def test_class_name_without_class(self):
         """Test class_name property without class parent."""
-        func = FunctionInfo(function_name="add", file_path=Path("/test/example.py"), starting_line=1, ending_line=3)
+        func = FunctionToOptimize(function_name="add", file_path=Path("/test/example.py"), starting_line=1, ending_line=3)
         assert func.class_name is None
 
     def test_class_name_nested_function(self):
         """Test class_name for function nested in another function."""
-        func = FunctionInfo(
+        func = FunctionToOptimize(
             function_name="inner",
             file_path=Path("/test/example.py"),
             starting_line=1,
@@ -188,7 +188,7 @@ class TestFunctionInfo:
 
     def test_class_name_method_in_nested_class(self):
         """Test class_name for method in nested class."""
-        func = FunctionInfo(
+        func = FunctionToOptimize(
             function_name="method",
             file_path=Path("/test/example.py"),
             starting_line=1,
@@ -200,12 +200,12 @@ class TestFunctionInfo:
 
     def test_top_level_parent_name_no_parents(self):
         """Test top_level_parent_name without parents."""
-        func = FunctionInfo(function_name="add", file_path=Path("/test/example.py"), starting_line=1, ending_line=3)
+        func = FunctionToOptimize(function_name="add", file_path=Path("/test/example.py"), starting_line=1, ending_line=3)
         assert func.top_level_parent_name == "add"
 
     def test_top_level_parent_name_with_parents(self):
         """Test top_level_parent_name with parents."""
-        func = FunctionInfo(
+        func = FunctionToOptimize(
             function_name="method",
             file_path=Path("/test/example.py"),
             starting_line=1,
@@ -216,7 +216,7 @@ class TestFunctionInfo:
 
     def test_function_info_str(self):
         """Test string representation."""
-        func = FunctionInfo(
+        func = FunctionToOptimize(
             function_name="add",
             file_path=Path("/test/example.py"),
             starting_line=1,

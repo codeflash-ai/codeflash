@@ -63,6 +63,13 @@ class PythonPlugin(PluginAiOpsMixin, PluginTestLifecycleMixin, PluginResultsMixi
             self.ai_client = AiServiceClient()
         return self.ai_client
 
+    # -- setup ----------------------------------------------------------------
+
+    def setup_test_config(self, test_cfg: TestConfig) -> None:
+        from codeflash_python.verification.test_runner import setup_pytest_cmd
+
+        setup_pytest_cmd(test_cfg.test_command)
+
     # -- cleanup, comparison, environment validation --------------------------
 
     def cleanup_run(self, tests_root: Path) -> None:

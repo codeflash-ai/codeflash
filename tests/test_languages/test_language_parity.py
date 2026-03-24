@@ -14,7 +14,7 @@ from typing import NamedTuple
 
 import pytest
 
-from codeflash.languages.base import FunctionFilterCriteria, FunctionInfo, Language, ParentInfo
+from codeflash.languages.base import FunctionFilterCriteria, Language, ParentInfo
 from codeflash.languages.javascript.support import JavaScriptSupport
 from codeflash.languages.python.support import PythonSupport
 
@@ -595,8 +595,8 @@ function multiply(a, b) {
     return a * b;
 }
 """
-        py_func = FunctionInfo(function_name="add", file_path=Path("/test.py"), starting_line=1, ending_line=2)
-        js_func = FunctionInfo(function_name="add", file_path=Path("/test.js"), starting_line=1, ending_line=3)
+        py_func = FunctionToOptimize(function_name="add", file_path=Path("/test.py"), starting_line=1, ending_line=2)
+        js_func = FunctionToOptimize(function_name="add", file_path=Path("/test.js"), starting_line=1, ending_line=3)
 
         py_new = """def add(a, b):
     return (a + b) | 0
@@ -642,8 +642,8 @@ function other() {
 
 // Footer
 """
-        py_func = FunctionInfo(function_name="target", file_path=Path("/test.py"), starting_line=4, ending_line=5)
-        js_func = FunctionInfo(function_name="target", file_path=Path("/test.js"), starting_line=4, ending_line=6)
+        py_func = FunctionToOptimize(function_name="target", file_path=Path("/test.py"), starting_line=4, ending_line=5)
+        js_func = FunctionToOptimize(function_name="target", file_path=Path("/test.js"), starting_line=4, ending_line=6)
 
         py_new = """def target():
     return 42
@@ -683,14 +683,14 @@ function other() {
     }
 }
 """
-        py_func = FunctionInfo(
+        py_func = FunctionToOptimize(
             function_name="add",
             file_path=Path("/test.py"),
             starting_line=2,
             ending_line=3,
             parents=[ParentInfo(name="Calculator", type="ClassDef")],
         )
-        js_func = FunctionInfo(
+        js_func = FunctionToOptimize(
             function_name="add",
             file_path=Path("/test.js"),
             starting_line=2,
@@ -863,8 +863,8 @@ class TestExtractCodeContextParity:
             ".js",
         )
 
-        py_func = FunctionInfo(function_name="add", file_path=py_file, starting_line=1, ending_line=2)
-        js_func = FunctionInfo(function_name="add", file_path=js_file, starting_line=1, ending_line=3)
+        py_func = FunctionToOptimize(function_name="add", file_path=py_file, starting_line=1, ending_line=2)
+        js_func = FunctionToOptimize(function_name="add", file_path=js_file, starting_line=1, ending_line=3)
 
         py_context = python_support.extract_code_context(py_func, py_file.parent, py_file.parent)
         js_context = js_support.extract_code_context(js_func, js_file.parent, js_file.parent)
@@ -956,7 +956,7 @@ class TestFeatureGaps:
     """Tests to detect gaps in JavaScript implementation vs Python."""
 
     def test_function_info_fields_populated(self, python_support, js_support):
-        """Both should populate all FunctionInfo fields consistently."""
+        """Both should populate all FunctionToOptimize fields consistently."""
         py_file = write_temp_file(CLASS_METHODS.python, ".py")
         js_file = write_temp_file(CLASS_METHODS.javascript, ".js")
 

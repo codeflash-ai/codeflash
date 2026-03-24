@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from codeflash.languages.base import Language
+from codeflash_core.models import FunctionToOptimize
 
 
 def skip_if_ts_not_supported():
@@ -157,7 +158,7 @@ class TestTypeScriptCodeReplacement:
         """Test replacing a function in a TypeScript file."""
         skip_if_ts_not_supported()
         from codeflash.languages import get_language_support
-        from codeflash.languages.base import FunctionInfo
+        
 
         original_source = """
 function add(a: number, b: number): number {
@@ -176,7 +177,7 @@ function multiply(a: number, b: number): number {
 
         ts_support = get_language_support(Language.TYPESCRIPT)
 
-        func_info = FunctionInfo(
+        func_info = FunctionToOptimize(
             function_name="add", file_path=Path("/tmp/test.ts"), starting_line=2, ending_line=4, language="typescript"
         )
 
@@ -198,7 +199,7 @@ function multiply(a: number, b: number): number {
         """Test that replacing a function preserves TypeScript type annotations."""
         skip_if_ts_not_supported()
         from codeflash.languages import get_language_support
-        from codeflash.languages.base import FunctionInfo
+        
 
         original_source = r"""
 interface Config {
@@ -219,7 +220,7 @@ function processConfig(config: Config): string {
 
         ts_support = get_language_support(Language.TYPESCRIPT)
 
-        func_info = FunctionInfo(
+        func_info = FunctionToOptimize(
             function_name="processConfig",
             file_path=Path("/tmp/test.ts"),
             starting_line=7,
@@ -251,7 +252,7 @@ class TestTypeScriptTestDiscovery:
         """Test discovering Vitest tests for TypeScript functions."""
         skip_if_ts_not_supported()
         from codeflash.languages import get_language_support
-        from codeflash.languages.base import FunctionInfo
+        
 
         ts_support = get_language_support(Language.TYPESCRIPT)
         test_root = ts_project_dir / "tests"
@@ -260,7 +261,7 @@ class TestTypeScriptTestDiscovery:
             pytest.skip("tests directory not found")
 
         fib_file = ts_project_dir / "fibonacci.ts"
-        func_info = FunctionInfo(
+        func_info = FunctionToOptimize(
             function_name="fibonacci", file_path=fib_file, starting_line=1, ending_line=7, language="typescript"
         )
 

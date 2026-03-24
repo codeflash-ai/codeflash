@@ -9,9 +9,10 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.languages.base import FunctionInfo, Language
+from codeflash.languages.base import Language
 from codeflash.languages.java.line_profiler import DEFAULT_WARMUP_ITERATIONS, JavaLineProfiler, find_agent_jar
 from codeflash.languages.java.support import get_java_support
+from codeflash_core.models import FunctionToOptimize
 
 
 class TestLineProfilerInstrumentation:
@@ -35,7 +36,7 @@ public class Calculator {
 
             profile_output = tmppath / "profile.json"
 
-            func = FunctionInfo(
+            func = FunctionToOptimize(
                 function_name="add",
                 file_path=java_file,
                 starting_line=4,
@@ -114,7 +115,7 @@ public class Calculator {
 
             profile_output = tmppath / "profile.json"
 
-            func = FunctionInfo(
+            func = FunctionToOptimize(
                 function_name="sort",
                 file_path=java_file,
                 starting_line=2,
@@ -201,7 +202,7 @@ public class Calculator {
 
             profile_output = tmppath / "profile.json"
 
-            func_reverse = FunctionInfo(
+            func_reverse = FunctionToOptimize(
                 function_name="reverse",
                 file_path=java_file,
                 starting_line=2,
@@ -213,7 +214,7 @@ public class Calculator {
                 is_method=True,
                 language=Language.JAVA,
             )
-            func_palindrome = FunctionInfo(
+            func_palindrome = FunctionToOptimize(
                 function_name="isPalindrome",
                 file_path=java_file,
                 starting_line=16,
@@ -302,7 +303,7 @@ public class StringUtils {
 
             profile_output = tmppath / "profile.json"
 
-            func = FunctionInfo(
+            func = FunctionToOptimize(
                 function_name="isEmpty",
                 file_path=java_file,
                 starting_line=4,
@@ -374,7 +375,7 @@ public class StringUtils {
 
             profile_output = tmppath / "profile.json"
 
-            func = FunctionInfo(
+            func = FunctionToOptimize(
                 function_name="fib",
                 file_path=java_file,
                 starting_line=2,
@@ -439,7 +440,7 @@ def run_spin_timer_profiled(tmppath: Path, spin_durations_ns: list[int]) -> dict
     profile_output = tmppath / "profile.json"
     config_path = profile_output.with_suffix(".config.json")
 
-    func = FunctionInfo(
+    func = FunctionToOptimize(
         function_name="spinWait",
         file_path=java_file,
         starting_line=2,
