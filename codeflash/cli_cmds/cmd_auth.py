@@ -7,7 +7,7 @@ import click
 from codeflash.cli_cmds.console import console
 from codeflash.cli_cmds.oauth_handler import perform_oauth_signin
 from codeflash.code_utils.env_utils import get_codeflash_api_key
-from codeflash.code_utils.shell_utils import get_shell_rc_path, save_api_key_to_rc
+from codeflash.code_utils.shell_utils import save_api_key_to_rc
 from codeflash.either import is_successful
 
 
@@ -28,10 +28,6 @@ def auth_login() -> None:
     if not api_key:
         click.echo("Authentication failed.")
         raise SystemExit(1)
-
-    shell_rc_path = get_shell_rc_path()
-    if not shell_rc_path.exists() and os.name == "nt":
-        shell_rc_path.touch()
 
     result = save_api_key_to_rc(api_key)
     if is_successful(result):
