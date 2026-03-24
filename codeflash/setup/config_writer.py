@@ -124,47 +124,87 @@ def _write_java_build_config(project_root: Path, config: CodeflashConfig) -> tup
     return _write_gradle_properties(gradle_props_path, non_default)
 
 
+_MAVEN_KEY_MAP: dict[str, str] = {
+    "module-root": "moduleRoot",
+    "tests-root": "testsRoot",
+    "git-remote": "gitRemote",
+    "disable-telemetry": "disableTelemetry",
+    "ignore-paths": "ignorePaths",
+    "formatter-cmds": "formatterCmds",
+}
+
+
 def _write_maven_properties(pom_path: Path, config: dict[str, Any]) -> tuple[bool, str]:
-    """Add codeflash.* properties to pom.xml <properties> section."""
-    import xml.etree.ElementTree as ET
+    """Add codeflash.* properties to pom.xml <properties> section.
+
+    Uses text-based manipulation to preserve comments, formatting, and namespace declarations.
+    """
+    import re
 
     try:
-        tree = ET.parse(str(pom_path))
-        root = tree.getroot()
-        ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+        content = pom_path.read_text(encoding="utf-8")
 
-        # Find or create <properties>
-        properties = root.find("m:properties", ns) or root.find("properties")
-        if properties is None:
-            properties = ET.SubElement(root, "properties")
+        # Remove existing codeflash.* property lines (with surrounding whitespace)
+        content = re.sub(r"\n[ \t]*<codeflash\.[^>]*>[^<]*</codeflash\.[^>]*>", "", content)
 
-        # Convert kebab-case keys to camelCase for Maven convention
-        key_map = {
-            "module-root": "moduleRoot",
-            "tests-root": "testsRoot",
-            "git-remote": "gitRemote",
-            "disable-telemetry": "disableTelemetry",
-            "ignore-paths": "ignorePaths",
-            "formatter-cmds": "formatterCmds",
-        }
+        # Detect child indentation from existing properties or fall back to </properties> indent + 4 spaces
+        props_close = re.search(r"([ \t]*)</properties>", content)
+        if props_close:
+            parent_indent = props_close.group(1)
+            # Try to detect child indent from an existing property element
+            child_match = re.search(
+                r"\n([ \t]+)<[a-zA-Z]",
+                content[content.find("<properties>") : props_close.start()] if "<properties>" in content else "",
+            )
+            child_indent = child_match.group(1) if child_match else parent_indent + "    "
+        else:
+            parent_indent = ""
+            child_indent = "    "
 
+        # Build new property lines with detected indentation
+        new_lines = []
         for key, value in config.items():
-            maven_key = f"codeflash.{key_map.get(key, key)}"
+            maven_key = f"codeflash.{_MAVEN_KEY_MAP.get(key, key)}"
             if isinstance(value, list):
                 value = ",".join(str(v) for v in value)
             elif isinstance(value, bool):
                 value = str(value).lower()
             else:
                 value = str(value)
+            new_lines.append(f"{child_indent}<{maven_key}>{value}</{maven_key}>")
 
-            existing = properties.find(maven_key)
-            if existing is None:
-                elem = ET.SubElement(properties, maven_key)
-                elem.text = value
-            else:
-                existing.text = value
+        properties_block = "\n".join(new_lines)
 
-        tree.write(str(pom_path), xml_declaration=True, encoding="UTF-8")
+        # Insert before </properties>
+        if props_close:
+            content = (
+                content[: props_close.start()]
+                + properties_block
+                + "\n"
+                + parent_indent
+                + "</properties>"
+                + content[props_close.end() :]
+            )
+        else:
+            # No <properties> section — create one before </project>
+            project_close = re.search(r"([ \t]*)</project>", content)
+            if project_close:
+                indent = project_close.group(1)
+                inner = "  " + indent
+                props_section = (
+                    f"{inner}<properties>\n"
+                    + "\n".join(f"  {line}" for line in new_lines)
+                    + f"\n{inner}</properties>\n"
+                )
+                content = (
+                    content[: project_close.start()]
+                    + props_section
+                    + indent
+                    + "</project>"
+                    + content[project_close.end() :]
+                )
+
+        pom_path.write_text(content, encoding="utf-8")
         return True, f"Config saved to {pom_path} <properties>"
 
     except Exception as e:
@@ -173,15 +213,6 @@ def _write_maven_properties(pom_path: Path, config: dict[str, Any]) -> tuple[boo
 
 def _write_gradle_properties(props_path: Path, config: dict[str, Any]) -> tuple[bool, str]:
     """Add codeflash.* entries to gradle.properties."""
-    key_map = {
-        "module-root": "moduleRoot",
-        "tests-root": "testsRoot",
-        "git-remote": "gitRemote",
-        "disable-telemetry": "disableTelemetry",
-        "ignore-paths": "ignorePaths",
-        "formatter-cmds": "formatterCmds",
-    }
-
     try:
         lines = []
         if props_path.exists():
@@ -195,7 +226,7 @@ def _write_gradle_properties(props_path: Path, config: dict[str, Any]) -> tuple[
             lines.append("")
         lines.append("# Codeflash configuration — https://docs.codeflash.ai")
         for key, value in config.items():
-            gradle_key = f"codeflash.{key_map.get(key, key)}"
+            gradle_key = f"codeflash.{_MAVEN_KEY_MAP.get(key, key)}"
             if isinstance(value, list):
                 value = ",".join(str(v) for v in value)
             elif isinstance(value, bool):
@@ -306,8 +337,25 @@ def _remove_from_pyproject(project_root: Path) -> tuple[bool, str]:
 
 
 def _remove_java_build_config(project_root: Path) -> tuple[bool, str]:
-    """Remove codeflash.* properties from pom.xml or gradle.properties."""
-    # Try gradle.properties first (simpler)
+    """Remove codeflash.* properties from pom.xml or gradle.properties.
+
+    Priority matches _write_java_build_config: pom.xml first, then gradle.properties.
+    """
+    # Try pom.xml first (matches write priority) — text-based removal preserves formatting
+    pom_path = project_root / "pom.xml"
+    if pom_path.exists():
+        try:
+            import re
+
+            content = pom_path.read_text(encoding="utf-8")
+            updated = re.sub(r"\n[ \t]*<codeflash\.[^>]*>[^<]*</codeflash\.[^>]*>", "", content)
+            if updated != content:
+                pom_path.write_text(updated, encoding="utf-8")
+            return True, "Removed codeflash properties from pom.xml"
+        except Exception as e:
+            return False, f"Failed to remove config from pom.xml: {e}"
+
+    # Try gradle.properties
     gradle_props = project_root / "gradle.properties"
     if gradle_props.exists():
         try:
@@ -316,32 +364,12 @@ def _remove_java_build_config(project_root: Path) -> tuple[bool, str]:
                 line
                 for line in lines
                 if not line.strip().startswith("codeflash.")
-                and line.strip() != "# Codeflash configuration — https://docs.codeflash.ai"
+                and line.strip() != "# Codeflash configuration \u2014 https://docs.codeflash.ai"
             ]
             gradle_props.write_text("\n".join(filtered) + "\n", encoding="utf-8")
             return True, "Removed codeflash properties from gradle.properties"
         except Exception as e:
             return False, f"Failed to remove config from gradle.properties: {e}"
-
-    # Try pom.xml
-    pom_path = project_root / "pom.xml"
-    if pom_path.exists():
-        try:
-            import xml.etree.ElementTree as ET
-
-            tree = ET.parse(str(pom_path))
-            root = tree.getroot()
-            ns = {"m": "http://maven.apache.org/POM/4.0.0"}
-            for properties in [root.find("m:properties", ns), root.find("properties")]:
-                if properties is None:
-                    continue
-                to_remove = [child for child in properties if child.tag.split("}")[-1].startswith("codeflash.")]
-                for elem in to_remove:
-                    properties.remove(elem)
-            tree.write(str(pom_path), xml_declaration=True, encoding="UTF-8")
-            return True, "Removed codeflash properties from pom.xml"
-        except Exception as e:
-            return False, f"Failed to remove config from pom.xml: {e}"
 
     return True, "No Java build config found"
 

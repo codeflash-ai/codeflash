@@ -558,6 +558,22 @@ class TestHasExistingConfig:
         assert has_config is False
         assert config_type is None
 
+    def test_java_pom_xml_is_zero_config(self, tmp_path):
+        """Java projects with pom.xml are zero-config — build file presence means configured."""
+        (tmp_path / "pom.xml").write_text("<project><modelVersion>4.0.0</modelVersion></project>")
+
+        has_config, config_type = has_existing_config(tmp_path)
+        assert has_config is True
+        assert config_type == "pom.xml"
+
+    def test_java_build_gradle_is_zero_config(self, tmp_path):
+        """Java projects with build.gradle are zero-config — build file presence means configured."""
+        (tmp_path / "build.gradle").write_text('plugins { id "java" }')
+
+        has_config, config_type = has_existing_config(tmp_path)
+        assert has_config is True
+        assert config_type == "build.gradle"
+
     def test_returns_false_for_empty_directory(self, tmp_path):
         """Should return False for empty directory."""
         has_config, config_type = has_existing_config(tmp_path)

@@ -900,7 +900,8 @@ def has_existing_config(project_root: Path) -> tuple[bool, str | None]:
         except Exception:
             pass
 
-    # Check Java build files — Java projects store config in pom.xml properties or gradle.properties
+    # Check Java build files — for zero-config Java, any build file means "configured"
+    # because Java config is auto-detected from build files without explicit codeflash.* properties
     for build_file in ("pom.xml", "build.gradle", "build.gradle.kts"):
         if (project_root / build_file).exists():
             return True, build_file
