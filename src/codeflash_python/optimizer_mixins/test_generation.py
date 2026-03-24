@@ -123,7 +123,7 @@ class TestGenerationMixin(_Base):
                 self.function_to_optimize,
                 helper_function_names,
                 Path(self.original_module_path),
-                self.test_cfg,  # type: ignore[arg-type]
+                self.test_cfg,
                 INDIVIDUAL_TESTCASE_TIMEOUT,
                 self.function_trace_id,
                 test_index,
