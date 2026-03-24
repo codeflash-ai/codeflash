@@ -20,6 +20,7 @@ from rich.progress import (
     MofNCompleteColumn,
     Progress,
     SpinnerColumn,
+    TaskID,
     TextColumn,
     TimeElapsedColumn,
     TimeRemainingColumn,
@@ -28,8 +29,6 @@ from rich.text import Text
 
 if TYPE_CHECKING:
     from collections.abc import Generator
-
-    from rich.progress import TaskID
 
 # ---------------------------------------------------------------------------
 # Console and logging
@@ -96,7 +95,7 @@ spinner_cycle = cycle(SPINNER_TYPES)
 
 class DummyTask:
     def __init__(self) -> None:
-        self.id = 0
+        self.id: TaskID = TaskID(0)
 
 
 class DummyProgress:

@@ -81,7 +81,7 @@ class DefaultStrategyEvaluationMixin(StrategyBase):
             )
 
             if hasattr(runtime.plugin, "pending_code_markdown"):
-                runtime.plugin.pending_code_markdown = candidate.code_markdown  # type: ignore[union-attr]
+                runtime.plugin.pending_code_markdown = candidate.code_markdown
             runtime.plugin.replace_function(function.file_path, function, candidate.code)
 
             try:

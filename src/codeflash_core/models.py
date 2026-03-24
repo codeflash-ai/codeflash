@@ -38,10 +38,6 @@ class FunctionToOptimize:
     doc_start_line: int | None = None
     source_code: str = ""
 
-    def __post_init__(self) -> None:
-        if isinstance(self.file_path, str):
-            object.__setattr__(self, "file_path", Path(self.file_path))
-
     @property
     def qualified_name(self) -> str:
         if not self.parents:
