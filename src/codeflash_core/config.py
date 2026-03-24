@@ -222,7 +222,10 @@ class CoreConfig:
         # This is the pytest rootdir used for resolving test module paths
         tests_project_rootdir = self.find_tests_project_rootdir(tests_root)
         return TestConfig(
-            tests_root=tests_root, project_root=self.project_root, tests_project_rootdir=tests_project_rootdir
+            tests_root=tests_root,
+            project_root=self.project_root,
+            tests_project_rootdir=tests_project_rootdir,
+            test_command=self.pytest_cmd,
         )
 
     def find_tests_project_rootdir(self, tests_root: Path) -> Path:

@@ -4,7 +4,7 @@ import functools
 import traceback
 from typing import TYPE_CHECKING
 
-from codeflash_core.danom._result import Err, Ok
+from codeflash_core.danom.result import Err, Ok
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
     from typing_extensions import Concatenate, ParamSpec
 
-    from codeflash_core.danom._result import Result
+    from codeflash_core.danom.result import Result
 
     T = TypeVar("T")
     P = ParamSpec("P")

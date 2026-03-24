@@ -25,7 +25,7 @@ def new_type(
     converters: Callable | Sequence[Callable] | None = None,
     *,
     frozen: bool = True,
-):
+) -> type:
     kwargs = _callables_to_kwargs(base_type, validators, converters)
 
     @attrs.define(frozen=frozen, eq=True, hash=frozen)

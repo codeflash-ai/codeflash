@@ -267,10 +267,21 @@ class DefaultStrategy(DefaultStrategyEvaluationMixin):
                     break
                 runtime.cancel_event.wait(timeout=0.1)
 
-            generated_tests = tests_future.result() if tests_future.done() and not tests_future.cancelled() else None
-            candidates = (
-                candidates_future.result() if candidates_future.done() and not candidates_future.cancelled() else []
-            )
+            try:
+                generated_tests = (
+                    tests_future.result() if tests_future.done() and not tests_future.cancelled() else None
+                )
+            except Exception:
+                logger.debug("Test generation failed", exc_info=True)
+                generated_tests = None
+
+            try:
+                candidates = (
+                    candidates_future.result() if candidates_future.done() and not candidates_future.cancelled() else []
+                )
+            except Exception:
+                logger.debug("Candidate generation failed", exc_info=True)
+                candidates = []
 
         return generated_tests, candidates
 

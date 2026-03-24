@@ -16,7 +16,7 @@ try:
 except ImportError:
     from itertools import islice
 
-    def batched(iterable, n, *, strict=False):
+    def batched(iterable, n, *, strict=False):  # noqa: ANN201
         if n < 1:
             raise ValueError("n must be at least one")
         iterator = iter(iterable)
