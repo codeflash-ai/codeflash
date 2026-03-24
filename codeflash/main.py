@@ -47,7 +47,16 @@ def main() -> None:
         init_sentry(enabled=not disable_telemetry, exclude_errors=True)
         posthog_cf.initialize_posthog(enabled=not disable_telemetry)
 
-        if args.command == "init":
+        if args.command == "auth":
+            from codeflash.cli_cmds.cmd_auth import auth_login
+
+            if args.auth_command == "login":
+                auth_login()
+            else:
+                from codeflash.code_utils.code_utils import exit_with_message
+
+                exit_with_message("Usage: codeflash auth login", error_on_exit=True)
+        elif args.command == "init":
             from codeflash.cli_cmds.cmd_init import init_codeflash
 
             init_codeflash()
