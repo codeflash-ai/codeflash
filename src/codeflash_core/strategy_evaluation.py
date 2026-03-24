@@ -73,7 +73,12 @@ class DefaultStrategyEvaluationMixin(_Base):
                 break
             candidate = queue.pop(0)
             processed += 1
-            ui_logger.info("Testing candidate %d/%d [%s]", processed, len(candidates) + processed - len(queue) - 1, candidate.source)
+            ui_logger.info(
+                "Testing candidate %d/%d [%s]",
+                processed,
+                len(candidates) + processed - len(queue) - 1,
+                candidate.source,
+            )
 
             if hasattr(runtime.plugin, "_pending_code_markdown"):
                 runtime.plugin._pending_code_markdown = candidate.code_markdown  # type: ignore[invalid-assignment]  # noqa: SLF001

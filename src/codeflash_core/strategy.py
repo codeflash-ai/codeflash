@@ -44,11 +44,21 @@ class DefaultStrategy(DefaultStrategyEvaluationMixin):
     stages: ClassVar[list[StageSpec]] = [
         StageSpec("context", "Extracting source code and dependencies to build the optimization context for the AI."),
         StageSpec("generating", "Generating unit tests for correctness validation and optimized candidates."),
-        StageSpec("test_review", "Reviewing generated tests for correctness and repairing any issues before validation."),
-        StageSpec("baseline", "Running the original code against tests and benchmarks to establish a performance reference point."),
+        StageSpec(
+            "test_review", "Reviewing generated tests for correctness and repairing any issues before validation."
+        ),
+        StageSpec(
+            "baseline",
+            "Running the original code against tests and benchmarks to establish a performance reference point.",
+        ),
         StageSpec("evaluating", "Testing each candidate for correctness, then benchmarking the ones that pass."),
-        StageSpec("ranking", "Comparing candidate benchmarks against the baseline to find the fastest correct optimization."),
-        StageSpec("explaining", "Generating a human-readable explanation of what the best optimization changed and why it's faster."),
+        StageSpec(
+            "ranking", "Comparing candidate benchmarks against the baseline to find the fastest correct optimization."
+        ),
+        StageSpec(
+            "explaining",
+            "Generating a human-readable explanation of what the best optimization changed and why it's faster.",
+        ),
     ]
 
     def optimize_function(

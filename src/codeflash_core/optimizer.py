@@ -32,10 +32,7 @@ class Optimizer:
     """
 
     def __init__(
-        self,
-        config: CoreConfig,
-        plugin: LanguagePlugin,
-        strategy: OptimizationStrategy | None = None,
+        self, config: CoreConfig, plugin: LanguagePlugin, strategy: OptimizationStrategy | None = None
     ) -> None:
         self.config = config
         self.plugin = plugin
@@ -122,10 +119,7 @@ class Optimizer:
             self.cleanup_leftover_trace_files()
 
         console.rule()
-        paneled_text(
-            f"{len(functions)} analyzed, {len(results)} optimized, {skipped} skipped",
-            title="Summary",
-        )
+        paneled_text(f"{len(functions)} analyzed, {len(results)} optimized, {skipped} skipped", title="Summary")
         return results
 
     def optimize_function(self, function: FunctionToOptimize) -> OptimizationResult | None:
