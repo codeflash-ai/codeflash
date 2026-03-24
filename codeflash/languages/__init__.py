@@ -17,6 +17,8 @@ Usage:
     new_source = lang.replace_function(file_path, function, new_code)
 """
 
+import importlib
+
 from codeflash.languages.base import (
     CodeContext,
     DependencyResolver,
@@ -60,29 +62,36 @@ from codeflash.languages.test_framework import (
     set_current_test_framework,
 )
 
+_LAZY_IMPORTS: dict[str, tuple[str, str]] = {
+    "FunctionInfo": ("codeflash_core.models", "FunctionToOptimize"),
+    "JavaScriptSupport": ("codeflash.languages.javascript.support", "JavaScriptSupport"),
+    "TypeScriptSupport": ("codeflash.languages.javascript.support", "TypeScriptSupport"),
+    "PythonSupport": ("codeflash.languages.python.support", "PythonSupport"),
+    "JavaSupport": ("codeflash.languages.java.support", "JavaSupport"),
+}
+
+_LAZY_CACHE: dict[str, object] = {}
+
 
 # Lazy imports to avoid circular imports
 def __getattr__(name: str):
-    if name == "FunctionInfo":
-        from codeflash_core.models import FunctionToOptimize
+    # Fast path: return cached value if already resolved
+    try:
+        return _LAZY_CACHE[name]
+    except KeyError:
+        pass
 
-        return FunctionToOptimize
-    if name == "JavaScriptSupport":
-        from codeflash.languages.javascript.support import JavaScriptSupport
+    importer = _LAZY_IMPORTS.get(name)
+    if importer is not None:
+        module_path, attr_name = importer
+        module = importlib.import_module(module_path)
+        value = getattr(module, attr_name)
+        # Cache both in module globals (so future attribute access avoids __getattr__)
+        # and in the local cache to speed subsequent lookups in this function.
+        globals()[name] = value
+        _LAZY_CACHE[name] = value
+        return value
 
-        return JavaScriptSupport
-    if name == "TypeScriptSupport":
-        from codeflash.languages.javascript.support import TypeScriptSupport
-
-        return TypeScriptSupport
-    if name == "PythonSupport":
-        from codeflash.languages.python.support import PythonSupport
-
-        return PythonSupport
-    if name == "JavaSupport":
-        from codeflash.languages.java.support import JavaSupport
-
-        return JavaSupport
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)
 
