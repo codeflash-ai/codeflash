@@ -3011,7 +3011,7 @@ class FunctionOptimizer:
                     optimization_iteration=optimization_candidate_index,
                     testing_time=TOTAL_LOOPING_TIME_EFFECTIVE,
                     enable_coverage=False,
-                    # **({"pytest_min_loops": 3, "pytest_max_loops": 100} if subagent else {}),
+                    **({"pytest_min_loops": 3, "pytest_max_loops": 100} if subagent else {}),
                 )
             finally:
                 if self.function_to_optimize.is_async:
