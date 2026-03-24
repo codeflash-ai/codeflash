@@ -1297,6 +1297,8 @@ class FunctionOptimizer:
         # Display runtime information
         if is_LSP_enabled():
             lsp_log(LspMarkdownMessage(markdown=tree_to_markdown(tree)))
+        elif is_subagent_mode():
+            logger.info(tree_to_markdown(tree))
         else:
             console.print(tree)
         if self.args.benchmark and benchmark_tree:
@@ -3009,7 +3011,7 @@ class FunctionOptimizer:
                     optimization_iteration=optimization_candidate_index,
                     testing_time=TOTAL_LOOPING_TIME_EFFECTIVE,
                     enable_coverage=False,
-                    **({"pytest_min_loops": 3, "pytest_max_loops": 100} if subagent else {}),
+                    # **({"pytest_min_loops": 3, "pytest_max_loops": 100} if subagent else {}),
                 )
             finally:
                 if self.function_to_optimize.is_async:

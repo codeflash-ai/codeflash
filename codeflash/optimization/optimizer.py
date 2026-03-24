@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import os
+import sys
 import tempfile
 import time
 from collections import defaultdict
@@ -780,15 +781,19 @@ class Optimizer:
         if self.current_worktree:
             return
 
-        if check_running_in_git_repo(self.args.module_root):
-            worktree_dir = create_detached_worktree(self.args.module_root)
-            if worktree_dir is None:
-                logger.warning("Failed to create worktree. Skipping optimization.")
-                return
-            self.current_worktree = worktree_dir
-            self.mirror_paths_for_worktree_mode(worktree_dir)
-            # make sure the tests dir is created in the worktree, this can happen if the original tests dir is empty
-            Path(self.args.tests_root).mkdir(parents=True, exist_ok=True)
+        if not check_running_in_git_repo(self.args.module_root):
+            logger.error("Worktree creation failed because the current directory is not part of a Git repository.")
+            sys.exit(1)
+
+        worktree_dir = create_detached_worktree()
+        if worktree_dir is None:
+            logger.error("Failed to create worktree. Skipping optimization.")
+            sys.exit(1)
+
+        self.current_worktree = worktree_dir
+        self.mirror_paths_for_worktree_mode(worktree_dir)
+        # make sure the tests dir is created in the worktree, this can happen if the original tests dir is empty
+        Path(self.args.tests_root).mkdir(parents=True, exist_ok=True)
 
     def mirror_paths_for_worktree_mode(self, worktree_dir: Path) -> None:
         original_args = copy.deepcopy(self.args)

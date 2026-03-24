@@ -13,7 +13,7 @@ import git
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.compat import codeflash_cache_dir
-from codeflash.code_utils.git_utils import check_running_in_git_repo, git_root_dir
+from codeflash.code_utils.git_utils import git_root_dir
 
 worktree_dirs = codeflash_cache_dir / "worktrees"
 patches_dir = codeflash_cache_dir / "patches"
@@ -53,10 +53,7 @@ def create_worktree_snapshot_commit(worktree_dir: Path, commit_message: str) -> 
             cw.remove_option("user", "email")
 
 
-def create_detached_worktree(module_root: Path) -> Optional[Path]:
-    if not check_running_in_git_repo(module_root):
-        logger.warning("Module is not in a git repository. Skipping worktree creation.")
-        return None
+def create_detached_worktree() -> Optional[Path]:
     git_root = git_root_dir()
     current_time_str = time.strftime("%Y%m%d-%H%M%S")
     worktree_dir = worktree_dirs / f"{git_root.name}-{current_time_str}"
