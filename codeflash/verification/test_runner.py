@@ -19,6 +19,8 @@ if TYPE_CHECKING:
     import threading
     from collections.abc import Sequence
 
+_SHLEX_SPECIAL = set(" \t\n\r\x0b\x0c'\"\\#")
+
 logger = logging.getLogger(__name__)
 
 _TIMING_MARKER_PATTERN = re.compile(r"!######.+:(\d+)######!")
@@ -34,7 +36,19 @@ def setup_pytest_cmd(pytest_cmd: str | None) -> None:
 def pytest_cmd_tokens(is_posix: bool) -> list[str]:
     import shlex
 
-    return shlex.split(PYTEST_CMD, posix=is_posix)
+    cmd: str = PYTEST_CMD
+
+    # Fast-paths:
+    # - empty string -> [] (same as shlex.split)
+    # - single simple token with no whitespace or shlex-special characters -> [cmd]
+    if not cmd:
+        return []
+    # If none of the special characters are present, shlex.split would yield a single
+    # token identical to cmd (and raise no parsing errors), so return it directly.
+    for ch in cmd:
+        if ch in _SHLEX_SPECIAL:
+            return shlex.split(cmd, posix=is_posix)
+    return [cmd]
 
 
 def build_pytest_cmd(safe_sys_executable: str, is_posix: bool) -> list[str]:
