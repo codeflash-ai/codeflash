@@ -19,6 +19,7 @@ F_co = TypeVar("F_co", bound=object, covariant=True)
 if TYPE_CHECKING:
     from collections.abc import Callable
     from types import TracebackType
+
     from typing_extensions import Concatenate, ParamSpec, Self
 
     P = ParamSpec("P")

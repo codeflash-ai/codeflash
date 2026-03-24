@@ -9,6 +9,7 @@ import attrs
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
     from typing_extensions import ParamSpec, Self
 
     P = ParamSpec("P")

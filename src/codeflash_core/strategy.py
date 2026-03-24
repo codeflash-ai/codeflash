@@ -17,7 +17,8 @@ from codeflash_core.diff import unified_diff
 from codeflash_core.models import OptimizationResult
 from codeflash_core.strategy_evaluation import DefaultStrategyEvaluationMixin
 from codeflash_core.strategy_utils import StageSpec, cleanup_generated_tests, log_optimization_run
-from codeflash_core.ui import code_print, logger as ui_logger, progress_bar
+from codeflash_core.ui import code_print, progress_bar
+from codeflash_core.ui import logger as ui_logger
 
 if TYPE_CHECKING:
     from pathlib import Path

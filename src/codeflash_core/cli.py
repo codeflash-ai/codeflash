@@ -167,8 +167,9 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     # -- Build plugin & validate environment ---------------------------------
-    from codeflash_core.optimizer import Optimizer
     from codeflash_python.plugin import PythonPlugin
+
+    from codeflash_core.optimizer import Optimizer
 
     plugin = PythonPlugin(config.project_root)
 

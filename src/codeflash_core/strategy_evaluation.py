@@ -9,7 +9,8 @@ from codeflash_core.config import MAX_TEST_REPAIR_CYCLES, EffortKeys, get_effort
 from codeflash_core.models import GeneratedTestSuite, ScoredCandidate, TestOutcomeStatus
 from codeflash_core.ranking import compute_speedup, score_candidate, select_best
 from codeflash_core.strategy_utils import MIN_CORRECT_CANDIDATES, compute_test_diffs, restore_test_snapshots
-from codeflash_core.ui import logger as ui_logger, progress_bar
+from codeflash_core.ui import logger as ui_logger
+from codeflash_core.ui import progress_bar
 from codeflash_core.verification import is_equivalent
 
 if TYPE_CHECKING:

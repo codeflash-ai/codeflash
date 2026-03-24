@@ -9,7 +9,8 @@ from typing import TYPE_CHECKING
 from codeflash_core.config import HIGH_EFFORT_TOP_N, EffortLevel
 from codeflash_core.strategy import DefaultStrategy
 from codeflash_core.strategy_utils import OptimizationRuntime
-from codeflash_core.ui import console, logger as ui_logger, paneled_text, progress_bar
+from codeflash_core.ui import console, paneled_text, progress_bar
+from codeflash_core.ui import logger as ui_logger
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -111,7 +111,7 @@ _progress_bar_active = False
 @contextmanager
 def progress_bar(message: str, *, transient: bool = False) -> Generator[TaskID, None, None]:
     """Spinner with elapsed time. Avoids nesting Rich Live displays."""
-    global _progress_bar_active  # noqa: PLW0603
+    global _progress_bar_active
 
     if _progress_bar_active:
         yield _DummyTask().id
