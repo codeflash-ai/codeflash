@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from codeflash_core.models import FunctionToOptimize
 
 from codeflash.languages.language_enum import Language
-from codeflash_core.models import FunctionParent, HelperFunction  # noqa: TC001
+from codeflash_core.models import FunctionParent, HelperFunction
 
 __all__ = ["FunctionParent", "HelperFunction"]
 
