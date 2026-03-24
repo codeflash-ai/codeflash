@@ -8,7 +8,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.api.cfapi import send_completion_email
 from codeflash.cli_cmds.console import call_graph_live_display, console, logger, progress_bar
 from codeflash.code_utils import env_utils
@@ -27,6 +26,7 @@ from codeflash.languages import set_current_language
 from codeflash.lsp.helpers import is_subagent_mode
 from codeflash.telemetry.posthog_cf import ph
 from codeflash_core.config import TestConfig
+from codeflash_python.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash_python.plugin import PythonPlugin
 
 if TYPE_CHECKING:
