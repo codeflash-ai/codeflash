@@ -230,7 +230,7 @@ def replace_functions_in_file(
         parsed_function_names.append((class_name, function_name))
 
     # Collect functions from optimized code without using MetadataWrapper
-    optimized_module = cst.parse_module(optimized_code)
+    optimized_module = _parse_module_cached(optimized_code)
     modified_functions: dict[tuple[str | None, str], cst.FunctionDef] = {}
     new_functions: list[cst.FunctionDef] = []
     new_class_functions: dict[str, list[cst.FunctionDef]] = defaultdict(list)
@@ -268,7 +268,7 @@ def replace_functions_in_file(
                     elif preexisting_objects and (child.name.value, parents) not in preexisting_objects:
                         new_class_functions[class_name].append(child)
 
-    original_module = cst.parse_module(source_code)
+    original_module = _parse_module_cached(source_code)
 
     max_function_index = None
     max_class_index = None
@@ -387,3 +387,15 @@ def replace_function_definitions_in_module(
 
 def is_zero_diff(original_code: str, new_code: str) -> bool:
     return normalize_code(original_code) == normalize_code(new_code)
+
+
+@lru_cache(maxsize=128)
+def _parse_module_cached(source_code: str) -> cst.Module:
+    """Cache parsed CST modules to avoid redundant parsing."""
+    return cst.parse_module(source_code)
+
+
+@lru_cache(maxsize=128)
+def _parse_module_cached(source_code: str) -> cst.Module:
+    """Cache parsed CST modules to avoid redundant parsing."""
+    return cst.parse_module(source_code)
