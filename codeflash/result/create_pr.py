@@ -88,29 +88,39 @@ def existing_tests_source_for(
     logger.debug(f"[PR-DEBUG] Processing {len(all_invocation_ids)} invocation_ids")
     matched_count = 0
     skipped_count = 0
+
+    # Precompute some costly or repeated values
+    # current_language_support may be somewhat expensive; call once and reuse
+    lang = current_language_support()
+    # resolve tests_root once
+    try:
+        tests_root_resolved = tests_root.resolve()
+    except Exception:
+        tests_root_resolved = tests_root
+    # tuple of jest extensions for quick endswith checks
+    jest_test_extensions = (
+        ".test.ts",
+        ".test.js",
+        ".test.tsx",
+        ".test.jsx",
+        ".spec.ts",
+        ".spec.js",
+        ".spec.tsx",
+        ".spec.jsx",
+        ".ts",
+        ".js",
+        ".tsx",
+        ".jsx",
+        ".mjs",
+        ".mts",
+    )
+
     for invocation_id in all_invocation_ids:
         # For JavaScript/TypeScript, test_module_path could be:
         # - A module-style path with dots: "tests.fibonacci.test.ts"
         # - A file path: "tests/fibonacci.test.ts"
         # For Python, it's a module name (e.g., "tests.test_example") that needs conversion
         test_module_path = invocation_id.test_module_path
-        # Jest test file extensions (including .test.ts, .spec.ts patterns)
-        jest_test_extensions = (
-            ".test.ts",
-            ".test.js",
-            ".test.tsx",
-            ".test.jsx",
-            ".spec.ts",
-            ".spec.js",
-            ".spec.tsx",
-            ".spec.jsx",
-            ".ts",
-            ".js",
-            ".tsx",
-            ".jsx",
-            ".mjs",
-            ".mts",
-        )
         # Find the appropriate extension
         matched_ext = None
         for ext in jest_test_extensions:
@@ -140,7 +150,6 @@ def existing_tests_source_for(
             else:
                 logger.debug(f"[PR-DEBUG] No mapping found for {instrumented_abs_path.name}")
         else:
-            lang = current_language_support()
             # Let language-specific resolution handle non-Python module paths
             lang_result = lang.resolve_test_module_path_for_pr(
                 test_module_path, test_cfg.tests_project_rootdir or test_cfg.project_root, non_generated_tests
@@ -189,26 +198,20 @@ def existing_tests_source_for(
         ].keys()  # both will have the same keys as some default values are assigned in the previous loop
         for qualified_name in sorted(all_qualified_names):
             # if not present in optimized output nan
-            if (
-                original_tests_to_runtimes[filename][qualified_name] != 0
-                and optimized_tests_to_runtimes[filename][qualified_name] != 0
-            ):
-                print_optimized_runtime = format_time(optimized_tests_to_runtimes[filename][qualified_name])
-                print_original_runtime = format_time(original_tests_to_runtimes[filename][qualified_name])
-                print_filename = filename.resolve().relative_to(tests_root.resolve()).as_posix()
-                greater = (
-                    optimized_tests_to_runtimes[filename][qualified_name]
-                    > original_tests_to_runtimes[filename][qualified_name]
-                )
+            orig_val = original_tests_to_runtimes[filename][qualified_name]
+            opt_val = optimized_tests_to_runtimes[filename][qualified_name]
+            if orig_val != 0 and opt_val != 0:
+                print_optimized_runtime = format_time(opt_val)
+                print_original_runtime = format_time(orig_val)
+                # Reuse resolved tests_root for relative computation
+                print_filename = filename.resolve().relative_to(tests_root_resolved).as_posix()
+                print_filename_str = str(print_filename)
+                greater = opt_val > orig_val
                 perf_gain = format_perf(
-                    performance_gain(
-                        original_runtime_ns=original_tests_to_runtimes[filename][qualified_name],
-                        optimized_runtime_ns=optimized_tests_to_runtimes[filename][qualified_name],
-                    )
-                    * 100
+                    performance_gain(original_runtime_ns=orig_val, optimized_runtime_ns=opt_val) * 100
                 )
                 if greater:
-                    if "__replay_test_" in str(print_filename):
+                    if "__replay_test_" in print_filename_str:
                         rows_replay.append(
                             [
                                 f"`{print_filename}::{qualified_name}`",
@@ -217,7 +220,7 @@ def existing_tests_source_for(
                                 f"{perf_gain}%⚠️",
                             ]
                         )
-                    elif "codeflash_concolic" in str(print_filename):
+                    elif "codeflash_concolic" in print_filename_str:
                         rows_concolic.append(
                             [
                                 f"`{print_filename}::{qualified_name}`",
@@ -235,7 +238,7 @@ def existing_tests_source_for(
                                 f"{perf_gain}%⚠️",
                             ]
                         )
-                elif "__replay_test_" in str(print_filename):
+                elif "__replay_test_" in print_filename_str:
                     rows_replay.append(
                         [
                             f"`{print_filename}::{qualified_name}`",
@@ -244,7 +247,7 @@ def existing_tests_source_for(
                             f"{perf_gain}%✅",
                         ]
                     )
-                elif "codeflash_concolic" in str(print_filename):
+                elif "codeflash_concolic" in print_filename_str:
                     rows_concolic.append(
                         [
                             f"`{print_filename}::{qualified_name}`",
@@ -262,23 +265,27 @@ def existing_tests_source_for(
                             f"{perf_gain}%✅",
                         ]
                     )
-    output_existing += tabulate(
-        headers=headers, tabular_data=rows_existing, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
-    )
-    output_existing += "\n"
-    if len(rows_existing) == 0:
+    # Only call tabulate if we have rows to format (avoid expensive tabulate calls for empty lists)
+    if rows_existing:
+        output_existing += tabulate(
+            headers=headers, tabular_data=rows_existing, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
+        )
+        output_existing += "\n"
+    else:
         output_existing = ""
-    output_concolic += tabulate(
-        headers=headers, tabular_data=rows_concolic, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
-    )
-    output_concolic += "\n"
-    if len(rows_concolic) == 0:
+    if rows_concolic:
+        output_concolic += tabulate(
+            headers=headers, tabular_data=rows_concolic, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
+        )
+        output_concolic += "\n"
+    else:
         output_concolic = ""
-    output_replay += tabulate(
-        headers=headers, tabular_data=rows_replay, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
-    )
-    output_replay += "\n"
-    if len(rows_replay) == 0:
+    if rows_replay:
+        output_replay += tabulate(
+            headers=headers, tabular_data=rows_replay, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
+        )
+        output_replay += "\n"
+    else:
         output_replay = ""
     return output_existing, output_replay, output_concolic
 
