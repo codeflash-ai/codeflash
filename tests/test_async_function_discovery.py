@@ -230,7 +230,7 @@ class MixedClass:
     file_path.write_text(mixed_code)
 
     test_config = TestConfig(
-        tests_root="tests", project_root=".", test_framework="pytest", tests_project_rootdir=Path()
+        tests_root=Path("tests"), project_root=Path("."), test_framework="pytest", tests_project_rootdir=Path()
     )
 
     functions, functions_count, _ = get_functions_to_optimize(
@@ -280,7 +280,7 @@ class MixedClass:
     file_path.write_text(mixed_code)
 
     test_config = TestConfig(
-        tests_root="tests", project_root=".", test_framework="pytest", tests_project_rootdir=Path()
+        tests_root=Path("tests"), project_root=Path("."), test_framework="pytest", tests_project_rootdir=Path()
     )
 
     functions, functions_count, _ = get_functions_to_optimize(
