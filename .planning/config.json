@@ -1,7 +1,0 @@
-{
-  "executor_model": "opus",
-  "commit_docs": true,
-  "parallelization": false,
-  "branching_strategy": "none",
-  "verifier_enabled": false
-}
