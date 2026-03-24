@@ -106,15 +106,20 @@ def find_conftest_files(test_paths: list[Path]) -> list[Path]:
 def parse_config_file(
     config_file_path: Path | None = None, override_formatter_check: bool = False
 ) -> tuple[dict[str, Any], Path]:
-    # Java projects: read config from pom.xml/gradle.properties (no standalone config file needed)
-    if config_file_path is None:
-        java_config = _try_parse_java_build_config()
-        if java_config is not None:
-            config, project_root = java_config
-            return config, project_root
-
+    # Detect all config sources — Java, package.json, pyproject.toml
+    java_result = _try_parse_java_build_config() if config_file_path is None else None
     package_json_path = find_package_json(config_file_path)
     pyproject_toml_path = find_closest_config_file("pyproject.toml") if config_file_path is None else None
+
+    # Use Java config only if no closer JS/Python config exists (monorepo support).
+    # In a monorepo with a parent pom.xml and a child package.json, the closer config wins.
+    if java_result is not None:
+        java_depth = len(java_result[1].parts)
+        has_closer = (package_json_path is not None and len(package_json_path.parent.parts) >= java_depth) or (
+            pyproject_toml_path is not None and len(pyproject_toml_path.parent.parts) >= java_depth
+        )
+        if not has_closer:
+            return java_result
 
     # When both config files exist, prefer the one closer to CWD.
     # This prevents a parent-directory package.json (e.g., monorepo root)
