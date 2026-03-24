@@ -391,11 +391,4 @@ def is_zero_diff(original_code: str, new_code: str) -> bool:
 
 @lru_cache(maxsize=128)
 def _parse_module_cached(source_code: str) -> cst.Module:
-    """Cache parsed CST modules to avoid redundant parsing."""
-    return cst.parse_module(source_code)
-
-
-@lru_cache(maxsize=128)
-def _parse_module_cached(source_code: str) -> cst.Module:
-    """Cache parsed CST modules to avoid redundant parsing."""
     return cst.parse_module(source_code)
