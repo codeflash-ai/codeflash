@@ -37,3 +37,17 @@ def auth_login() -> None:
 
     os.environ["CODEFLASH_API_KEY"] = api_key
     console.print("[green]Signed in successfully![/green]")
+
+
+def auth_status() -> None:
+    """Check and display current authentication status."""
+    try:
+        api_key = get_codeflash_api_key()
+    except OSError:
+        api_key = None
+
+    if api_key:
+        display_key = f"{api_key[:3]}****{api_key[-4:]}"
+        console.print(f"[green]Authenticated[/green] with API key {display_key}")
+    else:
+        console.print("[yellow]Not authenticated.[/yellow] Run [bold]codeflash auth login[/bold] to sign in.")

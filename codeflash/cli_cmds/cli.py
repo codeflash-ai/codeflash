@@ -375,6 +375,7 @@ def _build_parser() -> ArgumentParser:
     auth_parser = subparsers.add_parser("auth", help="Authentication commands")
     auth_subparsers = auth_parser.add_subparsers(dest="auth_command", help="Auth sub-commands")
     auth_subparsers.add_parser("login", help="Log in to Codeflash via OAuth")
+    auth_subparsers.add_parser("status", help="Check authentication status")
 
     trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize your project.")
 
