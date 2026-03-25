@@ -14,6 +14,15 @@ from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.time_utils import format_runtime_comment
 from codeflash.models.models import GeneratedTests, GeneratedTestsList
 
+_COMBINED_IMPORT_RE = re.compile(
+    r"^([ \t]+)import\s+(?:"
+    r"(\w+)\s+from\s+['\"]([^'\"]+)['\"]"  # default import
+    r"|\{([^}]+)\}\s+from\s+['\"]([^'\"]+)['\"]"  # named import
+    r"|\*\s+as\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"]"  # namespace import
+    r");?\s*$",
+    re.MULTILINE,
+)
+
 
 def add_runtime_comments(source: str, original_runtimes: dict[str, int], optimized_runtimes: dict[str, int]) -> str:
     """Add runtime comments to JavaScript test source code.
@@ -186,12 +195,7 @@ def fix_imports_inside_blocks(source: str) -> str:
     Only converts indented imports (those starting with whitespace), preserving
     top-level imports which are valid ESM syntax.
     """
-    # Convert: import X from 'Y' -> const X = require('Y')
-    source = _INDENTED_DEFAULT_IMPORT_RE.sub(r"\1const \2 = require('\3');", source)
-    # Convert: import { X, Y } from 'Z' -> const { X, Y } = require('Z')
-    source = _INDENTED_NAMED_IMPORT_RE.sub(r"\1const {\2} = require('\3');", source)
-    # Convert: import * as X from 'Y' -> const X = require('Y')
-    return _INDENTED_NAMESPACE_IMPORT_RE.sub(r"\1const \2 = require('\3');", source)
+    return _COMBINED_IMPORT_RE.sub(_replace_import, source)
 
 
 # Patterns for normalizing codeflash imports (legacy -> npm package)
@@ -682,3 +686,31 @@ def _find_block_end(source: str, start: int) -> int:
         i += 1
 
     return start
+
+
+def _replace_import(match: re.Match) -> str:
+    groups = match.groups()
+    indent = groups[0]
+
+    # default import
+    if groups[1]:
+        return f"{indent}const {groups[1]} = require('{groups[2]}');"
+    # named import
+    if groups[3]:
+        return f"{indent}const {{{groups[3]}}} = require('{groups[4]}');"
+    # namespace import
+    return f"{indent}const {groups[5]} = require('{groups[6]}');"
+
+
+def _replace_import(match: re.Match) -> str:
+    groups = match.groups()
+    indent = groups[0]
+
+    # default import
+    if groups[1]:
+        return f"{indent}const {groups[1]} = require('{groups[2]}');"
+    # named import
+    if groups[3]:
+        return f"{indent}const {{{groups[3]}}} = require('{groups[4]}');"
+    # namespace import
+    return f"{indent}const {groups[5]} = require('{groups[6]}');"
