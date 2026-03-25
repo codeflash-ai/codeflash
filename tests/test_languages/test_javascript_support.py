@@ -442,6 +442,44 @@ function add(a, b {
         assert js_support.validate_syntax("function foo() {") is False
 
 
+    def test_tsx_jsx_syntax_valid_with_file_path(self):
+        """Test that TSX/JSX syntax is valid when file_path with .tsx extension is provided."""
+        from codeflash.languages.javascript.support import TypeScriptSupport
+
+        ts_support = TypeScriptSupport()
+
+        tsx_code = """
+function VersionHeader({ version }) {
+    return (
+        <div className="header">
+            <h1>{version.name}</h1>
+            <span>{version.date}</span>
+        </div>
+    );
+}
+"""
+        # Without file_path, TypeScriptSupport uses TYPESCRIPT parser which can't handle JSX
+        assert ts_support.validate_syntax(tsx_code) is False
+
+        # With .tsx file_path, it should use TSX parser and pass
+        tsx_path = Path("/tmp/test.tsx")
+        assert ts_support.validate_syntax(tsx_code, file_path=tsx_path) is True
+
+    def test_tsx_jsx_syntax_valid_with_jsx_file_path(self, js_support):
+        """Test that JSX syntax is valid when file_path with .jsx extension is provided."""
+        jsx_code = """
+function Button({ label, onClick }) {
+    return <button onClick={onClick}>{label}</button>;
+}
+"""
+        # JavaScript parser handles JSX natively
+        assert js_support.validate_syntax(jsx_code) is True
+
+        # Explicit .jsx path should also work
+        jsx_path = Path("/tmp/test.jsx")
+        assert js_support.validate_syntax(jsx_code, file_path=jsx_path) is True
+
+
 class TestNormalizeCode:
     """Tests for normalize_code method using tree-sitter normalizer."""
 

@@ -413,7 +413,7 @@ class JavaScriptSupport:
 
         # Validate that the extracted code is syntactically valid
         # If not, raise an error to fail the optimization early
-        if target_code and not self.validate_syntax(target_code):
+        if target_code and not self.validate_syntax(target_code, file_path=function.file_path):
             error_msg = (
                 f"Extracted code for {function.function_name} is not syntactically valid JavaScript. "
                 f"Cannot proceed with optimization."
@@ -1712,10 +1712,13 @@ class JavaScriptSupport:
     def treesitter_language(self) -> TreeSitterLanguage:
         return TreeSitterLanguage.JAVASCRIPT
 
-    def validate_syntax(self, source: str) -> bool:
+    def validate_syntax(self, source: str, file_path: Path | None = None) -> bool:
         """Check if source code is syntactically valid using tree-sitter."""
         try:
-            analyzer = TreeSitterAnalyzer(self.treesitter_language)
+            if file_path is not None:
+                analyzer = get_analyzer_for_file(file_path)
+            else:
+                analyzer = TreeSitterAnalyzer(self.treesitter_language)
             tree = analyzer.parse(source)
             return not tree.root_node.has_error
         except Exception:
