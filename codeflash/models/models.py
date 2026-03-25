@@ -259,7 +259,7 @@ class CodeString(BaseModel):
             from codeflash.languages.registry import get_language_support
 
             lang_support = get_language_support(self.language)
-            if not lang_support.validate_syntax(self.code):
+            if not lang_support.validate_syntax(self.code, file_path=self.file_path):
                 msg = f"Invalid {self.language.title()} code"
                 raise ValueError(msg)
         return self

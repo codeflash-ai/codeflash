@@ -673,7 +673,7 @@ class PythonSupport:
 
     # === Validation ===
 
-    def validate_syntax(self, source: str) -> bool:
+    def validate_syntax(self, source: str, file_path: Path | None = None) -> bool:
         """Check if Python source code is syntactically valid.
 
         Uses Python's compile() to validate syntax.
