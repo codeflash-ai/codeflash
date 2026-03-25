@@ -1369,12 +1369,3 @@ def _compile_ok(source: str) -> bool:
     except SyntaxError:
         return False
 
-
-@lru_cache(maxsize=1024)
-def _compile_ok(source: str) -> bool:
-    # Keep behavior identical to the original: use compile() and only catch SyntaxError.
-    try:
-        compile(source, "<string>", "exec")
-        return True
-    except SyntaxError:
-        return False
