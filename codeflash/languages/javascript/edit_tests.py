@@ -688,21 +688,7 @@ def _find_block_end(source: str, start: int) -> int:
     return start
 
 
-def _replace_import(match: re.Match) -> str:
-    groups = match.groups()
-    indent = groups[0]
-
-    # default import
-    if groups[1]:
-        return f"{indent}const {groups[1]} = require('{groups[2]}');"
-    # named import
-    if groups[3]:
-        return f"{indent}const {{{groups[3]}}} = require('{groups[4]}');"
-    # namespace import
-    return f"{indent}const {groups[5]} = require('{groups[6]}');"
-
-
-def _replace_import(match: re.Match) -> str:
+def _replace_import(match: re.Match[str]) -> str:
     groups = match.groups()
     indent = groups[0]
 
