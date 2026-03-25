@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import platform
-from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -1360,7 +1359,6 @@ class PythonSupport:
         return function_to_concolic_tests, concolic_test_suite_code
 
 
-@lru_cache(maxsize=1024)
 def _compile_ok(source: str) -> bool:
     # Keep behavior identical to the original: use compile() and only catch SyntaxError.
     try:
@@ -1368,4 +1366,3 @@ def _compile_ok(source: str) -> bool:
         return True
     except SyntaxError:
         return False
-
