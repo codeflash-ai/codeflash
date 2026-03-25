@@ -1297,6 +1297,8 @@ class FunctionOptimizer:
         # Display runtime information
         if is_LSP_enabled():
             lsp_log(LspMarkdownMessage(markdown=tree_to_markdown(tree)))
+        elif is_subagent_mode():
+            logger.info(tree_to_markdown(tree))
         else:
             console.print(tree)
         if self.args.benchmark and benchmark_tree:
