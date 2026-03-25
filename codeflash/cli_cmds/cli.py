@@ -24,6 +24,8 @@ def parse_args() -> Namespace:
         args.no_pr = True
         args.worktree = True
         args.effort = "low"
+    if args.command == "auth":
+        return args
     return process_and_validate_cmd_args(args)
 
 
@@ -369,6 +371,11 @@ def _build_parser() -> ArgumentParser:
     subparsers.add_parser("init", help="Initialize Codeflash for your project.")
     subparsers.add_parser("vscode-install", help="Install the Codeflash VSCode extension")
     subparsers.add_parser("init-actions", help="Initialize GitHub Actions workflow")
+
+    auth_parser = subparsers.add_parser("auth", help="Authentication commands")
+    auth_subparsers = auth_parser.add_subparsers(dest="auth_command", help="Auth sub-commands")
+    auth_subparsers.add_parser("login", help="Log in to Codeflash via OAuth")
+    auth_subparsers.add_parser("status", help="Check authentication status")
 
     trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize your project.")
 
