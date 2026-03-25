@@ -42,7 +42,6 @@ class TestAuthLogin:
 
     @patch("codeflash.cli_cmds.cmd_auth.os")
     @patch("codeflash.cli_cmds.cmd_auth.save_api_key_to_rc")
-    @patch("codeflash.cli_cmds.cmd_auth.get_shell_rc_path")
     @patch("codeflash.cli_cmds.cmd_auth.perform_oauth_signin")
     @patch("codeflash.cli_cmds.cmd_auth.get_codeflash_api_key", return_value="")
     @patch("codeflash.cli_cmds.cmd_auth.console")
@@ -51,14 +50,10 @@ class TestAuthLogin:
         mock_console: MagicMock,
         mock_get_key: MagicMock,
         mock_oauth: MagicMock,
-        mock_get_rc: MagicMock,
         mock_save: MagicMock,
         mock_os: MagicMock,
     ) -> None:
         mock_oauth.return_value = "cf-newkey12345678"
-        mock_rc_path = MagicMock()
-        mock_rc_path.exists.return_value = True
-        mock_get_rc.return_value = mock_rc_path
         mock_save.return_value = Success("API key saved to ~/.zshrc")
 
         auth_login()
@@ -69,29 +64,25 @@ class TestAuthLogin:
 
     @patch("codeflash.cli_cmds.cmd_auth.os")
     @patch("codeflash.cli_cmds.cmd_auth.save_api_key_to_rc")
-    @patch("codeflash.cli_cmds.cmd_auth.get_shell_rc_path")
     @patch("codeflash.cli_cmds.cmd_auth.perform_oauth_signin")
     @patch("codeflash.cli_cmds.cmd_auth.get_codeflash_api_key", return_value="")
     @patch("codeflash.cli_cmds.cmd_auth.console")
-    def test_windows_creates_rc_file_if_missing(
+    def test_windows_oauth_saves_key(
         self,
         mock_console: MagicMock,
         mock_get_key: MagicMock,
         mock_oauth: MagicMock,
-        mock_get_rc: MagicMock,
         mock_save: MagicMock,
         mock_os: MagicMock,
     ) -> None:
         mock_oauth.return_value = "cf-newkey12345678"
-        mock_rc_path = MagicMock()
-        mock_rc_path.exists.return_value = False
-        mock_get_rc.return_value = mock_rc_path
         mock_os.name = "nt"
         mock_save.return_value = Success("API key saved")
 
         auth_login()
 
-        mock_rc_path.touch.assert_called_once()
+        mock_save.assert_called_once_with("cf-newkey12345678")
+        mock_os.environ.__setitem__.assert_called_once_with("CODEFLASH_API_KEY", "cf-newkey12345678")
 
 
 class TestAuthSubcommandParsing:
