@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import platform
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -685,11 +686,7 @@ class PythonSupport:
             True if valid, False otherwise.
 
         """
-        try:
-            compile(source, "<string>", "exec")
-            return True
-        except SyntaxError:
-            return False
+        return _compile_ok(source)
 
     def normalize_code(self, source: str) -> str:
         from codeflash.languages.python.normalizer import normalize_python_code
@@ -1361,3 +1358,23 @@ class PythonSupport:
         end_time = time.perf_counter()
         logger.debug("Generated concolic tests in %.2f seconds", end_time - start_time)
         return function_to_concolic_tests, concolic_test_suite_code
+
+
+@lru_cache(maxsize=1024)
+def _compile_ok(source: str) -> bool:
+    # Keep behavior identical to the original: use compile() and only catch SyntaxError.
+    try:
+        compile(source, "<string>", "exec")
+        return True
+    except SyntaxError:
+        return False
+
+
+@lru_cache(maxsize=1024)
+def _compile_ok(source: str) -> bool:
+    # Keep behavior identical to the original: use compile() and only catch SyntaxError.
+    try:
+        compile(source, "<string>", "exec")
+        return True
+    except SyntaxError:
+        return False
