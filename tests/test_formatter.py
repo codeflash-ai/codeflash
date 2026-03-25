@@ -1394,6 +1394,61 @@ def test_format_generated_code_unicode():
     assert "Hello, 世界! 🌍" in result
 
 
+def test_format_generated_code_uses_correct_extension_for_javascript():
+    """Test that format_generated_code creates temp files with .js extension for JavaScript code."""
+    from unittest.mock import patch
+
+    js_code = """function test() {
+  return 42;
+}"""
+
+    captured_paths = []
+    original_apply = format_code.__module__
+
+    with patch("codeflash.code_utils.formatter.apply_formatter_cmds") as mock_apply:
+        mock_apply.return_value = (Path("/tmp/temp.js"), js_code, False)
+        format_generated_code(js_code, ["npx prettier --write $file"], language="javascript")
+        # Verify the temp file path has .js extension
+        call_args = mock_apply.call_args
+        original_temp_path = call_args[0][1]  # second positional arg is the path
+        assert original_temp_path.suffix == ".js", (
+            f"Expected .js extension for JavaScript, got {original_temp_path.suffix}"
+        )
+
+
+def test_format_generated_code_uses_correct_extension_for_typescript():
+    """Test that format_generated_code creates temp files with .ts extension for TypeScript code."""
+    from unittest.mock import patch
+
+    ts_code = """function test(): number {
+  return 42;
+}"""
+
+    with patch("codeflash.code_utils.formatter.apply_formatter_cmds") as mock_apply:
+        mock_apply.return_value = (Path("/tmp/temp.ts"), ts_code, False)
+        format_generated_code(ts_code, ["npx prettier --write $file"], language="typescript")
+        call_args = mock_apply.call_args
+        original_temp_path = call_args[0][1]
+        assert original_temp_path.suffix == ".ts", (
+            f"Expected .ts extension for TypeScript, got {original_temp_path.suffix}"
+        )
+
+
+def test_format_generated_code_defaults_to_py_extension():
+    """Test that format_generated_code defaults to .py extension when no language specified."""
+    from unittest.mock import patch
+
+    py_code = """def test():
+    return 42"""
+
+    with patch("codeflash.code_utils.formatter.apply_formatter_cmds") as mock_apply:
+        mock_apply.return_value = (Path("/tmp/temp.py"), py_code, False)
+        format_generated_code(py_code, ["black $file"])
+        call_args = mock_apply.call_args
+        original_temp_path = call_args[0][1]
+        assert original_temp_path.suffix == ".py", f"Expected .py extension for Python, got {original_temp_path.suffix}"
+
+
 def test_format_generated_code_f_strings():
     """Test format_generated_code with f-strings."""
     try:
