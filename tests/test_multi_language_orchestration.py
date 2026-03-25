@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 from argparse import Namespace
 from pathlib import Path
@@ -49,7 +48,7 @@ class TestApplyLanguageConfig:
         src = tmp_path / "src" / "main" / "java"
         src.mkdir(parents=True)
         config = {"module_root": str(src)}
-        lang_config = LanguageConfig(config=config, config_path=tmp_path / "codeflash.toml", language=Language.JAVA)
+        lang_config = LanguageConfig(config=config, config_path=tmp_path, language=Language.JAVA)
         args = make_base_args()
 
         from codeflash.cli_cmds.cli import apply_language_config
@@ -63,7 +62,7 @@ class TestApplyLanguageConfig:
         tests = tmp_path / "src" / "test" / "java"
         tests.mkdir(parents=True)
         config = {"module_root": str(src), "tests_root": str(tests)}
-        lang_config = LanguageConfig(config=config, config_path=tmp_path / "codeflash.toml", language=Language.JAVA)
+        lang_config = LanguageConfig(config=config, config_path=tmp_path, language=Language.JAVA)
         args = make_base_args()
 
         from codeflash.cli_cmds.cli import apply_language_config
@@ -77,7 +76,7 @@ class TestApplyLanguageConfig:
         tests = tmp_path / "src" / "test" / "java"
         tests.mkdir(parents=True)
         config = {"module_root": str(src), "tests_root": str(tests)}
-        lang_config = LanguageConfig(config=config, config_path=tmp_path / "codeflash.toml", language=Language.JAVA)
+        lang_config = LanguageConfig(config=config, config_path=tmp_path, language=Language.JAVA)
         args = make_base_args()
 
         from codeflash.cli_cmds.cli import apply_language_config
@@ -93,7 +92,7 @@ class TestApplyLanguageConfig:
         tests.mkdir(parents=True)
         (tmp_path / "pom.xml").touch()
         config = {"module_root": str(src), "tests_root": str(tests)}
-        lang_config = LanguageConfig(config=config, config_path=tmp_path / "codeflash.toml", language=Language.JAVA)
+        lang_config = LanguageConfig(config=config, config_path=tmp_path, language=Language.JAVA)
         args = make_base_args()
 
         from codeflash.cli_cmds.cli import apply_language_config
@@ -109,7 +108,7 @@ class TestApplyLanguageConfig:
         tests = tmp_path / "src" / "test" / "java"
         tests.mkdir(parents=True)
         config = {"module_root": str(src), "tests_root": str(tests)}
-        lang_config = LanguageConfig(config=config, config_path=tmp_path / "codeflash.toml", language=Language.JAVA)
+        lang_config = LanguageConfig(config=config, config_path=tmp_path, language=Language.JAVA)
         args = make_base_args(module_root=str(override_module))
 
         from codeflash.cli_cmds.cli import apply_language_config
@@ -137,7 +136,7 @@ class TestApplyLanguageConfig:
         tests = tmp_path / "src" / "test" / "java"
         tests.mkdir(parents=True)
         config = {"module_root": str(src), "tests_root": str(tests)}
-        lang_config = LanguageConfig(config=config, config_path=tmp_path / "codeflash.toml", language=Language.JAVA)
+        lang_config = LanguageConfig(config=config, config_path=tmp_path, language=Language.JAVA)
         args = make_base_args()
 
         with patch("codeflash.cli_cmds.cli.set_current_language") as mock_set:
@@ -168,7 +167,7 @@ class TestApplyLanguageConfig:
         default_tests.mkdir(parents=True)
         monkeypatch.chdir(tmp_path)
         config = {"module_root": str(src)}
-        lang_config = LanguageConfig(config=config, config_path=tmp_path / "codeflash.toml", language=Language.JAVA)
+        lang_config = LanguageConfig(config=config, config_path=tmp_path, language=Language.JAVA)
         args = make_base_args()
 
         from codeflash.cli_cmds.cli import apply_language_config
@@ -204,7 +203,7 @@ def make_lang_config(tmp_path: Path, language: Language, subdir: str = "") -> La
     tests = tmp_path / subdir / "src" / "test" / "java" if subdir else tmp_path / "src" / "test" / "java"
     src.mkdir(parents=True, exist_ok=True)
     tests.mkdir(parents=True, exist_ok=True)
-    config_path = tmp_path / subdir / "codeflash.toml" if subdir else tmp_path / "codeflash.toml"
+    config_path = tmp_path / subdir if subdir else tmp_path
     return LanguageConfig(
         config={"module_root": str(src), "tests_root": str(tests)},
         config_path=config_path,
@@ -741,7 +740,7 @@ class TestDirectFunctionCoverage:
 
     def test_empty_config_no_module_root(self, tmp_path: Path) -> None:
         config: dict = {}
-        result = normalize_toml_config(config, tmp_path / "codeflash.toml")
+        result = normalize_toml_config(config, tmp_path / "pyproject.toml")
         assert result["formatter_cmds"] == []
         assert result["disable_telemetry"] is False
         assert "module_root" not in result
@@ -752,7 +751,7 @@ class TestNormalizeTomlConfig:
         config = {"module-root": "src", "tests-root": "tests"}
         (tmp_path / "src").mkdir()
         (tmp_path / "tests").mkdir()
-        result = normalize_toml_config(config, tmp_path / "codeflash.toml")
+        result = normalize_toml_config(config, tmp_path / "pyproject.toml")
         assert "module_root" in result
         assert "tests_root" in result
         assert "module-root" not in result
@@ -762,12 +761,12 @@ class TestNormalizeTomlConfig:
         src = tmp_path / "src"
         src.mkdir()
         config = {"module-root": "src"}
-        result = normalize_toml_config(config, tmp_path / "codeflash.toml")
+        result = normalize_toml_config(config, tmp_path / "pyproject.toml")
         assert result["module_root"] == str(src.resolve())
 
     def test_applies_default_values(self, tmp_path: Path) -> None:
         config: dict = {}
-        result = normalize_toml_config(config, tmp_path / "codeflash.toml")
+        result = normalize_toml_config(config, tmp_path / "pyproject.toml")
         assert result["formatter_cmds"] == []
         assert result["disable_telemetry"] is False
         assert result["override_fixtures"] is False
@@ -776,13 +775,13 @@ class TestNormalizeTomlConfig:
 
     def test_preserves_explicit_values(self, tmp_path: Path) -> None:
         config = {"disable-telemetry": True, "formatter-cmds": ["prettier $file"]}
-        result = normalize_toml_config(config, tmp_path / "codeflash.toml")
+        result = normalize_toml_config(config, tmp_path / "pyproject.toml")
         assert result["disable_telemetry"] is True
         assert result["formatter_cmds"] == ["prettier $file"]
 
     def test_resolves_ignore_paths(self, tmp_path: Path) -> None:
         config = {"ignore-paths": ["build", "dist"]}
-        result = normalize_toml_config(config, tmp_path / "codeflash.toml")
+        result = normalize_toml_config(config, tmp_path / "pyproject.toml")
         assert result["ignore_paths"] == [
             str((tmp_path / "build").resolve()),
             str((tmp_path / "dist").resolve()),
@@ -790,7 +789,7 @@ class TestNormalizeTomlConfig:
 
     def test_empty_ignore_paths_default(self, tmp_path: Path) -> None:
         config: dict = {}
-        result = normalize_toml_config(config, tmp_path / "codeflash.toml")
+        result = normalize_toml_config(config, tmp_path / "pyproject.toml")
         assert result["ignore_paths"] == []
 
 
@@ -809,7 +808,7 @@ class TestUnconfiguredLanguageDetection:
 
         configs = [
             LanguageConfig(config={}, config_path=Path("pyproject.toml"), language=Language.PYTHON),
-            LanguageConfig(config={}, config_path=Path("codeflash.toml"), language=Language.JAVA),
+            LanguageConfig(config={}, config_path=Path(), language=Language.JAVA),
         ]
         changed = [Path("Foo.java"), Path("bar.py")]
         result = detect_unconfigured_languages(configs, changed)
@@ -826,12 +825,12 @@ class TestUnconfiguredLanguageDetection:
     def test_auto_config_adds_language_config_on_success(self, mock_find_configs, tmp_path: Path) -> None:
         from codeflash.main import auto_configure_language
 
-        new_lc = LanguageConfig(config={}, config_path=tmp_path / "codeflash.toml", language=Language.JAVA)
+        new_lc = LanguageConfig(config={}, config_path=tmp_path, language=Language.JAVA)
         mock_find_configs.return_value = [new_lc]
 
         logger = logging.getLogger("codeflash.test")
         with (
-            patch("codeflash.main.write_config", return_value=(True, "Created codeflash.toml")) as mock_write,
+            patch("codeflash.main.write_config", return_value=(True, "Created config")) as mock_write,
             patch("codeflash.main.detect_project_for_language") as mock_detect,
         ):
             mock_detect.return_value = MagicMock()

@@ -157,6 +157,66 @@ def normalize_toml_config(config: dict[str, Any], config_file_path: Path) -> dic
     return config
 
 
+def _parse_java_config_for_dir(dir_path: Path) -> dict[str, Any] | None:
+    from codeflash.languages.java.build_tools import parse_java_project_config
+
+    return parse_java_project_config(dir_path)
+
+
+_SUBDIR_SKIP = frozenset({
+    ".git", ".hg", ".svn", "node_modules", ".venv", "venv", "__pycache__",
+    "target", "build", "dist", ".tox", ".mypy_cache", ".ruff_cache", ".pytest_cache",
+})
+
+
+def _check_dir_for_configs(
+    dir_path: Path,
+    configs: list[LanguageConfig],
+    seen_languages: set[Language],
+) -> None:
+    """Check a single directory for language config files and append any found to *configs*."""
+    if Language.PYTHON not in seen_languages:
+        pyproject = dir_path / "pyproject.toml"
+        if pyproject.exists():
+            try:
+                with pyproject.open("rb") as f:
+                    data = tomlkit.parse(f.read())
+                tool = data.get("tool", {})
+                if isinstance(tool, dict) and "codeflash" in tool:
+                    raw_config = dict(tool["codeflash"])
+                    normalized = normalize_toml_config(raw_config, pyproject)
+                    seen_languages.add(Language.PYTHON)
+                    configs.append(LanguageConfig(config=normalized, config_path=pyproject, language=Language.PYTHON))
+            except Exception:
+                pass
+
+    if Language.JAVASCRIPT not in seen_languages:
+        package_json = dir_path / "package.json"
+        if package_json.exists():
+            try:
+                result = parse_package_json_config(package_json)
+                if result is not None:
+                    config, path = result
+                    seen_languages.add(Language.JAVASCRIPT)
+                    configs.append(LanguageConfig(config=config, config_path=path, language=Language.JAVASCRIPT))
+            except Exception:
+                pass
+
+    if Language.JAVA not in seen_languages:
+        if (
+            (dir_path / "pom.xml").exists()
+            or (dir_path / "build.gradle").exists()
+            or (dir_path / "build.gradle.kts").exists()
+        ):
+            try:
+                java_config = _parse_java_config_for_dir(dir_path)
+                if java_config is not None:
+                    seen_languages.add(Language.JAVA)
+                    configs.append(LanguageConfig(config=java_config, config_path=dir_path, language=Language.JAVA))
+            except Exception:
+                pass
+
+
 def find_all_config_files(start_dir: Path | None = None) -> list[LanguageConfig]:
     if start_dir is None:
         start_dir = Path.cwd()
@@ -164,43 +224,24 @@ def find_all_config_files(start_dir: Path | None = None) -> list[LanguageConfig]
     configs: list[LanguageConfig] = []
     seen_languages: set[Language] = set()
 
-    toml_configs = {"pyproject.toml": Language.PYTHON, "codeflash.toml": Language.JAVA}
-
+    # Walk upward from start_dir to filesystem root (closest config wins per language)
     dir_path = start_dir.resolve()
     while True:
-        for config_name, language in toml_configs.items():
-            if language in seen_languages:
-                continue
-            config_file = dir_path / config_name
-            if config_file.exists():
-                try:
-                    with config_file.open("rb") as f:
-                        data = tomlkit.parse(f.read())
-                    tool = data.get("tool", {})
-                    if isinstance(tool, dict) and "codeflash" in tool:
-                        raw_config = dict(tool["codeflash"])
-                        normalized = normalize_toml_config(raw_config, config_file)
-                        seen_languages.add(language)
-                        configs.append(LanguageConfig(config=normalized, config_path=config_file, language=language))
-                except Exception:
-                    continue
-
-        if Language.JAVASCRIPT not in seen_languages:
-            package_json = dir_path / "package.json"
-            if package_json.exists():
-                try:
-                    result = parse_package_json_config(package_json)
-                    if result is not None:
-                        config, path = result
-                        seen_languages.add(Language.JAVASCRIPT)
-                        configs.append(LanguageConfig(config=config, config_path=path, language=Language.JAVASCRIPT))
-                except Exception:
-                    pass
+        _check_dir_for_configs(dir_path, configs, seen_languages)
 
         parent = dir_path.parent
         if parent == dir_path:
             break
         dir_path = parent
+
+    # Scan immediate subdirectories for monorepo language subprojects
+    resolved_start = start_dir.resolve()
+    try:
+        subdirs = sorted(p for p in resolved_start.iterdir() if p.is_dir() and p.name not in _SUBDIR_SKIP)
+    except OSError:
+        subdirs = []
+    for subdir in subdirs:
+        _check_dir_for_configs(subdir, configs, seen_languages)
 
     return configs
 

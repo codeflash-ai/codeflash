@@ -328,6 +328,11 @@ def apply_language_config(args: Namespace, lang_config: LanguageConfig) -> Names
         args.benchmarks_root = Path(args.benchmarks_root).resolve()
     args.test_project_root = project_root_from_module_root(args.tests_root, config_path)
 
+    if is_java and config_path.is_dir():
+        # For Java projects, config_path IS the project root directory (from build-tool detection).
+        args.project_root = config_path.resolve()
+        args.test_project_root = config_path.resolve()
+
     return args
 
 

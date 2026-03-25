@@ -131,6 +131,11 @@ def main() -> None:
             except UnsupportedLanguageError:
                 pass  # Unknown extension, let all configs run
 
+        # Track whether --all was originally requested (before handle_optimize_all_arg_parsing
+        # resolves it — in multi-language mode, module_root isn't available yet so the resolution
+        # produces None; we re-resolve per language inside the loop)
+        optimize_all_requested = hasattr(args, "all") and args.all is not None
+
         # Multi-language path: run git/GitHub checks ONCE before the loop
         args = handle_optimize_all_arg_parsing(args)
 
@@ -141,7 +146,7 @@ def main() -> None:
                 pass_args = copy.deepcopy(args)
                 pass_args = apply_language_config(pass_args, lang_config)
 
-                if hasattr(pass_args, "all") and pass_args.all is not None:
+                if optimize_all_requested:
                     pass_args.all = pass_args.module_root
 
                 if not env_utils.check_formatter_installed(pass_args.formatter_cmds):
