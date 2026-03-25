@@ -2514,13 +2514,15 @@ class FunctionOptimizer:
                 for test_file, count in map_gen_test_file_to_no_of_tests.items()
             ):
                 formatted_generated_test = format_generated_code(
-                    test.generated_original_test_source, self.args.formatter_cmds
+                    test.generated_original_test_source, self.args.formatter_cmds, language=code_lang
                 )
                 generated_tests_str += f"```{code_lang}\n{formatted_generated_test}\n```"
                 generated_tests_str += "\n\n"
 
         if concolic_test_str:
-            formatted_generated_test = format_generated_code(concolic_test_str, self.args.formatter_cmds)
+            formatted_generated_test = format_generated_code(
+                concolic_test_str, self.args.formatter_cmds, language=code_lang
+            )
             generated_tests_str += f"```{code_lang}\n{formatted_generated_test}\n```\n\n"
 
         existing_tests, replay_tests, _concolic_tests = existing_tests_source_for(
