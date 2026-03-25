@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 import os
-import sys
 import tempfile
 import time
 from collections import defaultdict
@@ -24,7 +23,7 @@ from codeflash.code_utils.git_worktree_utils import (
     remove_worktree,
 )
 from codeflash.code_utils.time_utils import humanize_runtime
-from codeflash.either import is_successful
+from codeflash.either import Failure, Success, is_successful
 from codeflash.languages import current_language_support, set_current_language
 from codeflash.lsp.helpers import is_subagent_mode
 from codeflash.telemetry.posthog_cf import ph
@@ -37,6 +36,7 @@ if TYPE_CHECKING:
     from codeflash.benchmarking.function_ranker import FunctionRanker
     from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.either import Result
     from codeflash.languages.base import DependencyResolver
     from codeflash.languages.function_optimizer import FunctionOptimizer
     from codeflash.models.models import BenchmarkKey, FunctionCalledInTest, ValidCode
@@ -494,7 +494,10 @@ class Optimizer:
             return
 
         if self.args.worktree:
-            self.worktree_mode()
+            result = self.worktree_mode()
+            if result.is_failure():
+                logger.error(result.value)
+                return
 
         if not self.args.replay_test and self.test_cfg.tests_root.exists():
             leftover_trace_files = list(self.test_cfg.tests_root.glob("*.trace"))
@@ -777,23 +780,22 @@ class Optimizer:
                     paths_to_cleanup.append(trace_file)
         cleanup_paths(paths_to_cleanup)
 
-    def worktree_mode(self) -> None:
+    def worktree_mode(self) -> Result[bool, str]:
         if self.current_worktree:
-            return
+            return Failure("There is an existing worktree, Can't create more than one per function")
 
         if not check_running_in_git_repo(self.args.module_root):
-            logger.error("Worktree creation failed because the current directory is not part of a Git repository.")
-            sys.exit(1)
+            return Failure("Worktree creation failed because the current directory is not part of a Git repository.")
 
         worktree_dir = create_detached_worktree()
         if worktree_dir is None:
-            logger.error("Failed to create a worktree.")
-            sys.exit(1)
+            return Failure("Failed to create a worktree.")
 
         self.current_worktree = worktree_dir
         self.mirror_paths_for_worktree_mode(worktree_dir)
         # make sure the tests dir is created in the worktree, this can happen if the original tests dir is empty
         Path(self.args.tests_root).mkdir(parents=True, exist_ok=True)
+        return Success(True)  # noqa: FBT003
 
     def mirror_paths_for_worktree_mode(self, worktree_dir: Path) -> None:
         original_args = copy.deepcopy(self.args)
