@@ -33,6 +33,10 @@ if TYPE_CHECKING:
     from codeflash.models.models import FunctionSource, GeneratedTestsList, InvocationId, ValidCode
     from codeflash.verification.verification_utils import TestConfig
 
+_CACHE: dict[str, bool] = {}
+
+_CACHE_MAX: int = 4096
+
 logger = logging.getLogger(__name__)
 
 
@@ -1362,7 +1366,24 @@ class PythonSupport:
 def _compile_ok(source: str) -> bool:
     # Keep behavior identical to the original: use compile() and only catch SyntaxError.
     try:
+        # Only cache for actual str inputs to preserve original behavior for other types
+        # (compile accepts bytes/AST objects, etc.). Caching non-str inputs could change
+        # behavior or raise different errors (e.g., unhashable types), so we avoid it.
+        if isinstance(source, str):
+            cached = _CACHE.get(source)
+            if cached is not None:
+                return cached
+
+            # Attempt to compile; if it succeeds cache the True result when under the limit.
+            compile(source, "<string>", "exec")
+            if len(_CACHE) < _CACHE_MAX:
+                _CACHE[source] = True
+            return True
+        # Non-str inputs: behave exactly like the original implementation.
         compile(source, "<string>", "exec")
         return True
     except SyntaxError:
+        # Cache negative results for str inputs when under the limit.
+        if isinstance(source, str) and len(_CACHE) < _CACHE_MAX:
+            _CACHE[source] = False
         return False
