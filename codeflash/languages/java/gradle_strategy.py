@@ -29,13 +29,13 @@ logger = logging.getLogger(__name__)
 _GRADLE_SKIP_VALIDATION_INIT_SCRIPT = """\
 gradle.projectsEvaluated {
     allprojects {
+        // Disable checkstyle, spotbugs, pmd by type (catches all source sets, not just Main/Test)
+        try { tasks.withType(Checkstyle) { enabled = false } } catch (e) {}
+        try { tasks.withType(Class.forName('com.github.spotbugs.snom.SpotBugsTask')) { enabled = false } } catch (e) {}
+        try { tasks.withType(Pmd) { enabled = false } } catch (e) {}
+        // Disable remaining validation tasks by name
         tasks.matching { task ->
-            task.name in [
-                'checkstyleMain', 'checkstyleTest',
-                'spotbugsMain', 'spotbugsTest',
-                'pmdMain', 'pmdTest',
-                'rat', 'japicmp'
-            ]
+            task.name in ['rat', 'japicmp']
         }.configureEach {
             enabled = false
         }
