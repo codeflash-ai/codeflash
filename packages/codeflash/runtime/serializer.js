@@ -38,16 +38,18 @@ try {
     // Verify serialize/deserialize are available
     if (typeof v8Module.serialize === 'function' && typeof v8Module.deserialize === 'function') {
         // Perform a self-test to verify V8 serialization works correctly
-        // This catches cases like Jest's VM context where V8 serialization
-        // produces data that deserializes incorrectly (Maps become plain objects)
+        // Use Object.prototype.toString for cross-VM-context detection instead of
+        // instanceof, which fails in Jest's sandboxed VM where the Map class from
+        // v8.deserialize differs from the test environment's Map class.
         const testMap = new Map([['__test__', 1]]);
         const testBuffer = v8Module.serialize(testMap);
         const testRestored = v8Module.deserialize(testBuffer);
 
-        if (testRestored instanceof Map && testRestored.get('__test__') === 1) {
+        if (Object.prototype.toString.call(testRestored) === '[object Map]' &&
+            testRestored.get('__test__') === 1) {
             useV8 = true;
         } else {
-            // V8 serialization is broken in this environment (e.g., Jest)
+            // V8 serialization is truly broken in this environment
             useV8 = false;
         }
     }
@@ -157,9 +159,11 @@ function wrapForV8(value, seen = new WeakMap()) {
         }
 
         // V8 handles these natively
-        if (value instanceof Date || value instanceof RegExp || value instanceof Error ||
-            value instanceof Map || value instanceof Set ||
-            ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
+        // Use Object.prototype.toString for cross-VM-context detection (Jest sandbox)
+        const tag = Object.prototype.toString.call(value);
+        if (tag === '[object Date]' || tag === '[object RegExp]' || tag === '[object Error]' ||
+            tag === '[object Map]' || tag === '[object Set]' ||
+            ArrayBuffer.isView(value) || tag === '[object ArrayBuffer]') {
             return value;
         }
 
@@ -219,9 +223,11 @@ function unwrapFromV8(value, seen = new WeakMap()) {
     }
 
     // V8 restores these natively
-    if (value instanceof Date || value instanceof RegExp || value instanceof Error ||
-        value instanceof Map || value instanceof Set ||
-        ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
+    // Use Object.prototype.toString for cross-VM-context detection
+    const tag = Object.prototype.toString.call(value);
+    if (tag === '[object Date]' || tag === '[object RegExp]' || tag === '[object Error]' ||
+        tag === '[object Map]' || tag === '[object Set]' ||
+        ArrayBuffer.isView(value) || tag === '[object ArrayBuffer]') {
         return value;
     }
 
