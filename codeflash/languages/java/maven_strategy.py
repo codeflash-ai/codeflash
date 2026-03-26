@@ -545,6 +545,8 @@ def _discover_maven_submodule_roots(
             try:
                 mod_tree = _safe_parse_xml(module_pom)
                 mod_root = mod_tree.getroot()
+                if mod_root is None:
+                    continue
                 for build in [mod_root.find("m:build", ns), mod_root.find("build")]:
                     if build is not None:
                         for tag, roots_list in [("sourceDirectory", source_roots), ("testSourceDirectory", test_roots)]:
@@ -585,6 +587,8 @@ class MavenStrategy(BuildToolStrategy):
         try:
             tree = _safe_parse_xml(pom_path)
             root = tree.getroot()
+            if root is None:
+                return None
             ns = {"m": "http://maven.apache.org/POM/4.0.0"}
 
             def get_text(xpath: str, default: str | None = None) -> str | None:
