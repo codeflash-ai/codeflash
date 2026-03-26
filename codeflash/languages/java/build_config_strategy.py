@@ -343,12 +343,12 @@ def parse_java_project_config(project_root: Path) -> dict[str, Any] | None:
         "module_root": str(
             (project_root / user_config["moduleRoot"]).resolve()
             if "moduleRoot" in user_config
-            else (source_root or (default_source if default_source.is_dir() else project_root))
+            else (source_root or default_source)
         ),
         "tests_root": str(
             (project_root / user_config["testsRoot"]).resolve()
             if "testsRoot" in user_config
-            else (test_root or (default_test if default_test.is_dir() else project_root))
+            else (test_root or default_test)
         ),
         "pytest_cmd": "pytest",
         "git_remote": user_config.get("gitRemote", "origin"),
