@@ -336,17 +336,19 @@ def parse_java_project_config(project_root: Path) -> dict[str, Any] | None:
         if test_from_modules is not None:
             test_root = test_from_modules
 
+    default_source = project_root / "src" / "main" / "java"
+    default_test = project_root / "src" / "test" / "java"
     config: dict[str, Any] = {
         "language": "java",
         "module_root": str(
             (project_root / user_config["moduleRoot"]).resolve()
             if "moduleRoot" in user_config
-            else (source_root or project_root / "src" / "main" / "java")
+            else (source_root or (default_source if default_source.is_dir() else project_root))
         ),
         "tests_root": str(
             (project_root / user_config["testsRoot"]).resolve()
             if "testsRoot" in user_config
-            else (test_root or project_root / "src" / "test" / "java")
+            else (test_root or (default_test if default_test.is_dir() else project_root))
         ),
         "pytest_cmd": "pytest",
         "git_remote": user_config.get("gitRemote", "origin"),
