@@ -436,4 +436,5 @@ class TestParseJavaProjectConfig:
         (tmp_path / "pom.xml").write_text("<project/>", encoding="utf-8")
         config = parse_java_project_config(tmp_path)
         assert config is not None
-        assert config["module_root"] == str(tmp_path / "src" / "main" / "java")
+        # When src/main/java doesn't exist, should fall back to project root
+        assert config["module_root"] == str(tmp_path)
