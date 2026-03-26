@@ -154,6 +154,61 @@ def install_codeflash_runtime(project_root: Path, runtime_jar_path: Path, mvn: s
         return False
 
 
+_VALIDATION_SKIP_PROPERTIES = [
+    "checkstyle.skip",
+    "checkstyle.failOnViolation",
+    "checkstyle.failsOnError",
+    "spotbugs.skip",
+    "pmd.skip",
+    "rat.skip",
+    "enforcer.skip",
+    "japicmp.skip",
+]
+
+
+def inject_validation_skip_properties(pom_path: Path) -> bool:
+    """Inject validation skip properties into POM's <properties> section.
+
+    POM-level properties override parent POM execution bindings, unlike -D flags
+    which may be ignored by plugins with explicit configuration.
+    """
+    if not pom_path.exists():
+        return False
+
+    try:
+        content = pom_path.read_text(encoding="utf-8")
+
+        if "<checkstyle.skip>true</checkstyle.skip>" in content:
+            return True
+
+        props_lines = "".join(f"        <{p}>true</{p}>\n" for p in _VALIDATION_SKIP_PROPERTIES)
+
+        closing_idx = content.find("</properties>")
+        if closing_idx != -1:
+            content = content[:closing_idx] + props_lines + content[closing_idx:]
+        else:
+            # No <properties> section — add one before </project>
+            project_close = content.rfind("</project>")
+            if project_close == -1:
+                logger.warning("No </project> tag found in %s", pom_path)
+                return False
+            content = (
+                content[:project_close]
+                + "    <properties>\n"
+                + props_lines
+                + "    </properties>\n"
+                + content[project_close:]
+            )
+
+        pom_path.write_text(content, encoding="utf-8")
+        logger.info("Injected validation skip properties into %s", pom_path)
+        return True
+
+    except Exception:
+        logger.debug("Failed to inject validation skip properties into %s", pom_path, exc_info=True)
+        return False
+
+
 def add_codeflash_dependency(pom_path: Path) -> bool:
     if not pom_path.exists():
         return False
@@ -426,6 +481,7 @@ class MavenStrategy(BuildToolStrategy):
             if not add_codeflash_dependency(pom_path):
                 logger.error("Failed to add codeflash-runtime dependency to %s", pom_path)
                 return False
+            inject_validation_skip_properties(pom_path)
         else:
             logger.warning("pom.xml not found at %s, cannot add codeflash-runtime dependency", pom_path)
             return False
