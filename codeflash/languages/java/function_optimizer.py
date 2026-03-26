@@ -248,7 +248,9 @@ class JavaFunctionOptimizer(FunctionOptimizer):
                             package_name = new_package
                             logger.debug(f"[JPMS] Remapped package: {old_decl} -> {new_decl}")
 
-        class_match = re.search(r"^\s*(?:(?:public|static|final|abstract)\s+)*class\s+(\w+)", behavior_source, re.MULTILINE)
+        class_match = re.search(
+            r"^\s*(?:(?:public|static|final|abstract)\s+)*class\s+(\w+)", behavior_source, re.MULTILINE
+        )
         behavior_class = class_match.group(1) if class_match else "GeneratedTest"
 
         perf_class_match = re.search(
