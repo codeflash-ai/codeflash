@@ -158,6 +158,8 @@ _VALIDATION_SKIP_PROPERTIES = [
     "checkstyle.skip",
     "checkstyle.failOnViolation",
     "checkstyle.failsOnError",
+    "maven-checkstyle-plugin.failsOnError",
+    "maven-checkstyle-plugin.failOnViolation",
     "spotbugs.skip",
     "pmd.skip",
     "rat.skip",
@@ -165,12 +167,38 @@ _VALIDATION_SKIP_PROPERTIES = [
     "japicmp.skip",
 ]
 
+# Plugin overrides that explicitly set <skip>true</skip> in the plugin <configuration>.
+# This handles parent POMs with custom execution IDs that ignore skip properties.
+_VALIDATION_PLUGIN_OVERRIDES = """\
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-checkstyle-plugin</artifactId>
+                <configuration>
+                    <skip>true</skip>
+                    <failOnViolation>false</failOnViolation>
+                    <failsOnError>false</failsOnError>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>com.github.spotbugs</groupId>
+                <artifactId>spotbugs-maven-plugin</artifactId>
+                <configuration><skip>true</skip></configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-pmd-plugin</artifactId>
+                <configuration><skip>true</skip></configuration>
+            </plugin>
+"""
+
 
 def inject_validation_skip_properties(pom_path: Path) -> bool:
-    """Inject validation skip properties into POM's <properties> section.
+    """Inject validation skip properties and plugin overrides into the POM.
 
-    POM-level properties override parent POM execution bindings, unlike -D flags
-    which may be ignored by plugins with explicit configuration.
+    Two-layer approach:
+    1. Properties — works when the plugin reads from standard property names.
+    2. Plugin configuration overrides — handles parent POMs with custom execution
+       bindings that ignore the standard skip properties.
     """
     if not pom_path.exists():
         return False
@@ -178,16 +206,16 @@ def inject_validation_skip_properties(pom_path: Path) -> bool:
     try:
         content = pom_path.read_text(encoding="utf-8")
 
-        if "<checkstyle.skip>true</checkstyle.skip>" in content:
+        if "<!-- codeflash-validation-skip -->" in content:
             return True
 
         props_lines = "".join(f"        <{p}>true</{p}>\n" for p in _VALIDATION_SKIP_PROPERTIES)
 
+        # 1. Inject properties
         closing_idx = content.find("</properties>")
         if closing_idx != -1:
             content = content[:closing_idx] + props_lines + content[closing_idx:]
         else:
-            # No <properties> section — add one before </project>
             project_close = content.rfind("</project>")
             if project_close == -1:
                 logger.warning("No </project> tag found in %s", pom_path)
@@ -200,8 +228,43 @@ def inject_validation_skip_properties(pom_path: Path) -> bool:
                 + content[project_close:]
             )
 
+        # 2. Inject plugin configuration overrides
+        plugins_block = (
+            "    <!-- codeflash-validation-skip -->\n"
+            "    <build>\n"
+            "        <plugins>\n"
+            + _VALIDATION_PLUGIN_OVERRIDES
+            + "        </plugins>\n"
+            "    </build>\n"
+        )
+
+        build_close = content.find("</build>")
+        if build_close != -1:
+            # Insert plugins before existing </build>
+            plugins_close = content.find("</plugins>", 0, build_close)
+            if plugins_close != -1:
+                content = (
+                    content[:plugins_close]
+                    + "<!-- codeflash-validation-skip -->\n"
+                    + _VALIDATION_PLUGIN_OVERRIDES
+                    + content[plugins_close:]
+                )
+            else:
+                content = (
+                    content[:build_close]
+                    + "    <!-- codeflash-validation-skip -->\n"
+                    + "    <plugins>\n"
+                    + _VALIDATION_PLUGIN_OVERRIDES
+                    + "    </plugins>\n"
+                    + content[build_close:]
+                )
+        else:
+            project_close = content.rfind("</project>")
+            if project_close != -1:
+                content = content[:project_close] + plugins_block + content[project_close:]
+
         pom_path.write_text(content, encoding="utf-8")
-        logger.info("Injected validation skip properties into %s", pom_path)
+        logger.info("Injected validation skip properties and plugin overrides into %s", pom_path)
         return True
 
     except Exception:
