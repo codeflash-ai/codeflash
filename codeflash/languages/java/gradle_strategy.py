@@ -180,6 +180,70 @@ def _find_top_level_dependencies_block(build_file: Path, content: str) -> int | 
     return None
 
 
+def _is_multimodule_project(build_root: Path) -> bool:
+    """Check if this is a multi-module Gradle project by looking for include directives in settings files."""
+    for settings_name in ("settings.gradle", "settings.gradle.kts"):
+        settings_file = build_root / settings_name
+        if settings_file.exists():
+            try:
+                content = settings_file.read_text(encoding="utf-8")
+                if re.search(r'include\s*[\(\'"]', content):
+                    return True
+            except Exception:
+                pass
+    return False
+
+
+def add_codeflash_dependency_multimodule(build_file: Path, runtime_jar_path: Path) -> bool:
+    """Add codeflash-runtime dependency wrapped in a subprojects block for multi-module projects.
+
+    This avoids adding testImplementation to the root build file directly, which would fail
+    if the root project doesn't apply the java plugin.
+    """
+    if not build_file.exists():
+        return False
+
+    try:
+        content = build_file.read_text(encoding="utf-8")
+
+        if "codeflash-runtime" in content:
+            logger.info("codeflash-runtime dependency already present in %s", build_file.name)
+            return True
+
+        is_kts = build_file.name.endswith(".kts")
+        jar_str = str(runtime_jar_path).replace("\\", "/")
+
+        if is_kts:
+            block = (
+                f'\nsubprojects {{\n'
+                f'    plugins.withId("java") {{\n'
+                f'        dependencies {{\n'
+                f'            testImplementation(files("{jar_str}"))  // codeflash-runtime\n'
+                f'        }}\n'
+                f'    }}\n'
+                f'}}\n'
+            )
+        else:
+            block = (
+                f"\nsubprojects {{\n"
+                f"    plugins.withId('java') {{\n"
+                f"        dependencies {{\n"
+                f"            testImplementation files('{jar_str}')  // codeflash-runtime\n"
+                f"        }}\n"
+                f"    }}\n"
+                f"}}\n"
+            )
+
+        content += block
+        build_file.write_text(content, encoding="utf-8")
+        logger.info("Added codeflash-runtime dependency to %s (subprojects block)", build_file.name)
+        return True
+
+    except Exception as e:
+        logger.exception("Failed to add dependency to %s: %s", build_file.name, e)
+        return False
+
+
 def add_codeflash_dependency(build_file: Path, runtime_jar_path: Path) -> bool:
     if not build_file.exists():
         return False
@@ -303,7 +367,11 @@ class GradleStrategy(BuildToolStrategy):
             logger.warning("No build.gradle(.kts) found at %s, cannot add codeflash-runtime dependency", module_root)
             return False
 
-        if not add_codeflash_dependency(build_file, dest_jar):
+        if not test_module and _is_multimodule_project(build_root):
+            if not add_codeflash_dependency_multimodule(build_file, dest_jar):
+                logger.error("Failed to add codeflash-runtime dependency to %s", build_file)
+                return False
+        elif not add_codeflash_dependency(build_file, dest_jar):
             logger.error("Failed to add codeflash-runtime dependency to %s", build_file)
             return False
 
