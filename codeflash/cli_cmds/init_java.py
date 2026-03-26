@@ -232,12 +232,18 @@ def should_modify_java_config() -> tuple[bool, dict[str, Any] | None]:
 
     project_root = Path.cwd()
 
-    # Check for existing codeflash config in pom.xml or a separate config file
-    codeflash_config_path = project_root / "codeflash.toml"
-    if codeflash_config_path.exists():
-        return Confirm.ask(
-            "A Codeflash config already exists. Do you want to re-configure it?", default=False, show_default=True
-        ), None
+    # Check for existing codeflash config in pom.xml properties or gradle.properties
+    from codeflash.languages.java.build_config_strategy import get_config_strategy
+
+    try:
+        strategy = get_config_strategy(project_root)
+        existing = strategy.read_codeflash_properties(project_root)
+        if existing:
+            return Confirm.ask(
+                "A Codeflash config already exists. Do you want to re-configure it?", default=False, show_default=True
+            ), None
+    except ValueError:
+        pass
 
     return True, None
 
@@ -436,42 +442,37 @@ def get_java_formatter_cmd(formatter: str, build_tool: JavaBuildTool) -> list[st
     if formatter == "other":
         global formatter_warning_shown
         if not formatter_warning_shown:
-            click.echo("In codeflash.toml, please replace 'your-formatter' with your formatter command.")
+            click.echo("In your build config, please replace 'your-formatter' with your formatter command.")
             formatter_warning_shown = True
         return ["your-formatter $file"]
     return ["disabled"]
 
 
 def configure_java_project(setup_info: JavaSetupInfo) -> bool:
-    """Configure codeflash.toml for Java projects."""
-    import tomlkit
+    """Configure codeflash in pom.xml properties or gradle.properties."""
+    from codeflash.languages.java.build_config_strategy import get_config_strategy
 
-    codeflash_config_path = Path.cwd() / "codeflash.toml"
+    curdir = Path.cwd()
 
-    # Build config
+    # Build config dict with only non-default overrides
     config: dict[str, Any] = {}
 
-    # Detect values
-    curdir = Path.cwd()
     source_root = setup_info.module_root_override or detect_java_source_root(curdir)
     test_root = setup_info.test_root_override or detect_java_test_root(curdir)
 
-    config["language"] = "java"
-    config["module-root"] = source_root
-    config["tests-root"] = test_root
+    # Only include non-default values
+    defaults = {"module-root": "src/main/java", "tests-root": "src/test/java"}
+    if source_root != defaults["module-root"]:
+        config["module-root"] = source_root
+    if test_root != defaults["tests-root"]:
+        config["tests-root"] = test_root
 
-    # Formatter
-    if setup_info.formatter_override is not None:
-        if setup_info.formatter_override != ["disabled"]:
-            config["formatter-cmds"] = setup_info.formatter_override
-        else:
-            config["formatter-cmds"] = []
+    if setup_info.formatter_override is not None and setup_info.formatter_override != ["disabled"]:
+        config["formatter-cmds"] = setup_info.formatter_override
 
-    # Git remote
     if setup_info.git_remote and setup_info.git_remote not in ("", "origin"):
         config["git-remote"] = setup_info.git_remote
 
-    # User preferences
     if setup_info.disable_telemetry:
         config["disable-telemetry"] = True
 
@@ -481,27 +482,19 @@ def configure_java_project(setup_info: JavaSetupInfo) -> bool:
     if setup_info.benchmarks_root:
         config["benchmarks-root"] = setup_info.benchmarks_root
 
-    try:
-        # Create TOML document
-        doc = tomlkit.document()
-        doc.add(tomlkit.comment("Codeflash configuration for Java project"))
-        doc.add(tomlkit.nl())
-
-        codeflash_table = tomlkit.table()
-        for key, value in config.items():
-            codeflash_table.add(key, value)
-
-        doc.add("tool", tomlkit.table())
-        doc["tool"]["codeflash"] = codeflash_table
-
-        with codeflash_config_path.open("w", encoding="utf-8") as f:
-            f.write(tomlkit.dumps(doc))
-
-        click.echo(f"Created Codeflash configuration in {codeflash_config_path}")
+    if not config:
+        click.echo("Standard Maven/Gradle layout detected — no config needed")
         click.echo()
         return True
-    except OSError as e:
-        click.echo(f"Failed to create codeflash.toml: {e}")
+
+    try:
+        strategy = get_config_strategy(curdir)
+        ok, msg = strategy.write_codeflash_properties(curdir, config)
+        click.echo(msg)
+        click.echo()
+        return ok
+    except ValueError as e:
+        click.echo(f"Failed to write config: {e}")
         return False
 
 
