@@ -232,9 +232,7 @@ def inject_validation_skip_properties(pom_path: Path) -> bool:
         plugins_block = (
             "    <!-- codeflash-validation-skip -->\n"
             "    <build>\n"
-            "        <plugins>\n"
-            + _VALIDATION_PLUGIN_OVERRIDES
-            + "        </plugins>\n"
+            "        <plugins>\n" + _VALIDATION_PLUGIN_OVERRIDES + "        </plugins>\n"
             "    </build>\n"
         )
 
