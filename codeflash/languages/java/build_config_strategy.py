@@ -338,10 +338,10 @@ def parse_java_project_config(project_root: Path) -> dict[str, Any] | None:
     Reads codeflash.* properties from pom.xml or gradle.properties,
     then fills in defaults from auto-detected build tool conventions.
 
-    For multi-module projects, module_root defaults to the project root so build
-    commands target the reactor. tests_root uses normal detection — the per-function
-    _get_java_sources_root() derives the correct module-specific test directory at
-    runtime from the source file path.
+    For multi-module projects, scans submodule pom.xml files to detect the
+    source root (largest module by Java file count) and test root (module with
+    "test" in its name). The per-function _get_java_sources_root() further
+    derives the correct module-specific test directory at runtime.
 
     Returns None if no Java build tool is detected.
     """
@@ -359,8 +359,11 @@ def parse_java_project_config(project_root: Path) -> dict[str, Any] | None:
 
     is_multimodule = _is_multi_module_project(project_root)
 
-    source_root = find_source_root(project_root)
-    test_root = find_test_root(project_root)
+    if is_multimodule:
+        source_root, test_root = _detect_roots_from_maven_modules(project_root)
+    else:
+        source_root = find_source_root(project_root)
+        test_root = find_test_root(project_root)
 
     default_source = project_root / "src" / "main" / "java"
     default_test = project_root / "src" / "test" / "java"
@@ -369,11 +372,7 @@ def parse_java_project_config(project_root: Path) -> dict[str, Any] | None:
         "module_root": str(
             (project_root / user_config["moduleRoot"]).resolve()
             if "moduleRoot" in user_config
-            else (
-                project_root
-                if is_multimodule
-                else (source_root or (default_source if default_source.is_dir() else project_root))
-            )
+            else (source_root or (default_source if default_source.is_dir() else project_root))
         ),
         "tests_root": str(
             (project_root / user_config["testsRoot"]).resolve()
