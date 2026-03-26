@@ -306,11 +306,42 @@ def get_config_strategy(project_root: Path) -> BuildConfigStrategy:
     raise ValueError(msg)
 
 
+def _is_multi_module_project(project_root: Path) -> bool:
+    """Check if the project is a multi-module Maven or Gradle project."""
+    # Maven: check for <modules> in pom.xml
+    pom_path = project_root / "pom.xml"
+    if pom_path.exists():
+        try:
+            content = pom_path.read_text(encoding="utf-8")
+            if "<modules>" in content:
+                return True
+        except Exception:
+            pass
+
+    # Gradle: check for include directives in settings.gradle(.kts)
+    for name in ("settings.gradle.kts", "settings.gradle"):
+        settings_path = project_root / name
+        if settings_path.exists():
+            try:
+                content = settings_path.read_text(encoding="utf-8")
+                if "include" in content:
+                    return True
+            except Exception:
+                pass
+
+    return False
+
+
 def parse_java_project_config(project_root: Path) -> dict[str, Any] | None:
     """Parse codeflash config from Maven/Gradle build files.
 
     Reads codeflash.* properties from pom.xml or gradle.properties,
     then fills in defaults from auto-detected build tool conventions.
+
+    For multi-module projects, module_root defaults to the project root so build
+    commands target the reactor. tests_root uses normal detection — the per-function
+    _get_java_sources_root() derives the correct module-specific test directory at
+    runtime from the source file path.
 
     Returns None if no Java build tool is detected.
     """
@@ -326,15 +357,10 @@ def parse_java_project_config(project_root: Path) -> dict[str, Any] | None:
     except ValueError:
         user_config = {}
 
+    is_multimodule = _is_multi_module_project(project_root)
+
     source_root = find_source_root(project_root)
     test_root = find_test_root(project_root)
-
-    if build_tool == BuildTool.MAVEN:
-        source_from_modules, test_from_modules = _detect_roots_from_maven_modules(project_root)
-        if source_from_modules is not None:
-            source_root = source_from_modules
-        if test_from_modules is not None:
-            test_root = test_from_modules
 
     default_source = project_root / "src" / "main" / "java"
     default_test = project_root / "src" / "test" / "java"
@@ -343,7 +369,11 @@ def parse_java_project_config(project_root: Path) -> dict[str, Any] | None:
         "module_root": str(
             (project_root / user_config["moduleRoot"]).resolve()
             if "moduleRoot" in user_config
-            else (source_root or (default_source if default_source.is_dir() else project_root))
+            else (
+                project_root
+                if is_multimodule
+                else (source_root or (default_source if default_source.is_dir() else project_root))
+            )
         ),
         "tests_root": str(
             (project_root / user_config["testsRoot"]).resolve()
