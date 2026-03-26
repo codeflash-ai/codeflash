@@ -17,7 +17,13 @@ from pathlib import Path
 from typing import Any
 
 from codeflash.languages.java.build_tool_strategy import BuildToolStrategy, module_to_dir
-from codeflash.languages.java.build_tools import CODEFLASH_RUNTIME_JAR_NAME, CODEFLASH_RUNTIME_VERSION
+from codeflash.languages.java.build_tools import (
+    CODEFLASH_RUNTIME_JAR_NAME,
+    CODEFLASH_RUNTIME_VERSION,
+    BuildTool,
+    JavaProjectInfo,
+    _safe_parse_xml,
+)
 
 _TARGET = "target"
 
@@ -115,12 +121,6 @@ def resolve_from_maven_central(maven_root: Path) -> bool:
     except Exception as e:
         logger.debug("Maven Central resolution error: %s", e)
         return False
-
-
-def _safe_parse_xml(file_path: Path) -> ET.ElementTree:
-    content = file_path.read_text(encoding="utf-8")
-    root = ET.fromstring(content)
-    return ET.ElementTree(root)
 
 
 def install_codeflash_runtime(project_root: Path, runtime_jar_path: Path, mvn: str | None = None) -> bool:
@@ -488,6 +488,77 @@ def get_jacoco_report_path(project_root: Path) -> Path:
     return project_root / "target" / "site" / "jacoco" / "jacoco.xml"
 
 
+def _extract_java_version_from_pom(root: ET.Element, ns: dict[str, str]) -> str | None:
+    """Extract Java version from Maven pom.xml properties or compiler plugin."""
+    for prop_name in ("maven.compiler.source", "java.version", "maven.compiler.release"):
+        for props in [root.find("m:properties", ns), root.find("properties")]:
+            if props is not None:
+                for prop in [props.find(f"m:{prop_name}", ns), props.find(prop_name)]:
+                    if prop is not None and prop.text:
+                        return prop.text
+
+    for build in [root.find("m:build", ns), root.find("build")]:
+        if build is not None:
+            for plugins in [build.find("m:plugins", ns), build.find("plugins")]:
+                if plugins is not None:
+                    for plugin in plugins.findall("m:plugin", ns) + plugins.findall("plugin"):
+                        artifact_id = plugin.find("m:artifactId", ns) or plugin.find("artifactId")
+                        if artifact_id is not None and artifact_id.text == "maven-compiler-plugin":
+                            config = plugin.find("m:configuration", ns) or plugin.find("configuration")
+                            if config is not None:
+                                source = config.find("m:source", ns) or config.find("source")
+                                if source is not None and source.text:
+                                    return source.text
+
+    return None
+
+
+def _discover_maven_submodule_roots(
+    project_root: Path, root: ET.Element, ns: dict[str, str]
+) -> tuple[list[Path], list[Path]]:
+    """Discover source and test roots from Maven submodules."""
+    source_roots: list[Path] = []
+    test_roots: list[Path] = []
+
+    modules: list[str] = []
+    for modules_elem in [root.find("m:modules", ns), root.find("modules")]:
+        if modules_elem is not None:
+            for mod in modules_elem:
+                if mod.text:
+                    modules.append(mod.text.strip())
+
+    for module_name in modules:
+        module_dir = project_root / module_name
+        if not module_dir.is_dir():
+            continue
+
+        std_src = module_dir / "src" / "main" / "java"
+        if std_src.exists():
+            source_roots.append(std_src)
+
+        std_test = module_dir / "src" / "test" / "java"
+        if std_test.exists():
+            test_roots.append(std_test)
+
+        module_pom = module_dir / "pom.xml"
+        if module_pom.exists():
+            try:
+                mod_tree = _safe_parse_xml(module_pom)
+                mod_root = mod_tree.getroot()
+                for build in [mod_root.find("m:build", ns), mod_root.find("build")]:
+                    if build is not None:
+                        for tag, roots_list in [("sourceDirectory", source_roots), ("testSourceDirectory", test_roots)]:
+                            for elem in [build.find(f"m:{tag}", ns), build.find(tag)]:
+                                if elem is not None and elem.text:
+                                    custom_dir = module_dir / elem.text.strip()
+                                    if custom_dir.exists() and custom_dir not in roots_list:
+                                        roots_list.append(custom_dir)
+            except Exception:
+                continue
+
+    return source_roots, test_roots
+
+
 class MavenStrategy(BuildToolStrategy):
     """Maven-specific build tool operations."""
 
@@ -505,6 +576,71 @@ class MavenStrategy(BuildToolStrategy):
     @property
     def name(self) -> str:
         return "Maven"
+
+    def get_project_info(self, project_root: Path) -> JavaProjectInfo | None:
+        pom_path = project_root / "pom.xml"
+        if not pom_path.exists():
+            return None
+
+        try:
+            tree = _safe_parse_xml(pom_path)
+            root = tree.getroot()
+            ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+
+            def get_text(xpath: str, default: str | None = None) -> str | None:
+                elem = root.find(f"m:{xpath}", ns)
+                if elem is None:
+                    elem = root.find(xpath)
+                return elem.text if elem is not None else default
+
+            group_id = get_text("groupId")
+            artifact_id = get_text("artifactId")
+            version = get_text("version")
+            java_version = _extract_java_version_from_pom(root, ns)
+
+            source_roots: list[Path] = []
+            test_roots: list[Path] = []
+
+            main_src = project_root / "src" / "main" / "java"
+            if main_src.exists():
+                source_roots.append(main_src)
+
+            test_src = project_root / "src" / "test" / "java"
+            if test_src.exists():
+                test_roots.append(test_src)
+
+            for build in [root.find("m:build", ns), root.find("build")]:
+                if build is not None:
+                    for tag, roots_list in [("sourceDirectory", source_roots), ("testSourceDirectory", test_roots)]:
+                        for elem in [build.find(f"m:{tag}", ns), build.find(tag)]:
+                            if elem is not None and elem.text:
+                                custom_dir = project_root / elem.text.strip()
+                                if custom_dir.exists() and custom_dir not in roots_list:
+                                    roots_list.append(custom_dir)
+
+            sub_sources, sub_tests = _discover_maven_submodule_roots(project_root, root, ns)
+            for root_path in sub_sources:
+                if root_path not in source_roots:
+                    source_roots.append(root_path)
+            for root_path in sub_tests:
+                if root_path not in test_roots:
+                    test_roots.append(root_path)
+
+            return JavaProjectInfo(
+                project_root=project_root,
+                build_tool=BuildTool.MAVEN,
+                source_roots=source_roots,
+                test_roots=test_roots,
+                target_dir=project_root / "target",
+                group_id=group_id,
+                artifact_id=artifact_id,
+                version=version,
+                java_version=java_version,
+            )
+
+        except ET.ParseError as e:
+            logger.warning("Failed to parse pom.xml: %s", e)
+            return None
 
     def find_executable(self, build_root: Path) -> str | None:
         mvnw_path = build_root / "mvnw"

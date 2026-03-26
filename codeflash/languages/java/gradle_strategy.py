@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from codeflash.languages.java.build_tool_strategy import BuildToolStrategy, module_to_dir
+from codeflash.languages.java.build_tools import BuildTool, JavaProjectInfo
 
 _BUILD = "build"
 
@@ -318,12 +319,92 @@ def _normalize_gradle_xml_reports(reports_dir: Path) -> None:
             logger.debug("Failed to normalize Gradle XML report %s", xml_file)
 
 
+def _extract_gradle_include_modules(content: str) -> list[str]:
+    """Extract module names from include() directives in settings.gradle."""
+    modules: list[str] = []
+    for match in re.finditer(r"""include\s*\(?([^)\n]+)\)?""", content):
+        args = match.group(1)
+        for quoted in re.findall(r"""['"]([^'"]+)['"]""", args):
+            module = quoted.lstrip(":")
+            if module:
+                modules.append(module)
+    return modules
+
+
+def _parse_gradle_settings_modules(project_root: Path) -> list[str]:
+    """Parse settings.gradle(.kts) to find included modules."""
+    for settings_name in ["settings.gradle", "settings.gradle.kts"]:
+        settings_path = project_root / settings_name
+        if settings_path.exists():
+            try:
+                content = settings_path.read_text(encoding="utf-8")
+                return _extract_gradle_include_modules(content)
+            except Exception:
+                continue
+    return []
+
+
+def _discover_gradle_submodule_roots(project_root: Path) -> tuple[list[Path], list[Path]]:
+    """Discover source and test roots from Gradle submodules."""
+    source_roots: list[Path] = []
+    test_roots: list[Path] = []
+
+    modules = _parse_gradle_settings_modules(project_root)
+    for module_name in modules:
+        module_path = module_name.replace(":", "/")
+        module_dir = project_root / module_path
+        if not module_dir.is_dir():
+            continue
+
+        std_src = module_dir / "src" / "main" / "java"
+        if std_src.exists():
+            source_roots.append(std_src)
+
+        std_test = module_dir / "src" / "test" / "java"
+        if std_test.exists():
+            test_roots.append(std_test)
+
+    return source_roots, test_roots
+
+
 class GradleStrategy(BuildToolStrategy):
     """Gradle-specific build tool operations."""
 
     @property
     def name(self) -> str:
         return "Gradle"
+
+    def get_project_info(self, project_root: Path) -> JavaProjectInfo | None:
+        source_roots: list[Path] = []
+        test_roots: list[Path] = []
+
+        main_src = project_root / "src" / "main" / "java"
+        if main_src.exists():
+            source_roots.append(main_src)
+
+        test_src = project_root / "src" / "test" / "java"
+        if test_src.exists():
+            test_roots.append(test_src)
+
+        sub_sources, sub_tests = _discover_gradle_submodule_roots(project_root)
+        for root_path in sub_sources:
+            if root_path not in source_roots:
+                source_roots.append(root_path)
+        for root_path in sub_tests:
+            if root_path not in test_roots:
+                test_roots.append(root_path)
+
+        return JavaProjectInfo(
+            project_root=project_root,
+            build_tool=BuildTool.GRADLE,
+            source_roots=source_roots,
+            test_roots=test_roots,
+            target_dir=project_root / "build",
+            group_id=None,
+            artifact_id=None,
+            version=None,
+            java_version=None,
+        )
 
     def find_executable(self, build_root: Path) -> str | None:
         # Walk up from build_root to find gradlew — for multi-module projects
