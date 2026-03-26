@@ -27,8 +27,11 @@ logger = logging.getLogger(__name__)
 _MAVEN_VALIDATION_SKIP_FLAGS = [
     "-Drat.skip=true",
     "-Dcheckstyle.skip=true",
+    "-Ddisable.checks=true",
     "-Dcheckstyle.failOnViolation=false",
     "-Dcheckstyle.failsOnError=false",
+    "-Dmaven-checkstyle-plugin.failsOnError=false",
+    "-Dmaven-checkstyle-plugin.failOnViolation=false",
     "-Dspotbugs.skip=true",
     "-Dpmd.skip=true",
     "-Denforcer.skip=true",
@@ -154,17 +157,23 @@ def install_codeflash_runtime(project_root: Path, runtime_jar_path: Path, mvn: s
         return False
 
 
-_VALIDATION_SKIP_PROPERTIES = [
+# Properties set to "true" to enable skipping
+_VALIDATION_SKIP_PROPERTIES_TRUE = [
     "checkstyle.skip",
-    "checkstyle.failOnViolation",
-    "checkstyle.failsOnError",
-    "maven-checkstyle-plugin.failsOnError",
-    "maven-checkstyle-plugin.failOnViolation",
+    "disable.checks",
     "spotbugs.skip",
     "pmd.skip",
     "rat.skip",
     "enforcer.skip",
     "japicmp.skip",
+]
+
+# Properties set to "false" to disable failure on violations
+_VALIDATION_SKIP_PROPERTIES_FALSE = [
+    "checkstyle.failOnViolation",
+    "checkstyle.failsOnError",
+    "maven-checkstyle-plugin.failsOnError",
+    "maven-checkstyle-plugin.failOnViolation",
 ]
 
 # Plugin overrides that explicitly set <skip>true</skip> in the plugin <configuration>.
@@ -209,7 +218,8 @@ def inject_validation_skip_properties(pom_path: Path) -> bool:
         if "<!-- codeflash-validation-skip -->" in content:
             return True
 
-        props_lines = "".join(f"        <{p}>true</{p}>\n" for p in _VALIDATION_SKIP_PROPERTIES)
+        props_lines = "".join(f"        <{p}>true</{p}>\n" for p in _VALIDATION_SKIP_PROPERTIES_TRUE)
+        props_lines += "".join(f"        <{p}>false</{p}>\n" for p in _VALIDATION_SKIP_PROPERTIES_FALSE)
 
         # 1. Inject properties
         closing_idx = content.find("</properties>")
