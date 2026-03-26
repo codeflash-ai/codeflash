@@ -215,13 +215,13 @@ def add_codeflash_dependency_multimodule(build_file: Path, runtime_jar_path: Pat
 
         if is_kts:
             block = (
-                f'\nsubprojects {{\n'
+                f"\nsubprojects {{\n"
                 f'    plugins.withId("java") {{\n'
-                f'        dependencies {{\n'
+                f"        dependencies {{\n"
                 f'            testImplementation(files("{jar_str}"))  // codeflash-runtime\n'
-                f'        }}\n'
-                f'    }}\n'
-                f'}}\n'
+                f"        }}\n"
+                f"    }}\n"
+                f"}}\n"
             )
         else:
             block = (
