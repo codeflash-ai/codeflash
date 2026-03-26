@@ -8,7 +8,7 @@ This module writes Codeflash configuration to native config files:
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import tomlkit
 
@@ -38,7 +38,7 @@ def write_config(detected: DetectedProject, config: CodeflashConfig | None = Non
     if detected.language == "python":
         return _write_pyproject_toml(detected.project_root, config)
     if detected.language == "java":
-        return _write_java_build_config(detected.project_root, config)
+        return _write_codeflash_toml(detected.project_root, config)
     return _write_package_json(detected.project_root, config)
 
 
@@ -92,10 +92,10 @@ def _write_pyproject_toml(project_root: Path, config: CodeflashConfig) -> tuple[
         return False, f"Failed to write pyproject.toml: {e}"
 
 
-def _write_java_build_config(project_root: Path, config: CodeflashConfig) -> tuple[bool, str]:
-    """Write codeflash config to pom.xml properties or gradle.properties.
+def _write_codeflash_toml(project_root: Path, config: CodeflashConfig) -> tuple[bool, str]:
+    """Write config to codeflash.toml [tool.codeflash] section for Java projects.
 
-    Only writes non-default values. Standard Maven/Gradle layouts need no config.
+    Creates codeflash.toml if it doesn't exist.
 
     Args:
         project_root: Project root directory.
@@ -105,141 +105,40 @@ def _write_java_build_config(project_root: Path, config: CodeflashConfig) -> tup
         Tuple of (success, message).
 
     """
-    config_dict = config.to_pyproject_dict()
-
-    # Filter out default values — only write overrides
-    defaults = {"module-root": "src/main/java", "tests-root": "src/test/java", "language": "java"}
-    non_default = {k: v for k, v in config_dict.items() if k not in defaults or str(v) != defaults.get(k)}
-    # Remove empty lists and False booleans
-    non_default = {k: v for k, v in non_default.items() if v not in ([], False, "", None)}
-
-    if not non_default:
-        return True, "Standard Maven/Gradle layout detected — no config needed"
-
-    pom_path = project_root / "pom.xml"
-    if pom_path.exists():
-        return _write_maven_properties(pom_path, non_default)
-
-    gradle_props_path = project_root / "gradle.properties"
-    return _write_gradle_properties(gradle_props_path, non_default)
-
-
-_MAVEN_KEY_MAP: dict[str, str] = {
-    "module-root": "moduleRoot",
-    "tests-root": "testsRoot",
-    "git-remote": "gitRemote",
-    "disable-telemetry": "disableTelemetry",
-    "ignore-paths": "ignorePaths",
-    "formatter-cmds": "formatterCmds",
-}
-
-
-def _write_maven_properties(pom_path: Path, config: dict[str, Any]) -> tuple[bool, str]:
-    """Add codeflash.* properties to pom.xml <properties> section.
-
-    Uses text-based manipulation to preserve comments, formatting, and namespace declarations.
-    """
-    import re
+    codeflash_toml_path = project_root / "codeflash.toml"
 
     try:
-        content = pom_path.read_text(encoding="utf-8")
-
-        # Remove existing codeflash.* property lines (with surrounding whitespace)
-        content = re.sub(r"\n[ \t]*<codeflash\.[^>]*>[^<]*</codeflash\.[^>]*>", "", content)
-
-        # Detect child indentation from existing properties or fall back to </properties> indent + 4 spaces
-        props_close = re.search(r"([ \t]*)</properties>", content)
-        if props_close:
-            parent_indent = props_close.group(1)
-            # Try to detect child indent from an existing property element
-            child_match = re.search(
-                r"\n([ \t]+)<[a-zA-Z]",
-                content[content.find("<properties>") : props_close.start()] if "<properties>" in content else "",
-            )
-            child_indent = child_match.group(1) if child_match else parent_indent + "    "
+        # Load existing or create new
+        if codeflash_toml_path.exists():
+            with codeflash_toml_path.open("rb") as f:
+                doc = tomlkit.parse(f.read())
         else:
-            parent_indent = ""
-            child_indent = "    "
+            doc = tomlkit.document()
 
-        # Build new property lines with detected indentation
-        new_lines = []
-        for key, value in config.items():
-            maven_key = f"codeflash.{_MAVEN_KEY_MAP.get(key, key)}"
-            if isinstance(value, list):
-                value = ",".join(str(v) for v in value)
-            elif isinstance(value, bool):
-                value = str(value).lower()
-            else:
-                value = str(value)
-            new_lines.append(f"{child_indent}<{maven_key}>{value}</{maven_key}>")
+        # Ensure [tool] section exists
+        if "tool" not in doc:
+            doc["tool"] = tomlkit.table()
 
-        properties_block = "\n".join(new_lines)
+        # Create codeflash section
+        codeflash_table = tomlkit.table()
+        codeflash_table.add(tomlkit.comment("Codeflash configuration for Java - https://docs.codeflash.ai"))
 
-        # Insert before </properties>
-        if props_close:
-            content = (
-                content[: props_close.start()]
-                + properties_block
-                + "\n"
-                + parent_indent
-                + "</properties>"
-                + content[props_close.end() :]
-            )
-        else:
-            # No <properties> section — create one before </project>
-            project_close = re.search(r"([ \t]*)</project>", content)
-            if project_close:
-                indent = project_close.group(1)
-                inner = "  " + indent
-                props_section = (
-                    f"{inner}<properties>\n"
-                    + "\n".join(f"  {line}" for line in new_lines)
-                    + f"\n{inner}</properties>\n"
-                )
-                content = (
-                    content[: project_close.start()]
-                    + props_section
-                    + indent
-                    + "</project>"
-                    + content[project_close.end() :]
-                )
+        # Add config values
+        config_dict = config.to_pyproject_dict()
+        for key, value in config_dict.items():
+            codeflash_table[key] = value
 
-        pom_path.write_text(content, encoding="utf-8")
-        return True, f"Config saved to {pom_path} <properties>"
+        # Update the document
+        doc["tool"]["codeflash"] = codeflash_table
+
+        # Write back
+        with codeflash_toml_path.open("w", encoding="utf8") as f:
+            f.write(tomlkit.dumps(doc))
+
+        return True, f"Config saved to {codeflash_toml_path}"
 
     except Exception as e:
-        return False, f"Failed to write Maven properties: {e}"
-
-
-def _write_gradle_properties(props_path: Path, config: dict[str, Any]) -> tuple[bool, str]:
-    """Add codeflash.* entries to gradle.properties."""
-    try:
-        lines = []
-        if props_path.exists():
-            lines = props_path.read_text(encoding="utf-8").splitlines()
-
-        # Remove existing codeflash.* lines
-        lines = [line for line in lines if not line.strip().startswith("codeflash.")]
-
-        # Add new config
-        if lines and lines[-1].strip():
-            lines.append("")
-        lines.append("# Codeflash configuration — https://docs.codeflash.ai")
-        for key, value in config.items():
-            gradle_key = f"codeflash.{_MAVEN_KEY_MAP.get(key, key)}"
-            if isinstance(value, list):
-                value = ",".join(str(v) for v in value)
-            elif isinstance(value, bool):
-                value = str(value).lower()
-            else:
-                value = str(value)
-            lines.append(f"{gradle_key}={value}")
-
-        props_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        return True, f"Config saved to {props_path}"
-
-    except Exception as e:
-        return False, f"Failed to write gradle.properties: {e}"
+        return False, f"Failed to write codeflash.toml: {e}"
 
 
 def _write_package_json(project_root: Path, config: CodeflashConfig) -> tuple[bool, str]:
@@ -307,7 +206,7 @@ def remove_config(project_root: Path, language: str) -> tuple[bool, str]:
     if language == "python":
         return _remove_from_pyproject(project_root)
     if language == "java":
-        return _remove_java_build_config(project_root)
+        return _remove_from_codeflash_toml(project_root)
     return _remove_from_package_json(project_root)
 
 
@@ -336,42 +235,29 @@ def _remove_from_pyproject(project_root: Path) -> tuple[bool, str]:
         return False, f"Failed to remove config: {e}"
 
 
-def _remove_java_build_config(project_root: Path) -> tuple[bool, str]:
-    """Remove codeflash.* properties from pom.xml or gradle.properties.
+def _remove_from_codeflash_toml(project_root: Path) -> tuple[bool, str]:
+    """Remove [tool.codeflash] section from codeflash.toml."""
+    codeflash_toml_path = project_root / "codeflash.toml"
 
-    Priority matches _write_java_build_config: pom.xml first, then gradle.properties.
-    """
-    # Try pom.xml first (matches write priority) — text-based removal preserves formatting
-    pom_path = project_root / "pom.xml"
-    if pom_path.exists():
-        try:
-            import re
+    if not codeflash_toml_path.exists():
+        return True, "No codeflash.toml found"
 
-            content = pom_path.read_text(encoding="utf-8")
-            updated = re.sub(r"\n[ \t]*<codeflash\.[^>]*>[^<]*</codeflash\.[^>]*>", "", content)
-            if updated != content:
-                pom_path.write_text(updated, encoding="utf-8")
-            return True, "Removed codeflash properties from pom.xml"
-        except Exception as e:
-            return False, f"Failed to remove config from pom.xml: {e}"
+    try:
+        with codeflash_toml_path.open("rb") as f:
+            doc = tomlkit.parse(f.read())
 
-    # Try gradle.properties
-    gradle_props = project_root / "gradle.properties"
-    if gradle_props.exists():
-        try:
-            lines = gradle_props.read_text(encoding="utf-8").splitlines()
-            filtered = [
-                line
-                for line in lines
-                if not line.strip().startswith("codeflash.")
-                and line.strip() != "# Codeflash configuration \u2014 https://docs.codeflash.ai"
-            ]
-            gradle_props.write_text("\n".join(filtered) + "\n", encoding="utf-8")
-            return True, "Removed codeflash properties from gradle.properties"
-        except Exception as e:
-            return False, f"Failed to remove config from gradle.properties: {e}"
+        if "tool" in doc and "codeflash" in doc["tool"]:
+            del doc["tool"]["codeflash"]
 
-    return True, "No Java build config found"
+            with codeflash_toml_path.open("w", encoding="utf8") as f:
+                f.write(tomlkit.dumps(doc))
+
+            return True, "Removed [tool.codeflash] section from codeflash.toml"
+
+        return True, "No codeflash config found in codeflash.toml"
+
+    except Exception as e:
+        return False, f"Failed to remove config: {e}"
 
 
 def _remove_from_package_json(project_root: Path) -> tuple[bool, str]:

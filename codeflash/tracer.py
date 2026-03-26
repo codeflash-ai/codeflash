@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 
 def _detect_non_python_language(args: Namespace | None) -> Language | None:
-    """Detect if the project uses a non-Python language from --file or build files.
+    """Detect if the project uses a non-Python language from --file or config.
 
     Returns a Language enum value if non-Python detected, None otherwise.
     """
@@ -66,23 +66,15 @@ def _detect_non_python_language(args: Namespace | None) -> Language | None:
         except Exception:
             pass
 
-    # Method 2: Detect Java from build files (pom.xml / build.gradle)
-    try:
-        from codeflash.languages.java.build_tools import BuildTool, detect_build_tool
-
-        cwd = Path.cwd()
-        if detect_build_tool(cwd) != BuildTool.UNKNOWN:
-            return Language.JAVA
-    except Exception:
-        pass
-
-    # Method 3: Check config file for language field (JS/TS via package.json)
+    # Method 2: Check project config for language field
     try:
         from codeflash.code_utils.config_parser import parse_config_file
 
         config_file = getattr(args, "config_file_path", None) if args else None
         config, _ = parse_config_file(config_file)
         lang_str = config.get("language", "")
+        if lang_str == "java":
+            return Language.JAVA
         if lang_str in ("javascript", "typescript"):
             return Language(lang_str)
     except Exception:

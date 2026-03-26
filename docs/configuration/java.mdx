@@ -1,112 +1,101 @@
 ---
 title: "Java Configuration"
-description: "Configure Codeflash for Java projects — zero config for standard layouts"
+description: "Configure Codeflash for Java projects using codeflash.toml"
 icon: "java"
-sidebarTitle: "Java (pom.xml / Gradle)"
+sidebarTitle: "Java (codeflash.toml)"
 keywords:
   [
     "configuration",
+    "codeflash.toml",
     "java",
     "maven",
     "gradle",
     "junit",
-    "pom.xml",
-    "gradle.properties",
-    "zero-config",
   ]
 ---
 
 # Java Configuration
 
-**Standard Maven/Gradle projects need zero configuration.** Codeflash auto-detects your project structure from `pom.xml` or `build.gradle` — no config file is required.
+Codeflash stores its configuration in `codeflash.toml` under the `[tool.codeflash]` section.
 
-For projects with non-standard layouts, you can add `codeflash.*` properties to your existing `pom.xml` or `gradle.properties`.
+## Full Reference
+
+```toml
+[tool.codeflash]
+# Required
+module-root = "src/main/java"
+tests-root = "src/test/java"
+language = "java"
+
+# Optional
+test-framework = "junit5"        # "junit5", "junit4", or "testng"
+disable-telemetry = false
+git-remote = "origin"
+ignore-paths = ["src/main/java/generated/"]
+```
+
+All file paths are relative to the directory containing `codeflash.toml`.
+
+<Info>
+Codeflash auto-detects most settings from your project structure. Running `codeflash init` will set up the correct config — manual configuration is usually not needed.
+</Info>
 
 ## Auto-Detection
 
-Codeflash inspects your build files and auto-detects:
+When you run `codeflash init`, Codeflash inspects your project and auto-detects:
 
 | Setting | Detection logic |
 |---------|----------------|
-| **Language** | Presence of `pom.xml` or `build.gradle` / `build.gradle.kts` |
-| **Source root** | `src/main/java` (standard), or `<sourceDirectory>` in `pom.xml`, or Gradle `sourceSets` |
-| **Test root** | `src/test/java` (standard), or `<testSourceDirectory>` in `pom.xml` |
-| **Test framework** | Checks build file dependencies for JUnit 5, JUnit 4, or TestNG |
-| **Java version** | `<maven.compiler.source>`, `<java.version>` in `pom.xml` |
+| `module-root` | Looks for `src/main/java` (Maven/Gradle standard layout) |
+| `tests-root` | Looks for `src/test/java`, `test/`, `tests/` |
+| `language` | Detected from build files (`pom.xml`, `build.gradle`) and `.java` files |
+| `test-framework` | Checks build file dependencies for JUnit 5, JUnit 4, or TestNG |
 
-### Multi-module Maven projects
+## Required Options
 
-For multi-module projects, Codeflash scans each module's `pom.xml` for `<sourceDirectory>` and `<testSourceDirectory>` declarations. It picks the module with the most Java source files as the main source root, and identifies test modules by name.
+- **`module-root`**: The source directory to optimize. Only code under this directory is discovered for optimization. For standard Maven/Gradle projects, this is `src/main/java`.
+- **`tests-root`**: The directory where your tests are located. Codeflash discovers existing tests and places generated replay tests here.
+- **`language`**: Must be set to `"java"` for Java projects.
 
-For example, with this layout:
+## Optional Options
+
+- **`test-framework`**: Test framework. Auto-detected from build dependencies. Supported values: `"junit5"` (default), `"junit4"`, `"testng"`.
+- **`disable-telemetry`**: Disable anonymized telemetry. Defaults to `false`.
+- **`git-remote`**: Git remote for pull requests. Defaults to `"origin"`.
+- **`ignore-paths`**: Paths within `module-root` to skip during optimization.
+
+## Multi-Module Projects
+
+For multi-module Maven/Gradle projects, place `codeflash.toml` at the project root and set `module-root` to the module you want to optimize:
 
 ```text
 my-project/
-|- client/              ← main library (most .java files)
-|  |- src/com/example/
-|  |- pom.xml           ← <sourceDirectory>${project.basedir}/src</sourceDirectory>
-|- test/                ← test module
-|  |- src/com/example/
-|  |- pom.xml           ← <testSourceDirectory>${project.basedir}/src</testSourceDirectory>
-|- benchmarks/          ← skipped (benchmark module)
-|- pom.xml              ← <modules>client, test, benchmarks</modules>
+|- client/
+|  |- src/main/java/com/example/client/
+|  |- src/test/java/com/example/client/
+|- server/
+|  |- src/main/java/com/example/server/
+|- pom.xml
+|- codeflash.toml
 ```
 
-Codeflash auto-detects `client/src` as the source root and `test/src` as the test root — no manual configuration needed.
-
-## Custom Configuration
-
-If auto-detection doesn't match your project layout, add `codeflash.*` properties to your build files.
-
-<Tabs>
-<Tab title="Maven (pom.xml)">
-
-Add properties to your `pom.xml` `<properties>` section:
-
-```xml
-<properties>
-    <!-- Only set values that differ from auto-detected defaults -->
-    <codeflash.moduleRoot>client/src</codeflash.moduleRoot>
-    <codeflash.testsRoot>test/src</codeflash.testsRoot>
-    <codeflash.disableTelemetry>true</codeflash.disableTelemetry>
-    <codeflash.gitRemote>upstream</codeflash.gitRemote>
-    <codeflash.ignorePaths>src/main/java/generated/,src/main/java/proto/</codeflash.ignorePaths>
-</properties>
+```toml
+[tool.codeflash]
+module-root = "client/src/main/java"
+tests-root = "client/src/test/java"
+language = "java"
 ```
 
-This follows the same pattern as SonarQube (`sonar.sources`), JaCoCo, and other Java tools — config lives in the build file, not a separate tool-specific file.
+For non-standard layouts (like the Aerospike client where source is under `client/src/`), adjust paths accordingly:
 
-</Tab>
-<Tab title="Gradle (gradle.properties)">
-
-Add properties to `gradle.properties`:
-
-```properties
-# Only set values that differ from auto-detected defaults
-codeflash.moduleRoot=lib/src/main/java
-codeflash.testsRoot=lib/src/test/java
-codeflash.disableTelemetry=true
-codeflash.gitRemote=upstream
-codeflash.ignorePaths=src/main/java/generated/
+```toml
+[tool.codeflash]
+module-root = "client/src"
+tests-root = "test/src"
+language = "java"
 ```
 
-</Tab>
-</Tabs>
-
-## Available Properties
-
-All properties are optional — only set values that differ from auto-detected defaults.
-
-| Property | Description | Default |
-|----------|------------|---------|
-| `codeflash.moduleRoot` | Source directory to optimize | Auto-detected from `<sourceDirectory>` or `src/main/java` |
-| `codeflash.testsRoot` | Test directory | Auto-detected from `<testSourceDirectory>` or `src/test/java` |
-| `codeflash.disableTelemetry` | Disable anonymized telemetry | `false` |
-| `codeflash.gitRemote` | Git remote for pull requests | `origin` |
-| `codeflash.ignorePaths` | Comma-separated paths to skip during optimization | Empty |
-| `codeflash.formatterCmds` | Comma-separated formatter commands (`$file` = file path) | Empty |
-
-## Tracer CLI Options
+## Tracer Options
 
 When using `codeflash optimize` to trace a Java program, these CLI options are available:
 
@@ -122,9 +111,9 @@ Example with timeout:
 codeflash optimize --timeout 30 java -jar target/my-app.jar --app-args
 ```
 
-## Examples
+## Example
 
-### Standard Maven project (zero config)
+### Standard Maven project
 
 ```text
 my-app/
@@ -135,14 +124,17 @@ my-app/
 |  |- test/java/com/example/
 |     |- AppTest.java
 |- pom.xml
+|- codeflash.toml
 ```
 
-Just run:
-```bash
-codeflash optimize java -jar target/my-app.jar
+```toml
+[tool.codeflash]
+module-root = "src/main/java"
+tests-root = "src/test/java"
+language = "java"
 ```
 
-### Standard Gradle project (zero config)
+### Gradle project
 
 ```text
 my-lib/
@@ -150,55 +142,12 @@ my-lib/
 |  |- main/java/com/example/
 |  |- test/java/com/example/
 |- build.gradle
+|- codeflash.toml
 ```
 
-Just run:
-```bash
-codeflash optimize java -cp build/classes/java/main com.example.Main
+```toml
+[tool.codeflash]
+module-root = "src/main/java"
+tests-root = "src/test/java"
+language = "java"
 ```
-
-### Non-standard layout (with config)
-
-```text
-aerospike-client-java/
-|- client/
-|  |- src/com/aerospike/client/     ← source here (not src/main/java)
-|  |- pom.xml
-|- test/
-|  |- src/com/aerospike/test/       ← tests here
-|  |- pom.xml
-|- pom.xml
-```
-
-If auto-detection doesn't pick up the right modules, add to the root `pom.xml`:
-
-```xml
-<properties>
-    <codeflash.moduleRoot>client/src</codeflash.moduleRoot>
-    <codeflash.testsRoot>test/src</codeflash.testsRoot>
-</properties>
-```
-
-<Info>
-In most cases, even non-standard multi-module layouts are auto-detected correctly from `<sourceDirectory>` and `<testSourceDirectory>` in each module's `pom.xml`. Only add manual config if auto-detection gets it wrong.
-</Info>
-
-## FAQ
-
-<AccordionGroup>
-  <Accordion title="Do I need to run codeflash init for Java projects?">
-    No. Codeflash auto-detects Java projects from `pom.xml` or `build.gradle`. No initialization step or config file is needed for standard layouts.
-  </Accordion>
-
-  <Accordion title="Where does codeflash store its config for Java?">
-    Codeflash reads config from your existing build files — `pom.xml` `<properties>` for Maven, `gradle.properties` for Gradle. No separate config file is created.
-  </Accordion>
-
-  <Accordion title="What if codeflash detects the wrong source/test directories?">
-    Add `<codeflash.moduleRoot>` and `<codeflash.testsRoot>` properties to your `pom.xml` or `gradle.properties`. These override auto-detection.
-  </Accordion>
-
-  <Accordion title="How does codeflash handle multi-module Maven projects?">
-    Codeflash scans each module's `pom.xml` for `<sourceDirectory>` and `<testSourceDirectory>`. It picks the module with the most Java files as the source root (skipping modules named `examples`, `benchmarks`, etc.) and identifies `test` modules for the test root.
-  </Accordion>
-</AccordionGroup>

@@ -190,12 +190,6 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     if args.benchmarks_root:
         args.benchmarks_root = Path(args.benchmarks_root).resolve()
     args.test_project_root = project_root_from_module_root(args.tests_root, pyproject_file_path)
-
-    if is_java_project and pyproject_file_path.is_dir():
-        # For Java projects, pyproject_file_path IS the project root directory (not a file).
-        # Override project_root which may have resolved to a sub-module.
-        args.project_root = pyproject_file_path.resolve()
-        args.test_project_root = pyproject_file_path.resolve()
     if is_LSP_enabled():
         args.all = None
         return args
@@ -213,6 +207,8 @@ def project_root_from_module_root(module_root: Path, pyproject_file_path: Path) 
         if (current / "pom.xml").exists():
             return current.resolve()
         if (current / "build.gradle").exists() or (current / "build.gradle.kts").exists():
+            return current.resolve()
+        if (current / "codeflash.toml").exists():
             return current.resolve()
         current = current.parent
 
