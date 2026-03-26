@@ -224,6 +224,58 @@ const arrow = () => 2;
         assert len(functions) == 1
         assert functions[0].name == "regular"
 
+    def test_skip_object_literal_methods(self, js_analyzer):
+        """Test that shorthand methods inside object literals are skipped."""
+        code = """
+function getStrategies() {
+    return {
+        encrypt(data) {
+            return data;
+        },
+        decrypt(data) {
+            return data;
+        }
+    };
+}
+"""
+        functions = js_analyzer.find_functions(code, include_methods=True)
+        names = [f.name for f in functions]
+        assert "getStrategies" in names
+        assert "encrypt" not in names
+        assert "decrypt" not in names
+
+    def test_skip_module_exports_methods(self, js_analyzer):
+        """Test that methods in module.exports object are skipped."""
+        code = """
+module.exports = {
+    handler(req) {
+        return req;
+    }
+};
+"""
+        functions = js_analyzer.find_functions(code, include_methods=True)
+        assert len(functions) == 0
+
+    def test_class_methods_not_skipped(self, js_analyzer):
+        """Test that class methods are NOT skipped (only object literal methods are)."""
+        code = """
+class Encryptor {
+    encrypt(data) {
+        return data;
+    }
+}
+
+const strategies = {
+    decrypt(data) {
+        return data;
+    }
+};
+"""
+        functions = js_analyzer.find_functions(code, include_methods=True)
+        names = [f.name for f in functions]
+        assert "encrypt" in names
+        assert "decrypt" not in names
+
     def test_find_generator_function(self, js_analyzer):
         """Test finding generator functions."""
         code = """
