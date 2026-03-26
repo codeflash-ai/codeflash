@@ -162,6 +162,38 @@ def resolve_js_test_module_path(test_module_path: str, tests_project_rootdir: Pa
     return tests_project_rootdir / Path(test_module_path)
 
 
+# Pattern to match import statements inside function bodies (indented).
+# These are invalid JS syntax and must be converted to require() calls.
+# Matches: import X from 'Y', import { X } from 'Y', import * as X from 'Y'
+_INDENTED_DEFAULT_IMPORT_RE = re.compile(r"^([ \t]+)import\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"];?\s*$", re.MULTILINE)
+_INDENTED_NAMED_IMPORT_RE = re.compile(
+    r"^([ \t]+)import\s+\{([^}]+)\}\s+from\s+['\"]([^'\"]+)['\"];?\s*$", re.MULTILINE
+)
+_INDENTED_NAMESPACE_IMPORT_RE = re.compile(
+    r"^([ \t]+)import\s+\*\s+as\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"];?\s*$", re.MULTILINE
+)
+
+
+def fix_imports_inside_blocks(source: str) -> str:
+    """Convert import statements inside function bodies to require() calls.
+
+    AI-generated tests sometimes place `import X from 'Y'` inside jest.mock()
+    callbacks, describe() blocks, or other function bodies. This is invalid
+    JavaScript syntax (imports must be at the top level). This function converts
+    them to equivalent `const X = require('Y')` calls which ARE valid inside
+    function bodies.
+
+    Only converts indented imports (those starting with whitespace), preserving
+    top-level imports which are valid ESM syntax.
+    """
+    # Convert: import X from 'Y' -> const X = require('Y')
+    source = _INDENTED_DEFAULT_IMPORT_RE.sub(r"\1const \2 = require('\3');", source)
+    # Convert: import { X, Y } from 'Z' -> const { X, Y } = require('Z')
+    source = _INDENTED_NAMED_IMPORT_RE.sub(r"\1const {\2} = require('\3');", source)
+    # Convert: import * as X from 'Y' -> const X = require('Y')
+    return _INDENTED_NAMESPACE_IMPORT_RE.sub(r"\1const \2 = require('\3');", source)
+
+
 # Patterns for normalizing codeflash imports (legacy -> npm package)
 # Author: Sarthak Agarwal <sarthak.saga@gmail.com>
 _CODEFLASH_REQUIRE_PATTERN = re.compile(

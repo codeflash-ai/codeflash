@@ -1780,6 +1780,7 @@ class JavaScriptSupport:
         """Apply language-specific postprocessing to generated tests."""
         from codeflash.languages.javascript.edit_tests import (
             disable_ts_check,
+            fix_imports_inside_blocks,
             inject_test_globals,
             normalize_generated_tests_imports,
             sanitize_mocha_imports,
@@ -1810,6 +1811,14 @@ class JavaScriptSupport:
             generated_tests = inject_test_globals(generated_tests, test_framework, module_system)
         if self.language == Language.TYPESCRIPT:
             generated_tests = disable_ts_check(generated_tests)
+
+        # Fix import statements inside function bodies (jest.mock callbacks, describe blocks, etc.)
+        # AI sometimes generates `import X from 'Y'` inside blocks, which is invalid JS syntax.
+        for test in generated_tests.generated_tests:
+            test.generated_original_test_source = fix_imports_inside_blocks(test.generated_original_test_source)
+            test.instrumented_behavior_test_source = fix_imports_inside_blocks(test.instrumented_behavior_test_source)
+            test.instrumented_perf_test_source = fix_imports_inside_blocks(test.instrumented_perf_test_source)
+
         return normalize_generated_tests_imports(generated_tests)
 
     def remove_test_functions_from_generated_tests(

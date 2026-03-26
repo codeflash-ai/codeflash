@@ -1761,3 +1761,111 @@ function identity<T>(arg: T): T {
 
         assert js_support.language == Language.JAVASCRIPT
         assert str(js_support.language) == "javascript"
+
+
+class TestFixImportsInsideBlocks:
+    """Tests for fix_imports_inside_blocks which converts illegal import statements
+    inside function bodies to valid require() calls."""
+
+    def test_import_inside_jest_mock_default(self):
+        from codeflash.languages.javascript.edit_tests import fix_imports_inside_blocks
+
+        source = """\
+jest.mock('lodash/fp', () => {
+  import _ from 'lodash';
+  return { snakeCase: _.snakeCase };
+});"""
+        expected = """\
+jest.mock('lodash/fp', () => {
+  const _ = require('lodash');
+  return { snakeCase: _.snakeCase };
+});"""
+        assert fix_imports_inside_blocks(source) == expected
+
+    def test_import_inside_jest_mock_named(self):
+        from codeflash.languages.javascript.edit_tests import fix_imports_inside_blocks
+
+        source = """\
+jest.mock('../types', () => {
+  import { getTypeValidator, yup } from 'yup';
+  return { getTypeValidator };
+});"""
+        expected = """\
+jest.mock('../types', () => {
+  const { getTypeValidator, yup } = require('yup');
+  return { getTypeValidator };
+});"""
+        assert fix_imports_inside_blocks(source) == expected
+
+    def test_import_inside_describe_block(self):
+        from codeflash.languages.javascript.edit_tests import fix_imports_inside_blocks
+
+        source = """\
+import codeflash from 'codeflash';
+describe('myFunc', () => {
+  import { contentTypes } from '@strapi/utils';
+  beforeEach(() => {});
+});"""
+        expected = """\
+import codeflash from 'codeflash';
+describe('myFunc', () => {
+  const { contentTypes } = require('@strapi/utils');
+  beforeEach(() => {});
+});"""
+        assert fix_imports_inside_blocks(source) == expected
+
+    def test_namespace_import_inside_block(self):
+        from codeflash.languages.javascript.edit_tests import fix_imports_inside_blocks
+
+        source = """\
+jest.mock('./utils', () => {
+  import * as utils from '../real-utils';
+  return utils;
+});"""
+        expected = """\
+jest.mock('./utils', () => {
+  const utils = require('../real-utils');
+  return utils;
+});"""
+        assert fix_imports_inside_blocks(source) == expected
+
+    def test_top_level_imports_preserved(self):
+        from codeflash.languages.javascript.edit_tests import fix_imports_inside_blocks
+
+        source = """\
+import { moveElement } from '../utils/moveElement';
+import codeflash from 'codeflash';
+
+describe('moveElement', () => {
+  test('basic', () => {
+    expect(moveElement([1,2,3], 0, 1)).toEqual([2,1,3]);
+  });
+});"""
+        assert fix_imports_inside_blocks(source) == source
+
+    def test_mixed_top_level_and_indented(self):
+        from codeflash.languages.javascript.edit_tests import fix_imports_inside_blocks
+
+        source = """\
+import { fn } from './module';
+
+jest.mock('dep', () => {
+  import helper from 'helper-lib';
+  return { helper };
+});
+
+describe('fn', () => {
+  test('works', () => {});
+});"""
+        expected = """\
+import { fn } from './module';
+
+jest.mock('dep', () => {
+  const helper = require('helper-lib');
+  return { helper };
+});
+
+describe('fn', () => {
+  test('works', () => {});
+});"""
+        assert fix_imports_inside_blocks(source) == expected
