@@ -19,6 +19,10 @@ from typing import Any
 from codeflash.languages.java.build_tool_strategy import BuildToolStrategy, module_to_dir
 from codeflash.languages.java.build_tools import BuildTool, JavaProjectInfo
 
+_RE_INCLUDE = re.compile(r"""include\s*\(?([^)\n]+)\)?""")
+
+_RE_QUOTED = re.compile(r"""['"]([^'"]+)['"]""")
+
 _BUILD = "build"
 
 logger = logging.getLogger(__name__)
@@ -322,9 +326,9 @@ def _normalize_gradle_xml_reports(reports_dir: Path) -> None:
 def _extract_gradle_include_modules(content: str) -> list[str]:
     """Extract module names from include() directives in settings.gradle."""
     modules: list[str] = []
-    for match in re.finditer(r"""include\s*\(?([^)\n]+)\)?""", content):
+    for match in _RE_INCLUDE.finditer(content):
         args = match.group(1)
-        for quoted in re.findall(r"""['"]([^'"]+)['"]""", args):
+        for quoted in _RE_QUOTED.findall(args):
             module = quoted.lstrip(":")
             if module:
                 modules.append(module)
