@@ -67,40 +67,13 @@ npm install --save-dev codeflash
 
 Run this in the directory containing your `package.json`.
 
-## Hook not triggering after commits
-
-**Symptom**: You commit Python/JS/TS files but don't see optimization suggestions.
-
-**Check**:
-1. Verify the hook is registered: look for `hooks/hooks.json` in the plugin directory
-2. Check the debug log: `cat /tmp/codeflash-hook-debug.log`
-3. Ensure commits touch `.py`, `.js`, `.ts`, `.jsx`, or `.tsx` files
-4. The hook only detects commits made **during the current session** (after the transcript file was created). Commits from before starting Claude Code won't trigger it.
-
-## Hook triggering repeatedly
-
-**Symptom**: The hook keeps suggesting optimization for the same commits.
-
-This shouldn't happen due to deduplication (the hook tracks seen commit hashes in `$TRANSCRIPT_DIR/codeflash-seen`). If it does:
-
-1. Check the seen-marker file exists in the transcript directory
-2. Look at `/tmp/codeflash-hook-debug.log` for the dedup logic trace
-3. If commit hashes changed (e.g., amended commits), the hook treats them as new
-
-## "Attempting to repair broken tests..."
-
-<Info>
-This is **normal codeflash behavior**, not an error. Codeflash generates tests and sometimes needs to fix them. Let it continue.
-</Info>
-
 ## 10-minute timeout exceeded
 
 **Symptom**: Codeflash background task times out.
 
-This can happen on large projects or with `--all`. Options:
+This can happen on large projects. Options:
 - Optimize specific files instead of the entire project: `/optimize src/specific_file.py`
 - Target individual functions: `/optimize src/utils.py my_function`
-- The `--all` flag scans every function, which naturally takes longer
 
 ## Formatter errors
 
