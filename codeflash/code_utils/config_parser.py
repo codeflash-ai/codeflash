@@ -199,15 +199,16 @@ def _check_dir_for_configs(dir_path: Path, configs: list[LanguageConfig], seen_l
             except Exception:
                 pass
 
-    if Language.JAVASCRIPT not in seen_languages:
+    if Language.JAVASCRIPT not in seen_languages and Language.TYPESCRIPT not in seen_languages:
         package_json = dir_path / "package.json"
         if package_json.exists():
             try:
                 result = parse_package_json_config(package_json)
                 if result is not None:
                     config, path = result
-                    seen_languages.add(Language.JAVASCRIPT)
-                    configs.append(LanguageConfig(config=config, config_path=path, language=Language.JAVASCRIPT))
+                    lang = Language(config.get("language", "javascript"))
+                    seen_languages.add(lang)
+                    configs.append(LanguageConfig(config=config, config_path=path, language=lang))
             except Exception:
                 pass
 
