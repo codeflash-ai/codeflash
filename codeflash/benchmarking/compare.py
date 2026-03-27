@@ -10,6 +10,7 @@ Compares benchmark performance between two git refs by:
 
 from __future__ import annotations
 
+import ast
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -151,8 +152,6 @@ def _discover_changed_functions(base_ref: str, head_ref: str, repo_root: Path) -
 
     from unidiff import PatchSet
 
-    from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
-
     repo = git.Repo(repo_root, search_parent_directories=True)
 
     # Get the diff with line-level detail
@@ -183,34 +182,56 @@ def _discover_changed_functions(base_ref: str, head_ref: str, repo_root: Path) -
         if line_nos:
             changed_lines_by_file[abs_path] = line_nos
 
-    # Discover all functions in changed files, then filter to those overlapping changed lines
+    # Discover top-level functions in changed files using ast (lightweight, no libcst overhead)
     result: dict[Path, list] = {}
     for abs_path, changed_lines in changed_lines_by_file.items():
         if not abs_path.exists():
             logger.debug(f"Skipping {abs_path} (does not exist)")
             continue
 
-        discovered = find_all_functions_in_file(abs_path)
-        for fp, all_fns in discovered.items():
-            modified_fns = []
-            for fn in all_fns:
-                # Skip methods inside classes — they can be called thousands of times
-                # (e.g., CST visitor methods) and tracing overhead is catastrophic.
-                # We only instrument top-level functions and static/class-level functions.
-                if fn.parents:
-                    continue
-                if fn.starting_line is None or fn.ending_line is None:
-                    # Can't determine range — include it to be safe
-                    modified_fns.append(fn)
-                    continue
-                fn_lines = set(range(fn.starting_line, fn.ending_line + 1))
-                if fn_lines & changed_lines:
-                    modified_fns.append(fn)
-
-            if modified_fns:
-                result[fp] = modified_fns
+        modified_fns = _find_changed_toplevel_functions(abs_path, changed_lines)
+        if modified_fns:
+            result[abs_path] = modified_fns
 
     return result
+
+
+def _find_changed_toplevel_functions(file_path: Path, changed_lines: set[int]) -> list:
+    """Find top-level functions overlapping changed lines using stdlib ast.
+
+    Only discovers module-level functions (not methods inside classes, not nested
+    functions). This is intentional: class methods can be called thousands of times
+    in benchmarks (e.g. CST visitor methods), and @codeflash_trace pickles self on
+    every call -- catastrophic overhead when self holds a full CST tree.
+    """
+    from codeflash.models.function_types import FunctionToOptimize
+
+    try:
+        source = file_path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(file_path))
+    except (SyntaxError, UnicodeDecodeError):
+        logger.debug(f"Skipping {file_path} (parse error)")
+        return []
+
+    functions: list[FunctionToOptimize] = []
+    for node in ast.iter_child_nodes(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        fn_lines = range(node.lineno, node.end_lineno + 1)
+        if not changed_lines.isdisjoint(fn_lines):
+            functions.append(
+                FunctionToOptimize(
+                    function_name=node.name,
+                    file_path=file_path,
+                    parents=[],
+                    starting_line=node.lineno,
+                    ending_line=node.end_lineno,
+                    is_async=isinstance(node, ast.AsyncFunctionDef),
+                    is_method=False,
+                )
+            )
+
+    return functions
 
 
 def _run_benchmark_on_worktree(
@@ -225,6 +246,8 @@ def _run_benchmark_on_worktree(
     trace_fn,
 ) -> None:
     """Instrument, benchmark, and restore source in a worktree."""
+    from codeflash.models.function_types import FunctionToOptimize
+
     # Remap function paths from repo_root to worktree_dir
     worktree_functions: dict[Path, list] = {}
     for file_path, fns in functions.items():
@@ -233,9 +256,6 @@ def _run_benchmark_on_worktree(
         if not wt_path.exists():
             logger.debug(f"Skipping {rel} (not present in this ref)")
             continue
-
-        # Rebuild FunctionToOptimize with worktree paths
-        from codeflash.models.function_types import FunctionToOptimize
 
         remapped_fns = []
         for fn in fns:
