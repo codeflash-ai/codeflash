@@ -386,9 +386,7 @@ def _build_parser() -> ArgumentParser:
     compare_parser.add_argument("head_ref", nargs="?", default=None, help="Head git ref (default: current branch)")
     compare_parser.add_argument("--pr", type=int, help="Resolve head ref from a PR number (requires gh CLI)")
     compare_parser.add_argument(
-        "--functions",
-        type=str,
-        help="Explicit functions to instrument: 'file.py::func1,func2;other.py::func3'",
+        "--functions", type=str, help="Explicit functions to instrument: 'file.py::func1,func2;other.py::func3'"
     )
     compare_parser.add_argument("--svg", type=str, help="Export comparison as SVG to this path")
     compare_parser.add_argument("--timeout", type=int, default=600, help="Benchmark timeout in seconds (default: 600)")
