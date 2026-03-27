@@ -432,9 +432,7 @@ def _has_aliased_future_imports(module: cst.Module) -> bool:
             for s in stmt.body:
                 if (
                     isinstance(s, cst.ImportFrom)
-                    and s.module is not None
-                    and isinstance(s.module, (cst.Attribute, cst.Name))
-                    and hasattr(s.module, "value")
+                    and isinstance(s.module, cst.Name)
                     and s.module.value == "__future__"
                     and isinstance(s.names, (list, tuple))
                     and any(name.asname is not None for name in s.names)
