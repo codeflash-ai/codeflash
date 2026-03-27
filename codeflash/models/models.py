@@ -259,7 +259,7 @@ class CodeString(BaseModel):
             from codeflash.languages.registry import get_language_support
 
             lang_support = get_language_support(self.language)
-            if not lang_support.validate_syntax(self.code):
+            if not lang_support.validate_syntax(self.code, file_path=self.file_path):
                 msg = f"Invalid {self.language.title()} code"
                 raise ValueError(msg)
         return self
@@ -542,15 +542,16 @@ class CandidateEvaluationContext:
         self.optimized_line_profiler_results[optimization_id] = result
 
     def handle_duplicate_candidate(
-        self, candidate: OptimizedCandidate, normalized_code: str, code_context: CodeOptimizationContext
+        self, candidate: OptimizedCandidate, normalized_code: str, original_flat_code: str
     ) -> None:
         """Handle a candidate that has been seen before."""
         past_opt_id = self.ast_code_to_id[normalized_code]["optimization_id"]
 
-        # Copy results from the previous evaluation
-        self.speedup_ratios[candidate.optimization_id] = self.speedup_ratios[past_opt_id]
-        self.is_correct[candidate.optimization_id] = self.is_correct[past_opt_id]
-        self.optimized_runtimes[candidate.optimization_id] = self.optimized_runtimes[past_opt_id]
+        # Copy results from the previous evaluation (use .get() in case past_opt_id was registered
+        # but never benchmarked due to an unhandled exception in process_single_candidate)
+        self.speedup_ratios[candidate.optimization_id] = self.speedup_ratios.get(past_opt_id)
+        self.is_correct[candidate.optimization_id] = self.is_correct.get(past_opt_id)
+        self.optimized_runtimes[candidate.optimization_id] = self.optimized_runtimes.get(past_opt_id)
 
         # Line profiler results only available for successful runs
         if past_opt_id in self.optimized_line_profiler_results:
@@ -564,19 +565,19 @@ class CandidateEvaluationContext:
         self.optimizations_post[past_opt_id] = self.ast_code_to_id[normalized_code]["shorter_source_code"].markdown
 
         # Update to shorter code if this candidate has a shorter diff
-        new_diff_len = diff_length(candidate.source_code.flat, code_context.read_writable_code.flat)
+        new_diff_len = diff_length(candidate.source_code.flat, original_flat_code)
         if new_diff_len < self.ast_code_to_id[normalized_code]["diff_len"]:
             self.ast_code_to_id[normalized_code]["shorter_source_code"] = candidate.source_code
             self.ast_code_to_id[normalized_code]["diff_len"] = new_diff_len
 
     def register_new_candidate(
-        self, normalized_code: str, candidate: OptimizedCandidate, code_context: CodeOptimizationContext
+        self, normalized_code: str, candidate: OptimizedCandidate, original_flat_code: str
     ) -> None:
         """Register a new candidate that hasn't been seen before."""
         self.ast_code_to_id[normalized_code] = {
             "optimization_id": candidate.optimization_id,
             "shorter_source_code": candidate.source_code,
-            "diff_len": diff_length(candidate.source_code.flat, code_context.read_writable_code.flat),
+            "diff_len": diff_length(candidate.source_code.flat, original_flat_code),
         }
 
     def get_speedup_ratio(self, optimization_id: str) -> float | None:
@@ -741,7 +742,7 @@ class VerificationType(str, Enum):
     INIT_STATE_HELPER = "init_state_helper"  # Correctness verification for helper class instance attributes after init
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class InvocationId:
     test_module_path: str  # The fully qualified name of the test module
     test_class_name: Optional[str]  # The name of the class where the test is defined
@@ -821,7 +822,7 @@ class InvocationId:
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FunctionTestInvocation:
     loop_index: int  # The loop index of the function invocation, starts at 1
     id: InvocationId  # The fully qualified name of the function invocation (id)

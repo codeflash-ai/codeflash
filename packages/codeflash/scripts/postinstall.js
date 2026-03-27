@@ -6,16 +6,27 @@
  * This script runs after `npm install codeflash` and:
  * 1. Checks if uv (Python package manager) is installed
  * 2. If not, installs uv automatically
- * 3. Uses uv to install the Python codeflash CLI
+ * 3. Creates a dedicated venv and installs the Python codeflash CLI into it
  *
- * This approach follows the same pattern as aider and mistral-code,
- * which use uv for Python distribution.
+ * The codeflash Python CLI is installed into an isolated venv at:
+ * - Linux:   ~/.cache/codeflash/venv/
+ * - macOS:   ~/Library/Caches/codeflash/venv/
+ * - Windows: %LOCALAPPDATA%\codeflash\venv\
  */
 
 const { execSync, spawnSync } = require('child_process');
 const os = require('os');
-const path = require('path');
 const fs = require('fs');
+const { getCacheDir, getVenvDir, getCodeflashBin, getUvPath } = require('./paths');
+
+// Clean environment without VIRTUAL_ENV so uv doesn't target an activated venv
+const cleanEnv = (() => {
+  const env = { ...process.env };
+  delete env.VIRTUAL_ENV;
+  delete env.CONDA_PREFIX;
+  delete env.CONDA_DEFAULT_ENV;
+  return env;
+})();
 
 // ANSI color codes for pretty output
 const colors = {
@@ -36,15 +47,15 @@ function logStep(step, message) {
 }
 
 function logSuccess(message) {
-  console.log(`${colors.green}✓${colors.reset} ${message}`);
+  console.log(`${colors.green}\u2713${colors.reset} ${message}`);
 }
 
 function logWarning(message) {
-  console.log(`${colors.yellow}⚠${colors.reset} ${message}`);
+  console.log(`${colors.yellow}\u26A0${colors.reset} ${message}`);
 }
 
 function logError(message) {
-  console.error(`${colors.red}✗${colors.reset} ${message}`);
+  console.error(`${colors.red}\u2717${colors.reset} ${message}`);
 }
 
 /**
@@ -63,20 +74,6 @@ function commandExists(command) {
 }
 
 /**
- * Get the uv binary path
- * uv installs to ~/.local/bin on Unix or %USERPROFILE%\.local\bin on Windows
- */
-function getUvPath() {
-  const platform = os.platform();
-  const homeDir = os.homedir();
-
-  if (platform === 'win32') {
-    return path.join(homeDir, '.local', 'bin', 'uv.exe');
-  }
-  return path.join(homeDir, '.local', 'bin', 'uv');
-}
-
-/**
  * Install uv using the official installer
  */
 function installUv() {
@@ -86,13 +83,11 @@ function installUv() {
 
   try {
     if (platform === 'win32') {
-      // Windows: Use PowerShell
       execSync(
         'powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"',
         { stdio: 'inherit', shell: true }
       );
     } else {
-      // macOS/Linux: Use curl
       execSync(
         'curl -LsSf https://astral.sh/uv/install.sh | sh',
         { stdio: 'inherit', shell: true }
@@ -122,26 +117,43 @@ function hasGit() {
 }
 
 /**
- * Install codeflash Python CLI using uv tool
+ * Create the codeflash venv and install the Python CLI into it.
  *
  * Installation priority:
  * 1. GitHub main branch (if git available) - gets latest features
  * 2. PyPI (fallback) - stable release
- *
- * We prefer GitHub because it has the latest JS/TS support that may not
- * be published to PyPI yet. uv handles cloning internally in its cache.
  */
 function installCodeflash(uvBin) {
   logStep('2/3', 'Installing codeflash Python CLI...');
+
+  const venvDir = getVenvDir();
+  const cacheDir = getCacheDir();
+
+  // Ensure cache directory exists
+  fs.mkdirSync(cacheDir, { recursive: true });
+
+  // Create the venv (or reuse existing)
+  try {
+    execSync(`"${uvBin}" venv --python python3.12 --clear "${venvDir}"`, {
+      stdio: 'inherit',
+      shell: true,
+      env: cleanEnv,
+    });
+    logSuccess(`venv created at ${venvDir}`);
+  } catch (error) {
+    logError(`Failed to create venv: ${error.message}`);
+    return false;
+  }
 
   const GITHUB_REPO = 'git+https://github.com/codeflash-ai/codeflash.git';
 
   // Priority 1: Install from GitHub (latest features, requires git)
   if (hasGit()) {
     try {
-      execSync(`"${uvBin}" tool install --force --python python3.12 "${GITHUB_REPO}"`, {
+      execSync(`"${uvBin}" pip install --python "${venvDir}" "${GITHUB_REPO}"`, {
         stdio: 'inherit',
         shell: true,
+        env: cleanEnv,
       });
       logSuccess('codeflash CLI installed from GitHub (latest)');
       return true;
@@ -155,9 +167,10 @@ function installCodeflash(uvBin) {
 
   // Priority 2: Install from PyPI (stable release fallback)
   try {
-    execSync(`"${uvBin}" tool install --force --python python3.12 codeflash`, {
+    execSync(`"${uvBin}" pip install --python "${venvDir}" codeflash`, {
       stdio: 'inherit',
       shell: true,
+      env: cleanEnv,
     });
     logSuccess('codeflash CLI installed from PyPI');
     return true;
@@ -168,33 +181,18 @@ function installCodeflash(uvBin) {
 }
 
 /**
- * Update shell configuration to include uv tools in PATH
- */
-function updateShellPath(uvBin) {
-  logStep('3/3', 'Updating shell configuration...');
-
-  try {
-    execSync(`"${uvBin}" tool update-shell`, {
-      stdio: 'inherit',
-      shell: true,
-    });
-    logSuccess('Shell configuration updated');
-    return true;
-  } catch (error) {
-    logWarning(`Could not update shell: ${error.message}`);
-    logWarning('You may need to add ~/.local/bin to your PATH manually');
-    return true; // Non-fatal
-  }
-}
-
-/**
  * Verify the installation works
  */
-function verifyInstallation(uvBin) {
+function verifyInstallation() {
+  const codeflashBin = getCodeflashBin();
   try {
-    const result = spawnSync(uvBin, ['tool', 'run', 'codeflash', '--version'], {
+    if (!fs.existsSync(codeflashBin)) {
+      return false;
+    }
+    const result = spawnSync(codeflashBin, ['--version'], {
       encoding: 'utf8',
       shell: true,
+      env: cleanEnv,
     });
 
     if (result.status === 0) {
@@ -213,9 +211,9 @@ function verifyInstallation(uvBin) {
  */
 async function main() {
   console.log('');
-  log('╔════════════════════════════════════════════╗', 'cyan');
-  log('║     Codeflash CLI Installation             ║', 'cyan');
-  log('╚════════════════════════════════════════════╝', 'cyan');
+  log('\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557', 'cyan');
+  log('\u2551     Codeflash CLI Installation             \u2551', 'cyan');
+  log('\u255A\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255D', 'cyan');
   console.log('');
 
   // Check if running in CI or with --ignore-scripts
@@ -230,7 +228,7 @@ async function main() {
   // Step 1: Check/install uv
   if (commandExists('uv')) {
     logSuccess('uv is already installed');
-    uvBin = 'uv'; // Use the one in PATH
+    uvBin = 'uv';
   } else if (fs.existsSync(uvBin)) {
     logSuccess('uv found at ' + uvBin);
   } else {
@@ -240,7 +238,6 @@ async function main() {
       process.exit(1);
     }
 
-    // Check if uv is now available
     if (!fs.existsSync(uvBin) && !commandExists('uv')) {
       logError('uv installation completed but binary not found');
       logError('Please restart your terminal and run: npx codeflash-setup');
@@ -253,25 +250,23 @@ async function main() {
     uvBin = 'uv';
   }
 
-  // Step 2: Install codeflash Python CLI
+  // Step 2: Install codeflash Python CLI into dedicated venv
   if (!installCodeflash(uvBin)) {
     logError('Failed to install codeflash CLI');
-    logError('You can try manually: uv tool install codeflash');
+    logError('You can try manually: uv pip install codeflash');
     process.exit(1);
   }
 
-  // Step 3: Update shell PATH
-  updateShellPath(uvBin);
-
   // Verify installation
   console.log('');
-  verifyInstallation(uvBin);
+  logStep('3/3', 'Verifying installation...');
+  verifyInstallation();
 
   // Print success message
   console.log('');
-  log('════════════════════════════════════════════', 'green');
+  log('\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550', 'green');
   logSuccess('Codeflash installation complete!');
-  log('════════════════════════════════════════════', 'green');
+  log('\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550', 'green');
   console.log('');
   log('Get started:', 'cyan');
   console.log('  npx codeflash --help');

@@ -1390,7 +1390,7 @@ def instrument_generated_java_test(
 
     # Extract class name from the test code
     # Use pattern that starts at beginning of line to avoid matching words in comments
-    class_match = re.search(r"^(?:public\s+)?class\s+(\w+)", test_code, re.MULTILINE)
+    class_match = re.search(r"^\s*(?:(?:public|static|final|abstract)\s+)*class\s+(\w+)", test_code, re.MULTILINE)
     if not class_match:
         logger.warning("Could not find class name in generated test")
         return test_code

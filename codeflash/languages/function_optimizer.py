@@ -257,6 +257,9 @@ class CandidateProcessor:
         future_all_refinements: list[concurrent.futures.Future],
         future_all_code_repair: list[concurrent.futures.Future],
         future_adaptive_optimizations: list[concurrent.futures.Future],
+        normalize_fn: Callable[[str], str],
+        normalized_original: str,
+        original_flat_code: str,
     ) -> None:
         self.candidate_queue = queue.Queue()
         self.forest = CandidateForest()
@@ -264,12 +267,17 @@ class CandidateProcessor:
         self.refinement_done = False
         self.eval_ctx = eval_ctx
         self.effort = effort
-        self.candidate_len = len(initial_candidates)
         self.refinement_calls_count = 0
         self.original_markdown_code = original_markdown_code
+        self.normalize_fn = normalize_fn
+        self.normalized_original = normalized_original
+        self.original_flat_code = original_flat_code
+        self.seen_normalized: set[str] = set()
+        self.normalized_cache: dict[str, str] = {}  # optimization_id -> normalized_code
 
-        # Initialize queue with initial candidates
-        for candidate in initial_candidates:
+        deduped = self.dedup_candidates(initial_candidates)
+        self.candidate_len = len(deduped)
+        for candidate in deduped:
             self.forest.add(candidate)
             self.candidate_queue.put(candidate)
 
@@ -277,6 +285,45 @@ class CandidateProcessor:
         self.future_all_refinements = future_all_refinements
         self.future_all_code_repair = future_all_code_repair
         self.future_adaptive_optimizations = future_adaptive_optimizations
+
+    def dedup_candidates(self, candidates: list[OptimizedCandidate]) -> list[OptimizedCandidate]:
+        unique: list[OptimizedCandidate] = []
+        removed_original = 0
+        removed_cross_batch = 0
+        removed_duplicate = 0
+
+        for candidate in candidates:
+            normalized = self.normalize_fn(candidate.source_code.flat.strip())
+
+            if normalized == self.normalized_original:
+                removed_original += 1
+                continue
+
+            if normalized in self.eval_ctx.ast_code_to_id:
+                self.eval_ctx.handle_duplicate_candidate(candidate, normalized, self.original_flat_code)
+                removed_cross_batch += 1
+                continue
+
+            if normalized in self.seen_normalized:
+                # Intra-batch duplicate: no results exist yet to copy, so just drop it.
+                # Its optimization_id will be absent from eval_ctx results — this is intentional.
+                removed_duplicate += 1
+                continue
+
+            self.seen_normalized.add(normalized)
+            self.normalized_cache[candidate.optimization_id] = normalized
+            unique.append(candidate)
+
+        total_removed = removed_original + removed_cross_batch + removed_duplicate
+        if total_removed > 0:
+            logger.info(
+                f"Early dedup removed {total_removed} candidate(s) "
+                f"({removed_original} identical to original, "
+                f"{removed_cross_batch} already-benchmarked duplicates, "
+                f"{removed_duplicate} duplicates)"
+            )
+
+        return unique
 
     def get_total_llm_calls(self) -> int:
         return self.refinement_calls_count
@@ -347,6 +394,7 @@ class CandidateProcessor:
                     candidates.append(candidate_result)
 
             candidates = filter_candidates_func(candidates) if filter_candidates_func else candidates
+            candidates = self.dedup_candidates(candidates)
             for candidate in candidates:
                 self.forest.add(candidate)
                 self.candidate_queue.put(candidate)
@@ -1084,6 +1132,7 @@ class FunctionOptimizer:
         exp_type: str,
         function_references: str,
         normalized_original: str,
+        cached_normalized_code: str | None = None,
     ) -> BestOptimization | None:
         """Process a single optimization candidate.
 
@@ -1096,8 +1145,13 @@ class FunctionOptimizer:
 
         candidate = candidate_node.candidate
 
-        normalized_code = self.language_support.normalize_code(candidate.source_code.flat.strip())
+        normalized_code = cached_normalized_code or self.language_support.normalize_code(
+            candidate.source_code.flat.strip()
+        )
 
+        # Defensive fallbacks: dedup_candidates filters these before the benchmark loop,
+        # so these checks should not fire in normal operation. They remain as safety nets
+        # for any future code path that bypasses dedup_candidates.
         if normalized_code == normalized_original:
             logger.info(f"h3|Candidate {candidate_index}/{total_candidates}: Identical to original code, skipping.")
             console.rule()
@@ -1107,7 +1161,7 @@ class FunctionOptimizer:
             logger.info(
                 f"h3|Candidate {candidate_index}/{total_candidates}: Duplicate of a previous candidate, skipping."
             )
-            eval_ctx.handle_duplicate_candidate(candidate, normalized_code, code_context)
+            eval_ctx.handle_duplicate_candidate(candidate, normalized_code, code_context.read_writable_code.flat)
             console.rule()
             return None
 
@@ -1139,7 +1193,7 @@ class FunctionOptimizer:
             )
             return None
 
-        eval_ctx.register_new_candidate(normalized_code, candidate, code_context)
+        eval_ctx.register_new_candidate(normalized_code, candidate, code_context.read_writable_code.flat)
 
         # Run the optimized candidate
         run_results = self.run_optimized_candidate(
@@ -1243,6 +1297,8 @@ class FunctionOptimizer:
         # Display runtime information
         if is_LSP_enabled():
             lsp_log(LspMarkdownMessage(markdown=tree_to_markdown(tree)))
+        elif is_subagent_mode():
+            logger.info(tree_to_markdown(tree))
         else:
             console.print(tree)
         if self.args.benchmark and benchmark_tree:
@@ -1299,6 +1355,7 @@ class FunctionOptimizer:
             language_version=self.language_support.language_version,
         )
 
+        normalized_original = self.language_support.normalize_code(code_context.read_writable_code.flat.strip())
         processor = CandidateProcessor(
             candidates,
             future_line_profile_results,
@@ -1308,9 +1365,11 @@ class FunctionOptimizer:
             self.future_all_refinements,
             self.future_all_code_repair,
             self.future_adaptive_optimizations,
+            normalize_fn=self.language_support.normalize_code,
+            normalized_original=normalized_original,
+            original_flat_code=code_context.read_writable_code.flat,
         )
         candidate_index = 0
-        normalized_original = self.language_support.normalize_code(code_context.read_writable_code.flat.strip())
 
         # Process candidates using queue-based approach
         while not processor.is_done():
@@ -1333,6 +1392,7 @@ class FunctionOptimizer:
                     exp_type=exp_type,
                     function_references=function_references,
                     normalized_original=normalized_original,
+                    cached_normalized_code=processor.normalized_cache.get(candidate_node.candidate.optimization_id),
                 )
             except KeyboardInterrupt as e:
                 logger.exception(f"Optimization interrupted: {e}")
@@ -2456,13 +2516,15 @@ class FunctionOptimizer:
                 for test_file, count in map_gen_test_file_to_no_of_tests.items()
             ):
                 formatted_generated_test = format_generated_code(
-                    test.generated_original_test_source, self.args.formatter_cmds
+                    test.generated_original_test_source, self.args.formatter_cmds, language=code_lang
                 )
                 generated_tests_str += f"```{code_lang}\n{formatted_generated_test}\n```"
                 generated_tests_str += "\n\n"
 
         if concolic_test_str:
-            formatted_generated_test = format_generated_code(concolic_test_str, self.args.formatter_cmds)
+            formatted_generated_test = format_generated_code(
+                concolic_test_str, self.args.formatter_cmds, language=code_lang
+            )
             generated_tests_str += f"```{code_lang}\n{formatted_generated_test}\n```\n\n"
 
         existing_tests, replay_tests, _concolic_tests = existing_tests_source_for(

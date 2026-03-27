@@ -28,7 +28,7 @@ from codeflash.code_utils.git_utils import get_git_diff, get_repo_owner_and_name
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.languages.language_enum import Language
 from codeflash.languages.registry import get_language_support, get_supported_extensions, is_language_supported
-from codeflash.lsp.helpers import is_LSP_enabled
+from codeflash.lsp.helpers import is_LSP_enabled, is_subagent_mode
 from codeflash.models.function_types import FunctionParent, FunctionToOptimize
 from codeflash.telemetry.posthog_cf import ph
 
@@ -761,8 +761,7 @@ def was_function_previously_optimized(
         Tuple of (filtered_functions_dict, remaining_count)
 
     """
-    if is_LSP_enabled():
-        # was_function_previously_optimized is for the checking the optimization duplicates in the github action, no need to do this in the LSP mode
+    if is_LSP_enabled() or is_subagent_mode():
         return False
 
     # Check optimization status if repository info is provided

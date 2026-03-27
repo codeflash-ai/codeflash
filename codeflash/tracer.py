@@ -66,7 +66,19 @@ def _detect_non_python_language(args: Namespace | None) -> Language | None:
         except Exception:
             pass
 
-    # Method 2: Check project config for language field
+    # Method 2: Check for Java build files (pom.xml, build.gradle, build.gradle.kts)
+    cwd = Path.cwd()
+    search = cwd
+    while search != search.parent:
+        if (
+            (search / "pom.xml").exists()
+            or (search / "build.gradle").exists()
+            or (search / "build.gradle.kts").exists()
+        ):
+            return Language.JAVA
+        search = search.parent
+
+    # Method 3: Check project config for language field
     try:
         from codeflash.code_utils.config_parser import parse_config_file
 
@@ -90,7 +102,8 @@ def main(args: Namespace | None = None) -> ArgumentParser:
     #
     # Detection methods (in priority order):
     # 1. --file pointing to a .java/.js/.ts file
-    # 2. language field in project config (codeflash.toml or pyproject.toml)
+    # 2. Java build files (pom.xml, build.gradle, build.gradle.kts)
+    # 3. language field in project config (pyproject.toml, package.json)
     detected_language = _detect_non_python_language(args)
     if detected_language is not None:
         from codeflash.languages import Language

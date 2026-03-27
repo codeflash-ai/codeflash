@@ -990,6 +990,102 @@ console.log('OK');
 
 
 
+class TestMonorepoModuleDirectories:
+    """Tests for monorepo moduleDirectories in runtime Jest config."""
+
+    def test_find_monorepo_root_finds_yarn_workspace(self):
+        """_find_monorepo_root should find a parent with yarn.lock + node_modules."""
+        from codeflash.languages.javascript.test_runner import _find_monorepo_root
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            (root / "yarn.lock").write_text("")
+            (root / "node_modules").mkdir()
+            pkg = root / "packages" / "my-pkg"
+            pkg.mkdir(parents=True)
+            (pkg / "package.json").write_text('{"name": "my-pkg"}')
+
+            assert _find_monorepo_root(pkg) == root
+
+    def test_find_monorepo_root_returns_none_for_standalone(self):
+        """_find_monorepo_root should return None when no monorepo markers exist."""
+        from codeflash.languages.javascript.test_runner import _find_monorepo_root
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            (root / "package.json").write_text('{"name": "standalone"}')
+            (root / "node_modules").mkdir()
+
+            assert _find_monorepo_root(root) is None
+
+    def test_runtime_config_includes_module_directories_for_monorepo(self):
+        """_create_runtime_jest_config should add moduleDirectories when in a monorepo."""
+        from codeflash.languages.javascript.test_runner import _create_runtime_jest_config
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monorepo_root = Path(tmpdir).resolve()
+            (monorepo_root / "yarn.lock").write_text("")
+            (monorepo_root / "node_modules").mkdir()
+            (monorepo_root / "package.json").write_text('{"name": "monorepo"}')
+
+            pkg = monorepo_root / "packages" / "my-pkg"
+            pkg.mkdir(parents=True)
+            (pkg / "package.json").write_text('{"name": "my-pkg"}')
+
+            test_dirs = {"/tmp/external-tests"}
+
+            config_path = _create_runtime_jest_config(None, pkg, test_dirs)
+
+            assert config_path is not None
+            content = config_path.read_text(encoding="utf-8")
+            monorepo_nm = (monorepo_root / "node_modules").as_posix()
+            assert "moduleDirectories" in content, "Expected moduleDirectories in config"
+            assert monorepo_nm in content, f"Expected {monorepo_nm} in config"
+
+    def test_runtime_config_no_module_directories_for_standalone(self):
+        """_create_runtime_jest_config should NOT add moduleDirectories for standalone projects."""
+        from codeflash.languages.javascript.test_runner import _create_runtime_jest_config
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project = Path(tmpdir).resolve()
+            (project / "package.json").write_text('{"name": "standalone"}')
+
+            test_dirs = {"/tmp/external-tests"}
+
+            config_path = _create_runtime_jest_config(None, project, test_dirs)
+
+            assert config_path is not None
+            content = config_path.read_text(encoding="utf-8")
+            assert "moduleDirectories" not in content
+
+    def test_runtime_config_with_base_config_includes_module_directories(self):
+        """moduleDirectories should spread base config's moduleDirectories in monorepo."""
+        from codeflash.languages.javascript.test_runner import _create_runtime_jest_config
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            monorepo_root = Path(tmpdir).resolve()
+            (monorepo_root / "yarn.lock").write_text("")
+            (monorepo_root / "node_modules").mkdir()
+            (monorepo_root / "package.json").write_text('{"name": "monorepo"}')
+
+            pkg = monorepo_root / "packages" / "my-pkg"
+            pkg.mkdir(parents=True)
+            (pkg / "package.json").write_text('{"name": "my-pkg"}')
+
+            base_config = pkg / "jest.config.js"
+            base_config.write_text("module.exports = {};")
+
+            test_dirs = {"/tmp/external-tests"}
+
+            config_path = _create_runtime_jest_config(base_config, pkg, test_dirs)
+
+            assert config_path is not None
+            content = config_path.read_text(encoding="utf-8")
+            assert "baseConfig.moduleDirectories" in content, "Should spread base config moduleDirectories"
+            monorepo_nm = (monorepo_root / "node_modules").as_posix()
+            assert monorepo_nm in content
+
+
 class TestUnsupportedFrameworkError:
     """Tests for clear error on unsupported test frameworks."""
 

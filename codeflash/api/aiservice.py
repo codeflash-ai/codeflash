@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import json
 import os
-import platform
 import time
 from itertools import count
 from typing import TYPE_CHECKING, Any, cast
 
 import requests
+from pydantic import ValidationError
 from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
@@ -61,7 +61,6 @@ class AiServiceClient:
         if language_version is None:
             language_version = current_language_support().language_version
         payload["language_version"] = language_version
-        payload["python_version"] = language_version if current_language() == Language.PYTHON else None
 
         if current_language() != Language.PYTHON:
             if module_system:
@@ -127,16 +126,19 @@ class AiServiceClient:
             code = CodeStringsMarkdown.parse_markdown_code(opt["source_code"], expected_language=language)
             if not code.code_strings:
                 continue
-            candidates.append(
-                OptimizedCandidate(
-                    source_code=code,
-                    explanation=opt["explanation"],
-                    optimization_id=opt["optimization_id"],
-                    source=source,
-                    parent_id=opt.get("parent_id", None),
-                    model=opt.get("model"),
+            try:
+                candidates.append(
+                    OptimizedCandidate(
+                        source_code=code,
+                        explanation=opt["explanation"],
+                        optimization_id=opt["optimization_id"],
+                        source=source,
+                        parent_id=opt.get("parent_id", None),
+                        model=opt.get("model"),
+                    )
                 )
-            )
+            except (ValidationError, KeyError, TypeError) as e:
+                logger.warning(f"Skipping invalid optimization candidate: {e}")
         return candidates
 
     def optimize_code(
@@ -266,7 +268,6 @@ class AiServiceClient:
             "trace_id": trace_id,
             "language": language,
             "language_version": language_version,
-            "python_version": language_version if current_language() == Language.PYTHON else None,
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
             "call_sequence": self.get_next_sequence(),
@@ -530,7 +531,6 @@ class AiServiceClient:
             "diffs": diffs,
             "speedups": speedups,
             "optimization_ids": optimization_ids,
-            "python_version": platform.python_version(),  # backward compat
             "function_references": function_references,
         }
         logger.info("loading|Generating ranking")
@@ -839,8 +839,7 @@ class AiServiceClient:
             "codeflash_version": codeflash_version,
             "calling_fn_details": calling_fn_details,
             "language": language,
-            "language_version": platform.python_version() if current_language() == Language.PYTHON else None,
-            "python_version": platform.python_version() if current_language() == Language.PYTHON else None,
+            "language_version": current_language_support().language_version,
             "call_sequence": self.get_next_sequence(),
         }
         console.rule()

@@ -23,7 +23,7 @@ from codeflash.code_utils.git_worktree_utils import (
     remove_worktree,
 )
 from codeflash.code_utils.time_utils import humanize_runtime
-from codeflash.either import is_successful
+from codeflash.either import Failure, Success, is_successful
 from codeflash.languages import current_language_support, set_current_language
 from codeflash.lsp.helpers import is_subagent_mode
 from codeflash.telemetry.posthog_cf import ph
@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from codeflash.benchmarking.function_ranker import FunctionRanker
     from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.either import Result
     from codeflash.languages.base import DependencyResolver
     from codeflash.languages.function_optimizer import FunctionOptimizer
     from codeflash.models.models import BenchmarkKey, FunctionCalledInTest, ValidCode
@@ -493,7 +494,10 @@ class Optimizer:
             return
 
         if self.args.worktree:
-            self.worktree_mode()
+            result = self.worktree_mode()
+            if result.is_failure():
+                logger.error(result.value)
+                return
 
         if not self.args.replay_test and self.test_cfg.tests_root.exists():
             leftover_trace_files = list(self.test_cfg.tests_root.glob("*.trace"))
@@ -502,6 +506,16 @@ class Optimizer:
                 cleanup_paths(leftover_trace_files)
 
         cleanup_paths(Optimizer.find_leftover_instrumented_test_files(self.test_cfg.tests_root))
+
+        # For multi-module Java projects, generated test files are placed in module-specific
+        # test dirs (e.g. spring-ai-core/src/test/java/...) which may differ from tests_root.
+        # Maven's test-compile phase compiles ALL .java files in src/test/java/, so leftover
+        # instrumented files from previous runs poison the build. Search from project root.
+        if self.args.project_root.resolve() != self.test_cfg.tests_root.resolve():
+            java_leftovers = Optimizer.find_leftover_java_test_files(self.args.project_root)
+            if java_leftovers:
+                logger.debug(f"Cleaning up {len(java_leftovers)} leftover Java test file(s) from submodules")
+                cleanup_paths(java_leftovers)
 
         function_optimizer = None
         file_to_funcs_to_optimize, num_optimizable_functions, trace_file_path = self.get_optimizable_functions()
@@ -736,6 +750,18 @@ class Optimizer:
             file_path for file_path in test_root.rglob("*") if file_path.is_file() and pattern.match(file_path.name)
         ]
 
+    @staticmethod
+    def find_leftover_java_test_files(project_root: Path) -> list[Path]:
+        """Search all directories under project_root for leftover instrumented Java test files.
+
+        Uses targeted glob patterns (much faster than rglob('*') + regex on large project roots)
+        to find instrumented test files that may have been left behind in submodule test directories.
+        """
+        results: list[Path] = []
+        for pattern in ("*__perfinstrumented*.java", "*__perfonlyinstrumented*.java"):
+            results.extend(f for f in project_root.rglob(pattern) if f.is_file())
+        return results
+
     def cleanup_replay_tests(self) -> None:
         paths_to_cleanup = []
         if self.replay_tests_dir and self.replay_tests_dir.exists():
@@ -776,19 +802,22 @@ class Optimizer:
                     paths_to_cleanup.append(trace_file)
         cleanup_paths(paths_to_cleanup)
 
-    def worktree_mode(self) -> None:
+    def worktree_mode(self) -> Result[bool, str]:
         if self.current_worktree:
-            return
+            return Failure("There is an existing worktree, Can't create more than one per function")
 
-        if check_running_in_git_repo(self.args.module_root):
-            worktree_dir = create_detached_worktree(self.args.module_root)
-            if worktree_dir is None:
-                logger.warning("Failed to create worktree. Skipping optimization.")
-                return
-            self.current_worktree = worktree_dir
-            self.mirror_paths_for_worktree_mode(worktree_dir)
-            # make sure the tests dir is created in the worktree, this can happen if the original tests dir is empty
-            Path(self.args.tests_root).mkdir(parents=True, exist_ok=True)
+        if not check_running_in_git_repo(self.args.module_root):
+            return Failure("Worktree creation failed because the current directory is not part of a Git repository.")
+
+        worktree_dir = create_detached_worktree()
+        if worktree_dir is None:
+            return Failure("Failed to create a worktree.")
+
+        self.current_worktree = worktree_dir
+        self.mirror_paths_for_worktree_mode(worktree_dir)
+        # make sure the tests dir is created in the worktree, this can happen if the original tests dir is empty
+        Path(self.args.tests_root).mkdir(parents=True, exist_ok=True)
+        return Success(True)  # noqa: FBT003
 
     def mirror_paths_for_worktree_mode(self, worktree_dir: Path) -> None:
         original_args = copy.deepcopy(self.args)

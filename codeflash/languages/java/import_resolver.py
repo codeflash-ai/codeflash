@@ -111,7 +111,20 @@ class JavaImportResolver:
                 class_name=self._extract_class_name(import_path),
             )
 
-        # Check if it's a known external library
+        # Try to resolve within the project FIRST — catches project-internal imports
+        # whose package prefixes (e.g. org.apache, com.google) overlap with
+        # COMMON_EXTERNAL_PREFIXES
+        resolved_path = self._resolve_to_file(import_path)
+        if resolved_path is not None:
+            return ResolvedImport(
+                import_path=import_path,
+                file_path=resolved_path,
+                is_external=False,
+                is_wildcard=import_info.is_wildcard,
+                class_name=self._extract_class_name(import_path),
+            )
+
+        # Only check external prefixes after failing to find the file in the project
         if self._is_external_library(import_path):
             return ResolvedImport(
                 import_path=import_path,
@@ -121,13 +134,11 @@ class JavaImportResolver:
                 class_name=self._extract_class_name(import_path),
             )
 
-        # Try to resolve within the project
-        resolved_path = self._resolve_to_file(import_path)
-
+        # Not found in project and not a known external — mark as unresolved
         return ResolvedImport(
             import_path=import_path,
-            file_path=resolved_path,
-            is_external=resolved_path is None,
+            file_path=None,
+            is_external=True,
             is_wildcard=import_info.is_wildcard,
             class_name=self._extract_class_name(import_path),
         )

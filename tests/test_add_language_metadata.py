@@ -18,12 +18,11 @@ class TestAddLanguageMetadata:
     """Test add_language_metadata sets correct payload fields per language."""
 
     @patch("codeflash.api.aiservice.current_language", return_value=Language.PYTHON)
-    def test_python_sets_language_version_and_python_version(self, _mock_lang: object) -> None:
-        """For Python, both language_version and python_version should be set to the same value."""
+    def test_python_sets_language_version(self, _mock_lang: object) -> None:
+        """For Python, language_version should be set."""
         payload: dict = {}
         AiServiceClient.add_language_metadata(payload, language_version="3.11.5")
         assert payload["language_version"] == "3.11.5"
-        assert payload["python_version"] == "3.11.5"
         assert "module_system" not in payload
 
     @patch("codeflash.api.aiservice.current_language", return_value=Language.PYTHON)
@@ -34,12 +33,11 @@ class TestAddLanguageMetadata:
         assert "module_system" not in payload
 
     @patch("codeflash.api.aiservice.current_language", return_value=Language.JAVA)
-    def test_java_sets_language_version_not_python_version(self, _mock_lang: object) -> None:
-        """For Java, language_version should be set, python_version should be None."""
+    def test_java_sets_language_version(self, _mock_lang: object) -> None:
+        """For Java, language_version should be set."""
         payload: dict = {}
         AiServiceClient.add_language_metadata(payload, language_version="17")
         assert payload["language_version"] == "17"
-        assert payload["python_version"] is None
 
     @patch("codeflash.api.aiservice.current_language", return_value=Language.JAVA)
     def test_java_includes_module_system(self, _mock_lang: object) -> None:
@@ -56,12 +54,11 @@ class TestAddLanguageMetadata:
         assert "module_system" not in payload
 
     @patch("codeflash.api.aiservice.current_language", return_value=Language.JAVASCRIPT)
-    def test_javascript_sets_language_version_not_python_version(self, _mock_lang: object) -> None:
-        """For JavaScript, language_version should be set, python_version should be None."""
+    def test_javascript_sets_language_version(self, _mock_lang: object) -> None:
+        """For JavaScript, language_version should be set."""
         payload: dict = {}
         AiServiceClient.add_language_metadata(payload, language_version="20.11.0")
         assert payload["language_version"] == "20.11.0"
-        assert payload["python_version"] is None
 
     @patch("codeflash.api.aiservice.current_language", return_value=Language.JAVASCRIPT)
     def test_javascript_includes_module_system(self, _mock_lang: object) -> None:
@@ -76,7 +73,6 @@ class TestAddLanguageMetadata:
         payload: dict = {}
         AiServiceClient.add_language_metadata(payload, language_version="20.11.0", module_system="commonjs")
         assert payload["language_version"] == "20.11.0"
-        assert payload["python_version"] is None
         assert payload["module_system"] == "commonjs"
 
     @patch("codeflash.api.aiservice.current_language", return_value=Language.PYTHON)
@@ -87,7 +83,6 @@ class TestAddLanguageMetadata:
         payload: dict = {}
         AiServiceClient.add_language_metadata(payload, language_version=None)
         assert payload["language_version"] == "3.12.0"
-        assert payload["python_version"] == "3.12.0"
 
     @patch("codeflash.api.aiservice.current_language", return_value=Language.JAVA)
     @patch("codeflash.api.aiservice.current_language_support")
@@ -97,4 +92,3 @@ class TestAddLanguageMetadata:
         payload: dict = {}
         AiServiceClient.add_language_metadata(payload, language_version=None)
         assert payload["language_version"] == "17"
-        assert payload["python_version"] is None

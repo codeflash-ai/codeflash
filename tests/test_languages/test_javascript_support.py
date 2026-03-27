@@ -442,6 +442,44 @@ function add(a, b {
         assert js_support.validate_syntax("function foo() {") is False
 
 
+    def test_tsx_jsx_syntax_valid_with_file_path(self):
+        """Test that TSX/JSX syntax is valid when file_path with .tsx extension is provided."""
+        from codeflash.languages.javascript.support import TypeScriptSupport
+
+        ts_support = TypeScriptSupport()
+
+        tsx_code = """
+function VersionHeader({ version }) {
+    return (
+        <div className="header">
+            <h1>{version.name}</h1>
+            <span>{version.date}</span>
+        </div>
+    );
+}
+"""
+        # Without file_path, TypeScriptSupport uses TYPESCRIPT parser which can't handle JSX
+        assert ts_support.validate_syntax(tsx_code) is False
+
+        # With .tsx file_path, it should use TSX parser and pass
+        tsx_path = Path("/tmp/test.tsx")
+        assert ts_support.validate_syntax(tsx_code, file_path=tsx_path) is True
+
+    def test_tsx_jsx_syntax_valid_with_jsx_file_path(self, js_support):
+        """Test that JSX syntax is valid when file_path with .jsx extension is provided."""
+        jsx_code = """
+function Button({ label, onClick }) {
+    return <button onClick={onClick}>{label}</button>;
+}
+"""
+        # JavaScript parser handles JSX natively
+        assert js_support.validate_syntax(jsx_code) is True
+
+        # Explicit .jsx path should also work
+        jsx_path = Path("/tmp/test.jsx")
+        assert js_support.validate_syntax(jsx_code, file_path=jsx_path) is True
+
+
 class TestNormalizeCode:
     """Tests for normalize_code method using tree-sitter normalizer."""
 
@@ -1723,3 +1761,111 @@ function identity<T>(arg: T): T {
 
         assert js_support.language == Language.JAVASCRIPT
         assert str(js_support.language) == "javascript"
+
+
+class TestFixImportsInsideBlocks:
+    """Tests for fix_imports_inside_blocks which converts illegal import statements
+    inside function bodies to valid require() calls."""
+
+    def test_import_inside_jest_mock_default(self):
+        from codeflash.languages.javascript.edit_tests import fix_imports_inside_blocks
+
+        source = """\
+jest.mock('lodash/fp', () => {
+  import _ from 'lodash';
+  return { snakeCase: _.snakeCase };
+});"""
+        expected = """\
+jest.mock('lodash/fp', () => {
+  const _ = require('lodash');
+  return { snakeCase: _.snakeCase };
+});"""
+        assert fix_imports_inside_blocks(source) == expected
+
+    def test_import_inside_jest_mock_named(self):
+        from codeflash.languages.javascript.edit_tests import fix_imports_inside_blocks
+
+        source = """\
+jest.mock('../types', () => {
+  import { getTypeValidator, yup } from 'yup';
+  return { getTypeValidator };
+});"""
+        expected = """\
+jest.mock('../types', () => {
+  const { getTypeValidator, yup } = require('yup');
+  return { getTypeValidator };
+});"""
+        assert fix_imports_inside_blocks(source) == expected
+
+    def test_import_inside_describe_block(self):
+        from codeflash.languages.javascript.edit_tests import fix_imports_inside_blocks
+
+        source = """\
+import codeflash from 'codeflash';
+describe('myFunc', () => {
+  import { contentTypes } from '@strapi/utils';
+  beforeEach(() => {});
+});"""
+        expected = """\
+import codeflash from 'codeflash';
+describe('myFunc', () => {
+  const { contentTypes } = require('@strapi/utils');
+  beforeEach(() => {});
+});"""
+        assert fix_imports_inside_blocks(source) == expected
+
+    def test_namespace_import_inside_block(self):
+        from codeflash.languages.javascript.edit_tests import fix_imports_inside_blocks
+
+        source = """\
+jest.mock('./utils', () => {
+  import * as utils from '../real-utils';
+  return utils;
+});"""
+        expected = """\
+jest.mock('./utils', () => {
+  const utils = require('../real-utils');
+  return utils;
+});"""
+        assert fix_imports_inside_blocks(source) == expected
+
+    def test_top_level_imports_preserved(self):
+        from codeflash.languages.javascript.edit_tests import fix_imports_inside_blocks
+
+        source = """\
+import { moveElement } from '../utils/moveElement';
+import codeflash from 'codeflash';
+
+describe('moveElement', () => {
+  test('basic', () => {
+    expect(moveElement([1,2,3], 0, 1)).toEqual([2,1,3]);
+  });
+});"""
+        assert fix_imports_inside_blocks(source) == source
+
+    def test_mixed_top_level_and_indented(self):
+        from codeflash.languages.javascript.edit_tests import fix_imports_inside_blocks
+
+        source = """\
+import { fn } from './module';
+
+jest.mock('dep', () => {
+  import helper from 'helper-lib';
+  return { helper };
+});
+
+describe('fn', () => {
+  test('works', () => {});
+});"""
+        expected = """\
+import { fn } from './module';
+
+jest.mock('dep', () => {
+  const helper = require('helper-lib');
+  return { helper };
+});
+
+describe('fn', () => {
+  test('works', () => {});
+});"""
+        assert fix_imports_inside_blocks(source) == expected

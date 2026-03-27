@@ -275,7 +275,7 @@ class JavaSupport(LanguageSupport):
 
     # === Validation ===
 
-    def validate_syntax(self, source: str) -> bool:
+    def validate_syntax(self, source: str, file_path: Path | None = None) -> bool:
         """Check if Java source code is syntactically valid."""
         return self._analyzer.validate_syntax(source)
 

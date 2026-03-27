@@ -408,23 +408,41 @@ def remove_unused_definitions_recursively(
     )
 
 
+def collect_top_level_defs_with_dependencies(code: Union[str, cst.Module]) -> dict[str, UsageInfo]:
+    """Collect all top level definitions and their inter-definition dependencies (expensive CST traversal).
+
+    Returns a definitions dict with dependencies populated but no usage marks set.
+    This result can be reused across multiple mark_defs_for_functions calls to avoid
+    repeating the expensive MetadataWrapper + DependencyCollector traversal.
+    """
+    module = code if isinstance(code, cst.Module) else cst.parse_module(code)
+    definitions = collect_top_level_definitions(module)
+    wrapper = cst.MetadataWrapper(module)
+    dependency_collector = DependencyCollector(definitions)
+    wrapper.visit(dependency_collector)
+    return definitions
+
+
+def mark_defs_for_functions(
+    base_defs: dict[str, UsageInfo], qualified_function_names: set[str]
+) -> dict[str, UsageInfo]:
+    """Create a copy of definitions with usage marks set for the given function names.
+
+    This is cheap (dict copy + graph walk) and can be called multiple times with
+    different function name sets on the same base_defs without re-traversing the CST.
+    """
+    marked = {k: UsageInfo(name=v.name, dependencies=v.dependencies) for k, v in base_defs.items()}
+    usage_marker = QualifiedFunctionUsageMarker(marked, qualified_function_names)
+    usage_marker.mark_used_definitions()
+    return marked
+
+
 def collect_top_level_defs_with_usages(
     code: Union[str, cst.Module], qualified_function_names: set[str]
 ) -> dict[str, UsageInfo]:
     """Collect all top level definitions (classes, variables or functions) and their usages."""
-    module = code if isinstance(code, cst.Module) else cst.parse_module(code)
-    # Collect all definitions (top level classes, variables or function)
-    definitions = collect_top_level_definitions(module)
-
-    # Collect dependencies between definitions using the visitor pattern
-    wrapper = cst.MetadataWrapper(module)
-    dependency_collector = DependencyCollector(definitions)
-    wrapper.visit(dependency_collector)
-
-    # Mark definitions used by specified functions, and their dependencies recursively
-    usage_marker = QualifiedFunctionUsageMarker(definitions, qualified_function_names)
-    usage_marker.mark_used_definitions()
-    return definitions
+    base_defs = collect_top_level_defs_with_dependencies(code)
+    return mark_defs_for_functions(base_defs, qualified_function_names)
 
 
 def remove_unused_definitions_by_function_names(

@@ -33,6 +33,10 @@ if TYPE_CHECKING:
     from codeflash.models.models import FunctionSource, GeneratedTestsList, InvocationId, ValidCode
     from codeflash.verification.verification_utils import TestConfig
 
+_CACHE: dict[str, bool] = {}
+
+_CACHE_MAX: int = 4096
+
 logger = logging.getLogger(__name__)
 
 
@@ -673,7 +677,7 @@ class PythonSupport:
 
     # === Validation ===
 
-    def validate_syntax(self, source: str) -> bool:
+    def validate_syntax(self, source: str, file_path: Path | None = None) -> bool:
         """Check if Python source code is syntactically valid.
 
         Uses Python's compile() to validate syntax.
@@ -685,11 +689,7 @@ class PythonSupport:
             True if valid, False otherwise.
 
         """
-        try:
-            compile(source, "<string>", "exec")
-            return True
-        except SyntaxError:
-            return False
+        return _compile_ok(source)
 
     def normalize_code(self, source: str) -> str:
         from codeflash.languages.python.normalizer import normalize_python_code
@@ -1361,3 +1361,19 @@ class PythonSupport:
         end_time = time.perf_counter()
         logger.debug("Generated concolic tests in %.2f seconds", end_time - start_time)
         return function_to_concolic_tests, concolic_test_suite_code
+
+
+def _compile_ok(source: str) -> bool:
+    try:
+        cached = _CACHE.get(source)
+        if cached is not None:
+            return cached
+
+        compile(source, "<string>", "exec")
+        if len(_CACHE) < _CACHE_MAX:
+            _CACHE[source] = True
+        return True
+    except SyntaxError:
+        if len(_CACHE) < _CACHE_MAX:
+            _CACHE[source] = False
+        return False

@@ -544,11 +544,12 @@ class LanguageSupport(Protocol):
 
     # === Validation ===
 
-    def validate_syntax(self, source: str) -> bool:
+    def validate_syntax(self, source: str, file_path: Path | None = None) -> bool:
         """Check if source code is syntactically valid.
 
         Args:
             source: Source code to validate.
+            file_path: Optional file path for parser selection (e.g., .tsx vs .ts).
 
         Returns:
             True if valid, False otherwise.

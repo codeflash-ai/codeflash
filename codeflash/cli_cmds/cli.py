@@ -24,6 +24,8 @@ def parse_args() -> Namespace:
         args.no_pr = True
         args.worktree = True
         args.effort = "low"
+    if args.command == "auth":
+        return args
     return process_and_validate_cmd_args(args)
 
 
@@ -190,6 +192,12 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     if args.benchmarks_root:
         args.benchmarks_root = Path(args.benchmarks_root).resolve()
     args.test_project_root = project_root_from_module_root(args.tests_root, pyproject_file_path)
+
+    if is_java_project and pyproject_file_path.is_dir():
+        # For Java projects, pyproject_file_path IS the project root directory (not a file).
+        # Override project_root which may have resolved to a sub-module.
+        args.project_root = pyproject_file_path.resolve()
+        args.test_project_root = pyproject_file_path.resolve()
     if is_LSP_enabled():
         args.all = None
         return args
@@ -207,8 +215,6 @@ def project_root_from_module_root(module_root: Path, pyproject_file_path: Path) 
         if (current / "pom.xml").exists():
             return current.resolve()
         if (current / "build.gradle").exists() or (current / "build.gradle.kts").exists():
-            return current.resolve()
-        if (current / "codeflash.toml").exists():
             return current.resolve()
         current = current.parent
 
@@ -371,6 +377,11 @@ def _build_parser() -> ArgumentParser:
     subparsers.add_parser("init-actions", help="Initialize GitHub Actions workflow")
 
     trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize your project.", add_help=False)
+    auth_parser = subparsers.add_parser("auth", help="Authentication commands")
+    auth_subparsers = auth_parser.add_subparsers(dest="auth_command", help="Auth sub-commands")
+    auth_subparsers.add_parser("login", help="Log in to Codeflash via OAuth")
+    auth_subparsers.add_parser("status", help="Check authentication status")
+
 
     trace_optimize.add_argument(
         "--max-function-count",

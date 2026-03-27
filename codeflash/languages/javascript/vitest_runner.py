@@ -6,6 +6,7 @@ verification and performance benchmarking.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import time
 from pathlib import Path
@@ -95,14 +96,21 @@ def _ensure_runtime_files(project_root: Path) -> None:
     The package provides all runtime files needed for test instrumentation.
     Uses the project's detected package manager (npm, pnpm, yarn, or bun).
 
+    In monorepos, node_modules may be hoisted to the repo root, so we walk
+    upward from project_root to find an existing codeflash installation.
+
     Args:
         project_root: The project root directory.
 
     """
-    node_modules_pkg = project_root / "node_modules" / "codeflash"
-    if node_modules_pkg.exists():
-        logger.debug("codeflash already installed")
-        return
+    # Walk upward to find codeflash in any ancestor node_modules (monorepo hoisting)
+    current = project_root
+    while current != current.parent:
+        node_modules_pkg = current / "node_modules" / "codeflash"
+        if node_modules_pkg.exists():
+            logger.debug(f"codeflash already installed at {node_modules_pkg}")
+            return
+        current = current.parent
 
     install_cmd = get_package_install_command(project_root, "codeflash", dev=True)
     try:
@@ -295,6 +303,18 @@ def _build_vitest_behavioral_command(
         if codeflash_vitest_config:
             cmd.append(f"--config={codeflash_vitest_config}")
 
+    # In monorepos, test files may be outside the project root (e.g., tests/ at repo root
+    # while project_root is packages/features/). Vitest only discovers files under its root
+    # directory, so we use --dir to widen the scan to the common ancestor.
+    if project_root and test_files:
+        resolved_root = project_root.resolve()
+        test_dirs = {f.resolve().parent for f in test_files}
+        if any(not d.is_relative_to(resolved_root) for d in test_dirs):
+            all_paths = [str(resolved_root)] + [str(d) for d in test_dirs]
+            common_ancestor = Path(os.path.commonpath(all_paths))
+            cmd.append(f"--dir={common_ancestor}")
+            logger.debug(f"Test files outside project root, using --dir={common_ancestor}")
+
     if output_file:
         # Use dot notation for junit reporter output file when multiple reporters are used
         # Format: --outputFile.junit=/path/to/file.xml
@@ -342,6 +362,16 @@ def _build_vitest_benchmarking_command(
         codeflash_vitest_config = _ensure_codeflash_vitest_config(project_root)
         if codeflash_vitest_config:
             cmd.append(f"--config={codeflash_vitest_config}")
+
+    # In monorepos, test files may be outside the project root. Widen the scan directory.
+    if project_root and test_files:
+        resolved_root = project_root.resolve()
+        test_dirs = {f.resolve().parent for f in test_files}
+        if any(not d.is_relative_to(resolved_root) for d in test_dirs):
+            all_paths = [str(resolved_root)] + [str(d) for d in test_dirs]
+            common_ancestor = Path(os.path.commonpath(all_paths))
+            cmd.append(f"--dir={common_ancestor}")
+            logger.debug(f"Test files outside project root, using --dir={common_ancestor}")
 
     if output_file:
         # Use dot notation for junit reporter output file when multiple reporters are used
