@@ -1813,6 +1813,94 @@ public class InnerClassTest__perfonlyinstrumented {
         assert result == expected
 
 
+class TestMultiLineCallInstrumentation:
+    """Tests that multi-line function calls are fully replaced during instrumentation.
+
+    When a call spans multiple lines the replacement must cover the entire byte range,
+    not just the first line. Otherwise continuation lines become orphaned.
+    """
+
+    def test_behavior_mode_multiline_expression_statement(self, tmp_path: Path):
+        """Multi-line expression statement call must not leave orphaned continuation lines."""
+        test_file = tmp_path / "SchemaTest.java"
+        source = """import org.junit.jupiter.api.Test;
+
+public class SchemaTest {
+    @Test
+    public void testAugment() {
+        augmentToolInputSchema(baseSchema, propertyName,
+                description, required);
+    }
+}
+"""
+        test_file.write_text(source, encoding="utf-8")
+
+        func = FunctionToOptimize(
+            function_name="augmentToolInputSchema",
+            file_path=tmp_path / "Schema.java",
+            starting_line=1,
+            ending_line=5,
+            parents=[],
+            is_method=True,
+            language="java",
+        )
+
+        success, result = instrument_existing_test(
+            test_string=source, function_to_optimize=func, mode="behavior", test_path=test_file
+        )
+
+        assert success is True
+        # The full call text appears inside the capture assignment within a try block
+        assert "_cf_result1_1 = augmentToolInputSchema(baseSchema, propertyName," in result
+        # The continuation line is inside the try block (after "try {"), not orphaned
+        lines = result.split("\n")
+        try_idx = next(i for i, l in enumerate(lines) if "try {" in l)
+        desc_indices = [i for i, l in enumerate(lines) if "description, required);" in l]
+        assert len(desc_indices) == 1, f"Expected exactly 1 continuation line, found {len(desc_indices)}"
+        assert desc_indices[0] > try_idx, "Continuation line must be inside the try block"
+        # Balanced braces
+        assert result.count("{") == result.count("}")
+
+    def test_behavior_mode_multiline_embedded_call(self, tmp_path: Path):
+        """Multi-line call embedded in assertEquals must not leave orphaned continuation lines."""
+        test_file = tmp_path / "SchemaTest.java"
+        source = """import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class SchemaTest {
+    @Test
+    public void testAugment() {
+        assertEquals("expected", augmentToolInputSchema(baseSchema,
+                propertyName));
+    }
+}
+"""
+        test_file.write_text(source, encoding="utf-8")
+
+        func = FunctionToOptimize(
+            function_name="augmentToolInputSchema",
+            file_path=tmp_path / "Schema.java",
+            starting_line=1,
+            ending_line=5,
+            parents=[],
+            is_method=True,
+            language="java",
+        )
+
+        success, result = instrument_existing_test(
+            test_string=source, function_to_optimize=func, mode="behavior", test_path=test_file
+        )
+
+        assert success is True
+        # The multi-line call is replaced with a variable in assertEquals
+        assert 'assertEquals("expected", _cf_result1_1);' in result
+        # No orphaned continuation line as a standalone statement
+        lines = result.split("\n")
+        assert not any(l.strip() == "propertyName));" for l in lines), "Orphaned continuation line found"
+        # Balanced braces
+        assert result.count("{") == result.count("}")
+
+
 class TestMultiByteUtf8Instrumentation:
     """Tests that timing instrumentation handles multi-byte UTF-8 source correctly.
 
