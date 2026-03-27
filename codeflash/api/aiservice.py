@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import platform
 import time
 from itertools import count
 from typing import TYPE_CHECKING, Any, cast
