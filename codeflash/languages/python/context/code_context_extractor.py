@@ -395,7 +395,10 @@ def extract_all_contexts_from_files(
         except ValueError:
             relative_path = file_path
 
-        cleaned = remove_unused_definitions_by_function_names(original_module, hoh_names)
+        # Collect definitions + dependencies once (expensive CST traversal), reuse for mark pass
+        base_defs = collect_top_level_defs_with_dependencies(original_module)
+        hoh_defs = mark_defs_for_functions(base_defs, hoh_names)
+        cleaned = remove_unused_definitions_by_function_names(original_module, hoh_names, defs_with_usages=hoh_defs)
 
         # Pre-compute source imports once for this file
         src_gathered = gather_source_imports(original_module, file_path, project_root_path)
