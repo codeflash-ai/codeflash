@@ -617,6 +617,39 @@ def gather_source_imports(
         return None
 
 
+def _collect_dst_referenced_names(dst_code: str) -> tuple[set[str], bool]:
+    """Collect all names referenced in destination code for import pre-filtering.
+
+    Uses ast (not libcst) for speed. Collects Name nodes and base names of Attribute chains,
+    plus names inside string annotations.
+
+    Returns (names, has_imports) where has_imports indicates whether the dst has any
+    pre-existing import statements.
+    """
+    try:
+        tree = ast.parse(dst_code)
+    except SyntaxError:
+        return set(), False
+    names: set[str] = set()
+    has_imports = False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            names.add(node.id)
+        elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+            names.add(node.value.id)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            has_imports = True
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            try:
+                inner = ast.parse(node.value, mode="eval")
+                for inner_node in ast.walk(inner):
+                    if isinstance(inner_node, ast.Name):
+                        names.add(inner_node.id)
+            except SyntaxError:
+                pass
+    return names, has_imports
+
+
 def add_needed_imports_from_module(
     src_module_code: str | cst.Module,
     dst_module_code: str | cst.Module,
@@ -667,13 +700,20 @@ def add_needed_imports_from_module(
 
     parsed_dst_module.visit(dotted_import_collector)
 
+    # Pre-filter: collect names referenced in destination code to avoid adding unused imports.
+    # This keeps the intermediate module small so RemoveImportsVisitor's scope analysis is cheap.
+    dst_code_str = parsed_dst_module.code if isinstance(parsed_dst_module, cst.Module) else dst_code_fallback
+    dst_referenced_names, dst_has_imports = _collect_dst_referenced_names(dst_code_str)
+
     try:
         for mod in gatherer.module_imports:
             # Skip __future__ imports as they cannot be imported directly
             # __future__ imports should only be imported with specific objects i.e from __future__ import annotations
             if mod == "__future__":
                 continue
-            if mod not in dotted_import_collector.imports:
+            # For `import foo.bar`, the bound name is `foo`
+            bound_name = mod.split(".")[0]
+            if bound_name in dst_referenced_names and mod not in dotted_import_collector.imports:
                 AddImportsVisitor.add_needed_import(dst_context, mod)
             RemoveImportsVisitor.remove_unused_import(dst_context, mod)
         aliased_objects = set()
@@ -699,13 +739,18 @@ def add_needed_imports_from_module(
 
                     for symbol in resolved_symbols:
                         if (
-                            f"{mod}.{symbol}" not in helper_functions_fqn
+                            symbol in dst_referenced_names
+                            and f"{mod}.{symbol}" not in helper_functions_fqn
                             and f"{mod}.{symbol}" not in dotted_import_collector.imports
                         ):
                             AddImportsVisitor.add_needed_import(dst_context, mod, symbol)
                         RemoveImportsVisitor.remove_unused_import(dst_context, mod, symbol)
                 else:
-                    if f"{mod}.{obj}" not in dotted_import_collector.imports:
+                    # For `from foo import bar`, the bound name is `bar`
+                    # Always include __future__ imports -- they affect parsing behavior, not naming
+                    if (
+                        mod == "__future__" or obj in dst_referenced_names
+                    ) and f"{mod}.{obj}" not in dotted_import_collector.imports:
                         AddImportsVisitor.add_needed_import(dst_context, mod, obj)
                     RemoveImportsVisitor.remove_unused_import(dst_context, mod, obj)
     except Exception as e:
@@ -715,7 +760,8 @@ def add_needed_imports_from_module(
     for mod, asname in gatherer.module_aliases.items():
         if not asname:
             continue
-        if f"{mod}.{asname}" not in dotted_import_collector.imports:
+        # For `import foo as bar`, the bound name is `bar`
+        if asname in dst_referenced_names and f"{mod}.{asname}" not in dotted_import_collector.imports:
             AddImportsVisitor.add_needed_import(dst_context, mod, asname=asname)
         RemoveImportsVisitor.remove_unused_import(dst_context, mod, asname=asname)
 
@@ -727,14 +773,22 @@ def add_needed_imports_from_module(
             if not alias_pair[0] or not alias_pair[1]:
                 continue
 
-            if f"{mod}.{alias_pair[1]}" not in dotted_import_collector.imports:
+            # For `from foo import bar as baz`, the bound name is `baz`
+            if (
+                alias_pair[1] in dst_referenced_names
+                and f"{mod}.{alias_pair[1]}" not in dotted_import_collector.imports
+            ):
                 AddImportsVisitor.add_needed_import(dst_context, mod, alias_pair[0], asname=alias_pair[1])
             RemoveImportsVisitor.remove_unused_import(dst_context, mod, alias_pair[0], asname=alias_pair[1])
 
     try:
         add_imports_visitor = AddImportsVisitor(dst_context)
         transformed_module = add_imports_visitor.transform_module(parsed_dst_module)
-        transformed_module = RemoveImportsVisitor(dst_context).transform_module(transformed_module)
+        # Skip RemoveImportsVisitor when the dst had no pre-existing imports.
+        # In that case, the only imports are those just added by AddImportsVisitor,
+        # which are already pre-filtered to names referenced in the dst code.
+        if dst_has_imports:
+            transformed_module = RemoveImportsVisitor(dst_context).transform_module(transformed_module)
         return transformed_module.code.lstrip("\n")
     except Exception as e:
         logger.exception(f"Error adding imports to destination module code: {e}")
