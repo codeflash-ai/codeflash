@@ -382,7 +382,6 @@ def _build_parser() -> ArgumentParser:
     auth_subparsers.add_parser("login", help="Log in to Codeflash via OAuth")
     auth_subparsers.add_parser("status", help="Check authentication status")
 
-
     trace_optimize.add_argument(
         "--max-function-count",
         type=int,
