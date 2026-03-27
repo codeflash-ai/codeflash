@@ -1,15 +1,24 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import tomlkit
 
 from codeflash.code_utils.config_js import find_package_json, parse_package_json_config
+from codeflash.languages.language_enum import Language
 from codeflash.lsp.helpers import is_LSP_enabled
 
 PYPROJECT_TOML_CACHE: dict[Path, Path] = {}
 ALL_CONFIG_FILES: dict[Path, dict[str, Path]] = {}
+
+
+@dataclass
+class LanguageConfig:
+    config: dict[str, Any]
+    config_path: Path
+    language: Language
 
 
 def _try_parse_java_build_config() -> tuple[dict[str, Any], Path] | None:
@@ -103,6 +112,149 @@ def find_conftest_files(test_paths: list[Path]) -> list[Path]:
     return list(list_of_conftest_files)
 
 
+def normalize_toml_config(config: dict[str, Any], config_file_path: Path) -> dict[str, Any]:
+    path_keys = ["module-root", "tests-root", "benchmarks-root"]
+    path_list_keys = ["ignore-paths"]
+    str_keys = {"pytest-cmd": "pytest", "git-remote": "origin"}
+    bool_keys = {
+        "override-fixtures": False,
+        "disable-telemetry": False,
+        "disable-imports-sorting": False,
+        "benchmark": False,
+    }
+    list_str_keys = {"formatter-cmds": []}
+
+    for key, default_value in str_keys.items():
+        if key in config:
+            config[key] = str(config[key])
+        else:
+            config[key] = default_value
+    for key, default_value in bool_keys.items():
+        if key in config:
+            config[key] = bool(config[key])
+        else:
+            config[key] = default_value
+    for key in path_keys:
+        if key in config:
+            config[key] = str((config_file_path.parent / Path(config[key])).resolve())
+    for key, default_value in list_str_keys.items():
+        if key in config:
+            config[key] = [str(cmd) for cmd in config[key]]
+        else:
+            config[key] = default_value
+    for key in path_list_keys:
+        if key in config:
+            config[key] = [str((config_file_path.parent / path).resolve()) for path in config[key]]
+        else:
+            config[key] = []
+
+    # Convert hyphenated keys to underscored keys
+    for key in list(config.keys()):
+        if "-" in key:
+            config[key.replace("-", "_")] = config[key]
+            del config[key]
+
+    return config
+
+
+def _parse_java_config_for_dir(dir_path: Path) -> dict[str, Any] | None:
+    from codeflash.languages.java.build_config_strategy import parse_java_project_config
+
+    return parse_java_project_config(dir_path)
+
+
+_SUBDIR_SKIP = frozenset(
+    {
+        ".git",
+        ".hg",
+        ".svn",
+        "node_modules",
+        ".venv",
+        "venv",
+        "__pycache__",
+        "target",
+        "build",
+        "dist",
+        ".tox",
+        ".mypy_cache",
+        ".ruff_cache",
+        ".pytest_cache",
+    }
+)
+
+
+def _check_dir_for_configs(dir_path: Path, configs: list[LanguageConfig], seen_languages: set[Language]) -> None:
+    if Language.PYTHON not in seen_languages:
+        pyproject = dir_path / "pyproject.toml"
+        if pyproject.exists():
+            try:
+                with pyproject.open("rb") as f:
+                    data = tomlkit.parse(f.read())
+                tool = data.get("tool", {})
+                if isinstance(tool, dict) and "codeflash" in tool:
+                    raw_config = dict(tool["codeflash"])
+                    normalized = normalize_toml_config(raw_config, pyproject)
+                    seen_languages.add(Language.PYTHON)
+                    configs.append(LanguageConfig(config=normalized, config_path=pyproject, language=Language.PYTHON))
+            except Exception:
+                pass
+
+    if Language.JAVASCRIPT not in seen_languages:
+        package_json = dir_path / "package.json"
+        if package_json.exists():
+            try:
+                result = parse_package_json_config(package_json)
+                if result is not None:
+                    config, path = result
+                    seen_languages.add(Language.JAVASCRIPT)
+                    configs.append(LanguageConfig(config=config, config_path=path, language=Language.JAVASCRIPT))
+            except Exception:
+                pass
+
+    if Language.JAVA not in seen_languages:
+        if (
+            (dir_path / "pom.xml").exists()
+            or (dir_path / "build.gradle").exists()
+            or (dir_path / "build.gradle.kts").exists()
+        ):
+            try:
+                java_config = _parse_java_config_for_dir(dir_path)
+                if java_config is not None:
+                    seen_languages.add(Language.JAVA)
+                    configs.append(LanguageConfig(config=java_config, config_path=dir_path, language=Language.JAVA))
+            except Exception:
+                pass
+
+
+def find_all_config_files(start_dir: Path | None = None) -> list[LanguageConfig]:
+    if start_dir is None:
+        start_dir = Path.cwd()
+
+    configs: list[LanguageConfig] = []
+    seen_languages: set[Language] = set()
+
+    # Walk upward from start_dir to filesystem root (closest config wins per language)
+    dir_path = start_dir.resolve()
+    while True:
+        _check_dir_for_configs(dir_path, configs, seen_languages)
+
+        parent = dir_path.parent
+        if parent == dir_path:
+            break
+        dir_path = parent
+
+    # Scan immediate subdirectories for monorepo language subprojects
+    resolved_start = start_dir.resolve()
+    try:
+        subdirs = sorted(p for p in resolved_start.iterdir() if p.is_dir() and p.name not in _SUBDIR_SKIP)
+    except OSError:
+        subdirs = []
+    for subdir in subdirs:
+        _check_dir_for_configs(subdir, configs, seen_languages)
+
+    return configs
+
+
 def parse_config_file(
     config_file_path: Path | None = None, override_formatter_check: bool = False
 ) -> tuple[dict[str, Any], Path]:
@@ -174,55 +326,13 @@ def parse_config_file(
     if config == {} and lsp_mode:
         return {}, config_file_path
 
-    # Preserve language field if present (important for JS/TS projects)
-    # default values:
-    path_keys = ["module-root", "tests-root", "benchmarks-root"]
-    path_list_keys = ["ignore-paths"]
-    str_keys = {"pytest-cmd": "pytest", "git-remote": "origin"}
-    bool_keys = {
-        "override-fixtures": False,
-        "disable-telemetry": False,
-        "disable-imports-sorting": False,
-        "benchmark": False,
-    }
-    # Note: formatter-cmds defaults to empty list. For Python projects, black is typically
-    # detected by the project detector. For Java projects, no formatter is supported yet.
-    list_str_keys = {"formatter-cmds": []}
-
-    for key, default_value in str_keys.items():
-        if key in config:
-            config[key] = str(config[key])
-        else:
-            config[key] = default_value
-    for key, default_value in bool_keys.items():
-        if key in config:
-            config[key] = bool(config[key])
-        else:
-            config[key] = default_value
-    for key in path_keys:
-        if key in config:
-            config[key] = str((Path(config_file_path).parent / Path(config[key])).resolve())
-    for key, default_value in list_str_keys.items():
-        if key in config:
-            config[key] = [str(cmd) for cmd in config[key]]
-        else:
-            config[key] = default_value
-
-    for key in path_list_keys:
-        if key in config:
-            config[key] = [str((Path(config_file_path).parent / path).resolve()) for path in config[key]]
-        else:
-            config[key] = []
+    config = normalize_toml_config(config, config_file_path)
 
     # see if this is happening during GitHub actions setup
-    if config.get("formatter-cmds") and len(config.get("formatter-cmds")) > 0 and not override_formatter_check:
-        assert config.get("formatter-cmds")[0] != "your-formatter $file", (
+    if config.get("formatter_cmds") and len(config.get("formatter_cmds")) > 0 and not override_formatter_check:
+        assert config.get("formatter_cmds")[0] != "your-formatter $file", (
             "The formatter command is not set correctly in pyproject.toml. Please set the "
             "formatter command in the 'formatter-cmds' key. More info - https://docs.codeflash.ai/configuration"
         )
-    for key in list(config.keys()):
-        if "-" in key:
-            config[key.replace("-", "_")] = config[key]
-            del config[key]
 
     return config, config_file_path
