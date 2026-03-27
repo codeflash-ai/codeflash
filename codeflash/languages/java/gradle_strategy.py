@@ -17,6 +17,11 @@ from pathlib import Path
 from typing import Any
 
 from codeflash.languages.java.build_tool_strategy import BuildToolStrategy, module_to_dir
+from codeflash.languages.java.build_tools import BuildTool, JavaProjectInfo
+
+_RE_INCLUDE = re.compile(r"""include\s*\(?([^)\n]+)\)?""")
+
+_RE_QUOTED = re.compile(r"""['"]([^'"]+)['"]""")
 
 _BUILD = "build"
 
@@ -29,13 +34,13 @@ logger = logging.getLogger(__name__)
 _GRADLE_SKIP_VALIDATION_INIT_SCRIPT = """\
 gradle.projectsEvaluated {
     allprojects {
+        // Disable checkstyle, spotbugs, pmd by type (catches all source sets, not just Main/Test)
+        try { tasks.withType(Checkstyle) { enabled = false } } catch (e) {}
+        try { tasks.withType(Class.forName('com.github.spotbugs.snom.SpotBugsTask')) { enabled = false } } catch (e) {}
+        try { tasks.withType(Pmd) { enabled = false } } catch (e) {}
+        // Disable remaining validation tasks by name
         tasks.matching { task ->
-            task.name in [
-                'checkstyleMain', 'checkstyleTest',
-                'spotbugsMain', 'spotbugsTest',
-                'pmdMain', 'pmdTest',
-                'rat', 'japicmp'
-            ]
+            task.name in ['rat', 'japicmp']
         }.configureEach {
             enabled = false
         }
@@ -180,6 +185,70 @@ def _find_top_level_dependencies_block(build_file: Path, content: str) -> int | 
     return None
 
 
+def _is_multimodule_project(build_root: Path) -> bool:
+    """Check if this is a multi-module Gradle project by looking for include directives in settings files."""
+    for settings_name in ("settings.gradle", "settings.gradle.kts"):
+        settings_file = build_root / settings_name
+        if settings_file.exists():
+            try:
+                content = settings_file.read_text(encoding="utf-8")
+                if re.search(r'include\s*[\(\'"]', content):
+                    return True
+            except Exception:
+                pass
+    return False
+
+
+def add_codeflash_dependency_multimodule(build_file: Path, runtime_jar_path: Path) -> bool:
+    """Add codeflash-runtime dependency wrapped in a subprojects block for multi-module projects.
+
+    This avoids adding testImplementation to the root build file directly, which would fail
+    if the root project doesn't apply the java plugin.
+    """
+    if not build_file.exists():
+        return False
+
+    try:
+        content = build_file.read_text(encoding="utf-8")
+
+        if "codeflash-runtime" in content:
+            logger.info("codeflash-runtime dependency already present in %s", build_file.name)
+            return True
+
+        is_kts = build_file.name.endswith(".kts")
+        jar_str = str(runtime_jar_path).replace("\\", "/")
+
+        if is_kts:
+            block = (
+                f"\nsubprojects {{\n"
+                f'    plugins.withId("java") {{\n'
+                f"        dependencies {{\n"
+                f'            testImplementation(files("{jar_str}"))  // codeflash-runtime\n'
+                f"        }}\n"
+                f"    }}\n"
+                f"}}\n"
+            )
+        else:
+            block = (
+                f"\nsubprojects {{\n"
+                f"    plugins.withId('java') {{\n"
+                f"        dependencies {{\n"
+                f"            testImplementation files('{jar_str}')  // codeflash-runtime\n"
+                f"        }}\n"
+                f"    }}\n"
+                f"}}\n"
+            )
+
+        content += block
+        build_file.write_text(content, encoding="utf-8")
+        logger.info("Added codeflash-runtime dependency to %s (subprojects block)", build_file.name)
+        return True
+
+    except Exception as e:
+        logger.exception("Failed to add dependency to %s: %s", build_file.name, e)
+        return False
+
+
 def add_codeflash_dependency(build_file: Path, runtime_jar_path: Path) -> bool:
     if not build_file.exists():
         return False
@@ -254,12 +323,92 @@ def _normalize_gradle_xml_reports(reports_dir: Path) -> None:
             logger.debug("Failed to normalize Gradle XML report %s", xml_file)
 
 
+def _extract_gradle_include_modules(content: str) -> list[str]:
+    """Extract module names from include() directives in settings.gradle."""
+    modules: list[str] = []
+    for match in _RE_INCLUDE.finditer(content):
+        args = match.group(1)
+        for quoted in _RE_QUOTED.findall(args):
+            module = quoted.lstrip(":")
+            if module:
+                modules.append(module)
+    return modules
+
+
+def _parse_gradle_settings_modules(project_root: Path) -> list[str]:
+    """Parse settings.gradle(.kts) to find included modules."""
+    for settings_name in ["settings.gradle", "settings.gradle.kts"]:
+        settings_path = project_root / settings_name
+        if settings_path.exists():
+            try:
+                content = settings_path.read_text(encoding="utf-8")
+                return _extract_gradle_include_modules(content)
+            except Exception:
+                continue
+    return []
+
+
+def _discover_gradle_submodule_roots(project_root: Path) -> tuple[list[Path], list[Path]]:
+    """Discover source and test roots from Gradle submodules."""
+    source_roots: list[Path] = []
+    test_roots: list[Path] = []
+
+    modules = _parse_gradle_settings_modules(project_root)
+    for module_name in modules:
+        module_path = module_name.replace(":", "/")
+        module_dir = project_root / module_path
+        if not module_dir.is_dir():
+            continue
+
+        std_src = module_dir / "src" / "main" / "java"
+        if std_src.exists():
+            source_roots.append(std_src)
+
+        std_test = module_dir / "src" / "test" / "java"
+        if std_test.exists():
+            test_roots.append(std_test)
+
+    return source_roots, test_roots
+
+
 class GradleStrategy(BuildToolStrategy):
     """Gradle-specific build tool operations."""
 
     @property
     def name(self) -> str:
         return "Gradle"
+
+    def get_project_info(self, project_root: Path) -> JavaProjectInfo | None:
+        source_roots: list[Path] = []
+        test_roots: list[Path] = []
+
+        main_src = project_root / "src" / "main" / "java"
+        if main_src.exists():
+            source_roots.append(main_src)
+
+        test_src = project_root / "src" / "test" / "java"
+        if test_src.exists():
+            test_roots.append(test_src)
+
+        sub_sources, sub_tests = _discover_gradle_submodule_roots(project_root)
+        for root_path in sub_sources:
+            if root_path not in source_roots:
+                source_roots.append(root_path)
+        for root_path in sub_tests:
+            if root_path not in test_roots:
+                test_roots.append(root_path)
+
+        return JavaProjectInfo(
+            project_root=project_root,
+            build_tool=BuildTool.GRADLE,
+            source_roots=source_roots,
+            test_roots=test_roots,
+            target_dir=project_root / "build",
+            group_id=None,
+            artifact_id=None,
+            version=None,
+            java_version=None,
+        )
 
     def find_executable(self, build_root: Path) -> str | None:
         # Walk up from build_root to find gradlew — for multi-module projects
@@ -303,7 +452,11 @@ class GradleStrategy(BuildToolStrategy):
             logger.warning("No build.gradle(.kts) found at %s, cannot add codeflash-runtime dependency", module_root)
             return False
 
-        if not add_codeflash_dependency(build_file, dest_jar):
+        if not test_module and _is_multimodule_project(build_root):
+            if not add_codeflash_dependency_multimodule(build_file, dest_jar):
+                logger.error("Failed to add codeflash-runtime dependency to %s", build_file)
+                return False
+        elif not add_codeflash_dependency(build_file, dest_jar):
             logger.error("Failed to add codeflash-runtime dependency to %s", build_file)
             return False
 

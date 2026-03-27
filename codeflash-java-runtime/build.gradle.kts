@@ -22,6 +22,8 @@ dependencies {
     implementation("org.xerial:sqlite-jdbc:3.45.0.0")
     implementation("org.ow2.asm:asm:9.7.1")
     implementation("org.ow2.asm:asm-commons:9.7.1")
+    implementation("org.jacoco:org.jacoco.agent:0.8.13:runtime")
+    implementation("org.jacoco:org.jacoco.cli:0.8.13:nodeps")
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

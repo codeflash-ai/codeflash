@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import subprocess
 
+    from codeflash.languages.java.build_tools import JavaProjectInfo
+
 logger = logging.getLogger(__name__)
 
 _RUNTIME_JAR_NAME = "codeflash-runtime-1.0.0.jar"
@@ -43,6 +45,11 @@ class BuildToolStrategy(ABC):
     @abstractmethod
     def name(self) -> str:
         """Human-readable name for log messages (e.g. 'Maven', 'Gradle')."""
+        ...
+
+    @abstractmethod
+    def get_project_info(self, project_root: Path) -> JavaProjectInfo | None:
+        """Extract project metadata (source roots, versions, etc.) from the build configuration."""
         ...
 
     def find_runtime_jar(self) -> Path | None:
