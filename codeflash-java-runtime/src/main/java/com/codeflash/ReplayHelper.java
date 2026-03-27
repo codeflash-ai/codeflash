@@ -84,7 +84,9 @@ public class ReplayHelper {
     private void replayBehavior(Method method, Object instance, Object[] args,
                                  String className, String methodName,
                                  String testClassName, String testMethodName) throws Exception {
-        String invId = testIteration + "_" + testMethodName;
+        // testIteration goes at the END so the Comparator's lastUnderscore stripping
+        // removes it, making baseline (iteration=0) and candidate (iteration=N) keys match.
+        String invId = testMethodName + "_" + testIteration;
 
         // Print start marker (same format as behavior instrumentation)
         System.out.println("!$######" + testClassName + ":" + testClassName + "." + testMethodName

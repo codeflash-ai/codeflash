@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import subprocess
 from datetime import datetime
@@ -42,6 +43,13 @@ class JfrProfile:
                 candidate = Path(home) / "bin" / "jfr"
                 if candidate.exists():
                     return str(candidate)
+
+        java_home_env = os.environ.get("JAVA_HOME")
+        if java_home_env:
+            candidate = Path(java_home_env) / "bin" / "jfr"
+            if candidate.exists():
+                return str(candidate)
+
         return None
 
     def _parse(self) -> None:
