@@ -34,7 +34,8 @@ gradle.projectsEvaluated {
                 'checkstyleMain', 'checkstyleTest',
                 'spotbugsMain', 'spotbugsTest',
                 'pmdMain', 'pmdTest',
-                'rat', 'japicmp'
+                'rat', 'japicmp',
+                'jarHell', 'thirdPartyAudit'
             ]
         }.configureEach {
             enabled = false

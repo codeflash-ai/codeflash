@@ -22,6 +22,8 @@ dependencies {
     implementation("org.xerial:sqlite-jdbc:3.45.0.0")
     implementation("org.ow2.asm:asm:9.7.1")
     implementation("org.ow2.asm:asm-commons:9.7.1")
+    implementation("org.jacoco:org.jacoco.agent:0.8.13:runtime")
+    implementation("org.jacoco:org.jacoco.cli:0.8.13:nodeps")
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
@@ -45,7 +47,12 @@ tasks.shadowJar {
     archiveVersion.set("1.0.0")
     archiveClassifier.set("")
 
-    relocate("org.objectweb.asm", "com.codeflash.asm")
+    relocate("org.objectweb.asm", "com.codeflash.shaded.org.objectweb.asm")
+    relocate("com.google.gson", "com.codeflash.shaded.com.google.gson")
+    relocate("com.esotericsoftware", "com.codeflash.shaded.com.esotericsoftware")
+    relocate("org.objenesis", "com.codeflash.shaded.org.objenesis")
+    relocate("org.slf4j", "com.codeflash.shaded.org.slf4j")
+    relocate("org.jacoco", "com.codeflash.shaded.org.jacoco")
 
     manifest {
         attributes(
