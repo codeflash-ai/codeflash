@@ -426,8 +426,31 @@ class FutureAliasedImportTransformer(cst.CSTTransformer):
         return updated_node
 
 
+def _has_aliased_future_imports(module: cst.Module) -> bool:
+    for stmt in module.body:
+        if isinstance(stmt, cst.SimpleStatementLine):
+            for s in stmt.body:
+                if (
+                    isinstance(s, cst.ImportFrom)
+                    and s.module is not None
+                    and isinstance(s.module, cst.Attribute | cst.Name)
+                    and hasattr(s.module, "value")
+                    and s.module.value == "__future__"
+                    and isinstance(s.names, (list, tuple))
+                    and any(name.asname is not None for name in s.names)
+                ):
+                    return True
+    return False
+
+
+def _strip_future_aliases(module: cst.Module) -> cst.Module:
+    if _has_aliased_future_imports(module):
+        return module.visit(FutureAliasedImportTransformer())
+    return module
+
+
 def delete___future___aliased_imports(module_code: str) -> str:
-    return cst.parse_module(module_code).visit(FutureAliasedImportTransformer()).code
+    return _strip_future_aliases(cst.parse_module(module_code)).code
 
 
 def add_global_assignments(src_module_code: str, dst_module_code: str) -> str:
@@ -555,9 +578,9 @@ def gather_source_imports(
     src_module_and_package: ModuleNameAndPackage = calculate_module_and_package(project_root, src_path)
     try:
         if isinstance(src_module_code, cst.Module):
-            src_module = src_module_code.visit(FutureAliasedImportTransformer())
+            src_module = _strip_future_aliases(src_module_code)
         else:
-            src_module = cst.parse_module(src_module_code).visit(FutureAliasedImportTransformer())
+            src_module = _strip_future_aliases(cst.parse_module(src_module_code))
 
         has_module_level_imports = any(
             isinstance(s, (cst.Import, cst.ImportFrom))
