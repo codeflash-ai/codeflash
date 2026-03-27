@@ -118,7 +118,7 @@ def get_code_optimization_context(
 
     # Get FunctionSource representation of helpers of FTO
     fto_input = {function_to_optimize.file_path: {function_to_optimize.qualified_name}}
-    jedi_refs_cache: dict[Path, dict[str, list]] | None = None
+    jedi_refs_cache: dict[Path, dict[str, list[Name]]] | None = None
     if call_graph is not None:
         helpers_of_fto_dict, helpers_of_fto_list = call_graph.get_callees(fto_input)
     else:
@@ -561,14 +561,14 @@ def get_function_sources_from_jedi(
     project_root_path: Path,
     *,
     jedi_project: object | None = None,
-    refs_cache: dict[Path, dict[str, list]] | None = None,
-) -> tuple[dict[Path, set[FunctionSource]], list[FunctionSource], dict[Path, dict[str, list]]]:
+    refs_cache: dict[Path, dict[str, list[Name]]] | None = None,
+) -> tuple[dict[Path, set[FunctionSource]], list[FunctionSource], dict[Path, dict[str, list[Name]]]]:
     import jedi
 
     project = jedi_project if jedi_project is not None else get_jedi_project(str(project_root_path))
     file_path_to_function_source = defaultdict(set)
     function_source_list: list[FunctionSource] = []
-    new_refs_cache: dict[Path, dict[str, list]] = {} if refs_cache is None else dict(refs_cache)
+    new_refs_cache: dict[Path, dict[str, list[Name]]] = {} if refs_cache is None else dict(refs_cache)
     for file_path, qualified_function_names in file_path_to_qualified_function_names.items():
         if file_path in new_refs_cache:
             refs_by_parent = new_refs_cache[file_path]
@@ -577,7 +577,7 @@ def get_function_sources_from_jedi(
             file_refs = script.get_names(all_scopes=True, definitions=False, references=True)
 
             # Pre-group references by their parent function's qualified name for O(1) lookup
-            refs_by_parent: dict[str, list[Name]] = defaultdict(list)
+            refs_by_parent = defaultdict(list)
             for ref in file_refs:
                 if not ref.full_name:
                     continue
