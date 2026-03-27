@@ -46,7 +46,7 @@ def compare_branches(
     tests_root: Path,
     functions: Optional[dict[Path, list]] = None,
     timeout: int = 600,
-    svg_output: Optional[Path] = None,
+    png_output: Optional[Path] = None,
 ) -> CompareResult:
     """Compare benchmark performance between two git refs.
 
@@ -132,7 +132,7 @@ def compare_branches(
             result.head_function_ns = CodeFlashBenchmarkPlugin.get_function_benchmark_timings(head_trace_db)
 
         # Render comparison
-        _render_comparison(result, svg_output=svg_output)
+        _render_comparison(result, png_output=png_output)
 
     finally:
         # Cleanup worktrees
@@ -315,13 +315,13 @@ def _cleanup_worktree(repo: git.Repo, worktree_dir: Path) -> None:
             logger.warning(f"Could not clean up worktree: {worktree_dir}")
 
 
-def _render_comparison(result: CompareResult, svg_output: Optional[Path] = None) -> None:
-    """Render Rich comparison tables to console (and optionally SVG)."""
+def _render_comparison(result: CompareResult, png_output: Optional[Path] = None) -> None:
+    """Render Rich comparison tables to console (and optionally PNG)."""
     if not result.base_total_ns and not result.head_total_ns:
         logger.warning("No benchmark results to compare")
         return
 
-    console = Console(width=140, record=svg_output is not None)
+    console = Console(width=140, record=png_output is not None)
 
     # Find all benchmark keys across both refs
     all_benchmark_keys = set(result.base_total_ns.keys()) | set(result.head_total_ns.keys())
@@ -389,9 +389,19 @@ def _render_comparison(result: CompareResult, svg_output: Optional[Path] = None)
 
     console.print()
 
-    if svg_output:
-        console.save_svg(str(svg_output), title=f"Benchmark: {result.base_ref} vs {result.head_ref}")
-        logger.info(f"Saved SVG to {svg_output}")
+    if png_output:
+        import tempfile
+
+        import cairosvg
+
+        with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as tmp:
+            tmp_svg = Path(tmp.name)
+        try:
+            console.save_svg(str(tmp_svg), title=f"Benchmark: {result.base_ref} vs {result.head_ref}")
+            cairosvg.svg2png(url=str(tmp_svg), write_to=str(png_output), dpi=144)
+            logger.info(f"Saved PNG to {png_output}")
+        finally:
+            tmp_svg.unlink(missing_ok=True)
 
 
 def _fmt_ms(ns: Optional[int]) -> str:

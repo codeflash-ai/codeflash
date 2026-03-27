@@ -51,7 +51,7 @@ def run_compare(args: Namespace) -> None:
     if args.functions:
         functions = _parse_functions_arg(args.functions, project_root)
 
-    svg_output = Path(args.svg) if args.svg else None
+    png_output = Path(args.png) if args.png else None
 
     from codeflash.benchmarking.compare import compare_branches
 
@@ -63,7 +63,7 @@ def run_compare(args: Namespace) -> None:
         tests_root=tests_root,
         functions=functions,
         timeout=args.timeout,
-        svg_output=svg_output,
+        png_output=png_output,
     )
 
     if not result.base_total_ns and not result.head_total_ns:

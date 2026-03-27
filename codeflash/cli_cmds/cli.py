@@ -388,7 +388,7 @@ def _build_parser() -> ArgumentParser:
     compare_parser.add_argument(
         "--functions", type=str, help="Explicit functions to instrument: 'file.py::func1,func2;other.py::func3'"
     )
-    compare_parser.add_argument("--svg", type=str, help="Export comparison as SVG to this path")
+    compare_parser.add_argument("--png", type=str, help="Export comparison as PNG to this path")
     compare_parser.add_argument("--timeout", type=int, default=600, help="Benchmark timeout in seconds (default: 600)")
     compare_parser.add_argument("--config-file", type=str, dest="config_file", help="Path to pyproject.toml")
 
