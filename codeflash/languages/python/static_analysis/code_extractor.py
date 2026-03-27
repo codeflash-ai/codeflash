@@ -433,7 +433,7 @@ def _has_aliased_future_imports(module: cst.Module) -> bool:
                 if (
                     isinstance(s, cst.ImportFrom)
                     and s.module is not None
-                    and isinstance(s.module, cst.Attribute | cst.Name)
+                    and isinstance(s.module, (cst.Attribute, cst.Name))
                     and hasattr(s.module, "value")
                     and s.module.value == "__future__"
                     and isinstance(s.names, (list, tuple))
