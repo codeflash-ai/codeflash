@@ -840,7 +840,7 @@ class AiServiceClient:
             "codeflash_version": codeflash_version,
             "calling_fn_details": calling_fn_details,
             "language": language,
-            "language_version": platform.python_version() if current_language() == Language.PYTHON else None,
+            "language_version": current_language_support().language_version,
             "call_sequence": self.get_next_sequence(),
         }
         console.rule()
