@@ -1813,6 +1813,215 @@ public class InnerClassTest__perfonlyinstrumented {
         assert result == expected
 
 
+class TestMultiLineCallInstrumentation:
+    """Tests that multi-line function calls are fully replaced during instrumentation.
+
+    When a call spans multiple lines the replacement must cover the entire byte range,
+    not just the first line. Otherwise continuation lines become orphaned.
+    """
+
+    def test_behavior_mode_multiline_expression_statement(self, tmp_path: Path):
+        """Multi-line expression statement call must not leave orphaned continuation lines."""
+        test_file = tmp_path / "SchemaTest.java"
+        source = """import org.junit.jupiter.api.Test;
+
+public class SchemaTest {
+    @Test
+    public void testAugment() {
+        augmentToolInputSchema(baseSchema, propertyName,
+                description, required);
+    }
+}
+"""
+        test_file.write_text(source, encoding="utf-8")
+
+        func = FunctionToOptimize(
+            function_name="augmentToolInputSchema",
+            file_path=tmp_path / "Schema.java",
+            starting_line=1,
+            ending_line=5,
+            parents=[],
+            is_method=True,
+            language="java",
+        )
+
+        success, result = instrument_existing_test(
+            test_string=source, function_to_optimize=func, mode="behavior", test_path=test_file
+        )
+
+        expected = """import org.junit.jupiter.api.Test;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+
+@SuppressWarnings("CheckReturnValue")
+public class SchemaTest__perfinstrumented {
+    @Test
+    public void testAugment() {
+        // Codeflash behavior instrumentation
+        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_iter1 = 1;
+        String _cf_mod1 = "SchemaTest__perfinstrumented";
+        String _cf_cls1 = "SchemaTest__perfinstrumented";
+        String _cf_fn1 = "augmentToolInputSchema";
+        String _cf_outputFile1 = System.getenv("CODEFLASH_OUTPUT_FILE");
+        String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
+        if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
+        String _cf_test1 = "testAugment";
+        Object _cf_result1_1 = null;
+        long _cf_end1_1 = -1;
+        long _cf_start1_1 = 0;
+        byte[] _cf_serializedResult1_1 = null;
+        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":L10_1" + "######$!");
+        try {
+            _cf_start1_1 = System.nanoTime();
+            _cf_result1_1 = augmentToolInputSchema(baseSchema, propertyName,
+                description, required);
+            _cf_end1_1 = System.nanoTime();
+            _cf_serializedResult1_1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);
+        } finally {
+            long _cf_end1_1_finally = System.nanoTime();
+            long _cf_dur1_1 = (_cf_end1_1 != -1 ? _cf_end1_1 : _cf_end1_1_finally) - _cf_start1_1;
+            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + "L10_1" + "######!");
+            // Write to SQLite if output file is set
+            if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
+                try {
+                    Class.forName("org.sqlite.JDBC");
+                    try (Connection _cf_conn1_1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {
+                        try (java.sql.Statement _cf_stmt1_1 = _cf_conn1_1.createStatement()) {
+                            _cf_stmt1_1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
+                                "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
+                                "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
+                                "runtime INTEGER, return_value BLOB, verification_type TEXT)");
+                        }
+                        String _cf_sql1_1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        try (PreparedStatement _cf_pstmt1_1 = _cf_conn1_1.prepareStatement(_cf_sql1_1)) {
+                            _cf_pstmt1_1.setString(1, _cf_mod1);
+                            _cf_pstmt1_1.setString(2, _cf_cls1);
+                            _cf_pstmt1_1.setString(3, _cf_test1);
+                            _cf_pstmt1_1.setString(4, _cf_fn1);
+                            _cf_pstmt1_1.setInt(5, _cf_loop1);
+                            _cf_pstmt1_1.setString(6, "L10_1");
+                            _cf_pstmt1_1.setLong(7, _cf_dur1_1);
+                            _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
+                            _cf_pstmt1_1.setString(9, "function_call");
+                            _cf_pstmt1_1.executeUpdate();
+                        }
+                    }
+                } catch (Exception _cf_e1_1) {
+                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e1_1.getMessage());
+                }
+            }
+        }
+    }
+}
+"""
+        assert success is True
+        assert result == expected
+
+    def test_behavior_mode_multiline_embedded_call(self, tmp_path: Path):
+        """Multi-line call embedded in assertEquals must not leave orphaned continuation lines."""
+        test_file = tmp_path / "SchemaTest.java"
+        source = """import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class SchemaTest {
+    @Test
+    public void testAugment() {
+        assertEquals("expected", augmentToolInputSchema(baseSchema,
+                propertyName));
+    }
+}
+"""
+        test_file.write_text(source, encoding="utf-8")
+
+        func = FunctionToOptimize(
+            function_name="augmentToolInputSchema",
+            file_path=tmp_path / "Schema.java",
+            starting_line=1,
+            ending_line=5,
+            parents=[],
+            is_method=True,
+            language="java",
+        )
+
+        success, result = instrument_existing_test(
+            test_string=source, function_to_optimize=func, mode="behavior", test_path=test_file
+        )
+
+        expected = """import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+
+@SuppressWarnings("CheckReturnValue")
+public class SchemaTest__perfinstrumented {
+    @Test
+    public void testAugment() {
+        // Codeflash behavior instrumentation
+        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
+        int _cf_iter1 = 1;
+        String _cf_mod1 = "SchemaTest__perfinstrumented";
+        String _cf_cls1 = "SchemaTest__perfinstrumented";
+        String _cf_fn1 = "augmentToolInputSchema";
+        String _cf_outputFile1 = System.getenv("CODEFLASH_OUTPUT_FILE");
+        String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");
+        if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
+        String _cf_test1 = "testAugment";
+        Object _cf_result1_1 = null;
+        long _cf_end1_1 = -1;
+        long _cf_start1_1 = 0;
+        byte[] _cf_serializedResult1_1 = null;
+        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":L11_1" + "######$!");
+        try {
+            _cf_start1_1 = System.nanoTime();
+            _cf_result1_1 = augmentToolInputSchema(baseSchema,
+                propertyName);
+            _cf_end1_1 = System.nanoTime();
+            _cf_serializedResult1_1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);
+        } finally {
+            long _cf_end1_1_finally = System.nanoTime();
+            long _cf_dur1_1 = (_cf_end1_1 != -1 ? _cf_end1_1 : _cf_end1_1_finally) - _cf_start1_1;
+            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + "L11_1" + "######!");
+            // Write to SQLite if output file is set
+            if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {
+                try {
+                    Class.forName("org.sqlite.JDBC");
+                    try (Connection _cf_conn1_1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {
+                        try (java.sql.Statement _cf_stmt1_1 = _cf_conn1_1.createStatement()) {
+                            _cf_stmt1_1.execute("CREATE TABLE IF NOT EXISTS test_results (" +
+                                "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +
+                                "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +
+                                "runtime INTEGER, return_value BLOB, verification_type TEXT)");
+                        }
+                        String _cf_sql1_1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        try (PreparedStatement _cf_pstmt1_1 = _cf_conn1_1.prepareStatement(_cf_sql1_1)) {
+                            _cf_pstmt1_1.setString(1, _cf_mod1);
+                            _cf_pstmt1_1.setString(2, _cf_cls1);
+                            _cf_pstmt1_1.setString(3, _cf_test1);
+                            _cf_pstmt1_1.setString(4, _cf_fn1);
+                            _cf_pstmt1_1.setInt(5, _cf_loop1);
+                            _cf_pstmt1_1.setString(6, "L11_1");
+                            _cf_pstmt1_1.setLong(7, _cf_dur1_1);
+                            _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);
+                            _cf_pstmt1_1.setString(9, "function_call");
+                            _cf_pstmt1_1.executeUpdate();
+                        }
+                    }
+                } catch (Exception _cf_e1_1) {
+                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e1_1.getMessage());
+                }
+            }
+        }
+        assertEquals("expected", _cf_result1_1);
+    }
+}
+"""
+        assert success is True
+        assert result == expected
+
+
 class TestMultiByteUtf8Instrumentation:
     """Tests that timing instrumentation handles multi-byte UTF-8 source correctly.
 
