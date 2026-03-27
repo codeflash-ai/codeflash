@@ -14,7 +14,7 @@ import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import git
 from rich.console import Console
@@ -22,7 +22,9 @@ from rich.table import Table
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.compat import codeflash_cache_dir
-from codeflash.models.models import BenchmarkKey
+
+if TYPE_CHECKING:
+    from codeflash.models.models import BenchmarkKey
 
 
 @dataclass
@@ -143,9 +145,7 @@ def compare_branches(
     return result
 
 
-def _discover_changed_functions(
-    base_ref: str, head_ref: str, repo_root: Path
-) -> dict[Path, list]:
+def _discover_changed_functions(base_ref: str, head_ref: str, repo_root: Path) -> dict[Path, list]:
     """Find only functions whose bodies overlap with changed lines between refs."""
     from io import StringIO
 
@@ -157,13 +157,9 @@ def _discover_changed_functions(
 
     # Get the diff with line-level detail
     try:
-        uni_diff_text = repo.git.diff(
-            f"{base_ref}...{head_ref}", ignore_blank_lines=True, ignore_space_at_eol=True
-        )
+        uni_diff_text = repo.git.diff(f"{base_ref}...{head_ref}", ignore_blank_lines=True, ignore_space_at_eol=True)
     except git.GitCommandError:
-        uni_diff_text = repo.git.diff(
-            base_ref, head_ref, ignore_blank_lines=True, ignore_space_at_eol=True
-        )
+        uni_diff_text = repo.git.diff(base_ref, head_ref, ignore_blank_lines=True, ignore_space_at_eol=True)
 
     if not uni_diff_text.strip():
         return {}
@@ -174,20 +170,14 @@ def _discover_changed_functions(
     changed_lines_by_file: dict[Path, set[int]] = {}
     for patched_file in patch_set:
         file_path = Path(patched_file.path)
-        if not file_path.suffix == ".py":
+        if file_path.suffix != ".py":
             continue
         abs_path = repo_root / file_path
 
         added_lines = {
-            line.target_line_no
-            for hunk in patched_file
-            for line in hunk
-            if line.is_added and line.value.strip()
+            line.target_line_no for hunk in patched_file for line in hunk if line.is_added and line.value.strip()
         }
-        deleted_lines = {
-            hunk.target_start
-            for hunk in patched_file
-        }
+        deleted_lines = {hunk.target_start for hunk in patched_file}
         # Use added lines if available, otherwise use hunk starts (deletion-only changes)
         line_nos = added_lines if added_lines else deleted_lines
         if line_nos:
@@ -305,10 +295,7 @@ def _cleanup_worktree(repo: git.Repo, worktree_dir: Path) -> None:
             logger.warning(f"Could not clean up worktree: {worktree_dir}")
 
 
-def _render_comparison(
-    result: CompareResult,
-    svg_output: Optional[Path] = None,
-) -> None:
+def _render_comparison(result: CompareResult, svg_output: Optional[Path] = None) -> None:
     """Render Rich comparison tables to console (and optionally SVG)."""
     if not result.base_total_ns and not result.head_total_ns:
         logger.warning("No benchmark results to compare")
@@ -335,12 +322,7 @@ def _render_comparison(
         t1.add_column("Speedup", justify="right", width=15)
 
         t1.add_row(result.base_ref, _fmt_ms(base_ns), "-", "-")
-        t1.add_row(
-            result.head_ref,
-            _fmt_ms(head_ns),
-            _fmt_delta(base_ns, head_ns),
-            _fmt_speedup(base_ns, head_ns),
-        )
+        t1.add_row(result.head_ref, _fmt_ms(head_ns), _fmt_delta(base_ns, head_ns), _fmt_speedup(base_ns, head_ns))
         console.print(t1)
 
         # Table 2: Per-function breakdown
@@ -362,8 +344,8 @@ def _render_comparison(
             t2.add_column("Delta", justify="right", width=25)
             t2.add_column("Speedup", justify="right", width=15)
 
-            def sort_key(fn: str) -> int:
-                return result.base_function_ns.get(fn, {}).get(bm_key, 0)
+            def sort_key(fn: str, _bm_key: BenchmarkKey = bm_key) -> int:
+                return result.base_function_ns.get(fn, {}).get(_bm_key, 0)
 
             for func_name in sorted(all_funcs, key=sort_key, reverse=True):
                 b_ns = result.base_function_ns.get(func_name, {}).get(bm_key)
@@ -372,13 +354,7 @@ def _render_comparison(
                 # Shorten function name for display
                 short_name = func_name.rsplit(".", 1)[-1] if "." in func_name else func_name
 
-                t2.add_row(
-                    short_name,
-                    _fmt_ms(b_ns),
-                    _fmt_ms(h_ns),
-                    _fmt_delta(b_ns, h_ns),
-                    _fmt_speedup(b_ns, h_ns),
-                )
+                t2.add_row(short_name, _fmt_ms(b_ns), _fmt_ms(h_ns), _fmt_delta(b_ns, h_ns), _fmt_speedup(b_ns, h_ns))
 
             # Totals row
             t2.add_section()

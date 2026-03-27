@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from argparse import Namespace
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from argparse import Namespace
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.config_parser import parse_config_file
@@ -108,7 +111,6 @@ def _parse_functions_arg(functions_str: str, project_root: Path) -> dict[Path, l
             continue
         func_names = [f.strip() for f in funcs_part.split(",") if f.strip()]
         result[file_path] = [
-            FunctionToOptimize(function_name=name, file_path=file_path, parents=[])
-            for name in func_names
+            FunctionToOptimize(function_name=name, file_path=file_path, parents=[]) for name in func_names
         ]
     return result
