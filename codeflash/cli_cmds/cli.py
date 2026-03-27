@@ -424,6 +424,12 @@ def _build_parser() -> ArgumentParser:
     parser.add_argument("--config-file", type=str, help="Path to the pyproject.toml with codeflash configs.")
     parser.add_argument("--replay-test", type=str, nargs="+", help="Paths to replay test to optimize functions from")
     parser.add_argument(
+        "--rerun",
+        type=str,
+        help="Rerun a previous optimization by trace ID, using stored LLM results",
+        metavar="TRACE_ID",
+    )
+    parser.add_argument(
         "--no-pr", action="store_true", help="Do not create a PR for the optimization, only update the code locally."
     )
     parser.add_argument(
