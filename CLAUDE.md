@@ -10,13 +10,7 @@ CodeFlash is an AI-powered code optimizer that automatically improves performanc
 Discovery → Ranking → Context Extraction → Test Gen + Optimization → Baseline → Candidate Evaluation → PR
 ```
 
-1. **Discovery** (`discovery/`): Find optimizable functions across the codebase
-2. **Ranking** (`benchmarking/function_ranker.py`): Rank functions by addressable time using trace data
-3. **Context** (`languages/<lang>/context/`): Extract code dependencies (read-writable code + read-only imports)
-4. **Optimization** (`optimization/`, `api/`): Generate candidates via AI service, run in parallel with test generation
-5. **Verification** (`verification/`): Run candidates against tests, compare outputs via custom pytest plugin
-6. **Benchmarking** (`benchmarking/`): Measure performance, select best candidate by speedup
-7. **Result** (`result/`, `github/`): Create PR with winning optimization
+See `.claude/rules/architecture.md` for directory mapping and entry points.
 
 # Instructions
 - **Bug fix workflow** — follow these steps in order, do not skip ahead:
