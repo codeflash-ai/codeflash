@@ -88,8 +88,6 @@ def detect_java_source_root(project_root: Path) -> str:
             return source_dir.text
 
     # Fallback to src directory
-
-    # Fallback to src directory
     if (project_root / "src").is_dir():
         return "src"
 
@@ -108,8 +106,6 @@ def detect_java_test_root(project_root: Path) -> str:
         test_source_dir = root.find(".//m:testSourceDirectory", _MAVEN_NS)
         if test_source_dir is not None and test_source_dir.text:
             return test_source_dir.text
-
-    # Fallback patterns
 
     # Fallback patterns
     if (project_root / "test").is_dir():
@@ -531,20 +527,6 @@ def get_java_test_command(build_tool: JavaBuildTool) -> str:
 
 @lru_cache(maxsize=8)
 def _get_pom_root_cached(project_root: Path) -> Union[ET.Element, None]:
-    """Parse pom.xml once and cache the result."""
-    pom_path = project_root / "pom.xml"
-    if not pom_path.exists():
-        return None
-    try:
-        tree = ET.parse(pom_path)
-        return tree.getroot()
-    except ET.ParseError:
-        return None
-
-
-@lru_cache(maxsize=8)
-def _get_pom_root_cached(project_root: Path) -> Union[ET.Element, None]:
-    """Parse pom.xml once and cache the result."""
     pom_path = project_root / "pom.xml"
     if not pom_path.exists():
         return None
