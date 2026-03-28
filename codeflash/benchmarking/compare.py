@@ -76,7 +76,7 @@ class CompareResult:
 
             if all_funcs:
 
-                def sort_key(fn: str, _bm_key: object = bm_key) -> int:
+                def sort_key(fn: str, _bm_key: BenchmarkKey = bm_key) -> int:
                     return self.base_function_ns.get(fn, {}).get(_bm_key, 0)
 
                 sorted_funcs = sorted(all_funcs, key=sort_key, reverse=True)
@@ -349,7 +349,7 @@ def _discover_changed_functions(base_ref: str, head_ref: str, repo_root: Path) -
     return result
 
 
-def _find_changed_toplevel_functions(file_path: Path, changed_lines: set[int]) -> list:
+def _find_changed_toplevel_functions(file_path: Path, changed_lines: set[int]) -> list[FunctionToOptimize]:
     """Find top-level functions overlapping changed lines using stdlib ast.
 
     Only discovers module-level functions (not methods inside classes, not nested
