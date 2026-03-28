@@ -493,17 +493,17 @@ def _render_comparison(result: CompareResult) -> None:
         head_ns = result.head_total_ns.get(bm_key)
 
         # Table 1: Total benchmark time
-        t1 = Table(title="End-to-End", border_style="blue", show_lines=True, width=100)
-        t1.add_column("Ref", style="bold cyan", width=30)
-        t1.add_column("Time (ms)", justify="right", width=15)
-        t1.add_column("Delta", justify="right", width=25)
-        t1.add_column("Speedup", justify="right", width=15)
+        t1 = Table(title="End-to-End", border_style="blue", show_lines=True, expand=False)
+        t1.add_column("Ref", style="bold cyan")
+        t1.add_column("Time (ms)", justify="right")
+        t1.add_column("Delta", justify="right")
+        t1.add_column("Speedup", justify="right")
 
         t1.add_row(f"{base_short} (base)", _fmt_ms(base_ns), "-", "-")
         t1.add_row(
             f"{head_short} (head)", _fmt_ms(head_ns), _fmt_delta(base_ns, head_ns), _fmt_speedup(base_ns, head_ns)
         )
-        console.print(t1)
+        console.print(t1, justify="center")
 
         # Table 2: Per-function breakdown
         all_funcs = set()
@@ -515,12 +515,12 @@ def _render_comparison(result: CompareResult) -> None:
         if all_funcs:
             console.print()
 
-            t2 = Table(title="Per-Function Breakdown", border_style="blue", show_lines=True)
-            t2.add_column("Function", style="cyan", width=40, overflow="fold")
-            t2.add_column("base (ms)", justify="right", style="yellow", width=15)
-            t2.add_column("head (ms)", justify="right", style="yellow", width=15)
-            t2.add_column("Delta", justify="right", width=25)
-            t2.add_column("Speedup", justify="right", width=15)
+            t2 = Table(title="Per-Function Breakdown", border_style="blue", show_lines=True, expand=False)
+            t2.add_column("Function", style="cyan")
+            t2.add_column("base (ms)", justify="right", style="yellow")
+            t2.add_column("head (ms)", justify="right", style="yellow")
+            t2.add_column("Delta", justify="right")
+            t2.add_column("Speedup", justify="right")
 
             def sort_key(fn: str, _bm_key: BenchmarkKey = bm_key) -> int:
                 return result.base_function_ns.get(fn, {}).get(_bm_key, 0)
@@ -543,7 +543,7 @@ def _render_comparison(result: CompareResult) -> None:
                 _fmt_delta(base_ns, head_ns),
                 _fmt_speedup(base_ns, head_ns),
             )
-            console.print(t2)
+            console.print(t2, justify="center")
 
     console.print()
 
