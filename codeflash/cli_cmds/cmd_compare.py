@@ -34,11 +34,9 @@ def run_compare(args: Namespace) -> None:
         logger.error(f"benchmarks-root {benchmarks_root} is not a valid directory")
         sys.exit(1)
 
-    # Determine project_root from module_root (same logic as cli.py)
-    if pyproject_file_path.parent == module_root:
-        project_root = module_root
-    else:
-        project_root = module_root.parent.resolve()
+    from codeflash.cli_cmds.cli import project_root_from_module_root
+
+    project_root = project_root_from_module_root(module_root, pyproject_file_path)
 
     # Resolve head_ref
     head_ref = args.head_ref

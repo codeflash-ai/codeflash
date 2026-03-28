@@ -21,7 +21,6 @@ import git
 from rich.table import Table
 
 from codeflash.cli_cmds.console import console, logger
-from codeflash.code_utils.compat import codeflash_cache_dir
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -40,7 +39,7 @@ class CompareResult:
     head_function_ns: dict[str, dict[BenchmarkKey, int]] = field(default_factory=dict)
 
     def format_markdown(self) -> str:
-        """Format comparison results as GitHub-flavored markdown."""
+        """Format comparison results as GitHub-flavored markdown (for programmatic use, e.g. PR comments)."""
         if not self.base_total_ns and not self.head_total_ns:
             return "_No benchmark results to compare._"
 
@@ -184,14 +183,15 @@ def compare_branches(
             branch.add(f"[bold]{fn.function_name}[/bold]")
 
     # Set up worktree paths and trace DB paths
-    worktree_dir = codeflash_cache_dir / "worktrees"
-    worktree_dir.mkdir(parents=True, exist_ok=True)
+    from codeflash.code_utils.git_worktree_utils import worktree_dirs
+
+    worktree_dirs.mkdir(parents=True, exist_ok=True)
     timestamp = time.strftime("%Y%m%d-%H%M%S")
 
-    base_worktree = worktree_dir / f"compare-base-{timestamp}"
-    head_worktree = worktree_dir / f"compare-head-{timestamp}"
-    base_trace_db = worktree_dir / f"trace-base-{timestamp}.db"
-    head_trace_db = worktree_dir / f"trace-head-{timestamp}.db"
+    base_worktree = worktree_dirs / f"compare-base-{timestamp}"
+    head_worktree = worktree_dirs / f"compare-head-{timestamp}"
+    base_trace_db = worktree_dirs / f"trace-base-{timestamp}.db"
+    head_trace_db = worktree_dirs / f"trace-head-{timestamp}.db"
 
     result = CompareResult(base_ref=base_ref, head_ref=head_ref)
 
@@ -237,9 +237,11 @@ def compare_branches(
 
     try:
         with Live(build_panel(0), console=console, refresh_per_second=1) as live:
-            # Step 1: Create worktrees
-            repo.git.worktree("add", str(base_worktree), base_ref)
-            repo.git.worktree("add", str(head_worktree), head_ref)
+            # Step 1: Create worktrees (resolve to SHAs to avoid "already checked out" errors)
+            base_sha = repo.commit(base_ref).hexsha
+            head_sha = repo.commit(head_ref).hexsha
+            repo.git.worktree("add", str(base_worktree), base_sha)
+            repo.git.worktree("add", str(head_worktree), head_sha)
             live.update(build_panel(1))
 
             # Step 2: Run benchmarks on base
@@ -286,8 +288,11 @@ def compare_branches(
 
     finally:
         # Cleanup worktrees
-        _cleanup_worktree(repo, base_worktree)
-        _cleanup_worktree(repo, head_worktree)
+        from codeflash.code_utils.git_worktree_utils import remove_worktree
+
+        remove_worktree(base_worktree)
+        remove_worktree(head_worktree)
+        repo.git.worktree("prune")
         # Cleanup trace DBs
         for db in [base_trace_db, head_trace_db]:
             if db.exists():
@@ -453,23 +458,6 @@ def _run_benchmark_on_worktree(
             file_path.write_text(source, encoding="utf-8")
 
 
-def _cleanup_worktree(repo: git.Repo, worktree_dir: Path) -> None:
-    """Remove a worktree, ignoring errors."""
-    if not worktree_dir.exists():
-        return
-    try:
-        repo.git.worktree("remove", "--force", str(worktree_dir))
-        logger.debug(f"Removed worktree: {worktree_dir}")
-    except Exception:
-        logger.debug(f"Failed to remove worktree {worktree_dir}, attempting manual cleanup")
-        import shutil
-
-        try:
-            shutil.rmtree(worktree_dir)
-        except Exception:
-            logger.warning(f"Could not clean up worktree: {worktree_dir}")
-
-
 def _render_comparison(result: CompareResult) -> None:
     """Render Rich comparison tables to console."""
     if not result.base_total_ns and not result.head_total_ns:
@@ -577,7 +565,7 @@ def _fmt_delta(before: Optional[int], after: Optional[int]) -> str:
     pct = ((after - before) / before) * 100 if before != 0 else 0
     if delta_ms < 0:
         return f"[green]{delta_ms:+,.0f}ms ({pct:+.0f}%)[/green]"
-    return f"[red]+{delta_ms:,.0f}ms ({pct:+.0f}%)[/red]"
+    return f"[red]{delta_ms:+,.0f}ms ({pct:+.0f}%)[/red]"
 
 
 def _md_speedup(before: Optional[int], after: Optional[int]) -> str:
