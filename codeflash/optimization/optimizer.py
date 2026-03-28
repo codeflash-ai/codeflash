@@ -17,6 +17,7 @@ from codeflash.code_utils.config_consts import HIGH_EFFORT_TOP_N, EffortLevel
 from codeflash.code_utils.env_utils import get_pr_number, is_pr_draft
 from codeflash.code_utils.git_utils import check_running_in_git_repo, git_root_dir, mirror_path
 from codeflash.code_utils.git_worktree_utils import (
+    cleanup_stale_worktrees,
     create_detached_worktree,
     create_diff_patch_from_worktree,
     create_worktree_snapshot_commit,
@@ -861,7 +862,33 @@ class Optimizer:
 
 
 def run_with_args(args: Namespace) -> None:
+    import atexit
+    import signal
+
+    cleanup_stale_worktrees()
+
     optimizer = None
+    original_sigterm = signal.getsignal(signal.SIGTERM)
+    original_sighup = signal.getsignal(signal.SIGHUP)
+    original_sigquit = signal.getsignal(signal.SIGQUIT)
+    original_sigpipe = signal.getsignal(signal.SIGPIPE)
+
+    def cleanup_worktree_on_exit() -> None:
+        if optimizer and optimizer.current_worktree:
+            remove_worktree(optimizer.current_worktree)
+
+    def signal_handler(signum: int, frame: object) -> None:
+        logger.warning(f"Signal {signum} received. Cleaning up worktree and exiting…")
+        if optimizer:
+            optimizer.cleanup_temporary_paths()
+        raise SystemExit(128 + signum)
+
+    atexit.register(cleanup_worktree_on_exit)
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGHUP, signal_handler)
+    signal.signal(signal.SIGQUIT, signal_handler)
+    signal.signal(signal.SIGPIPE, signal_handler)
+
     try:
         optimizer = Optimizer(args)
         optimizer.run()
@@ -871,3 +898,9 @@ def run_with_args(args: Namespace) -> None:
             optimizer.cleanup_temporary_paths()
 
         raise SystemExit from None
+    finally:
+        atexit.unregister(cleanup_worktree_on_exit)
+        signal.signal(signal.SIGTERM, original_sigterm)
+        signal.signal(signal.SIGHUP, original_sighup)
+        signal.signal(signal.SIGQUIT, original_sigquit)
+        signal.signal(signal.SIGPIPE, original_sigpipe)
