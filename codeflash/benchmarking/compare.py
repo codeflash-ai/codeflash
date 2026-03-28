@@ -24,6 +24,9 @@ from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.compat import codeflash_cache_dir
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from codeflash.models.function_types import FunctionToOptimize
     from codeflash.models.models import BenchmarkKey
 
 
@@ -126,7 +129,7 @@ def compare_branches(
     project_root: Path,
     benchmarks_root: Path,
     tests_root: Path,
-    functions: Optional[dict[Path, list]] = None,
+    functions: Optional[dict[Path, list[FunctionToOptimize]]] = None,
     timeout: int = 600,
 ) -> CompareResult:
     """Compare benchmark performance between two git refs.
@@ -293,7 +296,7 @@ def compare_branches(
     return result
 
 
-def _discover_changed_functions(base_ref: str, head_ref: str, repo_root: Path) -> dict[Path, list]:
+def _discover_changed_functions(base_ref: str, head_ref: str, repo_root: Path) -> dict[Path, list[FunctionToOptimize]]:
     """Find only functions whose bodies overlap with changed lines between refs."""
     from io import StringIO
 
@@ -320,17 +323,20 @@ def _discover_changed_functions(base_ref: str, head_ref: str, repo_root: Path) -
             continue
         abs_path = repo_root / file_path
 
-        added_lines = {
-            line.target_line_no for hunk in patched_file for line in hunk if line.is_added and line.value.strip()
+        added_lines: set[int] = {
+            line.target_line_no
+            for hunk in patched_file
+            for line in hunk
+            if line.is_added and line.value.strip() and line.target_line_no is not None
         }
-        deleted_lines = {hunk.target_start for hunk in patched_file}
+        deleted_lines: set[int] = {hunk.target_start for hunk in patched_file}
         # Use added lines if available, otherwise use hunk starts (deletion-only changes)
-        line_nos = added_lines if added_lines else deleted_lines
+        line_nos: set[int] = added_lines if added_lines else deleted_lines
         if line_nos:
             changed_lines_by_file[abs_path] = line_nos
 
     # Discover top-level functions in changed files using ast (lightweight, no libcst overhead)
-    result: dict[Path, list] = {}
+    result: dict[Path, list[FunctionToOptimize]] = {}
     for abs_path, changed_lines in changed_lines_by_file.items():
         if not abs_path.exists():
             logger.debug(f"Skipping {abs_path} (does not exist)")
@@ -364,6 +370,8 @@ def _find_changed_toplevel_functions(file_path: Path, changed_lines: set[int]) -
     for node in ast.iter_child_nodes(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
+        if node.end_lineno is None:
+            continue
         fn_lines = range(node.lineno, node.end_lineno + 1)
         if not changed_lines.isdisjoint(fn_lines):
             functions.append(
@@ -384,19 +392,19 @@ def _find_changed_toplevel_functions(file_path: Path, changed_lines: set[int]) -
 def _run_benchmark_on_worktree(
     worktree_dir: Path,
     repo_root: Path,
-    functions: dict[Path, list],
+    functions: dict[Path, list[FunctionToOptimize]],
     benchmarks_root: Path,
     tests_root: Path,
     trace_db: Path,
     timeout: int,
-    instrument_fn,
-    trace_fn,
+    instrument_fn: Callable[[dict[Path, list[FunctionToOptimize]]], None],
+    trace_fn: Callable[[Path, Path, Path, Path, int], None],
 ) -> None:
     """Instrument, benchmark, and restore source in a worktree."""
     from codeflash.models.function_types import FunctionToOptimize
 
     # Remap function paths from repo_root to worktree_dir
-    worktree_functions: dict[Path, list] = {}
+    worktree_functions: dict[Path, list[FunctionToOptimize]] = {}
     for file_path, fns in functions.items():
         rel = file_path.relative_to(repo_root) if file_path.is_relative_to(repo_root) else file_path
         wt_path = worktree_dir / rel

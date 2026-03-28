@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from argparse import Namespace
 
+    from codeflash.models.function_types import FunctionToOptimize
+
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.config_parser import parse_config_file
 
@@ -91,11 +93,11 @@ def _resolve_pr_branch(pr_number: int) -> str:
         sys.exit(1)
 
 
-def _parse_functions_arg(functions_str: str, project_root: Path) -> dict[Path, list]:
+def _parse_functions_arg(functions_str: str, project_root: Path) -> dict[Path, list[FunctionToOptimize]]:
     """Parse --functions arg format: 'file.py::func1,func2;other.py::func3'."""
     from codeflash.models.function_types import FunctionToOptimize
 
-    result: dict[Path, list] = {}
+    result: dict[Path, list[FunctionToOptimize]] = {}
     for entry in functions_str.split(";"):
         entry = entry.strip()
         if "::" not in entry:
