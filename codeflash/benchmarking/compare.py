@@ -493,8 +493,6 @@ def _render_comparison(result: CompareResult) -> None:
         speedup_str = _fmt_speedup(base_ns, head_ns)
 
         # Table 1: Total benchmark time
-
-        # Table 1: Total benchmark time
         t1 = Table(title="End-to-End", border_style="blue", show_lines=True, expand=False)
         t1.add_column("Ref", style="bold cyan")
         t1.add_column("Time (ms)", justify="right")
@@ -528,8 +526,6 @@ def _render_comparison(result: CompareResult) -> None:
             for func_name in sorted(all_funcs, key=sort_key, reverse=True):
                 b_ns = base_function_ns.get(func_name, {}).get(bm_key)
                 h_ns = head_function_ns.get(func_name, {}).get(bm_key)
-
-                # Shorten function name for display
 
                 # Shorten function name for display
                 short_name = func_name.rsplit(".", 1)[-1] if "." in func_name else func_name
