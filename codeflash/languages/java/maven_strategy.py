@@ -916,7 +916,15 @@ class MavenStrategy(BuildToolStrategy):
             " --add-opens java.base/java.net=ALL-UNNAMED"
             " --add-opens java.base/java.util.zip=ALL-UNNAMED"
         )
-        if javaagent_arg:
+        if enable_coverage:
+            # When coverage is enabled, JaCoCo's prepare-agent goal sets argLine via
+            # @{argLine}. Overriding -DargLine would clobber the JaCoCo agent flag.
+            # Pass add-opens and javaagent via JDK_JAVA_OPTIONS instead.
+            jdk_opts_parts = [add_opens_flags]
+            if javaagent_arg:
+                jdk_opts_parts.insert(0, javaagent_arg)
+            env["JDK_JAVA_OPTIONS"] = " ".join(jdk_opts_parts)
+        elif javaagent_arg:
             cmd.append(f"-DargLine={javaagent_arg} {add_opens_flags}")
         else:
             cmd.append(f"-DargLine={add_opens_flags}")

@@ -349,8 +349,12 @@ def _run_java_tracer(existing_args: Namespace | None = None) -> ArgumentParser:
     max_function_count = getattr(config, "max_function_count", 256)
     timeout = int(getattr(config, "timeout", None) or getattr(config, "tracer_timeout", 0) or 0)
 
+    console.print("[bold]Java project detected[/]")
+    console.print(f"  Project root: {project_root}")
+    console.print(f"  Module root:  {getattr(config, 'module_root', '?')}")
+    console.print(f"  Tests root:   {getattr(config, 'tests_root', '?')}")
+
     from codeflash.code_utils.code_utils import get_run_tmp_file
-    from codeflash.languages.java.build_tools import find_test_root
     from codeflash.languages.java.tracer import JavaTracer, run_java_tracer
 
     tracer = JavaTracer()
@@ -360,12 +364,16 @@ def _run_java_tracer(existing_args: Namespace | None = None) -> ArgumentParser:
 
     trace_db_path = get_run_tmp_file(Path("java_trace.db"))
 
-    # Place replay tests in the project's test source tree so Maven/Gradle can compile them
-    test_root = find_test_root(project_root)
-    if test_root:
-        output_dir = test_root / "codeflash" / "replay"
+    # Place replay tests in the project's test source tree so Maven/Gradle can compile them.
+    # Use the config's tests_root (correctly resolved for multi-module projects) not find_test_root().
+    tests_root = Path(getattr(config, "tests_root", ""))
+    if tests_root.is_dir():
+        output_dir = tests_root / "codeflash" / "replay"
     else:
-        output_dir = project_root / "src" / "test" / "java" / "codeflash" / "replay"
+        from codeflash.languages.java.build_tools import find_test_root
+
+        test_root = find_test_root(project_root)
+        output_dir = (test_root or project_root / "src" / "test" / "java") / "codeflash" / "replay"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Remaining args after our flags are the Java command
@@ -377,6 +385,12 @@ def _run_java_tracer(existing_args: Namespace | None = None) -> ArgumentParser:
         sys.exit(1)
     java_command = remaining
 
+    # Detect test framework for replay test generation
+    from codeflash.languages.java.config import detect_java_project
+
+    java_config = detect_java_project(project_root)
+    test_framework = java_config.test_framework if java_config else "junit5"
+
     trace_db, jfr_file, test_count = run_java_tracer(
         java_command=java_command,
         trace_db_path=trace_db_path,
@@ -385,6 +399,7 @@ def _run_java_tracer(existing_args: Namespace | None = None) -> ArgumentParser:
         output_dir=output_dir,
         max_function_count=max_function_count,
         timeout=timeout,
+        test_framework=test_framework,
     )
 
     console.print(f"[bold green]Java tracing complete:[/] {test_count} replay test files generated")

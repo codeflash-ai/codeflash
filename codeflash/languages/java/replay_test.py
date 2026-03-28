@@ -12,9 +12,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def generate_replay_tests(trace_db_path: Path, output_dir: Path, project_root: Path, max_run_count: int = 256) -> int:
-    """Generate JUnit 5 replay test files from a trace SQLite database.
+def generate_replay_tests(
+    trace_db_path: Path, output_dir: Path, project_root: Path, max_run_count: int = 256, test_framework: str = "junit5"
+) -> int:
+    """Generate JUnit replay test files from a trace SQLite database.
 
+    Supports both JUnit 5 (default) and JUnit 4.
     Returns the number of test files generated.
     """
     if not trace_db_path.exists():
@@ -44,9 +47,10 @@ def generate_replay_tests(trace_db_path: Path, output_dir: Path, project_root: P
 
             test_methods_code: list[str] = []
             class_function_names: list[str] = []
+            # Global test counter to avoid duplicate method names for overloaded Java methods
+            method_name_counters: dict[str, int] = {}
 
             for method_name, descriptor in method_list:
-                # Count invocations for this method
                 count_result = conn.execute(
                     "SELECT COUNT(*) FROM function_calls WHERE classname = ? AND function = ? AND descriptor = ?",
                     (classname, method_name, descriptor),
@@ -57,9 +61,14 @@ def generate_replay_tests(trace_db_path: Path, output_dir: Path, project_root: P
                 safe_method = _sanitize_identifier(method_name)
 
                 for i in range(invocation_count):
+                    # Use a global counter per method name to avoid collisions on overloaded methods
+                    test_idx = method_name_counters.get(safe_method, 0)
+                    method_name_counters[safe_method] = test_idx + 1
+
                     escaped_descriptor = descriptor.replace('"', '\\"')
+                    access = "public " if test_framework == "junit4" else ""
                     test_methods_code.append(
-                        f"    @Test void replay_{safe_method}_{i}() throws Exception {{\n"
+                        f"    @Test {access}void replay_{safe_method}_{test_idx}() throws Exception {{\n"
                         f'        helper.replay("{classname}", "{method_name}", '
                         f'"{escaped_descriptor}", {i});\n'
                         f"    }}"
@@ -69,18 +78,28 @@ def generate_replay_tests(trace_db_path: Path, output_dir: Path, project_root: P
 
             # Generate the test file
             functions_comment = ",".join(class_function_names)
+            if test_framework == "junit4":
+                test_imports = "import org.junit.Test;\nimport org.junit.AfterClass;\n"
+                cleanup_annotation = "@AfterClass"
+                class_modifier = "public "
+            else:
+                test_imports = "import org.junit.jupiter.api.Test;\nimport org.junit.jupiter.api.AfterAll;\n"
+                cleanup_annotation = "@AfterAll"
+                class_modifier = ""
+
             test_content = (
                 f"// codeflash:functions={functions_comment}\n"
                 f"// codeflash:trace_file={trace_db_path.as_posix()}\n"
                 f"// codeflash:classname={classname}\n"
                 f"package codeflash.replay;\n\n"
-                f"import org.junit.jupiter.api.Test;\n"
-                f"import org.junit.jupiter.api.AfterAll;\n"
+                f"{test_imports}"
                 f"import com.codeflash.ReplayHelper;\n\n"
-                f"class {test_class_name} {{\n"
+                f"{class_modifier}class {test_class_name} {{\n"
                 f"    private static final ReplayHelper helper =\n"
                 f'        new ReplayHelper("{trace_db_path.as_posix()}");\n\n'
-                f"    @AfterAll static void cleanup() {{ helper.close(); }}\n\n" + "\n\n".join(test_methods_code) + "\n"
+                f"    {cleanup_annotation} public static void cleanup() {{ helper.close(); }}\n\n"
+                + "\n\n".join(test_methods_code)
+                + "\n"
                 "}\n"
             )
 
