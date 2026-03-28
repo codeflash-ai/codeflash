@@ -61,7 +61,6 @@ def run_compare(args: Namespace) -> None:
         tests_root=tests_root,
         functions=functions,
         timeout=args.timeout,
-        markdown=args.markdown,
     )
 
     if not result.base_total_ns and not result.head_total_ns:

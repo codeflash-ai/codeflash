@@ -18,10 +18,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import git
-from rich.console import Console
 from rich.table import Table
 
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.compat import codeflash_cache_dir
 
 if TYPE_CHECKING:
@@ -129,7 +128,6 @@ def compare_branches(
     tests_root: Path,
     functions: Optional[dict[Path, list]] = None,
     timeout: int = 600,
-    markdown: bool = False,
 ) -> CompareResult:
     """Compare benchmark performance between two git refs.
 
@@ -150,12 +148,37 @@ def compare_branches(
             logger.warning("No changed Python functions found between %s and %s", base_ref, head_ref)
             return CompareResult(base_ref=base_ref, head_ref=head_ref)
 
+    from rich.live import Live
+    from rich.panel import Panel
+    from rich.text import Text
+
+    base_short = base_ref[:12]
+    head_short = head_ref[:12]
+
     func_count = sum(len(fns) for fns in functions.values())
     file_count = len(functions)
-    logger.info(f"Instrumenting {func_count} functions across {file_count} files")
-    for file_path, fns in functions.items():
-        rel = file_path.relative_to(repo_root) if file_path.is_relative_to(repo_root) else file_path
-        logger.info(f"  {rel}: {', '.join(f.function_name for f in fns)}")
+
+    # Build function tree for the panel
+    from os.path import commonpath
+
+    from rich.tree import Tree
+
+    rel_paths = []
+    for fp in functions:
+        rel_paths.append(fp.relative_to(repo_root) if fp.is_relative_to(repo_root) else fp)
+
+    # Strip common prefix so paths are short but unambiguous
+    if len(rel_paths) > 1:
+        common = Path(commonpath(rel_paths))
+        short_paths = [p.relative_to(common) if p != common else Path(p.name) for p in rel_paths]
+    else:
+        short_paths = [Path(p.name) for p in rel_paths]
+
+    fn_tree = Tree(f"[bold]{func_count} functions[/bold] [dim]across {file_count} files[/dim]", guide_style="dim")
+    for (_fp, fns), short in zip(functions.items(), short_paths):
+        branch = fn_tree.add(f"[cyan]{short}[/cyan]")
+        for fn in fns:
+            branch.add(f"[bold]{fn.function_name}[/bold]")
 
     # Set up worktree paths and trace DB paths
     worktree_dir = codeflash_cache_dir / "worktrees"
@@ -169,41 +192,79 @@ def compare_branches(
 
     result = CompareResult(base_ref=base_ref, head_ref=head_ref)
 
+    from rich.console import Group
+
+    step_labels = ["Creating worktrees", f"Benchmarking base ({base_short})", f"Benchmarking head ({head_short})"]
+
+    def build_steps(current_step: int) -> Group:
+        lines: list[Text] = []
+        for i, label in enumerate(step_labels):
+            if i < current_step:
+                lines.append(Text.from_markup(f"[green]\u2714[/green] {label}"))
+            elif i == current_step:
+                lines.append(Text.from_markup(f"[cyan]\u25cb[/cyan] {label}..."))
+            else:
+                lines.append(Text.from_markup(f"[dim]\u2500 {label}[/dim]"))
+        return Group(*lines)
+
+    def build_panel(current_step: int) -> Panel:
+        # Two-column grid: tree left, steps right (vertically padded to center)
+        tree_height = 1 + sum(1 + len(fns) for fns in functions.values())  # root + files + functions
+        step_count = len(step_labels)
+        pad_top = max(0, (tree_height - step_count) // 2)
+
+        grid = Table(box=None, show_header=False, expand=True, padding=0)
+        grid.add_column(ratio=3)
+        grid.add_column(ratio=2)
+        grid.add_row(fn_tree, Group(*([Text("")] * pad_top), build_steps(current_step)))
+
+        return Panel(
+            Group(
+                Text.from_markup(
+                    f"[bold cyan]{base_short}[/bold cyan] (base) vs [bold cyan]{head_short}[/bold cyan] (head)"
+                ),
+                "",
+                grid,
+            ),
+            title="[bold]Benchmark Compare[/bold]",
+            border_style="cyan",
+            expand=True,
+            padding=(1, 2),
+        )
+
     try:
-        # Create worktrees
-        logger.info(f"Creating worktree for base ref: {base_ref}")
-        repo.git.worktree("add", str(base_worktree), base_ref)
+        with Live(build_panel(0), console=console, refresh_per_second=1) as live:
+            # Step 1: Create worktrees
+            repo.git.worktree("add", str(base_worktree), base_ref)
+            repo.git.worktree("add", str(head_worktree), head_ref)
+            live.update(build_panel(1))
 
-        logger.info(f"Creating worktree for head ref: {head_ref}")
-        repo.git.worktree("add", str(head_worktree), head_ref)
+            # Step 2: Run benchmarks on base
+            _run_benchmark_on_worktree(
+                worktree_dir=base_worktree,
+                repo_root=repo_root,
+                functions=functions,
+                benchmarks_root=benchmarks_root,
+                tests_root=tests_root,
+                trace_db=base_trace_db,
+                timeout=timeout,
+                instrument_fn=instrument_codeflash_trace_decorator,
+                trace_fn=trace_benchmarks_pytest,
+            )
+            live.update(build_panel(2))
 
-        # Run benchmarks on base
-        logger.info(f"Running benchmarks on {base_ref}...")
-        _run_benchmark_on_worktree(
-            worktree_dir=base_worktree,
-            repo_root=repo_root,
-            functions=functions,
-            benchmarks_root=benchmarks_root,
-            tests_root=tests_root,
-            trace_db=base_trace_db,
-            timeout=timeout,
-            instrument_fn=instrument_codeflash_trace_decorator,
-            trace_fn=trace_benchmarks_pytest,
-        )
-
-        # Run benchmarks on head
-        logger.info(f"Running benchmarks on {head_ref}...")
-        _run_benchmark_on_worktree(
-            worktree_dir=head_worktree,
-            repo_root=repo_root,
-            functions=functions,
-            benchmarks_root=benchmarks_root,
-            tests_root=tests_root,
-            trace_db=head_trace_db,
-            timeout=timeout,
-            instrument_fn=instrument_codeflash_trace_decorator,
-            trace_fn=trace_benchmarks_pytest,
-        )
+            # Step 3: Run benchmarks on head
+            _run_benchmark_on_worktree(
+                worktree_dir=head_worktree,
+                repo_root=repo_root,
+                functions=functions,
+                benchmarks_root=benchmarks_root,
+                tests_root=tests_root,
+                trace_db=head_trace_db,
+                timeout=timeout,
+                instrument_fn=instrument_codeflash_trace_decorator,
+                trace_fn=trace_benchmarks_pytest,
+            )
 
         # Load results
         if base_trace_db.exists():
@@ -216,8 +277,9 @@ def compare_branches(
 
         # Render comparison
         _render_comparison(result)
-        if markdown:
-            print(result.format_markdown())
+
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Interrupted — cleaning up...[/yellow]")
 
     finally:
         # Cleanup worktrees
@@ -406,28 +468,33 @@ def _render_comparison(result: CompareResult) -> None:
         logger.warning("No benchmark results to compare")
         return
 
-    console = Console(width=140)
+    base_short = result.base_ref[:12]
+    head_short = result.head_ref[:12]
 
     # Find all benchmark keys across both refs
     all_benchmark_keys = set(result.base_total_ns.keys()) | set(result.head_total_ns.keys())
 
     for bm_key in sorted(all_benchmark_keys, key=str):
+        # Show only the test function name, not the full module path
+        bm_name = str(bm_key).rsplit("::", 1)[-1] if "::" in str(bm_key) else str(bm_key)
         console.print()
-        console.rule(f"[bold]Benchmark: {bm_key}[/bold]")
+        console.rule(f"[bold]{bm_name}[/bold]")
         console.print()
 
         base_ns = result.base_total_ns.get(bm_key)
         head_ns = result.head_total_ns.get(bm_key)
 
         # Table 1: Total benchmark time
-        t1 = Table(title="Total Benchmark Time", border_style="blue", show_lines=True, width=100)
+        t1 = Table(title="End-to-End", border_style="blue", show_lines=True, width=100)
         t1.add_column("Ref", style="bold cyan", width=30)
         t1.add_column("Time (ms)", justify="right", width=15)
         t1.add_column("Delta", justify="right", width=25)
         t1.add_column("Speedup", justify="right", width=15)
 
-        t1.add_row(result.base_ref, _fmt_ms(base_ns), "-", "-")
-        t1.add_row(result.head_ref, _fmt_ms(head_ns), _fmt_delta(base_ns, head_ns), _fmt_speedup(base_ns, head_ns))
+        t1.add_row(f"{base_short} (base)", _fmt_ms(base_ns), "-", "-")
+        t1.add_row(
+            f"{head_short} (head)", _fmt_ms(head_ns), _fmt_delta(base_ns, head_ns), _fmt_speedup(base_ns, head_ns)
+        )
         console.print(t1)
 
         # Table 2: Per-function breakdown
@@ -439,13 +506,11 @@ def _render_comparison(result: CompareResult) -> None:
 
         if all_funcs:
             console.print()
-            console.rule("[bold]Per-Function Breakdown[/bold]")
-            console.print()
 
-            t2 = Table(border_style="blue", show_lines=True, width=140)
+            t2 = Table(title="Per-Function Breakdown", border_style="blue", show_lines=True)
             t2.add_column("Function", style="cyan", width=40, overflow="fold")
-            t2.add_column(f"{result.base_ref} (ms)", justify="right", style="yellow", width=15)
-            t2.add_column(f"{result.head_ref} (ms)", justify="right", style="yellow", width=15)
+            t2.add_column("base (ms)", justify="right", style="yellow", width=15)
+            t2.add_column("head (ms)", justify="right", style="yellow", width=15)
             t2.add_column("Delta", justify="right", width=25)
             t2.add_column("Speedup", justify="right", width=15)
 

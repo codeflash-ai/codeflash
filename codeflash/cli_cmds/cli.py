@@ -388,7 +388,6 @@ def _build_parser() -> ArgumentParser:
     compare_parser.add_argument(
         "--functions", type=str, help="Explicit functions to instrument: 'file.py::func1,func2;other.py::func3'"
     )
-    compare_parser.add_argument("--markdown", action="store_true", help="Print comparison as GitHub-flavored markdown")
     compare_parser.add_argument("--timeout", type=int, default=600, help="Benchmark timeout in seconds (default: 600)")
     compare_parser.add_argument("--config-file", type=str, dest="config_file", help="Path to pyproject.toml")
 
