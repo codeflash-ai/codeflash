@@ -596,7 +596,7 @@ def _md_bar(before: Optional[int], after: Optional[int], width: int = 10) -> str
         return "-"
     pct = ((before - after) / before) * 100
     filled = round(abs(pct) / 100 * width)
-    filled = max(0, min(filled, width))
+    filled = min(filled, width)
     bar = "\u2588" * filled + "\u2591" * (width - filled)
     return f"`{bar}` {pct:+.0f}%"
 
