@@ -10,5 +10,6 @@ if [[ -z "$file_path" || ! -f "$file_path" ]]; then
 fi
 
 if [[ "$file_path" == *.py ]]; then
-    uv run prek --files "$file_path" 2>/dev/null || true
+    # First run auto-fixes formatting; second run catches real lint errors
+    uv run prek --files "$file_path" 2>/dev/null || uv run prek --files "$file_path"
 fi

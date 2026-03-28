@@ -71,6 +71,10 @@ def main() -> None:
             from codeflash.cli_cmds.extension import install_vscode_extension
 
             install_vscode_extension()
+        elif args.command == "compare":
+            from codeflash.cli_cmds.cmd_compare import run_compare
+
+            run_compare(args)
         elif args.command == "optimize":
             from codeflash.tracer import main as tracer_main
 

@@ -24,7 +24,7 @@ def parse_args() -> Namespace:
         args.no_pr = True
         args.worktree = True
         args.effort = "low"
-    if args.command == "auth":
+    if args.command in ("auth", "compare"):
         return args
     return process_and_validate_cmd_args(args)
 
@@ -380,6 +380,16 @@ def _build_parser() -> ArgumentParser:
     auth_subparsers = auth_parser.add_subparsers(dest="auth_command", help="Auth sub-commands")
     auth_subparsers.add_parser("login", help="Log in to Codeflash via OAuth")
     auth_subparsers.add_parser("status", help="Check authentication status")
+
+    compare_parser = subparsers.add_parser("compare", help="Compare benchmark performance between two git refs.")
+    compare_parser.add_argument("base_ref", help="Base git ref (branch, tag, or commit)")
+    compare_parser.add_argument("head_ref", nargs="?", default=None, help="Head git ref (default: current branch)")
+    compare_parser.add_argument("--pr", type=int, help="Resolve head ref from a PR number (requires gh CLI)")
+    compare_parser.add_argument(
+        "--functions", type=str, help="Explicit functions to instrument: 'file.py::func1,func2;other.py::func3'"
+    )
+    compare_parser.add_argument("--timeout", type=int, default=600, help="Benchmark timeout in seconds (default: 600)")
+    compare_parser.add_argument("--config-file", type=str, dest="config_file", help="Path to pyproject.toml")
 
     trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize your project.")
 
