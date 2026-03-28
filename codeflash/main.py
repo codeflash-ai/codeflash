@@ -6,6 +6,8 @@ solved problem, please reach out to us at careers@codeflash.ai. We're hiring!
 
 from __future__ import annotations
 
+import copy
+import logging
 import os
 import sys
 from pathlib import Path
@@ -17,12 +19,18 @@ if "--subagent" in sys.argv:
 
     warnings.filterwarnings("ignore")
 
-from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
+from codeflash.cli_cmds.cli import (
+    apply_language_config,
+    handle_optimize_all_arg_parsing,
+    parse_args,
+    process_pyproject_config,
+)
 from codeflash.cli_cmds.console import paneled_text
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.checkpoint import ask_should_use_checkpoint_get_functions
-from codeflash.code_utils.config_parser import parse_config_file
+from codeflash.code_utils.config_parser import find_all_config_files, parse_config_file
 from codeflash.code_utils.version_check import check_for_newer_minor_version
+from codeflash.languages.registry import UnsupportedLanguageError, get_language_support
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -84,21 +92,84 @@ def main() -> None:
 
         ask_run_end_to_end_test(args)
     else:
-        # Check for first-run experience (no config exists)
-        loaded_args = _handle_config_loading(args)
-        if loaded_args is None:
-            sys.exit(0)
-        args = loaded_args
+        language_configs = find_all_config_files()
 
-        if not env_utils.check_formatter_installed(args.formatter_cmds):
+        logger = logging.getLogger("codeflash")
+
+        if not language_configs:
+            # Fallback: no multi-config found, use existing single-config path
+            loaded_args = _handle_config_loading(args)
+            if loaded_args is None:
+                sys.exit(0)
+            args = loaded_args
+
+            if not env_utils.check_formatter_installed(args.formatter_cmds):
+                return
+            args.previous_checkpoint_functions = ask_should_use_checkpoint_get_functions(args)
+            init_sentry(enabled=not args.disable_telemetry, exclude_errors=True)
+            posthog_cf.initialize_posthog(enabled=not args.disable_telemetry)
+
+            from codeflash.optimization import optimizer
+
+            optimizer.run_with_args(args)
             return
-        args.previous_checkpoint_functions = ask_should_use_checkpoint_get_functions(args)
-        init_sentry(enabled=not args.disable_telemetry, exclude_errors=True)
-        posthog_cf.initialize_posthog(enabled=not args.disable_telemetry)
 
-        from codeflash.optimization import optimizer
+        # Filter to single language when --file is specified
+        if hasattr(args, "file") and args.file:
+            try:
+                file_lang_support = get_language_support(Path(args.file))
+                file_language = file_lang_support.language
+                matching_configs = [lc for lc in language_configs if lc.language == file_language]
+                if matching_configs:
+                    language_configs = matching_configs
+            except UnsupportedLanguageError:
+                pass  # Unknown extension, let all configs run
 
-        optimizer.run_with_args(args)
+        # Track whether --all was originally requested (before handle_optimize_all_arg_parsing
+        # resolves it — in multi-language mode, module_root isn't available yet so the resolution
+        # produces None; we re-resolve per language inside the loop)
+        optimize_all_requested = hasattr(args, "all") and args.all is not None
+
+        # Multi-language path: run git/GitHub checks ONCE before the loop
+        args = handle_optimize_all_arg_parsing(args)
+
+        results: dict[str, str] = {}
+        for lang_config in language_configs:
+            lang_name = lang_config.language.value
+            try:
+                pass_args = copy.deepcopy(args)
+                pass_args = apply_language_config(pass_args, lang_config)
+
+                if optimize_all_requested:
+                    pass_args.all = pass_args.module_root
+
+                if not env_utils.check_formatter_installed(pass_args.formatter_cmds):
+                    logger.info("Skipping %s: formatter not installed", lang_name)
+                    results[lang_name] = "skipped"
+                    continue
+
+                pass_args.previous_checkpoint_functions = ask_should_use_checkpoint_get_functions(pass_args)
+                init_sentry(enabled=not pass_args.disable_telemetry, exclude_errors=True)
+                posthog_cf.initialize_posthog(enabled=not pass_args.disable_telemetry)
+
+                logger.info("Processing %s (config: %s)", lang_name, lang_config.config_path)
+
+                from codeflash.optimization import optimizer
+
+                optimizer.run_with_args(pass_args)
+                results[lang_name] = "success"
+            except Exception:
+                logger.exception("Error processing %s, continuing with remaining languages", lang_name)
+                results[lang_name] = "failed"
+
+        _log_orchestration_summary(logger, results)
+
+
+def _log_orchestration_summary(logger: logging.Logger, results: dict[str, str]) -> None:
+    if not results:
+        return
+    parts = [f"{lang}: {status}" for lang, status in results.items()]
+    logger.info("Multi-language orchestration complete: %s", ", ".join(parts))
 
 
 def _handle_config_loading(args: Namespace) -> Namespace | None:
