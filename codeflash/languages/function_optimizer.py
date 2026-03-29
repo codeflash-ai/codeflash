@@ -877,6 +877,10 @@ class FunctionOptimizer:
             return Failure(f"No best optimizations found for function {self.function_to_optimize.qualified_name}")
         return Success(best_optimization)
 
+    @property
+    def rerun_trace_id(self) -> str | None:
+        return getattr(self.args, "rerun", None) if self.args else None
+
     def get_trace_id(self, exp_type: str) -> str:
         """Get the trace ID for the current experiment type."""
         if self.experiment_id:
@@ -1291,6 +1295,7 @@ class FunctionOptimizer:
                             language_version=self.language_support.language_version,
                         )
                     ],
+                    rerun_trace_id=self.rerun_trace_id,
                 )
                 self.future_all_refinements.append(future_refinement)
 
@@ -1353,6 +1358,7 @@ class FunctionOptimizer:
             is_numerical_code=self.is_numerical_code and not self.args.no_jit_opts,
             language=self.function_to_optimize.language,
             language_version=self.language_support.language_version,
+            rerun_trace_id=self.rerun_trace_id,
         )
 
         normalized_original = self.language_support.normalize_code(code_context.read_writable_code.flat.strip())
@@ -1485,7 +1491,7 @@ class FunctionOptimizer:
             trace_id=trace_id,
             language=language,
         )
-        return executor.submit(ai_service_client.code_repair, request=request)
+        return executor.submit(ai_service_client.code_repair, request=request, rerun_trace_id=self.rerun_trace_id)
 
     def log_successful_optimization(
         self, explanation: Explanation, generated_tests: GeneratedTestsList, exp_type: str
@@ -1861,6 +1867,7 @@ class FunctionOptimizer:
             is_async=self.function_to_optimize.is_async,
             n_candidates=n_candidates,
             is_numerical_code=is_numerical_code,
+            rerun_trace_id=self.rerun_trace_id,
         )
 
         future_references = self.executor.submit(
@@ -3181,6 +3188,7 @@ class FunctionOptimizer:
                 test_path,
                 test_perf_path,
                 self.is_numerical_code,
+                self.rerun_trace_id,
             )
             for test_index, (test_path, test_perf_path) in enumerate(
                 zip(generated_test_paths, generated_perf_test_paths)
