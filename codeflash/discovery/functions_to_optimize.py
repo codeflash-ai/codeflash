@@ -321,7 +321,7 @@ def get_functions_to_optimize(
             # Skip functions with cosmetic-only diffs (comments/whitespace)
             from codeflash.discovery.diff_classifier import filter_cosmetic_diff_functions
 
-            functions, cosmetic_skipped = filter_cosmetic_diff_functions(functions)
+            functions, _ = filter_cosmetic_diff_functions(functions)
         filtered_modified_functions, functions_count = filter_functions(
             functions, test_cfg.tests_root, ignore_paths, project_root, module_root, previous_checkpoint_functions
         )

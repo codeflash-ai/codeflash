@@ -234,7 +234,7 @@ class _PythonComplexityVisitor(ast.NodeVisitor):
                 self.has_recursion = True
             # I/O patterns
             io_names = {"open", "read", "write", "send", "recv", "connect", "execute", "fetch", "request", "urlopen"}
-            if func_name in io_names or func_name.startswith("requests.") or func_name.startswith("urllib"):
+            if func_name in io_names or func_name.startswith(("requests.", "urllib")):
                 self.io_call_count += 1
             # Math patterns
             math_names = {"sum", "min", "max", "abs", "pow", "sqrt", "log", "exp", "ceil", "floor"}
@@ -246,7 +246,7 @@ class _PythonComplexityVisitor(ast.NodeVisitor):
                 self.collection_op_count += 1
             # String ops
             string_names = {"format", "join", "split", "replace", "strip", "lower", "upper", "encode", "decode"}
-            if func_name in string_names or func_name.endswith(".format") or func_name.endswith(".join"):
+            if func_name in string_names or func_name.endswith((".format", ".join")):
                 self._string_op_count += 1
 
         self.generic_visit(node)

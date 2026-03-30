@@ -95,17 +95,17 @@ def classify_function_diff(func: FunctionToOptimize, repo_directory: Path | None
             is_whitespace_only=True,
         )
 
-    added_lines = [l for l in diff_lines if l.startswith("+")]
-    removed_lines = [l for l in diff_lines if l.startswith("-")]
+    added_lines = [line for line in diff_lines if line.startswith("+")]
+    removed_lines = [line for line in diff_lines if line.startswith("-")]
     total_changed = len(added_lines) + len(removed_lines)
 
     # Strip the +/- prefix for content analysis
-    added_content = [l[1:] for l in added_lines]
-    removed_content = [l[1:] for l in removed_lines]
+    added_content = [line[1:] for line in added_lines]
+    removed_content = [line[1:] for line in removed_lines]
 
     # Check if all changes are whitespace-only
-    added_stripped = [l.strip() for l in added_content]
-    removed_stripped = [l.strip() for l in removed_content]
+    added_stripped = [line.strip() for line in added_content]
+    removed_stripped = [line.strip() for line in removed_content]
     if all(not s for s in added_stripped) and all(not s for s in removed_stripped):
         return FunctionDiffInfo(
             category=DiffCategory.COSMETIC,
@@ -117,8 +117,8 @@ def classify_function_diff(func: FunctionToOptimize, repo_directory: Path | None
         )
 
     # Check if all changes are comment-only
-    added_logic = [l for l in added_content if _is_logic_line(l)]
-    removed_logic = [l for l in removed_content if _is_logic_line(l)]
+    added_logic = [line for line in added_content if _is_logic_line(line)]
+    removed_logic = [line for line in removed_content if _is_logic_line(line)]
 
     is_comment_only = len(added_logic) == 0 and len(removed_logic) == 0
     if is_comment_only:
