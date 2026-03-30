@@ -317,9 +317,21 @@ def get_functions_to_optimize(
             console.rule()
             ph("cli-optimizing-git-diff")
             functions = get_functions_within_git_diff(uncommitted_changes=False)
+
+            # Skip functions with cosmetic-only diffs (comments/whitespace)
+            from codeflash.discovery.diff_classifier import filter_cosmetic_diff_functions
+
+            functions, cosmetic_skipped = filter_cosmetic_diff_functions(functions)
         filtered_modified_functions, functions_count = filter_functions(
             functions, test_cfg.tests_root, ignore_paths, project_root, module_root, previous_checkpoint_functions
         )
+
+        # Pre-screen functions by optimizability to skip trivial/unoptimizable code
+        from codeflash.discovery.optimizability_scorer import filter_by_optimizability
+
+        filtered_modified_functions, prescreened_count = filter_by_optimizability(filtered_modified_functions)
+        if prescreened_count > 0:
+            functions_count -= prescreened_count
 
         logger.info(f"!lsp|Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
         return filtered_modified_functions, functions_count, trace_file_path

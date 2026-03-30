@@ -79,6 +79,146 @@ class Optimizer:
         self.original_args_and_test_cfg: tuple[Namespace, TestConfig] | None = None
         self.patch_files: list[Path] = []
         self._cached_callee_counts: dict[tuple[Path, str], int] = {}
+        self._high_effort_top_n: int | None = None
+
+    # Smart CI defaults (used when no explicit value is provided via CLI/env/config)
+    CI_DEFAULT_MAX_FUNCTIONS = 30
+    CI_DEFAULT_MAX_TIME_MINUTES = 20
+    CI_DEFAULT_HIGH_EFFORT_TOP_N = 5
+
+    @staticmethod
+    def _resolve_int_setting(args_value: int | None, env_var: str, ci_default: int | None = None) -> int | None:
+        """Resolve a setting with precedence: CLI arg > env var > CI default.
+
+        Returns None if no value found at any level (meaning no limit).
+        """
+        # CLI arg takes priority (already set from CLI or pyproject.toml)
+        if args_value is not None:
+            return args_value
+        # Environment variable next
+        env_val = os.environ.get(env_var)
+        if env_val is not None:
+            try:
+                return int(env_val)
+            except ValueError:
+                logger.warning(f"Invalid {env_var}={env_val!r} (expected integer), ignoring")
+        # CI auto-default last (only if running in CI)
+        if ci_default is not None and env_utils.is_ci():
+            return ci_default
+        return None
+
+    def _apply_ci_defaults(self) -> None:
+        """Resolve max_functions, max_time, and high_effort_top_n with full precedence chain.
+
+        Precedence: CLI arg > env var > pyproject.toml (already merged into args) > CI auto-default.
+        Env vars: CODEFLASH_MAX_FUNCTIONS, CODEFLASH_MAX_TIME, CODEFLASH_HIGH_EFFORT_TOP_N.
+        """
+        resolved_max_functions = self._resolve_int_setting(
+            getattr(self.args, "max_functions", None),
+            "CODEFLASH_MAX_FUNCTIONS",
+            ci_default=self.CI_DEFAULT_MAX_FUNCTIONS,
+        )
+        resolved_max_time = self._resolve_int_setting(
+            getattr(self.args, "max_time", None), "CODEFLASH_MAX_TIME", ci_default=self.CI_DEFAULT_MAX_TIME_MINUTES
+        )
+        # HIGH_EFFORT_TOP_N is not a CLI arg — only configurable via env var
+        self._high_effort_top_n = self._resolve_int_setting(
+            None, "CODEFLASH_HIGH_EFFORT_TOP_N", ci_default=self.CI_DEFAULT_HIGH_EFFORT_TOP_N
+        )
+
+        self.args.max_functions = resolved_max_functions
+        self.args.max_time = resolved_max_time
+
+        applied: list[str] = []
+        if resolved_max_functions is not None:
+            applied.append(f"max-functions={resolved_max_functions}")
+        if resolved_max_time is not None:
+            applied.append(f"max-time={resolved_max_time}m")
+        if self._high_effort_top_n is not None:
+            applied.append(f"high-effort-top-n={self._high_effort_top_n}")
+
+        if applied and env_utils.is_ci():
+            logger.info(f"CI mode: active limits ({', '.join(applied)})")
+
+    # Maximum batch size for a single prescreening LLM call
+    PRESCREENING_BATCH_SIZE = 20
+
+    def _should_prescreen(self) -> bool:
+        if getattr(self.args, "no_prescreening", False):
+            return False
+        if getattr(self.args, "prescreening", False):
+            return True
+        # Auto-enable in CI when running --all (the most expensive mode)
+        if env_utils.is_ci() and getattr(self.args, "all", None) is not None:
+            return True
+        return False
+
+    def _run_prescreening(
+        self, ranked_functions: list[tuple[Path, FunctionToOptimize]]
+    ) -> list[tuple[Path, FunctionToOptimize]]:
+        if not self._should_prescreen() or not ranked_functions:
+            return ranked_functions
+
+        console.rule()
+        logger.info(f"loading|Pre-screening {len(ranked_functions)} function(s) with LLM assessment...")
+
+        # Read source code for each function (batch by file for efficiency)
+        source_cache: dict[Path, str] = {}
+        function_inputs: list[dict[str, str]] = []
+        for file_path, func in ranked_functions:
+            if file_path not in source_cache:
+                try:
+                    source_cache[file_path] = file_path.read_text(encoding="utf-8")
+                except OSError:
+                    continue
+
+            source = source_cache[file_path]
+            if func.starting_line and func.ending_line:
+                lines = source.splitlines()
+                func_source = "\n".join(lines[func.starting_line - 1 : func.ending_line])
+            else:
+                func_source = source  # fallback: send whole file
+
+            function_inputs.append(
+                {"qualified_name": func.qualified_name, "source_code": func_source, "language": func.language}
+            )
+
+        if not function_inputs:
+            return ranked_functions
+
+        # Batch the prescreening calls
+        all_results: dict[str, dict[str, Any]] = {}
+        for batch_start in range(0, len(function_inputs), self.PRESCREENING_BATCH_SIZE):
+            batch = function_inputs[batch_start : batch_start + self.PRESCREENING_BATCH_SIZE]
+            result = self.aiservice_client.prescreen_functions(batch)
+            if result is not None:
+                all_results.update(result)
+
+        if not all_results:
+            logger.debug("Prescreening returned no results, keeping all functions")
+            console.rule()
+            return ranked_functions
+
+        # Filter based on prescreening results
+        kept: list[tuple[Path, FunctionToOptimize]] = []
+        skipped = 0
+        for file_path, func in ranked_functions:
+            func_result = all_results.get(func.qualified_name)
+            if func_result is None or func_result.get("optimizable", True):
+                kept.append((file_path, func))
+            else:
+                skipped += 1
+                reason = func_result.get("reason", "low optimization potential")
+                score = func_result.get("score", "?")
+                logger.debug(f"Prescreening filtered: {func.qualified_name} (score={score}, reason: {reason})")
+
+        if skipped > 0:
+            logger.info(
+                f"LLM pre-screening: kept {len(kept)} of {len(ranked_functions)} functions "
+                f"(filtered {skipped} with low optimization potential)"
+            )
+        console.rule()
+        return kept
 
     def run_benchmarks(
         self, file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]], num_optimizable_functions: int
@@ -493,6 +633,9 @@ class Optimizer:
             logger.warning("PR is in draft mode, skipping optimization")
             return
 
+        # Smart CI defaults: apply conservative limits when running in CI
+        self._apply_ci_defaults()
+
         if self.args.worktree:
             result = self.worktree_mode()
             if result.is_failure():
@@ -589,6 +732,24 @@ class Optimizer:
             globally_ranked_functions = self.rank_all_functions_globally(
                 file_to_funcs_to_optimize, trace_file_path, call_graph=resolver, test_count_cache=test_count_cache
             )
+
+            # LLM-based pre-screening (if enabled)
+            globally_ranked_functions = self._run_prescreening(globally_ranked_functions)
+
+            # Apply --max-functions limit after ranking and prescreening
+            max_functions = getattr(self.args, "max_functions", None)
+            if max_functions is not None and len(globally_ranked_functions) > max_functions:
+                skipped = len(globally_ranked_functions) - max_functions
+                logger.info(
+                    f"--max-functions={max_functions}: optimizing top {max_functions} of "
+                    f"{len(globally_ranked_functions)} ranked functions (skipping {skipped})"
+                )
+                globally_ranked_functions = globally_ranked_functions[:max_functions]
+
+            # Track start time for --max-time budget enforcement
+            optimization_start_time = time.monotonic()
+            max_time_minutes = getattr(self.args, "max_time", None)
+
             # Cache for module preparation (avoid re-parsing same files)
             prepared_modules: dict[Path, tuple[dict[Path, ValidCode], ast.Module | None]] = {}
 
@@ -602,6 +763,17 @@ class Optimizer:
 
             # Optimize functions in globally ranked order
             for i, (original_module_path, function_to_optimize) in enumerate(globally_ranked_functions):
+                # Check --max-time budget before starting a new function
+                if max_time_minutes is not None:
+                    elapsed_minutes = (time.monotonic() - optimization_start_time) / 60
+                    if elapsed_minutes >= max_time_minutes:
+                        remaining = len(globally_ranked_functions) - i
+                        logger.info(
+                            f"--max-time={max_time_minutes}m budget exhausted after {elapsed_minutes:.1f}m. "
+                            f"Optimized {i} functions, skipping remaining {remaining}."
+                        )
+                        break
+
                 # Prepare module if not already cached
                 if original_module_path not in prepared_modules:
                     module_prep_result = self.prepare_module_for_optimization(original_module_path)
@@ -622,11 +794,14 @@ class Optimizer:
                 test_suffix = f", {test_count} tests" if test_count else ""
 
                 effort_override: str | None = None
-                if i < HIGH_EFFORT_TOP_N and self.args.effort == EffortLevel.MEDIUM.value:
+                high_effort_limit = (
+                    self._high_effort_top_n if self._high_effort_top_n is not None else HIGH_EFFORT_TOP_N
+                )
+                if i < high_effort_limit and self.args.effort == EffortLevel.MEDIUM.value:
                     effort_override = EffortLevel.HIGH.value
                     logger.debug(
                         f"Escalating effort for {function_to_optimize.qualified_name} from medium to high"
-                        f" (top {HIGH_EFFORT_TOP_N} ranked)"
+                        f" (top {high_effort_limit} ranked)"
                     )
 
                 logger.info(
