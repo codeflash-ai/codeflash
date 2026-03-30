@@ -131,13 +131,13 @@ class TestGetJsCodeflashInstallStep:
 
         assert result == ""
 
-    def test_uv_tool_install_when_not_dependency(self) -> None:
-        """Should generate uv tool install when not a dependency, regardless of package manager."""
+    def test_uv_pip_install_when_not_dependency(self) -> None:
+        """Should generate uv pip install when not a dependency, regardless of package manager."""
         for pkg_manager in (JsPackageManager.NPM, JsPackageManager.YARN, JsPackageManager.PNPM, JsPackageManager.BUN):
             result = get_js_codeflash_install_step(pkg_manager, is_dependency=False)
 
             assert "Install Codeflash" in result
-            assert "uv tool install codeflash" in result
+            assert "uv pip install codeflash" in result
 
 
 class TestGetJsCodeflashRunCommand:
