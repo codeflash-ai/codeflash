@@ -154,6 +154,7 @@ class AiServiceClient:
         is_async: bool = False,
         n_candidates: int = 5,
         is_numerical_code: bool | None = None,
+        rerun_trace_id: str | None = None,
     ) -> list[OptimizedCandidate]:
         """Optimize the given code for performance by making a request to the Django endpoint.
 
@@ -194,6 +195,7 @@ class AiServiceClient:
             "call_sequence": self.get_next_sequence(),
             "n_candidates": n_candidates,
             "is_numerical_code": is_numerical_code,
+            "rerun_trace_id": rerun_trace_id,
         }
 
         self.add_language_metadata(payload, language_version, module_system)
@@ -234,6 +236,7 @@ class AiServiceClient:
         is_numerical_code: bool | None = None,
         language: str = "python",
         language_version: str | None = None,
+        rerun_trace_id: str | None = None,
     ) -> list[OptimizedCandidate]:
         """Optimize code for performance using line profiler results.
 
@@ -272,6 +275,7 @@ class AiServiceClient:
             "codeflash_version": codeflash_version,
             "call_sequence": self.get_next_sequence(),
             "is_numerical_code": is_numerical_code,
+            "rerun_trace_id": rerun_trace_id,
         }
 
         try:
@@ -318,7 +322,9 @@ class AiServiceClient:
         self.log_error_response(response, "generating optimized candidates", "cli-optimize-error-response")
         return None
 
-    def optimize_code_refinement(self, request: list[AIServiceRefinerRequest]) -> list[OptimizedCandidate]:
+    def optimize_code_refinement(
+        self, request: list[AIServiceRefinerRequest], rerun_trace_id: str | None = None
+    ) -> list[OptimizedCandidate]:
         """Refine optimization candidates for improved performance.
 
         Supports Python, JavaScript, and TypeScript code refinement with optional
@@ -349,6 +355,7 @@ class AiServiceClient:
                 "call_sequence": self.get_next_sequence(),
                 # Multi-language support
                 "language": opt.language,
+                "rerun_trace_id": rerun_trace_id,
             }
 
             self.add_language_metadata(item, opt.language_version)
@@ -375,7 +382,9 @@ class AiServiceClient:
         console.rule()
         return []
 
-    def code_repair(self, request: AIServiceCodeRepairRequest) -> OptimizedCandidate | None:
+    def code_repair(
+        self, request: AIServiceCodeRepairRequest, rerun_trace_id: str | None = None
+    ) -> OptimizedCandidate | None:
         console.rule()
         try:
             payload = {
@@ -385,6 +394,7 @@ class AiServiceClient:
                 "trace_id": request.trace_id,
                 "test_diffs": request.test_diffs,
                 "language": request.language,
+                "rerun_trace_id": rerun_trace_id,
             }
             response = self.make_ai_service_request("/code_repair", payload=payload, timeout=self.timeout)
         except (requests.exceptions.RequestException, TypeError) as e:
@@ -607,6 +617,7 @@ class AiServiceClient:
         language_version: str | None = None,
         module_system: str | None = None,
         is_numerical_code: bool | None = None,
+        rerun_trace_id: str | None = None,
     ) -> tuple[str, str, str, str | None] | None:
         """Generate regression tests for the given function by making a request to the Django endpoint.
 
@@ -655,6 +666,7 @@ class AiServiceClient:
             "is_numerical_code": is_numerical_code,
             "class_name": function_to_optimize.class_name,
             "qualified_name": function_to_optimize.qualified_name,
+            "rerun_trace_id": rerun_trace_id,
         }
 
         self.add_language_metadata(payload, language_version, module_system)
@@ -928,7 +940,6 @@ class AiServiceClient:
 
         """
         payload: dict[str, Any] = {"functions": functions, "trace_id": trace_id}
-        logger.info(f"loading|Pre-screening {len(functions)} function(s) for optimization potential")
         try:
             response = self.make_ai_service_request("/prescreen", payload=payload, timeout=30)
         except requests.exceptions.RequestException as e:
@@ -936,6 +947,7 @@ class AiServiceClient:
             return None
 
         if response.status_code == 200:
+            logger.info(f"loading|Pre-screening {len(functions)} function(s) for optimization potential")
             result: dict[str, dict[str, Any]] = response.json().get("functions", {})
             return result
         logger.debug(f"Prescreening returned status {response.status_code}")
