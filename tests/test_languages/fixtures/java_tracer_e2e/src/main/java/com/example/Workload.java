@@ -14,11 +14,12 @@ public class Workload {
     }
 
     public static String repeatString(String s, int count) {
-        String result = "";
-        for (int i = 0; i < count; i++) {
-            result = result + s;
+        if (count <= 0) {
+            return "";
         }
-        return result;
+        // Preserve original behavior where null becomes "null"
+        String unit = String.valueOf(s);
+        return unit.repeat(count);
     }
 
     public static List<Integer> filterEvens(List<Integer> numbers) {
