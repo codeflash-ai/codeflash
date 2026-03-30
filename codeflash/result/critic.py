@@ -11,6 +11,7 @@ from codeflash.code_utils.config_consts import (
     MIN_TESTCASE_PASSED_THRESHOLD,
     MIN_THROUGHPUT_IMPROVEMENT_THRESHOLD,
 )
+from codeflash.languages.current import is_javascript
 from codeflash.models.test_type import TestType
 
 if TYPE_CHECKING:
@@ -22,6 +23,23 @@ class AcceptanceReason(Enum):
     THROUGHPUT = "throughput"
     CONCURRENCY = "concurrency"
     NONE = "none"
+
+
+JS_NOISE_MULTIPLIER = 3
+
+
+def compute_noise_floor(original_code_runtime: int, *, disable_gh_action_noise: bool = False) -> float:
+    """Compute the noise floor for speedup acceptance based on runtime and language.
+
+    JavaScript/TypeScript gets a higher noise floor because separate V8 processes
+    have significant JIT/GC variance that creates false positive speedups.
+    """
+    noise_floor = 3 * MIN_IMPROVEMENT_THRESHOLD if original_code_runtime < 10000 else MIN_IMPROVEMENT_THRESHOLD
+    if is_javascript():
+        noise_floor *= JS_NOISE_MULTIPLIER
+    if not disable_gh_action_noise and env_utils.is_ci():
+        noise_floor *= 2
+    return noise_floor
 
 
 def performance_gain(*, original_runtime_ns: int, optimized_runtime_ns: int) -> float:
@@ -91,9 +109,7 @@ def speedup_critic(
     - Concurrency improvements detect when blocking calls are replaced with non-blocking equivalents
     """
     # Runtime performance evaluation
-    noise_floor = 3 * MIN_IMPROVEMENT_THRESHOLD if original_code_runtime < 10000 else MIN_IMPROVEMENT_THRESHOLD
-    if not disable_gh_action_noise and env_utils.is_ci():
-        noise_floor = noise_floor * 2  # Increase the noise floor in GitHub Actions mode
+    noise_floor = compute_noise_floor(original_code_runtime, disable_gh_action_noise=disable_gh_action_noise)
 
     perf_gain = performance_gain(
         original_runtime_ns=original_code_runtime, optimized_runtime_ns=candidate_result.best_test_runtime
@@ -151,9 +167,7 @@ def get_acceptance_reason(
     Returns the primary reason for acceptance, with priority:
     concurrency > throughput > runtime (for async code).
     """
-    noise_floor = 3 * MIN_IMPROVEMENT_THRESHOLD if original_runtime_ns < 10000 else MIN_IMPROVEMENT_THRESHOLD
-    if env_utils.is_ci():
-        noise_floor = noise_floor * 2
+    noise_floor = compute_noise_floor(original_runtime_ns)
 
     perf_gain = performance_gain(original_runtime_ns=original_runtime_ns, optimized_runtime_ns=optimized_runtime_ns)
     runtime_improved = perf_gain > noise_floor
