@@ -40,7 +40,13 @@ gradle.projectsEvaluated {
         try { tasks.withType(Pmd) { enabled = false } } catch (e) {}
         // Disable remaining validation tasks by name
         tasks.matching { task ->
-            task.name in ['rat', 'japicmp']
+            task.name in [
+                'checkstyleMain', 'checkstyleTest',
+                'spotbugsMain', 'spotbugsTest',
+                'pmdMain', 'pmdTest',
+                'rat', 'japicmp',
+                'jarHell', 'thirdPartyAudit'
+            ]
         }.configureEach {
             enabled = false
         }

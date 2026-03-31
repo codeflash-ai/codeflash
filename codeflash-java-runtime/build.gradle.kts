@@ -47,7 +47,12 @@ tasks.shadowJar {
     archiveVersion.set("1.0.0")
     archiveClassifier.set("")
 
-    relocate("org.objectweb.asm", "com.codeflash.asm")
+    relocate("org.objectweb.asm", "com.codeflash.shaded.org.objectweb.asm")
+    relocate("com.google.gson", "com.codeflash.shaded.com.google.gson")
+    relocate("com.esotericsoftware", "com.codeflash.shaded.com.esotericsoftware")
+    relocate("org.objenesis", "com.codeflash.shaded.org.objenesis")
+    relocate("org.slf4j", "com.codeflash.shaded.org.slf4j")
+    relocate("org.jacoco", "com.codeflash.shaded.org.jacoco")
 
     manifest {
         attributes(
