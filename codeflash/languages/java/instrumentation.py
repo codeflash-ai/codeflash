@@ -309,8 +309,8 @@ def wrap_target_calls_with_treesitter(
         line_byte_starts.append(offset)
         offset += len(line.encode("utf8")) + 1  # +1 for \n from join
 
-    # Filter out lambda and complex-expression calls, sort by start_byte ascending for counter assignment
-    valid_calls = [c for c in calls if not c["in_lambda"] and not c.get("in_complex", False)]
+    # Filter out lambda calls, sort by start_byte ascending for counter assignment
+    valid_calls = [c for c in calls if not c["in_lambda"]]
     if not valid_calls:
         return list(body_lines), 0
     valid_calls.sort(key=lambda c: c["start_byte"])
@@ -931,10 +931,10 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             if current.type == "method_invocation":
                 name_node = current.child_by_field_name("name")
                 if name_node and analyzer.get_node_text(name_node, wrapper_bytes) == func:
-                    if not _is_inside_lambda(current) and not _is_inside_complex_expression(current):
+                    if not _is_inside_lambda(current):
                         out.append(current)
                     else:
-                        logger.debug("Skipping instrumentation of %s inside lambda or complex expression", func)
+                        logger.debug("Skipping instrumentation of %s inside lambda", func)
             if current.children:
                 stack.extend(reversed(current.children))
 
