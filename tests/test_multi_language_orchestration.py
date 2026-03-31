@@ -5,6 +5,7 @@ from argparse import Namespace
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 import tomlkit
 
 from codeflash.code_utils.config_parser import LanguageConfig, normalize_toml_config
@@ -769,3 +770,50 @@ class TestPerLanguageLogging:
                 logged_messages = [str(call) for call in mock_log_info.call_args_list]
                 processing_logs = [m for m in logged_messages if "Processing" in m and "config:" in m]
                 assert len(processing_logs) >= 1
+
+
+class TestGitRepoDetectionEdgeCases:
+    def test_check_running_in_git_repo_nonexistent_path(self) -> None:
+        from codeflash.code_utils.git_utils import check_running_in_git_repo
+
+        assert check_running_in_git_repo("/nonexistent/path/that/does/not/exist") is False
+
+    def test_check_running_in_git_repo_none_uses_cwd(self) -> None:
+        from codeflash.code_utils.git_utils import check_running_in_git_repo
+
+        # None defaults to CWD, which is inside the codeflash git repo
+        assert check_running_in_git_repo(None) is True
+
+    def test_handle_optimize_all_git_remote_defaults_to_origin(self) -> None:
+        import git as git_module
+
+        from codeflash.cli_cmds.cli import handle_optimize_all_arg_parsing
+
+        args = make_base_args(file="/some/file.java", no_pr=False)
+        # Remove git_remote to simulate multi-config path where config hasn't loaded
+        if hasattr(args, "git_remote"):
+            delattr(args, "git_remote")
+
+        mock_repo = MagicMock(spec=git_module.Repo)
+        with (
+            patch("git.Repo", return_value=mock_repo),
+            patch(
+                "codeflash.code_utils.git_utils.check_and_push_branch", return_value=True
+            ) as mock_push,
+            patch("codeflash.code_utils.git_utils.get_repo_owner_and_name", return_value=("owner", "repo")),
+            patch("codeflash.code_utils.github_utils.require_github_app_or_exit"),
+        ):
+            handle_optimize_all_arg_parsing(args)
+            mock_push.assert_called_once()
+            assert mock_push.call_args[1].get("git_remote") == "origin"
+
+    def test_handle_optimize_all_no_such_path_error(self) -> None:
+        import git as git_module
+
+        from codeflash.cli_cmds.cli import handle_optimize_all_arg_parsing
+
+        args = make_base_args(file="/some/file.java", no_pr=False)
+
+        with patch("git.Repo", side_effect=git_module.exc.NoSuchPathError("/bad/path")):
+            with pytest.raises(SystemExit):
+                handle_optimize_all_arg_parsing(args)

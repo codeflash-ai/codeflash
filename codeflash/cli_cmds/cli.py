@@ -253,14 +253,14 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
             # Ensure that the user can actually open PRs on the repo.
             try:
                 git_repo = git.Repo(search_parent_directories=True)
-            except git.exc.InvalidGitRepositoryError:
+            except (git.exc.InvalidGitRepositoryError, git.exc.NoSuchPathError):
                 mode = "--all" if hasattr(args, "all") else "--file"
                 logger.exception(
                     f"I couldn't find a git repository in the current directory. "
                     f"I need a git repository to run {mode} and open PRs for optimizations. Exiting..."
                 )
                 apologize_and_exit()
-            git_remote = getattr(args, "git_remote", None)
+            git_remote = getattr(args, "git_remote", None) or "origin"
             if not check_and_push_branch(git_repo, git_remote=git_remote):
                 exit_with_message("Branch is not pushed...", error_on_exit=True)
             owner, repo = get_repo_owner_and_name(git_repo)
