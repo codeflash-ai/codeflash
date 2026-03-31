@@ -178,6 +178,14 @@
                                     <pattern>org.jacoco</pattern>
                                     <shadedPattern>com.codeflash.shaded.org.jacoco</shadedPattern>
                                 </relocation>
+                                <relocation>
+                                    <pattern>org.kohsuke</pattern>
+                                    <shadedPattern>com.codeflash.shaded.org.kohsuke</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.vladium</pattern>
+                                    <shadedPattern>com.codeflash.shaded.com.vladium</shadedPattern>
+                                </relocation>
                             </relocations>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
