@@ -21,7 +21,14 @@ public class Fibonacci {
         if (n <= 1) {
             return n;
         }
-        return fibonacci(n - 1) + fibonacci(n - 2);
+        long a = 0L;
+        long b = 1L;
+        for (int i = 2; i <= n; i++) {
+            long next = a + b;
+            a = b;
+            b = next;
+        }
+        return b;
     }
 
     /**
