@@ -151,7 +151,7 @@ def main() -> None:
                         pass_args.all = pass_args.module_root
                     else:
                         # --all /specific/path: preserve the user's path
-                        pass_args.all = Path(original_all).resolve()
+                        pass_args.all = Path(str(original_all)).resolve()
 
                 if not env_utils.check_formatter_installed(pass_args.formatter_cmds):
                     logger.info("Skipping %s: formatter not installed", lang_name)

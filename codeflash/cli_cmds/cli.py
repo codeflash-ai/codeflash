@@ -6,7 +6,7 @@ import sys
 from argparse import SUPPRESS, ArgumentParser
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from codeflash.cli_cmds import logging_config
 from codeflash.cli_cmds.console import apologize_and_exit, logger
@@ -113,7 +113,9 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     return handle_optimize_all_arg_parsing(args)
 
 
-def resolve_config_onto_args(args: Namespace, config: dict, config_path: Path, language: Language | None) -> Namespace:
+def resolve_config_onto_args(
+    args: Namespace, config: dict[str, Any], config_path: Path, language: Language | None
+) -> Namespace:
     supported_keys = [
         "module_root",
         "tests_root",
