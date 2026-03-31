@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,8 @@ import tomlkit
 from codeflash.code_utils.config_js import find_package_json, parse_package_json_config
 from codeflash.languages.language_enum import Language
 from codeflash.lsp.helpers import is_LSP_enabled
+
+logger = logging.getLogger("codeflash")
 
 PYPROJECT_TOML_CACHE: dict[Path, Path] = {}
 ALL_CONFIG_FILES: dict[Path, dict[str, Path]] = {}
@@ -197,7 +200,7 @@ def _check_dir_for_configs(dir_path: Path, configs: list[LanguageConfig], seen_l
                     seen_languages.add(Language.PYTHON)
                     configs.append(LanguageConfig(config=normalized, config_path=pyproject, language=Language.PYTHON))
             except Exception:
-                pass
+                logger.debug("Failed to parse Python config in %s", dir_path, exc_info=True)
 
     if Language.JAVASCRIPT not in seen_languages and Language.TYPESCRIPT not in seen_languages:
         package_json = dir_path / "package.json"
@@ -210,7 +213,7 @@ def _check_dir_for_configs(dir_path: Path, configs: list[LanguageConfig], seen_l
                     seen_languages.add(lang)
                     configs.append(LanguageConfig(config=config, config_path=path, language=lang))
             except Exception:
-                pass
+                logger.debug("Failed to parse JS/TS config in %s", dir_path, exc_info=True)
 
     if Language.JAVA not in seen_languages:
         if (
@@ -224,7 +227,7 @@ def _check_dir_for_configs(dir_path: Path, configs: list[LanguageConfig], seen_l
                     seen_languages.add(Language.JAVA)
                     configs.append(LanguageConfig(config=java_config, config_path=dir_path, language=Language.JAVA))
             except Exception:
-                pass
+                logger.debug("Failed to parse Java config in %s", dir_path, exc_info=True)
 
 
 def find_all_config_files(start_dir: Path | None = None) -> list[LanguageConfig]:
