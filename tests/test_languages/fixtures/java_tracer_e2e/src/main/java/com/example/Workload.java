@@ -17,9 +17,8 @@ public class Workload {
         if (count <= 0) {
             return "";
         }
-        // Preserve original behavior where null becomes "null"
-        String unit = String.valueOf(s);
-        return unit.repeat(count);
+        String piece = String.valueOf(s);
+        return piece.repeat(count);
     }
 
     public static List<Integer> filterEvens(List<Integer> numbers) {
