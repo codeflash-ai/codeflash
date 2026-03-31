@@ -177,6 +177,44 @@ class TestVerifyRequirements:
             assert errors[0].message == expected_message
 
 
+class TestSetupTestConfig:
+    """Tests for JavaScriptSupport.setup_test_config() early-exit behavior."""
+
+    @pytest.fixture
+    def js_support(self):
+        return JavaScriptSupport()
+
+    def test_setup_test_config_returns_false_on_abort_error(self, js_support, tmp_path):
+        """setup_test_config returns False when verify_js_requirements reports a should_abort error."""
+        from codeflash.languages.base import SetupError
+
+        abort_error = SetupError("Node.js is not installed", should_abort=True)
+        with (
+            patch("codeflash.languages.javascript.test_runner.find_node_project_root", return_value=tmp_path.resolve()),
+            patch("codeflash.languages.javascript.optimizer.verify_js_requirements", return_value=[abort_error]),
+        ):
+            test_cfg = MagicMock()
+            result = js_support.setup_test_config(test_cfg, tmp_path.resolve(), current_worktree=None)
+            assert result is False
+
+    def test_setup_test_config_returns_true_on_no_errors(self, js_support, tmp_path):
+        """setup_test_config returns True when verify_js_requirements reports no errors."""
+        with (
+            patch("codeflash.languages.javascript.test_runner.find_node_project_root", return_value=tmp_path.resolve()),
+            patch("codeflash.languages.javascript.optimizer.verify_js_requirements", return_value=[]),
+        ):
+            test_cfg = MagicMock()
+            result = js_support.setup_test_config(test_cfg, tmp_path.resolve(), current_worktree=None)
+            assert result is True
+
+    def test_setup_test_config_returns_false_when_project_root_is_none(self, js_support, tmp_path):
+        """setup_test_config returns False when find_node_project_root returns None."""
+        with patch("codeflash.languages.javascript.test_runner.find_node_project_root", return_value=None):
+            test_cfg = MagicMock()
+            result = js_support.setup_test_config(test_cfg, tmp_path.resolve(), current_worktree=None)
+            assert result is False
+
+
 class TestVerifyRequirementsIntegration:
     """Integration tests for verify_requirements with real filesystem."""
 

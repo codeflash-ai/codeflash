@@ -1963,6 +1963,8 @@ class JavaScriptSupport:
         from codeflash.languages.javascript.test_runner import find_node_project_root
 
         test_cfg.js_project_root = find_node_project_root(file_path)
+        if test_cfg.js_project_root is None:
+            return False
         if current_worktree is not None:
             original_js_root = git_root_dir()
             worktree_node_modules = test_cfg.js_project_root / "node_modules"
@@ -2248,7 +2250,7 @@ class JavaScriptSupport:
             Tuple of (success, list of error messages).
 
         """
-        errors: list[str] = []
+        errors: list[SetupError] = []
 
         # Check Node.js
         try:
