@@ -68,6 +68,8 @@ class JavaSupport(LanguageSupport):
         self._language_version: str | None = None
         self._test_framework: str = "junit5"
 
+        self._config_cache: dict[Path, Any] = {}
+
     @property
     def language(self) -> Language:
         """The language this implementation supports."""
@@ -405,7 +407,12 @@ class JavaSupport(LanguageSupport):
 
     def setup_test_config(self, test_cfg: Any, file_path: Path, current_worktree: Path | None = None) -> bool:
         """Detect test framework from project build config (pom.xml / build.gradle)."""
-        config = detect_java_project(test_cfg.project_root_path)
+        project_root = test_cfg.project_root_path
+        try:
+            config = self._config_cache[project_root]
+        except KeyError:
+            config = detect_java_project(project_root)
+            self._config_cache[project_root] = config
         if config is not None:
             self._test_framework = config.test_framework
         return True
