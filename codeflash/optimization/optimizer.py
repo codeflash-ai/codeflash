@@ -507,6 +507,16 @@ class Optimizer:
 
         cleanup_paths(Optimizer.find_leftover_instrumented_test_files(self.test_cfg.tests_root))
 
+        # For multi-module Java projects, generated test files are placed in module-specific
+        # test dirs (e.g. spring-ai-core/src/test/java/...) which may differ from tests_root.
+        # Maven's test-compile phase compiles ALL .java files in src/test/java/, so leftover
+        # instrumented files from previous runs poison the build. Search from project root.
+        if self.args.project_root.resolve() != self.test_cfg.tests_root.resolve():
+            java_leftovers = Optimizer.find_leftover_java_test_files(self.args.project_root)
+            if java_leftovers:
+                logger.debug(f"Cleaning up {len(java_leftovers)} leftover Java test file(s) from submodules")
+                cleanup_paths(java_leftovers)
+
         function_optimizer = None
         file_to_funcs_to_optimize, num_optimizable_functions, trace_file_path = self.get_optimizable_functions()
 
@@ -739,6 +749,18 @@ class Optimizer:
         return [
             file_path for file_path in test_root.rglob("*") if file_path.is_file() and pattern.match(file_path.name)
         ]
+
+    @staticmethod
+    def find_leftover_java_test_files(project_root: Path) -> list[Path]:
+        """Search all directories under project_root for leftover instrumented Java test files.
+
+        Uses targeted glob patterns (much faster than rglob('*') + regex on large project roots)
+        to find instrumented test files that may have been left behind in submodule test directories.
+        """
+        results: list[Path] = []
+        for pattern in ("*__perfinstrumented*.java", "*__perfonlyinstrumented*.java"):
+            results.extend(f for f in project_root.rglob(pattern) if f.is_file())
+        return results
 
     def cleanup_replay_tests(self) -> None:
         paths_to_cleanup = []

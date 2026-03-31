@@ -1,0 +1,53 @@
+---
+title: "Usage Guide"
+description: "Commands, flags, and workflows for the Codeflash Claude Code plugin"
+icon: "book"
+sidebarTitle: "Usage Guide"
+---
+
+## The `/optimize` skill
+
+`/optimize` is the primary command. It spawns a background optimizer agent that runs the codeflash CLI on your code.
+
+### Syntax
+
+```
+/optimize [file] [function] [flags]
+```
+
+### Examples
+
+| Command | Effect |
+|---------|--------|
+| `/optimize` | Let codeflash detect changed files automatically |
+| `/optimize src/utils.py` | Optimize all functions in `src/utils.py` |
+| `/optimize src/utils.py my_function` | Optimize only `my_function` in that file |
+| `/optimize --all` | Optimize the entire project |
+
+Flags can be combined: `/optimize src/utils.py my_function`
+
+### What happens behind the scenes
+
+1. The skill (defined in `skills/optimize/SKILL.md`) forks context and spawns the **optimizer agent**
+2. The agent locates your project config (`pyproject.toml` or `package.json` or `codeflash.toml`)
+3. It verifies the codeflash CLI is installed and the project is configured
+4. It runs `codeflash --subagent` as a **background task** with a 10-minute timeout
+5. You're notified when optimization completes with results
+
+The agent has up to **15 turns** to complete its work (install codeflash, configure the project, run optimization).
+
+## The `/codeflash:setup` command
+
+`/codeflash:setup` configures auto-permissions so codeflash runs without prompting.
+
+### What it does
+
+1. Finds `.claude/settings.json` in your project root
+2. Checks if `Bash(*codeflash*)` is already in `permissions.allow`
+3. If not, adds it (creating the file and directory if needed)
+4. Preserves any existing settings
+
+<Info>
+Running `/codeflash:setup` multiple times is safe — it's idempotent. If permissions are already configured, it reports "No changes needed."
+</Info>
+

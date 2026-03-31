@@ -5,6 +5,12 @@ test execution, and optimization using tree-sitter for parsing and
 Maven/Gradle for build operations.
 """
 
+from codeflash.languages.java.build_config_strategy import (
+    BuildConfigStrategy,
+    GradleConfigStrategy,
+    MavenConfigStrategy,
+    get_config_strategy,
+)
 from codeflash.languages.java.build_tool_strategy import BuildToolStrategy, get_strategy
 from codeflash.languages.java.build_tools import (
     BuildTool,
@@ -96,9 +102,12 @@ from codeflash.languages.java.test_runner import (
 )
 
 __all__ = [
+    # Build config strategy
+    "BuildConfigStrategy",
     # Build tools
     "BuildTool",
     "BuildToolStrategy",
+    "GradleConfigStrategy",
     # Parser
     "JavaAnalyzer",
     # Assertion removal
@@ -118,6 +127,7 @@ __all__ = [
     "JavaSupport",
     # Test runner
     "JavaTestRunResult",
+    "MavenConfigStrategy",
     "MavenTestResult",
     "ResolvedImport",
     "add_codeflash_dependency",
@@ -151,6 +161,7 @@ __all__ = [
     "format_java_code",
     "format_java_file",
     "get_class_methods",
+    "get_config_strategy",
     "get_java_analyzer",
     "get_java_support",
     "get_method_by_name",

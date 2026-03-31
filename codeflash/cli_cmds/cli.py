@@ -24,7 +24,7 @@ def parse_args() -> Namespace:
         args.no_pr = True
         args.worktree = True
         args.effort = "low"
-    if args.command == "auth":
+    if args.command in ("auth", "compare"):
         return args
     return process_and_validate_cmd_args(args)
 
@@ -187,11 +187,17 @@ def process_pyproject_config(args: Namespace) -> Namespace:
         args.ignore_paths = normalize_ignore_paths(args.ignore_paths, base_path=args.module_root)
     # If module-root is "." then all imports are relatives to it.
     # in this case, the ".." becomes outside project scope, causing issues with un-importable paths
-    args.project_root = project_root_from_module_root(args.module_root, pyproject_file_path)
+    args.project_root = project_root_from_module_root(Path(args.module_root), pyproject_file_path)
     args.tests_root = Path(args.tests_root).resolve()
     if args.benchmarks_root:
         args.benchmarks_root = Path(args.benchmarks_root).resolve()
     args.test_project_root = project_root_from_module_root(args.tests_root, pyproject_file_path)
+
+    if is_java_project and pyproject_file_path.is_dir():
+        # For Java projects, pyproject_file_path IS the project root directory (not a file).
+        # Override project_root which may have resolved to a sub-module.
+        args.project_root = pyproject_file_path.resolve()
+        args.test_project_root = pyproject_file_path.resolve()
     if is_LSP_enabled():
         args.all = None
         return args
@@ -209,8 +215,6 @@ def project_root_from_module_root(module_root: Path, pyproject_file_path: Path) 
         if (current / "pom.xml").exists():
             return current.resolve()
         if (current / "build.gradle").exists() or (current / "build.gradle.kts").exists():
-            return current.resolve()
-        if (current / "codeflash.toml").exists():
             return current.resolve()
         current = current.parent
 
@@ -377,6 +381,16 @@ def _build_parser() -> ArgumentParser:
     auth_subparsers.add_parser("login", help="Log in to Codeflash via OAuth")
     auth_subparsers.add_parser("status", help="Check authentication status")
 
+    compare_parser = subparsers.add_parser("compare", help="Compare benchmark performance between two git refs.")
+    compare_parser.add_argument("base_ref", help="Base git ref (branch, tag, or commit)")
+    compare_parser.add_argument("head_ref", nargs="?", default=None, help="Head git ref (default: current branch)")
+    compare_parser.add_argument("--pr", type=int, help="Resolve head ref from a PR number (requires gh CLI)")
+    compare_parser.add_argument(
+        "--functions", type=str, help="Explicit functions to instrument: 'file.py::func1,func2;other.py::func3'"
+    )
+    compare_parser.add_argument("--timeout", type=int, default=600, help="Benchmark timeout in seconds (default: 600)")
+    compare_parser.add_argument("--config-file", type=str, dest="config_file", help="Path to pyproject.toml")
+
     trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize your project.")
 
     trace_optimize.add_argument(
@@ -423,6 +437,12 @@ def _build_parser() -> ArgumentParser:
     )
     parser.add_argument("--config-file", type=str, help="Path to the pyproject.toml with codeflash configs.")
     parser.add_argument("--replay-test", type=str, nargs="+", help="Paths to replay test to optimize functions from")
+    parser.add_argument(
+        "--rerun",
+        type=str,
+        help="Rerun a previous optimization by trace ID, using stored LLM results",
+        metavar="TRACE_ID",
+    )
     parser.add_argument(
         "--no-pr", action="store_true", help="Do not create a PR for the optimization, only update the code locally."
     )

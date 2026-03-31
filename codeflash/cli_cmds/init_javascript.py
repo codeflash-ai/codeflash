@@ -700,9 +700,9 @@ def get_js_codeflash_install_step(pkg_manager: JsPackageManager, *, is_dependenc
         # Codeflash will be installed with other dependencies
         return ""
 
-    # Install codeflash via uv (Python + uv are set up in the workflow)
+    # Install codeflash via uv pip (Python + uv are set up in the workflow)
     return """- name: 📥 Install Codeflash
-        run: uv tool install codeflash"""
+        run: uv pip install codeflash"""
 
 
 def get_js_codeflash_run_command(pkg_manager: JsPackageManager, *, is_dependency: bool) -> str:

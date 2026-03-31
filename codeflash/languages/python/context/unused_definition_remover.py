@@ -165,8 +165,6 @@ def get_section_names(node: cst.CSTNode) -> list[str]:
 class DependencyCollector(cst.CSTVisitor):
     """Collects dependencies between definitions using the visitor pattern with depth tracking."""
 
-    METADATA_DEPENDENCIES = (cst.metadata.ParentNodeProvider,)
-
     def __init__(self, definitions: dict[str, UsageInfo]) -> None:
         super().__init__()
         self.definitions = definitions
@@ -179,6 +177,8 @@ class DependencyCollector(cst.CSTVisitor):
         # Track if we're processing a top-level variable
         self.processing_variable = False
         self.current_variable_names = set()
+        # Track Name nodes that are the .attr part of Attribute nodes (by id)
+        self.attr_name_ids: set[int] = set()
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
         function_name = node.name.value
@@ -281,6 +281,12 @@ class DependencyCollector(cst.CSTVisitor):
         self.processing_variable = False
         self.current_variable_names.clear()
 
+    def visit_Attribute(self, node: cst.Attribute) -> None:
+        self.attr_name_ids.add(id(node.attr))
+
+    def leave_Attribute(self, original_node: cst.Attribute) -> None:
+        self.attr_name_ids.discard(id(original_node.attr))
+
     def visit_Name(self, node: cst.Name) -> None:
         name = node.value
 
@@ -296,15 +302,11 @@ class DependencyCollector(cst.CSTVisitor):
             # Skip if this Name is the .attr part of an Attribute (e.g., 'x' in 'self.x')
             # We only want to track the base/value of attribute access, not the attribute name itself
             if self.class_depth > 0:
-                parent = self.get_metadata(cst.metadata.ParentNodeProvider, node)
-                if parent is not None and isinstance(parent, cst.Attribute):
-                    # Check if this Name is the .attr (property name), not the .value (base)
-                    # If it's the .attr, skip it - attribute names aren't references to definitions
-                    if parent.attr is node:
-                        return
-                    # If it's the .value (base), only skip if it's self/cls
-                    if name in ("self", "cls"):
-                        return
+                if id(node) in self.attr_name_ids:
+                    return
+                # If it's the .value (base), only skip if it's self/cls
+                if name in ("self", "cls"):
+                    return
             self.definitions[self.current_top_level_name].dependencies.add(name)
 
 
@@ -409,17 +411,16 @@ def remove_unused_definitions_recursively(
 
 
 def collect_top_level_defs_with_dependencies(code: Union[str, cst.Module]) -> dict[str, UsageInfo]:
-    """Collect all top level definitions and their inter-definition dependencies (expensive CST traversal).
+    """Collect all top level definitions and their inter-definition dependencies via CST traversal.
 
     Returns a definitions dict with dependencies populated but no usage marks set.
     This result can be reused across multiple mark_defs_for_functions calls to avoid
-    repeating the expensive MetadataWrapper + DependencyCollector traversal.
+    repeating the DependencyCollector traversal.
     """
     module = code if isinstance(code, cst.Module) else cst.parse_module(code)
     definitions = collect_top_level_definitions(module)
-    wrapper = cst.MetadataWrapper(module)
     dependency_collector = DependencyCollector(definitions)
-    wrapper.visit(dependency_collector)
+    module.visit(dependency_collector)
     return definitions
 
 
