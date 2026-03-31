@@ -526,7 +526,11 @@ class Optimizer:
                 if funcs and funcs[0].language:
                     set_current_language(funcs[0].language)
                     self.test_cfg.set_language(funcs[0].language)
-                    current_language_support().setup_test_config(self.test_cfg, file_path, self.current_worktree)
+                    if not current_language_support().setup_test_config(
+                        self.test_cfg, file_path, self.current_worktree
+                    ):
+                        logger.error("Project setup failed — aborting optimization. Check warnings above for details.")
+                        return
                     break
 
         if self.args.all:

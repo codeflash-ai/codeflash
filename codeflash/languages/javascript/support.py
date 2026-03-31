@@ -14,7 +14,15 @@ from typing import TYPE_CHECKING, Any
 
 from codeflash.code_utils.git_utils import git_root_dir, mirror_path
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, Language, TestInfo, TestResult
+from codeflash.languages.base import (
+    CodeContext,
+    FunctionFilterCriteria,
+    HelperFunction,
+    Language,
+    SetupError,
+    TestInfo,
+    TestResult,
+)
 from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
 from codeflash.languages.registry import register_language
 from codeflash.models.models import FunctionParent
@@ -1950,7 +1958,7 @@ class JavaScriptSupport:
 
         return prepare_javascript_module(module_code, module_path)
 
-    def setup_test_config(self, test_cfg: TestConfig, file_path: Path, current_worktree: Path | None) -> None:
+    def setup_test_config(self, test_cfg: TestConfig, file_path: Path, current_worktree: Path | None) -> bool:
         from codeflash.languages.javascript.optimizer import verify_js_requirements
         from codeflash.languages.javascript.test_runner import find_node_project_root
 
@@ -1970,7 +1978,11 @@ class JavaScriptSupport:
                 original_root_node_modules = original_js_root / "node_modules"
                 if original_root_node_modules.exists() and not worktree_root_node_modules.exists():
                     worktree_root_node_modules.symlink_to(original_root_node_modules)
-        verify_js_requirements(test_cfg)
+        setup_errors = verify_js_requirements(test_cfg)
+        if any(e.should_abort for e in setup_errors):
+            return False
+
+        return True
 
     def adjust_test_config_for_discovery(self, test_cfg: TestConfig) -> None:
         test_cfg.tests_project_rootdir = test_cfg.tests_root
@@ -2216,7 +2228,7 @@ class JavaScriptSupport:
             rel_path = source_file.relative_to(project_root)
             return "../" + rel_path.with_suffix("").as_posix()
 
-    def verify_requirements(self, project_root: Path, test_framework: str = "jest") -> tuple[bool, list[str]]:
+    def verify_requirements(self, project_root: Path, test_framework: str = "jest") -> tuple[bool, list[SetupError]]:
         """Verify that all JavaScript requirements are met.
 
         Checks for:
@@ -2242,21 +2254,34 @@ class JavaScriptSupport:
         try:
             result = subprocess.run(["node", "--version"], check=False, capture_output=True, text=True, timeout=10)
             if result.returncode != 0:
-                errors.append("Node.js is not installed. Please install Node.js 18+ from https://nodejs.org/")
+                errors.append(
+                    SetupError(
+                        "Node.js is not installed. Please install Node.js 18+ from https://nodejs.org/",
+                        should_abort=True,
+                    )
+                )
         except FileNotFoundError:
-            errors.append("Node.js is not installed. Please install Node.js 18+ from https://nodejs.org/")
+            errors.append(
+                SetupError(
+                    "Node.js is not installed. Please install Node.js 18+ from https://nodejs.org/", should_abort=True
+                )
+            )
         except Exception as e:
-            errors.append(f"Failed to check Node.js: {e}")
+            errors.append(SetupError(f"Failed to check Node.js: {e}", should_abort=True))
 
         # Check npm
         try:
             result = subprocess.run(["npm", "--version"], check=False, capture_output=True, text=True, timeout=10)
             if result.returncode != 0:
-                errors.append("npm is not available. Please ensure npm is installed with Node.js.")
+                errors.append(
+                    SetupError("npm is not available. Please ensure npm is installed with Node.js.", should_abort=True)
+                )
         except FileNotFoundError:
-            errors.append("npm is not available. Please ensure npm is installed with Node.js.")
+            errors.append(
+                SetupError("npm is not available. Please ensure npm is installed with Node.js.", should_abort=True)
+            )
         except Exception as e:
-            errors.append(f"Failed to check npm: {e}")
+            errors.append(SetupError(f"Failed to check npm: {e}", should_abort=True))
 
         # Check test framework is installed (with monorepo support)
         # Uses find_node_modules_with_package which searches up the directory tree
@@ -2270,12 +2295,17 @@ class JavaScriptSupport:
             local_node_modules = project_root / "node_modules"
             if not local_node_modules.exists():
                 errors.append(
-                    f"node_modules not found in {project_root}. Please run 'npm install' to install dependencies."
+                    SetupError(
+                        f"node_modules not found in {project_root}. Please run 'npm install' to install dependencies.",
+                        should_abort=True,
+                    )
                 )
             else:
                 errors.append(
-                    f"{test_framework} is not installed. "
-                    f"Please run 'npm install --save-dev {test_framework}' to install it."
+                    SetupError(
+                        f"{test_framework} is not installed. Please run 'npm install --save-dev {test_framework}' to install it.",
+                        should_abort=True,
+                    )
                 )
 
         return len(errors) == 0, errors

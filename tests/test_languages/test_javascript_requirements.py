@@ -91,7 +91,7 @@ class TestVerifyRequirements:
 
             assert success is False
             assert len(errors) >= 1
-            node_error_found = any("Node.js" in error for error in errors)
+            node_error_found = any("Node.js" in error.message for error in errors)
             assert node_error_found is True
 
     def test_verify_requirements_fails_without_npm(self, js_support, project_with_jest):
@@ -108,7 +108,7 @@ class TestVerifyRequirements:
             success, errors = js_support.verify_requirements(project_with_jest, "jest")
 
             assert success is False
-            npm_error_found = any("npm" in error for error in errors)
+            npm_error_found = any("npm" in error.message for error in errors)
             assert npm_error_found is True
 
     def test_verify_requirements_fails_without_node_modules(self, js_support, project_without_node_modules):
@@ -120,11 +120,11 @@ class TestVerifyRequirements:
 
             assert success is False
             assert len(errors) == 1
-            expected_error = (
+            expected_message = (
                 f"node_modules not found in {project_without_node_modules}. "
                 f"Please run 'npm install' to install dependencies."
             )
-            assert errors[0] == expected_error
+            assert errors[0].message == expected_message
 
     def test_verify_requirements_fails_without_test_framework(self, js_support, project_without_jest):
         """Test verification fails when test framework is not installed."""
@@ -135,8 +135,8 @@ class TestVerifyRequirements:
 
             assert success is False
             assert len(errors) == 1
-            expected_error = "jest is not installed. Please run 'npm install --save-dev jest' to install it."
-            assert errors[0] == expected_error
+            expected_message = "jest is not installed. Please run 'npm install --save-dev jest' to install it."
+            assert errors[0].message == expected_message
 
     def test_verify_requirements_returns_multiple_errors(self, js_support, project_without_node_modules):
         """Test that multiple errors can be returned."""
@@ -148,7 +148,7 @@ class TestVerifyRequirements:
             assert success is False
             assert len(errors) >= 2
             # Should have errors for Node.js, npm, and node_modules
-            error_text = " ".join(errors)
+            error_text = " ".join(e.message for e in errors)
             assert "Node.js" in error_text
             assert "npm" in error_text
 
@@ -161,8 +161,8 @@ class TestVerifyRequirements:
 
             assert success is False
             assert len(errors) == 1
-            expected_error = "vitest is not installed. Please run 'npm install --save-dev vitest' to install it."
-            assert errors[0] == expected_error
+            expected_message = "vitest is not installed. Please run 'npm install --save-dev vitest' to install it."
+            assert errors[0].message == expected_message
 
     def test_verify_requirements_jest_not_installed(self, js_support, project_with_vitest):
         """Test verification fails when Jest is requested but only Vitest is installed."""
@@ -173,8 +173,8 @@ class TestVerifyRequirements:
 
             assert success is False
             assert len(errors) == 1
-            expected_error = "jest is not installed. Please run 'npm install --save-dev jest' to install it."
-            assert errors[0] == expected_error
+            expected_message = "jest is not installed. Please run 'npm install --save-dev jest' to install it."
+            assert errors[0].message == expected_message
 
 
 class TestVerifyRequirementsIntegration:
