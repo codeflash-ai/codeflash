@@ -22,10 +22,24 @@ public class Workload {
     }
 
     public static List<Integer> filterEvens(List<Integer> numbers) {
-        List<Integer> result = new ArrayList<>();
-        for (int n : numbers) {
-            if (n % 2 == 0) {
-                result.add(n);
+        int size = numbers.size();
+        List<Integer> result = new ArrayList<>(size);
+        // Use indexed access for RandomAccess lists to avoid iterator overhead,
+        // fall back to enhanced-for for other list implementations.
+        if (numbers instanceof java.util.RandomAccess) {
+            for (int i = 0; i < size; i++) {
+                Integer num = numbers.get(i);
+                int n = num;
+                if ((n & 1) == 0) {
+                    result.add(num);
+                }
+            }
+        } else {
+            for (Integer num : numbers) {
+                int n = num;
+                if ((n & 1) == 0) {
+                    result.add(num);
+                }
             }
         }
         return result;
