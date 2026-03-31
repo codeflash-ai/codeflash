@@ -148,48 +148,6 @@ def _is_inside_lambda(node: Any) -> bool:
     return False
 
 
-def _is_inside_complex_expression(node: Any) -> bool:
-    """Check if a tree-sitter node is inside a complex expression that shouldn't be instrumented directly.
-
-    This includes:
-    - Cast expressions: (Long)list.get(2)
-    - Ternary expressions: condition ? func() : other
-    - Array access: arr[func()]
-    - Binary operations: func() + 1
-
-    Returns True if the node should not be directly instrumented.
-    """
-    current = node.parent
-    while current is not None:
-        # Stop at statement boundaries
-        if current.type in {
-            "method_declaration",
-            "block",
-            "if_statement",
-            "for_statement",
-            "while_statement",
-            "try_statement",
-            "expression_statement",
-        }:
-            return False
-
-        # These are complex expressions that shouldn't have instrumentation inserted in the middle
-        if current.type in {
-            "cast_expression",
-            "ternary_expression",
-            "array_access",
-            "binary_expression",
-            "unary_expression",
-            "parenthesized_expression",
-            "instanceof_expression",
-        }:
-            logger.debug("Found complex expression parent: %s", current.type)
-            return True
-
-        current = current.parent
-    return False
-
-
 _TS_BODY_PREFIX = "class _D { void _m() {\n"
 _TS_BODY_SUFFIX = "\n}}"
 _TS_BODY_PREFIX_BYTES = _TS_BODY_PREFIX.encode("utf8")
@@ -458,7 +416,6 @@ def _collect_calls(
                         "full_call": analyzer.get_node_text(node, wrapper_bytes),
                         "parent_type": parent_type,
                         "in_lambda": _is_inside_lambda(node),
-                        "in_complex": _is_inside_complex_expression(node),
                         "es_start_byte": es_start,
                         "es_end_byte": es_end,
                     }
