@@ -68,11 +68,6 @@ def _find_comparator_jar(project_root: Path | None = None) -> Path | None:
         if m2_jar.exists():
             return m2_jar
 
-    # Check bundled JAR in package resources
-    resources_jar = Path(__file__).parent / "resources" / CODEFLASH_RUNTIME_JAR_NAME
-    if resources_jar.exists():
-        return resources_jar
-
     return None
 
 
