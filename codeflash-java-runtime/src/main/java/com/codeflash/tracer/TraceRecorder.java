@@ -22,6 +22,7 @@ public final class TraceRecorder {
     private final TracerConfig config;
     private final TraceWriter writer;
     private final ConcurrentHashMap<String, AtomicInteger> functionCounts = new ConcurrentHashMap<>();
+    private final AtomicInteger droppedCaptures = new AtomicInteger(0);
     private final int maxFunctionCount;
     private final ExecutorService serializerExecutor;
 
@@ -82,11 +83,13 @@ public final class TraceRecorder {
             argsBlob = future.get(SERIALIZATION_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
             future.cancel(true);
+            droppedCaptures.incrementAndGet();
             System.err.println("[codeflash-tracer] Serialization timed out for " + className + "."
                     + methodName);
             return;
         } catch (Exception e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
+            droppedCaptures.incrementAndGet();
             System.err.println("[codeflash-tracer] Serialization failed for " + className + "."
                     + methodName + ": " + cause.getClass().getSimpleName() + ": " + cause.getMessage());
             return;
@@ -113,11 +116,15 @@ public final class TraceRecorder {
         }
         metadata.put("totalCaptures", String.valueOf(totalCaptures));
 
+        int dropped = droppedCaptures.get();
+        metadata.put("droppedCaptures", String.valueOf(dropped));
+
         writer.writeMetadata(metadata);
         writer.flush();
         writer.close();
 
         System.err.println("[codeflash-tracer] Captured " + totalCaptures
-                + " invocations across " + functionCounts.size() + " methods");
+                + " invocations across " + functionCounts.size() + " methods"
+                + (dropped > 0 ? " (" + dropped + " dropped due to serialization timeout/failure)" : ""));
     }
 }

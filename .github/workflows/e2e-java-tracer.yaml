@@ -3,17 +3,9 @@ name: E2E - Java Tracer
 on:
   pull_request:
     paths:
-      - 'codeflash/languages/java/**'
-      - 'codeflash/languages/base.py'
-      - 'codeflash/languages/registry.py'
-      - 'codeflash/tracer.py'
-      - 'codeflash/benchmarking/function_ranker.py'
-      - 'codeflash/discovery/functions_to_optimize.py'
-      - 'codeflash/optimization/**'
-      - 'codeflash/verification/**'
+      - 'codeflash/**'
       - 'codeflash-java-runtime/**'
-      - 'tests/test_languages/fixtures/java_tracer_e2e/**'
-      - 'tests/scripts/end_to_end_test_java_tracer.py'
+      - 'tests/**'
       - '.github/workflows/e2e-java-tracer.yaml'
 
   workflow_dispatch:
