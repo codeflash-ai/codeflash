@@ -367,11 +367,11 @@ class JavaScriptSupport:
                     # Include 'export' keyword if the class is exported
                     export_keyword = "export " if is_exported else ""
                     if class_jsdoc:
-                        target_code = (
-                            f"{class_jsdoc}\n{class_indent}{export_keyword}class {class_name} {{\n{class_body}{class_indent}}}\n"
-                        )
+                        target_code = f"{class_jsdoc}\n{class_indent}{export_keyword}class {class_name} {{\n{class_body}{class_indent}}}\n"
                     else:
-                        target_code = f"{class_indent}{export_keyword}class {class_name} {{\n{class_body}{class_indent}}}\n"
+                        target_code = (
+                            f"{class_indent}{export_keyword}class {class_name} {{\n{class_body}{class_indent}}}\n"
+                        )
                 else:
                     # Fallback: wrap with no indentation, including same-class helpers
                     helper_code = "\n".join(h[1] for h in same_class_helpers)
