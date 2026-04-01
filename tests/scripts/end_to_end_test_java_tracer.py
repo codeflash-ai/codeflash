@@ -52,6 +52,7 @@ def run_test(expected_improvement_pct: int) -> bool:
         "codeflash.main",
         "optimize",
         "java",
+        "--no-pr",
         "-cp",
         str(classes_dir),
         "com.example.Workload",
