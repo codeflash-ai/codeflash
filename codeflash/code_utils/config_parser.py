@@ -206,12 +206,16 @@ def _check_dir_for_configs(dir_path: Path, configs: list[LanguageConfig], seen_l
         package_json = dir_path / "package.json"
         if package_json.exists():
             try:
-                result = parse_package_json_config(package_json)
-                if result is not None:
-                    config, path = result
-                    lang = Language(config.get("language", "javascript"))
-                    seen_languages.add(lang)
-                    configs.append(LanguageConfig(config=config, config_path=path, language=lang))
+                import json
+
+                pkg_data = json.loads(package_json.read_text(encoding="utf-8"))
+                if isinstance(pkg_data, dict) and "codeflash" in pkg_data:
+                    result = parse_package_json_config(package_json)
+                    if result is not None:
+                        config, path = result
+                        lang = Language(config.get("language", "javascript"))
+                        seen_languages.add(lang)
+                        configs.append(LanguageConfig(config=config, config_path=path, language=lang))
             except Exception:
                 logger.debug("Failed to parse JS/TS config in %s", dir_path, exc_info=True)
 
@@ -237,11 +241,27 @@ def find_all_config_files(start_dir: Path | None = None) -> list[LanguageConfig]
     configs: list[LanguageConfig] = []
     seen_languages: set[Language] = set()
 
-    # Walk upward from start_dir to filesystem root (closest config wins per language)
+    # Determine the git root as the upward walk boundary.
+    # Without this, a pyproject.toml in ~ would be picked up from any subdirectory.
+    git_root: Path | None = None
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, cwd=start_dir, check=False
+        )
+        if result.returncode == 0:
+            git_root = Path(result.stdout.strip()).resolve()
+    except Exception:
+        pass
+
+    # Walk upward from start_dir to git root (closest config wins per language)
     dir_path = start_dir.resolve()
     while True:
         _check_dir_for_configs(dir_path, configs, seen_languages)
 
+        if git_root is not None and dir_path == git_root:
+            break
         parent = dir_path.parent
         if parent == dir_path:
             break

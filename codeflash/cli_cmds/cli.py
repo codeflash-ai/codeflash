@@ -410,7 +410,7 @@ def _build_parser() -> ArgumentParser:
     compare_parser.add_argument("--timeout", type=int, default=600, help="Benchmark timeout in seconds (default: 600)")
     compare_parser.add_argument("--config-file", type=str, dest="config_file", help="Path to pyproject.toml")
 
-    trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize your project.", add_help=False)
+    trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize your project.")
 
     trace_optimize.add_argument(
         "--max-function-count",
