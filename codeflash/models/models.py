@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections import Counter, defaultdict
 from functools import lru_cache
 from typing import TYPE_CHECKING
@@ -995,13 +996,37 @@ class TestResults(BaseModel):  # noqa: PLW1641
             return 0.0
 
         per_test_cvs: list[float] = []
+
+        # Use a single-pass Welford algorithm per list to compute sample standard deviation
+        # and mean in one traversal to avoid the double-pass of statistics.mean + statistics.stdev.
+        def _compute_sample_cv(values: list[int]) -> float | None:
+            n = 0
+            mean = 0.0
+            m2 = 0.0
+            for x in values:
+                n += 1
+                x_f = float(x)
+                delta = x_f - mean
+                mean += delta / n
+                delta2 = x_f - mean
+                m2 += delta * delta2
+            if n < 2:
+                return None
+            # sample variance = m2 / (n - 1)
+            if mean == 0.0:
+                return None
+            sample_variance = m2 / (n - 1)
+            # Guard against tiny negative rounding artefacts
+            if sample_variance <= 0.0:
+                stdev = 0.0
+            else:
+                stdev = math.sqrt(sample_variance)
+            return stdev / mean
+
         for runtimes in runtime_data.values():
-            if len(runtimes) < 2:
-                continue
-            mean = statistics.mean(runtimes)
-            if mean == 0:
-                continue
-            per_test_cvs.append(statistics.stdev(runtimes) / mean)
+            cv = _compute_sample_cv(runtimes)
+            if cv is not None:
+                per_test_cvs.append(cv)
 
         if not per_test_cvs:
             return 0.0
