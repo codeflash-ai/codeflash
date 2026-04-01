@@ -62,11 +62,11 @@ GITHUB_RELEASE_URL = (
 
 CODEFLASH_CACHE_DIR = Path.home() / ".cache" / "codeflash"
 
-CODEFLASH_DEPENDENCY_SNIPPET = """\
+CODEFLASH_DEPENDENCY_SNIPPET = f"""\
         <dependency>
             <groupId>com.codeflash</groupId>
             <artifactId>codeflash-runtime</artifactId>
-            <version>1.0.0</version>
+            <version>{CODEFLASH_RUNTIME_VERSION}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>"""
@@ -140,7 +140,7 @@ def install_codeflash_runtime(project_root: Path, runtime_jar_path: Path, mvn: s
         f"-Dfile={runtime_jar_path}",
         "-DgroupId=com.codeflash",
         "-DartifactId=codeflash-runtime",
-        "-Dversion=1.0.0",
+        f"-Dversion={CODEFLASH_RUNTIME_VERSION}",
         "-Dpackaging=jar",
         "-B",
     ]
@@ -297,7 +297,7 @@ def add_codeflash_dependency(pom_path: Path) -> bool:
                             "<dependency>\n"
                             "            <groupId>com.codeflash</groupId>\n"
                             "            <artifactId>codeflash-runtime</artifactId>\n"
-                            "            <version>1.0.0</version>\n"
+                            f"            <version>{CODEFLASH_RUNTIME_VERSION}</version>\n"
                             "            <scope>test</scope>\n"
                             "        </dependency>"
                         )
