@@ -962,16 +962,45 @@ class TestResults(BaseModel):  # noqa: PLW1641
         return by_id
 
     def total_passed_runtime(self) -> int:
-        """Calculate the sum of runtimes of all test cases that passed.
+        """Calculate the sum of median runtimes of all test cases that passed.
 
-        A testcase runtime is the minimum value of all looped execution runtimes.
+        A testcase runtime is the median value of all looped execution runtimes.
+        Using median instead of min reduces sensitivity to outlier-fast iterations
+        (lucky GC pauses, perfect cache alignment) that produce spurious speedups.
 
         :return: The runtime in nanoseconds.
         """
+        import statistics
+
         # TODO this doesn't look at the intersection of tests of baseline and original
         return sum(
-            [min(usable_runtime_data) for _, usable_runtime_data in self.usable_runtime_data_by_test_case().items()]
+            statistics.median_low(usable_runtime_data)
+            for _, usable_runtime_data in self.usable_runtime_data_by_test_case().items()
         )
+
+    def timing_coefficient_of_variation(self) -> float:
+        """Calculate the coefficient of variation (CV) across all per-test-case median runtimes.
+
+        CV = stdev / mean. A CV of 0.10 means 10% variance relative to the mean.
+        Returns 0.0 if there are fewer than 2 test cases with timing data.
+        """
+        import statistics
+
+        runtime_data = self.usable_runtime_data_by_test_case()
+        if not runtime_data:
+            return 0.0
+
+        all_runtimes: list[int] = []
+        for runtimes in runtime_data.values():
+            all_runtimes.extend(runtimes)
+
+        if len(all_runtimes) < 2:
+            return 0.0
+
+        mean = statistics.mean(all_runtimes)
+        if mean == 0:
+            return 0.0
+        return statistics.stdev(all_runtimes) / mean
 
     def effective_loop_count(self) -> int:
         """Calculate the effective number of complete loops.

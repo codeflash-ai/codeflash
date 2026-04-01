@@ -1223,6 +1223,7 @@ class FunctionOptimizer:
         eval_ctx.record_successful_candidate(candidate.optimization_id, candidate_result.best_test_runtime, perf_gain)
 
         # Check if this is a successful optimization
+        baseline_cv = original_code_baseline.benchmarking_test_results.timing_coefficient_of_variation()
         is_successful_opt = speedup_critic(
             candidate_result,
             original_code_baseline.runtime,
@@ -1231,6 +1232,7 @@ class FunctionOptimizer:
             best_throughput_until_now=None,
             original_concurrency_metrics=original_code_baseline.concurrency_metrics,
             best_concurrency_ratio_until_now=None,
+            baseline_timing_cv=baseline_cv,
         ) and quantity_of_tests_critic(candidate_result)
 
         tree = self.build_runtime_info_tree(

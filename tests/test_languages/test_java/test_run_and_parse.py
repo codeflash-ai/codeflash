@@ -527,7 +527,7 @@ public class PreciseWaiterTest {
             f"Mean runtime {mean_runtime / 1_000_000:.3f}ms not close to expected 10.0ms"
         )
 
-        # Verify total_passed_runtime sums minimum runtime per test case
+        # Verify total_passed_runtime sums median runtime per test case
         # iteration_id is now constant (wrapper ID) across inner iterations,
         # so all 4 runtimes (2 outer × 2 inner) group under 1 InvocationId key
         total_runtime = test_results.total_passed_runtime()
@@ -542,12 +542,12 @@ public class PreciseWaiterTest {
                 f"Expected 4 runtimes (2 outer × 2 inner) for {test_id.iteration_id}, got {len(test_runtimes)}"
             )
 
-        # Total should be min of all runtimes ≈ 10ms
-        # Minimums filter out JIT warmup, so use tighter ±3% tolerance
+        # Total should be median of all runtimes ≈ 10ms
+        # Median is more representative than min; use ±5% tolerance for JVM variance
         expected_total_ns = expected_ns
-        assert expected_total_ns * 0.97 <= total_runtime <= expected_total_ns * 1.03, (
+        assert expected_total_ns * 0.95 <= total_runtime <= expected_total_ns * 1.05, (
             f"total_passed_runtime {total_runtime / 1_000_000:.3f}ms not close to expected "
-            f"{expected_total_ns / 1_000_000:.1f}ms (min of 4 runtimes × 10ms each, ±3%)"
+            f"{expected_total_ns / 1_000_000:.1f}ms (median of 4 runtimes × 10ms each, ±5%)"
         )
 
     def test_performance_multiple_test_methods_inner_loop(self, java_project):
@@ -612,7 +612,7 @@ public class PreciseWaiterMultiTest {
             f"Mean runtime {mean_runtime / 1_000_000:.3f}ms not close to expected 10.0ms"
         )
 
-        # Verify total_passed_runtime sums minimum runtime per test case
+        # Verify total_passed_runtime sums median runtime per test case
         # iteration_id is now constant (wrapper ID) per call site, so:
         # 2 test methods = 2 InvocationId keys, each with 4 runtimes (2 outer × 2 inner)
         total_runtime = test_results.total_passed_runtime()
@@ -630,10 +630,10 @@ public class PreciseWaiterMultiTest {
                 f"got {len(test_runtimes)}"
             )
 
-        # Total should be sum of 2 minimums ≈ 20ms
-        # Minimums filter out JIT warmup, so use tighter ±3% tolerance
+        # Total should be sum of 2 medians ≈ 20ms
+        # Median is more representative than min; use ±5% tolerance for JVM variance
         expected_total_ns = 2 * expected_ns  # 2 test cases × 10ms each
-        assert expected_total_ns * 0.97 <= total_runtime <= expected_total_ns * 1.03, (
+        assert expected_total_ns * 0.95 <= total_runtime <= expected_total_ns * 1.05, (
             f"total_passed_runtime {total_runtime / 1_000_000:.3f}ms not close to expected "
-            f"{expected_total_ns / 1_000_000:.1f}ms (2 methods × min of 4 runtimes × 10ms, ±3%)"
+            f"{expected_total_ns / 1_000_000:.1f}ms (2 methods × median of 4 runtimes × 10ms, ±5%)"
         )

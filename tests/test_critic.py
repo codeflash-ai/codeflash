@@ -799,3 +799,134 @@ def test_parse_concurrency_metrics() -> None:
     metrics_no_class = parse_concurrency_metrics(test_results_no_class, "my_function")
     assert metrics_no_class is not None
     assert metrics_no_class.concurrency_ratio == 2.0  # 5000000 / 2500000
+
+
+def test_speedup_critic_with_baseline_cv() -> None:
+    """Test that high baseline variance raises the noise floor to reject noisy speedups."""
+    original_code_runtime = 100000  # 100µs — base noise floor is 5%
+    best_runtime_until_now = 100000
+
+    # 8% claimed speedup — would pass the default 5% noise floor
+    candidate_result = OptimizedCandidateResult(
+        max_loop_count=5,
+        best_test_runtime=92500,  # ~8% faster
+        behavior_test_results=TestResults(),
+        benchmarking_test_results=TestResults(),
+        optimization_candidate_index=0,
+        total_candidate_timing=12,
+    )
+
+    # Without CV: 8% > 5% noise floor → accepted
+    assert speedup_critic(
+        candidate_result, original_code_runtime, best_runtime_until_now, disable_gh_action_noise=True
+    )
+
+    # With 15% CV: noise floor raised to 15% → 8% improvement rejected
+    assert not speedup_critic(
+        candidate_result,
+        original_code_runtime,
+        best_runtime_until_now,
+        disable_gh_action_noise=True,
+        baseline_timing_cv=0.15,
+    )
+
+    # With 3% CV (lower than default noise floor): noise floor stays at 5% → still accepted
+    assert speedup_critic(
+        candidate_result,
+        original_code_runtime,
+        best_runtime_until_now,
+        disable_gh_action_noise=True,
+        baseline_timing_cv=0.03,
+    )
+
+    # 25% speedup passes even with 15% CV
+    fast_candidate = OptimizedCandidateResult(
+        max_loop_count=5,
+        best_test_runtime=80000,  # 25% faster
+        behavior_test_results=TestResults(),
+        benchmarking_test_results=TestResults(),
+        optimization_candidate_index=0,
+        total_candidate_timing=12,
+    )
+    assert speedup_critic(
+        fast_candidate,
+        original_code_runtime,
+        best_runtime_until_now,
+        disable_gh_action_noise=True,
+        baseline_timing_cv=0.15,
+    )
+
+
+def _make_test_invocation(runtime: int, loop_index: int = 0, iteration_id: str = "iter1") -> FunctionTestInvocation:
+    """Helper to create a FunctionTestInvocation with minimal required fields."""
+    return FunctionTestInvocation(
+        id=InvocationId(
+            test_module_path="test_mod",
+            test_class_name="TestClass",
+            test_function_name="test_func",
+            function_getting_tested="target",
+            iteration_id=iteration_id,
+        ),
+        file_name=Path("test.py"),
+        did_pass=True,
+        runtime=runtime,
+        test_framework="pytest",
+        loop_index=loop_index,
+        test_type=TestType.GENERATED_REGRESSION,
+        return_value=None,
+        timed_out=False,
+    )
+
+
+def test_total_passed_runtime_uses_median() -> None:
+    """Verify total_passed_runtime uses median (not min) for timing aggregation."""
+    test_results = TestResults(
+        test_results=[
+            _make_test_invocation(100, loop_index=0),
+            _make_test_invocation(200, loop_index=1),
+            _make_test_invocation(300, loop_index=2),
+        ]
+    )
+
+    # With min: would be 100. With median_low (3 values): should be 200.
+    total = test_results.total_passed_runtime()
+    assert total == 200, f"Expected median_low(100, 200, 300) = 200, got {total}"
+
+
+def test_total_passed_runtime_median_even_count() -> None:
+    """Verify median_low picks the lower middle value for even-count data."""
+    test_results = TestResults(
+        test_results=[
+            _make_test_invocation(100, loop_index=0),
+            _make_test_invocation(200, loop_index=1),
+            _make_test_invocation(300, loop_index=2),
+            _make_test_invocation(400, loop_index=3),
+        ]
+    )
+
+    # median_low of [100, 200, 300, 400] = 200 (lower of two middle values)
+    total = test_results.total_passed_runtime()
+    assert total == 200, f"Expected median_low(100, 200, 300, 400) = 200, got {total}"
+
+
+def test_timing_coefficient_of_variation() -> None:
+    """Verify CV calculation for benchmark timing data."""
+    import statistics
+
+    # Zero variance
+    test_results = TestResults(
+        test_results=[_make_test_invocation(1000, loop_index=i) for i in range(4)]
+    )
+    assert test_results.timing_coefficient_of_variation() == 0.0
+
+    # High variance
+    runtimes_var = [100, 200, 100, 200]
+    test_results_var = TestResults(
+        test_results=[_make_test_invocation(rt, loop_index=i) for i, rt in enumerate(runtimes_var)]
+    )
+    cv = test_results_var.timing_coefficient_of_variation()
+    expected_cv = statistics.stdev(runtimes_var) / statistics.mean(runtimes_var)
+    assert abs(cv - expected_cv) < 0.001, f"Expected CV {expected_cv:.4f}, got {cv:.4f}"
+
+    # Empty results
+    assert TestResults().timing_coefficient_of_variation() == 0.0

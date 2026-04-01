@@ -71,6 +71,7 @@ def speedup_critic(
     best_throughput_until_now: int | None = None,
     original_concurrency_metrics: ConcurrencyMetrics | None = None,
     best_concurrency_ratio_until_now: float | None = None,
+    baseline_timing_cv: float | None = None,
 ) -> bool:
     """Take in a correct optimized Test Result and decide if the optimization should actually be surfaced to the user.
 
@@ -81,6 +82,8 @@ def speedup_critic(
     - The noise floor is a function of the original code runtime. Currently, the noise floor is 2xMIN_IMPROVEMENT_THRESHOLD
       when the original runtime is less than 10 microseconds, and becomes MIN_IMPROVEMENT_THRESHOLD for any higher runtime.
     - The noise floor is doubled when benchmarking on a (noisy) GitHub Action virtual instance.
+    - If baseline timing CV (coefficient of variation) is available, the noise floor is raised
+      to at least the observed variance to avoid accepting benchmark noise as real speedup.
 
     For async throughput (when available):
     - Evaluates throughput improvements using MIN_THROUGHPUT_IMPROVEMENT_THRESHOLD
@@ -94,6 +97,11 @@ def speedup_critic(
     noise_floor = 3 * MIN_IMPROVEMENT_THRESHOLD if original_code_runtime < 10000 else MIN_IMPROVEMENT_THRESHOLD
     if not disable_gh_action_noise and env_utils.is_ci():
         noise_floor = noise_floor * 2  # Increase the noise floor in GitHub Actions mode
+
+    # Adapt noise floor to observed baseline variance: if the baseline benchmark has
+    # high variance, require proportionally larger speedups to avoid accepting noise.
+    if baseline_timing_cv is not None and baseline_timing_cv > noise_floor:
+        noise_floor = baseline_timing_cv
 
     perf_gain = performance_gain(
         original_runtime_ns=original_code_runtime, optimized_runtime_ns=candidate_result.best_test_runtime
