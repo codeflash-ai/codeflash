@@ -584,6 +584,11 @@ def find_agent_jar() -> Path | None:
     if m2_jar.exists():
         return m2_jar
 
+    # Check bundled JAR in package resources
+    resources_jar = Path(__file__).parent / "resources" / AGENT_JAR_NAME
+    if resources_jar.exists():
+        return resources_jar
+
     # Check development build directory
     dev_jar = Path(__file__).parent.parent.parent.parent / "codeflash-java-runtime" / "target" / AGENT_JAR_NAME
     if dev_jar.exists():

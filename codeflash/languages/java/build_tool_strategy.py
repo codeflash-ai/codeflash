@@ -60,6 +60,10 @@ class BuildToolStrategy(ABC):
         Subclasses should override to prepend tool-specific cache paths
         and fall back to super().find_runtime_jar().
         """
+        resources_jar = Path(__file__).parent / "resources" / _RUNTIME_JAR_NAME
+        if resources_jar.exists():
+            return resources_jar
+
         dev_jar_maven = _JAVA_RUNTIME_DIR / "target" / _RUNTIME_JAR_NAME
         if dev_jar_maven.exists():
             return dev_jar_maven
