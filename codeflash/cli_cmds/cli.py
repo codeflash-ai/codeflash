@@ -382,7 +382,9 @@ def _build_parser() -> ArgumentParser:
     auth_subparsers.add_parser("status", help="Check authentication status")
 
     compare_parser = subparsers.add_parser("compare", help="Compare benchmark performance between two git refs.")
-    compare_parser.add_argument("base_ref", help="Base git ref (branch, tag, or commit)")
+    compare_parser.add_argument(
+        "base_ref", nargs="?", default=None, help="Base git ref (default: auto-detect from PR or default branch)"
+    )
     compare_parser.add_argument("head_ref", nargs="?", default=None, help="Head git ref (default: current branch)")
     compare_parser.add_argument("--pr", type=int, help="Resolve head ref from a PR number (requires gh CLI)")
     compare_parser.add_argument(

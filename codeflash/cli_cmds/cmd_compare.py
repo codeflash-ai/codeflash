@@ -38,23 +38,35 @@ def run_compare(args: Namespace) -> None:
 
     project_root = project_root_from_module_root(module_root, pyproject_file_path)
 
-    # Resolve head_ref
+    # Resolve head_ref: explicit arg > --pr > current branch
     head_ref = args.head_ref
     if args.pr:
-        head_ref = _resolve_pr_branch(args.pr)
+        head_ref = resolve_pr_branch(args.pr)
     if not head_ref:
-        logger.error("Must provide head_ref or --pr")
-        sys.exit(1)
+        head_ref = get_current_branch()
+        if not head_ref:
+            logger.error("Must provide head_ref, --pr, or be on a branch")
+            sys.exit(1)
+        logger.info(f"Auto-detected head ref: {head_ref}")
+
+    # Resolve base_ref: explicit arg > PR base branch > repo default branch
+    base_ref = args.base_ref
+    if not base_ref:
+        base_ref = detect_base_ref(head_ref)
+        if not base_ref:
+            logger.error("Could not auto-detect base ref. Provide it explicitly or ensure gh CLI is available.")
+            sys.exit(1)
+        logger.info(f"Auto-detected base ref: {base_ref}")
 
     # Parse explicit functions if provided
     functions = None
     if args.functions:
-        functions = _parse_functions_arg(args.functions, project_root)
+        functions = parse_functions_arg(args.functions, project_root)
 
     from codeflash.benchmarking.compare import compare_branches
 
     result = compare_branches(
-        base_ref=args.base_ref,
+        base_ref=base_ref,
         head_ref=head_ref,
         project_root=project_root,
         benchmarks_root=benchmarks_root,
@@ -68,8 +80,61 @@ def run_compare(args: Namespace) -> None:
         sys.exit(1)
 
 
-def _resolve_pr_branch(pr_number: int) -> str:
-    """Resolve a PR number to its head branch name using gh CLI."""
+def get_current_branch() -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True, check=True
+        )
+        branch = result.stdout.strip()
+        return branch if branch and branch != "HEAD" else None
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
+
+
+def detect_base_ref(head_ref: str) -> str | None:
+    # Try to find an open PR for this branch and use its base
+    try:
+        result = subprocess.run(
+            ["gh", "pr", "view", head_ref, "--json", "baseRefName", "-q", ".baseRefName"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        base = result.stdout.strip()
+        if base:
+            return base
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        pass
+
+    # Fall back to repo default branch
+    try:
+        result = subprocess.run(
+            ["gh", "repo", "view", "--json", "defaultBranchRef", "-q", ".defaultBranchRef.name"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        default = result.stdout.strip()
+        if default:
+            return default
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        pass
+
+    # Last resort: check for common default branch names
+    try:
+        for candidate in ("main", "master"):
+            result = subprocess.run(
+                ["git", "rev-parse", "--verify", candidate], capture_output=True, text=True, check=False
+            )
+            if result.returncode == 0:
+                return candidate
+    except FileNotFoundError:
+        pass
+
+    return None
+
+
+def resolve_pr_branch(pr_number: int) -> str:
     try:
         result = subprocess.run(
             ["gh", "pr", "view", str(pr_number), "--json", "headRefName", "-q", ".headRefName"],
@@ -91,7 +156,7 @@ def _resolve_pr_branch(pr_number: int) -> str:
         sys.exit(1)
 
 
-def _parse_functions_arg(functions_str: str, project_root: Path) -> dict[Path, list[FunctionToOptimize]]:
+def parse_functions_arg(functions_str: str, project_root: Path) -> dict[Path, list[FunctionToOptimize]]:
     """Parse --functions arg format: 'file.py::func1,func2;other.py::func3'."""
     from codeflash.models.function_types import FunctionToOptimize
 
