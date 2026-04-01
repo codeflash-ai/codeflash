@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
-from codeflash.languages.java.build_tool_strategy import BuildToolStrategy, find_wrapper_executable, module_to_dir
+from codeflash.languages.java.build_tool_strategy import BuildToolStrategy, module_to_dir
 from codeflash.languages.java.build_tools import BuildTool, JavaProjectInfo
 
 _RE_INCLUDE = re.compile(r"""include\s*\(?([^)\n]+)\)?""")
@@ -417,7 +417,7 @@ class GradleStrategy(BuildToolStrategy):
         )
 
     def find_executable(self, build_root: Path) -> str | None:
-        return find_wrapper_executable(build_root, ("gradlew", "gradlew.bat"), "gradle")
+        return self.find_wrapper_executable(build_root, ("gradlew", "gradlew.bat"), "gradle")
 
     def ensure_runtime(self, build_root: Path, test_module: str | None) -> bool:
         runtime_jar = self.find_runtime_jar()

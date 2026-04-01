@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
-from codeflash.languages.java.build_tool_strategy import BuildToolStrategy, find_wrapper_executable, module_to_dir
+from codeflash.languages.java.build_tool_strategy import BuildToolStrategy, module_to_dir
 from codeflash.languages.java.build_tools import (
     CODEFLASH_RUNTIME_JAR_NAME,
     CODEFLASH_RUNTIME_VERSION,
@@ -647,7 +647,7 @@ class MavenStrategy(BuildToolStrategy):
             return None
 
     def find_executable(self, build_root: Path) -> str | None:
-        return find_wrapper_executable(build_root, ("mvnw", "mvnw.cmd"), "mvn")
+        return self.find_wrapper_executable(build_root, ("mvnw", "mvnw.cmd"), "mvn")
 
     def find_runtime_jar(self) -> Path | None:
         if self._M2_JAR.exists():
