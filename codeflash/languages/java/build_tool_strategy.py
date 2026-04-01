@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -22,6 +23,30 @@ logger = logging.getLogger(__name__)
 
 _RUNTIME_JAR_NAME = "codeflash-runtime-1.0.0.jar"
 _JAVA_RUNTIME_DIR = Path(__file__).parent.parent.parent.parent / "codeflash-java-runtime"
+
+
+def find_wrapper_executable(build_root: Path, wrapper_names: tuple[str, ...], system_command: str) -> str | None:
+    """Walk up from *build_root* looking for a build-tool wrapper script.
+
+    Parameters
+    ----------
+    build_root:
+        Directory to start searching from.
+    wrapper_names:
+        File names to look for at each level (e.g. ``("mvnw", "mvnw.cmd")``).
+    system_command:
+        Bare command name used as a last-resort fallback via :func:`shutil.which`
+        (e.g. ``"mvn"``).
+
+    """
+    search = build_root.resolve()
+    while search != search.parent:
+        for name in wrapper_names:
+            candidate = search / name
+            if candidate.exists():
+                return str(candidate)
+        search = search.parent
+    return shutil.which(system_command)
 
 
 def module_to_dir(test_module: str) -> str:
