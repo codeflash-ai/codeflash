@@ -2012,6 +2012,7 @@ class JavaScriptSupport:
             validate_and_fix_import_style,
         )
         from codeflash.languages.javascript.module_system import (
+            ModuleSystem,
             ensure_module_system_compatibility,
             ensure_vitest_imports,
         )
@@ -2035,6 +2036,13 @@ class JavaScriptSupport:
         generated_test_source = ensure_module_system_compatibility(
             generated_test_source, project_module_system, test_cfg.tests_project_rootdir
         )
+
+        # Add .js extensions to relative imports for ESM projects
+        # TypeScript + ESM requires explicit .js extensions even for .ts source files
+        if project_module_system == ModuleSystem.ES_MODULE:
+            from codeflash.languages.javascript.module_system import add_js_extensions_to_relative_imports
+
+            generated_test_source = add_js_extensions_to_relative_imports(generated_test_source)
 
         # Ensure vitest imports are present when using vitest framework
         generated_test_source = ensure_vitest_imports(generated_test_source, test_cfg.test_framework)
