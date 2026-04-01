@@ -69,7 +69,6 @@ def _parse_optimization_source(new_source: str, target_method_name: str, analyze
     if classes:
         # It's a class - extract components
         methods = analyzer.find_methods(new_source)
-        fields = analyzer.find_fields(new_source)
 
         # Find the target method and its index among all methods
         target_method = None
@@ -128,7 +127,11 @@ def _parse_optimization_source(new_source: str, target_method_name: str, analyze
                 ctor_end = c.end_line
                 modified_constructors.append("".join(ctor_lines[ctor_start:ctor_end]))
 
-        # Extract fields
+        # Extract fields scoped to the target method's class only.
+        # Without class filtering, fields from inner/anonymous classes would be
+        # incorrectly injected into the outer target class.
+        target_class_name = target_method.class_name if target_method else None
+        fields = analyzer.find_fields(new_source, class_name=target_class_name)
         for f in fields:
             if f.source_text:
                 new_fields.append(f.source_text)
