@@ -61,9 +61,9 @@ class CompareResult:
                 "",
                 "| Branch | Time (ms) | vs base | Speedup |",
                 "|:---|---:|---:|---:|",
-                f"| `{base_short}` (base) | {_fmt_ms(base_ns)} | - | - |",
-                f"| `{head_short}` (head) | {_fmt_ms(head_ns)} "
-                f"| {_md_delta(base_ns, head_ns)} | {_md_speedup(base_ns, head_ns)} |",
+                f"| `{base_short}` (base) | {fmt_ms(base_ns)} | - | - |",
+                f"| `{head_short}` (head) | {fmt_ms(head_ns)} "
+                f"| {md_delta(base_ns, head_ns)} | {md_speedup(base_ns, head_ns)} |",
             ]
 
             # --- Per-function breakdown ---
@@ -89,12 +89,12 @@ class CompareResult:
                     h = self.head_function_ns.get(func_name, {}).get(bm_key)
                     short_name = func_name.rsplit(".", 1)[-1] if "." in func_name else func_name
                     lines.append(
-                        f"| `{short_name}` | {_fmt_ms(b)} | {_fmt_ms(h)} | {_md_bar(b, h)} | {_md_speedup(b, h)} |"
+                        f"| `{short_name}` | {fmt_ms(b)} | {fmt_ms(h)} | {md_bar(b, h)} | {md_speedup(b, h)} |"
                     )
 
                 lines.append(
-                    f"| **TOTAL** | **{_fmt_ms(base_ns)}** | **{_fmt_ms(head_ns)}** "
-                    f"| {_md_bar(base_ns, head_ns)} | {_md_speedup(base_ns, head_ns)} |"
+                    f"| **TOTAL** | **{fmt_ms(base_ns)}** | **{fmt_ms(head_ns)}** "
+                    f"| {md_bar(base_ns, head_ns)} | {md_speedup(base_ns, head_ns)} |"
                 )
 
                 # --- Share of Benchmark Time (%) ---
@@ -111,7 +111,7 @@ class CompareResult:
                         short_name = func_name.rsplit(".", 1)[-1] if "." in func_name else func_name
                         b_pct = b / base_ns * 100 if b else 0
                         h_pct = h / head_ns * 100 if h else 0
-                        lines.append(f"| `{short_name}` | {_pct_bar(b_pct)} | {_pct_bar(h_pct)} |")
+                        lines.append(f"| `{short_name}` | {pct_bar(b_pct)} | {pct_bar(h_pct)} |")
 
                     lines.append("")
                     lines.append("</details>")
@@ -145,7 +145,7 @@ def compare_branches(
 
     # Auto-detect functions if not provided
     if functions is None:
-        functions = _discover_changed_functions(base_ref, head_ref, repo_root)
+        functions = discover_changed_functions(base_ref, head_ref, repo_root)
         if not functions:
             logger.warning("No changed Python functions found between %s and %s", base_ref, head_ref)
             return CompareResult(base_ref=base_ref, head_ref=head_ref)
@@ -245,7 +245,7 @@ def compare_branches(
             live.update(build_panel(1))
 
             # Step 2: Run benchmarks on base
-            _run_benchmark_on_worktree(
+            run_benchmark_on_worktree(
                 worktree_dir=base_worktree,
                 repo_root=repo_root,
                 functions=functions,
@@ -259,7 +259,7 @@ def compare_branches(
             live.update(build_panel(2))
 
             # Step 3: Run benchmarks on head
-            _run_benchmark_on_worktree(
+            run_benchmark_on_worktree(
                 worktree_dir=head_worktree,
                 repo_root=repo_root,
                 functions=functions,
@@ -281,7 +281,7 @@ def compare_branches(
             result.head_function_ns = CodeFlashBenchmarkPlugin.get_function_benchmark_timings(head_trace_db)
 
         # Render comparison
-        _render_comparison(result)
+        render_comparison(result)
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted — cleaning up...[/yellow]")
@@ -301,7 +301,7 @@ def compare_branches(
     return result
 
 
-def _discover_changed_functions(base_ref: str, head_ref: str, repo_root: Path) -> dict[Path, list[FunctionToOptimize]]:
+def discover_changed_functions(base_ref: str, head_ref: str, repo_root: Path) -> dict[Path, list[FunctionToOptimize]]:
     """Find only functions whose bodies overlap with changed lines between refs."""
     from io import StringIO
 
@@ -347,14 +347,14 @@ def _discover_changed_functions(base_ref: str, head_ref: str, repo_root: Path) -
             logger.debug(f"Skipping {abs_path} (does not exist)")
             continue
 
-        modified_fns = _find_changed_toplevel_functions(abs_path, changed_lines)
+        modified_fns = find_changed_toplevel_functions(abs_path, changed_lines)
         if modified_fns:
             result[abs_path] = modified_fns
 
     return result
 
 
-def _find_changed_toplevel_functions(file_path: Path, changed_lines: set[int]) -> list[FunctionToOptimize]:
+def find_changed_toplevel_functions(file_path: Path, changed_lines: set[int]) -> list[FunctionToOptimize]:
     """Find top-level functions overlapping changed lines using stdlib ast.
 
     Only discovers module-level functions (not methods inside classes, not nested
@@ -394,7 +394,7 @@ def _find_changed_toplevel_functions(file_path: Path, changed_lines: set[int]) -
     return functions
 
 
-def _run_benchmark_on_worktree(
+def run_benchmark_on_worktree(
     worktree_dir: Path,
     repo_root: Path,
     functions: dict[Path, list[FunctionToOptimize]],
@@ -443,6 +443,13 @@ def _run_benchmark_on_worktree(
     wt_benchmarks = worktree_dir / benchmarks_root.relative_to(repo_root)
     wt_tests = worktree_dir / tests_root.relative_to(repo_root)
 
+    # If benchmarks dir doesn't exist in this worktree (e.g. base ref predates
+    # the benchmark), copy it from the working directory so both refs can run.
+    if not wt_benchmarks.exists() and benchmarks_root.is_dir():
+        import shutil
+
+        shutil.copytree(benchmarks_root, wt_benchmarks)
+
     if trace_db.exists():
         trace_db.unlink()
 
@@ -458,7 +465,7 @@ def _run_benchmark_on_worktree(
             file_path.write_text(source, encoding="utf-8")
 
 
-def _render_comparison(result: CompareResult) -> None:
+def render_comparison(result: CompareResult) -> None:
     """Render Rich comparison tables to console."""
     if not result.base_total_ns and not result.head_total_ns:
         logger.warning("No benchmark results to compare")
@@ -487,10 +494,8 @@ def _render_comparison(result: CompareResult) -> None:
         t1.add_column("Delta", justify="right")
         t1.add_column("Speedup", justify="right")
 
-        t1.add_row(f"{base_short} (base)", _fmt_ms(base_ns), "-", "-")
-        t1.add_row(
-            f"{head_short} (head)", _fmt_ms(head_ns), _fmt_delta(base_ns, head_ns), _fmt_speedup(base_ns, head_ns)
-        )
+        t1.add_row(f"{base_short} (base)", fmt_ms(base_ns), "-", "-")
+        t1.add_row(f"{head_short} (head)", fmt_ms(head_ns), fmt_delta(base_ns, head_ns), fmt_speedup(base_ns, head_ns))
         console.print(t1, justify="center")
 
         # Table 2: Per-function breakdown
@@ -520,23 +525,23 @@ def _render_comparison(result: CompareResult) -> None:
                 # Shorten function name for display
                 short_name = func_name.rsplit(".", 1)[-1] if "." in func_name else func_name
 
-                t2.add_row(short_name, _fmt_ms(b_ns), _fmt_ms(h_ns), _fmt_delta(b_ns, h_ns), _fmt_speedup(b_ns, h_ns))
+                t2.add_row(short_name, fmt_ms(b_ns), fmt_ms(h_ns), fmt_delta(b_ns, h_ns), fmt_speedup(b_ns, h_ns))
 
             # Totals row
             t2.add_section()
             t2.add_row(
                 "[bold]TOTAL[/bold]",
-                f"[bold]{_fmt_ms(base_ns)}[/bold]",
-                f"[bold]{_fmt_ms(head_ns)}[/bold]",
-                _fmt_delta(base_ns, head_ns),
-                _fmt_speedup(base_ns, head_ns),
+                f"[bold]{fmt_ms(base_ns)}[/bold]",
+                f"[bold]{fmt_ms(head_ns)}[/bold]",
+                fmt_delta(base_ns, head_ns),
+                fmt_speedup(base_ns, head_ns),
             )
             console.print(t2, justify="center")
 
     console.print()
 
 
-def _fmt_ms(ns: Optional[int]) -> str:
+def fmt_ms(ns: Optional[int]) -> str:
     if ns is None:
         return "-"
     ms = ns / 1_000_000
@@ -549,7 +554,7 @@ def _fmt_ms(ns: Optional[int]) -> str:
     return f"{ms:.2f}"
 
 
-def _fmt_speedup(before: Optional[int], after: Optional[int]) -> str:
+def fmt_speedup(before: Optional[int], after: Optional[int]) -> str:
     if before is None or after is None or after == 0:
         return "-"
     ratio = before / after
@@ -558,7 +563,7 @@ def _fmt_speedup(before: Optional[int], after: Optional[int]) -> str:
     return f"[red]{ratio:.2f}x[/red]"
 
 
-def _fmt_delta(before: Optional[int], after: Optional[int]) -> str:
+def fmt_delta(before: Optional[int], after: Optional[int]) -> str:
     if before is None or after is None:
         return "-"
     delta_ms = (after - before) / 1_000_000
@@ -568,7 +573,7 @@ def _fmt_delta(before: Optional[int], after: Optional[int]) -> str:
     return f"[red]{delta_ms:+,.0f}ms ({pct:+.0f}%)[/red]"
 
 
-def _md_speedup(before: Optional[int], after: Optional[int]) -> str:
+def md_speedup(before: Optional[int], after: Optional[int]) -> str:
     if before is None or after is None or after == 0:
         return "-"
     ratio = before / after
@@ -576,7 +581,7 @@ def _md_speedup(before: Optional[int], after: Optional[int]) -> str:
     return f"{emoji} {ratio:.2f}x"
 
 
-def _md_delta(before: Optional[int], after: Optional[int]) -> str:
+def md_delta(before: Optional[int], after: Optional[int]) -> str:
     if before is None or after is None:
         return "-"
     delta_ms = (after - before) / 1_000_000
@@ -586,7 +591,7 @@ def _md_delta(before: Optional[int], after: Optional[int]) -> str:
     return f"+{delta_ms:,.0f}ms ({pct:+.0f}%)"
 
 
-def _md_bar(before: Optional[int], after: Optional[int], width: int = 10) -> str:
+def md_bar(before: Optional[int], after: Optional[int], width: int = 10) -> str:
     """Render a unicode progress bar showing the change from before to after.
 
     Improvement (after < before) shows green filled portion for the reduction.
@@ -601,7 +606,7 @@ def _md_bar(before: Optional[int], after: Optional[int], width: int = 10) -> str
     return f"`{bar}` {pct:+.0f}%"
 
 
-def _pct_bar(pct: float, width: int = 10) -> str:
+def pct_bar(pct: float, width: int = 10) -> str:
     """Render a unicode bar representing a percentage share."""
     filled = round(pct / 100 * width)
     filled = max(0, min(filled, width))
