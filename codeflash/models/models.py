@@ -999,7 +999,7 @@ class TestResults(BaseModel):  # noqa: PLW1641
 
         # Use a single-pass Welford algorithm per list to compute sample standard deviation
         # and mean in one traversal to avoid the double-pass of statistics.mean + statistics.stdev.
-        def _compute_sample_cv(values: list[int]) -> float | None:
+        def compute_sample_cv(values: list[int]) -> float | None:
             n = 0
             mean = 0.0
             m2 = 0.0
@@ -1024,7 +1024,7 @@ class TestResults(BaseModel):  # noqa: PLW1641
             return stdev / mean
 
         for runtimes in runtime_data.values():
-            cv = _compute_sample_cv(runtimes)
+            cv = compute_sample_cv(runtimes)
             if cv is not None:
                 per_test_cvs.append(cv)
 
