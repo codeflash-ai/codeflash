@@ -100,6 +100,8 @@ def process_pyproject_config(args: Namespace) -> Namespace:
         "disable_imports_sorting",
         "git_remote",
         "override_fixtures",
+        "max_functions",
+        "max_time",
     ]
     for key in supported_keys:
         if key in pyproject_config and (
@@ -504,6 +506,34 @@ def _build_parser() -> ArgumentParser:
         "--subagent",
         action="store_true",
         help="Subagent mode: skip all interactive prompts with sensible defaults. Designed for AI agent integrations.",
+    )
+    parser.add_argument(
+        "--max-functions",
+        type=int,
+        default=None,
+        help="Maximum number of functions to optimize per run. After ranking, only the top N functions are optimized. "
+        "Useful for controlling CI runtime.",
+    )
+    parser.add_argument(
+        "--max-time",
+        type=int,
+        default=None,
+        help="Maximum total optimization time in minutes. Stops optimizing new functions after this budget is exhausted. "
+        "Functions already in progress will complete.",
+    )
+    parser.add_argument(
+        "--prescreening",
+        action="store_true",
+        default=False,
+        help="Enable LLM-based pre-screening of functions before optimization. "
+        "Uses a fast LLM call to assess whether each function has meaningful optimization potential. "
+        "Filters out functions unlikely to benefit from optimization.",
+    )
+    parser.add_argument(
+        "--no-prescreening",
+        action="store_true",
+        default=False,
+        help="Disable LLM pre-screening even when it would be auto-enabled (e.g., in CI with --all).",
     )
 
     return parser
