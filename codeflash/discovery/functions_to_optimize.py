@@ -604,7 +604,7 @@ def _get_java_replay_test_functions(
         all_functions = lang_support.discover_functions(source_code, source_file)
 
         for func in all_functions:
-            if func.function_name in function_names:
+            if func.function_name in function_names or func.qualified_name in function_names:
                 functions[source_file].append(func)
 
     if trace_file_path is None:
