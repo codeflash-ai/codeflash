@@ -2164,8 +2164,9 @@ class JavaScriptSupport:
     def get_module_path(self, source_file: Path, project_root: Path, tests_root: Path | None = None) -> str:
         """Get the module path for importing a JavaScript source file from tests.
 
-        For JavaScript, this returns a relative path from the tests directory to the source file
-        (e.g., '../fibonacci' for source at /project/fibonacci.js and tests at /project/tests/).
+        For JavaScript/TypeScript, this returns a relative path from the tests directory to
+        the source file. For ESM projects or TypeScript, the path includes a .js extension
+        (TypeScript convention). For CommonJS, no extension is added.
 
         Args:
             source_file: Path to the source file.
@@ -2179,13 +2180,15 @@ class JavaScriptSupport:
         import os
 
         from codeflash.cli_cmds.console import logger
+        from codeflash.languages.javascript.module_system import ModuleSystem, detect_module_system
 
         if tests_root is None:
             tests_root = self.find_test_root(project_root) or project_root
 
         try:
             # Resolve both paths to absolute to ensure consistent relative path calculation
-            source_file_abs = source_file.resolve().with_suffix("")
+            # Note: Don't remove extension yet - we'll decide based on module system
+            source_file_abs = source_file.resolve()
             tests_root_abs = tests_root.resolve()
 
             # Find the project root using language support
@@ -2205,16 +2208,40 @@ class JavaScriptSupport:
                     if not tests_root_abs.exists():
                         tests_root_abs = project_root_from_lang
 
+            # Detect module system to determine if we need to add .js extension
+            module_system = detect_module_system(project_root, source_file)
+
+            # Remove source file extension first
+            source_without_ext = source_file_abs.with_suffix("")
+
             # Use os.path.relpath to compute relative path from tests_root to source file
-            rel_path = os.path.relpath(str(source_file_abs), str(tests_root_abs))
-            logger.debug(
-                f"!lsp|Module path: source={source_file_abs}, tests_root={tests_root_abs}, rel_path={rel_path}"
-            )
+            rel_path = os.path.relpath(str(source_without_ext), str(tests_root_abs))
+
+            # For ESM, add .js extension (TypeScript convention)
+            # TypeScript requires imports to reference the OUTPUT file extension (.js),
+            # even when the source file is .ts. This is required for Node.js ESM resolution.
+            if module_system == ModuleSystem.ES_MODULE:
+                rel_path = rel_path + ".js"
+                logger.debug(
+                    f"!lsp|Module path (ESM): source={source_file_abs}, tests_root={tests_root_abs}, "
+                    f"rel_path={rel_path} (added .js for ESM)"
+                )
+            else:
+                logger.debug(
+                    f"!lsp|Module path (CommonJS): source={source_file_abs}, tests_root={tests_root_abs}, "
+                    f"rel_path={rel_path}"
+                )
+
             return rel_path
         except ValueError:
             # Fallback if paths are on different drives (Windows)
             rel_path = source_file.relative_to(project_root)
-            return "../" + rel_path.with_suffix("").as_posix()
+            # For fallback, also check module system
+            module_system = detect_module_system(project_root, source_file)
+            path_without_ext = "../" + rel_path.with_suffix("").as_posix()
+            if module_system == ModuleSystem.ES_MODULE:
+                return path_without_ext + ".js"
+            return path_without_ext
 
     def verify_requirements(self, project_root: Path, test_framework: str = "jest") -> tuple[bool, list[str]]:
         """Verify that all JavaScript requirements are met.
