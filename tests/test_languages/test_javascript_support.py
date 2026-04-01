@@ -756,8 +756,8 @@ class TestClassMethodExtraction:
             context = js_support.extract_code_context(add_method, file_path.parent, file_path.parent)
 
             # Full string equality check for exact extraction output
-            # Note: export keyword is not included in extracted class wrapper
-            expected_code = """class Calculator {
+            # Export keyword IS included for exported classes
+            expected_code = """export class Calculator {
     add(a, b) {
         return a + b;
     }
@@ -793,9 +793,9 @@ export class Calculator {
             context = js_support.extract_code_context(add_method, file_path.parent, file_path.parent)
 
             # Full string equality check - includes class JSDoc, class definition, method JSDoc, and method
-            # Note: export keyword is not included in extracted class wrapper
+            # Export keyword IS included for exported classes
             # Note: Class-level JSDoc is not included when extracting a method
-            expected_code = """class Calculator {
+            expected_code = """export class Calculator {
     /**
      * Adds two numbers.
      * @param {number} a - First number
@@ -831,8 +831,8 @@ export class Calculator {
             context = js_support.extract_code_context(fib_method, file_path.parent, file_path.parent)
 
             # Full string equality check
-            # Note: export keyword is not included in extracted class wrapper
-            expected_code = """class FibonacciCalculator {
+            # Export keyword IS included for exported classes
+            expected_code = """export class FibonacciCalculator {
     fibonacci(n) {
         if (n <= 1) {
             return n;
@@ -871,8 +871,8 @@ export class Calculator {
                 context = js_support.extract_code_context(add_method, file_path.parent, file_path.parent)
 
                 # Full string equality check
-                # Note: export keyword is not included in extracted class wrapper
-                expected_code = """class Outer {
+                # Export keyword IS included for exported classes
+                expected_code = """export class Outer {
     add(a, b) {
         return a + b;
     }
@@ -900,8 +900,8 @@ export class Calculator {
             context = js_support.extract_code_context(fetch_method, file_path.parent, file_path.parent)
 
             # Full string equality check
-            # Note: export keyword is not included in extracted class wrapper
-            expected_code = """class ApiClient {
+            # Export keyword IS included for exported classes
+            expected_code = """export class ApiClient {
     async fetchData(url) {
         const response = await fetch(url);
         return response.json();
@@ -934,8 +934,8 @@ export class Calculator {
                 context = js_support.extract_code_context(add_method, file_path.parent, file_path.parent)
 
                 # Full string equality check
-                # Note: export keyword is not included in extracted class wrapper
-                expected_code = """class MathUtils {
+                # Export keyword IS included for exported classes
+                expected_code = """export class MathUtils {
     static add(a, b) {
         return a + b;
     }
@@ -962,8 +962,8 @@ export class Calculator {
             context = js_support.extract_code_context(method, file_path.parent, file_path.parent)
 
             # Full string equality check
-            # Note: export keyword is not included in extracted class wrapper
-            expected_code = """class SimpleClass {
+            # Export keyword IS included for exported classes
+            expected_code = """export class SimpleClass {
     simpleMethod() {
         return "hello";
     }
@@ -1208,8 +1208,8 @@ export class Dog extends Animal {
                 context = js_support.extract_code_context(fetch_method, file_path.parent, file_path.parent)
 
                 # Full string equality check
-                # Note: export keyword is not included in extracted class wrapper
-                expected_code = """class Dog {
+                # Export keyword IS included for exported classes
+                expected_code = """export class Dog {
     fetch() {
         return 'ball';
     }
@@ -1334,8 +1334,9 @@ module.exports = { Counter };
             context = js_support.extract_code_context(increment_func, file_path.parent, file_path.parent)
 
             # Verify extraction with exact string equality
+            # Export keyword IS included for exported classes
             expected_extraction = """\
-class Counter {
+export class Counter {
     constructor(initial = 0) {
         this.count = initial;
     }
@@ -1351,10 +1352,10 @@ class Counter {
                 f"Expected:\n{expected_extraction}\n\nGot:\n{context.target_code}"
             )
 
-            # Step 2: AI returns optimized code as FULL CLASS (not just method)
+            # Step 2: AI returns optimized code as FULL CLASS (with export)
             # This simulates what the AI would return - the full context with optimized method
             optimized_code_from_ai = """\
-class Counter {
+export class Counter {
     constructor(initial = 0) {
         this.count = initial;
     }
@@ -1431,8 +1432,9 @@ export class User {
             context = ts_support.extract_code_context(get_name_func, file_path.parent, file_path.parent)
 
             # Verify extraction with exact string equality
+            # Export keyword IS included for exported classes
             expected_extraction = """\
-class User {
+export class User {
     private name: string;
     private age: number;
 
@@ -1451,9 +1453,9 @@ class User {
                 f"Expected:\n{expected_extraction}\n\nGot:\n{context.target_code}"
             )
 
-            # Step 2: AI returns optimized code as FULL CLASS
+            # Step 2: AI returns optimized code as FULL CLASS (with export)
             optimized_code_from_ai = """\
-class User {
+export class User {
     private name: string;
     private age: number;
 
@@ -1531,8 +1533,9 @@ export class Calculator {
             context = js_support.extract_code_context(add_func, file_path.parent, file_path.parent)
 
             # Verify extraction with exact string equality
+            # Export keyword IS included for exported classes
             expected_extraction = """\
-class Calculator {
+export class Calculator {
     constructor(precision = 2) {
         this.precision = precision;
     }
@@ -1547,9 +1550,9 @@ class Calculator {
                 f"Expected:\n{expected_extraction}\n\nGot:\n{context.target_code}"
             )
 
-            # AI returns optimized code as FULL CLASS
+            # AI returns optimized code as FULL CLASS (with export)
             optimized_code_from_ai = """\
-class Calculator {
+export class Calculator {
     constructor(precision = 2) {
         this.precision = precision;
     }
@@ -1615,8 +1618,9 @@ export class MathUtils {
             context = js_support.extract_code_context(add_func, file_path.parent, file_path.parent)
 
             # Verify extraction with exact string equality
+            # Export keyword IS included for exported classes
             expected_extraction = """\
-class MathUtils {
+export class MathUtils {
     constructor() {
         this.cache = {};
     }
@@ -1631,9 +1635,9 @@ class MathUtils {
                 f"Expected:\n{expected_extraction}\n\nGot:\n{context.target_code}"
             )
 
-            # AI returns optimized code as FULL CLASS
+            # AI returns optimized code as FULL CLASS (with export)
             optimized_code_from_ai = """\
-class MathUtils {
+export class MathUtils {
     constructor() {
         this.cache = {};
     }

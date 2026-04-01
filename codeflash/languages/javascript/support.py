@@ -350,7 +350,7 @@ class JavaScriptSupport:
                 # Find the class definition in the source to get proper indentation, JSDoc, constructor, and fields
                 class_info = self._find_class_definition(source, class_name, analyzer, function.function_name)
                 if class_info:
-                    class_jsdoc, class_indent, constructor_code, fields_code = class_info
+                    class_jsdoc, class_indent, constructor_code, fields_code, is_exported = class_info
                     # Build the class body with fields, constructor, target method, and same-class helpers
                     class_body_parts = []
                     if fields_code:
@@ -364,12 +364,14 @@ class JavaScriptSupport:
                     class_body = "\n".join(class_body_parts)
 
                     # Wrap the method in a class definition with context
+                    # Include 'export' keyword if the class is exported
+                    export_keyword = "export " if is_exported else ""
                     if class_jsdoc:
                         target_code = (
-                            f"{class_jsdoc}\n{class_indent}class {class_name} {{\n{class_body}{class_indent}}}\n"
+                            f"{class_jsdoc}\n{class_indent}{export_keyword}class {class_name} {{\n{class_body}{class_indent}}}\n"
                         )
                     else:
-                        target_code = f"{class_indent}class {class_name} {{\n{class_body}{class_indent}}}\n"
+                        target_code = f"{class_indent}{export_keyword}class {class_name} {{\n{class_body}{class_indent}}}\n"
                 else:
                     # Fallback: wrap with no indentation, including same-class helpers
                     helper_code = "\n".join(h[1] for h in same_class_helpers)
@@ -432,7 +434,7 @@ class JavaScriptSupport:
 
     def _find_class_definition(
         self, source: str, class_name: str, analyzer: TreeSitterAnalyzer, target_method_name: str | None = None
-    ) -> tuple[str, str, str, str] | None:
+    ) -> tuple[str, str, str, str, bool] | None:
         """Find a class definition and extract its JSDoc, indentation, constructor, and fields.
 
         Args:
@@ -442,7 +444,7 @@ class JavaScriptSupport:
             target_method_name: Name of the target method (to exclude from extracted context).
 
         Returns:
-            Tuple of (jsdoc_comment, indentation, constructor_code, fields_code) or None if not found.
+            Tuple of (jsdoc_comment, indentation, constructor_code, fields_code, is_exported) or None if not found.
             Constructor and fields are included to provide context for method optimization.
 
         """
@@ -466,6 +468,11 @@ class JavaScriptSupport:
         class_node = find_class_node(tree.root_node)
         if not class_node:
             return None
+
+        # Check if the class is exported by examining its parent node
+        is_exported = False
+        if class_node.parent and class_node.parent.type == "export_statement":
+            is_exported = True
 
         # Get indentation from the class line
         lines = source.splitlines(keepends=True)
@@ -495,7 +502,7 @@ class JavaScriptSupport:
                 body_node, source_bytes, lines, target_method_name
             )
 
-        return (jsdoc, indentation, constructor_code, fields_code)
+        return (jsdoc, indentation, constructor_code, fields_code, is_exported)
 
     def _extract_class_context(
         self, body_node: Any, source_bytes: bytes, lines: list[str], target_method_name: str | None
