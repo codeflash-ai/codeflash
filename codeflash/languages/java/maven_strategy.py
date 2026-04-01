@@ -647,16 +647,18 @@ class MavenStrategy(BuildToolStrategy):
             return None
 
     def find_executable(self, build_root: Path) -> str | None:
-        mvnw_path = build_root / "mvnw"
-        if mvnw_path.exists():
-            return str(mvnw_path)
-        mvnw_cmd_path = build_root / "mvnw.cmd"
-        if mvnw_cmd_path.exists():
-            return str(mvnw_cmd_path)
-        if Path("mvnw").exists():
-            return "./mvnw"
-        if Path("mvnw.cmd").exists():
-            return "mvnw.cmd"
+        current = build_root.resolve()
+        while True:
+            mvnw_path = current / "mvnw"
+            if mvnw_path.exists():
+                return str(mvnw_path)
+            mvnw_cmd_path = current / "mvnw.cmd"
+            if mvnw_cmd_path.exists():
+                return str(mvnw_cmd_path)
+            parent = current.parent
+            if parent == current:
+                break
+            current = parent
         return shutil.which("mvn")
 
     def find_runtime_jar(self) -> Path | None:

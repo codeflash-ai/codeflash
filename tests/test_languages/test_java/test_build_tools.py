@@ -388,15 +388,65 @@ class TestMavenExecutableWithProjectRoot:
         assert result is not None
         assert str(tmp_path / "mvnw") in result
 
-    def test_fallback_to_cwd(self, tmp_path):
-        strategy = MavenStrategy()
-        result = strategy.find_executable(tmp_path)
-        # Should not crash even with a dir that has no wrapper
+    def test_find_wrapper_in_parent_directory(self, tmp_path):
+        """Multi-module project: mvnw at repo root, build_root is a submodule."""
+        repo_root = tmp_path / "repo"
+        repo_root.mkdir()
+        mvnw = repo_root / "mvnw"
+        mvnw.write_text("#!/bin/bash\necho Maven Wrapper")
+        mvnw.chmod(0o755)
 
-    def test_with_nonexistent_wrapper(self, tmp_path):
+        submodule = repo_root / "submodule"
+        submodule.mkdir()
+        (submodule / "pom.xml").write_text("<project/>")
+
         strategy = MavenStrategy()
-        result = strategy.find_executable(tmp_path)
-        # Should not crash, may return system mvn or None
+        result = strategy.find_executable(submodule.resolve())
+        assert result is not None
+        assert Path(result).is_absolute(), f"Expected absolute path, got: {result}"
+        assert Path(result).exists(), f"Returned path does not exist: {result}"
+        assert result == str(mvnw.resolve())
+
+    def test_find_wrapper_in_grandparent_directory(self, tmp_path):
+        """Deeply nested submodule: mvnw two levels up."""
+        repo_root = tmp_path / "repo"
+        repo_root.mkdir()
+        mvnw = repo_root / "mvnw"
+        mvnw.write_text("#!/bin/bash\necho Maven Wrapper")
+        mvnw.chmod(0o755)
+
+        nested = repo_root / "parent-module" / "child-module"
+        nested.mkdir(parents=True)
+
+        strategy = MavenStrategy()
+        result = strategy.find_executable(nested.resolve())
+        assert result is not None
+        assert Path(result).is_absolute()
+        assert result == str(mvnw.resolve())
+
+    def test_no_wrapper_returns_system_mvn_or_none(self, tmp_path):
+        strategy = MavenStrategy()
+        result = strategy.find_executable(tmp_path.resolve())
+        # Should return system mvn (if available) or None — never crash
+
+    def test_cwd_does_not_affect_result(self, tmp_path, monkeypatch):
+        """CWD should not influence find_executable — only build_root matters."""
+        repo_with_mvnw = tmp_path / "repo_a"
+        repo_with_mvnw.mkdir()
+        mvnw = repo_with_mvnw / "mvnw"
+        mvnw.write_text("#!/bin/bash\necho Maven Wrapper")
+        mvnw.chmod(0o755)
+
+        unrelated_dir = tmp_path / "repo_b"
+        unrelated_dir.mkdir()
+
+        monkeypatch.chdir(repo_with_mvnw)
+
+        strategy = MavenStrategy()
+        result = strategy.find_executable(unrelated_dir.resolve())
+        # Should NOT find mvnw from CWD — only from build_root and its parents
+        if result is not None:
+            assert "repo_a" not in result, f"Found mvnw from CWD instead of build_root: {result}"
 
 
 class TestCustomSourceDirectoryDetection:
