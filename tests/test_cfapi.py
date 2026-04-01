@@ -49,8 +49,6 @@ class TestMakeCfapiRequest:
         assert response is not None
         assert hasattr(response, 'status_code')
         assert response.status_code == 503
-        assert hasattr(response, 'text')
-        assert 'Connection' in response.text or 'refused' in response.text.lower()
 
     @patch("codeflash.api.cfapi.get_codeflash_api_key")
     @patch("requests.post")

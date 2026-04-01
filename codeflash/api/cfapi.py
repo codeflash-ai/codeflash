@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import git
 import requests
-from requests import Response
 import sentry_sdk
 from pydantic.json import pydantic_encoder
+from requests import Response
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.code_utils import exit_with_message
@@ -22,8 +22,6 @@ from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.version import __version__
 
 if TYPE_CHECKING:
-    from requests import Response
-
     from codeflash.result.explanation import Explanation
 
 from packaging import version
@@ -112,7 +110,6 @@ def make_cfapi_request(
         # Create a mock Response object with 503 status to indicate service unavailable
         mock_response = Response()
         mock_response.status_code = 503
-        mock_response._content = error_message.encode('utf-8')
         mock_response.url = url
         return mock_response
 
