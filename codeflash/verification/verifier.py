@@ -29,6 +29,7 @@ def generate_tests(
     test_path: Path,
     test_perf_path: Path,
     is_numerical_code: bool | None = None,
+    rerun_trace_id: str | None = None,
 ) -> tuple[str, str, str, str | None, Path, Path] | None:
     # TODO: Sometimes this recreates the original Class definition. This overrides and messes up the original
     #  class import. Remove the recreation of the class definition
@@ -73,6 +74,7 @@ def generate_tests(
         language_version=current_language_support().language_version,
         module_system=project_module_system,
         is_numerical_code=is_numerical_code,
+        rerun_trace_id=rerun_trace_id,
     )
     if response and isinstance(response, tuple) and len(response) == 4:
         generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source, raw_generated_tests = (

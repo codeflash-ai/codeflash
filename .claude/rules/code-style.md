@@ -11,5 +11,3 @@
 - **Paths**: Always use absolute paths
 - **Encoding**: Always pass `encoding="utf-8"` to `open()`, `read_text()`, `write_text()`, etc. in new or changed code — Windows defaults to `cp1252` which breaks on non-ASCII content. Don't flag pre-existing code that lacks it unless you're already modifying that line.
 - **Verification**: Use `uv run prek` to verify code — it handles ruff, ty, mypy in one pass. Don't run `ruff`, `mypy`, or `python -c "import ..."` separately; `prek` is the single verification command
-- **Pre-commit**: Run `uv run prek` before committing — fix any issues before creating the commit
-- **Pre-push**: Before pushing, run `uv run prek run --from-ref origin/<base>` to check all changed files against the PR base — this matches CI behavior and catches issues that per-commit prek misses. To detect the base branch: `gh pr view --json baseRefName -q .baseRefName 2>/dev/null || echo main`

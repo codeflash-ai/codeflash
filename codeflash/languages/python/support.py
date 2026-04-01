@@ -351,7 +351,7 @@ class PythonSupport:
         from codeflash.languages.python.context.code_context_extractor import get_function_sources_from_jedi
 
         try:
-            _dict, sources = get_function_sources_from_jedi(
+            _dict, sources, _ = get_function_sources_from_jedi(
                 {function.file_path: {function.qualified_name}}, project_root
             )
         except Exception as e:

@@ -269,6 +269,8 @@ tessl.json
 # Claude Code - track shared rules, ignore local config
 .claude/*
 !.claude/rules/
+!.claude/settings.json
+!.claude/hooks/
 **/node_modules/**
 **/dist-nuitka/**
 **/.npmrc

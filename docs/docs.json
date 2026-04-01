@@ -67,6 +67,14 @@
               "editor-plugins/vscode/configuration",
               "editor-plugins/vscode/troubleshooting"
             ]
+          },
+          {
+            "group": "Claude Code Plugin",
+            "pages": [
+              "claude-code-plugin/getting-started",
+              "claude-code-plugin/usage-guide",
+              "claude-code-plugin/troubleshooting"
+            ]
           }
         ]
       }
