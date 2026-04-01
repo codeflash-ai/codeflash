@@ -29,6 +29,10 @@ if TYPE_CHECKING:
     from codeflash.models.function_types import FunctionToOptimize
     from codeflash.models.models import BenchmarkKey
 
+_GREEN_TPL = "[green]%+.0f%%[/green]"
+
+_RED_TPL = "[red]%+.0f%%[/red]"
+
 
 @dataclass
 class CompareResult:
@@ -609,8 +613,8 @@ def fmt_delta(before: Optional[float], after: Optional[float]) -> str:
         return "-"
     pct = ((after - before) / before) * 100 if before != 0 else 0
     if pct < 0:
-        return f"[green]{pct:+.0f}%[/green]"
-    return f"[red]{pct:+.0f}%[/red]"
+        return _GREEN_TPL % pct
+    return _RED_TPL % pct
 
 
 def md_speedup(before: Optional[float], after: Optional[float]) -> str:
