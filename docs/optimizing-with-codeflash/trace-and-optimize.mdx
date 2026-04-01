@@ -57,7 +57,7 @@ codeflash optimize --language javascript script.js
 ```
 </Tab>
 <Tab title="Java">
-Pass your Java command after `codeflash optimize`:
+To trace and optimize a running Java program, replace your `java` command with `codeflash optimize java`:
 
 ```bash
 # JAR application
@@ -66,14 +66,11 @@ codeflash optimize java -jar target/my-app.jar --app-args
 # Class with classpath
 codeflash optimize java -cp target/classes com.example.Main
 
-# Maven test suite
-codeflash optimize mvn test
-
-# Gradle test suite
-codeflash optimize ./gradlew test
+# Maven exec
+codeflash optimize mvn exec:java -Dexec.mainClass="com.example.Main"
 ```
 
-For long-running programs, use `--timeout` to limit each tracing stage:
+For long-running programs (servers, benchmarks), use `--timeout` to limit each tracing stage:
 
 ```bash
 codeflash optimize --timeout 30 java -jar target/my-app.jar
@@ -224,11 +221,11 @@ The JavaScript tracer uses Babel instrumentation to capture function calls durin
 </Tab>
 <Tab title="Java">
 
-The Java tracer uses a **two-stage approach**: JFR (Java Flight Recorder) for profiling, then a bytecode instrumentation agent for argument capture.
+The Java tracer uses a **two-stage approach**: JFR (Java Flight Recorder) for accurate profiling, then a bytecode instrumentation agent for argument capture.
 
 1. **Trace and optimize a Java program**
 
-   Pass your Java command after `codeflash optimize`:
+   Replace your `java` command with `codeflash optimize java`:
 
    ```bash
    # JAR application
@@ -236,15 +233,9 @@ The Java tracer uses a **two-stage approach**: JFR (Java Flight Recorder) for pr
 
    # Class with classpath
    codeflash optimize java -cp target/classes com.example.Main
-
-   # Maven test suite
-   codeflash optimize mvn test
-
-   # Gradle test suite
-   codeflash optimize ./gradlew test
    ```
 
-   Codeflash runs your command twice (once for profiling, once for argument capture), generates JUnit replay tests from captured inputs, then optimizes the highest-impact functions.
+   Codeflash will run your program twice (once for profiling, once for argument capture), generate JUnit replay tests, then optimize the most impactful functions.
 
 2. **Long-running programs**
 
@@ -254,7 +245,7 @@ The Java tracer uses a **two-stage approach**: JFR (Java Flight Recorder) for pr
    codeflash optimize --timeout 30 java -jar target/my-benchmark.jar
    ```
 
-   Each stage runs for at most the specified seconds, then the program receives SIGTERM (allowing JFR dump and shutdown hooks to run), followed by SIGKILL if it doesn't exit within 5 seconds.
+   Each stage runs for at most 30 seconds, then the program is terminated and captured data is processed.
 
 3. **Trace only (no optimization)**
 
@@ -262,9 +253,9 @@ The Java tracer uses a **two-stage approach**: JFR (Java Flight Recorder) for pr
    codeflash optimize --trace-only java -jar target/my-app.jar
    ```
 
-   This generates replay tests in `src/test/java/codeflash/replay/` without running the optimizer. You can inspect the generated tests and run the optimizer later with `codeflash --replay-test path/to/ReplayTest.java`.
+   This generates replay tests in `src/test/java/codeflash/replay/` without running the optimizer.
 
-   Options:
+   More Options:
 
    - `--timeout`: Maximum time (seconds) for each tracing stage.
    - `--max-function-count`: Maximum captures per method (default: 100).
@@ -272,22 +263,12 @@ The Java tracer uses a **two-stage approach**: JFR (Java Flight Recorder) for pr
 <Info>
 **How the Java tracer works:**
 
-- **Stage 1 (JFR profiling)**: Runs your command with Java Flight Recorder enabled via `JAVA_TOOL_OPTIONS`. JFR is built into the JVM (Java 11+) and produces method-level CPU sampling data used to rank functions by impact.
+- **Stage 1 (JFR)**: Runs your program with Java Flight Recorder enabled. JFR is built into the JVM (Java 11+), has ~1% overhead, and doesn't interfere with JIT compilation. This produces accurate method-level CPU profiling data.
 
-- **Stage 2 (argument capture)**: Runs your command again with a bytecode instrumentation agent (`codeflash-runtime`) injected via `JAVA_TOOL_OPTIONS`. The agent uses ASM to intercept method entries, serializes arguments with Kryo, and writes them to an SQLite database. A per-serialization timeout prevents hangs on complex object graphs. Constructors and synthetic methods are skipped.
+- **Stage 2 (Agent)**: Runs your program with a bytecode instrumentation agent injected via `JAVA_TOOL_OPTIONS`. The agent intercepts method entry points, serializes arguments using Kryo, and writes them to an SQLite database. A 500ms timeout per serialization prevents hangs on complex object graphs.
 
-- **Replay tests**: Generated JUnit test classes (JUnit 5 by default, JUnit 4 if detected in the project) that use `ReplayHelper` to deserialize captured arguments from the trace database and invoke the original methods. Each captured invocation becomes a separate test method. These tests exercise your code with the exact inputs observed during tracing.
-
-- **Optimization**: Functions are ranked by JFR addressable time. For each function, Codeflash generates optimization candidates, verifies correctness against both replay tests and AI-generated regression tests, then benchmarks performance to select the best candidate.
+- **Replay Tests**: Generated JUnit 5 test classes that deserialize captured arguments and invoke the original methods via reflection. These tests exercise your code with real-world inputs.
 </Info>
-
-<Warning>
-**Current limitations:**
-
-- The tracer captures arguments for methods that return values. Void methods are traced for profiling (Stage 1) but argument capture may not produce usable replay tests for them.
-- The `--add-opens` JVM flags are automatically injected for Java 16+ compatibility with Kryo serialization.
-- For Maven projects, the Maven wrapper (`mvnw`) is preferred over system Maven. Codeflash searches parent directories to find it in multi-module projects.
-</Warning>
 
 </Tab>
 </Tabs>
