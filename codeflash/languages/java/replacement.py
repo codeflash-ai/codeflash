@@ -365,6 +365,39 @@ def _replace_constructors(
     return result
 
 
+def _normalized_equal(a: str, b: str) -> bool:
+    """Compare two method sources ignoring whitespace differences."""
+
+    def normalize(s: str) -> str:
+        return "\n".join(line.strip() for line in s.strip().splitlines() if line.strip())
+
+    return normalize(a) == normalize(b)
+
+
+def _extract_original_method_source(
+    source: str, func_name: str, function: FunctionToOptimize, analyzer: JavaAnalyzer
+) -> str | None:
+    """Extract the original method source from the file for comparison."""
+    methods = analyzer.find_methods(source)
+    matching = [
+        m
+        for m in methods
+        if m.name == func_name and (function.class_name is None or m.class_name == function.class_name)
+    ]
+    if not matching:
+        return None
+    target = matching[0]
+    if len(matching) > 1 and function.starting_line and function.ending_line:
+        for m in matching:
+            if abs(m.start_line - function.starting_line) <= 5:
+                target = m
+                break
+    start = (target.javadoc_start_line or target.start_line) - 1
+    end = target.end_line
+    lines = source.splitlines(keepends=True)
+    return "".join(lines[start:end])
+
+
 def replace_function(
     source: str, function: FunctionToOptimize, new_source: str, analyzer: JavaAnalyzer | None = None
 ) -> str:
@@ -404,6 +437,26 @@ def replace_function(
     if not parsed.target_method_source.strip():
         logger.warning("No valid replacement found for method '%s'. Returning original source.", func_name)
         return source
+
+    # Guard: reject optimizations that don't actually change the target method but modify surrounding class members.
+    # This catches the "wrong-file" pattern where the LLM adds cache fields, modifies constructors, or adds helpers
+    # without changing the method it was asked to optimize (15+ known PRs exhibit this pattern).
+    has_class_modifications = bool(
+        parsed.new_fields or parsed.helpers_before_target or parsed.helpers_after_target or parsed.modified_constructors
+    )
+    if has_class_modifications:
+        original_target = _extract_original_method_source(source, func_name, function, analyzer)
+        if original_target is not None and _normalized_equal(parsed.target_method_source, original_target):
+            logger.warning(
+                "Rejecting optimization for '%s': target method is unchanged but LLM modified surrounding class members "
+                "(fields=%d, helpers_before=%d, helpers_after=%d, constructors=%d). This is a no-op optimization.",
+                func_name,
+                len(parsed.new_fields),
+                len(parsed.helpers_before_target),
+                len(parsed.helpers_after_target),
+                len(parsed.modified_constructors),
+            )
+            return source
 
     # Find the method in the original source
     methods = analyzer.find_methods(source)
