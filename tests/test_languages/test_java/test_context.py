@@ -2530,6 +2530,36 @@ class TestGetJavaImportedTypeSkeletonsEdgeCases:
         # Wildcard imports should now be expanded to individual classes found in the package directory
         assert "MathHelper" in result
 
+    def test_large_wildcard_is_filtered_to_referenced_types(self, tmp_path: Path):
+        """When wildcard expands to >50 types, only types referenced in target code are included."""
+        from codeflash.languages.java.context import MAX_WILDCARD_TYPES_UNFILTERED
+
+        # Create a minimal Maven project structure so the resolver finds source roots
+        (tmp_path / "pom.xml").write_text("<project/>", encoding="utf-8")
+        pkg_dir = tmp_path / "src" / "main" / "java" / "com" / "bigpkg"
+        pkg_dir.mkdir(parents=True)
+        for i in range(MAX_WILDCARD_TYPES_UNFILTERED + 20):
+            (pkg_dir / f"Type{i:03d}.java").write_text(
+                f"package com.bigpkg;\npublic class Type{i:03d} {{ public int val() {{ return {i}; }} }}\n",
+                encoding="utf-8",
+            )
+
+        analyzer = get_java_analyzer()
+        # Target code references Type000 and Type001 only
+        target_code = "Type000 a = new Type000(); Type001 b = a.transform();"
+        source = "package com.example;\nimport com.bigpkg.*;\npublic class Foo { void bar() {} }"
+        imports = analyzer.find_imports(source)
+
+        result = get_java_imported_type_skeletons(
+            imports, tmp_path, tmp_path / "src" / "main" / "java", analyzer, target_code=target_code
+        )
+
+        # Only referenced types should appear, not all 70
+        assert "Type000" in result
+        assert "Type001" in result
+        # Types not referenced in target code should be excluded
+        assert "Type050" not in result
+
     def test_import_to_nonexistent_class_in_file(self):
         """When an import resolves to a file but the class doesn't exist in it, skeleton extraction returns None."""
         analyzer = get_java_analyzer()
