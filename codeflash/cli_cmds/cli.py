@@ -213,8 +213,13 @@ def resolve_config_onto_args(
     args.test_project_root = project_root_from_module_root(args.tests_root, config_path)
 
     if is_java and config_path.is_dir():
-        args.project_root = config_path.resolve()
-        args.test_project_root = config_path.resolve()
+        resolved_config = config_path.resolve()
+        try:
+            args.module_root.relative_to(resolved_config)
+            args.project_root = resolved_config
+            args.test_project_root = resolved_config
+        except ValueError:
+            pass
 
     return args
 

@@ -35,6 +35,23 @@ from codeflash.languages.registry import UnsupportedLanguageError, get_language_
 if TYPE_CHECKING:
     from argparse import Namespace
 
+    from codeflash.code_utils.config_parser import LanguageConfig
+
+
+def filter_configs_for_file(configs: list[LanguageConfig], file_path: str) -> list[LanguageConfig]:
+    resolved_file = Path(file_path).resolve()
+    matching = []
+    for config in configs:
+        config_root = config.config_path.resolve()
+        if config_root.is_file():
+            config_root = config_root.parent
+        try:
+            resolved_file.relative_to(config_root)
+            matching.append(config)
+        except ValueError:
+            continue
+    return matching if matching else configs
+
 
 def main() -> None:
     """Entry point for the codeflash command-line interface."""
@@ -128,6 +145,8 @@ def main() -> None:
                     language_configs = matching_configs
             except UnsupportedLanguageError:
                 pass  # Unknown extension, let all configs run
+
+            language_configs = filter_configs_for_file(language_configs, str(args.file))
 
         # Save the raw --all value before handle_optimize_all_arg_parsing mutates it.
         # In multi-language mode, module_root is None at this point so the resolution
