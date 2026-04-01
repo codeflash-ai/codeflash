@@ -1044,8 +1044,9 @@ class PythonSupport:
 
     pytest_cmd: str = "pytest"
 
-    def setup_test_config(self, test_cfg: TestConfig, file_path: Path, current_worktree: Path | None = None) -> None:
+    def setup_test_config(self, test_cfg: TestConfig, file_path: Path, current_worktree: Path | None = None) -> bool:
         self.pytest_cmd = test_cfg.pytest_cmd or "pytest"
+        return True
 
     def pytest_cmd_tokens(self, is_posix: bool) -> list[str]:
         import shlex

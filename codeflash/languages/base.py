@@ -50,6 +50,12 @@ class IndexResult:
     error: bool
 
 
+@dataclass(frozen=True)
+class SetupError:
+    message: str
+    should_abort: bool
+
+
 @dataclass
 class HelperFunction:
     """A helper function that is a dependency of the target function.
@@ -725,8 +731,12 @@ class LanguageSupport(Protocol):
         """Parse/validate a module before optimization."""
         ...
 
-    def setup_test_config(self, test_cfg: TestConfig, file_path: Path, current_worktree: Path | None = None) -> None:
-        """One-time project setup after language detection. Default: no-op."""
+    def setup_test_config(self, test_cfg: TestConfig, file_path: Path, current_worktree: Path | None = None) -> bool:
+        """One-time project setup after language detection. Default: no-op.
+
+        Returns True if the project is valid for optimization, False otherwise.
+        """
+        return True
 
     def adjust_test_config_for_discovery(self, test_cfg: TestConfig) -> None:
         """Adjust test config before test discovery. Default: no-op."""

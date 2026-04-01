@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
+from codeflash.languages.base import SetupError
 from codeflash.models.models import ValidCode
 
 if TYPE_CHECKING:
@@ -25,11 +26,13 @@ def prepare_javascript_module(
     return validated_original_code, None
 
 
-def verify_js_requirements(test_cfg: TestConfig) -> None:
+def verify_js_requirements(test_cfg: TestConfig) -> list[SetupError]:
     """Verify JavaScript/TypeScript requirements before optimization.
 
     Checks that Node.js, npm, and the test framework are available.
     Logs warnings if requirements are not met but does not abort.
+
+    Returns: List of setup errors if requirements are not met, empty list otherwise.
     """
     from codeflash.languages import get_language_support
     from codeflash.languages.base import Language
@@ -37,7 +40,7 @@ def verify_js_requirements(test_cfg: TestConfig) -> None:
 
     js_project_root = test_cfg.js_project_root
     if not js_project_root:
-        return
+        return [SetupError("JavaScript project root not found", should_abort=True)]
 
     try:
         js_support = get_language_support(Language.JAVASCRIPT)
@@ -47,6 +50,9 @@ def verify_js_requirements(test_cfg: TestConfig) -> None:
         if not success:
             logger.warning("JavaScript requirements check found issues:")
             for error in errors:
-                logger.warning(f"  - {error}")
+                logger.warning(f"  - {error.message}")
+            return errors
+        return []
     except Exception as e:
         logger.debug(f"Failed to verify JS requirements: {e}")
+        return [SetupError(str(e), should_abort=True)]
