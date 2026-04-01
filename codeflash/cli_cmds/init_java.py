@@ -147,7 +147,7 @@ def detect_java_test_framework(project_root: Path) -> str:
     return "junit5"  # Default to JUnit 5
 
 
-def init_java_project() -> None:
+def init_java_project(non_interactive: bool = False) -> None:
     """Initialize Codeflash for a Java project."""
     from codeflash.cli_cmds.github_workflow import install_github_actions
     from codeflash.cli_cmds.init_auth import install_github_app, prompt_api_key
@@ -164,17 +164,25 @@ def init_java_project() -> None:
 
     did_add_new_key = prompt_api_key()
 
-    should_modify, _config = should_modify_java_config()
-
-    # Default git remote
-    git_remote = "origin"
-
-    if should_modify:
-        setup_info = collect_java_setup_info()
+    if non_interactive:
+        # Use auto-detected defaults without any interactive prompts
+        setup_info = JavaSetupInfo()
         git_remote = setup_info.git_remote or "origin"
         configured = configure_java_project(setup_info)
         if not configured:
             apologize_and_exit()
+    else:
+        should_modify, _config = should_modify_java_config()
+
+        # Default git remote
+        git_remote = "origin"
+
+        if should_modify:
+            setup_info = collect_java_setup_info()
+            git_remote = setup_info.git_remote or "origin"
+            configured = configure_java_project(setup_info)
+            if not configured:
+                apologize_and_exit()
 
     install_github_app(git_remote)
 
