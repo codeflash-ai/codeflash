@@ -57,7 +57,8 @@ def generate_replay_tests(
                 ).fetchone()
                 invocation_count = min(count_result[0], max_run_count)
 
-                class_function_names.append(method_name)
+                simple_class = classname.rsplit(".", 1)[-1]
+                class_function_names.append(f"{simple_class}.{method_name}")
                 safe_method = _sanitize_identifier(method_name)
 
                 for i in range(invocation_count):
