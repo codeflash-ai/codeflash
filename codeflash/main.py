@@ -62,7 +62,7 @@ def main() -> None:
         elif args.command == "init":
             from codeflash.cli_cmds.cmd_init import init_codeflash
 
-            init_codeflash()
+            init_codeflash(non_interactive=getattr(args, "yes", False))
         elif args.command == "init-actions":
             from codeflash.cli_cmds.github_workflow import install_github_actions
 

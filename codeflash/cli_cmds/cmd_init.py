@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     from argparse import Namespace
 
 
-def init_codeflash() -> None:
+def init_codeflash(non_interactive: bool = False) -> None:
     try:
         welcome_panel = Panel(
             Text(
@@ -62,7 +62,7 @@ def init_codeflash() -> None:
         project_language = detect_project_language()
 
         if project_language == ProjectLanguage.JAVA:
-            init_java_project()
+            init_java_project(non_interactive=non_interactive)
             return
 
         if project_language in (ProjectLanguage.JAVASCRIPT, ProjectLanguage.TYPESCRIPT):
