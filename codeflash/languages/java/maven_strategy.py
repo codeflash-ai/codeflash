@@ -647,21 +647,7 @@ class MavenStrategy(BuildToolStrategy):
             return None
 
     def find_executable(self, build_root: Path) -> str | None:
-        # Walk up parent directories to find mvnw (multi-module projects keep it in the root)
-        search = build_root.resolve()
-        while search != search.parent:
-            mvnw_path = search / "mvnw"
-            if mvnw_path.exists():
-                return str(mvnw_path)
-            mvnw_cmd_path = search / "mvnw.cmd"
-            if mvnw_cmd_path.exists():
-                return str(mvnw_cmd_path)
-            search = search.parent
-        if Path("mvnw").exists():
-            return "./mvnw"
-        if Path("mvnw.cmd").exists():
-            return "mvnw.cmd"
-        return shutil.which("mvn")
+        return self.find_wrapper_executable(build_root, ("mvnw", "mvnw.cmd"), "mvn")
 
     def find_runtime_jar(self) -> Path | None:
         if self._M2_JAR.exists():

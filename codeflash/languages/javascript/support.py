@@ -14,7 +14,15 @@ from typing import TYPE_CHECKING, Any
 
 from codeflash.code_utils.git_utils import git_root_dir, mirror_path
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, Language, TestInfo, TestResult
+from codeflash.languages.base import (
+    CodeContext,
+    FunctionFilterCriteria,
+    HelperFunction,
+    Language,
+    SetupError,
+    TestInfo,
+    TestResult,
+)
 from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
 from codeflash.languages.registry import register_language
 from codeflash.models.models import FunctionParent
@@ -1950,11 +1958,13 @@ class JavaScriptSupport:
 
         return prepare_javascript_module(module_code, module_path)
 
-    def setup_test_config(self, test_cfg: TestConfig, file_path: Path, current_worktree: Path | None) -> None:
+    def setup_test_config(self, test_cfg: TestConfig, file_path: Path, current_worktree: Path | None) -> bool:
         from codeflash.languages.javascript.optimizer import verify_js_requirements
         from codeflash.languages.javascript.test_runner import find_node_project_root
 
         test_cfg.js_project_root = find_node_project_root(file_path)
+        if test_cfg.js_project_root is None:
+            return False
         if current_worktree is not None:
             original_js_root = git_root_dir()
             worktree_node_modules = test_cfg.js_project_root / "node_modules"
@@ -1970,7 +1980,11 @@ class JavaScriptSupport:
                 original_root_node_modules = original_js_root / "node_modules"
                 if original_root_node_modules.exists() and not worktree_root_node_modules.exists():
                     worktree_root_node_modules.symlink_to(original_root_node_modules)
-        verify_js_requirements(test_cfg)
+        setup_errors = verify_js_requirements(test_cfg)
+        if any(e.should_abort for e in setup_errors):
+            return False
+
+        return True
 
     def adjust_test_config_for_discovery(self, test_cfg: TestConfig) -> None:
         test_cfg.tests_project_rootdir = test_cfg.tests_root
@@ -2164,8 +2178,9 @@ class JavaScriptSupport:
     def get_module_path(self, source_file: Path, project_root: Path, tests_root: Path | None = None) -> str:
         """Get the module path for importing a JavaScript source file from tests.
 
-        For JavaScript, this returns a relative path from the tests directory to the source file
-        (e.g., '../fibonacci' for source at /project/fibonacci.js and tests at /project/tests/).
+        For JavaScript/TypeScript, this returns a relative path from the tests directory to
+        the source file. For ESM projects or TypeScript, the path includes a .js extension
+        (TypeScript convention). For CommonJS, no extension is added.
 
         Args:
             source_file: Path to the source file.
@@ -2179,13 +2194,15 @@ class JavaScriptSupport:
         import os
 
         from codeflash.cli_cmds.console import logger
+        from codeflash.languages.javascript.module_system import ModuleSystem, detect_module_system
 
         if tests_root is None:
             tests_root = self.find_test_root(project_root) or project_root
 
         try:
             # Resolve both paths to absolute to ensure consistent relative path calculation
-            source_file_abs = source_file.resolve().with_suffix("")
+            # Note: Don't remove extension yet - we'll decide based on module system
+            source_file_abs = source_file.resolve()
             tests_root_abs = tests_root.resolve()
 
             # Find the project root using language support
@@ -2205,18 +2222,42 @@ class JavaScriptSupport:
                     if not tests_root_abs.exists():
                         tests_root_abs = project_root_from_lang
 
+            # Detect module system to determine if we need to add .js extension
+            module_system = detect_module_system(project_root, source_file)
+
+            # Remove source file extension first
+            source_without_ext = source_file_abs.with_suffix("")
+
             # Use os.path.relpath to compute relative path from tests_root to source file
-            rel_path = os.path.relpath(str(source_file_abs), str(tests_root_abs))
-            logger.debug(
-                f"!lsp|Module path: source={source_file_abs}, tests_root={tests_root_abs}, rel_path={rel_path}"
-            )
+            rel_path = os.path.relpath(str(source_without_ext), str(tests_root_abs))
+
+            # For ESM, add .js extension (TypeScript convention)
+            # TypeScript requires imports to reference the OUTPUT file extension (.js),
+            # even when the source file is .ts. This is required for Node.js ESM resolution.
+            if module_system == ModuleSystem.ES_MODULE:
+                rel_path = rel_path + ".js"
+                logger.debug(
+                    f"!lsp|Module path (ESM): source={source_file_abs}, tests_root={tests_root_abs}, "
+                    f"rel_path={rel_path} (added .js for ESM)"
+                )
+            else:
+                logger.debug(
+                    f"!lsp|Module path (CommonJS): source={source_file_abs}, tests_root={tests_root_abs}, "
+                    f"rel_path={rel_path}"
+                )
+
             return rel_path
         except ValueError:
             # Fallback if paths are on different drives (Windows)
             rel_path = source_file.relative_to(project_root)
-            return "../" + rel_path.with_suffix("").as_posix()
+            # For fallback, also check module system
+            module_system = detect_module_system(project_root, source_file)
+            path_without_ext = "../" + rel_path.with_suffix("").as_posix()
+            if module_system == ModuleSystem.ES_MODULE:
+                return path_without_ext + ".js"
+            return path_without_ext
 
-    def verify_requirements(self, project_root: Path, test_framework: str = "jest") -> tuple[bool, list[str]]:
+    def verify_requirements(self, project_root: Path, test_framework: str = "jest") -> tuple[bool, list[SetupError]]:
         """Verify that all JavaScript requirements are met.
 
         Checks for:
@@ -2236,27 +2277,40 @@ class JavaScriptSupport:
             Tuple of (success, list of error messages).
 
         """
-        errors: list[str] = []
+        errors: list[SetupError] = []
 
         # Check Node.js
         try:
             result = subprocess.run(["node", "--version"], check=False, capture_output=True, text=True, timeout=10)
             if result.returncode != 0:
-                errors.append("Node.js is not installed. Please install Node.js 18+ from https://nodejs.org/")
+                errors.append(
+                    SetupError(
+                        "Node.js is not installed. Please install Node.js 18+ from https://nodejs.org/",
+                        should_abort=True,
+                    )
+                )
         except FileNotFoundError:
-            errors.append("Node.js is not installed. Please install Node.js 18+ from https://nodejs.org/")
+            errors.append(
+                SetupError(
+                    "Node.js is not installed. Please install Node.js 18+ from https://nodejs.org/", should_abort=True
+                )
+            )
         except Exception as e:
-            errors.append(f"Failed to check Node.js: {e}")
+            errors.append(SetupError(f"Failed to check Node.js: {e}", should_abort=True))
 
         # Check npm
         try:
             result = subprocess.run(["npm", "--version"], check=False, capture_output=True, text=True, timeout=10)
             if result.returncode != 0:
-                errors.append("npm is not available. Please ensure npm is installed with Node.js.")
+                errors.append(
+                    SetupError("npm is not available. Please ensure npm is installed with Node.js.", should_abort=True)
+                )
         except FileNotFoundError:
-            errors.append("npm is not available. Please ensure npm is installed with Node.js.")
+            errors.append(
+                SetupError("npm is not available. Please ensure npm is installed with Node.js.", should_abort=True)
+            )
         except Exception as e:
-            errors.append(f"Failed to check npm: {e}")
+            errors.append(SetupError(f"Failed to check npm: {e}", should_abort=True))
 
         # Check test framework is installed (with monorepo support)
         # Uses find_node_modules_with_package which searches up the directory tree
@@ -2270,12 +2324,17 @@ class JavaScriptSupport:
             local_node_modules = project_root / "node_modules"
             if not local_node_modules.exists():
                 errors.append(
-                    f"node_modules not found in {project_root}. Please run 'npm install' to install dependencies."
+                    SetupError(
+                        f"node_modules not found in {project_root}. Please run 'npm install' to install dependencies.",
+                        should_abort=True,
+                    )
                 )
             else:
                 errors.append(
-                    f"{test_framework} is not installed. "
-                    f"Please run 'npm install --save-dev {test_framework}' to install it."
+                    SetupError(
+                        f"{test_framework} is not installed. Please run 'npm install --save-dev {test_framework}' to install it.",
+                        should_abort=True,
+                    )
                 )
 
         return len(errors) == 0, errors
