@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import git
 import requests
+from requests import Response
 import sentry_sdk
 from pydantic.json import pydantic_encoder
 
@@ -99,6 +100,21 @@ def make_cfapi_request(
                 f"CF_API_Error:: making request to Codeflash API (url: {url}, method: {method}, status {response.status_code}): {error_message}"
             )
         return response
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+        # Handle connection errors (server unreachable, connection refused, timeout, etc.)
+        error_message = str(e)
+
+        if not suppress_errors:
+            logger.error(
+                f"CF_API_ConnectionError:: unable to connect to Codeflash API (url: {url}, method: {method}): {error_message}"
+            )
+
+        # Create a mock Response object with 503 status to indicate service unavailable
+        mock_response = Response()
+        mock_response.status_code = 503
+        mock_response._content = error_message.encode('utf-8')
+        mock_response.url = url
+        return mock_response
 
 
 @lru_cache(maxsize=1)
