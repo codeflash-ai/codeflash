@@ -288,26 +288,26 @@ def add_codeflash_dependency(pom_path: Path) -> bool:
         content = pom_path.read_text(encoding="utf-8")
 
         if "codeflash-runtime" in content:
-            if "<scope>system</scope>" in content:
 
-                def replace_system_dep(match: re.Match[str]) -> str:
-                    block: str = match.group(0)
-                    if "codeflash-runtime" in block and "<scope>system</scope>" in block:
-                        return (
-                            "<dependency>\n"
-                            "            <groupId>com.codeflash</groupId>\n"
-                            "            <artifactId>codeflash-runtime</artifactId>\n"
-                            f"            <version>{CODEFLASH_RUNTIME_VERSION}</version>\n"
-                            "            <scope>test</scope>\n"
-                            "        </dependency>"
-                        )
+            def update_codeflash_dep(match: re.Match[str]) -> str:
+                block: str = match.group(0)
+                if "codeflash-runtime" not in block:
                     return block
+                return (
+                    "<dependency>\n"
+                    "            <groupId>com.codeflash</groupId>\n"
+                    "            <artifactId>codeflash-runtime</artifactId>\n"
+                    f"            <version>{CODEFLASH_RUNTIME_VERSION}</version>\n"
+                    "            <scope>test</scope>\n"
+                    "        </dependency>"
+                )
 
-                content = re.sub(r"<dependency>[\s\S]*?</dependency>", replace_system_dep, content)
-                pom_path.write_text(content, encoding="utf-8")
-                logger.info("Replaced system-scope codeflash-runtime dependency with test scope")
-                return True
-            logger.info("codeflash-runtime dependency already present in pom.xml")
+            updated = re.sub(r"<dependency>[\s\S]*?</dependency>", update_codeflash_dep, content)
+            if updated != content:
+                pom_path.write_text(updated, encoding="utf-8")
+                logger.info("Updated codeflash-runtime dependency to version %s in pom.xml", CODEFLASH_RUNTIME_VERSION)
+            else:
+                logger.info("codeflash-runtime dependency already up to date in pom.xml")
             return True
 
         closing_tag = "</dependencies>"
