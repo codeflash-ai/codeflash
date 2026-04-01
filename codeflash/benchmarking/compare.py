@@ -57,24 +57,32 @@ class CompareResult:
             lines = [
                 f"### {bm_name}",
                 "",
-                "| | Min | Median | Mean | StdDev | Rounds | Iterations |",
-                "|:---|---:|---:|---:|---:|---:|---:|",
+                "| | Min | Max | Mean | StdDev | Median | IQR | Outliers | OPS | Rounds | Iters |",
+                "|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
                 f"| `{base_short}` (base) | {fmt_us(base_s.min_ns) if base_s else '-'}"
-                f" | {fmt_us(base_s.median_ns) if base_s else '-'}"
+                f" | {fmt_us(base_s.max_ns) if base_s else '-'}"
                 f" | {fmt_us(base_s.mean_ns) if base_s else '-'}"
                 f" | {fmt_us(base_s.stddev_ns) if base_s else '-'}"
-                f" | {base_s.rounds if base_s else '-'}"
+                f" | {fmt_us(base_s.median_ns) if base_s else '-'}"
+                f" | {fmt_us(base_s.iqr_ns) if base_s else '-'}"
+                f" | {base_s.outliers if base_s else '-'}"
+                f" | {md_ops(base_s.mean_ns) if base_s else '-'}"
+                f" | {f'{base_s.rounds:,}' if base_s else '-'}"
                 f" | {base_s.iterations if base_s else '-'} |",
                 f"| `{head_short}` (head) | {fmt_us(head_s.min_ns) if head_s else '-'}"
-                f" | {fmt_us(head_s.median_ns) if head_s else '-'}"
+                f" | {fmt_us(head_s.max_ns) if head_s else '-'}"
                 f" | {fmt_us(head_s.mean_ns) if head_s else '-'}"
                 f" | {fmt_us(head_s.stddev_ns) if head_s else '-'}"
-                f" | {head_s.rounds if head_s else '-'}"
+                f" | {fmt_us(head_s.median_ns) if head_s else '-'}"
+                f" | {fmt_us(head_s.iqr_ns) if head_s else '-'}"
+                f" | {head_s.outliers if head_s else '-'}"
+                f" | {md_ops(head_s.mean_ns) if head_s else '-'}"
+                f" | {f'{head_s.rounds:,}' if head_s else '-'}"
                 f" | {head_s.iterations if head_s else '-'} |",
                 f"| **Speedup** | **{md_speedup_val(base_s.min_ns, head_s.min_ns) if base_s and head_s else '-'}**"
-                f" | **{md_speedup_val(base_s.median_ns, head_s.median_ns) if base_s and head_s else '-'}**"
-                f" | **{md_speedup_val(base_s.mean_ns, head_s.mean_ns) if base_s and head_s else '-'}**"
-                f" | | | |",
+                f" | | **{md_speedup_val(base_s.mean_ns, head_s.mean_ns) if base_s and head_s else '-'}**"
+                f" | | **{md_speedup_val(base_s.median_ns, head_s.median_ns) if base_s and head_s else '-'}**"
+                f" | | | | | |",
             ]
 
             # Per-function breakdown
@@ -475,9 +483,13 @@ def render_comparison(result: CompareResult) -> None:
         t1 = Table(title="End-to-End (per iteration)", border_style="blue", show_lines=True, expand=False)
         t1.add_column("Ref", style="bold cyan")
         t1.add_column("Min", justify="right")
-        t1.add_column("Median", justify="right")
+        t1.add_column("Max", justify="right")
         t1.add_column("Mean", justify="right")
         t1.add_column("StdDev", justify="right")
+        t1.add_column("Median", justify="right")
+        t1.add_column("IQR", justify="right")
+        t1.add_column("Outliers", justify="right")
+        t1.add_column("OPS", justify="right")
         t1.add_column("Rounds", justify="right")
         t1.add_column("Iters", justify="right")
 
@@ -485,20 +497,28 @@ def render_comparison(result: CompareResult) -> None:
             t1.add_row(
                 f"{base_short} (base)",
                 fmt_time(base_s.min_ns),
-                fmt_time(base_s.median_ns),
+                fmt_time(base_s.max_ns),
                 fmt_time(base_s.mean_ns),
                 fmt_time(base_s.stddev_ns),
-                str(base_s.rounds),
+                fmt_time(base_s.median_ns),
+                fmt_time(base_s.iqr_ns),
+                base_s.outliers,
+                fmt_ops(base_s.mean_ns),
+                f"{base_s.rounds:,}",
                 str(base_s.iterations),
             )
         if head_s:
             t1.add_row(
                 f"{head_short} (head)",
                 fmt_time(head_s.min_ns),
-                fmt_time(head_s.median_ns),
+                fmt_time(head_s.max_ns),
                 fmt_time(head_s.mean_ns),
                 fmt_time(head_s.stddev_ns),
-                str(head_s.rounds),
+                fmt_time(head_s.median_ns),
+                fmt_time(head_s.iqr_ns),
+                head_s.outliers,
+                fmt_ops(head_s.mean_ns),
+                f"{head_s.rounds:,}",
                 str(head_s.iterations),
             )
         if base_s and head_s:
@@ -506,9 +526,13 @@ def render_comparison(result: CompareResult) -> None:
             t1.add_row(
                 "[bold]Speedup[/bold]",
                 fmt_speedup(base_s.min_ns, head_s.min_ns),
-                fmt_speedup(base_s.median_ns, head_s.median_ns),
+                "",
                 fmt_speedup(base_s.mean_ns, head_s.mean_ns),
                 "",
+                fmt_speedup(base_s.median_ns, head_s.median_ns),
+                "",
+                "",
+                fmt_speedup_ops(base_s.mean_ns, head_s.mean_ns),
                 "",
                 "",
             )
@@ -567,6 +591,37 @@ def fmt_us(ns: Optional[float]) -> str:
     if ns is None:
         return "-"
     return f"{ns / 1_000:,.2f}μs"
+
+
+def fmt_ops(mean_ns: Optional[float]) -> str:
+    if mean_ns is None or mean_ns == 0:
+        return "-"
+    ops = 1e9 / mean_ns
+    if ops >= 1_000_000:
+        return f"{ops / 1_000_000:,.2f} Mops/s"
+    if ops >= 1_000:
+        return f"{ops / 1_000:,.2f} Kops/s"
+    return f"{ops:,.2f} ops/s"
+
+
+def md_ops(mean_ns: Optional[float]) -> str:
+    if mean_ns is None or mean_ns == 0:
+        return "-"
+    ops = 1e9 / mean_ns
+    if ops >= 1_000_000:
+        return f"{ops / 1_000_000:,.2f} Mops/s"
+    if ops >= 1_000:
+        return f"{ops / 1_000:,.2f} Kops/s"
+    return f"{ops:,.2f} ops/s"
+
+
+def fmt_speedup_ops(before: Optional[float], after: Optional[float]) -> str:
+    if before is None or after is None or before == 0:
+        return "-"
+    ratio = before / after
+    if ratio >= 1:
+        return f"[green]{ratio:.2f}x[/green]"
+    return f"[red]{ratio:.2f}x[/red]"
 
 
 def fmt_speedup(before: Optional[float], after: Optional[float]) -> str:
