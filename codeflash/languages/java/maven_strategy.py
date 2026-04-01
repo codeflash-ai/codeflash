@@ -43,6 +43,8 @@ _MAVEN_VALIDATION_SKIP_FLAGS = [
     "-Denforcer.skip=true",
     "-Djapicmp.skip=true",
     "-Derrorprone.skip=true",
+    "-Dspotless.check.skip=true",
+    "-Dspotless.apply.skip=true",
     "-Dmaven.compiler.failOnWarning=false",
     "-Dmaven.compiler.showWarnings=false",
 ]
