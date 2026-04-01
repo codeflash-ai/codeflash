@@ -571,8 +571,8 @@ class MavenStrategy(BuildToolStrategy):
         / "com"
         / "codeflash"
         / "codeflash-runtime"
-        / "1.0.0"
-        / "codeflash-runtime-1.0.0.jar"
+        / "1.0.1"
+        / "codeflash-runtime-1.0.1.jar"
     )
 
     @property
