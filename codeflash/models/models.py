@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import statistics
 from collections import Counter, defaultdict
 from functools import lru_cache
 from typing import TYPE_CHECKING
@@ -953,12 +954,13 @@ class TestResults(BaseModel):  # noqa: PLW1641
                 if result.runtime:
                     by_id.setdefault(result.id, []).append(result.runtime)
                 else:
-                    msg = (
-                        f"Ignoring test case that passed but had no runtime -> {result.id}, "
-                        f"Loop # {result.loop_index}, Test Type: {result.test_type}, "
-                        f"Verification Type: {result.verification_type}"
+                    logger.debug(
+                        "Ignoring test case that passed but had no runtime -> %s, Loop # %s, Test Type: %s, Verification Type: %s",
+                        result.id,
+                        result.loop_index,
+                        result.test_type,
+                        result.verification_type,
                     )
-                    logger.debug(msg)
         return by_id
 
     def total_passed_runtime(self) -> int:
@@ -970,8 +972,6 @@ class TestResults(BaseModel):  # noqa: PLW1641
 
         :return: The runtime in nanoseconds.
         """
-        import statistics
-
         # TODO this doesn't look at the intersection of tests of baseline and original
         return sum(
             statistics.median_low(usable_runtime_data)
