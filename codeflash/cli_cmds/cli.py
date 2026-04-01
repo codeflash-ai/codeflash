@@ -391,6 +391,7 @@ def _build_parser() -> ArgumentParser:
         "--functions", type=str, help="Explicit functions to instrument: 'file.py::func1,func2;other.py::func3'"
     )
     compare_parser.add_argument("--timeout", type=int, default=600, help="Benchmark timeout in seconds (default: 600)")
+    compare_parser.add_argument("--output", "-o", type=str, help="Write markdown report to file")
     compare_parser.add_argument("--config-file", type=str, dest="config_file", help="Path to pyproject.toml")
 
     trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize your project.")

@@ -79,6 +79,11 @@ def run_compare(args: Namespace) -> None:
         logger.warning("No benchmark data collected. Check that benchmarks-root is configured and benchmarks exist.")
         sys.exit(1)
 
+    if args.output:
+        md = result.format_markdown()
+        Path(args.output).write_text(md, encoding="utf-8")
+        logger.info(f"Markdown report written to {args.output}")
+
 
 def get_current_branch() -> str | None:
     try:
