@@ -25,6 +25,7 @@ from codeflash.cli_cmds.console import console, logger
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from codeflash.benchmarking.plugin.plugin import BenchmarkStats
     from codeflash.models.function_types import FunctionToOptimize
     from codeflash.models.models import BenchmarkKey
 
@@ -33,40 +34,50 @@ if TYPE_CHECKING:
 class CompareResult:
     base_ref: str
     head_ref: str
-    base_total_ns: dict[BenchmarkKey, int] = field(default_factory=dict)
-    head_total_ns: dict[BenchmarkKey, int] = field(default_factory=dict)
-    base_function_ns: dict[str, dict[BenchmarkKey, int]] = field(default_factory=dict)
-    head_function_ns: dict[str, dict[BenchmarkKey, int]] = field(default_factory=dict)
+    base_stats: dict[BenchmarkKey, BenchmarkStats] = field(default_factory=dict)
+    head_stats: dict[BenchmarkKey, BenchmarkStats] = field(default_factory=dict)
+    base_function_ns: dict[str, dict[BenchmarkKey, float]] = field(default_factory=dict)
+    head_function_ns: dict[str, dict[BenchmarkKey, float]] = field(default_factory=dict)
 
     def format_markdown(self) -> str:
-        """Format comparison results as GitHub-flavored markdown (for programmatic use, e.g. PR comments)."""
-        if not self.base_total_ns and not self.head_total_ns:
+        if not self.base_stats and not self.head_stats:
             return "_No benchmark results to compare._"
 
         base_short = self.base_ref[:12]
         head_short = self.head_ref[:12]
-        all_keys = sorted(set(self.base_total_ns) | set(self.head_total_ns), key=str)
+        all_keys = sorted(set(self.base_stats) | set(self.head_stats), key=str)
         sections: list[str] = [f"## Benchmark: `{base_short}` vs `{head_short}`"]
 
         for bm_key in all_keys:
-            base_ns = self.base_total_ns.get(bm_key)
-            head_ns = self.head_total_ns.get(bm_key)
+            base_s = self.base_stats.get(bm_key)
+            head_s = self.head_stats.get(bm_key)
 
-            # Extract short benchmark name from the full key
             bm_name = str(bm_key).rsplit("::", 1)[-1] if "::" in str(bm_key) else str(bm_key)
 
-            # --- End-to-End table ---
             lines = [
                 f"### {bm_name}",
                 "",
-                "| Branch | Time (ms) | vs base | Speedup |",
-                "|:---|---:|---:|---:|",
-                f"| `{base_short}` (base) | {fmt_ms(base_ns)} | - | - |",
-                f"| `{head_short}` (head) | {fmt_ms(head_ns)} "
-                f"| {md_delta(base_ns, head_ns)} | {md_speedup(base_ns, head_ns)} |",
+                "| | Min | Median | Mean | StdDev | Rounds | Iterations |",
+                "|:---|---:|---:|---:|---:|---:|---:|",
+                f"| `{base_short}` (base) | {fmt_us(base_s.min_ns) if base_s else '-'}"
+                f" | {fmt_us(base_s.median_ns) if base_s else '-'}"
+                f" | {fmt_us(base_s.mean_ns) if base_s else '-'}"
+                f" | {fmt_us(base_s.stddev_ns) if base_s else '-'}"
+                f" | {base_s.rounds if base_s else '-'}"
+                f" | {base_s.iterations if base_s else '-'} |",
+                f"| `{head_short}` (head) | {fmt_us(head_s.min_ns) if head_s else '-'}"
+                f" | {fmt_us(head_s.median_ns) if head_s else '-'}"
+                f" | {fmt_us(head_s.mean_ns) if head_s else '-'}"
+                f" | {fmt_us(head_s.stddev_ns) if head_s else '-'}"
+                f" | {head_s.rounds if head_s else '-'}"
+                f" | {head_s.iterations if head_s else '-'} |",
+                f"| **Speedup** | **{md_speedup_val(base_s.min_ns, head_s.min_ns) if base_s and head_s else '-'}**"
+                f" | **{md_speedup_val(base_s.median_ns, head_s.median_ns) if base_s and head_s else '-'}**"
+                f" | **{md_speedup_val(base_s.mean_ns, head_s.mean_ns) if base_s and head_s else '-'}**"
+                f" | | | |",
             ]
 
-            # --- Per-function breakdown ---
+            # Per-function breakdown
             all_funcs: set[str] = set()
             for d in [self.base_function_ns, self.head_function_ns]:
                 for func_name, bm_dict in d.items():
@@ -75,13 +86,13 @@ class CompareResult:
 
             if all_funcs:
 
-                def sort_key(fn: str, _bm_key: BenchmarkKey = bm_key) -> int:
+                def sort_key(fn: str, _bm_key: BenchmarkKey = bm_key) -> float:
                     return self.base_function_ns.get(fn, {}).get(_bm_key, 0)
 
                 sorted_funcs = sorted(all_funcs, key=sort_key, reverse=True)
 
                 lines.append("")
-                lines.append("| Function | base (ms) | head (ms) | Improvement | Speedup |")
+                lines.append("| Function | base (μs) | head (μs) | Improvement | Speedup |")
                 lines.append("|:---|---:|---:|:---|---:|")
 
                 for func_name in sorted_funcs:
@@ -89,32 +100,8 @@ class CompareResult:
                     h = self.head_function_ns.get(func_name, {}).get(bm_key)
                     short_name = func_name.rsplit(".", 1)[-1] if "." in func_name else func_name
                     lines.append(
-                        f"| `{short_name}` | {fmt_ms(b)} | {fmt_ms(h)} | {md_bar(b, h)} | {md_speedup(b, h)} |"
+                        f"| `{short_name}` | {fmt_us(b)} | {fmt_us(h)} | {md_bar(b, h)} | {md_speedup(b, h)} |"
                     )
-
-                lines.append(
-                    f"| **TOTAL** | **{fmt_ms(base_ns)}** | **{fmt_ms(head_ns)}** "
-                    f"| {md_bar(base_ns, head_ns)} | {md_speedup(base_ns, head_ns)} |"
-                )
-
-                # --- Share of Benchmark Time (%) ---
-                if base_ns and head_ns:
-                    lines.append("")
-                    lines.append("<details><summary>Share of Benchmark Time</summary>")
-                    lines.append("")
-                    lines.append("| Function | base | head |")
-                    lines.append("|:---|:---|:---|")
-
-                    for func_name in sorted_funcs:
-                        b = self.base_function_ns.get(func_name, {}).get(bm_key)
-                        h = self.head_function_ns.get(func_name, {}).get(bm_key)
-                        short_name = func_name.rsplit(".", 1)[-1] if "." in func_name else func_name
-                        b_pct = b / base_ns * 100 if b else 0
-                        h_pct = h / head_ns * 100 if h else 0
-                        lines.append(f"| `{short_name}` | {pct_bar(b_pct)} | {pct_bar(h_pct)} |")
-
-                    lines.append("")
-                    lines.append("</details>")
 
             sections.append("\n".join(lines))
 
@@ -211,8 +198,7 @@ def compare_branches(
         return Group(*lines)
 
     def build_panel(current_step: int) -> Panel:
-        # Two-column grid: tree left, steps right (vertically padded to center)
-        tree_height = 1 + sum(1 + len(fns) for fns in functions.values())  # root + files + functions
+        tree_height = 1 + sum(1 + len(fns) for fns in functions.values())
         step_count = len(step_labels)
         pad_top = max(0, (tree_height - step_count) // 2)
 
@@ -273,11 +259,11 @@ def compare_branches(
 
         # Load results
         if base_trace_db.exists():
-            result.base_total_ns = CodeFlashBenchmarkPlugin.get_benchmark_timings(base_trace_db)
+            result.base_stats = CodeFlashBenchmarkPlugin.get_benchmark_timings(base_trace_db)
             result.base_function_ns = CodeFlashBenchmarkPlugin.get_function_benchmark_timings(base_trace_db)
 
         if head_trace_db.exists():
-            result.head_total_ns = CodeFlashBenchmarkPlugin.get_benchmark_timings(head_trace_db)
+            result.head_stats = CodeFlashBenchmarkPlugin.get_benchmark_timings(head_trace_db)
             result.head_function_ns = CodeFlashBenchmarkPlugin.get_function_benchmark_timings(head_trace_db)
 
         # Render comparison
@@ -467,39 +453,69 @@ def run_benchmark_on_worktree(
 
 def render_comparison(result: CompareResult) -> None:
     """Render Rich comparison tables to console."""
-    if not result.base_total_ns and not result.head_total_ns:
+    if not result.base_stats and not result.head_stats:
         logger.warning("No benchmark results to compare")
         return
 
     base_short = result.base_ref[:12]
     head_short = result.head_ref[:12]
 
-    # Find all benchmark keys across both refs
-    all_benchmark_keys = set(result.base_total_ns.keys()) | set(result.head_total_ns.keys())
+    all_benchmark_keys = set(result.base_stats.keys()) | set(result.head_stats.keys())
 
     for bm_key in sorted(all_benchmark_keys, key=str):
-        # Show only the test function name, not the full module path
         bm_name = str(bm_key).rsplit("::", 1)[-1] if "::" in str(bm_key) else str(bm_key)
         console.print()
         console.rule(f"[bold]{bm_name}[/bold]")
         console.print()
 
-        base_ns = result.base_total_ns.get(bm_key)
-        head_ns = result.head_total_ns.get(bm_key)
+        base_s = result.base_stats.get(bm_key)
+        head_s = result.head_stats.get(bm_key)
 
-        # Table 1: Total benchmark time
-        t1 = Table(title="End-to-End", border_style="blue", show_lines=True, expand=False)
+        # Table 1: Statistical summary
+        t1 = Table(title="End-to-End (per iteration)", border_style="blue", show_lines=True, expand=False)
         t1.add_column("Ref", style="bold cyan")
-        t1.add_column("Time (ms)", justify="right")
-        t1.add_column("Delta", justify="right")
-        t1.add_column("Speedup", justify="right")
+        t1.add_column("Min", justify="right")
+        t1.add_column("Median", justify="right")
+        t1.add_column("Mean", justify="right")
+        t1.add_column("StdDev", justify="right")
+        t1.add_column("Rounds", justify="right")
+        t1.add_column("Iters", justify="right")
 
-        t1.add_row(f"{base_short} (base)", fmt_ms(base_ns), "-", "-")
-        t1.add_row(f"{head_short} (head)", fmt_ms(head_ns), fmt_delta(base_ns, head_ns), fmt_speedup(base_ns, head_ns))
+        if base_s:
+            t1.add_row(
+                f"{base_short} (base)",
+                fmt_time(base_s.min_ns),
+                fmt_time(base_s.median_ns),
+                fmt_time(base_s.mean_ns),
+                fmt_time(base_s.stddev_ns),
+                str(base_s.rounds),
+                str(base_s.iterations),
+            )
+        if head_s:
+            t1.add_row(
+                f"{head_short} (head)",
+                fmt_time(head_s.min_ns),
+                fmt_time(head_s.median_ns),
+                fmt_time(head_s.mean_ns),
+                fmt_time(head_s.stddev_ns),
+                str(head_s.rounds),
+                str(head_s.iterations),
+            )
+        if base_s and head_s:
+            t1.add_section()
+            t1.add_row(
+                "[bold]Speedup[/bold]",
+                fmt_speedup(base_s.min_ns, head_s.min_ns),
+                fmt_speedup(base_s.median_ns, head_s.median_ns),
+                fmt_speedup(base_s.mean_ns, head_s.mean_ns),
+                "",
+                "",
+                "",
+            )
         console.print(t1, justify="center")
 
-        # Table 2: Per-function breakdown
-        all_funcs = set()
+        # Table 2: Per-function breakdown (average per-iteration)
+        all_funcs: set[str] = set()
         for d in [result.base_function_ns, result.head_function_ns]:
             for func_name, bm_dict in d.items():
                 if bm_key in bm_dict:
@@ -508,53 +524,52 @@ def render_comparison(result: CompareResult) -> None:
         if all_funcs:
             console.print()
 
-            t2 = Table(title="Per-Function Breakdown", border_style="blue", show_lines=True, expand=False)
+            t2 = Table(
+                title="Per-Function Breakdown (avg per iteration)", border_style="blue", show_lines=True, expand=False
+            )
             t2.add_column("Function", style="cyan")
-            t2.add_column("base (ms)", justify="right", style="yellow")
-            t2.add_column("head (ms)", justify="right", style="yellow")
+            t2.add_column("base", justify="right", style="yellow")
+            t2.add_column("head", justify="right", style="yellow")
             t2.add_column("Delta", justify="right")
             t2.add_column("Speedup", justify="right")
 
-            def sort_key(fn: str, _bm_key: BenchmarkKey = bm_key) -> int:
+            def sort_key(fn: str, _bm_key: BenchmarkKey = bm_key) -> float:
                 return result.base_function_ns.get(fn, {}).get(_bm_key, 0)
 
             for func_name in sorted(all_funcs, key=sort_key, reverse=True):
                 b_ns = result.base_function_ns.get(func_name, {}).get(bm_key)
                 h_ns = result.head_function_ns.get(func_name, {}).get(bm_key)
-
-                # Shorten function name for display
                 short_name = func_name.rsplit(".", 1)[-1] if "." in func_name else func_name
+                t2.add_row(short_name, fmt_time(b_ns), fmt_time(h_ns), fmt_delta(b_ns, h_ns), fmt_speedup(b_ns, h_ns))
 
-                t2.add_row(short_name, fmt_ms(b_ns), fmt_ms(h_ns), fmt_delta(b_ns, h_ns), fmt_speedup(b_ns, h_ns))
-
-            # Totals row
-            t2.add_section()
-            t2.add_row(
-                "[bold]TOTAL[/bold]",
-                f"[bold]{fmt_ms(base_ns)}[/bold]",
-                f"[bold]{fmt_ms(head_ns)}[/bold]",
-                fmt_delta(base_ns, head_ns),
-                fmt_speedup(base_ns, head_ns),
-            )
             console.print(t2, justify="center")
 
     console.print()
 
 
-def fmt_ms(ns: Optional[int]) -> str:
+# --- Formatting helpers ---
+
+
+def fmt_time(ns: Optional[float]) -> str:
     if ns is None:
         return "-"
-    ms = ns / 1_000_000
-    if ms >= 1000:
-        return f"{ms:,.0f}"
-    if ms >= 100:
-        return f"{ms:.0f}"
-    if ms >= 1:
-        return f"{ms:.1f}"
-    return f"{ms:.2f}"
+    us = ns / 1_000
+    if us >= 1_000_000:
+        return f"{us / 1_000_000:,.1f}s"
+    if us >= 1_000:
+        return f"{us / 1_000:,.1f}ms"
+    if us >= 1:
+        return f"{us:,.1f}μs"
+    return f"{ns:,.1f}ns"
 
 
-def fmt_speedup(before: Optional[int], after: Optional[int]) -> str:
+def fmt_us(ns: Optional[float]) -> str:
+    if ns is None:
+        return "-"
+    return f"{ns / 1_000:,.2f}μs"
+
+
+def fmt_speedup(before: Optional[float], after: Optional[float]) -> str:
     if before is None or after is None or after == 0:
         return "-"
     ratio = before / after
@@ -563,17 +578,16 @@ def fmt_speedup(before: Optional[int], after: Optional[int]) -> str:
     return f"[red]{ratio:.2f}x[/red]"
 
 
-def fmt_delta(before: Optional[int], after: Optional[int]) -> str:
+def fmt_delta(before: Optional[float], after: Optional[float]) -> str:
     if before is None or after is None:
         return "-"
-    delta_ms = (after - before) / 1_000_000
     pct = ((after - before) / before) * 100 if before != 0 else 0
-    if delta_ms < 0:
-        return f"[green]{delta_ms:+,.0f}ms ({pct:+.0f}%)[/green]"
-    return f"[red]{delta_ms:+,.0f}ms ({pct:+.0f}%)[/red]"
+    if pct < 0:
+        return f"[green]{pct:+.0f}%[/green]"
+    return f"[red]{pct:+.0f}%[/red]"
 
 
-def md_speedup(before: Optional[int], after: Optional[int]) -> str:
+def md_speedup(before: Optional[float], after: Optional[float]) -> str:
     if before is None or after is None or after == 0:
         return "-"
     ratio = before / after
@@ -581,22 +595,15 @@ def md_speedup(before: Optional[int], after: Optional[int]) -> str:
     return f"{emoji} {ratio:.2f}x"
 
 
-def md_delta(before: Optional[int], after: Optional[int]) -> str:
-    if before is None or after is None:
+def md_speedup_val(before: float, after: float) -> str:
+    if after == 0:
         return "-"
-    delta_ms = (after - before) / 1_000_000
-    pct = ((after - before) / before) * 100 if before != 0 else 0
-    if delta_ms < 0:
-        return f"{delta_ms:+,.0f}ms ({pct:+.0f}%)"
-    return f"+{delta_ms:,.0f}ms ({pct:+.0f}%)"
+    ratio = before / after
+    emoji = "\U0001f7e2" if ratio >= 1 else "\U0001f534"
+    return f"{emoji} {ratio:.2f}x"
 
 
-def md_bar(before: Optional[int], after: Optional[int], width: int = 10) -> str:
-    """Render a unicode progress bar showing the change from before to after.
-
-    Improvement (after < before) shows green filled portion for the reduction.
-    Regression (after > before) shows the bar in reverse.
-    """
+def md_bar(before: Optional[float], after: Optional[float], width: int = 10) -> str:
     if before is None or after is None or before == 0:
         return "-"
     pct = ((before - after) / before) * 100
@@ -604,11 +611,3 @@ def md_bar(before: Optional[int], after: Optional[int], width: int = 10) -> str:
     filled = min(filled, width)
     bar = "\u2588" * filled + "\u2591" * (width - filled)
     return f"`{bar}` {pct:+.0f}%"
-
-
-def pct_bar(pct: float, width: int = 10) -> str:
-    """Render a unicode bar representing a percentage share."""
-    filled = round(pct / 100 * width)
-    filled = max(0, min(filled, width))
-    bar = "\u2588" * filled + "\u2591" * (width - filled)
-    return f"`{bar}` {pct:.1f}%"

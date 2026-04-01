@@ -63,7 +63,7 @@ def run_compare(args: Namespace) -> None:
         timeout=args.timeout,
     )
 
-    if not result.base_total_ns and not result.head_total_ns:
+    if not result.base_stats and not result.head_stats:
         logger.warning("No benchmark data collected. Check that benchmarks-root is configured and benchmarks exist.")
         sys.exit(1)
 
