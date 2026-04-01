@@ -57,32 +57,23 @@ class CompareResult:
             lines = [
                 f"### {bm_name}",
                 "",
-                "| | Min | Max | Mean | StdDev | Median | IQR | Outliers | OPS | Rounds | Iters |",
-                "|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+                "| | Min | Median | Mean | OPS | Rounds |",
+                "|:---|---:|---:|---:|---:|---:|",
                 f"| `{base_short}` (base) | {fmt_us(base_s.min_ns) if base_s else '-'}"
-                f" | {fmt_us(base_s.max_ns) if base_s else '-'}"
-                f" | {fmt_us(base_s.mean_ns) if base_s else '-'}"
-                f" | {fmt_us(base_s.stddev_ns) if base_s else '-'}"
                 f" | {fmt_us(base_s.median_ns) if base_s else '-'}"
-                f" | {fmt_us(base_s.iqr_ns) if base_s else '-'}"
-                f" | {base_s.outliers if base_s else '-'}"
+                f" | {fmt_us(base_s.mean_ns) if base_s else '-'}"
                 f" | {md_ops(base_s.mean_ns) if base_s else '-'}"
-                f" | {f'{base_s.rounds:,}' if base_s else '-'}"
-                f" | {base_s.iterations if base_s else '-'} |",
+                f" | {f'{base_s.rounds:,}' if base_s else '-'} |",
                 f"| `{head_short}` (head) | {fmt_us(head_s.min_ns) if head_s else '-'}"
-                f" | {fmt_us(head_s.max_ns) if head_s else '-'}"
-                f" | {fmt_us(head_s.mean_ns) if head_s else '-'}"
-                f" | {fmt_us(head_s.stddev_ns) if head_s else '-'}"
                 f" | {fmt_us(head_s.median_ns) if head_s else '-'}"
-                f" | {fmt_us(head_s.iqr_ns) if head_s else '-'}"
-                f" | {head_s.outliers if head_s else '-'}"
+                f" | {fmt_us(head_s.mean_ns) if head_s else '-'}"
                 f" | {md_ops(head_s.mean_ns) if head_s else '-'}"
-                f" | {f'{head_s.rounds:,}' if head_s else '-'}"
-                f" | {head_s.iterations if head_s else '-'} |",
+                f" | {f'{head_s.rounds:,}' if head_s else '-'} |",
                 f"| **Speedup** | **{md_speedup_val(base_s.min_ns, head_s.min_ns) if base_s and head_s else '-'}**"
-                f" | | **{md_speedup_val(base_s.mean_ns, head_s.mean_ns) if base_s and head_s else '-'}**"
-                f" | | **{md_speedup_val(base_s.median_ns, head_s.median_ns) if base_s and head_s else '-'}**"
-                f" | | | | | |",
+                f" | **{md_speedup_val(base_s.median_ns, head_s.median_ns) if base_s and head_s else '-'}**"
+                f" | **{md_speedup_val(base_s.mean_ns, head_s.mean_ns) if base_s and head_s else '-'}**"
+                f" | **{md_speedup_val(base_s.mean_ns, head_s.mean_ns) if base_s and head_s else '-'}**"
+                f" | |",
             ]
 
             # Per-function breakdown
@@ -483,57 +474,37 @@ def render_comparison(result: CompareResult) -> None:
         t1 = Table(title="End-to-End (per iteration)", border_style="blue", show_lines=True, expand=False)
         t1.add_column("Ref", style="bold cyan")
         t1.add_column("Min", justify="right")
-        t1.add_column("Max", justify="right")
-        t1.add_column("Mean", justify="right")
-        t1.add_column("StdDev", justify="right")
         t1.add_column("Median", justify="right")
-        t1.add_column("IQR", justify="right")
-        t1.add_column("Outliers", justify="right")
+        t1.add_column("Mean", justify="right")
         t1.add_column("OPS", justify="right")
         t1.add_column("Rounds", justify="right")
-        t1.add_column("Iters", justify="right")
 
         if base_s:
             t1.add_row(
                 f"{base_short} (base)",
                 fmt_time(base_s.min_ns),
-                fmt_time(base_s.max_ns),
-                fmt_time(base_s.mean_ns),
-                fmt_time(base_s.stddev_ns),
                 fmt_time(base_s.median_ns),
-                fmt_time(base_s.iqr_ns),
-                base_s.outliers,
+                fmt_time(base_s.mean_ns),
                 fmt_ops(base_s.mean_ns),
                 f"{base_s.rounds:,}",
-                str(base_s.iterations),
             )
         if head_s:
             t1.add_row(
                 f"{head_short} (head)",
                 fmt_time(head_s.min_ns),
-                fmt_time(head_s.max_ns),
-                fmt_time(head_s.mean_ns),
-                fmt_time(head_s.stddev_ns),
                 fmt_time(head_s.median_ns),
-                fmt_time(head_s.iqr_ns),
-                head_s.outliers,
+                fmt_time(head_s.mean_ns),
                 fmt_ops(head_s.mean_ns),
                 f"{head_s.rounds:,}",
-                str(head_s.iterations),
             )
         if base_s and head_s:
             t1.add_section()
             t1.add_row(
                 "[bold]Speedup[/bold]",
                 fmt_speedup(base_s.min_ns, head_s.min_ns),
-                "",
-                fmt_speedup(base_s.mean_ns, head_s.mean_ns),
-                "",
                 fmt_speedup(base_s.median_ns, head_s.median_ns),
-                "",
-                "",
+                fmt_speedup(base_s.mean_ns, head_s.mean_ns),
                 fmt_speedup_ops(base_s.mean_ns, head_s.mean_ns),
-                "",
                 "",
             )
         console.print(t1, justify="center")
