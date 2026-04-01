@@ -104,31 +104,43 @@ def speedup_critic(
     if baseline_timing_cv is not None and baseline_timing_cv > noise_floor:
         noise_floor = min(baseline_timing_cv, 0.30)
 
-    perf_gain = performance_gain(
-        original_runtime_ns=original_code_runtime, optimized_runtime_ns=candidate_result.best_test_runtime
-    )
+    # Cache frequently used attributes locally to avoid repeated attribute access
+    optimized_runtime = candidate_result.best_test_runtime
+
+    perf_gain = performance_gain(original_runtime_ns=original_code_runtime, optimized_runtime_ns=optimized_runtime)
     runtime_improved = perf_gain > noise_floor
 
     # Check runtime comparison with best so far
-    runtime_is_best = best_runtime_until_now is None or candidate_result.best_test_runtime < best_runtime_until_now
+    runtime_is_best = best_runtime_until_now is None or optimized_runtime < best_runtime_until_now
+
+    # Fast-path: if there is no async throughput data, runtime is the sole acceptance criteria.
+    if original_async_throughput is None or candidate_result.async_throughput is None:
+        return runtime_improved and runtime_is_best
+
+    # At this point async throughput data is available; acceptance is OR of runtime/throughput/concurrency
+    # Early return if runtime already qualifies to avoid extra work
+    if runtime_improved and runtime_is_best:
+        return True
+
+    # Throughput evaluation
 
     throughput_improved = True  # Default to True if no throughput data
     throughput_is_best = True  # Default to True if no throughput data
-
-    if original_async_throughput is not None and candidate_result.async_throughput is not None:
-        if original_async_throughput > 0:
+    original_thr = original_async_throughput
+    optimized_thr = candidate_result.async_throughput
+    if original_thr is not None and optimized_thr is not None:
+        if original_thr > 0:
             throughput_gain_value = throughput_gain(
-                original_throughput=original_async_throughput, optimized_throughput=candidate_result.async_throughput
+                original_throughput=original_thr, optimized_throughput=optimized_thr
             )
             throughput_improved = throughput_gain_value > MIN_THROUGHPUT_IMPROVEMENT_THRESHOLD
 
-        throughput_is_best = (
-            best_throughput_until_now is None or candidate_result.async_throughput > best_throughput_until_now
-        )
+        throughput_is_best = best_throughput_until_now is None or optimized_thr > best_throughput_until_now
+
+        if throughput_improved and throughput_is_best:
+            return True
 
     # Concurrency evaluation
-    concurrency_improved = False
-    concurrency_is_best = True
     if original_concurrency_metrics is not None and candidate_result.concurrency_metrics is not None:
         conc_gain = concurrency_gain(original_concurrency_metrics, candidate_result.concurrency_metrics)
         concurrency_improved = conc_gain > MIN_CONCURRENCY_IMPROVEMENT_THRESHOLD
@@ -136,14 +148,10 @@ def speedup_critic(
             best_concurrency_ratio_until_now is None
             or candidate_result.concurrency_metrics.concurrency_ratio > best_concurrency_ratio_until_now
         )
+        if concurrency_improved and concurrency_is_best:
+            return True
 
-    # Accept if ANY of: runtime, throughput, or concurrency improves significantly
-    if original_async_throughput is not None and candidate_result.async_throughput is not None:
-        throughput_acceptance = throughput_improved and throughput_is_best
-        runtime_acceptance = runtime_improved and runtime_is_best
-        concurrency_acceptance = concurrency_improved and concurrency_is_best
-        return throughput_acceptance or runtime_acceptance or concurrency_acceptance
-    return runtime_improved and runtime_is_best
+    return False
 
 
 def get_acceptance_reason(
