@@ -856,6 +856,23 @@ def test_speedup_critic_with_baseline_cv() -> None:
         baseline_timing_cv=0.15,
     )
 
+    # CV cap: even with 50% CV, noise floor is capped at 30% — a 40% speedup should pass
+    big_speedup_candidate = OptimizedCandidateResult(
+        max_loop_count=5,
+        best_test_runtime=60000,  # 40% faster
+        behavior_test_results=TestResults(),
+        benchmarking_test_results=TestResults(),
+        optimization_candidate_index=0,
+        total_candidate_timing=12,
+    )
+    assert speedup_critic(
+        big_speedup_candidate,
+        original_code_runtime,
+        best_runtime_until_now,
+        disable_gh_action_noise=True,
+        baseline_timing_cv=0.50,
+    )
+
 
 def _make_test_invocation(runtime: int, loop_index: int = 0, iteration_id: str = "iter1") -> FunctionTestInvocation:
     """Helper to create a FunctionTestInvocation with minimal required fields."""
@@ -910,16 +927,16 @@ def test_total_passed_runtime_median_even_count() -> None:
 
 
 def test_timing_coefficient_of_variation() -> None:
-    """Verify CV calculation for benchmark timing data."""
+    """Verify CV is computed per-test-case, not across all raw iterations."""
     import statistics
 
-    # Zero variance
+    # Zero variance within a single test case
     test_results = TestResults(
         test_results=[_make_test_invocation(1000, loop_index=i) for i in range(4)]
     )
     assert test_results.timing_coefficient_of_variation() == 0.0
 
-    # High variance
+    # Single test case with variance — CV is computed from its loop iterations
     runtimes_var = [100, 200, 100, 200]
     test_results_var = TestResults(
         test_results=[_make_test_invocation(rt, loop_index=i) for i, rt in enumerate(runtimes_var)]
@@ -930,3 +947,37 @@ def test_timing_coefficient_of_variation() -> None:
 
     # Empty results
     assert TestResults().timing_coefficient_of_variation() == 0.0
+
+
+def test_timing_cv_multi_test_case() -> None:
+    """CV should reflect per-test-case noise, not inter-test-case runtime differences."""
+    import statistics
+
+    # Two test cases with very different runtimes but low internal variance.
+    # Old (broken) approach: flatten [100, 100, 10000, 10000] → CV ≈ 1.30 (130%)
+    # New approach: test_a CV=0.0, test_b CV=0.0 → median=0.0
+    test_results = TestResults(
+        test_results=[
+            _make_test_invocation(100, loop_index=0, iteration_id="test_a"),
+            _make_test_invocation(100, loop_index=1, iteration_id="test_a"),
+            _make_test_invocation(10000, loop_index=0, iteration_id="test_b"),
+            _make_test_invocation(10000, loop_index=1, iteration_id="test_b"),
+        ]
+    )
+    # Both test cases have zero internal variance — the 100x difference in runtimes is not noise
+    assert test_results.timing_coefficient_of_variation() == 0.0
+
+    # Two test cases, one noisy and one stable — median picks the middle ground
+    test_results_mixed = TestResults(
+        test_results=[
+            _make_test_invocation(1000, loop_index=0, iteration_id="stable"),
+            _make_test_invocation(1000, loop_index=1, iteration_id="stable"),
+            _make_test_invocation(1000, loop_index=0, iteration_id="noisy"),
+            _make_test_invocation(2000, loop_index=1, iteration_id="noisy"),
+        ]
+    )
+    cv = test_results_mixed.timing_coefficient_of_variation()
+    # stable: CV=0.0, noisy: CV=stdev([1000,2000])/mean([1000,2000])
+    noisy_cv = statistics.stdev([1000, 2000]) / statistics.mean([1000, 2000])
+    expected_median = statistics.median([0.0, noisy_cv])
+    assert abs(cv - expected_median) < 0.001

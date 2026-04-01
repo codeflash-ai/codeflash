@@ -979,10 +979,14 @@ class TestResults(BaseModel):  # noqa: PLW1641
         )
 
     def timing_coefficient_of_variation(self) -> float:
-        """Calculate the coefficient of variation (CV) across all per-test-case median runtimes.
+        """Calculate the median per-test-case coefficient of variation (CV) of loop iterations.
 
-        CV = stdev / mean. A CV of 0.10 means 10% variance relative to the mean.
-        Returns 0.0 if there are fewer than 2 test cases with timing data.
+        For each test case, computes CV = stdev / mean of its loop iteration runtimes.
+        Returns the median CV across test cases. This measures actual measurement noise
+        (how much repeated runs of the same test vary) rather than inter-test-case
+        differences (which reflect different inputs, not noise).
+
+        Returns 0.0 if no test case has enough loop iterations to compute CV.
         """
         import statistics
 
@@ -990,17 +994,18 @@ class TestResults(BaseModel):  # noqa: PLW1641
         if not runtime_data:
             return 0.0
 
-        all_runtimes: list[int] = []
+        per_test_cvs: list[float] = []
         for runtimes in runtime_data.values():
-            all_runtimes.extend(runtimes)
+            if len(runtimes) < 2:
+                continue
+            mean = statistics.mean(runtimes)
+            if mean == 0:
+                continue
+            per_test_cvs.append(statistics.stdev(runtimes) / mean)
 
-        if len(all_runtimes) < 2:
+        if not per_test_cvs:
             return 0.0
-
-        mean = statistics.mean(all_runtimes)
-        if mean == 0:
-            return 0.0
-        return statistics.stdev(all_runtimes) / mean
+        return statistics.median(per_test_cvs)
 
     def effective_loop_count(self) -> int:
         """Calculate the effective number of complete loops.

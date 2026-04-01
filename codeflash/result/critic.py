@@ -100,8 +100,9 @@ def speedup_critic(
 
     # Adapt noise floor to observed baseline variance: if the baseline benchmark has
     # high variance, require proportionally larger speedups to avoid accepting noise.
+    # Cap at 30% to avoid rejecting genuine large speedups on noisy CI runners.
     if baseline_timing_cv is not None and baseline_timing_cv > noise_floor:
-        noise_floor = baseline_timing_cv
+        noise_floor = min(baseline_timing_cv, 0.30)
 
     perf_gain = performance_gain(
         original_runtime_ns=original_code_runtime, optimized_runtime_ns=candidate_result.best_test_runtime
