@@ -863,6 +863,10 @@ def extract_class_context(file_path: Path, class_name: str, analyzer: JavaAnalyz
 
 # Maximum token budget for imported type skeletons to avoid bloating testgen context
 IMPORTED_SKELETON_TOKEN_BUDGET = 4000
+# Maximum types to expand from a single wildcard import before filtering to referenced types only.
+# Packages with more types than this (e.g. org.jooq with 870+) would waste minutes of disk I/O
+# and almost always exceed the token budget.
+MAX_WILDCARD_TYPES_UNFILTERED = 50
 
 
 def _extract_type_names_from_code(code: str, analyzer: JavaAnalyzer) -> set[str]:
@@ -932,11 +936,29 @@ def get_java_imported_type_skeletons(
     resolved_imports: list = []
     for imp in imports:
         if imp.is_wildcard:
-            # Expand wildcard imports (e.g., com.aerospike.client.policy.*) into individual types
-            expanded = resolver.expand_wildcard_import(imp.import_path)
+            # First try unfiltered expansion with a cap. If the package is small enough, take all types.
+            # If it's huge (e.g. org.jooq.* with 870+ types), filter to only types referenced in the target code.
+            expanded = resolver.expand_wildcard_import(imp.import_path, max_types=MAX_WILDCARD_TYPES_UNFILTERED + 1)
+            if len(expanded) > MAX_WILDCARD_TYPES_UNFILTERED:
+                if priority_types:
+                    expanded = resolver.expand_wildcard_import(imp.import_path, filter_names=priority_types)
+                    logger.debug(
+                        "Wildcard %s.* exceeds %d types, filtered to %d referenced types",
+                        imp.import_path,
+                        MAX_WILDCARD_TYPES_UNFILTERED,
+                        len(expanded),
+                    )
+                else:
+                    expanded = expanded[:MAX_WILDCARD_TYPES_UNFILTERED]
+                    logger.debug(
+                        "Wildcard %s.* exceeds %d types, capped (no target types to filter by)",
+                        imp.import_path,
+                        MAX_WILDCARD_TYPES_UNFILTERED,
+                    )
+            elif expanded:
+                logger.debug("Expanded wildcard import %s.* into %d types", imp.import_path, len(expanded))
             if expanded:
                 resolved_imports.extend(expanded)
-                logger.debug("Expanded wildcard import %s.* into %d types", imp.import_path, len(expanded))
             continue
 
         resolved = resolver.resolve_import(imp)
