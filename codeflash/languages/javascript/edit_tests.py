@@ -258,12 +258,28 @@ def inject_test_globals(
         )
 
     for test in generated_tests.generated_tests:
-        # Skip injection if the source already has the import (LLM may have included it)
-        if global_import.strip() not in test.generated_original_test_source:
+        # Check if ANY framework import already exists (don't rely on exact string match)
+        # Use regex patterns defined below to detect imports even with different identifier orders
+        has_vitest_import = bool(_VITEST_IMPORT_RE.search(test.generated_original_test_source)) or bool(
+            _VITEST_REQUIRE_RE.search(test.generated_original_test_source)
+        )
+        has_jest_import = bool(_JEST_GLOBALS_IMPORT_RE.search(test.generated_original_test_source)) or bool(
+            _JEST_GLOBALS_REQUIRE_RE.search(test.generated_original_test_source)
+        )
+        # For mocha, check if assert import exists
+        has_mocha_import = test_framework == "mocha" and (
+            "from 'node:assert" in test.generated_original_test_source
+            or 'from "node:assert' in test.generated_original_test_source
+            or "require('node:assert" in test.generated_original_test_source
+            or 'require("node:assert' in test.generated_original_test_source
+        )
+
+        # Only inject if no framework import exists
+        should_inject = not (has_vitest_import or has_jest_import or has_mocha_import)
+
+        if should_inject:
             test.generated_original_test_source = global_import + test.generated_original_test_source
-        if global_import.strip() not in test.instrumented_behavior_test_source:
             test.instrumented_behavior_test_source = global_import + test.instrumented_behavior_test_source
-        if global_import.strip() not in test.instrumented_perf_test_source:
             test.instrumented_perf_test_source = global_import + test.instrumented_perf_test_source
     return generated_tests
 
