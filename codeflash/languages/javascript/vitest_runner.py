@@ -118,10 +118,9 @@ def _ensure_runtime_files(project_root: Path) -> None:
         if result.returncode == 0:
             logger.debug(f"Installed codeflash using {install_cmd[0]}")
             return
-        # Log stderr at ERROR level so it's visible to users
-        logger.error(f"Failed to install codeflash (exit code {result.returncode}):\n{result.stderr.strip()}")
+        logger.warning(f"Failed to install codeflash: {result.stderr}")
     except Exception as e:
-        logger.error(f"Error installing codeflash: {e}")
+        logger.warning(f"Error installing codeflash: {e}")
 
     logger.error(f"Could not install codeflash. Please install it manually: {' '.join(install_cmd)}")
 
