@@ -181,6 +181,41 @@ def find_node_modules_with_package(project_root: Path, package_name: str) -> Pat
     return None
 
 
+def _is_pnpm_workspace(project_root: Path) -> bool:
+    """Check if project is a pnpm workspace root.
+
+    Args:
+        project_root: The project root directory.
+
+    Returns:
+        True if pnpm-workspace.yaml exists.
+
+    """
+    return (project_root / "pnpm-workspace.yaml").exists()
+
+
+def _get_local_codeflash_package_path() -> Path | None:
+    """Get path to local codeflash package in dev environment.
+
+    Returns:
+        Path to local codeflash package if in dev mode, None otherwise.
+
+    """
+    try:
+        import codeflash as cf
+
+        codeflash_python_path = Path(cf.__file__).parent
+        # Check if running from /opt/codeflash/ (dev environment)
+        if "/opt/codeflash" in str(codeflash_python_path):
+            # Local package is at /opt/codeflash/packages/codeflash
+            local_pkg = codeflash_python_path.parent / "packages" / "codeflash"
+            if local_pkg.exists() and (local_pkg / "package.json").exists():
+                return local_pkg
+    except Exception:
+        pass
+    return None
+
+
 def get_package_install_command(project_root: Path, package: str, dev: bool = True) -> list[str]:
     """Get the correct install command for the project's package manager.
 
@@ -195,10 +230,19 @@ def get_package_install_command(project_root: Path, package: str, dev: bool = Tr
     """
     pkg_manager = determine_js_package_manager(project_root)
 
+    # For codeflash package in dev environment, use local path
+    if package == "codeflash":
+        local_pkg = _get_local_codeflash_package_path()
+        if local_pkg:
+            package = str(local_pkg)
+
     if pkg_manager == JsPackageManager.PNPM:
         cmd = ["pnpm", "add", package]
         if dev:
             cmd.append("--save-dev")
+        # Add workspace flag if installing to workspace root
+        if _is_pnpm_workspace(project_root):
+            cmd.append("-w")
         return cmd
     if pkg_manager == JsPackageManager.YARN:
         cmd = ["yarn", "add", package]
