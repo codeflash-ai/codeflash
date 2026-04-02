@@ -469,7 +469,7 @@ class GradleStrategy(BuildToolStrategy):
             logger.error("Gradle not found — cannot pre-install multi-module dependencies")
             return False
 
-        cmd = [gradle, f":{test_module}:classes", "-x", "test", "--build-cache", "--no-daemon"]
+        cmd = [gradle, f":{test_module}:classes", "-x", "test", "--no-build-cache", "--no-daemon"]
         cmd.extend(["--init-script", _get_skip_validation_init_script()])
 
         logger.info("Pre-installing multi-module dependencies: %s (module: %s)", build_root, test_module)
@@ -504,9 +504,9 @@ class GradleStrategy(BuildToolStrategy):
             return subprocess.CompletedProcess(args=["gradle"], returncode=-1, stdout="", stderr="Gradle not found")
 
         if test_module:
-            cmd = [gradle, f":{test_module}:testClasses", "--no-daemon"]
+            cmd = [gradle, f":{test_module}:testClasses", "--no-build-cache", "--no-daemon"]
         else:
-            cmd = [gradle, "testClasses", "--no-daemon"]
+            cmd = [gradle, "testClasses", "--no-build-cache", "--no-daemon"]
         cmd.extend(["--init-script", _get_skip_validation_init_script()])
 
         logger.debug("Compiling tests: %s in %s", " ".join(cmd), build_root)
@@ -528,9 +528,9 @@ class GradleStrategy(BuildToolStrategy):
             return subprocess.CompletedProcess(args=["gradle"], returncode=-1, stdout="", stderr="Gradle not found")
 
         if test_module:
-            cmd = [gradle, f":{test_module}:classes", "--no-daemon"]
+            cmd = [gradle, f":{test_module}:classes", "--no-build-cache", "--no-daemon"]
         else:
-            cmd = [gradle, "classes", "--no-daemon"]
+            cmd = [gradle, "classes", "--no-build-cache", "--no-daemon"]
         cmd.extend(["--init-script", _get_skip_validation_init_script()])
 
         logger.debug("Compiling source only: %s in %s", " ".join(cmd), build_root)
@@ -574,7 +574,7 @@ class GradleStrategy(BuildToolStrategy):
             else:
                 task = "codeflashPrintClasspath"
 
-            cmd = [gradle, "--init-script", init_script_path, task, "-q", "--no-daemon"]
+            cmd = [gradle, "--init-script", init_script_path, task, "-q", "--no-build-cache", "--no-daemon"]
 
             logger.debug("Getting classpath: %s", " ".join(cmd))
 
@@ -725,7 +725,7 @@ class GradleStrategy(BuildToolStrategy):
             with os.fdopen(init_fd, "w", encoding="utf-8") as f:
                 f.write(init_script_content)
 
-            cmd = [gradle, task, "--no-daemon", "--rerun", "--init-script", init_path]
+            cmd = [gradle, task, "--no-build-cache", "--no-daemon", "--rerun", "--init-script", init_path]
             cmd.extend(["--init-script", _get_skip_validation_init_script()])
 
             # --continue ensures Gradle keeps going even if some tests fail.
@@ -952,7 +952,7 @@ class GradleStrategy(BuildToolStrategy):
                     raise ValueError(msg)
 
         gradle = self.find_executable(project_root) or "gradle"
-        cmd = [gradle, "test", "--no-daemon"]
+        cmd = [gradle, "test", "--no-build-cache", "--no-daemon"]
         if test_classes:
             for cls in test_classes:
                 cmd.extend(["--tests", cls])

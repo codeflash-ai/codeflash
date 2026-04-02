@@ -45,6 +45,7 @@ _MAVEN_VALIDATION_SKIP_FLAGS = [
     "-Derrorprone.skip=true",
     "-Dmaven.compiler.failOnWarning=false",
     "-Dmaven.compiler.showWarnings=false",
+    "-Dmaven.build.cache.enabled=false",
 ]
 
 # Cache for classpath strings — keyed on (maven_root, test_module).
