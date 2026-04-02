@@ -27,6 +27,8 @@ from codeflash.languages.java.discovery import discover_functions_from_source
 from codeflash.languages.java.instrumentation import (
     _add_behavior_instrumentation,
     _add_timing_instrumentation,
+    _erase_method_type_params,
+    _extract_return_type,
     create_benchmark_test,
     instrument_existing_test,
     instrument_for_behavior,
@@ -3485,3 +3487,114 @@ public class SpinWaitTest__perfonlyinstrumented {
             assert math.isclose(duration, 100_000_000, rel_tol=0.15), (
                 f"Long spin measured {duration}ns, expected ~100_000_000ns (15% tolerance)"
             )
+
+
+class TestEraseMethodTypeParams:
+    """Tests for _erase_method_type_params — erasing method-level type variables from return types."""
+
+    def test_generic_return_type_list(self):
+        """Generic method <T> List<T> should have T erased to ? in return type."""
+        source = """public class CollectionUtils {
+    public static <T extends Comparable<T>> List<T> mergeSorted(List<T> a, List<T> b) {
+        return null;
+    }
+}
+"""
+        from codeflash.languages.java.parser import get_java_analyzer
+
+        analyzer = get_java_analyzer()
+        methods = analyzer.find_methods(source)
+        assert len(methods) == 1
+        result = _erase_method_type_params(methods[0].return_type, methods[0])
+        assert result == "List<?>", f"Expected 'List<?>' but got '{result}'"
+
+    def test_bare_type_variable_erased_to_object(self):
+        """Generic method <T> T max(...) should erase bare T to Object."""
+        source = """public class Utils {
+    public static <T extends Comparable<T>> T max(T a, T b) {
+        return a.compareTo(b) >= 0 ? a : b;
+    }
+}
+"""
+        from codeflash.languages.java.parser import get_java_analyzer
+
+        analyzer = get_java_analyzer()
+        methods = analyzer.find_methods(source)
+        assert len(methods) == 1
+        result = _erase_method_type_params(methods[0].return_type, methods[0])
+        assert result == "Object", f"Expected 'Object' but got '{result}'"
+
+    def test_multiple_type_params(self):
+        """Generic method <K, V> Map<K, V> should erase both K and V."""
+        source = """public class Utils {
+    public static <K, V> Map<K, V> combine(Map<K, V> a, Map<K, V> b) {
+        return null;
+    }
+}
+"""
+        from codeflash.languages.java.parser import get_java_analyzer
+
+        analyzer = get_java_analyzer()
+        methods = analyzer.find_methods(source)
+        assert len(methods) == 1
+        result = _erase_method_type_params(methods[0].return_type, methods[0])
+        assert result == "Map<?, ?>", f"Expected 'Map<?, ?>' but got '{result}'"
+
+    def test_non_generic_method_unchanged(self):
+        """Non-generic method return type should be unchanged."""
+        source = """public class Calculator {
+    public int add(int a, int b) {
+        return a + b;
+    }
+}
+"""
+        from codeflash.languages.java.parser import get_java_analyzer
+
+        analyzer = get_java_analyzer()
+        methods = analyzer.find_methods(source)
+        assert len(methods) == 1
+        result = _erase_method_type_params("int", methods[0])
+        assert result == "int", f"Expected 'int' but got '{result}'"
+
+    def test_class_level_generics_not_erased(self):
+        """Class-level type params should NOT be erased (only method-level ones)."""
+        source = """public class Box<T> {
+    public T getValue() {
+        return null;
+    }
+}
+"""
+        from codeflash.languages.java.parser import get_java_analyzer
+
+        analyzer = get_java_analyzer()
+        methods = analyzer.find_methods(source)
+        assert len(methods) == 1
+        # T is a class-level param, not method-level — should not be erased
+        result = _erase_method_type_params("T", methods[0])
+        assert result == "T", f"Expected 'T' (class-level generic unchanged) but got '{result}'"
+
+
+class TestExtractReturnTypeGeneric:
+    """Test that _extract_return_type erases method-level type params."""
+
+    def test_extract_return_type_generic_method(self, tmp_path):
+        """_extract_return_type should return erased type for generic methods."""
+        java_file = tmp_path / "CollectionUtils.java"
+        java_file.write_text("""package com.example;
+import java.util.List;
+
+public class CollectionUtils {
+    public static <T extends Comparable<T>> List<T> mergeSorted(List<T> a, List<T> b) {
+        return null;
+    }
+}
+""")
+
+        class FakeFunc:
+            file_path = java_file
+            function_name = "mergeSorted"
+            qualified_name = "CollectionUtils.mergeSorted"
+            parents = []
+
+        result = _extract_return_type(FakeFunc())
+        assert result == "List<?>", f"Expected 'List<?>' but got '{result}'"
