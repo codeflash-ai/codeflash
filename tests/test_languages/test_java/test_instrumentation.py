@@ -22,7 +22,6 @@ os.environ["CODEFLASH_API_KEY"] = "cf-test-key"
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import Language
 from codeflash.languages.current import set_current_language
-from codeflash.languages.java.maven_strategy import MavenStrategy
 from codeflash.languages.java.discovery import discover_functions_from_source
 from codeflash.languages.java.instrumentation import (
     _add_behavior_instrumentation,
@@ -34,6 +33,7 @@ from codeflash.languages.java.instrumentation import (
     instrument_generated_java_test,
     remove_instrumentation,
 )
+from codeflash.languages.java.maven_strategy import MavenStrategy
 
 
 class TestInstrumentForBehavior:
@@ -2177,7 +2177,7 @@ public class AccentTest {
 
 # Skip all E2E tests if Maven is not available
 requires_maven = pytest.mark.skipif(
-    MavenStrategy().find_executable(Path(".")) is None, reason="Maven not found - skipping execution tests"
+    MavenStrategy().find_executable(Path()) is None, reason="Maven not found - skipping execution tests"
 )
 
 
@@ -3485,3 +3485,225 @@ public class SpinWaitTest__perfonlyinstrumented {
             assert math.isclose(duration, 100_000_000, rel_tol=0.15), (
                 f"Long spin measured {duration}ns, expected ~100_000_000ns (15% tolerance)"
             )
+
+
+class TestVoidMethodInstrumentation:
+    """Tests for void method instrumentation — behavior mode captures receiver state."""
+
+    def test_behavior_mode_void_method_serializes_receiver(self, tmp_path: Path):
+        """Void method instrumentation should serialize the receiver, not a return value."""
+        source_file = (tmp_path / "Sorter.java").resolve()
+        source_file.write_text(
+            "public class Sorter {\n"
+            "    public void sort(int[] data) {\n"
+            "        java.util.Arrays.sort(data);\n"
+            "    }\n"
+            "}\n",
+            encoding="utf-8",
+        )
+
+        test_file = (tmp_path / "SorterTest.java").resolve()
+        test_source = (
+            "import org.junit.jupiter.api.Test;\n"
+            "\n"
+            "public class SorterTest {\n"
+            "    @Test\n"
+            "    public void testSort() {\n"
+            "        Sorter sorter = new Sorter();\n"
+            "        int[] data = {3, 1, 2};\n"
+            "        sorter.sort(data);\n"
+            "    }\n"
+            "}\n"
+        )
+        test_file.write_text(test_source, encoding="utf-8")
+
+        func = FunctionToOptimize(
+            function_name="sort",
+            file_path=source_file,
+            starting_line=2,
+            ending_line=4,
+            parents=[],
+            is_method=True,
+            language="java",
+        )
+
+        success, result = instrument_existing_test(
+            test_string=test_source, function_to_optimize=func, mode="behavior", test_path=test_file
+        )
+
+        assert success is True
+        assert result is not None
+        # Void method: no "Object _cf_result" variable declaration
+        assert "Object _cf_result" not in result
+        # Void method: bare call without assignment
+        assert "sorter.sort(data);" in result
+        # Void method: serializes the receiver (sorter), not a result variable
+        assert "com.codeflash.Serializer.serialize((Object) sorter)" in result
+
+    def test_behavior_mode_void_method_implicit_this_receiver(self, tmp_path: Path):
+        """Void method with no explicit receiver uses 'this' for serialization."""
+        source_file = (tmp_path / "Container.java").resolve()
+        source_file.write_text(
+            "public class Container {\n"
+            "    public void clear() {\n"
+            "        // clears internal state\n"
+            "    }\n"
+            "}\n",
+            encoding="utf-8",
+        )
+
+        test_file = (tmp_path / "ContainerTest.java").resolve()
+        test_source = (
+            "import org.junit.jupiter.api.Test;\n"
+            "\n"
+            "public class ContainerTest {\n"
+            "    @Test\n"
+            "    public void testClear() {\n"
+            "        clear();\n"
+            "    }\n"
+            "}\n"
+        )
+        test_file.write_text(test_source, encoding="utf-8")
+
+        func = FunctionToOptimize(
+            function_name="clear",
+            file_path=source_file,
+            starting_line=2,
+            ending_line=4,
+            parents=[],
+            is_method=True,
+            language="java",
+        )
+
+        success, result = instrument_existing_test(
+            test_string=test_source, function_to_optimize=func, mode="behavior", test_path=test_file
+        )
+
+        assert success is True
+        assert result is not None
+        # Implicit receiver defaults to 'this'
+        assert "com.codeflash.Serializer.serialize((Object) this)" in result
+
+    def test_behavior_mode_non_void_still_captures_result(self, tmp_path: Path):
+        """Non-void methods should still capture the return value (not the receiver)."""
+        source_file = (tmp_path / "Calculator.java").resolve()
+        source_file.write_text(
+            "public class Calculator {\n"
+            "    public int add(int a, int b) {\n"
+            "        return a + b;\n"
+            "    }\n"
+            "}\n",
+            encoding="utf-8",
+        )
+
+        test_file = (tmp_path / "CalculatorTest.java").resolve()
+        test_source = (
+            "import org.junit.jupiter.api.Test;\n"
+            "\n"
+            "public class CalculatorTest {\n"
+            "    @Test\n"
+            "    public void testAdd() {\n"
+            "        Calculator calc = new Calculator();\n"
+            "        assertEquals(4, calc.add(2, 2));\n"
+            "    }\n"
+            "}\n"
+        )
+        test_file.write_text(test_source, encoding="utf-8")
+
+        func = FunctionToOptimize(
+            function_name="add",
+            file_path=source_file,
+            starting_line=2,
+            ending_line=4,
+            parents=[],
+            is_method=True,
+            language="java",
+        )
+
+        success, result = instrument_existing_test(
+            test_string=test_source, function_to_optimize=func, mode="behavior", test_path=test_file
+        )
+
+        assert success is True
+        assert result is not None
+        # Non-void: captures return value, not receiver
+        assert "Object _cf_result1_1" in result
+        assert "_cf_result1_1 = calc.add(2, 2);" in result
+        assert "com.codeflash.Serializer.serialize((Object) _cf_result1_1)" in result
+
+    def test_void_discovery_with_require_return_false(self):
+        """Void methods should be discovered when require_return=False."""
+        from codeflash.languages.base import FunctionFilterCriteria
+        from codeflash.languages.java.discovery import discover_functions_from_source
+
+        source = (
+            "public class Example {\n"
+            "    public void doSomething() {\n"
+            '        System.out.println("hello");\n'
+            "    }\n"
+            "\n"
+            "    public int getValue() {\n"
+            "        return 42;\n"
+            "    }\n"
+            "}\n"
+        )
+
+        criteria_no_return = FunctionFilterCriteria(require_return=False)
+        functions = discover_functions_from_source(source, filter_criteria=criteria_no_return)
+        method_names = {f.function_name for f in functions}
+        assert "doSomething" in method_names
+        assert "getValue" in method_names
+
+        criteria_require_return = FunctionFilterCriteria(require_return=True)
+        functions = discover_functions_from_source(source, filter_criteria=criteria_require_return)
+        method_names = {f.function_name for f in functions}
+        assert "doSomething" not in method_names
+        assert "getValue" in method_names
+
+    def test_performance_mode_void_method_generates_valid_code(self, tmp_path: Path):
+        """Void methods in performance mode should generate valid timing code."""
+        source_file = (tmp_path / "Sorter.java").resolve()
+        source_file.write_text(
+            "public class Sorter {\n"
+            "    public void sort(int[] data) {\n"
+            "        java.util.Arrays.sort(data);\n"
+            "    }\n"
+            "}\n",
+            encoding="utf-8",
+        )
+
+        test_file = (tmp_path / "SorterTest.java").resolve()
+        test_source = (
+            "import org.junit.jupiter.api.Test;\n"
+            "\n"
+            "public class SorterTest {\n"
+            "    @Test\n"
+            "    public void testSort() {\n"
+            "        Sorter sorter = new Sorter();\n"
+            "        int[] data = {3, 1, 2};\n"
+            "        sorter.sort(data);\n"
+            "    }\n"
+            "}\n"
+        )
+        test_file.write_text(test_source, encoding="utf-8")
+
+        func = FunctionToOptimize(
+            function_name="sort",
+            file_path=source_file,
+            starting_line=2,
+            ending_line=4,
+            parents=[],
+            is_method=True,
+            language="java",
+        )
+
+        success, result = instrument_existing_test(
+            test_string=test_source, function_to_optimize=func, mode="performance", test_path=test_file
+        )
+
+        assert success is True
+        assert result is not None
+        # Performance mode: no "var _cf_result =" for void
+        assert "var _cf_result" not in result
+        # The test should still contain the bare call
+        assert "sorter.sort(data);" in result

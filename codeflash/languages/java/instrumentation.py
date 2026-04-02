@@ -337,22 +337,39 @@ def wrap_target_calls_with_treesitter(
         orig_line = body_lines[line_idx]
         line_indent_str = " " * (len(orig_line) - len(orig_line.lstrip()))
 
+        is_void = target_return_type == "void"
         var_name = f"_cf_result{iter_id}_{call_counter}"
+        receiver = call.get("receiver", "this")
         cast_type = _infer_array_cast_type(orig_line)
-        if not cast_type and target_return_type and target_return_type != "void":
+        if not cast_type and target_return_type and not is_void:
             cast_type = target_return_type
         var_with_cast = f"({cast_type}){var_name}" if cast_type else var_name
 
-        capture_stmt_with_decl = f"var {var_name} = {call['full_call']};"
-        capture_stmt_assign = f"{var_name} = {call['full_call']};"
-        if precise_call_timing:
-            serialize_stmt = f"_cf_serializedResult{iter_id}_{call_counter} = com.codeflash.Serializer.serialize((Object) {var_name});"
-            start_stmt = f"_cf_start{iter_id}_{call_counter} = System.nanoTime();"
-            end_stmt = f"_cf_end{iter_id}_{call_counter} = System.nanoTime();"
+        if is_void:
+            bare_call_stmt = f"{call['full_call']};"
+            if precise_call_timing:
+                serialize_stmt = f"_cf_serializedResult{iter_id}_{call_counter} = com.codeflash.Serializer.serialize((Object) {receiver});"
+                start_stmt = f"_cf_start{iter_id}_{call_counter} = System.nanoTime();"
+                end_stmt = f"_cf_end{iter_id}_{call_counter} = System.nanoTime();"
+            else:
+                serialize_stmt = (
+                    f"_cf_serializedResult{iter_id} = com.codeflash.Serializer.serialize((Object) {receiver});"
+                )
+                start_stmt = f"_cf_start{iter_id} = System.nanoTime();"
+                end_stmt = f"_cf_end{iter_id} = System.nanoTime();"
         else:
-            serialize_stmt = f"_cf_serializedResult{iter_id} = com.codeflash.Serializer.serialize((Object) {var_name});"
-            start_stmt = f"_cf_start{iter_id} = System.nanoTime();"
-            end_stmt = f"_cf_end{iter_id} = System.nanoTime();"
+            capture_stmt_with_decl = f"var {var_name} = {call['full_call']};"
+            capture_stmt_assign = f"{var_name} = {call['full_call']};"
+            if precise_call_timing:
+                serialize_stmt = f"_cf_serializedResult{iter_id}_{call_counter} = com.codeflash.Serializer.serialize((Object) {var_name});"
+                start_stmt = f"_cf_start{iter_id}_{call_counter} = System.nanoTime();"
+                end_stmt = f"_cf_end{iter_id}_{call_counter} = System.nanoTime();"
+            else:
+                serialize_stmt = (
+                    f"_cf_serializedResult{iter_id} = com.codeflash.Serializer.serialize((Object) {var_name});"
+                )
+                start_stmt = f"_cf_start{iter_id} = System.nanoTime();"
+                end_stmt = f"_cf_end{iter_id} = System.nanoTime();"
 
         if call["parent_type"] == "expression_statement":
             es_start = call["_es_start_char"]
@@ -360,20 +377,36 @@ def wrap_target_calls_with_treesitter(
             if precise_call_timing:
                 # No indent on first line — body_text[:es_start] already has leading whitespace.
                 # Subsequent lines get line_indent_str.
-                var_decls = [
-                    f"Object {var_name} = null;",
-                    f"long _cf_end{iter_id}_{call_counter} = -1;",
-                    f"long _cf_start{iter_id}_{call_counter} = 0;",
-                    f"byte[] _cf_serializedResult{iter_id}_{call_counter} = null;",
-                ]
+                if is_void:
+                    var_decls = [
+                        f"long _cf_end{iter_id}_{call_counter} = -1;",
+                        f"long _cf_start{iter_id}_{call_counter} = 0;",
+                        f"byte[] _cf_serializedResult{iter_id}_{call_counter} = null;",
+                    ]
+                else:
+                    var_decls = [
+                        f"Object {var_name} = null;",
+                        f"long _cf_end{iter_id}_{call_counter} = -1;",
+                        f"long _cf_start{iter_id}_{call_counter} = 0;",
+                        f"byte[] _cf_serializedResult{iter_id}_{call_counter} = null;",
+                    ]
                 start_marker = f'System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + "." + _cf_test{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":{inv_id}" + "######$!");'
-                try_block = [
-                    "try {",
-                    f"    {start_stmt}",
-                    f"    {capture_stmt_assign}",
-                    f"    {end_stmt}",
-                    f"    {serialize_stmt}",
-                ]
+                if is_void:
+                    try_block = [
+                        "try {",
+                        f"    {start_stmt}",
+                        f"    {bare_call_stmt}",
+                        f"    {end_stmt}",
+                        f"    {serialize_stmt}",
+                    ]
+                else:
+                    try_block = [
+                        "try {",
+                        f"    {start_stmt}",
+                        f"    {capture_stmt_assign}",
+                        f"    {end_stmt}",
+                        f"    {serialize_stmt}",
+                    ]
                 finally_block = _generate_sqlite_write_code(
                     iter_id, call_counter, "", class_name, func_name, test_method_name, invocation_id=inv_id
                 )
@@ -381,10 +414,17 @@ def wrap_target_calls_with_treesitter(
                 replacement = (
                     all_lines[0] + "\n" + "\n".join(f"{line_indent_str}{repl_line}" for repl_line in all_lines[1:])
                 )
+            elif is_void:
+                replacement = f"{bare_call_stmt} {serialize_stmt}"
             else:
                 replacement = f"{capture_stmt_with_decl} {serialize_stmt}"
             body_text = body_text[:es_start] + replacement + body_text[es_end:]
         else:
+            if is_void:
+                # Void calls cannot be embedded in expressions in valid Java — skip instrumentation
+                logger.warning("Skipping instrumentation of embedded void call: %s", call["full_call"])
+                continue
+
             # Embedded call: replace call with variable, then insert capture lines before the line
             call_start = call["_call_start_char"]
             call_end = call["_call_end_char"]
@@ -451,6 +491,8 @@ def _collect_calls(
                 if parent_type == "expression_statement":
                     es_start = parent.start_byte - prefix_len
                     es_end = parent.end_byte - prefix_len
+                object_node = node.child_by_field_name("object")
+                receiver = analyzer.get_node_text(object_node, wrapper_bytes) if object_node else "this"
                 out.append(
                     {
                         "start_byte": start,
@@ -461,6 +503,7 @@ def _collect_calls(
                         "in_complex": _is_inside_complex_expression(node),
                         "es_start_byte": es_start,
                         "es_end_byte": es_end,
+                        "receiver": receiver,
                     }
                 )
     for child in node.children:
