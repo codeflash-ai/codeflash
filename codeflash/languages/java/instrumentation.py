@@ -391,17 +391,50 @@ def wrap_target_calls_with_treesitter(
             line_char_start = call["_line_char_start"]
 
             if precise_call_timing:
-                prefix_lines = [
-                    f"{line_indent_str}Object {var_name} = null;",
+                # For embedded calls, the original line uses the captured variable inline
+                # (e.g., builder().model("x") becomes _cf_result.model("x")).
+                # Using `Object` loses the type and breaks method chaining (builder pattern).
+                # Fix: use `var` to capture with type inference inside the try block, and
+                # move the original line (with call replaced) INTO the try block so the
+                # `var`-typed variable is in scope. A separate Object variable handles
+                # serialization in the finally block.
+                #
+                # Generated structure:
+                #   Object _cf_obj = null;
+                #   try {
+                #       var _cf_result = targetCall();
+                #       _cf_obj = _cf_result;
+                #       serialize(_cf_obj);
+                #       <original line with call replaced by _cf_result>
+                #   } finally { ... }
+                obj_var = f"_cf_obj{iter_id}_{call_counter}"
+                typed_capture = f"var {var_name} = {call['full_call']};"
+                obj_assign = f"{obj_var} = {var_name};"
+                typed_serialize = f"_cf_serializedResult{iter_id}_{call_counter} = com.codeflash.Serializer.serialize((Object) {var_name});"
+
+                # Step 1: Replace the call in the original line with the typed var
+                modified_line_text = body_text[line_char_start:]
+                # Adjust offsets relative to line start
+                rel_call_start = call_start - line_char_start
+                rel_call_end = call_end - line_char_start
+                modified_line_text_before_eol = modified_line_text.split("\n", 1)
+                orig_line_text = modified_line_text_before_eol[0]
+                # Replace the call within the original line
+                orig_line_with_var = orig_line_text[:rel_call_start] + var_name + orig_line_text[rel_call_end:]
+
+                pre_lines = [
+                    f"{line_indent_str}Object {obj_var} = null;",
                     f"{line_indent_str}long _cf_end{iter_id}_{call_counter} = -1;",
                     f"{line_indent_str}long _cf_start{iter_id}_{call_counter} = 0;",
                     f"{line_indent_str}byte[] _cf_serializedResult{iter_id}_{call_counter} = null;",
                     f'{line_indent_str}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + "." + _cf_test{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":{inv_id}" + "######$!");',
                     f"{line_indent_str}try {{",
                     f"{line_indent_str}    {start_stmt}",
-                    f"{line_indent_str}    {capture_stmt_assign}",
+                    f"{line_indent_str}    {typed_capture}",
                     f"{line_indent_str}    {end_stmt}",
-                    f"{line_indent_str}    {serialize_stmt}",
+                    f"{line_indent_str}    {obj_assign}",
+                    f"{line_indent_str}    {typed_serialize}",
+                    f"{line_indent_str}    {orig_line_with_var.strip()}",
                 ]
                 finally_lines = _generate_sqlite_write_code(
                     iter_id,
@@ -412,15 +445,23 @@ def wrap_target_calls_with_treesitter(
                     test_method_name,
                     invocation_id=inv_id,
                 )
-                prefix_lines.extend(finally_lines)
+                pre_lines.extend(finally_lines)
+
+                # Replace the entire original line with the instrumented block
+                # Find the end of the original line
+                next_newline = body_text.find("\n", line_char_start)
+                if next_newline == -1:
+                    next_newline = len(body_text)
+                replacement_text = "\n".join(pre_lines)
+                body_text = body_text[:line_char_start] + replacement_text + body_text[next_newline:]
             else:
                 prefix_lines = [f"{line_indent_str}{capture_stmt_with_decl}", f"{line_indent_str}{serialize_stmt}"]
 
-            # Step 1: Replace the call with the variable (at higher offset, safe to do first)
-            body_text = body_text[:call_start] + var_with_cast + body_text[call_end:]
-            # Step 2: Insert prefix lines before the line containing the call (at lower offset)
-            prefix_text = "\n".join(prefix_lines) + "\n"
-            body_text = body_text[:line_char_start] + prefix_text + body_text[line_char_start:]
+                # Step 1: Replace the call with the variable (at higher offset, safe to do first)
+                body_text = body_text[:call_start] + var_with_cast + body_text[call_end:]
+                # Step 2: Insert prefix lines before the line containing the call (at lower offset)
+                prefix_text = "\n".join(prefix_lines) + "\n"
+                body_text = body_text[:line_char_start] + prefix_text + body_text[line_char_start:]
 
     # Split back into lines, filtering out any lines that became empty from statement replacement
     wrapped = [line for line in body_text.split("\n") if line.strip()]

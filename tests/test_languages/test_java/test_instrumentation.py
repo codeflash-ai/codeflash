@@ -145,16 +145,18 @@ public class CalculatorTest__perfinstrumented {
         if (_cf_testIteration1 == null) _cf_testIteration1 = "0";
         String _cf_test1 = "testAdd";
         Calculator calc = new Calculator();
-        Object _cf_result1_1 = null;
+        Object _cf_obj1_1 = null;
         long _cf_end1_1 = -1;
         long _cf_start1_1 = 0;
         byte[] _cf_serializedResult1_1 = null;
         System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":L11_1" + "######$!");
         try {
             _cf_start1_1 = System.nanoTime();
-            _cf_result1_1 = calc.add(2, 2);
+            var _cf_result1_1 = calc.add(2, 2);
             _cf_end1_1 = System.nanoTime();
+            _cf_obj1_1 = _cf_result1_1;
             _cf_serializedResult1_1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);
+            assertEquals(4, _cf_result1_1);
         } finally {
             long _cf_end1_1_finally = System.nanoTime();
             long _cf_dur1_1 = (_cf_end1_1 != -1 ? _cf_end1_1 : _cf_end1_1_finally) - _cf_start1_1;
@@ -189,7 +191,6 @@ public class CalculatorTest__perfinstrumented {
                 }
             }
         }
-        assertEquals(4, _cf_result1_1);
     }
 }
 """
