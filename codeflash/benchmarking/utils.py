@@ -21,9 +21,7 @@ def validate_and_format_benchmark_table(
     function_benchmark_timings: dict[str, dict[BenchmarkKey, float]], total_benchmark_timings: dict[BenchmarkKey, float]
 ) -> dict[str, list[tuple[BenchmarkKey, float, float, float]]]:
     function_to_result = {}
-    # Process each function's benchmark data
     scale = 1_000_000.0
-    # Process each function's benchmark data
     for func_path, test_times in function_benchmark_timings.items():
         # Sort by percentage (highest first)
         sorted_tests = []
@@ -36,8 +34,6 @@ def validate_and_format_benchmark_table(
                     logger.debug(
                         f"Skipping test {benchmark_key} due to func_time {func_time} > total_time {total_time}"
                     )
-                # If the function time is greater than total time, likely to have multithreading / multiprocessing issues.
-                # Do not try to project the optimization impact for this function.
                 sorted_tests.append((benchmark_key, 0.0, 0.0, 0.0))
             elif total_time > 0:
                 percentage = (func_time / total_time) * 100
