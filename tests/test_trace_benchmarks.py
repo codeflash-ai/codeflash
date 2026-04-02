@@ -29,7 +29,7 @@ def test_trace_benchmarks() -> None:
         # Get the count of records
         # Get all records
         cursor.execute(
-            "SELECT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name"
+            "SELECT DISTINCT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name"
         )
         function_calls = cursor.fetchall()
 
@@ -220,7 +220,8 @@ def test_code_to_optimize_bubble_sort_codeflash_trace_sorter_test_no_func():
         if conn is not None:
             conn.close()
         output_file.unlink(missing_ok=True)
-        shutil.rmtree(replay_tests_dir)
+        if replay_tests_dir.exists():
+            shutil.rmtree(replay_tests_dir)
 
 
 # Skip the test in CI as the machine may not be multithreaded
@@ -242,14 +243,15 @@ def test_trace_multithreaded_benchmark() -> None:
         # Get the count of records
         # Get all records
         cursor.execute(
-            "SELECT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name"
+            "SELECT DISTINCT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name"
         )
         function_calls = cursor.fetchall()
 
         # Assert the length of function calls
         assert len(function_calls) == 10, f"Expected 10 function calls, but got {len(function_calls)}"
         function_benchmark_timings = codeflash_benchmark_plugin.get_function_benchmark_timings(output_file)
-        total_benchmark_timings = codeflash_benchmark_plugin.get_benchmark_timings(output_file)
+        total_benchmark_stats = codeflash_benchmark_plugin.get_benchmark_timings(output_file)
+        total_benchmark_timings = {k: v.median_ns for k, v in total_benchmark_stats.items()}
         function_to_results = validate_and_format_benchmark_table(function_benchmark_timings, total_benchmark_timings)
         assert "code_to_optimize.bubble_sort_codeflash_trace.sorter" in function_to_results
 
@@ -304,14 +306,15 @@ def test_trace_benchmark_decorator() -> None:
         # Get the count of records
         # Get all records
         cursor.execute(
-            "SELECT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name"
+            "SELECT DISTINCT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name"
         )
         function_calls = cursor.fetchall()
 
         # Assert the length of function calls
         assert len(function_calls) == 2, f"Expected 2 function calls, but got {len(function_calls)}"
         function_benchmark_timings = codeflash_benchmark_plugin.get_function_benchmark_timings(output_file)
-        total_benchmark_timings = codeflash_benchmark_plugin.get_benchmark_timings(output_file)
+        total_benchmark_stats = codeflash_benchmark_plugin.get_benchmark_timings(output_file)
+        total_benchmark_timings = {k: v.median_ns for k, v in total_benchmark_stats.items()}
         function_to_results = validate_and_format_benchmark_table(function_benchmark_timings, total_benchmark_timings)
         assert "code_to_optimize.bubble_sort_codeflash_trace.sorter" in function_to_results
 

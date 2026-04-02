@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 def validate_and_format_benchmark_table(
-    function_benchmark_timings: dict[str, dict[BenchmarkKey, int]], total_benchmark_timings: dict[BenchmarkKey, int]
+    function_benchmark_timings: dict[str, dict[BenchmarkKey, float]], total_benchmark_timings: dict[BenchmarkKey, float]
 ) -> dict[str, list[tuple[BenchmarkKey, float, float, float]]]:
     function_to_result = {}
     # Process each function's benchmark data
@@ -77,8 +77,8 @@ def print_benchmark_table(function_to_results: dict[str, list[tuple[BenchmarkKey
 
 def process_benchmark_data(
     replay_performance_gain: dict[BenchmarkKey, float],
-    fto_benchmark_timings: dict[BenchmarkKey, int],
-    total_benchmark_timings: dict[BenchmarkKey, int],
+    fto_benchmark_timings: dict[BenchmarkKey, float],
+    total_benchmark_timings: dict[BenchmarkKey, float],
 ) -> Optional[ProcessedBenchmarkInfo]:
     """Process benchmark data and generate detailed benchmark information.
 
