@@ -392,6 +392,9 @@ def _build_parser() -> ArgumentParser:
     )
     compare_parser.add_argument("--timeout", type=int, default=600, help="Benchmark timeout in seconds (default: 600)")
     compare_parser.add_argument("--output", "-o", type=str, help="Write markdown report to file")
+    compare_parser.add_argument(
+        "--memory", action="store_true", help="Profile peak memory usage per benchmark (requires memray, Linux/macOS)"
+    )
     compare_parser.add_argument("--config-file", type=str, dest="config_file", help="Path to pyproject.toml")
 
     trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize your project.")

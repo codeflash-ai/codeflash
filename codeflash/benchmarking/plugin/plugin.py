@@ -68,6 +68,51 @@ class BenchmarkStats:
         )
 
 
+@dataclass
+class MemoryStats:
+    peak_memory_bytes: int
+    total_allocations: int
+
+    @staticmethod
+    def parse_memray_results(bin_dir: Path, bin_prefix: str) -> dict:
+        from codeflash.models.models import BenchmarkKey
+
+        try:
+            from memray import FileReader
+        except ImportError as e:
+            msg = "memray is required for --memory profiling. Install with: uv add memray pytest-memray"
+            raise ImportError(msg) from e
+
+        results: dict[BenchmarkKey, MemoryStats] = {}
+        for bin_file in sorted(bin_dir.glob(f"{bin_prefix}-*.bin")):
+            stem = bin_file.stem
+            # pytest-memray names: {prefix}-{nodeid with :: and os.sep replaced by -}.bin
+            nodeid_part = stem[len(bin_prefix) + 1 :]  # strip "{prefix}-"
+            # Extract the test function name (last segment after the final -)
+            # Node IDs look like: tests-benchmarks-test_file.py-test_func_name
+            # We need the module_path and function_name for BenchmarkKey
+            # Split on ".py-" to separate module path from function name
+            parts = nodeid_part.split(".py-", 1)
+            if len(parts) == 2:
+                module_part = parts[0].replace("-", ".")
+                function_name = parts[1]
+            else:
+                module_part = nodeid_part.rsplit("-", 1)[0].replace("-", ".")
+                function_name = nodeid_part.rsplit("-", 1)[-1] if "-" in nodeid_part else nodeid_part
+
+            try:
+                reader = FileReader(str(bin_file))
+                meta = reader.metadata
+                bm_key = BenchmarkKey(module_path=module_part, function_name=function_name)
+                results[bm_key] = MemoryStats(
+                    peak_memory_bytes=meta.peak_memory, total_allocations=meta.total_allocations
+                )
+                reader.close()
+            except OSError:
+                continue
+        return results
+
+
 class CodeFlashBenchmarkPlugin:
     def __init__(self) -> None:
         self._trace_path = None

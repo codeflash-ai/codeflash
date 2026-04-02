@@ -73,6 +73,7 @@ def run_compare(args: Namespace) -> None:
         tests_root=tests_root,
         functions=functions,
         timeout=args.timeout,
+        memory=getattr(args, "memory", False),
     )
 
     if not result.base_stats and not result.head_stats:
