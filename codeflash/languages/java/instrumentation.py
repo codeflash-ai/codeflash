@@ -541,7 +541,9 @@ def _erase_method_type_params(return_type: str, method_node: Any) -> str:
         if child.type == "type_parameter":
             name_node = child.child_by_field_name("name") or (child.children[0] if child.children else None)
             if name_node:
-                type_var_names.add(name_node.text.decode("utf8") if isinstance(name_node.text, bytes) else str(name_node.text))
+                type_var_names.add(
+                    name_node.text.decode("utf8") if isinstance(name_node.text, bytes) else str(name_node.text)
+                )
 
     if not type_var_names:
         return return_type
@@ -553,7 +555,7 @@ def _erase_method_type_params(return_type: str, method_node: Any) -> str:
     # Replace type variables used as generic arguments with '?'
     # Match whole-word type variable names that appear as generic type arguments
     for tv in type_var_names:
-        return_type = re.sub(rf'\b{re.escape(tv)}\b', '?', return_type)
+        return_type = re.sub(rf"\b{re.escape(tv)}\b", "?", return_type)
 
     return return_type
 
