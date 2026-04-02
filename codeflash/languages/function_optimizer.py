@@ -2787,6 +2787,25 @@ class FunctionOptimizer:
             did_pass_all_tests = all(result.did_pass for result in behavioral_results)
             if not did_pass_all_tests:
                 return Failure("Tests failed to pass for the original code.")
+
+            # Check if coverage data was not found (file excluded from coverage)
+            from codeflash.models.models import CoverageStatus
+
+            if coverage_results and coverage_results.status == CoverageStatus.NOT_FOUND:
+                # File was not found in coverage data - likely excluded by test framework config
+                logger.warning(
+                    f"No coverage data found for {self.function_to_optimize.source_file_path}. "
+                    f"This file may be excluded from coverage collection by your test framework configuration "
+                    f"(e.g., coverage.exclude in vitest.config.ts for Vitest, or testMatch/coveragePathIgnorePatterns "
+                    f"for Jest). Tests ran successfully but coverage cannot be measured."
+                )
+                return Failure(
+                    f"Coverage data not found for {self.function_to_optimize.source_file_path}. "
+                    f"The file may be excluded from coverage by your test framework config. "
+                    f"Check coverage.exclude patterns in vitest.config.ts or jest.config.js."
+                )
+
+            # Normal coverage failure (tests ran but coverage below threshold)
             coverage_pct = coverage_results.coverage if coverage_results else 0
             return Failure(
                 f"Test coverage is {coverage_pct}%, which is below the required threshold of {COVERAGE_THRESHOLD}%."
