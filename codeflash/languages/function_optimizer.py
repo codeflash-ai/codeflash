@@ -2794,13 +2794,13 @@ class FunctionOptimizer:
             if coverage_results and coverage_results.status == CoverageStatus.NOT_FOUND:
                 # File was not found in coverage data - likely excluded by test framework config
                 logger.warning(
-                    f"No coverage data found for {self.function_to_optimize.source_file_path}. "
+                    f"No coverage data found for {self.function_to_optimize.file_path}. "
                     f"This file may be excluded from coverage collection by your test framework configuration "
                     f"(e.g., coverage.exclude in vitest.config.ts for Vitest, or testMatch/coveragePathIgnorePatterns "
                     f"for Jest). Tests ran successfully but coverage cannot be measured."
                 )
                 return Failure(
-                    f"Coverage data not found for {self.function_to_optimize.source_file_path}. "
+                    f"Coverage data not found for {self.function_to_optimize.file_path}. "
                     f"The file may be excluded from coverage by your test framework config. "
                     f"Check coverage.exclude patterns in vitest.config.ts or jest.config.js."
                 )
