@@ -46,12 +46,14 @@ class CompareResult:
     head_memory: dict[BenchmarkKey, MemoryStats] = field(default_factory=dict)
 
     def format_markdown(self) -> str:
-        if not self.base_stats and not self.head_stats:
+        if not self.base_stats and not self.head_stats and not self.base_memory and not self.head_memory:
             return "_No benchmark results to compare._"
 
         base_short = self.base_ref[:12]
         head_short = self.head_ref[:12]
-        all_keys = sorted(set(self.base_stats) | set(self.head_stats), key=str)
+        all_keys = sorted(
+            set(self.base_stats) | set(self.head_stats) | set(self.base_memory) | set(self.head_memory), key=str
+        )
         sections: list[str] = [f"## Benchmark: `{base_short}` vs `{head_short}`"]
 
         for bm_key in all_keys:
@@ -60,58 +62,64 @@ class CompareResult:
 
             bm_name = str(bm_key).rsplit("::", 1)[-1] if "::" in str(bm_key) else str(bm_key)
 
-            lines = [
-                f"### {bm_name}",
-                "",
-                "| | Min | Median | Mean | OPS | Rounds |",
-                "|:---|---:|---:|---:|---:|---:|",
-                f"| `{base_short}` (base) | {fmt_us(base_s.min_ns) if base_s else '-'}"
-                f" | {fmt_us(base_s.median_ns) if base_s else '-'}"
-                f" | {fmt_us(base_s.mean_ns) if base_s else '-'}"
-                f" | {md_ops(base_s.mean_ns) if base_s else '-'}"
-                f" | {f'{base_s.rounds:,}' if base_s else '-'} |",
-                f"| `{head_short}` (head) | {fmt_us(head_s.min_ns) if head_s else '-'}"
-                f" | {fmt_us(head_s.median_ns) if head_s else '-'}"
-                f" | {fmt_us(head_s.mean_ns) if head_s else '-'}"
-                f" | {md_ops(head_s.mean_ns) if head_s else '-'}"
-                f" | {f'{head_s.rounds:,}' if head_s else '-'} |",
-                f"| **Speedup** | **{md_speedup_val(base_s.min_ns, head_s.min_ns) if base_s and head_s else '-'}**"
-                f" | **{md_speedup_val(base_s.median_ns, head_s.median_ns) if base_s and head_s else '-'}**"
-                f" | **{md_speedup_val(base_s.mean_ns, head_s.mean_ns) if base_s and head_s else '-'}**"
-                f" | **{md_speedup_val(base_s.mean_ns, head_s.mean_ns) if base_s and head_s else '-'}**"
-                f" | |",
-            ]
+            lines = [f"### {bm_name}"]
 
-            # Per-function breakdown
-            all_funcs: set[str] = set()
-            for d in [self.base_function_ns, self.head_function_ns]:
-                for func_name, bm_dict in d.items():
-                    if bm_key in bm_dict:
-                        all_funcs.add(func_name)
+            # Timing table (skip for memory-only benchmark keys)
+            if base_s or head_s:
+                lines.extend(
+                    [
+                        "",
+                        "| | Min | Median | Mean | OPS | Rounds |",
+                        "|:---|---:|---:|---:|---:|---:|",
+                        f"| `{base_short}` (base) | {fmt_us(base_s.min_ns) if base_s else '-'}"
+                        f" | {fmt_us(base_s.median_ns) if base_s else '-'}"
+                        f" | {fmt_us(base_s.mean_ns) if base_s else '-'}"
+                        f" | {md_ops(base_s.mean_ns) if base_s else '-'}"
+                        f" | {f'{base_s.rounds:,}' if base_s else '-'} |",
+                        f"| `{head_short}` (head) | {fmt_us(head_s.min_ns) if head_s else '-'}"
+                        f" | {fmt_us(head_s.median_ns) if head_s else '-'}"
+                        f" | {fmt_us(head_s.mean_ns) if head_s else '-'}"
+                        f" | {md_ops(head_s.mean_ns) if head_s else '-'}"
+                        f" | {f'{head_s.rounds:,}' if head_s else '-'} |",
+                        f"| **Speedup** | **{md_speedup_val(base_s.min_ns, head_s.min_ns) if base_s and head_s else '-'}**"
+                        f" | **{md_speedup_val(base_s.median_ns, head_s.median_ns) if base_s and head_s else '-'}**"
+                        f" | **{md_speedup_val(base_s.mean_ns, head_s.mean_ns) if base_s and head_s else '-'}**"
+                        f" | **{md_speedup_val(base_s.mean_ns, head_s.mean_ns) if base_s and head_s else '-'}**"
+                        f" | |",
+                    ]
+                )
 
-            if all_funcs:
+                # Per-function breakdown
+                all_funcs: set[str] = set()
+                for d in [self.base_function_ns, self.head_function_ns]:
+                    for func_name, bm_dict in d.items():
+                        if bm_key in bm_dict:
+                            all_funcs.add(func_name)
 
-                def sort_key(fn: str, _bm_key: BenchmarkKey = bm_key) -> float:
-                    return self.base_function_ns.get(fn, {}).get(_bm_key, 0)
+                if all_funcs:
 
-                sorted_funcs = sorted(all_funcs, key=sort_key, reverse=True)
+                    def sort_key(fn: str, _bm_key: BenchmarkKey = bm_key) -> float:
+                        return self.base_function_ns.get(fn, {}).get(_bm_key, 0)
 
-                lines.append("")
-                lines.append("| Function | base (μs) | head (μs) | Improvement | Speedup |")
-                lines.append("|:---|---:|---:|:---|---:|")
+                    sorted_funcs = sorted(all_funcs, key=sort_key, reverse=True)
 
-                for func_name in sorted_funcs:
-                    b = self.base_function_ns.get(func_name, {}).get(bm_key)
-                    h = self.head_function_ns.get(func_name, {}).get(bm_key)
-                    short_name = func_name.rsplit(".", 1)[-1] if "." in func_name else func_name
-                    lines.append(
-                        f"| `{short_name}` | {fmt_us(b)} | {fmt_us(h)} | {md_bar(b, h)} | {md_speedup(b, h)} |"
-                    )
+                    lines.append("")
+                    lines.append("| Function | base (μs) | head (μs) | Improvement | Speedup |")
+                    lines.append("|:---|---:|---:|:---|---:|")
 
-            # Memory section (skip when delta is negligible)
+                    for func_name in sorted_funcs:
+                        b = self.base_function_ns.get(func_name, {}).get(bm_key)
+                        h = self.head_function_ns.get(func_name, {}).get(bm_key)
+                        short_name = func_name.rsplit(".", 1)[-1] if "." in func_name else func_name
+                        lines.append(
+                            f"| `{short_name}` | {fmt_us(b)} | {fmt_us(h)} | {md_bar(b, h)} | {md_speedup(b, h)} |"
+                        )
+
+            # Memory section (always show for memory-only keys, otherwise skip when delta is negligible)
             base_mem = self.base_memory.get(bm_key)
             head_mem = self.head_memory.get(bm_key)
-            if has_meaningful_memory_change(base_mem, head_mem):
+            memory_only_key = not base_s and not head_s
+            if memory_only_key or has_meaningful_memory_change(base_mem, head_mem):
                 lines.append("")
                 lines.append("#### Memory")
                 lines.append("")
@@ -169,8 +177,12 @@ def compare_branches(
     if functions is None:
         functions = discover_changed_functions(base_ref, head_ref, repo_root)
         if not functions:
-            logger.warning("No changed Python functions found between %s and %s", base_ref, head_ref)
-            return CompareResult(base_ref=base_ref, head_ref=head_ref)
+            if not memory:
+                logger.warning("No changed Python functions found between %s and %s", base_ref, head_ref)
+                return CompareResult(base_ref=base_ref, head_ref=head_ref)
+            logger.info("No changed top-level functions — running memory-only comparison")
+
+    memory_only = memory and not functions
 
     from rich.live import Live
     from rich.panel import Panel
@@ -179,30 +191,33 @@ def compare_branches(
     base_short = base_ref[:12]
     head_short = head_ref[:12]
 
-    func_count = sum(len(fns) for fns in functions.values())
-    file_count = len(functions)
-
-    # Build function tree for the panel
-    from os.path import commonpath
-
     from rich.tree import Tree
 
-    rel_paths = []
-    for fp in functions:
-        rel_paths.append(fp.relative_to(repo_root) if fp.is_relative_to(repo_root) else fp)
-
-    # Strip common prefix so paths are short but unambiguous
-    if len(rel_paths) > 1:
-        common = Path(commonpath(rel_paths))
-        short_paths = [p.relative_to(common) if p != common else Path(p.name) for p in rel_paths]
+    if memory_only:
+        fn_tree = Tree("[bold]Memory-only[/bold] [dim](no changed top-level functions)[/dim]", guide_style="dim")
     else:
-        short_paths = [Path(p.name) for p in rel_paths]
+        func_count = sum(len(fns) for fns in functions.values())
+        file_count = len(functions)
 
-    fn_tree = Tree(f"[bold]{func_count} functions[/bold] [dim]across {file_count} files[/dim]", guide_style="dim")
-    for (_fp, fns), short in zip(functions.items(), short_paths):
-        branch = fn_tree.add(f"[cyan]{short}[/cyan]")
-        for fn in fns:
-            branch.add(f"[bold]{fn.function_name}[/bold]")
+        # Build function tree for the panel
+        from os.path import commonpath
+
+        rel_paths = []
+        for fp in functions:
+            rel_paths.append(fp.relative_to(repo_root) if fp.is_relative_to(repo_root) else fp)
+
+        # Strip common prefix so paths are short but unambiguous
+        if len(rel_paths) > 1:
+            common = Path(commonpath(rel_paths))
+            short_paths = [p.relative_to(common) if p != common else Path(p.name) for p in rel_paths]
+        else:
+            short_paths = [Path(p.name) for p in rel_paths]
+
+        fn_tree = Tree(f"[bold]{func_count} functions[/bold] [dim]across {file_count} files[/dim]", guide_style="dim")
+        for (_fp, fns), short in zip(functions.items(), short_paths):
+            branch = fn_tree.add(f"[cyan]{short}[/cyan]")
+            for fn in fns:
+                branch.add(f"[bold]{fn.function_name}[/bold]")
 
     # Set up worktree paths and trace DB paths
     from codeflash.code_utils.git_worktree_utils import worktree_dirs
@@ -222,7 +237,9 @@ def compare_branches(
 
     from rich.console import Group
 
-    step_labels = ["Creating worktrees", f"Benchmarking base ({base_short})", f"Benchmarking head ({head_short})"]
+    step_labels = ["Creating worktrees"]
+    if not memory_only:
+        step_labels.extend([f"Benchmarking base ({base_short})", f"Benchmarking head ({head_short})"])
     if memory:
         step_labels.extend([f"Memory profiling base ({base_short})", f"Memory profiling head ({head_short})"])
 
@@ -262,61 +279,78 @@ def compare_branches(
         )
 
     try:
-        with Live(build_panel(0), console=console, refresh_per_second=1) as live:
-            # Step 1: Create worktrees (resolve to SHAs to avoid "already checked out" errors)
+        step = 0
+        with Live(build_panel(step), console=console, refresh_per_second=1) as live:
+            # Create worktrees (resolve to SHAs to avoid "already checked out" errors)
             base_sha = repo.commit(base_ref).hexsha
             head_sha = repo.commit(head_ref).hexsha
             repo.git.worktree("add", str(base_worktree), base_sha)
             repo.git.worktree("add", str(head_worktree), head_sha)
-            live.update(build_panel(1))
+            step += 1
+            live.update(build_panel(step))
 
-            # Step 2: Run benchmarks on base
-            run_benchmark_on_worktree(
-                worktree_dir=base_worktree,
-                repo_root=repo_root,
-                functions=functions,
-                benchmarks_root=benchmarks_root,
-                tests_root=tests_root,
-                trace_db=base_trace_db,
-                timeout=timeout,
-                instrument_fn=instrument_codeflash_trace_decorator,
-                trace_fn=trace_benchmarks_pytest,
-            )
-            live.update(build_panel(2))
+            if not memory_only:
+                # Run trace benchmarks on base
+                run_benchmark_on_worktree(
+                    worktree_dir=base_worktree,
+                    repo_root=repo_root,
+                    functions=functions,
+                    benchmarks_root=benchmarks_root,
+                    tests_root=tests_root,
+                    trace_db=base_trace_db,
+                    timeout=timeout,
+                    instrument_fn=instrument_codeflash_trace_decorator,
+                    trace_fn=trace_benchmarks_pytest,
+                )
+                step += 1
+                live.update(build_panel(step))
 
-            # Step 3: Run benchmarks on head
-            run_benchmark_on_worktree(
-                worktree_dir=head_worktree,
-                repo_root=repo_root,
-                functions=functions,
-                benchmarks_root=benchmarks_root,
-                tests_root=tests_root,
-                trace_db=head_trace_db,
-                timeout=timeout,
-                instrument_fn=instrument_codeflash_trace_decorator,
-                trace_fn=trace_benchmarks_pytest,
-            )
+                # Run trace benchmarks on head
+                run_benchmark_on_worktree(
+                    worktree_dir=head_worktree,
+                    repo_root=repo_root,
+                    functions=functions,
+                    benchmarks_root=benchmarks_root,
+                    tests_root=tests_root,
+                    trace_db=head_trace_db,
+                    timeout=timeout,
+                    instrument_fn=instrument_codeflash_trace_decorator,
+                    trace_fn=trace_benchmarks_pytest,
+                )
 
-            # Steps 4-5: Memory profiling (reuses existing worktrees)
+            # Memory profiling (reuses existing worktrees)
             if memory:
                 from codeflash.benchmarking.trace_benchmarks import memory_benchmarks_pytest
 
-                live.update(build_panel(3))
                 wt_base_benchmarks = base_worktree / benchmarks_root.relative_to(repo_root)
+                wt_head_benchmarks = head_worktree / benchmarks_root.relative_to(repo_root)
+
+                # Copy benchmarks into worktrees if not present (e.g. base ref predates benchmark dir)
+                if memory_only:
+                    import shutil
+
+                    for wt_bm in [wt_base_benchmarks, wt_head_benchmarks]:
+                        if not wt_bm.exists() and benchmarks_root.is_dir():
+                            shutil.copytree(benchmarks_root, wt_bm)
+
+                if not memory_only:
+                    step += 1
+                    live.update(build_panel(step))
                 memory_benchmarks_pytest(wt_base_benchmarks, base_worktree, base_memray_dir, memray_prefix, timeout)
 
-                live.update(build_panel(4))
-                wt_head_benchmarks = head_worktree / benchmarks_root.relative_to(repo_root)
+                step += 1
+                live.update(build_panel(step))
                 memory_benchmarks_pytest(wt_head_benchmarks, head_worktree, head_memray_dir, memray_prefix, timeout)
 
         # Load results
-        if base_trace_db.exists():
-            result.base_stats = CodeFlashBenchmarkPlugin.get_benchmark_timings(base_trace_db)
-            result.base_function_ns = CodeFlashBenchmarkPlugin.get_function_benchmark_timings(base_trace_db)
+        if not memory_only:
+            if base_trace_db.exists():
+                result.base_stats = CodeFlashBenchmarkPlugin.get_benchmark_timings(base_trace_db)
+                result.base_function_ns = CodeFlashBenchmarkPlugin.get_function_benchmark_timings(base_trace_db)
 
-        if head_trace_db.exists():
-            result.head_stats = CodeFlashBenchmarkPlugin.get_benchmark_timings(head_trace_db)
-            result.head_function_ns = CodeFlashBenchmarkPlugin.get_function_benchmark_timings(head_trace_db)
+            if head_trace_db.exists():
+                result.head_stats = CodeFlashBenchmarkPlugin.get_benchmark_timings(head_trace_db)
+                result.head_function_ns = CodeFlashBenchmarkPlugin.get_function_benchmark_timings(head_trace_db)
 
         if memory:
             from codeflash.benchmarking.plugin.plugin import MemoryStats
@@ -519,14 +553,21 @@ def run_benchmark_on_worktree(
 
 def render_comparison(result: CompareResult) -> None:
     """Render Rich comparison tables to console."""
-    if not result.base_stats and not result.head_stats:
+    has_timing = result.base_stats or result.head_stats
+    has_memory = result.base_memory or result.head_memory
+    if not has_timing and not has_memory:
         logger.warning("No benchmark results to compare")
         return
 
     base_short = result.base_ref[:12]
     head_short = result.head_ref[:12]
 
-    all_benchmark_keys = set(result.base_stats.keys()) | set(result.head_stats.keys())
+    all_benchmark_keys = (
+        set(result.base_stats.keys())
+        | set(result.head_stats.keys())
+        | set(result.base_memory.keys())
+        | set(result.head_memory.keys())
+    )
 
     for bm_key in sorted(all_benchmark_keys, key=str):
         bm_name = str(bm_key).rsplit("::", 1)[-1] if "::" in str(bm_key) else str(bm_key)
@@ -537,79 +578,86 @@ def render_comparison(result: CompareResult) -> None:
         base_s = result.base_stats.get(bm_key)
         head_s = result.head_stats.get(bm_key)
 
-        # Table 1: Statistical summary
-        t1 = Table(title="End-to-End (per iteration)", border_style="blue", show_lines=True, expand=False)
-        t1.add_column("Ref", style="bold cyan")
-        t1.add_column("Min", justify="right")
-        t1.add_column("Median", justify="right")
-        t1.add_column("Mean", justify="right")
-        t1.add_column("OPS", justify="right")
-        t1.add_column("Rounds", justify="right")
+        # Table 1: Statistical summary (skip for memory-only benchmark keys)
+        if base_s or head_s:
+            t1 = Table(title="End-to-End (per iteration)", border_style="blue", show_lines=True, expand=False)
+            t1.add_column("Ref", style="bold cyan")
+            t1.add_column("Min", justify="right")
+            t1.add_column("Median", justify="right")
+            t1.add_column("Mean", justify="right")
+            t1.add_column("OPS", justify="right")
+            t1.add_column("Rounds", justify="right")
 
-        if base_s:
-            t1.add_row(
-                f"{base_short} (base)",
-                fmt_time(base_s.min_ns),
-                fmt_time(base_s.median_ns),
-                fmt_time(base_s.mean_ns),
-                fmt_ops(base_s.mean_ns),
-                f"{base_s.rounds:,}",
-            )
-        if head_s:
-            t1.add_row(
-                f"{head_short} (head)",
-                fmt_time(head_s.min_ns),
-                fmt_time(head_s.median_ns),
-                fmt_time(head_s.mean_ns),
-                fmt_ops(head_s.mean_ns),
-                f"{head_s.rounds:,}",
-            )
-        if base_s and head_s:
-            t1.add_section()
-            t1.add_row(
-                "[bold]Speedup[/bold]",
-                fmt_speedup(base_s.min_ns, head_s.min_ns),
-                fmt_speedup(base_s.median_ns, head_s.median_ns),
-                fmt_speedup(base_s.mean_ns, head_s.mean_ns),
-                fmt_speedup_ops(base_s.mean_ns, head_s.mean_ns),
-                "",
-            )
-        console.print(t1, justify="center")
+            if base_s:
+                t1.add_row(
+                    f"{base_short} (base)",
+                    fmt_time(base_s.min_ns),
+                    fmt_time(base_s.median_ns),
+                    fmt_time(base_s.mean_ns),
+                    fmt_ops(base_s.mean_ns),
+                    f"{base_s.rounds:,}",
+                )
+            if head_s:
+                t1.add_row(
+                    f"{head_short} (head)",
+                    fmt_time(head_s.min_ns),
+                    fmt_time(head_s.median_ns),
+                    fmt_time(head_s.mean_ns),
+                    fmt_ops(head_s.mean_ns),
+                    f"{head_s.rounds:,}",
+                )
+            if base_s and head_s:
+                t1.add_section()
+                t1.add_row(
+                    "[bold]Speedup[/bold]",
+                    fmt_speedup(base_s.min_ns, head_s.min_ns),
+                    fmt_speedup(base_s.median_ns, head_s.median_ns),
+                    fmt_speedup(base_s.mean_ns, head_s.mean_ns),
+                    fmt_speedup_ops(base_s.mean_ns, head_s.mean_ns),
+                    "",
+                )
+            console.print(t1, justify="center")
 
-        # Table 2: Per-function breakdown (average per-iteration)
-        all_funcs: set[str] = set()
-        for d in [result.base_function_ns, result.head_function_ns]:
-            for func_name, bm_dict in d.items():
-                if bm_key in bm_dict:
-                    all_funcs.add(func_name)
+            # Table 2: Per-function breakdown (average per-iteration)
+            all_funcs: set[str] = set()
+            for d in [result.base_function_ns, result.head_function_ns]:
+                for func_name, bm_dict in d.items():
+                    if bm_key in bm_dict:
+                        all_funcs.add(func_name)
 
-        if all_funcs:
-            console.print()
+            if all_funcs:
+                console.print()
 
-            t2 = Table(
-                title="Per-Function Breakdown (avg per iteration)", border_style="blue", show_lines=True, expand=False
-            )
-            t2.add_column("Function", style="cyan")
-            t2.add_column("base", justify="right", style="yellow")
-            t2.add_column("head", justify="right", style="yellow")
-            t2.add_column("Delta", justify="right")
-            t2.add_column("Speedup", justify="right")
+                t2 = Table(
+                    title="Per-Function Breakdown (avg per iteration)",
+                    border_style="blue",
+                    show_lines=True,
+                    expand=False,
+                )
+                t2.add_column("Function", style="cyan")
+                t2.add_column("base", justify="right", style="yellow")
+                t2.add_column("head", justify="right", style="yellow")
+                t2.add_column("Delta", justify="right")
+                t2.add_column("Speedup", justify="right")
 
-            def sort_key(fn: str, _bm_key: BenchmarkKey = bm_key) -> float:
-                return result.base_function_ns.get(fn, {}).get(_bm_key, 0)
+                def sort_key(fn: str, _bm_key: BenchmarkKey = bm_key) -> float:
+                    return result.base_function_ns.get(fn, {}).get(_bm_key, 0)
 
-            for func_name in sorted(all_funcs, key=sort_key, reverse=True):
-                b_ns = result.base_function_ns.get(func_name, {}).get(bm_key)
-                h_ns = result.head_function_ns.get(func_name, {}).get(bm_key)
-                short_name = func_name.rsplit(".", 1)[-1] if "." in func_name else func_name
-                t2.add_row(short_name, fmt_time(b_ns), fmt_time(h_ns), fmt_delta(b_ns, h_ns), fmt_speedup(b_ns, h_ns))
+                for func_name in sorted(all_funcs, key=sort_key, reverse=True):
+                    b_ns = result.base_function_ns.get(func_name, {}).get(bm_key)
+                    h_ns = result.head_function_ns.get(func_name, {}).get(bm_key)
+                    short_name = func_name.rsplit(".", 1)[-1] if "." in func_name else func_name
+                    t2.add_row(
+                        short_name, fmt_time(b_ns), fmt_time(h_ns), fmt_delta(b_ns, h_ns), fmt_speedup(b_ns, h_ns)
+                    )
 
-            console.print(t2, justify="center")
+                console.print(t2, justify="center")
 
-        # Table 3: Memory (skip when delta is negligible)
+        # Table 3: Memory (always show for memory-only keys, otherwise skip when delta is negligible)
         base_mem = result.base_memory.get(bm_key)
         head_mem = result.head_memory.get(bm_key)
-        if has_meaningful_memory_change(base_mem, head_mem):
+        memory_only_key = not base_s and not head_s
+        if memory_only_key or has_meaningful_memory_change(base_mem, head_mem):
             console.print()
             t3 = Table(title="Memory (peak per test)", border_style="magenta", show_lines=True, expand=False)
             t3.add_column("Ref", style="bold cyan")
