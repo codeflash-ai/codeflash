@@ -11,7 +11,7 @@ from codeflash.models.models import GeneratedTests, GeneratedTestsList
 from pathlib import Path
 
 
-def test_inject_test_globals_skips_existing_vitest_imports():
+def test_inject_test_globals_skips_existing_vitest_imports() -> None:
     """Test that inject_test_globals skips injection when vitest import already exists."""
     # AI service generated this test with vitest imports already present
     # (note: different order and identifiers than what inject_test_globals would add)
@@ -62,7 +62,7 @@ describe('isWindowsDrivePath', () => {
     assert len(import_lines) == 2, f"Should have 2 import statements (vitest + function), found {len(import_lines)}: {import_lines}"
 
 
-def test_inject_test_globals_adds_import_when_missing():
+def test_inject_test_globals_adds_import_when_missing() -> None:
     """Test that inject_test_globals DOES add import when it's truly missing."""
     # Test without any vitest imports
     test_without_imports = """// function import
