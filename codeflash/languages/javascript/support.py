@@ -231,7 +231,7 @@ class JavaScriptSupport:
         result: dict[str, list[TestInfo]] = {}
 
         # Build index: function_name → qualified_name for O(1) lookup
-        # This avoids iterating all functions for every test file (was O(N×M), now O(N+M))
+        # This avoids iterating all functions for every test file (was O(NxM), now O(N+M))
         function_name_to_qualified: dict[str, str] = {}
         for func in source_functions:
             function_name_to_qualified[func.function_name] = func.qualified_name
