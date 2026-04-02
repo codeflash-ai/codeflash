@@ -256,7 +256,10 @@ class JavaScriptSupport:
 
                 # Match source functions to tests
                 for func in source_functions:
-                    if func.function_name in imported_names or func.function_name in source:
+                    # Only match functions that are explicitly imported from the source module.
+                    # Avoid substring matching (e.g., "func.function_name in source") as it causes
+                    # false positives when functions are mentioned in mocks, comments, or unrelated code.
+                    if func.function_name in imported_names:
                         if func.qualified_name not in result:
                             result[func.qualified_name] = []
                         for test_name in test_functions:
