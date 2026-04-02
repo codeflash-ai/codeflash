@@ -13,31 +13,10 @@ if TYPE_CHECKING:
     from codeflash.models.function_types import FunctionToOptimize
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.config_parser import parse_config_file
 
 
 def run_compare(args: Namespace) -> None:
     """Entry point for the compare subcommand."""
-    # Load project config
-    pyproject_config, pyproject_file_path = parse_config_file(args.config_file)
-
-    module_root = Path(pyproject_config.get("module_root", ".")).resolve()
-    tests_root = Path(pyproject_config.get("tests_root", "tests")).resolve()
-    benchmarks_root_str = pyproject_config.get("benchmarks_root")
-
-    if not benchmarks_root_str:
-        logger.error("benchmarks-root must be configured in [tool.codeflash] to use compare")
-        sys.exit(1)
-
-    benchmarks_root = Path(benchmarks_root_str).resolve()
-    if not benchmarks_root.is_dir():
-        logger.error(f"benchmarks-root {benchmarks_root} is not a valid directory")
-        sys.exit(1)
-
-    from codeflash.cli_cmds.cli import project_root_from_module_root
-
-    project_root = project_root_from_module_root(module_root, pyproject_file_path)
-
     # Resolve head_ref: explicit arg > --pr > current branch
     head_ref = args.head_ref
     if args.pr:
@@ -57,6 +36,61 @@ def run_compare(args: Namespace) -> None:
             logger.error("Could not auto-detect base ref. Provide it explicitly or ensure gh CLI is available.")
             sys.exit(1)
         logger.info(f"Auto-detected base ref: {base_ref}")
+
+    # Script mode: run an arbitrary benchmark command on each worktree (no codeflash config needed)
+    script_cmd = getattr(args, "script", None)
+    if script_cmd:
+        script_output = getattr(args, "script_output", None)
+        if not script_output:
+            logger.error("--script-output is required when using --script")
+            sys.exit(1)
+
+        import git
+
+        project_root = Path(git.Repo(Path.cwd(), search_parent_directories=True).working_dir)
+
+        from codeflash.benchmarking.compare import compare_with_script
+
+        result = compare_with_script(
+            base_ref=base_ref,
+            head_ref=head_ref,
+            project_root=project_root,
+            script_cmd=script_cmd,
+            script_output=script_output,
+            timeout=args.timeout,
+            memory=getattr(args, "memory", False),
+        )
+
+        if not result.base_results and not result.head_results:
+            logger.warning("No benchmark data collected. Check that --script-output points to a valid JSON file.")
+            sys.exit(1)
+
+        if args.output:
+            md = result.format_markdown()
+            Path(args.output).write_text(md, encoding="utf-8")
+            logger.info(f"Markdown report written to {args.output}")
+        return
+
+    # Standard trace-benchmark mode: requires codeflash config
+    from codeflash.code_utils.config_parser import parse_config_file
+
+    pyproject_config, pyproject_file_path = parse_config_file(args.config_file)
+    module_root = Path(pyproject_config.get("module_root", ".")).resolve()
+
+    from codeflash.cli_cmds.cli import project_root_from_module_root
+
+    project_root = project_root_from_module_root(module_root, pyproject_file_path)
+    tests_root = Path(pyproject_config.get("tests_root", "tests")).resolve()
+    benchmarks_root_str = pyproject_config.get("benchmarks_root")
+
+    if not benchmarks_root_str:
+        logger.error("benchmarks-root must be configured in [tool.codeflash] to use compare")
+        sys.exit(1)
+
+    benchmarks_root = Path(benchmarks_root_str).resolve()
+    if not benchmarks_root.is_dir():
+        logger.error(f"benchmarks-root {benchmarks_root} is not a valid directory")
+        sys.exit(1)
 
     # Parse explicit functions if provided
     functions = None

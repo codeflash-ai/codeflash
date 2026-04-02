@@ -395,6 +395,13 @@ def _build_parser() -> ArgumentParser:
     compare_parser.add_argument(
         "--memory", action="store_true", help="Profile peak memory usage per benchmark (requires memray, Linux/macOS)"
     )
+    compare_parser.add_argument("--script", type=str, help="Shell command to run as benchmark in each worktree")
+    compare_parser.add_argument(
+        "--script-output",
+        type=str,
+        dest="script_output",
+        help="Relative path to JSON results file produced by --script (required with --script)",
+    )
     compare_parser.add_argument("--config-file", type=str, dest="config_file", help="Path to pyproject.toml")
 
     trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize your project.")

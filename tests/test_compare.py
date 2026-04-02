@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from codeflash.benchmarking.compare import CompareResult, has_meaningful_memory_change, render_comparison
+from codeflash.benchmarking.compare import (
+    CompareResult,
+    ScriptCompareResult,
+    has_meaningful_memory_change,
+    render_comparison,
+    render_script_comparison,
+)
 from codeflash.benchmarking.plugin.plugin import BenchmarkStats, MemoryStats
 from codeflash.models.models import BenchmarkKey
 
@@ -101,14 +107,8 @@ class TestFormatMarkdownMemoryOnly:
             head_ref="def456",
             base_stats={timing_key: _make_stats()},
             head_stats={timing_key: _make_stats(median_ns=500.0)},
-            base_memory={
-                timing_key: _make_memory(peak=10_000_000),
-                memory_key: _make_memory(peak=8_000_000),
-            },
-            head_memory={
-                timing_key: _make_memory(peak=5_000_000),
-                memory_key: _make_memory(peak=6_000_000),
-            },
+            base_memory={timing_key: _make_memory(peak=10_000_000), memory_key: _make_memory(peak=8_000_000)},
+            head_memory={timing_key: _make_memory(peak=5_000_000), memory_key: _make_memory(peak=6_000_000)},
         )
         md = result.format_markdown()
 
@@ -161,3 +161,80 @@ class TestHasMeaningfulMemoryChange:
         base = _make_memory(peak=10_000_000, allocs=1000)
         head = _make_memory(peak=10_000_000, allocs=800)
         assert has_meaningful_memory_change(base, head)
+
+
+class TestScriptCompareResult:
+    def test_format_markdown_basic(self) -> None:
+        result = ScriptCompareResult(
+            base_ref="abc123",
+            head_ref="def456",
+            base_results={"file1.pdf": 12.34, "file2.docx": 1.23},
+            head_results={"file1.pdf": 10.21, "file2.docx": 1.45},
+        )
+        md = result.format_markdown()
+        assert "file1.pdf" in md
+        assert "file2.docx" in md
+        assert "Base" in md
+        assert "Head" in md
+
+    def test_format_markdown_empty(self) -> None:
+        result = ScriptCompareResult(base_ref="abc123", head_ref="def456")
+        md = result.format_markdown()
+        assert md == "_No benchmark results to compare._"
+
+    def test_format_markdown_total_row(self) -> None:
+        result = ScriptCompareResult(
+            base_ref="abc123",
+            head_ref="def456",
+            base_results={"test1": 1.0, "__total__": 5.0},
+            head_results={"test1": 0.8, "__total__": 4.0},
+        )
+        md = result.format_markdown()
+        assert "**TOTAL**" in md
+        # __total__ should not appear as a regular key row
+        assert md.count("__total__") == 0
+
+    def test_format_markdown_missing_keys(self) -> None:
+        result = ScriptCompareResult(
+            base_ref="abc123", head_ref="def456", base_results={"only_base": 2.0}, head_results={"only_head": 3.0}
+        )
+        md = result.format_markdown()
+        assert "only_base" in md
+        assert "only_head" in md
+
+    def test_format_markdown_with_memory(self) -> None:
+        result = ScriptCompareResult(
+            base_ref="abc123",
+            head_ref="def456",
+            base_results={"test1": 1.0},
+            head_results={"test1": 0.5},
+            base_memory=_make_memory(peak=10_000_000, allocs=500),
+            head_memory=_make_memory(peak=7_000_000, allocs=400),
+        )
+        md = result.format_markdown()
+        assert "Peak Memory" in md
+        assert "Allocations" in md
+
+    def test_render_no_crash(self) -> None:
+        result = ScriptCompareResult(
+            base_ref="abc123",
+            head_ref="def456",
+            base_results={"a": 1.0, "b": 2.0, "__total__": 3.0},
+            head_results={"a": 0.5, "b": 1.5, "__total__": 2.0},
+        )
+        render_script_comparison(result)
+
+    def test_render_empty_no_crash(self) -> None:
+        result = ScriptCompareResult(base_ref="abc123", head_ref="def456")
+        render_script_comparison(result)
+
+    def test_render_with_memory_no_crash(self) -> None:
+        result = ScriptCompareResult(
+            base_ref="abc123",
+            head_ref="def456",
+            base_results={"test1": 5.0},
+            head_results={"test1": 4.0},
+            base_memory=_make_memory(peak=10_000_000, allocs=1000),
+            head_memory=_make_memory(peak=8_000_000, allocs=900),
+        )
+        render_script_comparison(result)
