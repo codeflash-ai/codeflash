@@ -160,9 +160,15 @@ class JavaScriptSupport:
                 if not criteria.include_async and func.is_async:
                     continue
 
+                # Skip nested functions (functions defined inside other functions)
+                # Nested functions depend on closure variables from parent scope and cannot
+                # be optimized in isolation without complex context extraction
+                if func.parent_function:
+                    logger.debug(f"Skipping nested function: {func.name} (parent: {func.parent_function})")  # noqa: G004
+                    continue
+
                 # Skip non-exported functions (can't be imported in tests)
-                # Exception: nested functions and methods are allowed if their parent is exported
-                if criteria.require_export and not func.is_exported and not func.parent_function:
+                if criteria.require_export and not func.is_exported:
                     logger.debug(f"Skipping non-exported function: {func.name}")  # noqa: G004
                     continue
 
