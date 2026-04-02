@@ -27,9 +27,11 @@ if TYPE_CHECKING:
 
 # Jest timing marker patterns (from codeflash-jest-helper.js console.log output)
 # Format: !$######testName:testName:funcName:loopIndex:lineId######$! (start)
-# Format: !######testName:testName:funcName:loopIndex:lineId:durationNs######! (end)
+# Format: !######testName:testName:funcName:loopIndex:lineId:durationNs######! (end, performance mode)
+# Format: !######testName:testName:funcName:loopIndex:lineId######! (end, behavior mode - no duration)
 jest_start_pattern = re.compile(r"!\$######([^:]+):([^:]+):([^:]+):([^:]+):([^#]+)######\$!")
 jest_end_pattern = re.compile(r"!######([^:]+):([^:]+):([^:]+):([^:]+):([^:]+):(\d+)######!")
+jest_end_pattern_no_duration = re.compile(r"!######([^:]+):([^:]+):([^:]+):([^:]+):([^:]+)######!")
 
 
 def _extract_jest_console_output(suite_elem) -> str:
@@ -173,9 +175,14 @@ def parse_jest_test_xml(
                 marker_count = len(jest_start_pattern.findall(global_stdout))
                 if marker_count > 0:
                     logger.debug(f"Found {marker_count} timing start markers in subprocess stdout")
-                end_marker_count = len(jest_end_pattern.findall(global_stdout))
-                if end_marker_count > 0:
-                    logger.debug(f"Found {end_marker_count} END timing markers with duration in subprocess stdout")
+                end_marker_count_with_duration = len(jest_end_pattern.findall(global_stdout))
+                end_marker_count_no_duration = len(jest_end_pattern_no_duration.findall(global_stdout))
+                total_end_markers = end_marker_count_with_duration + end_marker_count_no_duration
+                if total_end_markers > 0:
+                    logger.debug(
+                        f"Found {total_end_markers} END timing markers in subprocess stdout "
+                        f"({end_marker_count_with_duration} with duration, {end_marker_count_no_duration} without duration)"
+                    )
                 else:
                     logger.debug(f"No END markers found in subprocess stdout (len={len(global_stdout)})")
         except (AttributeError, UnicodeDecodeError):
@@ -201,10 +208,17 @@ def parse_jest_test_xml(
         # Parse timing markers from the combined console output
         start_matches = list(jest_start_pattern.finditer(combined_stdout))
         end_matches_dict = {}
+        # Parse END markers with duration (performance mode)
         for match in jest_end_pattern.finditer(combined_stdout):
             # Key: (testName, testName2, funcName, loopIndex, lineId)
             key = match.groups()[:5]
             end_matches_dict[key] = match
+        # Also parse END markers without duration (behavior mode)
+        for match in jest_end_pattern_no_duration.finditer(combined_stdout):
+            key = match.groups()[:5]
+            # Only add if not already present (performance markers take precedence)
+            if key not in end_matches_dict:
+                end_matches_dict[key] = match
         logger.debug(
             f"Suite {suite_count}: combined_stdout len={len(combined_stdout)}, "
             f"start_matches={len(start_matches)}, end_matches={len(end_matches_dict)}"
@@ -225,10 +239,17 @@ def parse_jest_test_xml(
                 tc_stdout = tc_system_out.text.strip()
                 logger.debug(f"Vitest testcase system-out found: {len(tc_stdout)} chars, first 200: {tc_stdout[:200]}")
                 end_marker_count = 0
+                # Parse END markers with duration (performance mode)
                 for match in jest_end_pattern.finditer(tc_stdout):
                     key = match.groups()[:5]
                     end_matches_dict[key] = match
                     end_marker_count += 1
+                # Also parse END markers without duration (behavior mode)
+                for match in jest_end_pattern_no_duration.finditer(tc_stdout):
+                    key = match.groups()[:5]
+                    if key not in end_matches_dict:
+                        end_matches_dict[key] = match
+                        end_marker_count += 1
                 if end_marker_count > 0:
                     logger.debug(f"Found {end_marker_count} END timing markers in testcase system-out")
                 start_matches.extend(jest_start_pattern.finditer(tc_stdout))
