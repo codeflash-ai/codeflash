@@ -432,7 +432,7 @@ class GradleStrategy(BuildToolStrategy):
 
         libs_dir = module_root / "libs"
         libs_dir.mkdir(parents=True, exist_ok=True)
-        dest_jar = libs_dir / "codeflash-runtime-1.0.0.jar"
+        dest_jar = libs_dir / "codeflash-runtime-1.0.1.jar"
 
         if not dest_jar.exists():
             logger.info("Copying codeflash-runtime JAR to %s", dest_jar)

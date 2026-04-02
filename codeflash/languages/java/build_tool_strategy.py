@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_RUNTIME_JAR_NAME = "codeflash-runtime-1.0.0.jar"
+_RUNTIME_JAR_NAME = "codeflash-runtime-1.0.1.jar"
 _JAVA_RUNTIME_DIR = Path(__file__).parent.parent.parent.parent / "codeflash-java-runtime"
 
 
