@@ -376,6 +376,7 @@ def _build_parser() -> ArgumentParser:
     subparsers.add_parser("vscode-install", help="Install the Codeflash VSCode extension")
     subparsers.add_parser("init-actions", help="Initialize GitHub Actions workflow")
 
+    trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize your project.", add_help=False)
     auth_parser = subparsers.add_parser("auth", help="Authentication commands")
     auth_subparsers = auth_parser.add_subparsers(dest="auth_command", help="Auth sub-commands")
     auth_subparsers.add_parser("login", help="Log in to Codeflash via OAuth")
@@ -390,8 +391,6 @@ def _build_parser() -> ArgumentParser:
     )
     compare_parser.add_argument("--timeout", type=int, default=600, help="Benchmark timeout in seconds (default: 600)")
     compare_parser.add_argument("--config-file", type=str, dest="config_file", help="Path to pyproject.toml")
-
-    trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize your project.")
 
     trace_optimize.add_argument(
         "--max-function-count",
