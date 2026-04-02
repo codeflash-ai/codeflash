@@ -110,11 +110,15 @@ def existing_tests_source_for(
                 if registry_tf.instrumented_behavior_file_path:
                     generated_resolved = registry_tf.instrumented_behavior_file_path.resolve()
                     non_generated_tests.add(generated_resolved)
-                    logger.debug(f"[PR-DEBUG] Added generated test (behavior) to non_generated_tests: {generated_resolved}")
+                    logger.debug(
+                        f"[PR-DEBUG] Added generated test (behavior) to non_generated_tests: {generated_resolved}"
+                    )
                 if registry_tf.benchmarking_file_path:
                     generated_perf_resolved = registry_tf.benchmarking_file_path.resolve()
                     non_generated_tests.add(generated_perf_resolved)
-                    logger.debug(f"[PR-DEBUG] Added generated test (perf) to non_generated_tests: {generated_perf_resolved}")
+                    logger.debug(
+                        f"[PR-DEBUG] Added generated test (perf) to non_generated_tests: {generated_perf_resolved}"
+                    )
     # TODO confirm that original and optimized have the same keys
     all_invocation_ids = original_runtimes_all.keys() | optimized_runtimes_all.keys()
     logger.debug(f"[PR-DEBUG] Processing {len(all_invocation_ids)} invocation_ids")

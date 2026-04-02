@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.models.models import TestFile, TestFiles, TestType
+from codeflash.models.models import TestFile, TestFiles
+from codeflash.models.test_type import TestType
 
 
 @pytest.fixture
