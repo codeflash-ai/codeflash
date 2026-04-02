@@ -61,7 +61,10 @@ def existing_tests_source_for(
     instrumented_to_original: dict[Path, Path] = {}
     if test_files_registry:
         for registry_tf in test_files_registry.test_files:
+            # For existing tests, map instrumented → original
+            # For generated tests (original_file_path=None), map instrumented → instrumented (self)
             if registry_tf.original_file_path:
+                # Existing test: map to original file
                 if registry_tf.instrumented_behavior_file_path:
                     instrumented_to_original[registry_tf.instrumented_behavior_file_path.resolve()] = (
                         registry_tf.original_file_path.resolve()
@@ -76,13 +79,42 @@ def existing_tests_source_for(
                     logger.debug(
                         f"[PR-DEBUG] Mapping (perf): {registry_tf.benchmarking_file_path.name} -> {registry_tf.original_file_path.name}"
                     )
+            else:
+                # Generated test (no original file): map to itself
+                if registry_tf.instrumented_behavior_file_path:
+                    behavior_resolved = registry_tf.instrumented_behavior_file_path.resolve()
+                    instrumented_to_original[behavior_resolved] = behavior_resolved
+                    logger.debug(
+                        f"[PR-DEBUG] Mapping (generated behavior): {registry_tf.instrumented_behavior_file_path.name} -> {registry_tf.instrumented_behavior_file_path.name}"
+                    )
+                if registry_tf.benchmarking_file_path:
+                    perf_resolved = registry_tf.benchmarking_file_path.resolve()
+                    instrumented_to_original[perf_resolved] = perf_resolved
+                    logger.debug(
+                        f"[PR-DEBUG] Mapping (generated perf): {registry_tf.benchmarking_file_path.name} -> {registry_tf.benchmarking_file_path.name}"
+                    )
 
     # Resolve all paths to absolute for consistent comparison
+    # Include both existing tests (from function_to_tests) and generated tests (from registry)
     non_generated_tests: set[Path] = set()
     for test_file in test_files:
         resolved = test_file.tests_in_file.test_file.resolve()
         non_generated_tests.add(resolved)
         logger.debug(f"[PR-DEBUG] Added to non_generated_tests: {resolved}")
+
+    # Also add generated tests from registry to the set
+    # Generated tests have original_file_path=None and should be included by their instrumented paths
+    if test_files_registry:
+        for registry_tf in test_files_registry.test_files:
+            if registry_tf.original_file_path is None:  # Generated test
+                if registry_tf.instrumented_behavior_file_path:
+                    generated_resolved = registry_tf.instrumented_behavior_file_path.resolve()
+                    non_generated_tests.add(generated_resolved)
+                    logger.debug(f"[PR-DEBUG] Added generated test (behavior) to non_generated_tests: {generated_resolved}")
+                if registry_tf.benchmarking_file_path:
+                    generated_perf_resolved = registry_tf.benchmarking_file_path.resolve()
+                    non_generated_tests.add(generated_perf_resolved)
+                    logger.debug(f"[PR-DEBUG] Added generated test (perf) to non_generated_tests: {generated_perf_resolved}")
     # TODO confirm that original and optimized have the same keys
     all_invocation_ids = original_runtimes_all.keys() | optimized_runtimes_all.keys()
     logger.debug(f"[PR-DEBUG] Processing {len(all_invocation_ids)} invocation_ids")
