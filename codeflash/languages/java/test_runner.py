@@ -226,17 +226,17 @@ def _scan_filesystem_for_modules(directory: Path) -> list[str]:
     file uses complex DSL that text-based parsing cannot handle.
     """
     modules: list[str] = []
-    _BUILD_FILES = ("build.gradle", "build.gradle.kts", "pom.xml")
+    build_files = ("build.gradle", "build.gradle.kts", "pom.xml")
     for child in directory.iterdir():
         if not child.is_dir() or child.name.startswith("."):
             continue
-        if any((child / bf).exists() for bf in _BUILD_FILES):
+        if any((child / bf).exists() for bf in build_files):
             modules.append(child.name)
         # One level deeper for nested modules (connect/runtime)
         for grandchild in child.iterdir():
             if not grandchild.is_dir() or grandchild.name.startswith("."):
                 continue
-            if any((grandchild / bf).exists() for bf in _BUILD_FILES):
+            if any((grandchild / bf).exists() for bf in build_files):
                 rel = grandchild.relative_to(directory)
                 modules.append(str(rel).replace(os.sep, ":"))
     return modules
