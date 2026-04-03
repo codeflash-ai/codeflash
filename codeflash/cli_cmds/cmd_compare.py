@@ -40,6 +40,9 @@ def run_compare(args: Namespace) -> None:
     # Script mode: run an arbitrary benchmark command on each worktree (no codeflash config needed)
     script_cmd = getattr(args, "script", None)
     if script_cmd:
+        if getattr(args, "inject", None):
+            logger.warning("--inject is not supported in --script mode and will be ignored")
+
         script_output = getattr(args, "script_output", None)
         if not script_output:
             logger.error("--script-output is required when using --script")

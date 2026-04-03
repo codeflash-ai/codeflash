@@ -347,7 +347,7 @@ def compare_branches(
 
             # Inject files from working tree into both worktrees
             if inject_paths:
-                import shutil as _shutil
+                import shutil
 
                 for path_str in inject_paths:
                     src = repo_root / path_str
@@ -358,9 +358,9 @@ def compare_branches(
                         dst = wt / path_str
                         dst.parent.mkdir(parents=True, exist_ok=True)
                         if src.is_dir():
-                            _shutil.copytree(src, dst, dirs_exist_ok=True)
+                            shutil.copytree(src, dst, dirs_exist_ok=True)
                         elif src.is_file():
-                            _shutil.copy2(src, dst)
+                            shutil.copy2(src, dst)
 
             step += 1
             live.update(build_panel(step))
