@@ -7,6 +7,7 @@ verification and performance benchmarking.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -169,18 +170,17 @@ def _is_vitest_workspace(project_root: Path) -> bool:
         return False
 
     try:
-        content = vitest_config.read_text()
+        content = vitest_config.read_text(encoding="utf-8")
         # Check for actual workspace configuration patterns (not just the word "workspace" in comments)
         # Valid indicators:
         #   - defineWorkspace() function call
         #   - workspace: [ array config
         #   - separate vitest.workspace.ts/js file
-        import re
         # Match defineWorkspace calls or workspace: property assignments
         workspace_pattern = re.compile(
-            r'(?:^|[^a-zA-Z_])defineWorkspace\s*\(|'  # defineWorkspace( function call
-            r'(?:^|[^a-zA-Z_])workspace\s*:\s*\[',     # workspace: [ array
-            re.MULTILINE
+            r"(?:^|[^a-zA-Z_])defineWorkspace\s*\(|"  # defineWorkspace( function call
+            r"(?:^|[^a-zA-Z_])workspace\s*:\s*\[",  # workspace: [ array
+            re.MULTILINE,
         )
         if workspace_pattern.search(content):
             return True
