@@ -230,6 +230,12 @@ class JavaScriptSupport:
         """
         result: dict[str, list[TestInfo]] = {}
 
+        # Build index: function_name → qualified_name for O(1) lookup
+        # This avoids iterating all functions for every test file (was O(NxM), now O(N+M))
+        function_name_to_qualified: dict[str, str] = {}
+        for func in source_functions:
+            function_name_to_qualified[func.function_name] = func.qualified_name
+
         # Find all test files using language-specific patterns
         test_patterns = self._get_test_patterns()
 
@@ -254,13 +260,15 @@ class JavaScriptSupport:
                 # Find test functions (describe/it/test blocks)
                 test_functions = self._find_jest_tests(source, analyzer)
 
-                # Match source functions to tests
-                for func in source_functions:
-                    if func.function_name in imported_names or func.function_name in source:
-                        if func.qualified_name not in result:
-                            result[func.qualified_name] = []
+                # Match source functions to tests using the index
+                # Only check functions that are actually imported in this test file
+                for imported_name in imported_names:
+                    if imported_name in function_name_to_qualified:
+                        qualified_name = function_name_to_qualified[imported_name]
+                        if qualified_name not in result:
+                            result[qualified_name] = []
                         for test_name in test_functions:
-                            result[func.qualified_name].append(
+                            result[qualified_name].append(
                                 TestInfo(test_name=test_name, test_file=test_file, test_class=None)
                             )
             except Exception as e:
