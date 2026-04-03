@@ -393,6 +393,7 @@ module.exports = {{
     {test_dirs_js},
   ],
   testMatch: ['**/*.test.ts', '**/*.test.js', '**/*.test.tsx', '**/*.test.jsx'],
+  testRegex: undefined,  // Clear testRegex from baseConfig to avoid conflict with testMatch
 {module_dirs_line}}};
 """
     else:
