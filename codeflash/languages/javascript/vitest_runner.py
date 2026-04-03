@@ -170,8 +170,24 @@ def _is_vitest_workspace(project_root: Path) -> bool:
 
     try:
         content = vitest_config.read_text()
-        # Check for workspace indicators
-        return "workspace" in content.lower() or "defineWorkspace" in content
+        # Check for actual workspace configuration patterns (not just the word "workspace" in comments)
+        # Valid indicators:
+        #   - defineWorkspace() function call
+        #   - workspace: [ array config
+        #   - separate vitest.workspace.ts/js file
+        import re
+        # Match defineWorkspace calls or workspace: property assignments
+        workspace_pattern = re.compile(
+            r'(?:^|[^a-zA-Z_])defineWorkspace\s*\(|'  # defineWorkspace( function call
+            r'(?:^|[^a-zA-Z_])workspace\s*:\s*\[',     # workspace: [ array
+            re.MULTILINE
+        )
+        if workspace_pattern.search(content):
+            return True
+        # Also check for separate workspace config file
+        if (project_root / "vitest.workspace.ts").exists() or (project_root / "vitest.workspace.js").exists():
+            return True
+        return False
     except Exception:
         return False
 
@@ -238,6 +254,18 @@ export default mergeConfig(originalConfig, {{
     include: ['**/*.test.ts', '**/*.test.js', '**/*.test.tsx', '**/*.test.jsx'],
     // Use forks pool so timing markers from process.stdout.write flow to parent stdout
     pool: 'forks',
+    // Disable setupFiles to prevent relative path resolution issues in nested directories.
+    // Project setupFiles often use relative paths (e.g., "test/setup.ts") which resolve
+    // incorrectly when tests are in subdirectories (e.g., extensions/discord/test/).
+    // Codeflash-generated tests are self-contained and don't require project setup files.
+    setupFiles: [],
+    // Override coverage settings to ensure JSON reporter is used.
+    // Vitest's mergeConfig doesn't properly handle nested coverage object merge with
+    // command-line flags, so we explicitly set reporter here to guarantee coverage
+    // files are written to the expected location (coverage-final.json).
+    coverage: {{
+      reporter: ['json'],
+    }},
   }},
 }});
 """
@@ -254,6 +282,10 @@ export default defineConfig({
     exclude: ['**/node_modules/**', '**/dist/**'],
     // Use forks pool so timing markers from process.stdout.write flow to parent stdout
     pool: 'forks',
+    // Override coverage settings to ensure JSON reporter is used
+    coverage: {
+      reporter: ['json'],
+    },
   },
 });
 """
