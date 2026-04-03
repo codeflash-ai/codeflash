@@ -60,9 +60,9 @@ class ComparatorCorrectnessTest {
         String json = Comparator.compareDatabases(originalDb.toString(), candidateDb.toString());
         Map<String, Object> result = parseJson(json);
 
-        assertFalse((Boolean) result.get("equivalent"));
-        assertEquals(0, ((Number) result.get("actualComparisons")).intValue());
-        assertTrue(((Number) result.get("skippedPlaceholders")).intValue() > 0);
+        // Placeholders are skipped during comparison (treated as matching) — counts as actual comparison
+        assertTrue((Boolean) result.get("equivalent"));
+        assertEquals(1, ((Number) result.get("actualComparisons")).intValue());
     }
 
     @Test
@@ -108,8 +108,8 @@ class ComparatorCorrectnessTest {
         Map<String, Object> result = parseJson(json);
 
         assertTrue((Boolean) result.get("equivalent"));
-        assertEquals(2, ((Number) result.get("actualComparisons")).intValue());
-        assertEquals(1, ((Number) result.get("skippedPlaceholders")).intValue());
+        // All 3 compared: 2 real values + 1 placeholder (placeholder skipped during deep compare)
+        assertEquals(3, ((Number) result.get("actualComparisons")).intValue());
     }
 
     @Test
@@ -207,6 +207,87 @@ class ComparatorCorrectnessTest {
         assertFalse(Comparator.isDeserializationError("not a map"));
         assertFalse(Comparator.isDeserializationError(null));
         assertFalse(Comparator.isDeserializationError(42));
+    }
+
+    // ============================================================
+    // VOID METHOD STATE COMPARISON — proves we actually compare
+    // post-call state for void methods, not just skip them
+    // ============================================================
+
+    @Test
+    @DisplayName("void state: both sides sorted identically → equivalent")
+    void testVoidState_identicalMutation_equivalent() throws Exception {
+        createTestDb(originalDb);
+        createTestDb(candidateDb);
+
+        // Simulate: bubbleSortInPlace(arr) — both original and candidate sort correctly
+        // Post-call state: Object[]{sorted_array}
+        int[] sortedArr = {1, 2, 3, 4, 5};
+        byte[] origState = Serializer.serialize(new Object[]{sortedArr});
+        byte[] candState = Serializer.serialize(new Object[]{new int[]{1, 2, 3, 4, 5}});
+
+        insertRow(originalDb, "L1_1", 1, origState);
+        insertRow(candidateDb, "L1_1", 1, candState);
+
+        String json = Comparator.compareDatabases(originalDb.toString(), candidateDb.toString());
+        Map<String, Object> result = parseJson(json);
+
+        assertTrue((Boolean) result.get("equivalent"),
+            "Both sides produce same sorted array — should be equivalent");
+        assertEquals(1, ((Number) result.get("actualComparisons")).intValue());
+    }
+
+    @Test
+    @DisplayName("void state: candidate mutates array differently → NOT equivalent")
+    void testVoidState_differentMutation_rejected() throws Exception {
+        createTestDb(originalDb);
+        createTestDb(candidateDb);
+
+        // Simulate: original sorts [3,1,2] → [1,2,3]
+        // Bad optimization doesn't sort correctly → [3,1,2] unchanged
+        byte[] origState = Serializer.serialize(new Object[]{new int[]{1, 2, 3}});
+        byte[] candState = Serializer.serialize(new Object[]{new int[]{3, 1, 2}});
+
+        insertRow(originalDb, "L1_1", 1, origState);
+        insertRow(candidateDb, "L1_1", 1, candState);
+
+        String json = Comparator.compareDatabases(originalDb.toString(), candidateDb.toString());
+        Map<String, Object> result = parseJson(json);
+
+        assertFalse((Boolean) result.get("equivalent"),
+            "Candidate produced wrong array — must be rejected");
+        assertEquals(1, ((Number) result.get("actualComparisons")).intValue());
+    }
+
+    @Test
+    @DisplayName("void state: receiver + args both compared — wrong receiver state rejected")
+    void testVoidState_receiverAndArgs_wrongReceiverRejected() throws Exception {
+        createTestDb(originalDb);
+        createTestDb(candidateDb);
+
+        // Simulate: instance method sorter.sort(data)
+        // Post-call state is Object[]{receiver_fields_map, mutated_data}
+        // Original: receiver has size=3, data is [1,2,3]
+        // Candidate: receiver has size=0 (wrong), data is [1,2,3]
+        Map<String, Object> origReceiver = new HashMap<>();
+        origReceiver.put("size", 3);
+        origReceiver.put("sorted", true);
+        Map<String, Object> candReceiver = new HashMap<>();
+        candReceiver.put("size", 0);
+        candReceiver.put("sorted", true);
+
+        byte[] origState = Serializer.serialize(new Object[]{origReceiver, new int[]{1, 2, 3}});
+        byte[] candState = Serializer.serialize(new Object[]{candReceiver, new int[]{1, 2, 3}});
+
+        insertRow(originalDb, "L1_1", 1, origState);
+        insertRow(candidateDb, "L1_1", 1, candState);
+
+        String json = Comparator.compareDatabases(originalDb.toString(), candidateDb.toString());
+        Map<String, Object> result = parseJson(json);
+
+        assertFalse((Boolean) result.get("equivalent"),
+            "Receiver state differs (size 3 vs 0) — must be rejected even though args match");
+        assertEquals(1, ((Number) result.get("actualComparisons")).intValue());
     }
 
     // --- Helpers ---

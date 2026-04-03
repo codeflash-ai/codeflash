@@ -299,16 +299,6 @@ def compare_test_results(
         skipped_deser_errors = comparison.get("skippedDeserializationErrors", 0)
 
         if actual_comparisons == 0:
-            if skipped_placeholders > 0 and skipped_deser_errors == 0 and not comparison.get("diffs"):
-                # For void methods, all return values are null → all are "placeholder" skips.
-                # If no diffs and no deser errors, treat as equivalent (pass/fail verification).
-                logger.info(
-                    "Java comparison: void method — all return values null, treating as equivalent "
-                    "(total=%s, skipped_placeholders=%s)",
-                    comparison.get("totalInvocations", 0),
-                    skipped_placeholders,
-                )
-                return True, []
             logger.warning(
                 "Java comparison: no actual comparisons performed "
                 "(total=%s, skipped_placeholders=%s, skipped_deser_errors=%s). "

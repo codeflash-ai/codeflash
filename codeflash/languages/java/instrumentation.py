@@ -203,6 +203,7 @@ def _generate_sqlite_write_code(
     func_name: str,
     test_method_name: str,
     invocation_id: str = "",
+    verification_type: str = "function_call",
 ) -> list[str]:
     """Generate SQLite write code for a single function call.
 
@@ -249,7 +250,7 @@ def _generate_sqlite_write_code(
         f'{inner_indent}                _cf_pstmt{id_pair}.setString(6, "{inv_id_str}");',
         f"{inner_indent}                _cf_pstmt{id_pair}.setLong(7, _cf_dur{id_pair});",
         f"{inner_indent}                _cf_pstmt{id_pair}.setBytes(8, _cf_serializedResult{id_pair});",
-        f'{inner_indent}                _cf_pstmt{id_pair}.setString(9, "function_call");',
+        f'{inner_indent}                _cf_pstmt{id_pair}.setString(9, "{verification_type}");',
         f"{inner_indent}                _cf_pstmt{id_pair}.executeUpdate();",
         f"{inner_indent}            }}",
         f"{inner_indent}        }}",
@@ -349,14 +350,18 @@ def wrap_target_calls_with_treesitter(
         if is_void:
             bare_call_stmt = f"{call['full_call']};"
             # For void methods, serialize the post-call state to capture side effects.
-            # For instance methods (receiver is a variable), serialize the receiver.
-            # For static methods (receiver is a class name), serialize the arguments
-            # since the class name itself is not a value and can't be cast to Object.
+            # We always serialize the arguments (which are mutated in place).
+            # For instance methods, we also include the receiver to capture object state changes.
+            # For static methods, the receiver is a class name (not a value), so args only.
             is_static_call = receiver != "this" and receiver[:1].isupper()
-            if is_static_call and arg_texts:
-                serialize_target = f"new Object[]{{{', '.join(arg_texts)}}}"
+            parts: list[str] = []
+            if not is_static_call:
+                parts.append(receiver)
+            parts.extend(arg_texts)
+            if parts:
+                serialize_target = f"new Object[]{{{', '.join(parts)}}}"
             else:
-                serialize_target = f"(Object) {receiver}"
+                serialize_target = "new Object[]{}"
             if precise_call_timing:
                 serialize_stmt = f"_cf_serializedResult{iter_id}_{call_counter} = com.codeflash.Serializer.serialize({serialize_target});"
                 start_stmt = f"_cf_start{iter_id}_{call_counter} = System.nanoTime();"
@@ -418,7 +423,14 @@ def wrap_target_calls_with_treesitter(
                         f"    {serialize_stmt}",
                     ]
                 finally_block = _generate_sqlite_write_code(
-                    iter_id, call_counter, "", class_name, func_name, test_method_name, invocation_id=inv_id
+                    iter_id,
+                    call_counter,
+                    "",
+                    class_name,
+                    func_name,
+                    test_method_name,
+                    invocation_id=inv_id,
+                    verification_type="void_state" if is_void else "function_call",
                 )
                 all_lines = [*var_decls, start_marker, *try_block, *finally_block]
                 replacement = (
