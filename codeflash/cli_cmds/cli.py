@@ -404,6 +404,12 @@ def _build_parser() -> ArgumentParser:
         help="Relative path to JSON results file produced by --script (required with --script)",
     )
     compare_parser.add_argument("--config-file", type=str, dest="config_file", help="Path to pyproject.toml")
+    compare_parser.add_argument(
+        "--inject",
+        nargs="+",
+        default=None,
+        help="Files or directories to copy into both worktrees before benchmarking. Paths are relative to repo root.",
+    )
 
     trace_optimize.add_argument(
         "--max-function-count",

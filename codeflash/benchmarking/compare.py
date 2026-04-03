@@ -211,6 +211,7 @@ def compare_branches(
     functions: Optional[dict[Path, list[FunctionToOptimize]]] = None,
     timeout: int = 600,
     memory: bool = False,
+    inject_paths: Optional[list[str]] = None,
 ) -> CompareResult:
     """Compare benchmark performance between two git refs.
 
@@ -343,6 +344,24 @@ def compare_branches(
             head_sha = repo.commit(head_ref).hexsha
             repo.git.worktree("add", str(base_worktree), base_sha)
             repo.git.worktree("add", str(head_worktree), head_sha)
+
+            # Inject files from working tree into both worktrees
+            if inject_paths:
+                import shutil
+
+                for path_str in inject_paths:
+                    src = repo_root / path_str
+                    if not src.exists():
+                        logger.warning("Inject path does not exist: %s", src)
+                        continue
+                    for wt in [base_worktree, head_worktree]:
+                        dst = wt / path_str
+                        dst.parent.mkdir(parents=True, exist_ok=True)
+                        if src.is_dir():
+                            shutil.copytree(src, dst, dirs_exist_ok=True)
+                        elif src.is_file():
+                            shutil.copy2(src, dst)
+
             step += 1
             live.update(build_panel(step))
 
