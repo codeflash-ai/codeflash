@@ -268,8 +268,8 @@ class SerializerTest {
     class PlaceholderAccessTests {
 
         @Test
-        @DisplayName("comparing objects with placeholder skips the placeholder field")
-        void testPlaceholderComparisonSkips() throws Exception {
+        @DisplayName("comparing objects with placeholder throws KryoPlaceholderAccessException")
+        void testPlaceholderComparisonThrowsException() throws Exception {
             try (Socket socket = new Socket()) {
                 Map<String, Object> data = new LinkedHashMap<>();
                 data.put("socket", socket);
@@ -279,8 +279,9 @@ class SerializerTest {
 
                 KryoPlaceholder placeholder = (KryoPlaceholder) reloaded.get("socket");
 
-                // Placeholders are skipped during comparison — treated as matching
-                assertTrue(Comparator.compare(placeholder, "anything"));
+                assertThrows(KryoPlaceholderAccessException.class, () -> {
+                    Comparator.compare(placeholder, "anything");
+                });
             }
         }
     }

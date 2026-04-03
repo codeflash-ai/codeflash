@@ -60,9 +60,9 @@ class ComparatorCorrectnessTest {
         String json = Comparator.compareDatabases(originalDb.toString(), candidateDb.toString());
         Map<String, Object> result = parseJson(json);
 
-        // Placeholders are skipped during comparison (treated as matching) — counts as actual comparison
-        assertTrue((Boolean) result.get("equivalent"));
-        assertEquals(1, ((Number) result.get("actualComparisons")).intValue());
+        assertFalse((Boolean) result.get("equivalent"));
+        assertEquals(0, ((Number) result.get("actualComparisons")).intValue());
+        assertTrue(((Number) result.get("skippedPlaceholders")).intValue() > 0);
     }
 
     @Test
@@ -108,8 +108,8 @@ class ComparatorCorrectnessTest {
         Map<String, Object> result = parseJson(json);
 
         assertTrue((Boolean) result.get("equivalent"));
-        // All 3 compared: 2 real values + 1 placeholder (placeholder skipped during deep compare)
-        assertEquals(3, ((Number) result.get("actualComparisons")).intValue());
+        assertEquals(2, ((Number) result.get("actualComparisons")).intValue());
+        assertEquals(1, ((Number) result.get("skippedPlaceholders")).intValue());
     }
 
     @Test

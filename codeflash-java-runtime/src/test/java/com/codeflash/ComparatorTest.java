@@ -311,28 +311,31 @@ class ComparatorTest {
     class PlaceholderTests {
 
         @Test
-        @DisplayName("original contains placeholder: skipped, treated as matching")
+        @DisplayName("original contains placeholder: throws exception")
         void testOriginalPlaceholder() {
             KryoPlaceholder placeholder = new KryoPlaceholder(
                 "java.net.Socket", "<socket>", "error", "path"
             );
 
-            // Placeholders are skipped — comparison returns true (not comparable, so skip)
-            assertTrue(Comparator.compare(placeholder, "anything"));
+            assertThrows(KryoPlaceholderAccessException.class, () -> {
+                Comparator.compare(placeholder, "anything");
+            });
         }
 
         @Test
-        @DisplayName("new contains placeholder: skipped, treated as matching")
+        @DisplayName("new contains placeholder: throws exception")
         void testNewPlaceholder() {
             KryoPlaceholder placeholder = new KryoPlaceholder(
                 "java.net.Socket", "<socket>", "error", "path"
             );
 
-            assertTrue(Comparator.compare("anything", placeholder));
+            assertThrows(KryoPlaceholderAccessException.class, () -> {
+                Comparator.compare("anything", placeholder);
+            });
         }
 
         @Test
-        @DisplayName("placeholder in nested structure: skipped, rest compared normally")
+        @DisplayName("placeholder in nested structure: throws exception")
         void testNestedPlaceholder() {
             KryoPlaceholder placeholder = new KryoPlaceholder(
                 "java.net.Socket", "<socket>", "error", "data.socket"
@@ -340,18 +343,17 @@ class ComparatorTest {
 
             Map<String, Object> map1 = new HashMap<>();
             map1.put("socket", placeholder);
-            map1.put("name", "same");
 
             Map<String, Object> map2 = new HashMap<>();
             map2.put("socket", "different");
-            map2.put("name", "same");
 
-            // Placeholder field skipped, "name" field compared normally → equivalent
-            assertTrue(Comparator.compare(map1, map2));
+            assertThrows(KryoPlaceholderAccessException.class, () -> {
+                Comparator.compare(map1, map2);
+            });
         }
 
         @Test
-        @DisplayName("compareWithDetails with placeholder returns equal (skipped)")
+        @DisplayName("compareWithDetails captures error message")
         void testCompareWithDetails() {
             KryoPlaceholder placeholder = new KryoPlaceholder(
                 "java.net.Socket", "<socket>", "error", "path"
@@ -360,8 +362,9 @@ class ComparatorTest {
             Comparator.ComparisonResult result =
                 Comparator.compareWithDetails(placeholder, "anything");
 
-            assertTrue(result.isEqual());
-            assertFalse(result.hasError());
+            assertFalse(result.isEqual());
+            assertTrue(result.hasError());
+            assertNotNull(result.getErrorMessage());
         }
     }
 

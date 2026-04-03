@@ -284,10 +284,18 @@ public final class Comparator {
             return false;
         }
 
-        // KryoPlaceholder means the Serializer couldn't serialize this part.
-        // Skip comparison for placeholder fields — we can't compare what we couldn't serialize.
-        if (orig instanceof KryoPlaceholder || newObj instanceof KryoPlaceholder) {
-            return true;
+        // Detect and reject KryoPlaceholder
+        if (orig instanceof KryoPlaceholder) {
+            KryoPlaceholder p = (KryoPlaceholder) orig;
+            throw new KryoPlaceholderAccessException(
+                "Cannot compare: original contains placeholder for unserializable object",
+                p.getObjType(), p.getPath());
+        }
+        if (newObj instanceof KryoPlaceholder) {
+            KryoPlaceholder p = (KryoPlaceholder) newObj;
+            throw new KryoPlaceholderAccessException(
+                "Cannot compare: new object contains placeholder for unserializable object",
+                p.getObjType(), p.getPath());
         }
 
         // Handle exceptions specially
