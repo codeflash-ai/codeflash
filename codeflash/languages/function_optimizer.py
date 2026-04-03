@@ -3085,29 +3085,15 @@ class FunctionOptimizer:
                 )
             )
 
-    def _get_js_project_root(self) -> Path | None:
-        """Get the JavaScript project root for the current function being optimized.
-
-        This method calculates the js_project_root for each function instead of
-        caching it in test_cfg. This is important in monorepos where different
-        functions may belong to different packages/extensions with their own
-        package.json files.
-
-        Returns:
-            Path to the JavaScript project root, or None if not a JavaScript project
-            or if the project root cannot be determined.
-        """
+    def get_js_project_root(self) -> Path | None:
         # Only calculate for JavaScript/TypeScript projects
         if self.function_to_optimize.language not in ("javascript", "typescript"):
             return self.test_cfg.js_project_root  # Fall back to cached value for non-JS
 
-        # For JS/TS, calculate fresh for each function
-        from pathlib import Path
-
+        # For JS/TS, calculate fresh for each function to support monorepos
         from codeflash.languages.javascript.test_runner import find_node_project_root
 
-        source_file = Path(self.function_to_optimize.file_path)
-        return find_node_project_root(source_file)
+        return find_node_project_root(Path(self.function_to_optimize.file_path))
 
     def run_and_parse_tests(
         self,
@@ -3129,7 +3115,7 @@ class FunctionOptimizer:
             if testing_type == TestingMode.BEHAVIOR:
                 # Calculate js_project_root for the current function being optimized
                 # instead of using cached value from test_cfg, which may be from a different function
-                js_project_root = self._get_js_project_root()
+                js_project_root = self.get_js_project_root()
 
                 result_file_path, run_result, coverage_database_file, coverage_config_file = (
                     self.language_support.run_behavioral_tests(
@@ -3143,7 +3129,7 @@ class FunctionOptimizer:
                     )
                 )
             elif testing_type == TestingMode.LINE_PROFILE:
-                js_project_root = self._get_js_project_root()
+                js_project_root = self.get_js_project_root()
                 result_file_path, run_result = self.language_support.run_line_profile_tests(
                     test_paths=test_files,
                     test_env=test_env,
@@ -3153,7 +3139,7 @@ class FunctionOptimizer:
                     line_profile_output_file=line_profiler_output_file,
                 )
             elif testing_type == TestingMode.PERFORMANCE:
-                js_project_root = self._get_js_project_root()
+                js_project_root = self.get_js_project_root()
                 result_file_path, run_result = self.language_support.run_benchmarking_tests(
                     test_paths=test_files,
                     test_env=test_env,
