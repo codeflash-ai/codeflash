@@ -13,15 +13,73 @@ if TYPE_CHECKING:
     from codeflash.models.function_types import FunctionToOptimize
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.config_parser import parse_config_file
 
 
 def run_compare(args: Namespace) -> None:
     """Entry point for the compare subcommand."""
-    # Load project config
-    pyproject_config, pyproject_file_path = parse_config_file(args.config_file)
+    # Resolve head_ref: explicit arg > --pr > current branch
+    head_ref = args.head_ref
+    if args.pr:
+        head_ref = resolve_pr_branch(args.pr)
+    if not head_ref:
+        head_ref = get_current_branch()
+        if not head_ref:
+            logger.error("Must provide head_ref, --pr, or be on a branch")
+            sys.exit(1)
+        logger.info(f"Auto-detected head ref: {head_ref}")
 
+    # Resolve base_ref: explicit arg > PR base branch > repo default branch
+    base_ref = args.base_ref
+    if not base_ref:
+        base_ref = detect_base_ref(head_ref)
+        if not base_ref:
+            logger.error("Could not auto-detect base ref. Provide it explicitly or ensure gh CLI is available.")
+            sys.exit(1)
+        logger.info(f"Auto-detected base ref: {base_ref}")
+
+    # Script mode: run an arbitrary benchmark command on each worktree (no codeflash config needed)
+    script_cmd = getattr(args, "script", None)
+    if script_cmd:
+        script_output = getattr(args, "script_output", None)
+        if not script_output:
+            logger.error("--script-output is required when using --script")
+            sys.exit(1)
+
+        import git
+
+        project_root = Path(git.Repo(Path.cwd(), search_parent_directories=True).working_dir)
+
+        from codeflash.benchmarking.compare import compare_with_script
+
+        result = compare_with_script(
+            base_ref=base_ref,
+            head_ref=head_ref,
+            project_root=project_root,
+            script_cmd=script_cmd,
+            script_output=script_output,
+            timeout=args.timeout,
+            memory=getattr(args, "memory", False),
+        )
+
+        if not result.base_results and not result.head_results:
+            logger.warning("No benchmark data collected. Check that --script-output points to a valid JSON file.")
+            sys.exit(1)
+
+        if args.output:
+            md = result.format_markdown()
+            Path(args.output).write_text(md, encoding="utf-8")
+            logger.info(f"Markdown report written to {args.output}")
+        return
+
+    # Standard trace-benchmark mode: requires codeflash config
+    from codeflash.code_utils.config_parser import parse_config_file
+
+    pyproject_config, pyproject_file_path = parse_config_file(args.config_file)
     module_root = Path(pyproject_config.get("module_root", ".")).resolve()
+
+    from codeflash.cli_cmds.cli import project_root_from_module_root
+
+    project_root = project_root_from_module_root(module_root, pyproject_file_path)
     tests_root = Path(pyproject_config.get("tests_root", "tests")).resolve()
     benchmarks_root_str = pyproject_config.get("benchmarks_root")
 
@@ -34,42 +92,89 @@ def run_compare(args: Namespace) -> None:
         logger.error(f"benchmarks-root {benchmarks_root} is not a valid directory")
         sys.exit(1)
 
-    from codeflash.cli_cmds.cli import project_root_from_module_root
-
-    project_root = project_root_from_module_root(module_root, pyproject_file_path)
-
-    # Resolve head_ref
-    head_ref = args.head_ref
-    if args.pr:
-        head_ref = _resolve_pr_branch(args.pr)
-    if not head_ref:
-        logger.error("Must provide head_ref or --pr")
-        sys.exit(1)
-
     # Parse explicit functions if provided
     functions = None
     if args.functions:
-        functions = _parse_functions_arg(args.functions, project_root)
+        functions = parse_functions_arg(args.functions, project_root)
 
     from codeflash.benchmarking.compare import compare_branches
 
     result = compare_branches(
-        base_ref=args.base_ref,
+        base_ref=base_ref,
         head_ref=head_ref,
         project_root=project_root,
         benchmarks_root=benchmarks_root,
         tests_root=tests_root,
         functions=functions,
         timeout=args.timeout,
+        memory=getattr(args, "memory", False),
     )
 
-    if not result.base_total_ns and not result.head_total_ns:
+    if not result.base_stats and not result.head_stats:
         logger.warning("No benchmark data collected. Check that benchmarks-root is configured and benchmarks exist.")
         sys.exit(1)
 
+    if args.output:
+        md = result.format_markdown()
+        Path(args.output).write_text(md, encoding="utf-8")
+        logger.info(f"Markdown report written to {args.output}")
 
-def _resolve_pr_branch(pr_number: int) -> str:
-    """Resolve a PR number to its head branch name using gh CLI."""
+
+def get_current_branch() -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True, check=True
+        )
+        branch = result.stdout.strip()
+        return branch if branch and branch != "HEAD" else None
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
+
+
+def detect_base_ref(head_ref: str) -> str | None:
+    # Try to find an open PR for this branch and use its base
+    try:
+        result = subprocess.run(
+            ["gh", "pr", "view", head_ref, "--json", "baseRefName", "-q", ".baseRefName"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        base = result.stdout.strip()
+        if base:
+            return base
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        pass
+
+    # Fall back to repo default branch
+    try:
+        result = subprocess.run(
+            ["gh", "repo", "view", "--json", "defaultBranchRef", "-q", ".defaultBranchRef.name"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        default = result.stdout.strip()
+        if default:
+            return default
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        pass
+
+    # Last resort: check for common default branch names
+    try:
+        for candidate in ("main", "master"):
+            result = subprocess.run(
+                ["git", "rev-parse", "--verify", candidate], capture_output=True, text=True, check=False
+            )
+            if result.returncode == 0:
+                return candidate
+    except FileNotFoundError:
+        pass
+
+    return None
+
+
+def resolve_pr_branch(pr_number: int) -> str:
     try:
         result = subprocess.run(
             ["gh", "pr", "view", str(pr_number), "--json", "headRefName", "-q", ".headRefName"],
@@ -91,7 +196,7 @@ def _resolve_pr_branch(pr_number: int) -> str:
         sys.exit(1)
 
 
-def _parse_functions_arg(functions_str: str, project_root: Path) -> dict[Path, list[FunctionToOptimize]]:
+def parse_functions_arg(functions_str: str, project_root: Path) -> dict[Path, list[FunctionToOptimize]]:
     """Parse --functions arg format: 'file.py::func1,func2;other.py::func3'."""
     from codeflash.models.function_types import FunctionToOptimize
 
