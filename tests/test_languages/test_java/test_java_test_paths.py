@@ -507,6 +507,29 @@ class TestExtractModulesFromSettingsGradle:
         assert "streams" in modules
         assert "clients" in modules
 
+    def test_multiline_include(self):
+        """Multi-line include() calls should be parsed correctly."""
+        content = 'include(\n    "rewrite-core",\n    "rewrite-java",\n    "rewrite-test"\n)'
+        modules = _extract_modules_from_settings_gradle(content)
+        assert "rewrite-core" in modules
+        assert "rewrite-java" in modules
+        assert "rewrite-test" in modules
+
+    def test_kotlin_listof_variable(self):
+        """Kotlin-style val x = listOf(...) should be parsed for module names."""
+        content = 'val allProjects = listOf(\n    "rewrite-core",\n    "rewrite-java",\n    "rewrite-test"\n)\ninclude(*(allProjects).toTypedArray())'
+        modules = _extract_modules_from_settings_gradle(content)
+        assert "rewrite-core" in modules
+        assert "rewrite-java" in modules
+        assert "rewrite-test" in modules
+
+    def test_groovy_include_without_parens(self):
+        """Groovy-style include without parentheses."""
+        content = "include 'streams', 'clients'"
+        modules = _extract_modules_from_settings_gradle(content)
+        assert "streams" in modules
+        assert "clients" in modules
+
 
 class TestFindMultiModuleRoot:
     """Tests for _find_multi_module_root with Gradle multi-module projects."""

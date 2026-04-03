@@ -589,6 +589,13 @@ class GradleStrategy(BuildToolStrategy):
                 logger.error("Classpath not found in Gradle output")
                 return None
 
+            # Replace missing project dependency JARs with class/resource directories.
+            # Gradle's testRuntimeClasspath resolves project deps to JAR files
+            # (build/libs/*.jar), but testClasses doesn't build JARs for dependency
+            # modules.  This also compiles any testRuntimeOnly project deps that
+            # weren't compiled by testClasses.
+            classpath = self._resolve_project_classpath(classpath, build_root, env, timeout)
+
             if test_module:
                 module_path = build_root / module_to_dir(test_module)
             else:
@@ -602,15 +609,6 @@ class GradleStrategy(BuildToolStrategy):
                 cp_parts.append(str(test_classes))
             if main_classes.exists():
                 cp_parts.append(str(main_classes))
-
-            if test_module:
-                module_dir_name = module_to_dir(test_module)
-                for module_dir in build_root.iterdir():
-                    if module_dir.is_dir() and module_dir.name != module_dir_name:
-                        module_classes = module_dir / "build" / "classes" / "java" / "main"
-                        if module_classes.exists():
-                            logger.debug("Adding multi-module classpath: %s", module_classes)
-                            cp_parts.append(str(module_classes))
 
             if "console-standalone" not in classpath and "ConsoleLauncher" not in classpath:
                 console_jar = _find_junit_console_standalone()
@@ -638,6 +636,121 @@ class GradleStrategy(BuildToolStrategy):
             if in_cp and line.strip():
                 return line.strip()
         return None
+
+    def _resolve_project_classpath(self, classpath: str, build_root: Path, env: dict[str, str], timeout: int) -> str:
+        """Replace missing project dependency JARs with class/resource directories.
+
+        Gradle's ``testRuntimeClasspath`` resolves project dependencies to JAR
+        files (``build/libs/*.jar``), but ``testClasses`` only compiles classes —
+        it does not package JARs for dependency modules.  This method:
+
+        1. Scans the classpath for project-local JARs that don't exist on disk.
+        2. Compiles any dependency modules whose classes haven't been built yet
+           (e.g. ``testRuntimeOnly`` project deps skipped by ``testClasses``).
+        3. Replaces each missing JAR entry with the module's compiled-class and
+           processed-resource directories.
+        """
+        build_root_str = str(build_root)
+        build_libs_sep = os.sep + "build" + os.sep + "libs" + os.sep
+
+        entries = classpath.split(os.pathsep)
+        missing_jar_modules: dict[int, Path] = {}  # index -> module_dir
+        uncompiled_modules: list[str] = []
+
+        # Phase 1: identify missing project dependency JARs
+        for i, entry in enumerate(entries):
+            if not entry.startswith(build_root_str) or build_libs_sep not in entry:
+                continue
+            if Path(entry).exists():
+                continue
+
+            idx = entry.find(build_libs_sep)
+            module_dir = Path(entry[:idx])
+            if not module_dir.is_dir():
+                continue
+
+            missing_jar_modules[i] = module_dir
+
+            classes_dir = module_dir / "build" / "classes"
+            if not classes_dir.exists() or not any(classes_dir.iterdir()):
+                try:
+                    rel = module_dir.relative_to(build_root)
+                    uncompiled_modules.append(str(rel).replace(os.sep, ":"))
+                except ValueError:
+                    pass
+
+        if not missing_jar_modules:
+            return classpath
+
+        # Phase 2: compile uncompiled dependency modules in one Gradle call
+        if uncompiled_modules:
+            self._compile_dependency_modules(build_root, env, uncompiled_modules, timeout)
+
+        # Phase 3: replace each missing JAR with class + resource directories
+        result_entries: list[str] = []
+        for i, entry in enumerate(entries):
+            if i not in missing_jar_modules:
+                result_entries.append(entry)
+                continue
+
+            module_dir = missing_jar_modules[i]
+            added = False
+
+            classes_dir = module_dir / "build" / "classes"
+            if classes_dir.exists():
+                for lang_dir in classes_dir.iterdir():
+                    if lang_dir.is_dir():
+                        main_dir = lang_dir / "main"
+                        if main_dir.exists():
+                            result_entries.append(str(main_dir))
+                            added = True
+
+            resources_main = module_dir / "build" / "resources" / "main"
+            if resources_main.exists():
+                result_entries.append(str(resources_main))
+                added = True
+
+            if not added:
+                logger.warning("No class/resource directories found for missing JAR: %s", entry)
+
+        logger.debug(
+            "Replaced %d missing project dependency JARs with class/resource directories (compiled %d modules)",
+            len(missing_jar_modules),
+            len(uncompiled_modules),
+        )
+        return os.pathsep.join(result_entries)
+
+    def _compile_dependency_modules(
+        self, build_root: Path, env: dict[str, str], module_names: list[str], timeout: int
+    ) -> None:
+        """Compile project dependency modules that haven't been compiled yet.
+
+        This handles ``testRuntimeOnly`` project dependencies that ``testClasses``
+        does not compile.  All modules are compiled in a single Gradle invocation.
+        """
+        from codeflash.languages.java.test_runner import _run_cmd_kill_pg_on_timeout
+
+        gradle = self.find_executable(build_root)
+        if not gradle:
+            logger.warning("Gradle not found — cannot compile dependency modules")
+            return
+
+        tasks = [f":{module}:classes" for module in module_names]
+        cmd = [gradle, *tasks, "--no-daemon"]
+        cmd.extend(["--init-script", _get_skip_validation_init_script()])
+
+        logger.info("Compiling %d uncompiled project dependencies: %s", len(module_names), module_names)
+
+        try:
+            result = _run_cmd_kill_pg_on_timeout(cmd, cwd=build_root, env=env, timeout=timeout)
+            if result.returncode != 0:
+                logger.warning(
+                    "Failed to compile dependency modules (exit %d): %s",
+                    result.returncode,
+                    result.stderr[-1000:] if result.stderr else "",
+                )
+        except Exception:
+            logger.exception("Exception compiling dependency modules")
 
     def get_reports_dir(self, build_root: Path, test_module: str | None) -> Path:
         build_dir = self.get_build_output_dir(build_root, test_module)

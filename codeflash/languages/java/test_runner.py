@@ -202,15 +202,29 @@ def _validate_test_filter(test_filter: str) -> str:
 def _extract_modules_from_settings_gradle(content: str) -> list[str]:
     """Extract module names from settings.gradle(.kts) content.
 
-    Looks for include directives like:
-        include("module-a", "module-b")   // Kotlin DSL
-        include 'module-a', 'module-b'    // Groovy DSL
+    Handles several patterns:
+        include("module-a", "module-b")              // Kotlin DSL (single/multi-line)
+        include 'module-a', 'module-b'               // Groovy DSL
+        val projects = listOf("module-a", "module-b") // Kotlin variable lists
     Module names may be prefixed with ':' which is stripped.
     """
     modules: list[str] = []
-    for match in re.findall(r"""include\s*\(?[^)\n]*\)?""", content):
+    # Match include(...) calls, including multi-line ones
+    for match in re.findall(r"""include\s*\(([^)]*)\)""", content, re.DOTALL):
         for name in re.findall(r"""['"]([^'"]+)['"]""", match):
             modules.append(name.lstrip(":"))
+    # Match Groovy-style: include 'mod-a', 'mod-b' (no parens, single line)
+    for match in re.findall(r"""include\s+(?=['"])([^\n]+)""", content):
+        for name in re.findall(r"""['"]([^'"]+)['"]""", match):
+            clean = name.lstrip(":")
+            if clean not in modules:
+                modules.append(clean)
+    # Match Kotlin-style variable lists: val x = listOf("mod-a", "mod-b")
+    for match in re.findall(r"""listOf\s*\(([^)]*)\)""", content, re.DOTALL):
+        for name in re.findall(r"""['"]([^'"]+)['"]""", match):
+            clean = name.lstrip(":")
+            if clean not in modules:
+                modules.append(clean)
     return modules
 
 
