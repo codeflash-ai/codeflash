@@ -7,6 +7,7 @@ using tree-sitter for code analysis and Jest for test execution.
 from __future__ import annotations
 
 import logging
+import re
 import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -230,11 +231,14 @@ class JavaScriptSupport:
         """
         result: dict[str, list[TestInfo]] = {}
 
-        # Build index: function_name → qualified_name for O(1) lookup
-        # This avoids iterating all functions for every test file (was O(NxM), now O(N+M))
+        # Build indices for O(1) lookup per imported name (avoids O(NxM) loop)
         function_name_to_qualified: dict[str, str] = {}
+        class_name_to_qualified_names: dict[str, list[str]] = {}
         for func in source_functions:
             function_name_to_qualified[func.function_name] = func.qualified_name
+            for parent in func.parents:
+                if parent.type == "ClassDef":
+                    class_name_to_qualified_names.setdefault(parent.name, []).append(func.qualified_name)
 
         # Find all test files using language-specific patterns
         test_patterns = self._get_test_patterns()
@@ -249,28 +253,41 @@ class JavaScriptSupport:
                 analyzer = get_analyzer_for_file(test_file)
                 imports = analyzer.find_imports(source)
 
-                # Build a set of imported function names
+                # Build a set of imported names, resolving aliases and namespace member access
                 imported_names: set[str] = set()
                 for imp in imports:
                     if imp.default_import:
                         imported_names.add(imp.default_import)
+                        # Extract member access patterns: e.g. `math.calculate(...)` → "calculate"
+                        for m in re.finditer(rf"\b{re.escape(imp.default_import)}\.(\w+)", source):
+                            imported_names.add(m.group(1))
+                    if imp.namespace_import:
+                        imported_names.add(imp.namespace_import)
+                        for m in re.finditer(rf"\b{re.escape(imp.namespace_import)}\.(\w+)", source):
+                            imported_names.add(m.group(1))
                     for name, alias in imp.named_imports:
-                        imported_names.add(alias or name)
+                        imported_names.add(name)
+                        if alias:
+                            imported_names.add(alias)
 
                 # Find test functions (describe/it/test blocks)
                 test_functions = self._find_jest_tests(source, analyzer)
 
-                # Match source functions to tests using the index
-                # Only check functions that are actually imported in this test file
+                # Match via indices: function names and class names → qualified names
+                matched_qualified_names: set[str] = set()
                 for imported_name in imported_names:
                     if imported_name in function_name_to_qualified:
-                        qualified_name = function_name_to_qualified[imported_name]
-                        if qualified_name not in result:
-                            result[qualified_name] = []
-                        for test_name in test_functions:
-                            result[qualified_name].append(
-                                TestInfo(test_name=test_name, test_file=test_file, test_class=None)
-                            )
+                        matched_qualified_names.add(function_name_to_qualified[imported_name])
+                    if imported_name in class_name_to_qualified_names:
+                        matched_qualified_names.update(class_name_to_qualified_names[imported_name])
+
+                for qualified_name in matched_qualified_names:
+                    if qualified_name not in result:
+                        result[qualified_name] = []
+                    for test_name in test_functions:
+                        result[qualified_name].append(
+                            TestInfo(test_name=test_name, test_file=test_file, test_class=None)
+                        )
             except Exception as e:
                 logger.debug("Failed to analyze test file %s: %s", test_file, e)
 
