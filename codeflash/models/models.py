@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections import Counter, defaultdict
 from functools import lru_cache
 from typing import TYPE_CHECKING
@@ -962,16 +963,74 @@ class TestResults(BaseModel):  # noqa: PLW1641
         return by_id
 
     def total_passed_runtime(self) -> int:
-        """Calculate the sum of runtimes of all test cases that passed.
+        """Calculate the sum of median runtimes of all test cases that passed.
 
-        A testcase runtime is the minimum value of all looped execution runtimes.
+        A testcase runtime is the median value of all looped execution runtimes.
+        Using median instead of min reduces sensitivity to outlier-fast iterations
+        (lucky GC pauses, perfect cache alignment) that produce spurious speedups.
 
         :return: The runtime in nanoseconds.
         """
+        import statistics
+
         # TODO this doesn't look at the intersection of tests of baseline and original
         return sum(
-            [min(usable_runtime_data) for _, usable_runtime_data in self.usable_runtime_data_by_test_case().items()]
+            statistics.median_low(usable_runtime_data)
+            for _, usable_runtime_data in self.usable_runtime_data_by_test_case().items()
         )
+
+    def timing_coefficient_of_variation(self) -> float:
+        """Calculate the median per-test-case coefficient of variation (CV) of loop iterations.
+
+        For each test case, computes CV = stdev / mean of its loop iteration runtimes.
+        Returns the median CV across test cases. This measures actual measurement noise
+        (how much repeated runs of the same test vary) rather than inter-test-case
+        differences (which reflect different inputs, not noise).
+
+        Returns 0.0 if no test case has enough loop iterations to compute CV.
+        """
+        import statistics
+
+        runtime_data = self.usable_runtime_data_by_test_case()
+        if not runtime_data:
+            return 0.0
+
+        per_test_cvs: list[float] = []
+
+        # Use a single-pass Welford algorithm per list to compute sample standard deviation
+        # and mean in one traversal to avoid the double-pass of statistics.mean + statistics.stdev.
+        def compute_sample_cv(values: list[int]) -> float | None:
+            n = 0
+            mean = 0.0
+            m2 = 0.0
+            for x in values:
+                n += 1
+                x_f = float(x)
+                delta = x_f - mean
+                mean += delta / n
+                delta2 = x_f - mean
+                m2 += delta * delta2
+            if n < 2:
+                return None
+            # sample variance = m2 / (n - 1)
+            if mean == 0.0:
+                return None
+            sample_variance = m2 / (n - 1)
+            # Guard against tiny negative rounding artefacts
+            if sample_variance <= 0.0:
+                stdev = 0.0
+            else:
+                stdev = math.sqrt(sample_variance)
+            return stdev / mean
+
+        for runtimes in runtime_data.values():
+            cv = compute_sample_cv(runtimes)
+            if cv is not None:
+                per_test_cvs.append(cv)
+
+        if not per_test_cvs:
+            return 0.0
+        return statistics.median(per_test_cvs)
 
     def effective_loop_count(self) -> int:
         """Calculate the effective number of complete loops.
