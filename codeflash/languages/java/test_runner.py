@@ -202,29 +202,43 @@ def _validate_test_filter(test_filter: str) -> str:
 def _extract_modules_from_settings_gradle(content: str) -> list[str]:
     """Extract module names from settings.gradle(.kts) content.
 
-    Handles several patterns:
-        include("module-a", "module-b")              // Kotlin DSL (single/multi-line)
-        include 'module-a', 'module-b'               // Groovy DSL
-        val projects = listOf("module-a", "module-b") // Kotlin variable lists
-    Module names may be prefixed with ':' which is stripped.
+    Collects every quoted string that looks like a Gradle module identifier
+    (word chars, hyphens, colons, dots).  This is intentionally broad so it
+    works regardless of DSL style — ``include("a")``, ``listOf("a")``,
+    variable-based indirection, etc.  False positives are harmless because
+    callers match module names against actual file paths.
+    """
+    seen: set[str] = set()
+    modules: list[str] = []
+    for name in re.findall(r"""['"]([:\w][\w.:-]*)['"]""", content):
+        clean = name.lstrip(":")
+        if clean and clean not in seen:
+            seen.add(clean)
+            modules.append(clean)
+    return modules
+
+
+def _scan_filesystem_for_modules(directory: Path) -> list[str]:
+    """Detect Gradle/Maven sub-modules by scanning for build files on disk.
+
+    Checks up to two directory levels (covers nested modules like
+    ``connect/runtime``).  This is a reliable fallback when the settings
+    file uses complex DSL that text-based parsing cannot handle.
     """
     modules: list[str] = []
-    # Match include(...) calls, including multi-line ones
-    for match in re.findall(r"""include\s*\(([^)]*)\)""", content, re.DOTALL):
-        for name in re.findall(r"""['"]([^'"]+)['"]""", match):
-            modules.append(name.lstrip(":"))
-    # Match Groovy-style: include 'mod-a', 'mod-b' (no parens, single line)
-    for match in re.findall(r"""include\s+(?=['"])([^\n]+)""", content):
-        for name in re.findall(r"""['"]([^'"]+)['"]""", match):
-            clean = name.lstrip(":")
-            if clean not in modules:
-                modules.append(clean)
-    # Match Kotlin-style variable lists: val x = listOf("mod-a", "mod-b")
-    for match in re.findall(r"""listOf\s*\(([^)]*)\)""", content, re.DOTALL):
-        for name in re.findall(r"""['"]([^'"]+)['"]""", match):
-            clean = name.lstrip(":")
-            if clean not in modules:
-                modules.append(clean)
+    _BUILD_FILES = ("build.gradle", "build.gradle.kts", "pom.xml")
+    for child in directory.iterdir():
+        if not child.is_dir() or child.name.startswith("."):
+            continue
+        if any((child / bf).exists() for bf in _BUILD_FILES):
+            modules.append(child.name)
+        # One level deeper for nested modules (connect/runtime)
+        for grandchild in child.iterdir():
+            if not grandchild.is_dir() or grandchild.name.startswith("."):
+                continue
+            if any((grandchild / bf).exists() for bf in _BUILD_FILES):
+                rel = grandchild.relative_to(directory)
+                modules.append(str(rel).replace(os.sep, ":"))
     return modules
 
 
@@ -251,7 +265,8 @@ def _detect_modules(directory: Path) -> list[str]:
             except Exception:
                 pass
 
-    return []
+    # Fallback: scan filesystem for directories with build files
+    return _scan_filesystem_for_modules(directory)
 
 
 def _is_build_root(directory: Path) -> bool:

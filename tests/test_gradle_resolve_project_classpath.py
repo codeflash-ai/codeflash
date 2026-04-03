@@ -77,25 +77,24 @@ def test_replaces_missing_jars_with_class_dirs(strategy, build_root, tmp_path):
 
     entries = result.split(os.pathsep)
 
-    # Module A: JAR replaced with java/main classes + resources/main
+    ext_jar = str(tmp_path / "gradle-cache" / "some-lib-1.0.jar")
     mod_a_java = str(build_root / "module-a" / "build" / "classes" / "java" / "main")
     mod_a_resources = str(build_root / "module-a" / "build" / "resources" / "main")
-    assert mod_a_java in entries
-    assert mod_a_resources in entries
-
-    # Module B: JAR replaced with both kotlin/main and java/main classes
     mod_b_kotlin = str(build_root / "module-b" / "build" / "classes" / "kotlin" / "main")
     mod_b_java = str(build_root / "module-b" / "build" / "classes" / "java" / "main")
-    assert mod_b_kotlin in entries
-    assert mod_b_java in entries
+    mod_c_java = str(build_root / "module-c" / "build" / "classes" / "java" / "main")
 
-    # External JAR preserved as-is
-    ext_jar = str(tmp_path / "gradle-cache" / "some-lib-1.0.jar")
-    assert ext_jar in entries
-
-    # Original JAR paths should NOT be present
-    assert str(build_root / "module-a" / "build" / "libs" / "module-a-1.0.jar") not in entries
-    assert str(build_root / "module-b" / "build" / "libs" / "module-b-1.0.jar") not in entries
+    # Full equality: module-a JAR → java/main + resources/main,
+    # external JAR preserved, module-b JAR → kotlin/main + java/main,
+    # module-c JAR → java/main (compiled by mock)
+    assert entries == [
+        mod_a_java,
+        mod_a_resources,
+        ext_jar,
+        mod_b_kotlin,
+        mod_b_java,
+        mod_c_java,
+    ]
 
 
 def test_compiles_uncompiled_modules(strategy, build_root, tmp_path):
