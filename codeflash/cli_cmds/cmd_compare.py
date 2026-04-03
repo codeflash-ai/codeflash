@@ -108,6 +108,7 @@ def run_compare(args: Namespace) -> None:
         functions=functions,
         timeout=args.timeout,
         memory=getattr(args, "memory", False),
+        inject_paths=getattr(args, "inject", None),
     )
 
     if not result.base_stats and not result.head_stats:
