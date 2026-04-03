@@ -340,6 +340,7 @@ def wrap_target_calls_with_treesitter(
         is_void = target_return_type == "void"
         var_name = f"_cf_result{iter_id}_{call_counter}"
         receiver = call.get("receiver", "this")
+        arg_texts: list[str] = call.get("arg_texts", [])
         cast_type = _infer_array_cast_type(orig_line)
         if not cast_type and target_return_type and not is_void:
             cast_type = target_return_type
@@ -347,13 +348,22 @@ def wrap_target_calls_with_treesitter(
 
         if is_void:
             bare_call_stmt = f"{call['full_call']};"
+            # For void methods, serialize the post-call state to capture side effects.
+            # For instance methods (receiver is a variable), serialize the receiver.
+            # For static methods (receiver is a class name), serialize the arguments
+            # since the class name itself is not a value and can't be cast to Object.
+            is_static_call = receiver != "this" and receiver[:1].isupper()
+            if is_static_call and arg_texts:
+                serialize_target = f"new Object[]{{{', '.join(arg_texts)}}}"
+            else:
+                serialize_target = f"(Object) {receiver}"
             if precise_call_timing:
-                serialize_stmt = f"_cf_serializedResult{iter_id}_{call_counter} = com.codeflash.Serializer.serialize((Object) {receiver});"
+                serialize_stmt = f"_cf_serializedResult{iter_id}_{call_counter} = com.codeflash.Serializer.serialize({serialize_target});"
                 start_stmt = f"_cf_start{iter_id}_{call_counter} = System.nanoTime();"
                 end_stmt = f"_cf_end{iter_id}_{call_counter} = System.nanoTime();"
             else:
                 serialize_stmt = (
-                    f"_cf_serializedResult{iter_id} = com.codeflash.Serializer.serialize((Object) {receiver});"
+                    f"_cf_serializedResult{iter_id} = com.codeflash.Serializer.serialize({serialize_target});"
                 )
                 start_stmt = f"_cf_start{iter_id} = System.nanoTime();"
                 end_stmt = f"_cf_end{iter_id} = System.nanoTime();"
@@ -493,6 +503,13 @@ def _collect_calls(
                     es_end = parent.end_byte - prefix_len
                 object_node = node.child_by_field_name("object")
                 receiver = analyzer.get_node_text(object_node, wrapper_bytes) if object_node else "this"
+                # Extract argument texts for void method serialization
+                args_node = node.child_by_field_name("arguments")
+                arg_texts: list[str] = []
+                if args_node:
+                    for child in args_node.children:
+                        if child.type not in ("(", ")", ","):
+                            arg_texts.append(analyzer.get_node_text(child, wrapper_bytes))
                 out.append(
                     {
                         "start_byte": start,
@@ -504,6 +521,7 @@ def _collect_calls(
                         "es_start_byte": es_start,
                         "es_end_byte": es_end,
                         "receiver": receiver,
+                        "arg_texts": arg_texts,
                     }
                 )
     for child in node.children:
