@@ -781,9 +781,12 @@ def run_jest_behavioral_tests(
         detected_root = find_node_project_root(first_test_file)
         # Only override if: (1) detected a different package root, (2) it has package.json,
         # (3) both are peer packages (same parent directory)
-        if (detected_root and detected_root != project_root and
-            (detected_root / "package.json").exists() and
-            detected_root.parent == project_root.parent):
+        if (
+            detected_root
+            and detected_root != project_root
+            and (detected_root / "package.json").exists()
+            and detected_root.parent == project_root.parent
+        ):
             logger.debug(f"Monorepo: overriding project_root {project_root} with detected {detected_root}")
             project_root = detected_root
     elif project_root is None and test_files:
@@ -1045,9 +1048,12 @@ def run_jest_benchmarking_tests(
     if test_files and project_root:
         first_test_file = Path(test_files[0])
         detected_root = find_node_project_root(first_test_file)
-        if (detected_root and detected_root != project_root and
-            (detected_root / "package.json").exists() and
-            detected_root.parent == project_root.parent):
+        if (
+            detected_root
+            and detected_root != project_root
+            and (detected_root / "package.json").exists()
+            and detected_root.parent == project_root.parent
+        ):
             project_root = detected_root
     elif project_root is None and test_files:
         first_test_file = Path(test_files[0])
@@ -1226,9 +1232,12 @@ def run_jest_line_profile_tests(
     if test_files and project_root:
         first_test_file = Path(test_files[0])
         detected_root = find_node_project_root(first_test_file)
-        if (detected_root and detected_root != project_root and
-            (detected_root / "package.json").exists() and
-            detected_root.parent == project_root.parent):
+        if (
+            detected_root
+            and detected_root != project_root
+            and (detected_root / "package.json").exists()
+            and detected_root.parent == project_root.parent
+        ):
             project_root = detected_root
     elif project_root is None and test_files:
         first_test_file = Path(test_files[0])
