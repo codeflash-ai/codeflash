@@ -1263,7 +1263,9 @@ class FunctionOptimizer:
 
             aiservice_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
 
-            if is_candidate_refined_before:
+            # adaptive_optimize is Python-only (uses libcst for AST parsing)
+            # For JavaScript/TypeScript, continue using optimize_code_refinement
+            if is_candidate_refined_before and self.function_to_optimize.language == "python":
                 future_adaptive_optimization = self.call_adaptive_optimize(
                     trace_id=self.get_trace_id(exp_type),
                     original_source_code=code_context.read_writable_code.markdown,
