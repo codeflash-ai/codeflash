@@ -259,6 +259,13 @@ export default mergeConfig(originalConfig, {{
     // incorrectly when tests are in subdirectories (e.g., extensions/discord/test/).
     // Codeflash-generated tests are self-contained and don't require project setup files.
     setupFiles: [],
+    // Override coverage settings to ensure JSON reporter is used.
+    // Vitest's mergeConfig doesn't properly handle nested coverage object merge with
+    // command-line flags, so we explicitly set reporter here to guarantee coverage
+    // files are written to the expected location (coverage-final.json).
+    coverage: {{
+      reporter: ['json'],
+    }},
   }},
 }});
 """
@@ -275,6 +282,10 @@ export default defineConfig({
     exclude: ['**/node_modules/**', '**/dist/**'],
     // Use forks pool so timing markers from process.stdout.write flow to parent stdout
     pool: 'forks',
+    // Override coverage settings to ensure JSON reporter is used
+    coverage: {
+      reporter: ['json'],
+    },
   },
 });
 """
