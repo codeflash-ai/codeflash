@@ -176,8 +176,6 @@ def _is_vitest_workspace(project_root: Path) -> bool:
         #   - defineWorkspace() function call
         #   - workspace: [ array config
         #   - separate vitest.workspace.ts/js file
-        import re
-
         # Match defineWorkspace calls or workspace: property assignments
         workspace_pattern = re.compile(
             r"(?:^|[^a-zA-Z_])defineWorkspace\s*\(|"  # defineWorkspace( function call
