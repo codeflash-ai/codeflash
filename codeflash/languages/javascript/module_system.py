@@ -46,8 +46,10 @@ def detect_module_system(project_root: Path, file_path: Path | None = None) -> s
     """Detect the module system used by a JavaScript/TypeScript project.
 
     Detection strategy:
-    1. Check file extension for explicit module type (.mjs, .cjs, .ts, .tsx, .mts)
-       - TypeScript files always use ESM syntax regardless of package.json
+    1. Check file extension for explicit module type (.mjs, .cjs, .mts, .cts)
+       - .mjs and .mts always use ES Modules
+       - .cjs and .cts always use CommonJS
+       - .ts and .tsx defer to package.json "type" field
     2. Check package.json for explicit "type" field (only if explicitly set)
     3. Analyze import/export statements in the file content
     4. Default to CommonJS if uncertain
@@ -61,39 +63,59 @@ def detect_module_system(project_root: Path, file_path: Path | None = None) -> s
 
     """
     # Strategy 1: Check file extension first for explicit module type indicators
-    # TypeScript files always use ESM syntax (import/export)
     if file_path:
         suffix = file_path.suffix.lower()
+        # Explicit JavaScript module system extensions
         if suffix == ".mjs":
             logger.debug("Detected ES Module from .mjs extension")
             return ModuleSystem.ES_MODULE
         if suffix == ".cjs":
             logger.debug("Detected CommonJS from .cjs extension")
             return ModuleSystem.COMMONJS
-        if suffix in (".ts", ".tsx", ".mts"):
-            # TypeScript always uses ESM syntax (import/export)
-            # even if package.json doesn't have "type": "module"
-            logger.debug("Detected ES Module from TypeScript file extension")
+
+        # Explicit TypeScript module system extensions
+        if suffix == ".mts":
+            logger.debug("Detected ES Module from .mts extension")
             return ModuleSystem.ES_MODULE
+        if suffix == ".cts":
+            logger.debug("Detected CommonJS from .cts extension")
+            return ModuleSystem.COMMONJS
+
+        # For .ts/.tsx files, defer to package.json "type" field
+        # TypeScript source uses ESM syntax (import/export), but the module system
+        # at runtime depends on package.json and tsconfig compilation settings
 
     # Strategy 2: Check package.json for explicit type field
     package_json = project_root / "package.json"
+    pkg_type_from_json = None
     if package_json.exists():
         try:
             with package_json.open("r") as f:
                 pkg = json.load(f)
-                pkg_type = pkg.get("type")  # Don't default - only use if explicitly set
+                pkg_type_from_json = pkg.get("type")  # Don't default - only use if explicitly set
 
-                if pkg_type == "module":
+                if pkg_type_from_json == "module":
                     logger.debug("Detected ES Module from package.json type field")
                     return ModuleSystem.ES_MODULE
-                if pkg_type == "commonjs":
+                if pkg_type_from_json == "commonjs":
                     logger.debug("Detected CommonJS from package.json type field")
                     return ModuleSystem.COMMONJS
                 # If type is not explicitly set, continue to file content analysis
 
         except Exception as e:
             logger.warning("Failed to parse package.json: %s", e)
+
+    # For TypeScript files (.ts, .tsx), if package.json doesn't specify a type,
+    # default to CommonJS since that's the Node.js default.
+    # We skip file content analysis for TypeScript because TypeScript source
+    # always uses ESM syntax (import/export), but the actual module system
+    # depends on how TypeScript compiles and how Node.js loads the files.
+    if file_path and file_path.suffix.lower() in (".ts", ".tsx"):
+        if pkg_type_from_json is None:
+            logger.debug(
+                "TypeScript file without explicit package.json type field - defaulting to CommonJS"
+            )
+            return ModuleSystem.COMMONJS
 
     # Strategy 3: Analyze file content for import/export patterns
     if file_path and file_path.exists():
