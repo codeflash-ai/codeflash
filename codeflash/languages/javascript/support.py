@@ -2070,7 +2070,8 @@ class JavaScriptSupport:
 
         # Add .js extensions to relative imports for ESM projects
         # TypeScript + ESM requires explicit .js extensions even for .ts source files
-        if project_module_system == ModuleSystem.ES_MODULE:
+        # jest uses it's own resolver so imports without the .js extension work fine
+        if project_module_system == ModuleSystem.ES_MODULE and test_cfg.test_framework != "jest":
             from codeflash.languages.javascript.module_system import add_js_extensions_to_relative_imports
 
             generated_test_source = add_js_extensions_to_relative_imports(generated_test_source)
