@@ -57,36 +57,39 @@ class TestModuleSystemDetection:
             assert result == ModuleSystem.COMMONJS
 
     def test_detect_esm_from_typescript_extension(self):
-        """Test detection of ES modules from TypeScript file extensions."""
+        """Test detection of explicit TypeScript module extensions (.mts, .cts)."""
         with tempfile.TemporaryDirectory() as tmpdir:
             project_root = Path(tmpdir)
 
-            # Test .ts files
-            ts_file = project_root / "module.ts"
-            ts_file.write_text("export const foo = 'bar';")
-            assert detect_module_system(project_root, ts_file) == ModuleSystem.ES_MODULE
-
-            # Test .tsx files
-            tsx_file = project_root / "component.tsx"
-            tsx_file.write_text("export const Component = () => <div />;")
-            assert detect_module_system(project_root, tsx_file) == ModuleSystem.ES_MODULE
-
-            # Test .mts files
+            # .mts files should always be ESM
             mts_file = project_root / "module.mts"
             mts_file.write_text("export const foo = 'bar';")
             assert detect_module_system(project_root, mts_file) == ModuleSystem.ES_MODULE
 
-    def test_typescript_ignores_package_json_commonjs(self):
-        """Test that TypeScript files are detected as ESM even with CommonJS package.json."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            project_root = Path(tmpdir)
-            # Create package.json with explicit commonjs type
-            package_json = project_root / "package.json"
-            package_json.write_text(json.dumps({"type": "commonjs"}))
+            # .cts files should always be CommonJS
+            cts_file = project_root / "module.cts"
+            cts_file.write_text("export const foo = 'bar';")
+            assert detect_module_system(project_root, cts_file) == ModuleSystem.COMMONJS
 
-            # TypeScript file should still be detected as ESM
+            # .ts/.tsx files without package.json should default to CommonJS
             ts_file = project_root / "module.ts"
             ts_file.write_text("export const foo = 'bar';")
+            assert detect_module_system(project_root, ts_file) == ModuleSystem.COMMONJS
+
+    def test_typescript_respects_package_json_type(self):
+        """Test that TypeScript files respect package.json type field."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir)
+            ts_file = project_root / "module.ts"
+            ts_file.write_text("export const foo = 'bar';")
+
+            # With explicit "type": "commonjs"
+            package_json = project_root / "package.json"
+            package_json.write_text(json.dumps({"type": "commonjs"}))
+            assert detect_module_system(project_root, ts_file) == ModuleSystem.COMMONJS
+
+            # With explicit "type": "module"
+            package_json.write_text(json.dumps({"type": "module"}))
             assert detect_module_system(project_root, ts_file) == ModuleSystem.ES_MODULE
 
     def test_detect_esm_from_import_syntax(self):
