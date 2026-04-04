@@ -34,7 +34,9 @@ def generate_tests(
     # TODO: Sometimes this recreates the original Class definition. This overrides and messes up the original
     #  class import. Remove the recreation of the class definition
     start_time = time.perf_counter()
-    test_module_path = Path(module_name_from_file_path(test_path, test_cfg.tests_project_rootdir))
+    # Use traverse_up=True to handle co-located __tests__ directories that may be outside
+    # the configured tests_root (e.g., src/gateway/__tests__/ when tests_root is test/)
+    test_module_path = Path(module_name_from_file_path(test_path, test_cfg.tests_project_rootdir, traverse_up=True))
 
     # Detect module system via language support (non-None for JS/TS, None for Python)
     lang_support = current_language_support()
