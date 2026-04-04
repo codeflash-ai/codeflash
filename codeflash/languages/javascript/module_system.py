@@ -112,9 +112,7 @@ def detect_module_system(project_root: Path, file_path: Path | None = None) -> s
     # depends on how TypeScript compiles and how Node.js loads the files.
     if file_path and file_path.suffix.lower() in (".ts", ".tsx"):
         if pkg_type_from_json is None:
-            logger.debug(
-                "TypeScript file without explicit package.json type field - defaulting to CommonJS"
-            )
+            logger.debug("TypeScript file without explicit package.json type field - defaulting to CommonJS")
             return ModuleSystem.COMMONJS
 
     # Strategy 3: Analyze file content for import/export patterns
