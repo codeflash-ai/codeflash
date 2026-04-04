@@ -7,6 +7,7 @@ verification and performance benchmarking.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -169,7 +170,7 @@ def _is_vitest_workspace(project_root: Path) -> bool:
         return False
 
     try:
-        content = vitest_config.read_text()
+        content = vitest_config.read_text(encoding="utf-8")
         # Check for actual workspace configuration patterns (not just the word "workspace" in comments)
         # Valid indicators:
         #   - defineWorkspace() function call
