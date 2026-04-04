@@ -2037,6 +2037,7 @@ class JavaScriptSupport:
     ) -> tuple[str, str, str]:
         from codeflash.languages.javascript.instrument import (
             TestingMode,
+            fix_import_paths,
             fix_imports_inside_test_blocks,
             fix_jest_mock_paths,
             instrument_generated_js_test,
@@ -2058,6 +2059,11 @@ class JavaScriptSupport:
             generated_test_source, test_path, source_file, test_cfg.tests_project_rootdir
         )
 
+        # Fix relative paths in regular import/require statements
+        generated_test_source = fix_import_paths(
+            generated_test_source, test_path, source_file, test_cfg.tests_project_rootdir
+        )
+
         # Validate and fix import styles (default vs named exports)
         generated_test_source = validate_and_fix_import_style(
             generated_test_source, source_file, function_to_optimize.function_name
@@ -2070,7 +2076,8 @@ class JavaScriptSupport:
 
         # Add .js extensions to relative imports for ESM projects
         # TypeScript + ESM requires explicit .js extensions even for .ts source files
-        if project_module_system == ModuleSystem.ES_MODULE:
+        # jest uses it's own resolver so imports without the .js extension work fine
+        if project_module_system == ModuleSystem.ES_MODULE and test_cfg.test_framework != "jest":
             from codeflash.languages.javascript.module_system import add_js_extensions_to_relative_imports
 
             generated_test_source = add_js_extensions_to_relative_imports(generated_test_source)

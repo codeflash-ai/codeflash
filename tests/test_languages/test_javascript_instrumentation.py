@@ -865,6 +865,160 @@ jest.doMock('../environment', () => ({ isTest: jest.fn() }));
             assert fix_jest_mock_paths("   ", test_file, source_file, tests_dir) == "   "
 
 
+class TestFixImportPaths:
+    """Tests for fix_import_paths function."""
+
+    def test_fix_import_path_when_source_relative(self, tmp_path: Path):
+        from codeflash.languages.javascript.instrument import fix_import_paths
+
+        src_dir = (tmp_path / "src" / "queue").resolve()
+        tests_dir = (tmp_path / "tests").resolve()
+        env_file = (tmp_path / "src" / "utilities" / "workerRequests.ts").resolve()
+
+        src_dir.mkdir(parents=True)
+        tests_dir.mkdir(parents=True)
+        env_file.parent.mkdir(parents=True, exist_ok=True)
+        env_file.write_text("export function sendSmtpEmail() {}", encoding="utf-8")
+
+        source_file = (src_dir / "queue.ts").resolve()
+        source_file.write_text("import { sendSmtpEmail } from '../../utilities/workerRequests';", encoding="utf-8")
+
+        test_file = (tests_dir / "test_queue.test.ts").resolve()
+
+        test_code = "import { sendSmtpEmail } from '../utilities/workerRequests';\n"
+        fixed = fix_import_paths(test_code, test_file, source_file, tests_dir)
+
+        assert "from '../src/utilities/workerRequests'" in fixed
+
+    def test_preserve_valid_import_path(self, tmp_path: Path):
+        from codeflash.languages.javascript.instrument import fix_import_paths
+
+        src_dir = (tmp_path / "src").resolve()
+        tests_dir = (tmp_path / "tests").resolve()
+
+        src_dir.mkdir(parents=True)
+        tests_dir.mkdir(parents=True)
+
+        utils_file = (src_dir / "utils.ts").resolve()
+        utils_file.write_text("export const utils = {};", encoding="utf-8")
+
+        source_file = (src_dir / "main.ts").resolve()
+        source_file.write_text("", encoding="utf-8")
+        test_file = (tests_dir / "test_main.test.ts").resolve()
+
+        test_code = "import { utils } from '../src/utils';\n"
+        fixed = fix_import_paths(test_code, test_file, source_file, tests_dir)
+
+        assert "from '../src/utils'" in fixed
+
+    def test_fix_require_path(self, tmp_path: Path):
+        from codeflash.languages.javascript.instrument import fix_import_paths
+
+        src_dir = (tmp_path / "src" / "queue").resolve()
+        tests_dir = (tmp_path / "tests").resolve()
+        env_file = (tmp_path / "src" / "environment.ts").resolve()
+
+        src_dir.mkdir(parents=True)
+        tests_dir.mkdir(parents=True)
+        env_file.parent.mkdir(parents=True, exist_ok=True)
+        env_file.write_text("module.exports = {};", encoding="utf-8")
+
+        source_file = (src_dir / "queue.ts").resolve()
+        source_file.write_text("", encoding="utf-8")
+        test_file = (tests_dir / "test_queue.test.ts").resolve()
+
+        test_code = "const env = require('../environment');\n"
+        fixed = fix_import_paths(test_code, test_file, source_file, tests_dir)
+
+        assert "require('../src/environment')" in fixed
+
+    def test_fix_dynamic_import_path(self, tmp_path: Path):
+        from codeflash.languages.javascript.instrument import fix_import_paths
+
+        src_dir = (tmp_path / "src" / "queue").resolve()
+        tests_dir = (tmp_path / "tests").resolve()
+        env_file = (tmp_path / "src" / "environment.ts").resolve()
+
+        src_dir.mkdir(parents=True)
+        tests_dir.mkdir(parents=True)
+        env_file.parent.mkdir(parents=True, exist_ok=True)
+        env_file.write_text("export default {};", encoding="utf-8")
+
+        source_file = (src_dir / "queue.ts").resolve()
+        source_file.write_text("", encoding="utf-8")
+        test_file = (tests_dir / "test_queue.test.ts").resolve()
+
+        test_code = "const env = await import('../environment');\n"
+        fixed = fix_import_paths(test_code, test_file, source_file, tests_dir)
+
+        assert "import('../src/environment')" in fixed
+
+    def test_empty_code(self, tmp_path: Path):
+        from codeflash.languages.javascript.instrument import fix_import_paths
+
+        tests_dir = (tmp_path / "tests").resolve()
+        tests_dir.mkdir()
+        source_file = (tmp_path / "src" / "main.ts").resolve()
+        test_file = (tests_dir / "test.ts").resolve()
+
+        assert fix_import_paths("", test_file, source_file, tests_dir) == ""
+        assert fix_import_paths("   ", test_file, source_file, tests_dir) == "   "
+
+    def test_does_not_touch_package_imports(self, tmp_path: Path):
+        from codeflash.languages.javascript.instrument import fix_import_paths
+
+        src_dir = (tmp_path / "src").resolve()
+        tests_dir = (tmp_path / "tests").resolve()
+
+        src_dir.mkdir(parents=True)
+        tests_dir.mkdir(parents=True)
+
+        source_file = (src_dir / "main.ts").resolve()
+        source_file.write_text("", encoding="utf-8")
+        test_file = (tests_dir / "test_main.test.ts").resolve()
+
+        test_code = "import { jest } from '@jest/globals';\nimport express from 'express';\n"
+        fixed = fix_import_paths(test_code, test_file, source_file, tests_dir)
+
+        assert fixed == test_code
+
+    def test_splits_concatenated_imports(self, tmp_path: Path):
+        from codeflash.languages.javascript.instrument import fix_import_paths
+
+        src_dir = (tmp_path / "src").resolve()
+        tests_dir = (tmp_path / "tests").resolve()
+
+        src_dir.mkdir(parents=True)
+        tests_dir.mkdir(parents=True)
+
+        source_file = (src_dir / "main.ts").resolve()
+        source_file.write_text("", encoding="utf-8")
+        test_file = (tests_dir / "test_main.test.ts").resolve()
+
+        test_code = "import { sendSmtpEmail } from '../src/workerRequests';import automationUtils from '../src/utils';describe('run', () => {});\n"
+        fixed = fix_import_paths(test_code, test_file, source_file, tests_dir)
+
+        assert "workerRequests';\nimport automationUtils" in fixed
+
+    def test_splits_concatenated_require(self, tmp_path: Path):
+        from codeflash.languages.javascript.instrument import fix_import_paths
+
+        src_dir = (tmp_path / "src").resolve()
+        tests_dir = (tmp_path / "tests").resolve()
+
+        src_dir.mkdir(parents=True)
+        tests_dir.mkdir(parents=True)
+
+        source_file = (src_dir / "main.ts").resolve()
+        source_file.write_text("", encoding="utf-8")
+        test_file = (tests_dir / "test_main.test.ts").resolve()
+
+        test_code = "import { foo } from '../src/foo';const bar = require('../src/bar');\n"
+        fixed = fix_import_paths(test_code, test_file, source_file, tests_dir)
+
+        assert "foo';\nconst bar = require" in fixed
+
+
 class TestFunctionCallsInStrings:
     """Tests for skipping function calls inside string literals."""
 
