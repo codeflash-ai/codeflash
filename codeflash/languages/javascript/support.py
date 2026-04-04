@@ -2037,6 +2037,7 @@ class JavaScriptSupport:
     ) -> tuple[str, str, str]:
         from codeflash.languages.javascript.instrument import (
             TestingMode,
+            fix_import_paths,
             fix_imports_inside_test_blocks,
             fix_jest_mock_paths,
             instrument_generated_js_test,
@@ -2055,6 +2056,11 @@ class JavaScriptSupport:
 
         # Fix relative paths in jest.mock() calls
         generated_test_source = fix_jest_mock_paths(
+            generated_test_source, test_path, source_file, test_cfg.tests_project_rootdir
+        )
+
+        # Fix relative paths in regular import/require statements
+        generated_test_source = fix_import_paths(
             generated_test_source, test_path, source_file, test_cfg.tests_project_rootdir
         )
 
