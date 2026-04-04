@@ -17,7 +17,7 @@ from codeflash.code_utils.code_utils import module_name_from_file_path
 class TestVerifierPathHandling:
     """Test path handling in verifier.py for test files outside tests_root."""
 
-    def test_module_name_from_file_path_raises_valueerror_when_outside_root(self):
+    def test_module_name_from_file_path_raises_valueerror_when_outside_root(self) -> None:
         """Verify that module_name_from_file_path raises ValueError when file is outside root.
 
         This is the current behavior that causes the bug in verifier.py line 37.
@@ -34,7 +34,7 @@ class TestVerifierPathHandling:
         with pytest.raises(ValueError, match="is not within the project root"):
             module_name_from_file_path(test_path, tests_root)
 
-    def test_module_name_from_file_path_with_fallback_succeeds(self):
+    def test_module_name_from_file_path_with_fallback_succeeds(self) -> None:
         """Test that adding a fallback (try-except) allows graceful handling.
 
         This is the pattern used in javascript/parse.py:330-333 that should
