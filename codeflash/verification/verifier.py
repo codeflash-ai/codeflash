@@ -39,7 +39,9 @@ def generate_tests(
     # (e.g., JavaScript/TypeScript tests generated in __tests__ subdirectories adjacent to source files)
     # Similar to javascript/parse.py:330-333 fallback pattern
     try:
-        test_module_path = Path(module_name_from_file_path(test_path, test_cfg.tests_project_rootdir))
+        # Use traverse_up=True to handle co-located __tests__ directories that may be outside
+        # the configured tests_root (e.g., src/gateway/__tests__/ when tests_root is test/)
+        test_module_path = Path(module_name_from_file_path(test_path, test_cfg.tests_project_rootdir, traverse_up=True))
     except ValueError:
         # Test file is not within tests_project_rootdir - use just the filename
         # This can happen for JavaScript/TypeScript when get_test_dir_for_source()
