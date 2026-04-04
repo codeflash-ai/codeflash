@@ -43,14 +43,14 @@ class JestCoverageUtils:
 
         """
         if not coverage_json_path or not coverage_json_path.exists():
-            logger.debug(f"Jest coverage file not found: {coverage_json_path}")
+            logger.debug(f"JavaScript coverage file not found: {coverage_json_path}")
             return CoverageData.create_empty(source_code_path, function_name, code_context)
 
         try:
             with coverage_json_path.open(encoding="utf-8") as f:
                 coverage_data = json.load(f)
         except (json.JSONDecodeError, OSError) as e:
-            logger.warning(f"Failed to parse Jest coverage file: {e}")
+            logger.warning(f"Failed to parse JavaScript coverage file: {e}")
             return CoverageData.create_empty(source_code_path, function_name, code_context)
 
         # Find the file entry in coverage data
@@ -66,7 +66,7 @@ class JestCoverageUtils:
                 break
 
         if not file_coverage:
-            logger.debug(f"No coverage data found for {source_code_path} in Jest coverage")
+            logger.debug(f"No coverage data found for {source_code_path} in JavaScript coverage")
             return CoverageData.create_empty(source_code_path, function_name, code_context)
 
         # Extract line coverage from statement map and execution counts
@@ -94,7 +94,7 @@ class JestCoverageUtils:
             # If function not found in fnMap, use entire file
             fn_start_line = 1
             fn_end_line = 999999
-            logger.debug(f"Function {function_name} not found in Jest fnMap, using file coverage")
+            logger.debug(f"Function {function_name} not found in JavaScript fnMap, using file coverage")
 
         # Calculate executed and unexecuted lines within the function
         executed_lines = []
