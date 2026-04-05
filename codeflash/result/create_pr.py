@@ -35,7 +35,7 @@ def existing_tests_source_for(
     logger.debug(
         f"[PR-DEBUG] existing_tests_source_for called with func={function_qualified_name_with_modules_from_root}"
     )
-    logger.debug(f"[PR-DEBUG] function_to_tests keys: {list(function_to_tests.keys())}")
+    logger.debug(f"[PR-DEBUG] function_to_tests has {len(function_to_tests)} keys")
     logger.debug(f"[PR-DEBUG] original_runtimes_all has {len(original_runtimes_all)} entries")
     logger.debug(f"[PR-DEBUG] optimized_runtimes_all has {len(optimized_runtimes_all)} entries")
     test_files = function_to_tests.get(function_qualified_name_with_modules_from_root)
