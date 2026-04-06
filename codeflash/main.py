@@ -33,7 +33,7 @@ def main() -> None:
     from codeflash.telemetry import posthog_cf
     from codeflash.telemetry.sentry import init_sentry
 
-    if "--help" in sys.argv or "-h" in sys.argv:
+    if "--help" in sys.argv[1:] or "-h" in sys.argv[1:]:
         print_codeflash_banner()
     args = parse_args()
     if args.command != "auth":
