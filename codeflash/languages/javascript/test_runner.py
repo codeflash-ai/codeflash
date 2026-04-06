@@ -220,27 +220,12 @@ def _has_ts_jest_dependency(project_root: Path) -> bool:
 
 
 def _detect_typescript_transformer(project_root: Path) -> tuple[str | None, str]:
-    """Detect the TypeScript transformer configured in the project.
-
-    Checks package.json for common TypeScript transformers and returns
-    the transformer name and its configuration string for Jest config.
-
-    Args:
-        project_root: Root of the project.
-
-    Returns:
-        Tuple of (transformer_name, config_string) where:
-        - transformer_name is the package name (e.g., "@swc/jest", "ts-jest")
-        - config_string is the Jest transform config snippet to inject
-        Returns (None, "") if no TypeScript transformer is found.
-
-    """
     package_json = project_root / "package.json"
     if not package_json.exists():
         return (None, "")
 
     try:
-        content = json.loads(package_json.read_text())
+        content = json.loads(package_json.read_text(encoding="utf-8"))
         deps = {**content.get("dependencies", {}), **content.get("devDependencies", {})}
 
         # Check for various TypeScript transformers in order of preference
