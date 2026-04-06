@@ -420,7 +420,10 @@ def run_behavioral_tests(
     if enable_coverage:
         coverage_xml_path = strategy.setup_coverage(build_root, test_module, project_root)
 
-    min_timeout = 300 if enable_coverage else 60
+    # Coverage runs add JaCoCo overhead (instrumentation + report generation) on top of
+    # normal test execution. 600s accommodates multi-module Gradle projects with --no-daemon
+    # which need cold startup + configuration + compilation + tests + JaCoCo report.
+    min_timeout = 600 if enable_coverage else 60
     effective_timeout = max(timeout or 300, min_timeout)
 
     if enable_coverage:
