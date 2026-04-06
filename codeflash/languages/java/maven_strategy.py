@@ -72,6 +72,45 @@ CODEFLASH_DEPENDENCY_SNIPPET = f"""\
     </dependencies>"""
 
 
+MAVEN_CENTRAL_URL = (
+    "https://repo1.maven.org/maven2/com/codeflash/codeflash-runtime"
+    f"/{CODEFLASH_RUNTIME_VERSION}/{CODEFLASH_RUNTIME_JAR_NAME}"
+)
+
+M2_JAR_PATH = (
+    Path.home()
+    / ".m2"
+    / "repository"
+    / "com"
+    / "codeflash"
+    / "codeflash-runtime"
+    / CODEFLASH_RUNTIME_VERSION
+    / CODEFLASH_RUNTIME_JAR_NAME
+)
+
+
+def download_from_maven_central_http() -> Path | None:
+    """Download codeflash-runtime JAR directly from Maven Central via HTTP.
+
+    No `mvn` binary required — works for Gradle-only users and the tracer flow.
+    Downloads to ~/.m2/repository/ so all resolution paths find it.
+    Returns the path to the JAR, or None if the download fails.
+    """
+    if M2_JAR_PATH.exists():
+        return M2_JAR_PATH
+
+    try:
+        M2_JAR_PATH.parent.mkdir(parents=True, exist_ok=True)
+        logger.info("Downloading codeflash-runtime from Maven Central: %s", MAVEN_CENTRAL_URL)
+        urllib.request.urlretrieve(MAVEN_CENTRAL_URL, M2_JAR_PATH)  # noqa: S310
+        logger.info("Downloaded codeflash-runtime to %s", M2_JAR_PATH)
+        return M2_JAR_PATH
+    except Exception as e:
+        logger.debug("Maven Central HTTP download failed: %s", e)
+        M2_JAR_PATH.unlink(missing_ok=True)
+        return None
+
+
 def download_from_github_releases() -> Path | None:
     """Download codeflash-runtime JAR from GitHub Releases.
 

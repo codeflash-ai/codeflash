@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from codeflash.languages.java.build_tool_strategy import BuildToolStrategy, module_to_dir
-from codeflash.languages.java.build_tools import BuildTool, JavaProjectInfo
+from codeflash.languages.java.build_tools import CODEFLASH_RUNTIME_JAR_NAME, BuildTool, JavaProjectInfo
 
 _RE_INCLUDE = re.compile(r"""include\s*\(?([^)\n]+)\)?""")
 
@@ -422,6 +422,10 @@ class GradleStrategy(BuildToolStrategy):
     def ensure_runtime(self, build_root: Path, test_module: str | None) -> bool:
         runtime_jar = self.find_runtime_jar()
         if runtime_jar is None:
+            from codeflash.languages.java.maven_strategy import download_from_maven_central_http
+
+            runtime_jar = download_from_maven_central_http()
+        if runtime_jar is None:
             logger.error("codeflash-runtime JAR not found. Generated tests will fail to compile.")
             return False
 
@@ -432,7 +436,7 @@ class GradleStrategy(BuildToolStrategy):
 
         libs_dir = module_root / "libs"
         libs_dir.mkdir(parents=True, exist_ok=True)
-        dest_jar = libs_dir / "codeflash-runtime-1.0.1.jar"
+        dest_jar = libs_dir / CODEFLASH_RUNTIME_JAR_NAME
 
         if not dest_jar.exists():
             logger.info("Copying codeflash-runtime JAR to %s", dest_jar)

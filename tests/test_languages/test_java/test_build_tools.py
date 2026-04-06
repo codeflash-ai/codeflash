@@ -12,7 +12,12 @@ from codeflash.languages.java.build_tools import (
     get_project_info,
 )
 from codeflash.languages.java.gradle_strategy import GradleStrategy
-from codeflash.languages.java.maven_strategy import MavenStrategy, add_codeflash_dependency
+from codeflash.languages.java.line_profiler import find_agent_jar
+from codeflash.languages.java.maven_strategy import (
+    MavenStrategy,
+    add_codeflash_dependency,
+    download_from_maven_central_http,
+)
 from codeflash.languages.java.test_runner import _extract_modules_from_pom_content
 
 
@@ -641,3 +646,113 @@ class TestGradleEnsureRuntimeMultiModule:
         assert result is True
         nested_build = (nested / "build.gradle.kts").read_text(encoding="utf-8")
         assert "codeflash-runtime" in nested_build
+
+
+class TestDownloadFromMavenCentralHttp:
+    """Tests for the direct HTTP download from Maven Central."""
+
+    def test_returns_existing_m2_jar(self, tmp_path):
+        """If the JAR already exists in ~/.m2, return it without downloading."""
+        fake_m2 = tmp_path / "m2" / "codeflash-runtime" / "1.0.1" / "codeflash-runtime-1.0.1.jar"
+        fake_m2.parent.mkdir(parents=True)
+        fake_m2.write_bytes(b"PK\x03\x04")
+
+        with patch("codeflash.languages.java.maven_strategy.M2_JAR_PATH", fake_m2):
+            result = download_from_maven_central_http()
+
+        assert result == fake_m2
+
+    def test_downloads_jar_when_not_cached(self, tmp_path):
+        """Downloads the JAR to ~/.m2 when it doesn't exist locally."""
+        fake_m2 = tmp_path / "m2" / "codeflash-runtime" / "1.0.1" / "codeflash-runtime-1.0.1.jar"
+
+        with (
+            patch("codeflash.languages.java.maven_strategy.M2_JAR_PATH", fake_m2),
+            patch("urllib.request.urlretrieve") as mock_download,
+        ):
+            mock_download.side_effect = lambda _url, path: Path(path).write_bytes(b"PK\x03\x04")
+            result = download_from_maven_central_http()
+
+        assert result == fake_m2
+        assert "repo1.maven.org" in mock_download.call_args[0][0]
+
+    def test_returns_none_on_network_failure(self, tmp_path):
+        """Returns None when the download fails."""
+        fake_m2 = tmp_path / "m2" / "codeflash-runtime" / "1.0.1" / "codeflash-runtime-1.0.1.jar"
+
+        with (
+            patch("codeflash.languages.java.maven_strategy.M2_JAR_PATH", fake_m2),
+            patch("urllib.request.urlretrieve", side_effect=OSError("Network unreachable")),
+        ):
+            result = download_from_maven_central_http()
+
+        assert result is None
+        assert not fake_m2.exists()
+
+
+class TestFindAgentJarFallback:
+    """Tests that find_agent_jar falls back to Maven Central HTTP download."""
+
+    def test_falls_back_to_maven_central_when_no_local_jar(self, tmp_path):
+        """When no local JAR exists, find_agent_jar tries Maven Central HTTP download."""
+        fake_jar = tmp_path / "downloaded.jar"
+        fake_jar.write_bytes(b"PK\x03\x04")
+
+        with (
+            patch("codeflash.languages.java.line_profiler.CODEFLASH_RUNTIME_VERSION", "99.99.99"),
+            patch("codeflash.languages.java.line_profiler.AGENT_JAR_NAME", "codeflash-runtime-99.99.99.jar"),
+            patch(
+                "codeflash.languages.java.maven_strategy.download_from_maven_central_http", return_value=fake_jar
+            ) as mock_download,
+        ):
+            result = find_agent_jar()
+
+        assert result == fake_jar
+        assert mock_download.called
+
+
+class TestGradleEnsureRuntimeFallback:
+    """Tests that Gradle ensure_runtime falls back to Maven Central HTTP download."""
+
+    def test_falls_back_to_http_download_when_find_runtime_jar_returns_none(self, tmp_path):
+        """When find_runtime_jar returns None, ensure_runtime tries HTTP download."""
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / "build.gradle.kts").write_text(
+            'plugins {\n    java\n}\n\ndependencies {\n    testImplementation("junit:junit:4.13.2")\n}\n',
+            encoding="utf-8",
+        )
+        (project / "gradlew").write_text("#!/bin/sh\necho gradle", encoding="utf-8")
+        (project / "gradlew").chmod(0o755)
+
+        fake_jar = tmp_path / "downloaded.jar"
+        fake_jar.write_bytes(b"PK\x03\x04")
+
+        strategy = GradleStrategy()
+        with (
+            patch.object(strategy, "find_runtime_jar", return_value=None),
+            patch(
+                "codeflash.languages.java.maven_strategy.download_from_maven_central_http", return_value=fake_jar
+            ) as mock_download,
+        ):
+            result = strategy.ensure_runtime(project, test_module=None)
+
+        assert result is True
+        assert mock_download.called
+        build_content = (project / "build.gradle.kts").read_text(encoding="utf-8")
+        assert "codeflash-runtime" in build_content
+
+    def test_fails_when_both_local_and_http_return_none(self, tmp_path):
+        """When both find_runtime_jar and HTTP download return None, ensure_runtime fails."""
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / "build.gradle.kts").write_text("plugins { java }\n", encoding="utf-8")
+
+        strategy = GradleStrategy()
+        with (
+            patch.object(strategy, "find_runtime_jar", return_value=None),
+            patch("codeflash.languages.java.maven_strategy.download_from_maven_central_http", return_value=None),
+        ):
+            result = strategy.ensure_runtime(project, test_module=None)
+
+        assert result is False

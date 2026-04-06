@@ -568,7 +568,8 @@ def find_method_for_line(
 def find_agent_jar() -> Path | None:
     """Locate the profiler agent JAR file (now bundled in codeflash-runtime).
 
-    Checks local Maven repo, package resources, and development build directory.
+    Checks local Maven repo, package resources, development build directory,
+    and falls back to downloading from Maven Central via HTTP if not found locally.
     """
     # Check local Maven repository first (fastest)
     m2_jar = (
@@ -594,7 +595,10 @@ def find_agent_jar() -> Path | None:
     if dev_jar.exists():
         return dev_jar
 
-    return None
+    # Download from Maven Central as last resort (no mvn binary needed)
+    from codeflash.languages.java.maven_strategy import download_from_maven_central_http
+
+    return download_from_maven_central_http()
 
 
 def resolve_internal_class_name(file_path: Path, source: str) -> str:
