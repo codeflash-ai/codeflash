@@ -219,6 +219,70 @@ def _has_ts_jest_dependency(project_root: Path) -> bool:
         return False
 
 
+def _detect_typescript_transformer(project_root: Path) -> tuple[str | None, str]:
+    """Detect the TypeScript transformer configured in the project.
+
+    Checks package.json for common TypeScript transformers and returns
+    the transformer name and its configuration string for Jest config.
+
+    Args:
+        project_root: Root of the project.
+
+    Returns:
+        Tuple of (transformer_name, config_string) where:
+        - transformer_name is the package name (e.g., "@swc/jest", "ts-jest")
+        - config_string is the Jest transform config snippet to inject
+        Returns (None, "") if no TypeScript transformer is found.
+
+    """
+    package_json = project_root / "package.json"
+    if not package_json.exists():
+        return (None, "")
+
+    try:
+        content = json.loads(package_json.read_text())
+        deps = {**content.get("dependencies", {}), **content.get("devDependencies", {})}
+
+        # Check for various TypeScript transformers in order of preference
+        if "ts-jest" in deps:
+            config = """
+  // Ensure TypeScript files are transformed using ts-jest
+  transform: {
+    '^.+\\\\.(ts|tsx)$': ['ts-jest', { isolatedModules: true }],
+    // Use ts-jest for JS files in ESM packages too
+    '^.+\\\\.js$': ['ts-jest', { isolatedModules: true }],
+  },"""
+            return ("ts-jest", config)
+
+        if "@swc/jest" in deps:
+            config = """
+  // Ensure TypeScript files are transformed using @swc/jest
+  transform: {
+    '^.+\\\\.(ts|tsx)$': '@swc/jest',
+  },"""
+            return ("@swc/jest", config)
+
+        if "babel-jest" in deps and "@babel/preset-typescript" in deps:
+            config = """
+  // Ensure TypeScript files are transformed using babel-jest
+  transform: {
+    '^.+\\\\.(ts|tsx)$': 'babel-jest',
+  },"""
+            return ("babel-jest", config)
+
+        if "esbuild-jest" in deps:
+            config = """
+  // Ensure TypeScript files are transformed using esbuild-jest
+  transform: {
+    '^.+\\\\.(ts|tsx)$': 'esbuild-jest',
+  },"""
+            return ("esbuild-jest", config)
+
+        return (None, "")
+    except (json.JSONDecodeError, OSError):
+        return (None, "")
+
+
 def _create_codeflash_jest_config(
     project_root: Path, original_jest_config: Path | None, *, for_esm: bool = False
 ) -> Path | None:
@@ -278,21 +342,13 @@ def _create_codeflash_jest_config(
     ]
     esm_pattern = "|".join(esm_packages)
 
-    # Check if ts-jest is available in the project
-    has_ts_jest = _has_ts_jest_dependency(project_root)
+    # Detect TypeScript transformer in the project
+    transformer_name, transform_config = _detect_typescript_transformer(project_root)
 
-    # Build transform config only if ts-jest is available
-    if has_ts_jest:
-        transform_config = """
-  // Ensure TypeScript files are transformed using ts-jest
-  transform: {
-    '^.+\\\\.(ts|tsx)$': ['ts-jest', { isolatedModules: true }],
-    // Use ts-jest for JS files in ESM packages too
-    '^.+\\\\.js$': ['ts-jest', { isolatedModules: true }],
-  },"""
+    if transformer_name:
+        logger.debug(f"Detected TypeScript transformer: {transformer_name}")
     else:
-        transform_config = ""
-        logger.debug("ts-jest not found in project dependencies, skipping transform config")
+        logger.debug("No TypeScript transformer found in project dependencies")
 
     # Create a wrapper Jest config
     if original_jest_config:
