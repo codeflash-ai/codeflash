@@ -250,9 +250,9 @@ def _ensure_babel_preset_typescript(project_root: Path) -> bool:
         check_cmd = [
             "node",
             "-e",
-            "try { require.resolve('@babel/preset-typescript'); process.exit(0); } catch { process.exit(1); }"
+            "try { require.resolve('@babel/preset-typescript'); process.exit(0); } catch { process.exit(1); }",
         ]
-        result = subprocess.run(check_cmd, cwd=project_root, capture_output=True, timeout=5)
+        result = subprocess.run(check_cmd, cwd=project_root, capture_output=True, timeout=5, check=False)
         if result.returncode == 0:
             logger.debug("@babel/preset-typescript available transitively")
             return True
@@ -353,11 +353,10 @@ def _detect_typescript_transformer(project_root: Path) -> tuple[str | None, str]
     }],
   },"""
                 return ("babel-jest (fallback)", config)
-            else:
-                logger.warning(
-                    "@babel/core is installed but @babel/preset-typescript could not be installed. "
-                    "TypeScript files may fail to transform. Consider installing ts-jest or @swc/jest."
-                )
+            logger.warning(
+                "@babel/core is installed but @babel/preset-typescript could not be installed. "
+                "TypeScript files may fail to transform. Consider installing ts-jest or @swc/jest."
+            )
 
         return (None, "")
     except (json.JSONDecodeError, OSError):
