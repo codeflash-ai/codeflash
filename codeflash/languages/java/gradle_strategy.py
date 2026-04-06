@@ -78,6 +78,20 @@ def _get_skip_validation_init_script() -> str:
     return _skip_validation_init_path
 
 
+# Lazily-created temp file for the JaCoCo init script.
+_jacoco_init_path: str | None = None
+
+
+def _get_jacoco_init_script() -> str:
+    global _jacoco_init_path
+    if _jacoco_init_path is None or not Path(_jacoco_init_path).exists():
+        fd, path = tempfile.mkstemp(suffix=".gradle", prefix="codeflash_jacoco_")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(_JACOCO_INIT_SCRIPT)
+        _jacoco_init_path = path
+    return _jacoco_init_path
+
+
 # Cache for classpath strings — keyed on (gradle_root, test_module).
 _classpath_cache: dict[tuple[Path, str | None], str] = {}
 
@@ -104,15 +118,18 @@ gradle.projectsEvaluated {
 """
 
 # Gradle init script that applies JaCoCo plugin for coverage collection.
-# Uses projectsEvaluated to avoid triggering configuration of unrelated subprojects.
+# Uses projectsEvaluated + JavaPlugin guard so it only applies to subprojects
+# that actually compile Java (skips container/root projects without java plugin).
 _JACOCO_INIT_SCRIPT = """\
 gradle.projectsEvaluated {
-    allprojects {
-        apply plugin: 'jacoco'
-        jacocoTestReport {
-            reports {
-                xml.required = true
-                html.required = false
+    allprojects { project ->
+        project.plugins.withType(JavaPlugin) {
+            project.apply plugin: 'jacoco'
+            project.jacocoTestReport {
+                reports {
+                    xml.required = true
+                    html.required = false
+                }
             }
         }
     }
@@ -732,24 +749,29 @@ class GradleStrategy(BuildToolStrategy):
             cmd = [gradle, task, "--no-daemon", "--rerun", "--init-script", init_path]
             cmd.extend(["--init-script", _get_skip_validation_init_script()])
 
-            # --continue ensures Gradle keeps going even if some tests fail.
-            # For coverage: needed so jacocoTestReport runs even after test failures
-            #   (matches Maven's -Dmaven.test.failure.ignore=true).
+            if enable_coverage:
+                jacoco_init = _get_jacoco_init_script()
+                cmd.extend(["--init-script", jacoco_init])
+                # --continue ensures Gradle keeps going even if some tests fail,
+                # so jacocoTestReport runs even after test failures
+                # (matches Maven's -Dmaven.test.failure.ignore=true).
+                cmd.append("--continue")
+
             # Note: multi-module --tests filtering is handled by
             #   filter.failOnNoMatchingTests = false in the init script above
             #   (matches Maven's -DfailIfNoTests=false).
-            if enable_coverage:
-                cmd.append("--continue")
-
             for class_filter in test_filter.split(","):
                 class_filter = class_filter.strip()
                 if class_filter:
                     cmd.extend(["--tests", class_filter])
             logger.debug("Added --tests filters to Gradle command")
 
-            # Append jacocoTestReport AFTER --tests so Gradle doesn't try to apply --tests to it
+            # Append jacocoTestReport AFTER --tests so Gradle doesn't try to apply --tests to it.
+            # Must be module-qualified for multi-module projects — running it at root level fails
+            # if the root project doesn't have the java plugin (e.g., eureka).
             if enable_coverage:
-                cmd.append("jacocoTestReport")
+                jacoco_task = f":{test_module}:jacocoTestReport" if test_module else "jacocoTestReport"
+                cmd.append(jacoco_task)
 
             logger.debug("Running Gradle command: %s in %s", " ".join(cmd), build_root)
 
@@ -907,43 +929,12 @@ class GradleStrategy(BuildToolStrategy):
         return result, result_xml_path, coverage_xml_path
 
     def setup_coverage(self, build_root: Path, test_module: str | None, project_root: Path) -> Path | None:
+        # JaCoCo plugin is applied via init script (_JACOCO_INIT_SCRIPT) at test execution time,
+        # so no build file modification is needed here. Just return the expected report path.
         if test_module:
             module_root = build_root / module_to_dir(test_module)
         else:
             module_root = project_root
-
-        build_file = find_gradle_build_file(module_root)
-        if build_file is None:
-            logger.warning("No build.gradle(.kts) found at %s, cannot setup JaCoCo", module_root)
-            return None
-
-        content = build_file.read_text(encoding="utf-8")
-        if "jacoco" not in content.lower():
-            logger.info("Adding JaCoCo plugin to %s for coverage collection", build_file.name)
-            is_kts = build_file.name.endswith(".kts")
-            if is_kts:
-                plugin_line = "plugins {\n    jacoco\n}\n"
-            else:
-                plugin_line = "apply plugin: 'jacoco'\n"
-
-            if "plugins {" in content or "plugins{" in content:
-                # Insert jacoco inside existing plugins block
-                plugins_idx = content.find("plugins")
-                brace_depth = 0
-                for i in range(plugins_idx, len(content)):
-                    if content[i] == "{":
-                        brace_depth += 1
-                    elif content[i] == "}":
-                        brace_depth -= 1
-                        if brace_depth == 0:
-                            insert = "    jacoco\n" if is_kts else "    id 'jacoco'\n"
-                            content = content[:i] + insert + content[i:]
-                            break
-            else:
-                content = plugin_line + content
-
-            build_file.write_text(content, encoding="utf-8")
-
         return module_root / "build" / "reports" / "jacoco" / "test" / "jacocoTestReport.xml"
 
     def get_test_run_command(self, project_root: Path, test_classes: list[str] | None = None) -> list[str]:

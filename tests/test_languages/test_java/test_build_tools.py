@@ -756,3 +756,51 @@ class TestGradleEnsureRuntimeFallback:
             result = strategy.ensure_runtime(project, test_module=None)
 
         assert result is False
+
+
+class TestGradleSetupCoverage:
+    """Tests for GradleStrategy.setup_coverage — returns report path without modifying build files."""
+
+    def test_returns_report_path_for_module(self, tmp_path):
+        strategy = GradleStrategy()
+        path = strategy.setup_coverage(tmp_path, test_module="eureka-core", project_root=tmp_path)
+        assert path == tmp_path / "eureka-core" / "build" / "reports" / "jacoco" / "test" / "jacocoTestReport.xml"
+
+    def test_returns_report_path_without_module(self, tmp_path):
+        strategy = GradleStrategy()
+        path = strategy.setup_coverage(tmp_path, test_module=None, project_root=tmp_path)
+        assert path == tmp_path / "build" / "reports" / "jacoco" / "test" / "jacocoTestReport.xml"
+
+    def test_does_not_modify_build_files(self, tmp_path):
+        """setup_coverage must NOT modify build.gradle — JaCoCo is applied via init script."""
+        build_file = tmp_path / "build.gradle"
+        original_content = "plugins { id 'java' }\n"
+        build_file.write_text(original_content, encoding="utf-8")
+
+        strategy = GradleStrategy()
+        strategy.setup_coverage(tmp_path, test_module=None, project_root=tmp_path)
+        assert build_file.read_text(encoding="utf-8") == original_content
+
+
+class TestGradleJacocoInitScript:
+    """Tests for the JaCoCo init script content and helper."""
+
+    def test_init_script_has_java_plugin_guard(self):
+        from codeflash.languages.java.gradle_strategy import _JACOCO_INIT_SCRIPT
+
+        assert "withType(JavaPlugin)" in _JACOCO_INIT_SCRIPT
+
+    def test_get_jacoco_init_script_creates_temp_file(self):
+        from codeflash.languages.java.gradle_strategy import _JACOCO_INIT_SCRIPT, _get_jacoco_init_script
+
+        path = _get_jacoco_init_script()
+        assert Path(path).exists()
+        content = Path(path).read_text(encoding="utf-8")
+        assert content == _JACOCO_INIT_SCRIPT
+
+    def test_get_jacoco_init_script_is_cached(self):
+        from codeflash.languages.java.gradle_strategy import _get_jacoco_init_script
+
+        path1 = _get_jacoco_init_script()
+        path2 = _get_jacoco_init_script()
+        assert path1 == path2
