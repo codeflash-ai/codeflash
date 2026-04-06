@@ -219,6 +219,151 @@ def _has_ts_jest_dependency(project_root: Path) -> bool:
         return False
 
 
+def _ensure_babel_preset_typescript(project_root: Path) -> bool:
+    """Ensure @babel/preset-typescript is installed if @babel/core is present.
+
+    Args:
+        project_root: Root of the project.
+
+    Returns:
+        True if @babel/preset-typescript is available (already installed or just installed),
+        False if installation failed or @babel/core is not present.
+
+    """
+    package_json = project_root / "package.json"
+    if not package_json.exists():
+        return False
+
+    try:
+        content = json.loads(package_json.read_text())
+        deps = {**content.get("dependencies", {}), **content.get("devDependencies", {})}
+
+        # Only proceed if @babel/core is installed
+        if "@babel/core" not in deps:
+            return False
+
+        # Check if already available
+        if "@babel/preset-typescript" in deps:
+            return True
+
+        # Check if actually resolvable (might be transitively installed)
+        check_cmd = [
+            "node",
+            "-e",
+            "try { require.resolve('@babel/preset-typescript'); process.exit(0); } catch { process.exit(1); }"
+        ]
+        result = subprocess.run(check_cmd, cwd=project_root, capture_output=True, timeout=5)
+        if result.returncode == 0:
+            logger.debug("@babel/preset-typescript available transitively")
+            return True
+
+        # Not available - install it
+        logger.info("Installing @babel/preset-typescript for TypeScript transformation...")
+        install_cmd = get_package_install_command(project_root, "@babel/preset-typescript", dev=True)
+        result = subprocess.run(install_cmd, check=False, cwd=project_root, capture_output=True, text=True, timeout=120)
+
+        if result.returncode == 0:
+            logger.debug(f"Installed @babel/preset-typescript using {install_cmd[0]}")
+            return True
+
+        logger.warning(f"Failed to install @babel/preset-typescript: {result.stderr}")
+        return False
+
+    except Exception as e:
+        logger.warning(f"Error ensuring @babel/preset-typescript: {e}")
+        return False
+
+
+def _detect_typescript_transformer(project_root: Path) -> tuple[str | None, str]:
+    """Detect the TypeScript transformer configured in the project.
+
+    Checks package.json for common TypeScript transformers and returns
+    the transformer name and its configuration string for Jest config.
+
+    If no transformer is found but @babel/core is installed, attempts to
+    install @babel/preset-typescript and returns a babel-jest config.
+
+    Args:
+        project_root: Root of the project.
+
+    Returns:
+        Tuple of (transformer_name, config_string) where:
+        - transformer_name is the package name (e.g., "@swc/jest", "ts-jest")
+        - config_string is the Jest transform config snippet to inject
+        Returns (None, "") if no TypeScript transformer is found.
+
+    """
+    package_json = project_root / "package.json"
+    if not package_json.exists():
+        return (None, "")
+
+    try:
+        content = json.loads(package_json.read_text())
+        deps = {**content.get("dependencies", {}), **content.get("devDependencies", {})}
+
+        # Check for various TypeScript transformers in order of preference
+        if "ts-jest" in deps:
+            config = """
+  // Ensure TypeScript files are transformed using ts-jest
+  transform: {
+    '^.+\\\\.(ts|tsx)$': ['ts-jest', { isolatedModules: true }],
+    // Use ts-jest for JS files in ESM packages too
+    '^.+\\\\.js$': ['ts-jest', { isolatedModules: true }],
+  },"""
+            return ("ts-jest", config)
+
+        if "@swc/jest" in deps:
+            config = """
+  // Ensure TypeScript files are transformed using @swc/jest
+  transform: {
+    '^.+\\\\.(ts|tsx)$': '@swc/jest',
+  },"""
+            return ("@swc/jest", config)
+
+        if "babel-jest" in deps and "@babel/preset-typescript" in deps:
+            config = """
+  // Ensure TypeScript files are transformed using babel-jest
+  transform: {
+    '^.+\\\\.(ts|tsx)$': 'babel-jest',
+  },"""
+            return ("babel-jest", config)
+
+        if "esbuild-jest" in deps:
+            config = """
+  // Ensure TypeScript files are transformed using esbuild-jest
+  transform: {
+    '^.+\\\\.(ts|tsx)$': 'esbuild-jest',
+  },"""
+            return ("esbuild-jest", config)
+
+        # Fallback: If @babel/core is installed but no TypeScript transformer found,
+        # try to ensure @babel/preset-typescript is available and use babel-jest.
+        # This handles projects that have Babel but no TypeScript-specific setup.
+        if "@babel/core" in deps:
+            # Ensure preset-typescript is available (install if needed)
+            if _ensure_babel_preset_typescript(project_root):
+                config = """
+  // Fallback: Use babel-jest with TypeScript preset
+  // @babel/preset-typescript was installed by codeflash for TypeScript transformation
+  transform: {
+    '^.+\\\\.(ts|tsx)$': ['babel-jest', {
+      presets: [
+        ['@babel/preset-typescript', { allowDeclareFields: true }]
+      ]
+    }],
+  },"""
+                return ("babel-jest (fallback)", config)
+            else:
+                logger.warning(
+                    "@babel/core is installed but @babel/preset-typescript could not be installed. "
+                    "TypeScript files may fail to transform. Consider installing ts-jest or @swc/jest."
+                )
+
+        return (None, "")
+    except (json.JSONDecodeError, OSError):
+        return (None, "")
+
+
 def _create_codeflash_jest_config(
     project_root: Path, original_jest_config: Path | None, *, for_esm: bool = False
 ) -> Path | None:
@@ -278,21 +423,13 @@ def _create_codeflash_jest_config(
     ]
     esm_pattern = "|".join(esm_packages)
 
-    # Check if ts-jest is available in the project
-    has_ts_jest = _has_ts_jest_dependency(project_root)
+    # Detect TypeScript transformer in the project
+    transformer_name, transform_config = _detect_typescript_transformer(project_root)
 
-    # Build transform config only if ts-jest is available
-    if has_ts_jest:
-        transform_config = """
-  // Ensure TypeScript files are transformed using ts-jest
-  transform: {
-    '^.+\\\\.(ts|tsx)$': ['ts-jest', { isolatedModules: true }],
-    // Use ts-jest for JS files in ESM packages too
-    '^.+\\\\.js$': ['ts-jest', { isolatedModules: true }],
-  },"""
+    if transformer_name:
+        logger.debug(f"Detected TypeScript transformer: {transformer_name}")
     else:
-        transform_config = ""
-        logger.debug("ts-jest not found in project dependencies, skipping transform config")
+        logger.debug("No TypeScript transformer found in project dependencies")
 
     # Create a wrapper Jest config
     if original_jest_config:
@@ -310,6 +447,10 @@ module.exports = {{
   transformIgnorePatterns: [
     'node_modules/(?!(\\\\.pnpm/)?({esm_pattern}))',
   ],{transform_config}
+  // Disable globalSetup/globalTeardown - these often require infrastructure (Docker, databases)
+  // that isn't available when running Codeflash-generated unit tests
+  globalSetup: undefined,
+  globalTeardown: undefined,
 }};
 """
     else:
@@ -326,6 +467,9 @@ module.exports = {{
     'node_modules/(?!(\\\\.pnpm/)?({esm_pattern}))',
   ],{transform_config}
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+  // Disable globalSetup/globalTeardown - not needed for unit tests
+  globalSetup: undefined,
+  globalTeardown: undefined,
 }};
 """
 
@@ -339,6 +483,108 @@ module.exports = {{
         return None
 
 
+def _extract_module_name_mapper_from_ts_config(
+    ts_config_path: Path, project_root: Path
+) -> dict[str, str] | None:
+    """Extract moduleNameMapper from a TypeScript Jest config.
+
+    TypeScript Jest configs (.ts) cannot be directly required by Node.js without
+    a loader. This function uses a small Node.js script with dynamic import and
+    --loader tsx to load and execute the TypeScript config.
+
+    Args:
+        ts_config_path: Path to the TypeScript Jest config file.
+        project_root: The project root directory (for resolving relative imports).
+
+    Returns:
+        Dictionary of moduleNameMapper entries, or None if extraction fails.
+
+    """
+    try:
+        # Create a temporary Node.js script to load the TypeScript config
+        # Uses ts-node to transpile and execute TypeScript on the fly
+        loader_script = f"""
+const tsNode = require('ts-node');
+
+// Register ts-node to handle .ts files
+tsNode.register({{
+  transpileOnly: true,
+  compilerOptions: {{
+    module: 'commonjs'
+  }}
+}});
+
+try {{
+  // Load the TypeScript config
+  const config = require('{ts_config_path.as_posix()}');
+
+  // Handle both default export and direct export
+  const jestConfig = config.default || config;
+
+  // Extract and print moduleNameMapper as JSON
+  if (jestConfig && jestConfig.moduleNameMapper) {{
+    console.log(JSON.stringify(jestConfig.moduleNameMapper));
+  }} else {{
+    console.log('{{}}');
+  }}
+}} catch (error) {{
+  // Silent failure - return empty object
+  console.log('{{}}');
+}}
+"""
+
+        # Try multiple approaches in order of preference
+        approaches = [
+            # 1. Try with ts-node (most common in TypeScript projects)
+            (["node", "-e", loader_script], "ts-node"),
+            # 2. Try with jest --showConfig (if Jest is available with proper loaders)
+            (
+                ["npx", "jest", "--showConfig", f"--config={ts_config_path.name}"],
+                "jest --showConfig",
+            ),
+        ]
+
+        for cmd, approach_name in approaches:
+            result = subprocess.run(
+                cmd,
+                cwd=project_root,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+
+            if result.returncode == 0 and result.stdout.strip():
+                try:
+                    if approach_name == "jest --showConfig":
+                        # Parse Jest's showConfig output
+                        config_data = json.loads(result.stdout)
+                        if "configs" in config_data and len(config_data["configs"]) > 0:
+                            module_name_mapper = config_data["configs"][0].get("moduleNameMapper")
+                    else:
+                        # Direct JSON output from our loader script
+                        module_name_mapper = json.loads(result.stdout)
+
+                    if module_name_mapper and isinstance(module_name_mapper, dict) and module_name_mapper:
+                        logger.debug(
+                            f"Extracted {len(module_name_mapper)} moduleNameMapper entries "
+                            f"from {ts_config_path.name} using {approach_name}"
+                        )
+                        return module_name_mapper
+                except (json.JSONDecodeError, KeyError):
+                    continue
+
+        logger.debug(
+            f"Could not extract moduleNameMapper from {ts_config_path.name} - "
+            "tried ts-node and jest --showConfig"
+        )
+        return None
+
+    except (subprocess.TimeoutExpired, Exception) as e:
+        logger.debug(f"Error extracting moduleNameMapper from {ts_config_path.name}: {e}")
+        return None
+
+
 def _create_runtime_jest_config(base_config_path: Path | None, project_root: Path, test_dirs: set[str]) -> Path | None:
     """Create a runtime Jest config that includes test directories in roots and testMatch.
 
@@ -349,6 +595,10 @@ def _create_runtime_jest_config(base_config_path: Path | None, project_root: Pat
     patterns (which typically use ``<rootDir>``). Since ``roots`` set via CLI
     can be overridden by config, and ``testMatch`` patterns using ``<rootDir>``
     won't match files outside the project root, we must create a wrapper config.
+
+    For TypeScript configs (.ts), this function also extracts and preserves the
+    moduleNameMapper configuration, which is critical for monorepo workspace
+    packages (e.g., @budibase/backend-core) to resolve correctly.
 
     Args:
         base_config_path: Path to the base Jest config to extend, or None.
@@ -369,7 +619,10 @@ def _create_runtime_jest_config(base_config_path: Path | None, project_root: Pat
 
     runtime_config_path = config_dir / f"jest.codeflash.runtime.config{config_ext}"
 
-    test_dirs_js = ", ".join(f"'{d}'" for d in sorted(test_dirs))
+    # SECURITY FIX (Issue #17): Use json.dumps() to properly escape paths
+    # Before: f"'{d}'" - vulnerable to code injection if path contains single quote
+    # After: json.dumps(d) - properly escapes quotes and special characters
+    test_dirs_js = ", ".join(json.dumps(d) for d in sorted(test_dirs))
 
     # In monorepos, add the root node_modules to moduleDirectories so Jest
     # can resolve workspace packages that are hoisted to the monorepo root.
@@ -377,12 +630,24 @@ def _create_runtime_jest_config(base_config_path: Path | None, project_root: Pat
     module_dirs_line = ""
     if monorepo_root and monorepo_root != project_root:
         monorepo_node_modules = (monorepo_root / "node_modules").as_posix()
-        module_dirs_line = f"  moduleDirectories: [...(baseConfig.moduleDirectories || ['node_modules']), '{monorepo_node_modules}'],\n"
-        module_dirs_line_no_base = f"  moduleDirectories: ['node_modules', '{monorepo_node_modules}'],\n"
+        # SECURITY FIX (Issue #17): Use json.dumps() to escape path
+        monorepo_node_modules_escaped = json.dumps(monorepo_node_modules)
+        module_dirs_line = f"  moduleDirectories: [...(baseConfig.moduleDirectories || ['node_modules']), {monorepo_node_modules_escaped}],\n"
+        module_dirs_line_no_base = f"  moduleDirectories: ['node_modules', {monorepo_node_modules_escaped}],\n"
     else:
         module_dirs_line_no_base = ""
 
-    if base_config_path:
+    # TypeScript config files cannot be directly required by Node.js without a loader.
+    # If the base config is a .ts file, skip it and create a standalone config instead.
+    can_require_base_config = base_config_path and base_config_path.suffix != ".ts"
+
+    if base_config_path and not can_require_base_config:
+        logger.debug(
+            f"Skipping TypeScript Jest config {base_config_path.name} "
+            "(cannot be directly required by Node.js)"
+        )
+
+    if can_require_base_config:
         require_path = f"./{base_config_path.name}"
         config_content = f"""// Auto-generated by codeflash - runtime config with test roots
 const baseConfig = require('{require_path}');
@@ -394,14 +659,40 @@ module.exports = {{
   ],
   testMatch: ['**/*.test.ts', '**/*.test.js', '**/*.test.tsx', '**/*.test.jsx'],
   testRegex: undefined,  // Clear testRegex from baseConfig to avoid conflict with testMatch
-{module_dirs_line}}};
+{module_dirs_line}  // Disable globalSetup/globalTeardown - these often require infrastructure (Docker, databases)
+  // that isn't available when running Codeflash-generated unit tests
+  globalSetup: undefined,
+  globalTeardown: undefined,
+}};
 """
     else:
+        # SECURITY FIX (Issue #17): Escape project_root too
+        project_root_escaped = json.dumps(str(project_root))
+
+        # For TypeScript configs, extract moduleNameMapper to preserve monorepo workspace package resolution
+        module_name_mapper_line = ""
+        if base_config_path and base_config_path.suffix == ".ts":
+            module_name_mapper = _extract_module_name_mapper_from_ts_config(base_config_path, project_root)
+            if module_name_mapper:
+                # Serialize the moduleNameMapper dict to JavaScript object syntax
+                mapper_entries = []
+                for pattern, replacement in module_name_mapper.items():
+                    # Escape both pattern and replacement for JavaScript string literals
+                    pattern_escaped = json.dumps(pattern)
+                    replacement_escaped = json.dumps(replacement)
+                    mapper_entries.append(f"    {pattern_escaped}: {replacement_escaped}")
+
+                mapper_js = ",\n".join(mapper_entries)
+                module_name_mapper_line = f"  moduleNameMapper: {{\n{mapper_js}\n  }},\n"
+
         config_content = f"""// Auto-generated by codeflash - runtime config with test roots
 module.exports = {{
-  roots: ['{project_root}', {test_dirs_js}],
+  roots: [{project_root_escaped}, {test_dirs_js}],
   testMatch: ['**/*.test.ts', '**/*.test.js', '**/*.test.tsx', '**/*.test.jsx'],
-{module_dirs_line_no_base}}};
+{module_dirs_line_no_base}{module_name_mapper_line}  // Disable globalSetup/globalTeardown - not needed for unit tests
+  globalSetup: undefined,
+  globalTeardown: undefined,
+}};
 """
 
     try:
@@ -799,15 +1090,21 @@ def run_jest_behavioral_tests(
     # Uses codeflash-compatible config if project has bundler moduleResolution
     jest_config = _get_jest_config_for_project(effective_cwd)
 
-    # If test files are outside the project root, create a runtime wrapper config
-    # that adds their directories to Jest's `roots` and overrides `testMatch`.
-    # This is necessary because Jest's testMatch patterns use <rootDir> which
-    # resolves to the config file's directory, excluding external test files.
-    if test_files:
+    # Create runtime wrapper config to:
+    # 1. Add test directories to Jest's `roots` (for tests outside project root)
+    # 2. Disable globalSetup/globalTeardown (ALWAYS needed - Issue #18)
+    #
+    # globalSetup hooks often require infrastructure (Docker, databases) that isn't
+    # available during Codeflash test runs, causing failures like:
+    #   "Command failed: docker context ls --format json"
+    #
+    # Issue #18: Previously, runtime config was only created when tests were outside
+    # project root, so globalSetup was NOT disabled for the common case (tests inside
+    # project root), causing systematic failures on projects with globalSetup hooks.
+    if test_files and jest_config:
         resolved_root = effective_cwd.resolve()
         test_dirs = {str(Path(f).resolve().parent) for f in test_files}
-        if any(not Path(d).is_relative_to(resolved_root) for d in test_dirs):
-            jest_config = _create_runtime_jest_config(jest_config, effective_cwd, test_dirs)
+        jest_config = _create_runtime_jest_config(jest_config, effective_cwd, test_dirs)
 
     if jest_config:
         jest_cmd.append(f"--config={jest_config}")
@@ -1054,12 +1351,12 @@ def run_jest_benchmarking_tests(
     # Uses codeflash-compatible config if project has bundler moduleResolution
     jest_config = _get_jest_config_for_project(effective_cwd)
 
-    # If test files are outside the project root, create a runtime wrapper config
-    if test_files:
+    # Create runtime config to disable globalSetup/globalTeardown (Issue #18)
+    # and add test directories to `roots` (for tests outside project root)
+    if test_files and jest_config:
         resolved_root = effective_cwd.resolve()
         test_dirs = {str(Path(f).resolve().parent) for f in test_files}
-        if any(not Path(d).is_relative_to(resolved_root) for d in test_dirs):
-            jest_config = _create_runtime_jest_config(jest_config, effective_cwd, test_dirs)
+        jest_config = _create_runtime_jest_config(jest_config, effective_cwd, test_dirs)
 
     if jest_config:
         jest_cmd.append(f"--config={jest_config}")
@@ -1223,12 +1520,12 @@ def run_jest_line_profile_tests(
     # Uses codeflash-compatible config if project has bundler moduleResolution
     jest_config = _get_jest_config_for_project(effective_cwd)
 
-    # If test files are outside the project root, create a runtime wrapper config
-    if test_files:
+    # Create runtime config to disable globalSetup/globalTeardown (Issue #18)
+    # and add test directories to `roots` (for tests outside project root)
+    if test_files and jest_config:
         resolved_root = effective_cwd.resolve()
         test_dirs = {str(Path(f).resolve().parent) for f in test_files}
-        if any(not Path(d).is_relative_to(resolved_root) for d in test_dirs):
-            jest_config = _create_runtime_jest_config(jest_config, effective_cwd, test_dirs)
+        jest_config = _create_runtime_jest_config(jest_config, effective_cwd, test_dirs)
 
     if jest_config:
         jest_cmd.append(f"--config={jest_config}")

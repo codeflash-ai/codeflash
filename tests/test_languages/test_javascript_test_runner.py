@@ -11,8 +11,12 @@ import pytest
 class TestJestRootsConfiguration:
     """Tests for Jest runtime config creation when test files are outside the project root."""
 
-    def test_no_runtime_config_when_tests_inside_project_root(self):
-        """Test that no runtime config is created when test files are inside the project root."""
+    def test_runtime_config_created_even_when_tests_inside_project_root(self):
+        """Test that runtime config IS created even when test files are inside project root.
+
+        This changed in PR #2009 to ensure globalSetup/globalTeardown are always disabled,
+        regardless of where tests are located.
+        """
         from codeflash.languages.javascript.test_runner import clear_created_config_files, get_created_config_files, run_jest_behavioral_tests
         from codeflash.models.models import TestFile, TestFiles
         from codeflash.models.test_type import TestType
@@ -23,6 +27,9 @@ class TestJestRootsConfiguration:
             test_dir.mkdir()
 
             (tmpdir_path / "package.json").write_text('{"name": "test"}')
+
+            # Create a Jest config so runtime config will be created
+            (tmpdir_path / "jest.config.js").write_text("module.exports = {};")
 
             test_file1 = test_dir / "test_func__unit_test_0.test.ts"
             test_file1.write_text("// test 1")
@@ -57,13 +64,18 @@ class TestJestRootsConfiguration:
                 except Exception:
                     pass
 
-                if mock_run.called:
-                    cmd = mock_run.call_args[0][0]
-                    # No --roots flags should be present
-                    assert "--roots" not in cmd, "Should not have --roots flags when tests are inside project root"
-                    # No runtime config should have been created
-                    runtime_configs = [f for f in get_created_config_files() if "codeflash.runtime" in f.name]
-                    assert len(runtime_configs) == 0, "Should not create runtime config when tests are inside project root"
+                # Runtime config should be created even when tests are inside project root
+                runtime_configs = [f for f in get_created_config_files() if "codeflash.runtime" in f.name]
+                assert len(runtime_configs) == 1, (
+                    "Should create runtime config to disable globalSetup/globalTeardown, "
+                    "even when tests are inside project root"
+                )
+
+                # Verify the runtime config disables globalSetup/globalTeardown
+                if runtime_configs:
+                    content = runtime_configs[0].read_text()
+                    assert "globalSetup: undefined" in content
+                    assert "globalTeardown: undefined" in content
 
             clear_created_config_files()
 
