@@ -58,29 +58,31 @@ codeflash init
 This will:
 - Detect your build tool (Maven/Gradle)
 - Find your source and test directories
-- Update your pom.xml or gradle settings with codeflash java library. The java library instruments your code and verifies correctness.
+- Write Codeflash configuration to your `pom.xml` properties (Maven) or `gradle.properties` (Gradle)
 
 </Step>
 <Step title="Run your first optimization">
 
-Trace and optimize a Java program:
+Optimize a specific function:
 
 ```bash
-codeflash optimize java -jar target/my-app.jar
+codeflash --file src/main/java/com/example/Utils.java --function myMethod
 ```
 
-Or with Maven:
+Or optimize all functions in your project:
 
 ```bash
-codeflash optimize mvn exec:java -Dexec.mainClass="com.example.Main"
+codeflash --all
 ```
 
 Codeflash will:
-1. Profile your program using JFR (Java Flight Recorder)
-2. Capture method arguments using a bytecode instrumentation agent
-3. Generate JUnit replay tests from the captured data to create a micro-benchmark.
-4. Rank functions by performance impact
-5. Optimize the most impactful functions
+1. Discover optimizable functions in your source code
+2. Generate tests and optimization candidates using AI
+3. Verify correctness by running tests (JUnit 5, JUnit 4, or TestNG)
+4. Benchmark performance improvements
+5. Create a pull request with the optimization (if the GitHub App is installed)
+
+For advanced workflow tracing (profiling a running Java program), see [Trace & Optimize](/optimizing-with-codeflash/trace-and-optimize).
 
 </Step>
 </Steps>
