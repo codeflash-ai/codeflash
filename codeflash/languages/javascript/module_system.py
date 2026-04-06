@@ -112,9 +112,7 @@ def detect_module_system(project_root: Path, file_path: Path | None = None) -> s
     # depends on how TypeScript compiles and how Node.js loads the files.
     if file_path and file_path.suffix.lower() in (".ts", ".tsx"):
         if pkg_type_from_json is None:
-            logger.debug(
-                "TypeScript file without explicit package.json type field - defaulting to CommonJS"
-            )
+            logger.debug("TypeScript file without explicit package.json type field - defaulting to CommonJS")
             return ModuleSystem.COMMONJS
 
     # Strategy 3: Analyze file content for import/export patterns
@@ -456,8 +454,9 @@ def ensure_module_system_compatibility(
         )
         if is_typescript_test and target_module_system == ModuleSystem.COMMONJS:
             logger.debug(
-                f"Preserving ESM imports for TypeScript test file: {file_path}. "
-                "TypeScript test runners expect ESM syntax even in CommonJS projects."
+                "Preserving ESM imports for TypeScript test file: %s. "
+                "TypeScript test runners expect ESM syntax even in CommonJS projects.",
+                file_path,
             )
             return code
 
