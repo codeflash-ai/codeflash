@@ -219,6 +219,151 @@ def _has_ts_jest_dependency(project_root: Path) -> bool:
         return False
 
 
+def _ensure_babel_preset_typescript(project_root: Path) -> bool:
+    """Ensure @babel/preset-typescript is installed if @babel/core is present.
+
+    Args:
+        project_root: Root of the project.
+
+    Returns:
+        True if @babel/preset-typescript is available (already installed or just installed),
+        False if installation failed or @babel/core is not present.
+
+    """
+    package_json = project_root / "package.json"
+    if not package_json.exists():
+        return False
+
+    try:
+        content = json.loads(package_json.read_text())
+        deps = {**content.get("dependencies", {}), **content.get("devDependencies", {})}
+
+        # Only proceed if @babel/core is installed
+        if "@babel/core" not in deps:
+            return False
+
+        # Check if already available
+        if "@babel/preset-typescript" in deps:
+            return True
+
+        # Check if actually resolvable (might be transitively installed)
+        check_cmd = [
+            "node",
+            "-e",
+            "try { require.resolve('@babel/preset-typescript'); process.exit(0); } catch { process.exit(1); }"
+        ]
+        result = subprocess.run(check_cmd, cwd=project_root, capture_output=True, timeout=5)
+        if result.returncode == 0:
+            logger.debug("@babel/preset-typescript available transitively")
+            return True
+
+        # Not available - install it
+        logger.info("Installing @babel/preset-typescript for TypeScript transformation...")
+        install_cmd = get_package_install_command(project_root, "@babel/preset-typescript", dev=True)
+        result = subprocess.run(install_cmd, check=False, cwd=project_root, capture_output=True, text=True, timeout=120)
+
+        if result.returncode == 0:
+            logger.debug(f"Installed @babel/preset-typescript using {install_cmd[0]}")
+            return True
+
+        logger.warning(f"Failed to install @babel/preset-typescript: {result.stderr}")
+        return False
+
+    except Exception as e:
+        logger.warning(f"Error ensuring @babel/preset-typescript: {e}")
+        return False
+
+
+def _detect_typescript_transformer(project_root: Path) -> tuple[str | None, str]:
+    """Detect the TypeScript transformer configured in the project.
+
+    Checks package.json for common TypeScript transformers and returns
+    the transformer name and its configuration string for Jest config.
+
+    If no transformer is found but @babel/core is installed, attempts to
+    install @babel/preset-typescript and returns a babel-jest config.
+
+    Args:
+        project_root: Root of the project.
+
+    Returns:
+        Tuple of (transformer_name, config_string) where:
+        - transformer_name is the package name (e.g., "@swc/jest", "ts-jest")
+        - config_string is the Jest transform config snippet to inject
+        Returns (None, "") if no TypeScript transformer is found.
+
+    """
+    package_json = project_root / "package.json"
+    if not package_json.exists():
+        return (None, "")
+
+    try:
+        content = json.loads(package_json.read_text())
+        deps = {**content.get("dependencies", {}), **content.get("devDependencies", {})}
+
+        # Check for various TypeScript transformers in order of preference
+        if "ts-jest" in deps:
+            config = """
+  // Ensure TypeScript files are transformed using ts-jest
+  transform: {
+    '^.+\\\\.(ts|tsx)$': ['ts-jest', { isolatedModules: true }],
+    // Use ts-jest for JS files in ESM packages too
+    '^.+\\\\.js$': ['ts-jest', { isolatedModules: true }],
+  },"""
+            return ("ts-jest", config)
+
+        if "@swc/jest" in deps:
+            config = """
+  // Ensure TypeScript files are transformed using @swc/jest
+  transform: {
+    '^.+\\\\.(ts|tsx)$': '@swc/jest',
+  },"""
+            return ("@swc/jest", config)
+
+        if "babel-jest" in deps and "@babel/preset-typescript" in deps:
+            config = """
+  // Ensure TypeScript files are transformed using babel-jest
+  transform: {
+    '^.+\\\\.(ts|tsx)$': 'babel-jest',
+  },"""
+            return ("babel-jest", config)
+
+        if "esbuild-jest" in deps:
+            config = """
+  // Ensure TypeScript files are transformed using esbuild-jest
+  transform: {
+    '^.+\\\\.(ts|tsx)$': 'esbuild-jest',
+  },"""
+            return ("esbuild-jest", config)
+
+        # Fallback: If @babel/core is installed but no TypeScript transformer found,
+        # try to ensure @babel/preset-typescript is available and use babel-jest.
+        # This handles projects that have Babel but no TypeScript-specific setup.
+        if "@babel/core" in deps:
+            # Ensure preset-typescript is available (install if needed)
+            if _ensure_babel_preset_typescript(project_root):
+                config = """
+  // Fallback: Use babel-jest with TypeScript preset
+  // @babel/preset-typescript was installed by codeflash for TypeScript transformation
+  transform: {
+    '^.+\\\\.(ts|tsx)$': ['babel-jest', {
+      presets: [
+        ['@babel/preset-typescript', { allowDeclareFields: true }]
+      ]
+    }],
+  },"""
+                return ("babel-jest (fallback)", config)
+            else:
+                logger.warning(
+                    "@babel/core is installed but @babel/preset-typescript could not be installed. "
+                    "TypeScript files may fail to transform. Consider installing ts-jest or @swc/jest."
+                )
+
+        return (None, "")
+    except (json.JSONDecodeError, OSError):
+        return (None, "")
+
+
 def _create_codeflash_jest_config(
     project_root: Path, original_jest_config: Path | None, *, for_esm: bool = False
 ) -> Path | None:
@@ -278,21 +423,13 @@ def _create_codeflash_jest_config(
     ]
     esm_pattern = "|".join(esm_packages)
 
-    # Check if ts-jest is available in the project
-    has_ts_jest = _has_ts_jest_dependency(project_root)
+    # Detect TypeScript transformer in the project
+    transformer_name, transform_config = _detect_typescript_transformer(project_root)
 
-    # Build transform config only if ts-jest is available
-    if has_ts_jest:
-        transform_config = """
-  // Ensure TypeScript files are transformed using ts-jest
-  transform: {
-    '^.+\\\\.(ts|tsx)$': ['ts-jest', { isolatedModules: true }],
-    // Use ts-jest for JS files in ESM packages too
-    '^.+\\\\.js$': ['ts-jest', { isolatedModules: true }],
-  },"""
+    if transformer_name:
+        logger.debug(f"Detected TypeScript transformer: {transformer_name}")
     else:
-        transform_config = ""
-        logger.debug("ts-jest not found in project dependencies, skipping transform config")
+        logger.debug("No TypeScript transformer found in project dependencies")
 
     # Create a wrapper Jest config
     if original_jest_config:
