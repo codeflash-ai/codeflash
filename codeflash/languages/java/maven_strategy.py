@@ -64,11 +64,11 @@ GITHUB_RELEASE_URL = (
 
 CODEFLASH_CACHE_DIR = Path.home() / ".cache" / "codeflash"
 
-CODEFLASH_DEPENDENCY_SNIPPET = """\
+CODEFLASH_DEPENDENCY_SNIPPET = f"""\
         <dependency>
             <groupId>com.codeflash</groupId>
             <artifactId>codeflash-runtime</artifactId>
-            <version>1.0.0</version>
+            <version>{CODEFLASH_RUNTIME_VERSION}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>"""
@@ -142,7 +142,7 @@ def install_codeflash_runtime(project_root: Path, runtime_jar_path: Path, mvn: s
         f"-Dfile={runtime_jar_path}",
         "-DgroupId=com.codeflash",
         "-DartifactId=codeflash-runtime",
-        "-Dversion=1.0.0",
+        f"-Dversion={CODEFLASH_RUNTIME_VERSION}",
         "-Dpackaging=jar",
         "-B",
     ]
@@ -290,26 +290,26 @@ def add_codeflash_dependency(pom_path: Path) -> bool:
         content = pom_path.read_text(encoding="utf-8")
 
         if "codeflash-runtime" in content:
-            if "<scope>system</scope>" in content:
 
-                def replace_system_dep(match: re.Match[str]) -> str:
-                    block: str = match.group(0)
-                    if "codeflash-runtime" in block and "<scope>system</scope>" in block:
-                        return (
-                            "<dependency>\n"
-                            "            <groupId>com.codeflash</groupId>\n"
-                            "            <artifactId>codeflash-runtime</artifactId>\n"
-                            "            <version>1.0.0</version>\n"
-                            "            <scope>test</scope>\n"
-                            "        </dependency>"
-                        )
+            def update_codeflash_dep(match: re.Match[str]) -> str:
+                block: str = match.group(0)
+                if "codeflash-runtime" not in block:
                     return block
+                return (
+                    "<dependency>\n"
+                    "            <groupId>com.codeflash</groupId>\n"
+                    "            <artifactId>codeflash-runtime</artifactId>\n"
+                    f"            <version>{CODEFLASH_RUNTIME_VERSION}</version>\n"
+                    "            <scope>test</scope>\n"
+                    "        </dependency>"
+                )
 
-                content = re.sub(r"<dependency>[\s\S]*?</dependency>", replace_system_dep, content)
-                pom_path.write_text(content, encoding="utf-8")
-                logger.info("Replaced system-scope codeflash-runtime dependency with test scope")
-                return True
-            logger.info("codeflash-runtime dependency already present in pom.xml")
+            updated = re.sub(r"<dependency>[\s\S]*?</dependency>", update_codeflash_dep, content)
+            if updated != content:
+                pom_path.write_text(updated, encoding="utf-8")
+                logger.info("Updated codeflash-runtime dependency to version %s in pom.xml", CODEFLASH_RUNTIME_VERSION)
+            else:
+                logger.info("codeflash-runtime dependency already up to date in pom.xml")
             return True
 
         closing_tag = "</dependencies>"
@@ -573,8 +573,8 @@ class MavenStrategy(BuildToolStrategy):
         / "com"
         / "codeflash"
         / "codeflash-runtime"
-        / "1.0.0"
-        / "codeflash-runtime-1.0.0.jar"
+        / "1.0.1"
+        / "codeflash-runtime-1.0.1.jar"
     )
 
     @property
@@ -649,17 +649,7 @@ class MavenStrategy(BuildToolStrategy):
             return None
 
     def find_executable(self, build_root: Path) -> str | None:
-        mvnw_path = build_root / "mvnw"
-        if mvnw_path.exists():
-            return str(mvnw_path)
-        mvnw_cmd_path = build_root / "mvnw.cmd"
-        if mvnw_cmd_path.exists():
-            return str(mvnw_cmd_path)
-        if Path("mvnw").exists():
-            return "./mvnw"
-        if Path("mvnw.cmd").exists():
-            return "mvnw.cmd"
-        return shutil.which("mvn")
+        return self.find_wrapper_executable(build_root, ("mvnw", "mvnw.cmd"), "mvn")
 
     def find_runtime_jar(self) -> Path | None:
         if self._M2_JAR.exists():
@@ -918,7 +908,15 @@ class MavenStrategy(BuildToolStrategy):
             " --add-opens java.base/java.net=ALL-UNNAMED"
             " --add-opens java.base/java.util.zip=ALL-UNNAMED"
         )
-        if javaagent_arg:
+        if enable_coverage:
+            # When coverage is enabled, JaCoCo's prepare-agent goal sets argLine via
+            # @{argLine}. Overriding -DargLine would clobber the JaCoCo agent flag.
+            # Pass add-opens and javaagent via JDK_JAVA_OPTIONS instead.
+            jdk_opts_parts = [add_opens_flags]
+            if javaagent_arg:
+                jdk_opts_parts.insert(0, javaagent_arg)
+            env["JDK_JAVA_OPTIONS"] = " ".join(jdk_opts_parts)
+        elif javaagent_arg:
             cmd.append(f"-DargLine={javaagent_arg} {add_opens_flags}")
         else:
             cmd.append(f"-DargLine={add_opens_flags}")
