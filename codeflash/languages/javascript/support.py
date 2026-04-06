@@ -2064,13 +2064,26 @@ class JavaScriptSupport:
         )
 
         # Convert module system if needed (e.g., CommonJS -> ESM for ESM projects)
+        # Pass test_path so TypeScript test files can preserve ESM imports (Issue #15)
         generated_test_source = ensure_module_system_compatibility(
-            generated_test_source, project_module_system, test_cfg.tests_project_rootdir
+            generated_test_source, project_module_system, test_cfg.tests_project_rootdir, file_path=test_path
         )
 
         # Add .js extensions to relative imports for ESM projects
-        # TypeScript + ESM requires explicit .js extensions even for .ts source files
-        if project_module_system == ModuleSystem.ES_MODULE:
+        # IMPORTANT: Only for JavaScript source files, NOT TypeScript!
+        #
+        # When tests run on TypeScript source with ts-jest/tsx:
+        # - Imports should NOT have .js extensions (file is .ts, not .js)
+        # - ts-jest transpiles TypeScript at runtime
+        # - Adding .js causes "Cannot find module './foo.js'" when file is foo.ts
+        #
+        # When tests run on compiled JavaScript output:
+        # - Imports SHOULD have .js extensions (TypeScript convention for ESM)
+        # - But we're testing source files, not compiled output
+        #
+        # Solution: Skip .js extension for TypeScript test files
+        is_typescript_test = test_path.suffix in (".ts", ".tsx")
+        if project_module_system == ModuleSystem.ES_MODULE and not is_typescript_test:
             from codeflash.languages.javascript.module_system import add_js_extensions_to_relative_imports
 
             generated_test_source = add_js_extensions_to_relative_imports(generated_test_source)

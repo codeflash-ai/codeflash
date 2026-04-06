@@ -46,8 +46,10 @@ def detect_module_system(project_root: Path, file_path: Path | None = None) -> s
     """Detect the module system used by a JavaScript/TypeScript project.
 
     Detection strategy:
-    1. Check file extension for explicit module type (.mjs, .cjs, .ts, .tsx, .mts)
-       - TypeScript files always use ESM syntax regardless of package.json
+    1. Check file extension for explicit module type (.mjs, .cjs, .mts, .cts)
+       - .mjs and .mts always use ES Modules
+       - .cjs and .cts always use CommonJS
+       - .ts and .tsx defer to package.json "type" field
     2. Check package.json for explicit "type" field (only if explicitly set)
     3. Analyze import/export statements in the file content
     4. Default to CommonJS if uncertain
@@ -61,39 +63,59 @@ def detect_module_system(project_root: Path, file_path: Path | None = None) -> s
 
     """
     # Strategy 1: Check file extension first for explicit module type indicators
-    # TypeScript files always use ESM syntax (import/export)
     if file_path:
         suffix = file_path.suffix.lower()
+        # Explicit JavaScript module system extensions
         if suffix == ".mjs":
             logger.debug("Detected ES Module from .mjs extension")
             return ModuleSystem.ES_MODULE
         if suffix == ".cjs":
             logger.debug("Detected CommonJS from .cjs extension")
             return ModuleSystem.COMMONJS
-        if suffix in (".ts", ".tsx", ".mts"):
-            # TypeScript always uses ESM syntax (import/export)
-            # even if package.json doesn't have "type": "module"
-            logger.debug("Detected ES Module from TypeScript file extension")
+
+        # Explicit TypeScript module system extensions
+        if suffix == ".mts":
+            logger.debug("Detected ES Module from .mts extension")
             return ModuleSystem.ES_MODULE
+        if suffix == ".cts":
+            logger.debug("Detected CommonJS from .cts extension")
+            return ModuleSystem.COMMONJS
+
+        # For .ts/.tsx files, defer to package.json "type" field
+        # TypeScript source uses ESM syntax (import/export), but the module system
+        # at runtime depends on package.json and tsconfig compilation settings
 
     # Strategy 2: Check package.json for explicit type field
     package_json = project_root / "package.json"
+    pkg_type_from_json = None
     if package_json.exists():
         try:
             with package_json.open("r") as f:
                 pkg = json.load(f)
-                pkg_type = pkg.get("type")  # Don't default - only use if explicitly set
+                pkg_type_from_json = pkg.get("type")  # Don't default - only use if explicitly set
 
-                if pkg_type == "module":
+                if pkg_type_from_json == "module":
                     logger.debug("Detected ES Module from package.json type field")
                     return ModuleSystem.ES_MODULE
-                if pkg_type == "commonjs":
+                if pkg_type_from_json == "commonjs":
                     logger.debug("Detected CommonJS from package.json type field")
                     return ModuleSystem.COMMONJS
                 # If type is not explicitly set, continue to file content analysis
 
         except Exception as e:
             logger.warning("Failed to parse package.json: %s", e)
+
+    # For TypeScript files (.ts, .tsx), if package.json doesn't specify a type,
+    # default to CommonJS since that's the Node.js default.
+    # We skip file content analysis for TypeScript because TypeScript source
+    # always uses ESM syntax (import/export), but the actual module system
+    # depends on how TypeScript compiles and how Node.js loads the files.
+    if file_path and file_path.suffix.lower() in (".ts", ".tsx"):
+        if pkg_type_from_json is None:
+            logger.debug(
+                "TypeScript file without explicit package.json type field - defaulting to CommonJS"
+            )
+            return ModuleSystem.COMMONJS
 
     # Strategy 3: Analyze file content for import/export patterns
     if file_path and file_path.exists():
@@ -399,22 +421,46 @@ def uses_ts_jest(project_root: Path) -> bool:
     return False
 
 
-def ensure_module_system_compatibility(code: str, target_module_system: str, project_root: Path | None = None) -> str:
+def ensure_module_system_compatibility(
+    code: str, target_module_system: str, project_root: Path | None = None, file_path: Path | None = None
+) -> str:
     """Ensure code uses the correct module system syntax.
 
     If the project uses ts-jest, no conversion is performed because ts-jest
     handles module interoperability internally. Otherwise, converts between
     CommonJS and ES Modules as needed.
 
+    IMPORTANT: TypeScript test files (.test.ts, .spec.ts) ALWAYS keep ESM import
+    syntax, even in CommonJS projects. This is because TypeScript test runners
+    (@swc/jest, ts-jest) expect ESM syntax in .ts files. Converting ESM → CommonJS
+    causes SyntaxError when Jest tries to parse TypeScript source files via require().
+
     Args:
         code: JavaScript code to check and potentially convert.
         target_module_system: Target ModuleSystem (COMMONJS or ES_MODULE).
         project_root: Project root directory for ts-jest detection.
+        file_path: Path to the file being converted (used to detect TypeScript test files).
 
     Returns:
-        Converted code, or unchanged if ts-jest handles interop.
+        Converted code, or unchanged if ts-jest handles interop or file is TypeScript test.
 
     """
+    # TypeScript test files must preserve ESM imports regardless of project module system
+    # See Issue #15: https://github.com/codeflash-ai/codeflash/issues/XXXX
+    if file_path is not None:
+        is_typescript_test = file_path.suffix in (".ts", ".tsx") and (
+            ".test." in file_path.name
+            or ".spec." in file_path.name
+            or "/tests/" in str(file_path)
+            or "/__tests__/" in str(file_path)
+        )
+        if is_typescript_test and target_module_system == ModuleSystem.COMMONJS:
+            logger.debug(
+                f"Preserving ESM imports for TypeScript test file: {file_path}. "
+                "TypeScript test runners expect ESM syntax even in CommonJS projects."
+            )
+            return code
+
     # If ts-jest is installed, skip conversion - it handles interop natively
     if is_typescript() and project_root and uses_ts_jest(project_root):
         logger.debug(
