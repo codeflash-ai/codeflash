@@ -18,6 +18,8 @@ from typing import Any
 from codeflash.languages.java.build_tool_strategy import BuildToolStrategy, module_to_dir
 from codeflash.languages.java.build_tools import CODEFLASH_RUNTIME_VERSION, BuildTool, JavaProjectInfo
 
+_REPO_BLOCK_PATTERN = re.compile(r"repositories\s*\{")
+
 _RE_INCLUDE = re.compile(r"""include\s*\(?([^)\n]+)\)?""")
 
 _RE_QUOTED = re.compile(r"""['"]([^'"]+)['"]""")
@@ -212,20 +214,14 @@ def _ensure_maven_central_repo(build_file: Path, content: str) -> str:
     if "mavenCentral()" in content:
         return content
 
-    is_kts = build_file.name.endswith(".kts")
-
     # Try to find existing repositories block and add mavenCentral() inside it
-    repo_match = re.search(r"repositories\s*\{", content)
+    repo_match = _REPO_BLOCK_PATTERN.search(content)
     if repo_match:
         insert_pos = repo_match.end()
         return content[:insert_pos] + "\n    mavenCentral()" + content[insert_pos:]
 
     # No repositories block — append one
-    if is_kts:
-        content += "\nrepositories {\n    mavenCentral()\n}\n"
-    else:
-        content += "\nrepositories {\n    mavenCentral()\n}\n"
-    return content
+    return content + "\nrepositories {\n    mavenCentral()\n}\n"
 
 
 def add_codeflash_dependency_multimodule(build_file: Path) -> bool:
