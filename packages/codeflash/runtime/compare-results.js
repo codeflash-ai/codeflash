@@ -167,9 +167,13 @@ function compareResults(originalResults, candidateResults) {
 
         if (!isEqual) {
             allEquivalent = false;
+            // Use dom_snapshot scope for __dom_snapshot__ rows
+            const scope = original.functionGettingTested === '__dom_snapshot__'
+                ? 'dom_snapshot'
+                : 'return_value';
             diffs.push({
                 invocation_id: invocationId,
-                scope: 'return_value',
+                scope,
                 original: summarizeValue(originalValue),
                 candidate: summarizeValue(candidateValue),
                 test_info: {

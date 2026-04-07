@@ -38,6 +38,7 @@ module.exports = {
 
   captureRender: capture.captureRender,
   captureRenderPerf: capture.captureRenderPerf,
+  snapshotDOM: capture.snapshotDOM,
 
   captureMultiple: capture.captureMultiple,
 

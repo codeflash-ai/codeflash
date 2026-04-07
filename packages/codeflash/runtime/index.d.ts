@@ -37,6 +37,15 @@ export function capturePerf<T extends (...args: any[]) => any>(
 ): ReturnType<T>;
 
 /**
+ * Capture a DOM snapshot after a user interaction for behavioral verification.
+ * Writes normalized document.body.innerHTML to the SQLite database with
+ * function name '__dom_snapshot__' so the comparator detects DOM divergence.
+ *
+ * @param label - Unique label for this snapshot (e.g. 'after_click_1')
+ */
+export function snapshotDOM(label: string): void;
+
+/**
  * Capture multiple invocations for benchmarking.
  *
  * @param funcName - Name of the function being tested
@@ -126,6 +135,7 @@ export const TEST_ITERATION: string;
 declare const codeflash: {
     capture: typeof capture;
     capturePerf: typeof capturePerf;
+    snapshotDOM: typeof snapshotDOM;
     captureMultiple: typeof captureMultiple;
     writeResults: typeof writeResults;
     clearResults: typeof clearResults;

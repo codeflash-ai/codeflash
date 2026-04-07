@@ -174,6 +174,14 @@ class JavaScriptSupport:
                     logger.debug(f"Skipping non-exported function: {func.name}")  # noqa: G004
                     continue
 
+                # Skip closures inside React components — they capture hook state
+                # and cannot be tested independently
+                if func.parent_function and func.parent_function in react_component_map:
+                    logger.debug(
+                        f"Skipping closure {func.name} inside React component {func.parent_function}"  # noqa: G004
+                    )
+                    continue
+
                 # Build parents list
                 parents: list[FunctionParent] = []
                 if func.class_name:
@@ -231,8 +239,23 @@ class JavaScriptSupport:
                 source, include_methods=True, include_arrow_functions=True, require_name=True
             )
 
+            # Build React component lookup to filter out closures
+            react_component_names: set[str] = set()
+            try:
+                from codeflash.languages.javascript.frameworks.react.discovery import classify_component  # noqa: PLC0415
+
+                for func in tree_functions:
+                    if classify_component(func, source, analyzer) is not None:
+                        react_component_names.add(func.name)
+            except Exception:
+                pass
+
             functions: list[FunctionToOptimize] = []
             for func in tree_functions:
+                # Skip closures inside React components
+                if func.parent_function and func.parent_function in react_component_names:
+                    continue
+
                 # Build parents list
                 parents: list[FunctionParent] = []
                 if func.class_name:
@@ -1212,6 +1235,47 @@ class JavaScriptSupport:
 
     # === Code Transformation ===
 
+    @staticmethod
+    def _strip_imports(source: str, analyzer: TreeSitterAnalyzer) -> str:
+        """Strip import/require statements from source code.
+
+        Used to remove duplicate imports from optimizer output before inserting
+        into the original file (which already has its own imports).
+        """
+        source_bytes = source.encode("utf8")
+        tree = analyzer.parse(source_bytes)
+
+        # Collect byte ranges of import nodes to remove
+        ranges_to_remove: list[tuple[int, int]] = []
+        for child in tree.root_node.children:
+            if child.type == "import_statement":
+                ranges_to_remove.append((child.start_byte, child.end_byte))
+            # CJS require: const x = require('...')
+            elif child.type in ("lexical_declaration", "variable_declaration"):
+                text = source_bytes[child.start_byte : child.end_byte].decode("utf8")
+                if "require(" in text:
+                    ranges_to_remove.append((child.start_byte, child.end_byte))
+
+        if not ranges_to_remove:
+            return source
+
+        # Build result, skipping removed ranges
+        parts: list[bytes] = []
+        prev_end = 0
+        for start, end in sorted(ranges_to_remove):
+            parts.append(source_bytes[prev_end:start])
+            # Skip trailing newline after import
+            if end < len(source_bytes) and source_bytes[end : end + 1] == b"\n":
+                end += 1
+            prev_end = end
+        parts.append(source_bytes[prev_end:])
+
+        result = b"".join(parts).decode("utf8")
+        # Remove leading blank lines left by stripping imports
+        while result.startswith("\n"):
+            result = result[1:]
+        return result
+
     def replace_function(self, source: str, function: FunctionToOptimize, new_source: str) -> str:
         """Replace a function in source code with new implementation.
 
@@ -1247,6 +1311,15 @@ class JavaScriptSupport:
         else:
             analyzer = TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
 
+        # Strip imports from optimizer output — the original file already has them,
+        # and import merging is handled by _add_global_declarations_for_language()
+        new_source = self._strip_imports(new_source, analyzer)
+
+        # If stripping imports left nothing, return original
+        if not new_source.strip():
+            logger.warning("new_source was only imports for %s, returning original", function.function_name)
+            return source
+
         # Check if new_source contains a JSDoc comment - if so, use full replacement
         # to include the updated JSDoc along with the function body
         stripped_new_source = new_source.strip()
@@ -1263,15 +1336,63 @@ class JavaScriptSupport:
             logger.warning(
                 "Could not extract body for %s from optimized code, using full replacement", function.function_name
             )
-            # Verify that new_source contains actual code before falling back to text replacement
-            # This prevents deletion of the original function when new_source is invalid
-            if not self._contains_function_declaration(new_source, function.function_name, analyzer):
-                logger.warning("new_source does not contain function %s, returning original", function.function_name)
-                return source
-            return self._replace_function_text_based(source, function, new_source, analyzer)
+            if self._contains_function_declaration(new_source, function.function_name, analyzer):
+                return self._replace_function_text_based(source, function, new_source, analyzer)
+            # Final fallback: line-range replacement using the function's known line boundaries.
+            # This handles cases where tree-sitter can't parse the optimized output.
+            logger.warning(
+                "Falling back to line-range replacement for %s (lines %d-%d)",
+                function.function_name,
+                function.starting_line,
+                function.ending_line,
+            )
+            return self._replace_function_by_line_range(source, function, new_source)
 
         # Find the original function and replace its body
         return self._replace_function_body(source, function, new_body, analyzer)
+
+    def _replace_function_by_line_range(
+        self, source: str, function: FunctionToOptimize, new_source: str
+    ) -> str:
+        """Last-resort replacement: cut the original function by line range and paste new_source."""
+        if function.starting_line is None or function.ending_line is None:
+            return source
+
+        lines = source.splitlines(keepends=True)
+        if lines and not lines[-1].endswith("\n"):
+            lines[-1] += "\n"
+
+        # Get indentation from original function's first line
+        if function.starting_line <= len(lines):
+            original_first = lines[function.starting_line - 1]
+            original_indent = len(original_first) - len(original_first.lstrip())
+        else:
+            original_indent = 0
+
+        new_lines = new_source.splitlines(keepends=True)
+        if new_lines:
+            first_non_blank = next((l for l in new_lines if l.strip()), new_lines[0])
+            new_indent = len(first_non_blank) - len(first_non_blank.lstrip())
+            indent_diff = original_indent - new_indent
+            if indent_diff != 0:
+                adjusted = []
+                for line in new_lines:
+                    if line.strip():
+                        if indent_diff > 0:
+                            adjusted.append(" " * indent_diff + line)
+                        else:
+                            cur = len(line) - len(line.lstrip())
+                            adjusted.append(line[min(cur, abs(indent_diff)) :])
+                    else:
+                        adjusted.append(line)
+                new_lines = adjusted
+
+        if new_lines and not new_lines[-1].endswith("\n"):
+            new_lines[-1] += "\n"
+
+        before = lines[: function.starting_line - 1]
+        after = lines[function.ending_line :]
+        return "".join(before + new_lines + after)
 
     def _contains_function_declaration(self, source: str, function_name: str, analyzer: TreeSitterAnalyzer) -> bool:
         """Check if source contains a function declaration with the given name.
@@ -1912,7 +2033,52 @@ class JavaScriptSupport:
             generated_tests = inject_test_globals(generated_tests, test_framework)
         if is_typescript():
             generated_tests = disable_ts_check(generated_tests)
-        return normalize_generated_tests_imports(generated_tests)
+        generated_tests = normalize_generated_tests_imports(generated_tests)
+
+        # Apply React-specific post-processing (act wrapping, interaction markers, etc.)
+        if self._is_react_source(source_file_path):
+            generated_tests = self._apply_react_postprocessing(generated_tests, source_file_path)
+
+        return generated_tests
+
+    def _is_react_source(self, source_file_path: Path) -> bool:
+        """Check if the source file is a React component."""
+        try:
+            content = source_file_path.read_text("utf-8", errors="replace")
+            return "react" in content.lower() and ("jsx" in content.lower() or source_file_path.suffix in (".tsx", ".jsx"))
+        except OSError:
+            return False
+
+    def _apply_react_postprocessing(self, generated_tests: GeneratedTestsList, source_file_path: Path) -> GeneratedTestsList:
+        """Apply React-specific post-processing to generated tests."""
+        from codeflash.languages.javascript.frameworks.react.testgen import (  # noqa: PLC0415
+            post_process_react_tests,
+        )
+        from codeflash.languages.javascript.frameworks.react.discovery import ComponentType, ReactComponentInfo  # noqa: PLC0415
+        from codeflash.models.models import GeneratedTests, GeneratedTestsList  # noqa: PLC0415
+
+        component_name = source_file_path.stem
+        dummy_info = ReactComponentInfo(
+            function_name=component_name,
+            component_type=ComponentType.FUNCTION,
+        )
+
+        updated_tests = []
+        for test in generated_tests.generated_tests:
+            updated_tests.append(
+                GeneratedTests(
+                    generated_original_test_source=test.generated_original_test_source,
+                    instrumented_behavior_test_source=post_process_react_tests(
+                        test.instrumented_behavior_test_source, dummy_info
+                    ),
+                    instrumented_perf_test_source=post_process_react_tests(
+                        test.instrumented_perf_test_source, dummy_info
+                    ),
+                    behavior_file_path=test.behavior_file_path,
+                    perf_file_path=test.perf_file_path,
+                )
+            )
+        return GeneratedTestsList(generated_tests=updated_tests)
 
     def remove_test_functions_from_generated_tests(
         self, generated_tests: GeneratedTestsList, functions_to_remove: list[str]

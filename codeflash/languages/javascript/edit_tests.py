@@ -210,7 +210,10 @@ def normalize_codeflash_imports(source: str) -> str:
     # Replace CommonJS require
     source = _CODEFLASH_REQUIRE_PATTERN.sub(r"\1 \2 = require('codeflash')", source)
     # Replace ES module import
-    return _CODEFLASH_IMPORT_PATTERN.sub(r"import \1 from 'codeflash'", source)
+    source = _CODEFLASH_IMPORT_PATTERN.sub(r"import \1 from 'codeflash'", source)
+    # Fix outdated @testing-library/jest-dom import paths (v6+ removed /extend-expect subpath)
+    source = source.replace("@testing-library/jest-dom/extend-expect", "@testing-library/jest-dom")
+    return source
 
 
 # Author: ali <mohammed18200118@gmail.com>

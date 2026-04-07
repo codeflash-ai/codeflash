@@ -98,6 +98,15 @@ def post_process_react_tests(test_source: str, component_info: ReactComponentInf
     """
     result = test_source
 
+    # Fix outdated @testing-library/jest-dom import paths (v6+ removed /extend-expect subpath)
+    result = result.replace("@testing-library/jest-dom/extend-expect", "@testing-library/jest-dom")
+    # Also fix require() variant
+    result = re.sub(
+        r"""require\s*\(\s*['"]@testing-library/jest-dom/extend-expect['"]\s*\)""",
+        "require('@testing-library/jest-dom')",
+        result,
+    )
+
     # Ensure testing-library import
     if "@testing-library/react" not in result:
         result = "import { render, screen, act } from '@testing-library/react';\n" + result
@@ -168,14 +177,14 @@ def post_process_react_tests(test_source: str, component_info: ReactComponentInf
     # This gives per-interaction A/B signal without the LLM needing to know about it.
     result = inject_interaction_markers(result)
 
-    # Warn if no tests contain interaction calls — mount-phase only markers are
-    # not useful for measuring optimization effectiveness.
+    # If no tests contain interaction calls, auto-inject a rerender fallback so
+    # that EVERY React perf test produces at least one update-phase marker.
     if not has_react_test_interactions(result):
         logger.warning(
-            "[REACT] Generated tests for %s contain no interactions (fireEvent, userEvent, rerender). "
-            "Tests will produce only mount-phase markers which cannot measure optimization improvements.",
+            "[REACT] Generated tests for %s contain no interactions — auto-injecting rerender fallback.",
             component_info.function_name,
         )
+        result = _inject_rerender_fallback(result, component_info.function_name)
 
     # Check interaction density — fewer than MIN_INTERACTION_CALLS total interactions
     # means the test is unlikely to produce enough update-phase renders for reliable measurement.
@@ -219,6 +228,48 @@ def _extract_interaction_label(call_text: str) -> str:
     """Extract a short label from an interaction call, e.g. 'click' from 'fireEvent.click(...)'."""
     m = re.search(r"(?:fireEvent|userEvent)\.(\w+)", call_text)
     return m.group(1) if m else "interaction"
+
+
+def inject_dom_snapshot_calls(test_source: str) -> str:
+    """Inject codeflash.snapshotDOM() calls after each user interaction in behavior mode.
+
+    Only active when `captureRender` (not `captureRenderPerf`) is present,
+    meaning the test is running in behavioral verification mode.
+
+    After each fireEvent.*, userEvent.*, or rerender() call, inserts:
+        codeflash.snapshotDOM('after_{label}_{n}');
+    on the next line with matching indentation.
+    """
+    if "captureRender" not in test_source:
+        return test_source
+    if "captureRenderPerf" in test_source:
+        return test_source
+
+    interaction_counter: dict[str, int] = {}
+    lines = test_source.split("\n")
+    new_lines: list[str] = []
+
+    # Also match rerender() calls — use .* to handle nested parens like getByText('Add')
+    snapshot_interaction_pattern = re.compile(
+        r"^(\s*)((?:await\s+)?(?:fireEvent\.\w+|userEvent\.\w+|(?:\w+\.)?rerender)\s*\(.*\))\s*;?\s*$",
+        re.MULTILINE,
+    )
+
+    for line in lines:
+        new_lines.append(line)
+        m = snapshot_interaction_pattern.match(line)
+        if m:
+            indent = m.group(1)
+            call_text = m.group(2)
+            label = _extract_interaction_label(call_text)
+            if label == "interaction":
+                # rerender() call
+                label = "rerender"
+            interaction_counter[label] = interaction_counter.get(label, 0) + 1
+            unique_label = f"{label}_{interaction_counter[label]}"
+            new_lines.append(f"{indent}codeflash.snapshotDOM('after_{unique_label}');")
+
+    return "\n".join(new_lines)
 
 
 def inject_interaction_markers(test_source: str) -> str:
@@ -325,3 +376,54 @@ def has_high_density_interactions(test_source: str) -> bool:
 
     interaction_calls = _INTERACTION_PATTERNS.findall(test_source)
     return len(interaction_calls) >= _MIN_SEQUENTIAL_INTERACTIONS
+
+
+# Pattern to extract props from the first render(<Component ...props... />) call
+_RENDER_CALL_PROPS_PATTERN = re.compile(
+    r"render\s*\(\s*<(\w+)\s+([^/]*?)\s*/?\s*>",
+)
+
+
+def _extract_render_props(test_source: str, component_name: str) -> str | None:
+    """Extract the props expression from the first render(<Component ...>) call."""
+    for m in _RENDER_CALL_PROPS_PATTERN.finditer(test_source):
+        if m.group(1) == component_name:
+            props_text = m.group(2).strip()
+            if props_text:
+                return props_text
+    return None
+
+
+def _inject_rerender_fallback(test_source: str, component_name: str) -> str:
+    """Inject a rerender efficiency test block when the test has no interactions.
+
+    This ensures every React perf test produces at least one update-phase marker.
+    """
+    # Try to extract props from existing render call
+    props_expr = _extract_render_props(test_source, component_name)
+    if props_expr:
+        jsx_open = f"<{component_name} {props_expr} />"
+    else:
+        jsx_open = f"<{component_name} />"
+
+    rerender_block = f"""
+describe('{component_name} rerender efficiency (auto-generated)', () => {{
+  it('should handle same-props rerenders', () => {{
+    const {{ rerender }} = render({jsx_open});
+    for (let i = 0; i < 10; i++) {{
+      rerender({jsx_open});
+    }}
+  }});
+}});
+"""
+    # Ensure {rerender} is in the @testing-library/react import
+    rtl_import_match = re.search(
+        r"import\s*\{([^}]+)\}\s*from\s*['\"]@testing-library/react['\"]", test_source
+    )
+    if rtl_import_match:
+        imports = rtl_import_match.group(1)
+        if "rerender" not in imports:
+            # Don't add 'rerender' to import — it comes from render() return value, not an import
+            pass
+
+    return test_source.rstrip() + "\n" + rerender_block

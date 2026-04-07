@@ -96,6 +96,7 @@ from codeflash.models.models import (
     OptimizedCandidateResult,
     OptimizedCandidateSource,
     OriginalCodeBaseline,
+    TestDiffScope,
     TestFile,
     TestFiles,
     TestingMode,
@@ -2955,6 +2956,13 @@ class FunctionOptimizer:
                 logger.info("h3|Test results matched ✅")
                 console.rule()
             else:
+                dom_snapshot_diffs = [d for d in diffs if d.scope == TestDiffScope.DOM_SNAPSHOT]
+                if dom_snapshot_diffs:
+                    logger.warning(
+                        "[REACT] DOM snapshot divergence detected after %d interaction(s). "
+                        "The optimized component produces different DOM output.",
+                        len(dom_snapshot_diffs),
+                    )
                 self.repair_if_possible(
                     candidate, diffs, eval_ctx, code_context, len(candidate_behavior_results), exp_type
                 )
@@ -3178,8 +3186,7 @@ class FunctionOptimizer:
                 coverage_config_file=coverage_config_file,
                 skip_sqlite_cleanup=skip_cleanup,
             )
-            if testing_type == TestingMode.PERFORMANCE:
-                results.perf_stdout = run_result.stdout
+            results.perf_stdout = run_result.stdout
             return results, coverage_results
         # For LINE_PROFILE mode, Python uses .lprof files while JavaScript uses JSON
         # Return TestResults for JavaScript so _line_profiler_step_javascript can parse the JSON

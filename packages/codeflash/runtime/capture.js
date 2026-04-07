@@ -46,11 +46,11 @@ function _getReact() {
     }
 }
 
-// Try to load better-sqlite3, fall back to JSON if not available
-let useSqlite = false;
-
 // Configuration from environment
 const OUTPUT_FILE = process.env.CODEFLASH_OUTPUT_FILE;
+
+// Enable SQLite when better-sqlite3 is available and an output file is configured
+let useSqlite = !!(Database && OUTPUT_FILE);
 const LOOP_INDEX = parseInt(process.env.CODEFLASH_LOOP_INDEX || '1', 10);
 const TEST_ITERATION = process.env.CODEFLASH_TEST_ITERATION;
 const TEST_MODULE = process.env.CODEFLASH_TEST_MODULE;
@@ -1092,6 +1092,35 @@ function captureRender(funcName, lineId, renderFn, Component, ...createElementAr
 }
 
 /**
+ * Capture a DOM snapshot after a user interaction for behavioral verification.
+ *
+ * Writes normalized `document.body.innerHTML` to the SQLite database as an
+ * additional row with function name `__dom_snapshot__`.  The existing
+ * `compare-results.js` comparator compares all rows by invocation ID, so
+ * snapshot rows are compared automatically.
+ *
+ * @param {string} label - Unique label for this snapshot (e.g. 'after_click_1')
+ */
+function snapshotDOM(label) {
+    if (!useSqlite || !db) return;
+    if (typeof document === 'undefined' || !document.body) return;
+
+    // Normalize HTML: collapse whitespace, strip React-internal attributes
+    let html = document.body.innerHTML;
+    html = html.replace(/\s+/g, ' ').trim();
+    html = html.replace(/\s*data-reactroot\s*/g, '');
+
+    const { testModulePath, testClassName, testFunctionName } = _getTestContext();
+    const invocationId = `snapshot_${label}`;
+
+    recordResult(
+        testModulePath, testClassName, testFunctionName,
+        '__dom_snapshot__', invocationId,
+        [label], html, null, 0
+    );
+}
+
+/**
  * Capture a React component render call for PERFORMANCE benchmarking only.
  *
  * Wraps the component in React.Profiler at the render call site to emit
@@ -1334,6 +1363,7 @@ module.exports = {
     capturePerf,       // Performance benchmarking (prints to stdout only)
     captureRender,     // React render behavior verification (writes to SQLite)
     captureRenderPerf, // React render performance benchmarking (prints to stdout only)
+    snapshotDOM,       // DOM snapshot after interaction (behavior verification)
     captureMultiple,
     writeResults,
     clearResults,

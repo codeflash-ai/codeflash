@@ -1346,6 +1346,13 @@ def _instrument_js_test_code(
             code=code, function_to_optimize=function_to_optimize, capture_func=capture_func, start_counter=final_counter
         )
 
+    # In behavior mode, inject DOM snapshot calls after each interaction so the
+    # comparator can detect post-interaction DOM divergence between original and candidate.
+    if mode == TestingMode.BEHAVIOR:
+        from codeflash.languages.javascript.frameworks.react.testgen import inject_dom_snapshot_calls  # noqa: PLC0415
+
+        code = inject_dom_snapshot_calls(code)
+
     return code
 
 

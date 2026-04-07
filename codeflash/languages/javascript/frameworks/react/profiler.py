@@ -72,42 +72,37 @@ def instrument_component_with_profiler(source: str, component_name: str, analyze
         if computed is not None:
             replacements.append(computed)
 
+    # Work entirely in bytes to avoid byte-offset vs char-index mismatches
+    # (tree-sitter returns byte offsets; non-ASCII chars cause divergence from Python string indices)
     if replacements:
-        # Reconstruct result in a single pass
-        parts: list[str] = []
+        byte_parts: list[bytes] = []
         prev = 0
         for start, end, wrapped in replacements:
-            # Use original source slices (string indices expected by original logic)
-            parts.append(source[prev:start])
-            parts.append(wrapped)
+            byte_parts.append(source_bytes[prev:start])
+            byte_parts.append(wrapped.encode("utf-8"))
             prev = end
-        parts.append(source[prev:])
-        result = "".join(parts)
+        byte_parts.append(source_bytes[prev:])
+        result_bytes = b"".join(byte_parts)
     else:
-        result = source
-
-    # Add render counter code at the top (after imports) using the already-parsed tree
+        result_bytes = source_bytes
 
     # Add render counter code at the top (after imports)
     counter_code = generate_render_counter_code(component_name)
 
-    # Inline logic similar to _insert_after_imports but reuse existing `tree` to avoid re-parsing
     last_import_end = 0
     for child in tree.root_node.children:
         if child.type == "import_statement":
             last_import_end = child.end_byte
 
     insert_pos = last_import_end
-    while insert_pos < len(result) and result[insert_pos] != "\n":
+    while insert_pos < len(result_bytes) and result_bytes[insert_pos : insert_pos + 1] != b"\n":
         insert_pos += 1
-    if insert_pos < len(result):
+    if insert_pos < len(result_bytes):
         insert_pos += 1  # skip the newline
 
-    result = result[:insert_pos] + "\n" + counter_code + "\n\n" + result[insert_pos:]
+    counter_bytes = ("\n" + counter_code + "\n\n").encode("utf-8")
+    result = (result_bytes[:insert_pos] + counter_bytes + result_bytes[insert_pos:]).decode("utf-8")
 
-    # Ensure React is imported
-
-    # Ensure React is imported
     return _ensure_react_import(result)
 
 
@@ -317,7 +312,8 @@ def _wrap_return_with_profiler(source: str, return_node: Node, profiler_id: str,
         f"</React.Profiler>"
     )
 
-    return source[:jsx_start] + wrapped + source[jsx_end:]
+    # Use byte-level splicing to avoid byte-offset vs char-index mismatches
+    return (source_bytes[:jsx_start] + wrapped.encode("utf-8") + source_bytes[jsx_end:]).decode("utf-8")
 
 
 def _insert_after_imports(source: str, code: str, analyzer: TreeSitterAnalyzer) -> str:
@@ -421,7 +417,7 @@ let _codeflash_render_count_{safe_name} = 0;
 if (typeof beforeEach !== 'undefined') {{
   beforeEach(() => {{ _codeflash_render_count_{safe_name} = 0; }});
 }}
-function _codeflashOnRender_{safe_name}(id, phase, actualDuration, baseDuration) {{
+function _codeflashOnRender_{safe_name}(id: any, phase: any, actualDuration: any, baseDuration: any) {{
   _codeflash_render_count_{safe_name}++;
   console.log(`!######{marker_prefix}:${{id}}:${{phase}}:${{actualDuration}}:${{baseDuration}}:${{_codeflash_render_count_{safe_name}}}######!`);
 }}"""

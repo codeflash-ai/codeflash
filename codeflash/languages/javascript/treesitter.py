@@ -401,6 +401,29 @@ class TreeSitterAnalyzer:
                     great_grandparent = grandparent.parent
                     if great_grandparent and great_grandparent.type == "export_statement":
                         return True
+            # HOC wrappers: export const Comp = forwardRef/memo(function/arrow)
+            # Tree: function → arguments → call_expression → variable_declarator → lexical_declaration → export_statement
+            if parent and parent.type == "arguments":
+                call_expr = parent.parent
+                if call_expr and call_expr.type == "call_expression":
+                    declarator = call_expr.parent
+                    if declarator and declarator.type == "variable_declarator":
+                        lex_decl = declarator.parent
+                        if lex_decl and lex_decl.type in ("lexical_declaration", "variable_declaration"):
+                            export_stmt = lex_decl.parent
+                            if export_stmt and export_stmt.type == "export_statement":
+                                return True
+                    # Nested HOC: export const X = memo(forwardRef(fn))
+                    if declarator and declarator.type == "arguments":
+                        outer_call = declarator.parent
+                        if outer_call and outer_call.type == "call_expression":
+                            outer_decl = outer_call.parent
+                            if outer_decl and outer_decl.type == "variable_declarator":
+                                lex_decl = outer_decl.parent
+                                if lex_decl and lex_decl.type in ("lexical_declaration", "variable_declaration"):
+                                    export_stmt = lex_decl.parent
+                                    if export_stmt and export_stmt.type == "export_statement":
+                                        return True
 
         # For methods in exported classes
         if node.type == "method_definition":
@@ -609,6 +632,8 @@ class TreeSitterAnalyzer:
 
         return None
 
+    _HOC_WRAPPER_NAMES = frozenset({"forwardRef", "memo", "React.forwardRef", "React.memo"})
+
     def _get_name_from_assignment(self, node: Node, source_bytes: bytes) -> str:
         """Try to extract function name from parent variable declaration or assignment.
 
@@ -617,6 +642,8 @@ class TreeSitterAnalyzer:
         - const foo = function() {}
         - let bar = function() {}
         - obj.method = () => {}
+        - const Tooltip = forwardRef(function TooltipInner(...) {...})
+        - const MemoComp = React.memo((props) => {...})
         """
         parent = node.parent
         if parent is None:
@@ -627,6 +654,30 @@ class TreeSitterAnalyzer:
             name_node = parent.child_by_field_name("name")
             if name_node:
                 return self.get_node_text(name_node, source_bytes)
+
+        # Check for HOC wrapper: const Name = forwardRef/memo(function/arrow)
+        # Tree structure: function → arguments → call_expression → variable_declarator
+        if parent.type == "arguments":
+            call_expr = parent.parent
+            if call_expr is not None and call_expr.type == "call_expression":
+                callee = call_expr.child_by_field_name("function")
+                if callee is not None:
+                    callee_text = self.get_node_text(callee, source_bytes)
+                    if callee_text in self._HOC_WRAPPER_NAMES:
+                        declarator = call_expr.parent
+                        if declarator is not None and declarator.type == "variable_declarator":
+                            name_node = declarator.child_by_field_name("name")
+                            if name_node:
+                                return self.get_node_text(name_node, source_bytes)
+                        # Nested HOC: memo(forwardRef(fn)) — call_expr parent is arguments of outer call
+                        if declarator is not None and declarator.type == "arguments":
+                            outer_call = declarator.parent
+                            if outer_call is not None and outer_call.type == "call_expression":
+                                outer_declarator = outer_call.parent
+                                if outer_declarator is not None and outer_declarator.type == "variable_declarator":
+                                    name_node = outer_declarator.child_by_field_name("name")
+                                    if name_node:
+                                        return self.get_node_text(name_node, source_bytes)
 
         # Check for assignment expression: foo = ...
         if parent.type == "assignment_expression":

@@ -46,6 +46,8 @@ class AiServiceClient:
         self.llm_call_counter = count(1)
         self.is_local = self.base_url == "http://localhost:8000"
         self.timeout: float | None = 300 if self.is_local else 90
+        # React components are larger (300+ lines of JSX) and need more LLM processing time
+        self.react_timeout: float | None = 300 if self.is_local else 180
 
     def get_next_sequence(self) -> int:
         """Get the next LLM call sequence number."""
@@ -203,7 +205,8 @@ class AiServiceClient:
         logger.debug(f"Sending optimize request: trace_id={trace_id}, n_candidates={payload['n_candidates']}")
 
         try:
-            response = self.make_ai_service_request("/optimize", payload=payload, timeout=self.timeout)
+            timeout = self.react_timeout if is_react_component else self.timeout
+            response = self.make_ai_service_request("/optimize", payload=payload, timeout=timeout)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimized candidates: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -806,7 +809,8 @@ class AiServiceClient:
         # DEBUG: Print payload language field
         logger.debug(f"Sending testgen request with language='{payload['language']}', framework='{test_framework}'")
         try:
-            response = self.make_ai_service_request("/testgen", payload=payload, timeout=self.timeout)
+            timeout = self.react_timeout if is_react_component else self.timeout
+            response = self.make_ai_service_request("/testgen", payload=payload, timeout=timeout)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating tests: {e}")
             ph("cli-testgen-error-caught", {"error": str(e)})

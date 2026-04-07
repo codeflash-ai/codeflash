@@ -143,6 +143,8 @@ def compare_test_results(
                 scope = TestDiffScope.STDOUT
             elif scope_str == "did_pass":
                 scope = TestDiffScope.DID_PASS
+            elif scope_str == "dom_snapshot":
+                scope = TestDiffScope.DOM_SNAPSHOT
 
             test_info = diff.get("test_info", {})
             # Build a test identifier string for JavaScript tests

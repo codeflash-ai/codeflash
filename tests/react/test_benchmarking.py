@@ -173,6 +173,8 @@ class TestRenderEfficiencyCritic:
             optimized_render_duration=10.0,
             original_update_render_count=8,
             optimized_update_render_count=8,
+            original_update_duration=80.0,
+            optimized_update_duration=5.0,
         ) is True
 
     def test_rejects_worse_than_best(self):
@@ -448,6 +450,8 @@ class TestRenderEfficiencyCriticTrustDuration:
             optimized_render_duration=10.0,
             original_update_render_count=8,
             optimized_update_render_count=8,
+            original_update_duration=100.0,
+            optimized_update_duration=10.0,
             trust_duration=True,
         ) is True
 

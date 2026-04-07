@@ -83,6 +83,7 @@ class TestDiffScope(str, Enum):
     RETURN_VALUE = "return_value"
     STDOUT = "stdout"
     DID_PASS = "did_pass"  # noqa: S105
+    DOM_SNAPSHOT = "dom_snapshot"
 
 
 @dataclass
