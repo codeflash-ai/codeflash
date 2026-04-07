@@ -1368,3 +1368,78 @@ def fix_jest_mock_paths(test_code: str, test_file_path: Path, source_file_path: 
         return original  # Keep original if we can't fix it
 
     return mock_pattern.sub(fix_mock_path, test_code)
+
+
+def fix_import_paths(test_code: str, test_file_path: Path, source_file_path: Path, tests_root: Path) -> str:
+    """Fix relative paths in import/require statements to be correct from the test file's location.
+
+    The AI sometimes generates import statements with paths relative to the source file
+    instead of the test file. This applies the same logic as fix_jest_mock_paths but for
+    regular imports: `import ... from '...'`, `require('...')`, and `import('...')`.
+
+    Also splits concatenated import statements onto separate lines.
+    """
+    if not test_code or not test_code.strip():
+        return test_code
+
+    import os
+
+    source_dir = source_file_path.resolve().parent
+    test_dir = test_file_path.resolve().parent
+
+    # Match: import ... from './...' or '../...',  require('./...' or '../...'),  import('./...' or '../...')
+    # Excludes jest.mock/vi.mock (handled by fix_jest_mock_paths)
+    import_pattern = re.compile(
+        r"("
+        r"(?:from\s+['\"])"  # from '...' or from "..."
+        r"|(?:require\s*\(\s*['\"])"  # require('...')
+        r"|(?:import\s*\(\s*['\"])"  # import('...')
+        r")"
+        r"(\.\./[^'\"]+|\.\/[^'\"]+)"  # relative path
+        r"(['\"])"  # closing quote
+    )
+
+    def fix_path(match: re.Match[str]) -> str:
+        original = match.group(0)
+        prefix = match.group(1)
+        rel_path = match.group(2)
+        suffix = match.group(3)
+
+        source_relative_resolved = (source_dir / rel_path).resolve()
+
+        try:
+            test_relative_resolved = (test_dir / rel_path).resolve()
+
+            if test_relative_resolved.exists() or (
+                test_relative_resolved.with_suffix(".ts").exists()
+                or test_relative_resolved.with_suffix(".js").exists()
+                or test_relative_resolved.with_suffix(".tsx").exists()
+                or test_relative_resolved.with_suffix(".jsx").exists()
+            ):
+                return original
+
+            if source_relative_resolved.exists() or (
+                source_relative_resolved.with_suffix(".ts").exists()
+                or source_relative_resolved.with_suffix(".js").exists()
+                or source_relative_resolved.with_suffix(".tsx").exists()
+                or source_relative_resolved.with_suffix(".jsx").exists()
+            ):
+                new_rel_path = Path(os.path.relpath(source_relative_resolved, test_dir)).as_posix()
+                if not new_rel_path.startswith("../") and not new_rel_path.startswith("./"):
+                    new_rel_path = f"./{new_rel_path}"
+
+                logger.debug(f"Fixed import path: {rel_path} -> {new_rel_path}")
+                return f"{prefix}{new_rel_path}{suffix}"
+
+        except (ValueError, OSError):
+            pass
+
+        return original
+
+    result = import_pattern.sub(fix_path, test_code)
+
+    # Split concatenated import/require statements onto separate lines.
+    # The AI sometimes generates: `import { a } from './x';import b from './y';`
+    # This inserts a newline before any import/require/const-require that follows a semicolon on the same line.
+    result = re.sub(r";(import\s)", r";\n\1", result)
+    return re.sub(r";(const\s+\w+\s*=\s*require\()", r";\n\1", result)
