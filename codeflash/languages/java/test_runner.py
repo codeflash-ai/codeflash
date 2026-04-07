@@ -24,6 +24,12 @@ from typing import Any
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.languages.base import TestResult
 
+_INCLUDE_PATTERN = re.compile(r"""(?:^|(?<=\s))include\s*\(?[^)\n]*\)?""", re.MULTILINE)
+
+_LISTOF_PATTERN = re.compile(r"""listOf\s*\(([^)]*)\)""", re.DOTALL)
+
+_QUOTED_PATTERN = re.compile(r"""['"]([^'"]+)['"]""")
+
 _result_counter = itertools.count(1)
 
 
@@ -213,17 +219,19 @@ def _extract_modules_from_settings_gradle(content: str) -> list[str]:
     modules: list[str] = []
     # Standard include(...) directives — word boundary avoids matching variable names
     # like 'includedProjects'
-    for match in re.findall(r"""(?:^|(?<=\s))include\s*\(?[^)\n]*\)?""", content, re.MULTILINE):
-        for name in re.findall(r"""['"]([^'"]+)['"]""", match):
+    for match in _INCLUDE_PATTERN.findall(content):
+        for name in _QUOTED_PATTERN.findall(match):
             modules.append(name.lstrip(":"))
     # Kotlin DSL: val ... = listOf("module-a", "module-b", ...) spanning multiple lines.
     # Used when settings.gradle.kts builds the include list dynamically.
     if not modules or not any("/" not in m and "." not in m for m in modules):
-        for match in re.findall(r"""listOf\s*\(([^)]*)\)""", content, re.DOTALL):
-            for name in re.findall(r"""['"]([^'"]+)['"]""", match):
+        seen = set(modules)
+        for match in _LISTOF_PATTERN.findall(content):
+            for name in _QUOTED_PATTERN.findall(match):
                 stripped = name.lstrip(":")
-                if stripped not in modules:
+                if stripped not in seen:
                     modules.append(stripped)
+                    seen.add(stripped)
     return modules
 
 
