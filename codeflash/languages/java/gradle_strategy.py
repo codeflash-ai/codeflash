@@ -129,12 +129,12 @@ def find_gradle_build_file(project_root: Path) -> Path | None:
     return None
 
 
-def _find_top_level_dependencies_block(build_file: Path, content: str) -> int | None:
-    """Find the insert position (before closing }) of the top-level dependencies block using tree-sitter.
+def _find_top_level_block(build_file: Path, content: str, block_name: str) -> int | None:
+    """Find the insert position (before closing }) of a top-level block using tree-sitter.
 
-    Returns the byte offset of the closing brace, or None if no top-level dependencies block exists.
-    Only matches `dependencies { }` at the root level — ignores blocks nested inside
-    `buildscript`, `subprojects`, `allprojects`, etc.
+    Returns the byte offset of the closing brace, or None if no top-level block with the
+    given name exists. Only matches blocks at the root level — ignores blocks nested inside
+    ``buildscript``, ``subprojects``, ``allprojects``, etc.
     """
     import tree_sitter as ts
 
@@ -152,10 +152,10 @@ def _find_top_level_dependencies_block(build_file: Path, content: str) -> int | 
 
     tree = parser.parse(source_bytes)
 
-    # Walk only direct children of root to find top-level `dependencies { }`
+    # Walk only direct children of root to find top-level `<block_name> { }`
     for child in tree.root_node.children:
-        # Groovy: expression_statement > method_invocation(identifier="dependencies", closure)
-        # Kotlin: call_expression(identifier="dependencies", annotated_lambda)
+        # Groovy: expression_statement > method_invocation(identifier, closure)
+        # Kotlin: call_expression(identifier, annotated_lambda)
         node = child
         if node.type == "expression_statement" and node.child_count > 0:
             node = node.children[0]
@@ -175,7 +175,7 @@ def _find_top_level_dependencies_block(build_file: Path, content: str) -> int | 
             continue
 
         name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf-8")
-        if name != "dependencies":
+        if name != block_name:
             continue
 
         # Find the closing brace of this block
@@ -188,6 +188,11 @@ def _find_top_level_dependencies_block(build_file: Path, content: str) -> int | 
             return closing_brace.start_byte
 
     return None
+
+
+def _find_top_level_dependencies_block(build_file: Path, content: str) -> int | None:
+    """Find the insert position (before closing }) of the top-level dependencies block."""
+    return _find_top_level_block(build_file, content, "dependencies")
 
 
 def _is_multimodule_project(build_root: Path) -> bool:
@@ -207,24 +212,58 @@ def _is_multimodule_project(build_root: Path) -> bool:
 _CODEFLASH_MAVEN_COORD = f"com.codeflash:codeflash-runtime:{CODEFLASH_RUNTIME_VERSION}"
 
 
+def _update_existing_codeflash_dependency(build_file: Path, content: str) -> str | None:
+    """If the codeflash-runtime dependency exists but is outdated or uses the old files() format, update it.
+
+    Returns the updated content, or None if no update was needed (already current).
+    """
+    is_kts = build_file.name.endswith(".kts")
+
+    if is_kts:
+        current_dep = f'testImplementation("{_CODEFLASH_MAVEN_COORD}")'
+    else:
+        current_dep = f"testImplementation '{_CODEFLASH_MAVEN_COORD}'"
+
+    if current_dep in content:
+        return None
+
+    # Replace the line containing "codeflash-runtime" with the current Maven Central coordinate.
+    # This handles both old versions (e.g. 1.0.0) and old files() format.
+    updated_lines: list[str] = []
+    replaced = False
+    for line in content.splitlines(keepends=True):
+        if "codeflash-runtime" in line:
+            indent = len(line) - len(line.lstrip())
+            spaces = " " * indent
+            if is_kts:
+                updated_lines.append(f'{spaces}testImplementation("{_CODEFLASH_MAVEN_COORD}")  // codeflash-runtime\n')
+            else:
+                updated_lines.append(f"{spaces}testImplementation '{_CODEFLASH_MAVEN_COORD}'  // codeflash-runtime\n")
+            replaced = True
+        else:
+            updated_lines.append(line)
+
+    if replaced:
+        return "".join(updated_lines)
+    return None
+
+
 def _ensure_maven_central_repo(build_file: Path, content: str) -> str:
-    """Ensure mavenCentral() is present in the repositories block. Returns updated content."""
+    """Ensure mavenCentral() is present in the top-level repositories block. Returns updated content.
+
+    Uses tree-sitter to find the correct top-level ``repositories {}`` block, avoiding
+    false matches inside ``buildscript {}``, ``subprojects {}``, etc.
+    """
     if "mavenCentral()" in content:
         return content
 
-    is_kts = build_file.name.endswith(".kts")
+    # Use tree-sitter to find the top-level repositories block
+    insert_pos = _find_top_level_block(build_file, content, "repositories")
+    if insert_pos is not None:
+        return content[:insert_pos] + "    mavenCentral()\n" + content[insert_pos:]
 
-    # Try to find existing repositories block and add mavenCentral() inside it
-    repo_match = re.search(r"repositories\s*\{", content)
-    if repo_match:
-        insert_pos = repo_match.end()
-        return content[:insert_pos] + "\n    mavenCentral()" + content[insert_pos:]
-
-    # No repositories block — append one
-    if is_kts:
-        content += "\nrepositories {\n    mavenCentral()\n}\n"
-    else:
-        content += "\nrepositories {\n    mavenCentral()\n}\n"
+    # No top-level repositories block — append one
+    content += "\nrepositories {\n    mavenCentral()\n}\n"
     return content
 
 
@@ -241,7 +280,16 @@ def add_codeflash_dependency_multimodule(build_file: Path) -> bool:
         content = build_file.read_text(encoding="utf-8")
 
         if "codeflash-runtime" in content:
-            logger.info("codeflash-runtime dependency already present in %s", build_file.name)
+            updated = _update_existing_codeflash_dependency(build_file, content)
+            if updated is not None:
+                build_file.write_text(updated, encoding="utf-8")
+                logger.info(
+                    "Updated codeflash-runtime dependency in %s to version %s",
+                    build_file.name,
+                    CODEFLASH_RUNTIME_VERSION,
+                )
+            else:
+                logger.info("codeflash-runtime dependency already up-to-date in %s", build_file.name)
             return True
 
         is_kts = build_file.name.endswith(".kts")
@@ -291,7 +339,18 @@ def add_codeflash_dependency(build_file: Path) -> bool:
         content = build_file.read_text(encoding="utf-8")
 
         if "codeflash-runtime" in content:
-            logger.info("codeflash-runtime dependency already present in %s", build_file.name)
+            updated = _update_existing_codeflash_dependency(build_file, content)
+            if updated is not None:
+                # Also ensure mavenCentral() is present (old files() format won't have it)
+                updated = _ensure_maven_central_repo(build_file, updated)
+                build_file.write_text(updated, encoding="utf-8")
+                logger.info(
+                    "Updated codeflash-runtime dependency in %s to version %s",
+                    build_file.name,
+                    CODEFLASH_RUNTIME_VERSION,
+                )
+            else:
+                logger.info("codeflash-runtime dependency already up-to-date in %s", build_file.name)
             return True
 
         content = _ensure_maven_central_repo(build_file, content)

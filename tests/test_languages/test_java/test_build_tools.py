@@ -2,16 +2,22 @@
 
 import os
 from pathlib import Path
-from unittest.mock import patch
 
 from codeflash.languages.java.build_tools import (
+    CODEFLASH_RUNTIME_VERSION,
     BuildTool,
     detect_build_tool,
     find_source_root,
     find_test_root,
     get_project_info,
 )
-from codeflash.languages.java.gradle_strategy import GradleStrategy
+from codeflash.languages.java.gradle_strategy import (
+    GradleStrategy,
+    _ensure_maven_central_repo,
+    _find_top_level_block,
+    _update_existing_codeflash_dependency,
+)
+from codeflash.languages.java.gradle_strategy import add_codeflash_dependency as gradle_add_codeflash_dependency
 from codeflash.languages.java.maven_strategy import MavenStrategy, add_codeflash_dependency
 from codeflash.languages.java.test_runner import _extract_modules_from_pom_content
 
@@ -644,3 +650,183 @@ class TestGradleEnsureRuntimeMultiModule:
 
         libs_dir = project / "streams" / "libs"
         assert not libs_dir.exists()
+
+
+class TestEnsureMavenCentralRepo:
+    """Tests for _ensure_maven_central_repo with tree-sitter."""
+
+    def test_skips_when_maven_central_already_present(self, tmp_path):
+        build_file = tmp_path / "build.gradle"
+        content = "repositories {\n    mavenCentral()\n}\n"
+        build_file.write_text(content, encoding="utf-8")
+        result = _ensure_maven_central_repo(build_file, content)
+        assert result == content
+
+    def test_inserts_into_top_level_repositories(self, tmp_path):
+        build_file = tmp_path / "build.gradle"
+        content = "repositories {\n    google()\n}\n"
+        build_file.write_text(content, encoding="utf-8")
+        result = _ensure_maven_central_repo(build_file, content)
+        assert "mavenCentral()" in result
+        assert "google()" in result
+
+    def test_does_not_match_buildscript_repositories(self, tmp_path):
+        build_file = tmp_path / "build.gradle"
+        content = "buildscript {\n    repositories {\n        google()\n    }\n}\n"
+        build_file.write_text(content, encoding="utf-8")
+        result = _ensure_maven_central_repo(build_file, content)
+        # Should NOT insert into buildscript repositories — should append a new top-level block
+        assert result.endswith("\nrepositories {\n    mavenCentral()\n}\n")
+        # The buildscript block should be unchanged
+        assert "buildscript {\n    repositories {\n        google()\n    }\n}" in result
+
+    def test_appends_new_block_when_no_repositories(self, tmp_path):
+        build_file = tmp_path / "build.gradle"
+        content = "plugins {\n    id 'java'\n}\n"
+        build_file.write_text(content, encoding="utf-8")
+        result = _ensure_maven_central_repo(build_file, content)
+        assert result.endswith("\nrepositories {\n    mavenCentral()\n}\n")
+
+    def test_works_with_kts(self, tmp_path):
+        build_file = tmp_path / "build.gradle.kts"
+        content = "repositories {\n    google()\n}\n"
+        build_file.write_text(content, encoding="utf-8")
+        result = _ensure_maven_central_repo(build_file, content)
+        assert "mavenCentral()" in result
+
+
+class TestFindTopLevelBlock:
+    """Tests for _find_top_level_block tree-sitter function."""
+
+    def test_finds_top_level_dependencies(self, tmp_path):
+        build_file = tmp_path / "build.gradle"
+        content = 'dependencies {\n    testImplementation "junit:junit:4.13"\n}\n'
+        build_file.write_text(content, encoding="utf-8")
+        pos = _find_top_level_block(build_file, content, "dependencies")
+        assert pos is not None
+        assert content[pos] == "}"
+
+    def test_ignores_nested_dependencies(self, tmp_path):
+        build_file = tmp_path / "build.gradle"
+        content = (
+            "buildscript {\n    dependencies {\n        classpath 'com.android.tools.build:gradle:7.0'\n    }\n}\n"
+        )
+        build_file.write_text(content, encoding="utf-8")
+        pos = _find_top_level_block(build_file, content, "dependencies")
+        assert pos is None
+
+    def test_finds_top_level_repositories(self, tmp_path):
+        build_file = tmp_path / "build.gradle"
+        content = "repositories {\n    google()\n}\n"
+        build_file.write_text(content, encoding="utf-8")
+        pos = _find_top_level_block(build_file, content, "repositories")
+        assert pos is not None
+
+    def test_ignores_buildscript_repositories(self, tmp_path):
+        build_file = tmp_path / "build.gradle"
+        content = "buildscript {\n    repositories {\n        google()\n    }\n}\n"
+        build_file.write_text(content, encoding="utf-8")
+        pos = _find_top_level_block(build_file, content, "repositories")
+        assert pos is None
+
+    def test_returns_none_when_block_absent(self, tmp_path):
+        build_file = tmp_path / "build.gradle"
+        content = "plugins {\n    id 'java'\n}\n"
+        build_file.write_text(content, encoding="utf-8")
+        pos = _find_top_level_block(build_file, content, "repositories")
+        assert pos is None
+
+    def test_works_with_kts(self, tmp_path):
+        build_file = tmp_path / "build.gradle.kts"
+        content = 'dependencies {\n    testImplementation("junit:junit:4.13")\n}\n'
+        build_file.write_text(content, encoding="utf-8")
+        pos = _find_top_level_block(build_file, content, "dependencies")
+        assert pos is not None
+
+
+class TestGradleVersionUpdate:
+    """Tests for version update logic in Gradle dependency management."""
+
+    def test_updates_old_version(self, tmp_path):
+        build_file = tmp_path / "build.gradle"
+        content = (
+            "dependencies {\n    testImplementation 'com.codeflash:codeflash-runtime:1.0.0'  // codeflash-runtime\n}\n"
+        )
+        build_file.write_text(content, encoding="utf-8")
+        result = _update_existing_codeflash_dependency(build_file, content)
+        assert result is not None
+        assert f"com.codeflash:codeflash-runtime:{CODEFLASH_RUNTIME_VERSION}" in result
+        assert "1.0.0" not in result
+
+    def test_updates_old_files_format(self, tmp_path):
+        build_file = tmp_path / "build.gradle"
+        content = "dependencies {\n    testImplementation files('/path/to/codeflash-runtime-1.0.1.jar')\n}\n"
+        build_file.write_text(content, encoding="utf-8")
+        result = _update_existing_codeflash_dependency(build_file, content)
+        assert result is not None
+        assert f"com.codeflash:codeflash-runtime:{CODEFLASH_RUNTIME_VERSION}" in result
+        assert "files(" not in result
+
+    def test_returns_none_when_already_current(self, tmp_path):
+        build_file = tmp_path / "build.gradle"
+        content = f"dependencies {{\n    testImplementation 'com.codeflash:codeflash-runtime:{CODEFLASH_RUNTIME_VERSION}'  // codeflash-runtime\n}}\n"
+        build_file.write_text(content, encoding="utf-8")
+        result = _update_existing_codeflash_dependency(build_file, content)
+        assert result is None
+
+    def test_returns_none_when_already_current_kts(self, tmp_path):
+        build_file = tmp_path / "build.gradle.kts"
+        content = f'dependencies {{\n    testImplementation("com.codeflash:codeflash-runtime:{CODEFLASH_RUNTIME_VERSION}")\n}}\n'
+        build_file.write_text(content, encoding="utf-8")
+        result = _update_existing_codeflash_dependency(build_file, content)
+        assert result is None
+
+    def test_updates_old_version_kts(self, tmp_path):
+        build_file = tmp_path / "build.gradle.kts"
+        content = (
+            'dependencies {\n    testImplementation("com.codeflash:codeflash-runtime:1.0.0")  // codeflash-runtime\n}\n'
+        )
+        build_file.write_text(content, encoding="utf-8")
+        result = _update_existing_codeflash_dependency(build_file, content)
+        assert result is not None
+        assert f"com.codeflash:codeflash-runtime:{CODEFLASH_RUNTIME_VERSION}" in result
+
+    def test_add_codeflash_dependency_updates_old_version(self, tmp_path):
+        """Full integration: add_codeflash_dependency updates old version instead of skipping."""
+        build_file = tmp_path / "build.gradle"
+        build_file.write_text(
+            "repositories {\n    mavenCentral()\n}\n\n"
+            "dependencies {\n    testImplementation 'com.codeflash:codeflash-runtime:1.0.0'\n}\n",
+            encoding="utf-8",
+        )
+        result = gradle_add_codeflash_dependency(build_file)
+        assert result is True
+        content = build_file.read_text(encoding="utf-8")
+        assert f"com.codeflash:codeflash-runtime:{CODEFLASH_RUNTIME_VERSION}" in content
+        assert "1.0.0" not in content
+
+    def test_add_codeflash_dependency_replaces_files_format(self, tmp_path):
+        """Full integration: add_codeflash_dependency replaces old files() with Maven Central coord."""
+        build_file = tmp_path / "build.gradle"
+        build_file.write_text(
+            "dependencies {\n    testImplementation files('/home/user/libs/codeflash-runtime-1.0.1.jar')\n}\n",
+            encoding="utf-8",
+        )
+        result = gradle_add_codeflash_dependency(build_file)
+        assert result is True
+        content = build_file.read_text(encoding="utf-8")
+        assert f"com.codeflash:codeflash-runtime:{CODEFLASH_RUNTIME_VERSION}" in content
+        assert "files(" not in content
+        # Should also add mavenCentral() since the old format didn't need it
+        assert "mavenCentral()" in content
+
+    def test_add_codeflash_dependency_preserves_indent(self, tmp_path):
+        build_file = tmp_path / "build.gradle"
+        build_file.write_text(
+            "dependencies {\n        testImplementation 'com.codeflash:codeflash-runtime:1.0.0'\n}\n", encoding="utf-8"
+        )
+        result = gradle_add_codeflash_dependency(build_file)
+        assert result is True
+        content = build_file.read_text(encoding="utf-8")
+        # Should preserve the 8-space indent
+        assert f"        testImplementation 'com.codeflash:codeflash-runtime:{CODEFLASH_RUNTIME_VERSION}'" in content
