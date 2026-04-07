@@ -507,6 +507,25 @@ class TestExtractModulesFromSettingsGradle:
         assert "streams" in modules
         assert "clients" in modules
 
+    def test_multi_line_groovy_include(self):
+        content = """rootProject.name='eureka'
+include 'eureka-client',
+        'eureka-client-jersey2',
+        'eureka-server',
+        'eureka-core',
+        'eureka-resources'"""
+        modules = _extract_modules_from_settings_gradle(content)
+        assert modules == ["eureka-client", "eureka-client-jersey2", "eureka-server", "eureka-core", "eureka-resources"]
+
+    def test_multi_line_kotlin_dsl_include(self):
+        content = """include(
+    "module-a",
+    "module-b",
+    "module-c"
+)"""
+        modules = _extract_modules_from_settings_gradle(content)
+        assert modules == ["module-a", "module-b", "module-c"]
+
 
 class TestFindMultiModuleRoot:
     """Tests for _find_multi_module_root with Gradle multi-module projects."""

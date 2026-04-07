@@ -24,7 +24,7 @@ from typing import Any
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.languages.base import TestResult
 
-_INCLUDE_PATTERN = re.compile(r"""(?:^|(?<=\s))include\s*\(?[^)\n]*\)?""", re.MULTILINE)
+_INCLUDE_PATTERN = re.compile(r"""(?:^|(?<=\s))include\s*\(?[^)]*\)?""", re.MULTILINE | re.DOTALL)
 
 _LISTOF_PATTERN = re.compile(r"""listOf\s*\(([^)]*)\)""", re.DOTALL)
 
@@ -218,7 +218,8 @@ def _extract_modules_from_settings_gradle(content: str) -> list[str]:
     """
     modules: list[str] = []
     # Standard include(...) directives — word boundary avoids matching variable names
-    # like 'includedProjects'
+    # like 'includedProjects'. Pattern allows multi-line includes (e.g., eureka's
+    # include 'module-a',\n        'module-b',\n        'module-c')
     for match in _INCLUDE_PATTERN.findall(content):
         for name in _QUOTED_PATTERN.findall(match):
             modules.append(name.lstrip(":"))
