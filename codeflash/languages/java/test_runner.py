@@ -424,8 +424,8 @@ def run_behavioral_tests(
         coverage_xml_path = strategy.setup_coverage(build_root, test_module, project_root)
 
     # Coverage runs use the build tool (not direct JVM), so Gradle --no-daemon cold startup +
-    # compilation + test execution can take 5+ min on large multi-module projects.
-    min_timeout = 600 if enable_coverage else 60
+    # compilation + test execution can take 10+ min on large multi-module projects.
+    min_timeout = 900 if enable_coverage else 60
     effective_timeout = max(timeout or 300, min_timeout)
 
     if enable_coverage:
