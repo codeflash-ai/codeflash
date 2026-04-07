@@ -205,10 +205,13 @@ def _extract_modules_from_settings_gradle(content: str) -> list[str]:
     Looks for include directives like:
         include("module-a", "module-b")   // Kotlin DSL
         include 'module-a', 'module-b'    // Groovy DSL
+    Handles multi-line include statements (comma-continued across lines).
     Module names may be prefixed with ':' which is stripped.
     """
     modules: list[str] = []
-    for match in re.findall(r"""include\s*\(?[^)\n]*\)?""", content):
+    # Match include blocks that may span multiple lines (comma-separated entries).
+    # The block ends at a line that doesn't end with a comma (after stripping comments/whitespace).
+    for match in re.findall(r"include\s*\(?((?:[^)\n]*,\s*\n)*[^)\n]*)\)?", content):
         for name in re.findall(r"""['"]([^'"]+)['"]""", match):
             modules.append(name.lstrip(":"))
     return modules
@@ -421,9 +424,9 @@ def run_behavioral_tests(
         coverage_xml_path = strategy.setup_coverage(build_root, test_module, project_root)
 
     # Coverage runs add JaCoCo overhead (instrumentation + report generation) on top of
-    # normal test execution. 600s accommodates multi-module Gradle projects with --no-daemon
-    # which need cold startup + configuration + compilation + tests + JaCoCo report.
-    min_timeout = 600 if enable_coverage else 60
+    # normal test execution. Gradle --no-daemon on large projects (e.g., eureka-core)
+    # needs ~10min for cold startup + compilation + tests, plus ~3min for JaCoCo report.
+    min_timeout = 900 if enable_coverage else 60
     effective_timeout = max(timeout or 300, min_timeout)
 
     if enable_coverage:

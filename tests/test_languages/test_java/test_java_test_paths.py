@@ -507,6 +507,23 @@ class TestExtractModulesFromSettingsGradle:
         assert "streams" in modules
         assert "clients" in modules
 
+    def test_multiline_groovy_include(self):
+        """Multi-line include with comma continuation (eureka-style settings.gradle)."""
+        content = (
+            "rootProject.name='eureka'\n"
+            "include 'eureka-client',\n"
+            "        'eureka-server',\n"
+            "        'eureka-core'\n"
+        )
+        modules = _extract_modules_from_settings_gradle(content)
+        assert modules == ["eureka-client", "eureka-server", "eureka-core"]
+
+    def test_multiple_separate_includes(self):
+        """Multiple separate include statements on different lines."""
+        content = "include 'module-a'\ninclude 'module-b'\n"
+        modules = _extract_modules_from_settings_gradle(content)
+        assert modules == ["module-a", "module-b"]
+
 
 class TestFindMultiModuleRoot:
     """Tests for _find_multi_module_root with Gradle multi-module projects."""
