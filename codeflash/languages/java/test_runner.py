@@ -526,7 +526,7 @@ def run_behavioral_tests(
     if enable_coverage:
         coverage_xml_path = strategy.setup_coverage(build_root, test_module, project_root)
 
-    min_timeout = 900 if enable_coverage else 60
+    min_timeout = 1200 if enable_coverage else 60
     effective_timeout = max(timeout or 300, min_timeout)
 
     if enable_coverage:
