@@ -102,22 +102,6 @@ gradle.projectsEvaluated {
 }
 """
 
-# Gradle init script that applies JaCoCo plugin for coverage collection.
-# Uses projectsEvaluated to avoid triggering configuration of unrelated subprojects.
-_JACOCO_INIT_SCRIPT = """\
-gradle.projectsEvaluated {
-    allprojects {
-        apply plugin: 'jacoco'
-        jacocoTestReport {
-            reports {
-                xml.required = true
-                html.required = false
-            }
-        }
-    }
-}
-"""
-
 
 def find_gradle_build_file(project_root: Path) -> Path | None:
     kts = project_root / "build.gradle.kts"
@@ -736,7 +720,7 @@ class GradleStrategy(BuildToolStrategy):
         mode: str,
         test_module: str | None,
         javaagent_arg: str | None = None,
-        enable_coverage: bool = False,
+        enable_coverage: bool = False,  # kept for interface compatibility; coverage now uses JAVA_TOOL_OPTIONS
     ) -> subprocess.CompletedProcess[str]:
         from codeflash.languages.java.test_runner import _build_test_filter, _run_cmd_kill_pg_on_timeout
 
@@ -807,24 +791,11 @@ class GradleStrategy(BuildToolStrategy):
             cmd = [gradle, task, "--no-daemon", "--rerun", "--init-script", init_path]
             cmd.extend(["--init-script", _get_skip_validation_init_script()])
 
-            # --continue ensures Gradle keeps going even if some tests fail.
-            # For coverage: needed so jacocoTestReport runs even after test failures
-            #   (matches Maven's -Dmaven.test.failure.ignore=true).
-            # Note: multi-module --tests filtering is handled by
-            #   filter.failOnNoMatchingTests = false in the init script above
-            #   (matches Maven's -DfailIfNoTests=false).
-            if enable_coverage:
-                cmd.append("--continue")
-
             for class_filter in test_filter.split(","):
                 class_filter = class_filter.strip()
                 if class_filter:
                     cmd.extend(["--tests", class_filter])
             logger.debug("Added --tests filters to Gradle command")
-
-            # Append jacocoTestReport AFTER --tests so Gradle doesn't try to apply --tests to it
-            if enable_coverage:
-                cmd.append("jacocoTestReport")
 
             logger.debug("Running Gradle command: %s in %s", " ".join(cmd), build_root)
 
@@ -962,64 +933,105 @@ class GradleStrategy(BuildToolStrategy):
         timeout: int,
         candidate_index: int,
     ) -> tuple[subprocess.CompletedProcess[str], Path, Path | None]:
+        from codeflash.languages.java.line_profiler import find_agent_jar
         from codeflash.languages.java.test_runner import _get_combined_junit_xml
 
-        coverage_xml_path = self.setup_coverage(build_root, test_module, build_root)
+        if test_module:
+            module_path = build_root / module_to_dir(test_module)
+        else:
+            module_path = build_root
 
+        # Locate the runtime JAR (contains shaded JaCoCo agent + CLI)
+        classpath = self.get_classpath(build_root, run_env, test_module)
+        runtime_jar = find_agent_jar(classpath=classpath)
+        if runtime_jar is None:
+            logger.warning("codeflash-runtime JAR not found, cannot collect coverage")
+            result = self.run_tests_via_build_tool(
+                build_root, test_paths, run_env, timeout=timeout, mode="behavior", test_module=test_module
+            )
+            reports_dir = self.get_reports_dir(build_root, test_module)
+            result_xml_path = _get_combined_junit_xml(reports_dir, candidate_index)
+            return result, result_xml_path, None
+
+        # Use the runtime JAR's built-in JaCoCo agent via AgentDispatcher
+        exec_path = module_path / "build" / "jacoco" / "test.exec"
+        exec_path.parent.mkdir(parents=True, exist_ok=True)
+
+        jacoco_agent_arg = f"-javaagent:{runtime_jar}=destfile={exec_path}"
+        run_env = run_env.copy()
+        existing_opts = run_env.get("JAVA_TOOL_OPTIONS", "")
+        run_env["JAVA_TOOL_OPTIONS"] = f"{existing_opts} {jacoco_agent_arg}".strip()
+
+        # Run tests WITHOUT enable_coverage (no jacocoTestReport task needed)
         result = self.run_tests_via_build_tool(
-            build_root,
-            test_paths,
-            run_env,
-            timeout=timeout,
-            mode="behavior",
-            enable_coverage=True,
-            test_module=test_module,
+            build_root, test_paths, run_env, timeout=timeout, mode="behavior", test_module=test_module
         )
 
         reports_dir = self.get_reports_dir(build_root, test_module)
         result_xml_path = _get_combined_junit_xml(reports_dir, candidate_index)
 
+        # Convert .exec → .xml via the shaded JaCoCo CLI in the runtime JAR
+        coverage_xml_path = self._convert_jacoco_exec_to_xml(runtime_jar, exec_path, module_path)
+
         return result, result_xml_path, coverage_xml_path
+
+    def _convert_jacoco_exec_to_xml(self, runtime_jar: Path, exec_path: Path, module_path: Path) -> Path | None:
+        if not exec_path.exists():
+            logger.warning("JaCoCo exec file not found: %s", exec_path)
+            return None
+
+        xml_path = exec_path.with_suffix(".xml")
+
+        # Collect classfiles directories for the report
+        classfiles_dirs: list[str] = []
+        for classes_dir in [
+            module_path / "build" / "classes" / "java" / "main",
+            module_path / "build" / "classes" / "java" / "test",
+        ]:
+            if classes_dir.exists():
+                classfiles_dirs.append(str(classes_dir))
+
+        if not classfiles_dirs:
+            logger.warning("No classfiles directories found under %s/build/classes", module_path)
+            return None
+
+        cmd = [
+            "java",
+            "-cp",
+            str(runtime_jar),
+            "com.codeflash.shaded.org.jacoco.cli.internal.Main",
+            "report",
+            str(exec_path),
+        ]
+        for d in classfiles_dirs:
+            cmd.extend(["--classfiles", d])
+        cmd.extend(["--xml", str(xml_path)])
+
+        logger.debug("Converting JaCoCo exec to XML: %s", " ".join(cmd))
+        try:
+            conv_result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
+            if conv_result.returncode != 0:
+                logger.warning(
+                    "JaCoCo exec→XML conversion failed (exit %d): %s", conv_result.returncode, conv_result.stderr
+                )
+                return None
+        except Exception:
+            logger.exception("JaCoCo exec→XML conversion error")
+            return None
+
+        if xml_path.exists():
+            logger.info("JaCoCo coverage XML generated: %s", xml_path)
+            return xml_path
+
+        logger.warning("JaCoCo XML not created at %s", xml_path)
+        return None
 
     def setup_coverage(self, build_root: Path, test_module: str | None, project_root: Path) -> Path | None:
         if test_module:
             module_root = build_root / module_to_dir(test_module)
         else:
             module_root = project_root
-
-        build_file = find_gradle_build_file(module_root)
-        if build_file is None:
-            logger.warning("No build.gradle(.kts) found at %s, cannot setup JaCoCo", module_root)
-            return None
-
-        content = build_file.read_text(encoding="utf-8")
-        if "jacoco" not in content.lower():
-            logger.info("Adding JaCoCo plugin to %s for coverage collection", build_file.name)
-            is_kts = build_file.name.endswith(".kts")
-            if is_kts:
-                plugin_line = "plugins {\n    jacoco\n}\n"
-            else:
-                plugin_line = "apply plugin: 'jacoco'\n"
-
-            if "plugins {" in content or "plugins{" in content:
-                # Insert jacoco inside existing plugins block
-                plugins_idx = content.find("plugins")
-                brace_depth = 0
-                for i in range(plugins_idx, len(content)):
-                    if content[i] == "{":
-                        brace_depth += 1
-                    elif content[i] == "}":
-                        brace_depth -= 1
-                        if brace_depth == 0:
-                            insert = "    jacoco\n" if is_kts else "    id 'jacoco'\n"
-                            content = content[:i] + insert + content[i:]
-                            break
-            else:
-                content = plugin_line + content
-
-            build_file.write_text(content, encoding="utf-8")
-
-        return module_root / "build" / "reports" / "jacoco" / "test" / "jacocoTestReport.xml"
+        return module_root / "build" / "jacoco" / "test.xml"
 
     def get_test_run_command(self, project_root: Path, test_classes: list[str] | None = None) -> list[str]:
         from codeflash.languages.java.test_runner import _validate_java_class_name
