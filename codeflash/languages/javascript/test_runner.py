@@ -773,8 +773,24 @@ def run_jest_behavioral_tests(
 
     # Get test files to run
     test_files = [str(file.instrumented_behavior_file_path) for file in test_paths.test_files]
-    # Use provided project_root, or detect it as fallback
-    if project_root is None and test_files:
+    # In monorepos with --all mode, test_cfg.js_project_root may point to the wrong package
+    # (e.g., optimizing worker functions but project_root is set to server package).
+    # Detect the correct package from test file location to ensure Jest uses the right config.
+    if test_files and project_root:
+        first_test_file = Path(test_files[0])
+        detected_root = find_node_project_root(first_test_file)
+        # Only override if: (1) detected a different package root, (2) it has package.json,
+        # (3) both are peer packages (same parent directory)
+        if (
+            detected_root
+            and detected_root != project_root
+            and (detected_root / "package.json").exists()
+            and detected_root.parent == project_root.parent
+        ):
+            logger.debug(f"Monorepo: overriding project_root {project_root} with detected {detected_root}")
+            project_root = detected_root
+    elif project_root is None and test_files:
+        # Fallback: if no project_root provided, detect from test file
         first_test_file = Path(test_files[0])
         project_root = find_node_project_root(first_test_file)
 
@@ -1028,8 +1044,18 @@ def run_jest_benchmarking_tests(
 
     # Get performance test files
     test_files = [str(file.benchmarking_file_path) for file in test_paths.test_files if file.benchmarking_file_path]
-    # Use provided project_root, or detect it as fallback
-    if project_root is None and test_files:
+    # In monorepos, detect correct package from test file location
+    if test_files and project_root:
+        first_test_file = Path(test_files[0])
+        detected_root = find_node_project_root(first_test_file)
+        if (
+            detected_root
+            and detected_root != project_root
+            and (detected_root / "package.json").exists()
+            and detected_root.parent == project_root.parent
+        ):
+            project_root = detected_root
+    elif project_root is None and test_files:
         first_test_file = Path(test_files[0])
         project_root = find_node_project_root(first_test_file)
 
@@ -1202,8 +1228,18 @@ def run_jest_line_profile_tests(
         elif file.benchmarking_file_path:
             test_files.append(str(file.benchmarking_file_path))
 
-    # Use provided project_root, or detect it as fallback
-    if project_root is None and test_files:
+    # In monorepos, detect correct package from test file location
+    if test_files and project_root:
+        first_test_file = Path(test_files[0])
+        detected_root = find_node_project_root(first_test_file)
+        if (
+            detected_root
+            and detected_root != project_root
+            and (detected_root / "package.json").exists()
+            and detected_root.parent == project_root.parent
+        ):
+            project_root = detected_root
+    elif project_root is None and test_files:
         first_test_file = Path(test_files[0])
         project_root = find_node_project_root(first_test_file)
 
