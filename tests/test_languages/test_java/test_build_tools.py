@@ -759,20 +759,20 @@ class TestGradleEnsureRuntimeFallback:
 
 
 class TestGradleSetupCoverage:
-    """Tests for GradleStrategy.setup_coverage — returns report path without modifying build files."""
+    """Tests for GradleStrategy.setup_coverage — returns expected XML path for JaCoCo agent output."""
 
     def test_returns_report_path_for_module(self, tmp_path):
         strategy = GradleStrategy()
         path = strategy.setup_coverage(tmp_path, test_module="eureka-core", project_root=tmp_path)
-        assert path == tmp_path / "eureka-core" / "build" / "reports" / "jacoco" / "test" / "jacocoTestReport.xml"
+        assert path == tmp_path / "eureka-core" / "build" / "jacoco" / "test.xml"
 
     def test_returns_report_path_without_module(self, tmp_path):
         strategy = GradleStrategy()
         path = strategy.setup_coverage(tmp_path, test_module=None, project_root=tmp_path)
-        assert path == tmp_path / "build" / "reports" / "jacoco" / "test" / "jacocoTestReport.xml"
+        assert path == tmp_path / "build" / "jacoco" / "test.xml"
 
     def test_does_not_modify_build_files(self, tmp_path):
-        """setup_coverage must NOT modify build.gradle — JaCoCo is applied via init script."""
+        """setup_coverage must NOT modify build.gradle — coverage is collected via JaCoCo agent."""
         build_file = tmp_path / "build.gradle"
         original_content = "plugins { id 'java' }\n"
         build_file.write_text(original_content, encoding="utf-8")
@@ -782,25 +782,31 @@ class TestGradleSetupCoverage:
         assert build_file.read_text(encoding="utf-8") == original_content
 
 
-class TestGradleJacocoInitScript:
-    """Tests for the JaCoCo init script content and helper."""
+class TestJacocoAgentDownload:
+    """Tests for JaCoCo agent and CLI JAR download helpers."""
 
-    def test_init_script_has_java_plugin_guard(self):
-        from codeflash.languages.java.gradle_strategy import _JACOCO_INIT_SCRIPT
+    def test_get_jacoco_agent_jar_downloads_to_codeflash_home(self, tmp_path):
+        from codeflash.languages.java.gradle_strategy import get_jacoco_agent_jar
 
-        assert "withType(JavaPlugin)" in _JACOCO_INIT_SCRIPT
+        jar = get_jacoco_agent_jar(codeflash_home=tmp_path)
+        assert jar == tmp_path / "java_agents" / "jacocoagent.jar"
+        # JAR is downloaded from Maven Central — verify it exists and is non-empty
+        assert jar.exists()
+        assert jar.stat().st_size > 0
 
-    def test_get_jacoco_init_script_creates_temp_file(self):
-        from codeflash.languages.java.gradle_strategy import _JACOCO_INIT_SCRIPT, _get_jacoco_init_script
+    def test_get_jacoco_agent_jar_is_cached(self, tmp_path):
+        from codeflash.languages.java.gradle_strategy import get_jacoco_agent_jar
 
-        path = _get_jacoco_init_script()
-        assert Path(path).exists()
-        content = Path(path).read_text(encoding="utf-8")
-        assert content == _JACOCO_INIT_SCRIPT
+        jar1 = get_jacoco_agent_jar(codeflash_home=tmp_path)
+        size1 = jar1.stat().st_size
+        jar2 = get_jacoco_agent_jar(codeflash_home=tmp_path)
+        assert jar1 == jar2
+        assert jar2.stat().st_size == size1
 
-    def test_get_jacoco_init_script_is_cached(self):
-        from codeflash.languages.java.gradle_strategy import _get_jacoco_init_script
+    def test_get_jacoco_cli_jar_downloads(self, tmp_path):
+        from codeflash.languages.java.gradle_strategy import get_jacoco_cli_jar
 
-        path1 = _get_jacoco_init_script()
-        path2 = _get_jacoco_init_script()
-        assert path1 == path2
+        jar = get_jacoco_cli_jar(codeflash_home=tmp_path)
+        assert jar == tmp_path / "java_agents" / "jacococli.jar"
+        assert jar.exists()
+        assert jar.stat().st_size > 0

@@ -423,14 +423,13 @@ def run_behavioral_tests(
     if enable_coverage:
         coverage_xml_path = strategy.setup_coverage(build_root, test_module, project_root)
 
-    # Coverage runs add JaCoCo overhead (instrumentation + report generation) on top of
-    # normal test execution. Gradle --no-daemon on large projects (e.g., eureka-core)
-    # needs ~10min for cold startup + compilation + tests, plus ~3min for JaCoCo report.
-    min_timeout = 900 if enable_coverage else 60
+    # Coverage runs use the build tool (not direct JVM), so Gradle --no-daemon cold startup +
+    # compilation + test execution can take 5+ min on large multi-module projects.
+    min_timeout = 600 if enable_coverage else 60
     effective_timeout = max(timeout or 300, min_timeout)
 
     if enable_coverage:
-        # Coverage MUST use build tool — JaCoCo runs as a plugin during the verify phase
+        # Coverage uses the build tool with JaCoCo agent injected via JAVA_TOOL_OPTIONS
         result, result_xml_path, coverage_xml_path = strategy.run_tests_with_coverage(
             build_root, test_module, test_paths, run_env, effective_timeout, candidate_index
         )
@@ -458,20 +457,13 @@ def run_behavioral_tests(
             )
 
     if enable_coverage and coverage_xml_path:
-        target_dir = strategy.get_build_output_dir(build_root, test_module)
-        jacoco_exec_path = target_dir / "jacoco.exec"
-        logger.info("Coverage paths - target_dir: %s, coverage_xml_path: %s", target_dir, coverage_xml_path)
-        if jacoco_exec_path.exists():
-            logger.info("JaCoCo exec file exists: %s (%s bytes)", jacoco_exec_path, jacoco_exec_path.stat().st_size)
-        else:
-            logger.warning("JaCoCo exec file not found: %s - JaCoCo agent may not have run", jacoco_exec_path)
         if coverage_xml_path.exists():
             file_size = coverage_xml_path.stat().st_size
-            logger.info("JaCoCo XML report exists: %s (%s bytes)", coverage_xml_path, file_size)
+            logger.info("JaCoCo coverage XML: %s (%s bytes)", coverage_xml_path, file_size)
             if file_size == 0:
-                logger.warning("JaCoCo XML report is empty - report generation may have failed")
+                logger.warning("JaCoCo XML report is empty — report generation may have failed")
         else:
-            logger.warning("JaCoCo XML report not found: %s - verify phase may not have completed", coverage_xml_path)
+            logger.warning("JaCoCo XML report not found: %s", coverage_xml_path)
 
     return result_xml_path, result, coverage_xml_path, None
 

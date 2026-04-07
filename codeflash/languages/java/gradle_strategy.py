@@ -78,18 +78,8 @@ def _get_skip_validation_init_script() -> str:
     return _skip_validation_init_path
 
 
-# Lazily-created temp file for the JaCoCo init script.
-_jacoco_init_path: str | None = None
-
-
-def _get_jacoco_init_script() -> str:
-    global _jacoco_init_path
-    if _jacoco_init_path is None or not Path(_jacoco_init_path).exists():
-        fd, path = tempfile.mkstemp(suffix=".gradle", prefix="codeflash_jacoco_")
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(_JACOCO_INIT_SCRIPT)
-        _jacoco_init_path = path
-    return _jacoco_init_path
+# JaCoCo version used for agent and CLI JARs.
+_JACOCO_VERSION = "0.8.11"
 
 
 # Cache for classpath strings — keyed on (gradle_root, test_module).
@@ -117,24 +107,6 @@ gradle.projectsEvaluated {
 }
 """
 
-# Gradle init script that applies JaCoCo plugin for coverage collection.
-# Uses projectsEvaluated + JavaPlugin guard so it only applies to subprojects
-# that actually compile Java (skips container/root projects without java plugin).
-_JACOCO_INIT_SCRIPT = """\
-gradle.projectsEvaluated {
-    allprojects { project ->
-        project.plugins.withType(JavaPlugin) {
-            project.apply plugin: 'jacoco'
-            project.jacocoTestReport {
-                reports {
-                    xml.required = true
-                    html.required = false
-                }
-            }
-        }
-    }
-}
-"""
 
 
 def find_gradle_build_file(project_root: Path) -> Path | None:
@@ -749,14 +721,6 @@ class GradleStrategy(BuildToolStrategy):
             cmd = [gradle, task, "--no-daemon", "--rerun", "--init-script", init_path]
             cmd.extend(["--init-script", _get_skip_validation_init_script()])
 
-            if enable_coverage:
-                jacoco_init = _get_jacoco_init_script()
-                cmd.extend(["--init-script", jacoco_init])
-                # --continue ensures Gradle keeps going even if some tests fail,
-                # so jacocoTestReport runs even after test failures
-                # (matches Maven's -Dmaven.test.failure.ignore=true).
-                cmd.append("--continue")
-
             # Note: multi-module --tests filtering is handled by
             #   filter.failOnNoMatchingTests = false in the init script above
             #   (matches Maven's -DfailIfNoTests=false).
@@ -766,12 +730,8 @@ class GradleStrategy(BuildToolStrategy):
                     cmd.extend(["--tests", class_filter])
             logger.debug("Added --tests filters to Gradle command")
 
-            # Append jacocoTestReport AFTER --tests so Gradle doesn't try to apply --tests to it.
-            # Must be module-qualified for multi-module projects — running it at root level fails
-            # if the root project doesn't have the java plugin (e.g., eureka).
-            if enable_coverage:
-                jacoco_task = f":{test_module}:jacocoTestReport" if test_module else "jacocoTestReport"
-                cmd.append(jacoco_task)
+            # JaCoCo coverage is collected via -javaagent (set up by run_tests_with_coverage),
+            # not via a Gradle task. No extra tasks or init scripts needed here.
 
             logger.debug("Running Gradle command: %s in %s", " ".join(cmd), build_root)
 
@@ -911,31 +871,60 @@ class GradleStrategy(BuildToolStrategy):
     ) -> tuple[subprocess.CompletedProcess[str], Path, Path | None]:
         from codeflash.languages.java.test_runner import _get_combined_junit_xml
 
-        coverage_xml_path = self.setup_coverage(build_root, test_module, build_root)
+        # Determine coverage paths
+        if test_module:
+            module_path = build_root / module_to_dir(test_module)
+        else:
+            module_path = build_root
+        exec_path = module_path / "build" / "jacoco" / "test.exec"
+        exec_path.parent.mkdir(parents=True, exist_ok=True)
+        xml_path = exec_path.with_suffix(".xml")
+
+        # Inject JaCoCo agent via JAVA_TOOL_OPTIONS — collects coverage during test execution
+        # without requiring any Gradle plugin or jacocoTestReport task.
+        try:
+            agent_jar = get_jacoco_agent_jar()
+            agent_opts = f"-javaagent:{agent_jar.absolute()}=destfile={exec_path.absolute()}"
+            existing = run_env.get("JAVA_TOOL_OPTIONS", "")
+            run_env["JAVA_TOOL_OPTIONS"] = f"{existing} {agent_opts}".strip() if existing else agent_opts
+            logger.info("JaCoCo agent enabled: %s", agent_opts)
+        except Exception:
+            logger.exception("Failed to configure JaCoCo agent — coverage will be unavailable")
+            xml_path = None
 
         result = self.run_tests_via_build_tool(
-            build_root,
-            test_paths,
-            run_env,
-            timeout=timeout,
-            mode="behavior",
-            enable_coverage=True,
-            test_module=test_module,
+            build_root, test_paths, run_env, timeout=timeout, mode="behavior",
+            enable_coverage=True, test_module=test_module,
         )
+
+        # Convert .exec → .xml using JaCoCo CLI (fast, ~2s even on large projects)
+        if xml_path and exec_path.exists():
+            classes_dirs = [
+                module_path / "build" / "classes" / "java" / "main",
+                module_path / "build" / "classes" / "java" / "test",
+            ]
+            sources_dirs = [
+                module_path / "src" / "main" / "java",
+                module_path / "src" / "test" / "java",
+            ]
+            convert_jacoco_exec_to_xml(exec_path, classes_dirs, sources_dirs, xml_path)
+        elif xml_path:
+            logger.warning("JaCoCo .exec not found at %s — agent may not have run", exec_path)
+            xml_path = None
 
         reports_dir = self.get_reports_dir(build_root, test_module)
         result_xml_path = _get_combined_junit_xml(reports_dir, candidate_index)
 
-        return result, result_xml_path, coverage_xml_path
+        return result, result_xml_path, xml_path
 
     def setup_coverage(self, build_root: Path, test_module: str | None, project_root: Path) -> Path | None:
-        # JaCoCo plugin is applied via init script (_JACOCO_INIT_SCRIPT) at test execution time,
-        # so no build file modification is needed here. Just return the expected report path.
+        # Coverage is collected via JaCoCo agent (injected in run_tests_with_coverage).
+        # Return the expected XML path so callers know where to look.
         if test_module:
             module_root = build_root / module_to_dir(test_module)
         else:
             module_root = project_root
-        return module_root / "build" / "reports" / "jacoco" / "test" / "jacocoTestReport.xml"
+        return module_root / "build" / "jacoco" / "test.xml"
 
     def get_test_run_command(self, project_root: Path, test_classes: list[str] | None = None) -> list[str]:
         from codeflash.languages.java.test_runner import _validate_java_class_name
@@ -952,3 +941,88 @@ class GradleStrategy(BuildToolStrategy):
             for cls in test_classes:
                 cmd.extend(["--tests", cls])
         return cmd
+
+
+def get_jacoco_agent_jar(codeflash_home: Path | None = None) -> Path:
+    if codeflash_home is None:
+        codeflash_home = Path.home() / ".codeflash"
+
+    agent_dir = codeflash_home / "java_agents"
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    agent_jar = agent_dir / "jacocoagent.jar"
+
+    if not agent_jar.exists():
+        import urllib.request
+
+        url = (
+            f"https://repo1.maven.org/maven2/org/jacoco/org.jacoco.agent/{_JACOCO_VERSION}/"
+            f"org.jacoco.agent-{_JACOCO_VERSION}-runtime.jar"
+        )
+        logger.info("Downloading JaCoCo agent from %s", url)
+        urllib.request.urlretrieve(url, agent_jar)  # noqa: S310
+        logger.info("Downloaded JaCoCo agent to %s", agent_jar)
+
+    return agent_jar
+
+
+def get_jacoco_cli_jar(codeflash_home: Path | None = None) -> Path:
+    if codeflash_home is None:
+        codeflash_home = Path.home() / ".codeflash"
+
+    cli_dir = codeflash_home / "java_agents"
+    cli_dir.mkdir(parents=True, exist_ok=True)
+    cli_jar = cli_dir / "jacococli.jar"
+
+    if not cli_jar.exists():
+        import urllib.request
+
+        url = (
+            f"https://repo1.maven.org/maven2/org/jacoco/org.jacoco.cli/{_JACOCO_VERSION}/"
+            f"org.jacoco.cli-{_JACOCO_VERSION}-nodeps.jar"
+        )
+        logger.info("Downloading JaCoCo CLI from %s", url)
+        urllib.request.urlretrieve(url, cli_jar)  # noqa: S310
+        logger.info("Downloaded JaCoCo CLI to %s", cli_jar)
+
+    return cli_jar
+
+
+def convert_jacoco_exec_to_xml(
+    exec_path: Path,
+    classes_dirs: list[Path],
+    sources_dirs: list[Path],
+    xml_path: Path,
+) -> bool:
+    if not exec_path.exists():
+        logger.error("JaCoCo .exec file not found: %s", exec_path)
+        return False
+
+    try:
+        cli_jar = get_jacoco_cli_jar()
+    except Exception:
+        logger.exception("Failed to get JaCoCo CLI")
+        return False
+
+    cmd: list[str] = ["java", "-jar", str(cli_jar), "report", str(exec_path)]
+    for d in classes_dirs:
+        if d.exists():
+            cmd.extend(["--classfiles", str(d)])
+    for d in sources_dirs:
+        if d.exists():
+            cmd.extend(["--sourcefiles", str(d)])
+    cmd.extend(["--xml", str(xml_path)])
+
+    logger.info("Converting JaCoCo .exec to XML: %s", " ".join(cmd))
+    try:
+        result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=60)
+        if result.returncode == 0:
+            logger.info("JaCoCo coverage XML generated: %s", xml_path)
+            return True
+        logger.error("Failed to convert .exec to XML: %s", result.stderr)
+        return False
+    except subprocess.TimeoutExpired:
+        logger.exception("JaCoCo CLI conversion timed out")
+        return False
+    except Exception:
+        logger.exception("Error converting .exec to XML")
+        return False
