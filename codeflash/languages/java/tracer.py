@@ -132,9 +132,9 @@ class JavaTracer:
         env["JAVA_TOOL_OPTIONS"] = f"{existing} {jfr_opts}".strip()
         return env
 
-    def build_agent_env(self, config_path: Path) -> dict[str, str]:
+    def build_agent_env(self, config_path: Path, classpath: str | None = None) -> dict[str, str]:
         env = os.environ.copy()
-        agent_jar = find_agent_jar()
+        agent_jar = find_agent_jar(classpath=classpath)
         if agent_jar is None:
             msg = "codeflash-runtime JAR not found, cannot run tracing agent"
             raise FileNotFoundError(msg)
