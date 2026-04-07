@@ -9,7 +9,6 @@ from __future__ import annotations
 import logging
 import os
 import re
-import shutil
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
@@ -17,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from codeflash.languages.java.build_tool_strategy import BuildToolStrategy, module_to_dir
-from codeflash.languages.java.build_tools import BuildTool, JavaProjectInfo
+from codeflash.languages.java.build_tools import CODEFLASH_RUNTIME_VERSION, BuildTool, JavaProjectInfo
 
 _RE_INCLUDE = re.compile(r"""include\s*\(?([^)\n]+)\)?""")
 
@@ -205,8 +204,32 @@ def _is_multimodule_project(build_root: Path) -> bool:
     return False
 
 
-def add_codeflash_dependency_multimodule(build_file: Path, runtime_jar_path: Path) -> bool:
-    """Add codeflash-runtime dependency wrapped in a subprojects block for multi-module projects.
+_CODEFLASH_MAVEN_COORD = f"com.codeflash:codeflash-runtime:{CODEFLASH_RUNTIME_VERSION}"
+
+
+def _ensure_maven_central_repo(build_file: Path, content: str) -> str:
+    """Ensure mavenCentral() is present in the repositories block. Returns updated content."""
+    if "mavenCentral()" in content:
+        return content
+
+    is_kts = build_file.name.endswith(".kts")
+
+    # Try to find existing repositories block and add mavenCentral() inside it
+    repo_match = re.search(r"repositories\s*\{", content)
+    if repo_match:
+        insert_pos = repo_match.end()
+        return content[:insert_pos] + "\n    mavenCentral()" + content[insert_pos:]
+
+    # No repositories block — append one
+    if is_kts:
+        content += "\nrepositories {\n    mavenCentral()\n}\n"
+    else:
+        content += "\nrepositories {\n    mavenCentral()\n}\n"
+    return content
+
+
+def add_codeflash_dependency_multimodule(build_file: Path) -> bool:
+    """Add codeflash-runtime dependency from Maven Central in a subprojects block for multi-module projects.
 
     This avoids adding testImplementation to the root build file directly, which would fail
     if the root project doesn't apply the java plugin.
@@ -222,14 +245,16 @@ def add_codeflash_dependency_multimodule(build_file: Path, runtime_jar_path: Pat
             return True
 
         is_kts = build_file.name.endswith(".kts")
-        jar_str = str(runtime_jar_path).replace("\\", "/")
 
         if is_kts:
             block = (
                 f"\nsubprojects {{\n"
                 f'    plugins.withId("java") {{\n'
+                f"        repositories {{\n"
+                f"            mavenCentral()\n"
+                f"        }}\n"
                 f"        dependencies {{\n"
-                f'            testImplementation(files("{jar_str}"))  // codeflash-runtime\n'
+                f'            testImplementation("{_CODEFLASH_MAVEN_COORD}")  // codeflash-runtime\n'
                 f"        }}\n"
                 f"    }}\n"
                 f"}}\n"
@@ -238,8 +263,11 @@ def add_codeflash_dependency_multimodule(build_file: Path, runtime_jar_path: Pat
             block = (
                 f"\nsubprojects {{\n"
                 f"    plugins.withId('java') {{\n"
+                f"        repositories {{\n"
+                f"            mavenCentral()\n"
+                f"        }}\n"
                 f"        dependencies {{\n"
-                f"            testImplementation files('{jar_str}')  // codeflash-runtime\n"
+                f"            testImplementation '{_CODEFLASH_MAVEN_COORD}'  // codeflash-runtime\n"
                 f"        }}\n"
                 f"    }}\n"
                 f"}}\n"
@@ -255,7 +283,7 @@ def add_codeflash_dependency_multimodule(build_file: Path, runtime_jar_path: Pat
         return False
 
 
-def add_codeflash_dependency(build_file: Path, runtime_jar_path: Path) -> bool:
+def add_codeflash_dependency(build_file: Path) -> bool:
     if not build_file.exists():
         return False
 
@@ -266,13 +294,14 @@ def add_codeflash_dependency(build_file: Path, runtime_jar_path: Path) -> bool:
             logger.info("codeflash-runtime dependency already present in %s", build_file.name)
             return True
 
+        content = _ensure_maven_central_repo(build_file, content)
+
         is_kts = build_file.name.endswith(".kts")
-        jar_str = str(runtime_jar_path).replace("\\", "/")
 
         if is_kts:
-            dep_line = f'    testImplementation(files("{jar_str}"))  // codeflash-runtime\n'
+            dep_line = f'    testImplementation("{_CODEFLASH_MAVEN_COORD}")  // codeflash-runtime\n'
         else:
-            dep_line = f"    testImplementation files('{jar_str}')  // codeflash-runtime\n"
+            dep_line = f"    testImplementation '{_CODEFLASH_MAVEN_COORD}'  // codeflash-runtime\n"
 
         # Use tree-sitter to find the top-level dependencies block
         insert_pos = _find_top_level_dependencies_block(build_file, content)
@@ -284,9 +313,13 @@ def add_codeflash_dependency(build_file: Path, runtime_jar_path: Path) -> bool:
 
         # No existing dependencies block — append one
         if is_kts:
-            content += f'\ndependencies {{\n    testImplementation(files("{jar_str}"))  // codeflash-runtime\n}}\n'
+            content += (
+                f'\ndependencies {{\n    testImplementation("{_CODEFLASH_MAVEN_COORD}")  // codeflash-runtime\n}}\n'
+            )
         else:
-            content += f"\ndependencies {{\n    testImplementation files('{jar_str}')  // codeflash-runtime\n}}\n"
+            content += (
+                f"\ndependencies {{\n    testImplementation '{_CODEFLASH_MAVEN_COORD}'  // codeflash-runtime\n}}\n"
+            )
         build_file.write_text(content, encoding="utf-8")
         logger.info("Added codeflash-runtime dependency to %s (new block)", build_file.name)
         return True
@@ -420,23 +453,10 @@ class GradleStrategy(BuildToolStrategy):
         return self.find_wrapper_executable(build_root, ("gradlew", "gradlew.bat"), "gradle")
 
     def ensure_runtime(self, build_root: Path, test_module: str | None) -> bool:
-        runtime_jar = self.find_runtime_jar()
-        if runtime_jar is None:
-            logger.error("codeflash-runtime JAR not found. Generated tests will fail to compile.")
-            return False
-
         if test_module:
             module_root = build_root / module_to_dir(test_module)
         else:
             module_root = build_root
-
-        libs_dir = module_root / "libs"
-        libs_dir.mkdir(parents=True, exist_ok=True)
-        dest_jar = libs_dir / "codeflash-runtime-1.0.1.jar"
-
-        if not dest_jar.exists():
-            logger.info("Copying codeflash-runtime JAR to %s", dest_jar)
-            shutil.copy2(runtime_jar, dest_jar)
 
         build_file = find_gradle_build_file(module_root)
         if build_file is None:
@@ -444,10 +464,10 @@ class GradleStrategy(BuildToolStrategy):
             return False
 
         if not test_module and _is_multimodule_project(build_root):
-            if not add_codeflash_dependency_multimodule(build_file, dest_jar):
+            if not add_codeflash_dependency_multimodule(build_file):
                 logger.error("Failed to add codeflash-runtime dependency to %s", build_file)
                 return False
-        elif not add_codeflash_dependency(build_file, dest_jar):
+        elif not add_codeflash_dependency(build_file):
             logger.error("Failed to add codeflash-runtime dependency to %s", build_file)
             return False
 

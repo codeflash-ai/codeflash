@@ -588,17 +588,14 @@ class TestGradleEnsureRuntimeMultiModule:
         project = self._make_multi_module_project(tmp_path)
 
         strategy = GradleStrategy()
-        # Provide a fake runtime JAR
-        fake_jar = tmp_path / "fake-runtime.jar"
-        fake_jar.write_bytes(b"PK\x03\x04")  # minimal zip header
-
-        with patch.object(strategy, "find_runtime_jar", return_value=fake_jar):
-            result = strategy.ensure_runtime(project, test_module="streams")
+        result = strategy.ensure_runtime(project, test_module="streams")
 
         assert result is True
-        # Dependency should be in streams/build.gradle.kts
+        # Dependency should be in streams/build.gradle.kts with Maven Central coordinate
         streams_build = (project / "streams" / "build.gradle.kts").read_text(encoding="utf-8")
         assert "codeflash-runtime" in streams_build
+        assert "com.codeflash:codeflash-runtime:" in streams_build
+        assert "mavenCentral()" in streams_build
         # And NOT in clients/build.gradle.kts or root build.gradle.kts
         clients_build = (project / "clients" / "build.gradle.kts").read_text(encoding="utf-8")
         assert "codeflash-runtime" not in clients_build
@@ -610,15 +607,13 @@ class TestGradleEnsureRuntimeMultiModule:
         project = self._make_multi_module_project(tmp_path)
 
         strategy = GradleStrategy()
-        fake_jar = tmp_path / "fake-runtime.jar"
-        fake_jar.write_bytes(b"PK\x03\x04")
-
-        with patch.object(strategy, "find_runtime_jar", return_value=fake_jar):
-            result = strategy.ensure_runtime(project, test_module=None)
+        result = strategy.ensure_runtime(project, test_module=None)
 
         assert result is True
         root_build = (project / "build.gradle.kts").read_text(encoding="utf-8")
         assert "codeflash-runtime" in root_build
+        assert "com.codeflash:codeflash-runtime:" in root_build
+        assert "mavenCentral()" in root_build
 
     def test_adds_dependency_to_nested_module(self, tmp_path):
         """When test_module='connect:runtime', the dep goes to connect/runtime/build.gradle.kts."""
@@ -632,12 +627,20 @@ class TestGradleEnsureRuntimeMultiModule:
         )
 
         strategy = GradleStrategy()
-        fake_jar = tmp_path / "fake-runtime.jar"
-        fake_jar.write_bytes(b"PK\x03\x04")
-
-        with patch.object(strategy, "find_runtime_jar", return_value=fake_jar):
-            result = strategy.ensure_runtime(project, test_module="connect:runtime")
+        result = strategy.ensure_runtime(project, test_module="connect:runtime")
 
         assert result is True
         nested_build = (nested / "build.gradle.kts").read_text(encoding="utf-8")
         assert "codeflash-runtime" in nested_build
+        assert "com.codeflash:codeflash-runtime:" in nested_build
+        assert "mavenCentral()" in nested_build
+
+    def test_does_not_copy_jar_to_libs(self, tmp_path):
+        """ensure_runtime should NOT copy JARs locally — Gradle resolves from Maven Central."""
+        project = self._make_multi_module_project(tmp_path)
+
+        strategy = GradleStrategy()
+        strategy.ensure_runtime(project, test_module="streams")
+
+        libs_dir = project / "streams" / "libs"
+        assert not libs_dir.exists()
