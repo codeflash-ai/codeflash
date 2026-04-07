@@ -532,14 +532,14 @@ class GradleStrategy(BuildToolStrategy):
             logger.error("Gradle not found — cannot pre-install multi-module dependencies")
             return False
 
-        cmd = [gradle, f":{test_module}:classes", "-x", "test", "--build-cache", "--no-daemon"]
+        cmd = [gradle, f":{test_module}:testClasses", "-x", "test", "--build-cache", "--no-daemon"]
         cmd.extend(["--init-script", _get_skip_validation_init_script()])
 
         logger.info("Pre-installing multi-module dependencies: %s (module: %s)", build_root, test_module)
         logger.debug("Running: %s", " ".join(cmd))
 
         try:
-            result = _run_cmd_kill_pg_on_timeout(cmd, cwd=build_root, env=env, timeout=300)
+            result = _run_cmd_kill_pg_on_timeout(cmd, cwd=build_root, env=env, timeout=900)
             if result.returncode != 0:
                 logger.error(
                     "Failed to pre-install multi-module deps (exit %d).\nstdout: %s\nstderr: %s",
