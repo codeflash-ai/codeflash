@@ -877,7 +877,7 @@ class GradleStrategy(BuildToolStrategy):
             module_path = build_root
         exec_path = module_path / "build" / "jacoco" / "test.exec"
         exec_path.parent.mkdir(parents=True, exist_ok=True)
-        xml_path = exec_path.with_suffix(".xml")
+        xml_path: Path | None = exec_path.with_suffix(".xml")
 
         # Inject JaCoCo agent via JAVA_TOOL_OPTIONS — collects coverage during test execution
         # without requiring any Gradle plugin or jacocoTestReport task.
