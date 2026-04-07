@@ -108,7 +108,6 @@ gradle.projectsEvaluated {
 """
 
 
-
 def find_gradle_build_file(project_root: Path) -> Path | None:
     kts = project_root / "build.gradle.kts"
     if kts.exists():
@@ -893,8 +892,13 @@ class GradleStrategy(BuildToolStrategy):
             xml_path = None
 
         result = self.run_tests_via_build_tool(
-            build_root, test_paths, run_env, timeout=timeout, mode="behavior",
-            enable_coverage=True, test_module=test_module,
+            build_root,
+            test_paths,
+            run_env,
+            timeout=timeout,
+            mode="behavior",
+            enable_coverage=True,
+            test_module=test_module,
         )
 
         # Convert .exec → .xml using JaCoCo CLI (fast, ~2s even on large projects)
@@ -903,10 +907,7 @@ class GradleStrategy(BuildToolStrategy):
                 module_path / "build" / "classes" / "java" / "main",
                 module_path / "build" / "classes" / "java" / "test",
             ]
-            sources_dirs = [
-                module_path / "src" / "main" / "java",
-                module_path / "src" / "test" / "java",
-            ]
+            sources_dirs = [module_path / "src" / "main" / "java", module_path / "src" / "test" / "java"]
             convert_jacoco_exec_to_xml(exec_path, classes_dirs, sources_dirs, xml_path)
         elif xml_path:
             logger.warning("JaCoCo .exec not found at %s — agent may not have run", exec_path)
@@ -988,10 +989,7 @@ def get_jacoco_cli_jar(codeflash_home: Path | None = None) -> Path:
 
 
 def convert_jacoco_exec_to_xml(
-    exec_path: Path,
-    classes_dirs: list[Path],
-    sources_dirs: list[Path],
-    xml_path: Path,
+    exec_path: Path, classes_dirs: list[Path], sources_dirs: list[Path], xml_path: Path
 ) -> bool:
     if not exec_path.exists():
         logger.error("JaCoCo .exec file not found: %s", exec_path)
