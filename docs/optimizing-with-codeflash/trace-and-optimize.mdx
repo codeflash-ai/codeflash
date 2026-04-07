@@ -60,14 +60,13 @@ codeflash optimize --language javascript script.js
 To trace and optimize a running Java program, replace your `java` command with `codeflash optimize java`:
 
 ```bash
+cd /path/to/your/java/project
+
 # JAR application
-codeflash optimize java -jar target/my-app.jar --app-args
+codeflash optimize java -jar target/my-app.jar
 
 # Class with classpath
 codeflash optimize java -cp target/classes com.example.Main
-
-# Maven exec
-codeflash optimize mvn exec:java -Dexec.mainClass="com.example.Main"
 ```
 
 For long-running programs (servers, benchmarks), use `--timeout` to limit each tracing stage:
@@ -229,7 +228,7 @@ The Java tracer uses a **two-stage approach**: JFR (Java Flight Recorder) for ac
 
    ```bash
    # JAR application
-   codeflash optimize java -jar target/my-app.jar --app-args
+   codeflash optimize java -jar target/my-app.jar
 
    # Class with classpath
    codeflash optimize java -cp target/classes com.example.Main
@@ -237,7 +236,28 @@ The Java tracer uses a **two-stage approach**: JFR (Java Flight Recorder) for ac
 
    Codeflash will run your program twice (once for profiling, once for argument capture), generate JUnit replay tests, then optimize the most impactful functions.
 
-2. **Long-running programs**
+2. **With Maven / Gradle test suites**
+
+   ```bash
+   # Maven
+   codeflash optimize mvn test
+
+   # Gradle
+   codeflash optimize ./gradlew :module:cleanTest :module:test
+   ```
+
+3. **Multi-module projects**
+
+   For multi-module builds, point Codeflash at the correct source and test roots:
+
+   ```bash
+   codeflash \
+     --module-root src/main/java \
+     --tests-root src/test/java \
+     optimize ./gradlew :my-module:cleanTest :my-module:test
+   ```
+
+4. **Long-running programs**
 
    For servers, benchmarks, or programs that don't terminate on their own, use `--timeout` to limit each tracing stage:
 
@@ -247,28 +267,23 @@ The Java tracer uses a **two-stage approach**: JFR (Java Flight Recorder) for ac
 
    Each stage runs for at most 30 seconds, then the program is terminated and captured data is processed.
 
-3. **Trace only (no optimization)**
+5. **Trace only (no optimization)**
 
    ```bash
-   codeflash optimize --trace-only java -jar target/my-app.jar
+   codeflash optimize --trace-only java -cp target/classes com.example.Main
    ```
 
    This generates replay tests in `src/test/java/codeflash/replay/` without running the optimizer.
 
-   More Options:
+   Options:
 
-   - `--timeout`: Maximum time (seconds) for each tracing stage.
-   - `--max-function-count`: Maximum captures per method (default: 100).
+   | Option | Description | Default |
+   |--------|-------------|---------|
+   | `--timeout` | Maximum time (seconds) for each tracing stage | Indefinite |
+   | `--max-function-count` | Maximum captures per method | 100 |
+   | `--trace-only` | Generate replay tests without running the optimizer | Off |
+   | `--no-pr` | Skip PR creation and keep changes local | Off |
 
-<Info>
-**How the Java tracer works:**
-
-- **Stage 1 (JFR)**: Runs your program with Java Flight Recorder enabled. JFR is built into the JVM (Java 11+), has ~1% overhead, and doesn't interfere with JIT compilation. This produces accurate method-level CPU profiling data.
-
-- **Stage 2 (Agent)**: Runs your program with a bytecode instrumentation agent injected via `JAVA_TOOL_OPTIONS`. The agent intercepts method entry points, serializes arguments using Kryo, and writes them to an SQLite database. A 500ms timeout per serialization prevents hangs on complex object graphs.
-
-- **Replay Tests**: Generated JUnit 5 test classes that deserialize captured arguments and invoke the original methods via reflection. These tests exercise your code with real-world inputs.
-</Info>
 
 </Tab>
 </Tabs>
