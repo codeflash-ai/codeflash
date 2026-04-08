@@ -1929,3 +1929,240 @@ public final class LuaMap {
 }
 """
         assert new_code == expected_code
+
+
+class TestUnusedAdditionsRejection:
+    """Tests that optimizations adding unused fields/helpers with unchanged target method are rejected."""
+
+    def test_unchanged_method_with_unused_field_rejected(self, tmp_path: Path, java_support: JavaSupport):
+        """An optimization that adds a field but doesn't change the method should be rejected."""
+        java_file = (tmp_path / "SystemUtils.java").resolve()
+        original_code = """public class SystemUtils {
+    public static String getJavaIoTmpdir() {
+        return System.getProperty("java.io.tmpdir");
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # AI adds NULL_SUPPLIER but doesn't change getJavaIoTmpdir
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class SystemUtils {{
+    private static final String CACHED_TMPDIR = System.getProperty("java.io.tmpdir");
+
+    public static String getJavaIoTmpdir() {{
+        return System.getProperty("java.io.tmpdir");
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+
+        function_to_optimize = FunctionToOptimize(
+            function_name="getJavaIoTmpdir",
+            file_path=java_file,
+            starting_line=2,
+            ending_line=4,
+            parents=[FunctionParent(name="SystemUtils", type="ClassDef")],
+            qualified_name="SystemUtils.getJavaIoTmpdir",
+            is_method=True,
+        )
+
+        result = replace_function_definitions_for_language(
+            function_names=["getJavaIoTmpdir"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            lang_support=java_support,
+            function_to_optimize=function_to_optimize,
+        )
+
+        # Should reject: method unchanged, field unreferenced
+        assert result is False
+        assert java_file.read_text(encoding="utf-8") == original_code
+
+    def test_unchanged_method_with_unused_helper_rejected(self, tmp_path: Path, java_support: JavaSupport):
+        """An optimization that adds a helper method but doesn't change the target should be rejected."""
+        java_file = (tmp_path / "Calculator.java").resolve()
+        original_code = """public class Calculator {
+    public int add(int a, int b) {
+        return a + b;
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # AI adds a helper method but doesn't change add()
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class Calculator {{
+    private static int fastAdd(int a, int b) {{
+        return Math.addExact(a, b);
+    }}
+
+    public int add(int a, int b) {{
+        return a + b;
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+
+        function_to_optimize = FunctionToOptimize(
+            function_name="add",
+            file_path=java_file,
+            starting_line=2,
+            ending_line=4,
+            parents=[FunctionParent(name="Calculator", type="ClassDef")],
+            qualified_name="Calculator.add",
+            is_method=True,
+        )
+
+        result = replace_function_definitions_for_language(
+            function_names=["add"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            lang_support=java_support,
+            function_to_optimize=function_to_optimize,
+        )
+
+        # Should reject: method unchanged, helper unreferenced
+        assert result is False
+        assert java_file.read_text(encoding="utf-8") == original_code
+
+    def test_changed_method_with_used_field_accepted(self, tmp_path: Path, java_support: JavaSupport):
+        """An optimization that adds a field AND uses it in the changed method should be accepted."""
+        java_file = (tmp_path / "SystemUtils.java").resolve()
+        original_code = """public class SystemUtils {
+    public static String getJavaIoTmpdir() {
+        return System.getProperty("java.io.tmpdir");
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # AI adds CACHED_TMPDIR and actually uses it in the method
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class SystemUtils {{
+    private static final String CACHED_TMPDIR = System.getProperty("java.io.tmpdir");
+
+    public static String getJavaIoTmpdir() {{
+        return CACHED_TMPDIR;
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+
+        function_to_optimize = FunctionToOptimize(
+            function_name="getJavaIoTmpdir",
+            file_path=java_file,
+            starting_line=2,
+            ending_line=4,
+            parents=[FunctionParent(name="SystemUtils", type="ClassDef")],
+            qualified_name="SystemUtils.getJavaIoTmpdir",
+            is_method=True,
+        )
+
+        result = replace_function_definitions_for_language(
+            function_names=["getJavaIoTmpdir"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            lang_support=java_support,
+            function_to_optimize=function_to_optimize,
+        )
+
+        # Should accept: method changed to use CACHED_TMPDIR
+        assert result is True
+        new_code = java_file.read_text(encoding="utf-8")
+        assert "CACHED_TMPDIR" in new_code
+        assert "private static final String CACHED_TMPDIR" in new_code
+
+    def test_changed_method_without_additions_accepted(self, tmp_path: Path, java_support: JavaSupport):
+        """A normal optimization that just changes the method body should be accepted."""
+        java_file = (tmp_path / "Calculator.java").resolve()
+        original_code = """public class Calculator {
+    public int add(int a, int b) {
+        return a + b;
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class Calculator {{
+    public int add(int a, int b) {{
+        return Math.addExact(a, b);
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        result = replace_function_definitions_for_language(
+            function_names=["add"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            lang_support=java_support,
+        )
+
+        # Should accept: method was changed
+        assert result is True
+
+    def test_unchanged_method_with_used_helper_accepted(self, tmp_path: Path, java_support: JavaSupport):
+        """Method unchanged but references the new helper — should be accepted (helper IS used)."""
+        java_file = (tmp_path / "Calculator.java").resolve()
+        original_code = """public class Calculator {
+    public int add(int a, int b) {
+        return a + b;
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # AI adds helper AND rewrites method to use it
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class Calculator {{
+    private static int fastAdd(int a, int b) {{
+        return Math.addExact(a, b);
+    }}
+
+    public int add(int a, int b) {{
+        return fastAdd(a, b);
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+
+        function_to_optimize = FunctionToOptimize(
+            function_name="add",
+            file_path=java_file,
+            starting_line=2,
+            ending_line=4,
+            parents=[FunctionParent(name="Calculator", type="ClassDef")],
+            qualified_name="Calculator.add",
+            is_method=True,
+        )
+
+        result = replace_function_definitions_for_language(
+            function_names=["add"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            lang_support=java_support,
+            function_to_optimize=function_to_optimize,
+        )
+
+        # Should accept: method changed to call fastAdd
+        assert result is True
