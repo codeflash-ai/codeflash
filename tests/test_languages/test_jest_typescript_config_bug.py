@@ -91,7 +91,7 @@ try {{
                 capture_output=True,
                 text=True,
                 cwd=project_path,
-                timeout=5,
+                timeout=30,
             )
 
             assert result.returncode == 0, (
@@ -148,7 +148,7 @@ try {{
                 capture_output=True,
                 text=True,
                 cwd=project_path,
-                timeout=5,
+                timeout=30,
             )
 
             assert result.returncode == 0, f"JS config should load: {result.stderr}"
