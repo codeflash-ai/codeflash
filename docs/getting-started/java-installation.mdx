@@ -15,7 +15,9 @@ keywords:
   ]
 ---
 
-Codeflash supports Java projects using Maven or Gradle build systems. It uses a two-stage tracing approach to capture method arguments and profiling data from running Java programs, then optimizes the hottest functions.
+Codeflash supports optimizing Java projects using Maven or Gradle build systems. It works in two main ways:
+1. Codeflash can optimize new java code written in a Pull Request through Github Actions.
+2. Codeflash can optimize real workloads end to end. It uses a two-stage tracing approach to capture method arguments and profiling data from running Java program, then optimizes the hottest functions with that data.
 
 ### Prerequisites
 
@@ -32,16 +34,16 @@ Good to have (optional):
 <Steps>
 <Step title="Install Codeflash CLI">
 
-Codeflash CLI is a Python tool. Install it with pip:
+Codeflash uses Python to run its CLI. You can use uv as a package manager and installer for Python programs.
+To install uv, run the following or [see these instructions](https://docs.astral.sh/uv/getting-started/installation/)
+
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
+Then install Codeflash as a uv tool.
 
 ```bash
-pip install codeflash
-```
-
-Or with uv:
-
-```bash
-uv pip install codeflash
+uv tool install codeflash
 ```
 
 </Step>
@@ -56,64 +58,34 @@ codeflash init
 This will:
 - Detect your build tool (Maven/Gradle)
 - Find your source and test directories
-- Create a `codeflash.toml` configuration file
-
-</Step>
-<Step title="Verify setup">
-
-Check that the configuration looks correct:
-
-```bash
-cat codeflash.toml
-```
-
-You should see something like:
-
-```toml
-[tool.codeflash]
-module-root = "src/main/java"
-tests-root = "src/test/java"
-language = "java"
-```
+- Write Codeflash configuration to your `pom.xml` properties (Maven) or `gradle.properties` (Gradle)
 
 </Step>
 <Step title="Run your first optimization">
 
-Trace and optimize a running Java program:
+Optimize a specific function:
 
 ```bash
-codeflash optimize java -jar target/my-app.jar
+codeflash --file src/main/java/com/example/Utils.java --function myMethod
 ```
 
-Or with Maven:
+Or optimize all functions in your project:
 
 ```bash
-codeflash optimize mvn exec:java -Dexec.mainClass="com.example.Main"
+codeflash --all
 ```
 
 Codeflash will:
-1. Profile your program using JFR (Java Flight Recorder)
-2. Capture method arguments using a bytecode instrumentation agent
-3. Generate JUnit replay tests from the captured data
-4. Rank functions by performance impact
-5. Optimize the most impactful functions
+1. Discover optimizable functions in your source code
+2. Generate tests and optimization candidates using AI
+3. Verify correctness by running tests (JUnit 5, JUnit 4, or TestNG)
+4. Benchmark performance improvements
+5. Create a pull request with the optimization (if the GitHub App is installed)
+
+For advanced workflow tracing (profiling a running Java program), see [Trace & Optimize](/optimizing-with-codeflash/trace-and-optimize).
 
 </Step>
 </Steps>
-
-## How it works
-
-Codeflash uses a **two-stage tracing** approach for Java:
-
-1. **Stage 1 — JFR Profiling**: Runs your program with Java Flight Recorder enabled to collect accurate method-level CPU profiling data. JFR has ~1% overhead and doesn't affect JIT compilation.
-
-2. **Stage 2 — Argument Capture**: Runs your program again with a bytecode instrumentation agent that captures method arguments using Kryo serialization. Arguments are stored in an SQLite database.
-
-The traced data is used to generate **JUnit replay tests** that exercise your functions with real-world inputs. Codeflash uses these tests alongside any existing unit tests to verify correctness and benchmark optimization candidates.
-
-<Info>
-Your program runs **twice** — once for profiling, once for argument capture. This separation ensures profiling data isn't distorted by serialization overhead.
-</Info>
 
 ## Supported build tools
 
