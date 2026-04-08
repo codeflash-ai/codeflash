@@ -2,11 +2,11 @@
 title: "Codeflash is an AI performance optimizer for your code"
 icon: "rocket"
 sidebarTitle: "Overview"
-keywords: ["python", "javascript", "typescript", "performance", "optimization", "AI", "code analysis", "benchmarking"]
+keywords: ["python", "javascript", "typescript", "java", "performance", "optimization", "AI", "code analysis", "benchmarking"]
 ---
 
 Codeflash speeds up your code by figuring out the best way to rewrite it while verifying that the behavior is unchanged, and verifying real speed
-gains through performance benchmarking. It supports **Python**, **JavaScript**, and **TypeScript**.
+gains through performance benchmarking. It supports **Python**, **JavaScript**, **TypeScript**, and **Java**.
 
 The optimizations Codeflash finds are generally better algorithms, opportunities to remove wasteful compute, better logic, utilizing caching and utilization of more efficient library methods. Codeflash
 does not modify the system architecture of your code, but it tries to find the most efficient implementation of your current architecture.
@@ -15,18 +15,21 @@ does not modify the system architecture of your code, but it tries to find the m
 
 Pick your language to install and configure Codeflash:
 
-<CardGroup cols={2}>
+<CardGroup cols={3}>
   <Card title="Python" icon="python" href="/getting-started/local-installation">
     Install via pip, uv, or poetry. Configure in `pyproject.toml`.
   </Card>
   <Card title="JavaScript / TypeScript" icon="js" href="/getting-started/javascript-installation">
     Install via npm, yarn, pnpm, or bun. Configure in `package.json`. Supports Jest, Vitest, and Mocha.
   </Card>
+  <Card title="Java" icon="java" href="/getting-started/java-installation">
+    Install via uv. Supports Maven and Gradle. JUnit 5, JUnit 4, and TestNG.
+  </Card>
 </CardGroup>
 
 ### How to use Codeflash
 
-These commands work for both Python and JS/TS projects:
+These commands work for Python, JS/TS, and Java projects:
 
 <CardGroup cols={2}>
   <Card title="Optimize a Function" icon="bullseye" href="/optimizing-with-codeflash/one-function">
@@ -56,12 +59,15 @@ These commands work for both Python and JS/TS projects:
 
 ### Configuration Reference
 
-<CardGroup cols={2}>
+<CardGroup cols={3}>
   <Card title="Python Config" icon="python" href="/configuration/python">
     `pyproject.toml` reference
   </Card>
   <Card title="JS / TS Config" icon="js" href="/configuration/javascript">
     `package.json` reference — includes monorepo, scattered tests, manual setup
+  </Card>
+  <Card title="Java Config" icon="java" href="/configuration/java">
+    `pom.xml` / `gradle.properties` reference
   </Card>
 </CardGroup>
 
