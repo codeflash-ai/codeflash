@@ -149,7 +149,7 @@ def mirror_path(path: Path, src_root: Path, dest_root: Path) -> Path:
 def check_running_in_git_repo(module_root: str) -> bool:
     try:
         _ = git.Repo(module_root, search_parent_directories=True).git_dir
-    except git.InvalidGitRepositoryError:
+    except (git.InvalidGitRepositoryError, git.NoSuchPathError):
         return False
     else:
         return True
