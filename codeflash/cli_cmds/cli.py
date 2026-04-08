@@ -523,5 +523,12 @@ def _build_parser() -> ArgumentParser:
         action="store_true",
         help="Subagent mode: skip all interactive prompts with sensible defaults. Designed for AI agent integrations.",
     )
+    parser.add_argument(
+        "--since-commit",
+        type=str,
+        default=None,
+        help="Optimize functions changed since this commit hash (diff from this commit to HEAD). "
+        "Useful when multiple commits were made in a session.",
+    )
 
     return parser
