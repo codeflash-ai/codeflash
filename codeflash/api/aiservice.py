@@ -238,7 +238,6 @@ class AiServiceClient:
         language_version: str | None = None,
         rerun_trace_id: str | None = None,
     ) -> list[OptimizedCandidate]:
-        return []
         """Optimize code for performance using line profiler results.
 
         Parameters
@@ -326,7 +325,6 @@ class AiServiceClient:
     def optimize_code_refinement(
         self, request: list[AIServiceRefinerRequest], rerun_trace_id: str | None = None
     ) -> list[OptimizedCandidate]:
-        return []
         """Refine optimization candidates for improved performance.
 
         Supports Python, JavaScript, and TypeScript code refinement with optional
