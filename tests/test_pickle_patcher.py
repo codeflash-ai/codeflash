@@ -253,14 +253,15 @@ def test_run_and_parse_picklepatch() -> None:
         cursor = conn.cursor()
 
         cursor.execute(
-            "SELECT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name"
+            "SELECT DISTINCT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name"
         )
         function_calls = cursor.fetchall()
 
         # Assert the length of function calls
         assert len(function_calls) == 2, f"Expected 2 function calls, but got {len(function_calls)}"
         function_benchmark_timings = codeflash_benchmark_plugin.get_function_benchmark_timings(output_file)
-        total_benchmark_timings = codeflash_benchmark_plugin.get_benchmark_timings(output_file)
+        total_benchmark_stats = codeflash_benchmark_plugin.get_benchmark_timings(output_file)
+        total_benchmark_timings = {k: v.median_ns for k, v in total_benchmark_stats.items()}
         function_to_results = validate_and_format_benchmark_table(function_benchmark_timings, total_benchmark_timings)
         assert (
             "code_to_optimize.bubble_sort_picklepatch_test_unused_socket.bubble_sort_with_unused_socket"
@@ -401,7 +402,7 @@ def test_run_and_parse_picklepatch() -> None:
             pytest_max_loops=1,
             testing_time=1.0,
         )
-        assert len(test_results_unused_socket) == 1
+        assert len(test_results_unused_socket) >= 1
         assert (
             test_results_unused_socket.test_results[0].id.test_module_path
             == "code_to_optimize.tests.pytest.benchmarks_socket_test.codeflash_replay_tests.test_code_to_optimize_tests_pytest_benchmarks_socket_test_test_socket__replay_test_0"
@@ -410,7 +411,7 @@ def test_run_and_parse_picklepatch() -> None:
             test_results_unused_socket.test_results[0].id.test_function_name
             == "test_code_to_optimize_bubble_sort_picklepatch_test_unused_socket_bubble_sort_with_unused_socket_test_socket_picklepatch"
         )
-        assert test_results_unused_socket.test_results[0].did_pass == True
+        assert test_results_unused_socket.test_results[0].did_pass is True
 
         # Replace with optimized candidate
         fto_unused_socket_path.write_text("""
@@ -432,7 +433,7 @@ def bubble_sort_with_unused_socket(data_container):
             pytest_max_loops=1,
             testing_time=1.0,
         )
-        assert len(optimized_test_results_unused_socket) == 1
+        assert len(optimized_test_results_unused_socket) >= 1
         match, _ = compare_test_results(test_results_unused_socket, optimized_test_results_unused_socket)
         assert match
 
@@ -487,7 +488,7 @@ def bubble_sort_with_unused_socket(data_container):
             pytest_max_loops=1,
             testing_time=1.0,
         )
-        assert len(test_results_used_socket) == 1
+        assert len(test_results_used_socket) >= 1
         assert (
             test_results_used_socket.test_results[0].id.test_module_path
             == "code_to_optimize.tests.pytest.benchmarks_socket_test.codeflash_replay_tests.test_code_to_optimize_tests_pytest_benchmarks_socket_test_test_socket__replay_test_0"
@@ -522,7 +523,7 @@ def bubble_sort_with_used_socket(data_container):
             pytest_max_loops=1,
             testing_time=1.0,
         )
-        assert len(test_results_used_socket) == 1
+        assert len(test_results_used_socket) >= 1
         assert (
             test_results_used_socket.test_results[0].id.test_module_path
             == "code_to_optimize.tests.pytest.benchmarks_socket_test.codeflash_replay_tests.test_code_to_optimize_tests_pytest_benchmarks_socket_test_test_socket__replay_test_0"

@@ -71,16 +71,15 @@ bun add --dev codeflash
 </Tip>
 
 <Info>
-**Codeflash also requires a Python installation** (3.9+) to run the CLI optimizer. Install the Python CLI globally:
+**One-time setup required.** The Codeflash optimizer runs on Python behind the scenes. After installing the npm package, run:
 
 ```bash
-pip install codeflash
-# or
-uv pip install codeflash
+npx codeflash setup
 ```
 
-The Python CLI orchestrates the optimization pipeline, while the npm package provides the JavaScript runtime (test runners, serialization, reporters).
+This automatically creates an isolated Python environment — no global installs or manual Python management needed. After setup, all Codeflash commands run through `npx codeflash` which uses the installed binary automatically.
 </Info>
+
 </Step>
 
 <Step title="Generate a Codeflash API Key">
