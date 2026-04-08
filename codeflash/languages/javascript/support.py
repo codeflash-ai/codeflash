@@ -2268,7 +2268,10 @@ class JavaScriptSupport:
             source_without_ext = source_file_abs.with_suffix("")
 
             # Use os.path.relpath to compute relative path from tests_root to source file
-            rel_path = os.path.relpath(str(source_without_ext), str(tests_root_abs))
+            # Replace backslashes with forward slashes — JavaScript import/require paths
+            # must use forward slashes. Backslashes are escape chars in JS strings
+            # (e.g. \t → tab, \n → newline) and would break imports on Windows.
+            rel_path = os.path.relpath(str(source_without_ext), str(tests_root_abs)).replace("\\", "/")
 
             # For ESM, add .js extension (TypeScript convention)
             # TypeScript requires imports to reference the OUTPUT file extension (.js),
