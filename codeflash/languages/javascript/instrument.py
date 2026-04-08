@@ -1287,13 +1287,13 @@ def fix_imports_inside_test_blocks(test_code: str) -> str:
 
 
 def fix_jest_mock_paths(test_code: str, test_file_path: Path, source_file_path: Path, tests_root: Path) -> str:
-    """Fix relative paths in jest.mock() calls to be correct from the test file's location.
+    """Fix relative paths in jest.mock() and vi.mock() calls to be correct from the test file's location.
 
-    The AI sometimes generates jest.mock() calls with paths relative to the source file
+    The AI sometimes generates mock calls with paths relative to the source file
     instead of the test file. For example:
     - Source at `src/queue/queue.ts` imports `../environment` (-> src/environment)
-    - Test at `tests/test.test.ts` generates `jest.mock('../environment')` (-> ./environment, wrong!)
-    - Should generate `jest.mock('../src/environment')`
+    - Test at `tests/test.test.ts` generates `jest.mock('../environment')` or `vi.mock('../environment')` (-> ./environment, wrong!)
+    - Should generate `jest.mock('../src/environment')` or `vi.mock('../src/environment')`
 
     This function detects relative mock paths and adjusts them based on the test file's
     location relative to the source file's directory.
@@ -1318,8 +1318,8 @@ def fix_jest_mock_paths(test_code: str, test_file_path: Path, source_file_path: 
     test_dir = test_file_path.resolve().parent
     project_root = tests_root.resolve().parent if tests_root.name == "tests" else tests_root.resolve()
 
-    # Pattern to match jest.mock() or jest.doMock() with relative paths
-    mock_pattern = re.compile(r"(jest\.(?:mock|doMock)\s*\(\s*['\"])(\.\./[^'\"]+|\.\/[^'\"]+)(['\"])")
+    # Pattern to match jest.mock(), jest.doMock(), or vi.mock() with relative paths
+    mock_pattern = re.compile(r"((?:jest|vi)\.(?:mock|doMock)\s*\(\s*['\"])(\.\./[^'\"]+|\.\/[^'\"]+)(['\"])")
 
     def fix_mock_path(match: re.Match[str]) -> str:
         original = match.group(0)
@@ -1359,7 +1359,7 @@ def fix_jest_mock_paths(test_code: str, test_file_path: Path, source_file_path: 
                 if not new_rel_path.startswith("../") and not new_rel_path.startswith("./"):
                     new_rel_path = f"./{new_rel_path}"
 
-                logger.debug(f"Fixed jest.mock path: {rel_path} -> {new_rel_path}")
+                logger.debug(f"Fixed mock path: {rel_path} -> {new_rel_path}")
                 return f"{prefix}{new_rel_path}{suffix}"
 
         except (ValueError, OSError):

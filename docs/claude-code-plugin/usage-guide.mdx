@@ -29,7 +29,7 @@ Flags can be combined: `/optimize src/utils.py my_function`
 ### What happens behind the scenes
 
 1. The skill (defined in `skills/optimize/SKILL.md`) forks context and spawns the **optimizer agent**
-2. The agent locates your project config (`pyproject.toml` or `package.json` or `codeflash.toml`)
+2. The agent locates your project config (`pyproject.toml`, `package.json`, or `pom.xml`/`gradle.properties`)
 3. It verifies the codeflash CLI is installed and the project is configured
 4. It runs `codeflash --subagent` as a **background task** with a 10-minute timeout
 5. You're notified when optimization completes with results
