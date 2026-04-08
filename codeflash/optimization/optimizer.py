@@ -486,7 +486,7 @@ class Optimizer:
     def run(self) -> None:
         from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
 
-        ph("cli-optimize-run-start")
+        ph("cli-optimize-run-start", {"subagent": is_subagent_mode()})
         logger.info("Running optimizer.")
         console.rule()
         if not env_utils.ensure_codeflash_api_key():
