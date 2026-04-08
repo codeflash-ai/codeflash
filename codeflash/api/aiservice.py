@@ -925,6 +925,34 @@ class AiServiceClient:
             logger.debug("[aiservice.py:generate_workflow_steps] Could not parse error response")
         return None
 
+    def prescreen_functions(
+        self, functions: list[dict[str, str]], trace_id: str | None = None
+    ) -> dict[str, dict[str, Any]] | None:
+        """Pre-screen functions for optimization potential using LLM assessment.
+
+        Args:
+            functions: List of dicts with keys: qualified_name, source_code, language
+            trace_id: Optional trace ID for logging
+
+        Returns:
+            Dict mapping qualified_name to {score: int, optimizable: bool, reason: str},
+            or None if the call fails.
+
+        """
+        payload: dict[str, Any] = {"functions": functions, "trace_id": trace_id}
+        try:
+            response = self.make_ai_service_request("/prescreen", payload=payload, timeout=30)
+        except requests.exceptions.RequestException as e:
+            logger.debug(f"Prescreening request failed: {e}")
+            return None
+
+        if response.status_code == 200:
+            logger.info(f"loading|Pre-screening {len(functions)} function(s) for optimization potential")
+            result: dict[str, dict[str, Any]] = response.json().get("functions", {})
+            return result
+        logger.debug(f"Prescreening returned status {response.status_code}")
+        return None
+
 
 class LocalAiServiceClient(AiServiceClient):
     """Client for interacting with the local AI service."""
