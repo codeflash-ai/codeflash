@@ -554,10 +554,12 @@ def get_all_replay_test_functions(
 
 
 def _get_java_replay_test_functions(
-    replay_test: list[Path], test_cfg: TestConfig, project_root_path: Path
+    replay_test: list[Path], test_cfg: TestConfig, project_root_path: Path | str
 ) -> tuple[dict[Path, list[FunctionToOptimize]], Path]:
     """Parse Java replay test files to extract functions and trace file path."""
     from codeflash.languages.java.replay_test import parse_replay_test_metadata
+
+    project_root_path = Path(project_root_path)
 
     trace_file_path: Path | None = None
     functions: dict[Path, list[FunctionToOptimize]] = defaultdict(list)
@@ -602,7 +604,7 @@ def _get_java_replay_test_functions(
         all_functions = lang_support.discover_functions(source_code, source_file)
 
         for func in all_functions:
-            if func.function_name in function_names:
+            if func.function_name in function_names or func.qualified_name in function_names:
                 functions[source_file].append(func)
 
     if trace_file_path is None:

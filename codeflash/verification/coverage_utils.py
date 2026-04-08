@@ -43,30 +43,33 @@ class JestCoverageUtils:
 
         """
         if not coverage_json_path or not coverage_json_path.exists():
-            logger.debug(f"Jest coverage file not found: {coverage_json_path}")
+            logger.debug(f"JavaScript coverage file not found: {coverage_json_path}")
             return CoverageData.create_empty(source_code_path, function_name, code_context)
 
         try:
             with coverage_json_path.open(encoding="utf-8") as f:
                 coverage_data = json.load(f)
         except (json.JSONDecodeError, OSError) as e:
-            logger.warning(f"Failed to parse Jest coverage file: {e}")
+            logger.warning(f"Failed to parse JavaScript coverage file: {e}")
             return CoverageData.create_empty(source_code_path, function_name, code_context)
 
         # Find the file entry in coverage data
-        # Jest uses absolute paths as keys
+        # Jest/Vitest always writes coverage keys with forward slashes (POSIX paths),
+        # so we normalize our paths to POSIX for comparison — critical on Windows
+        # where Path.resolve() and str(Path) produce backslash paths.
         file_coverage = None
-        source_path_str = str(source_code_path.resolve())
+        source_path_posix = source_code_path.resolve().as_posix()
+        source_relative_posix = source_code_path.as_posix()
 
         for file_path, file_data in coverage_data.items():
             # Match exact path or path ending with full relative path from src/
             # Avoid matching files with same name in different directories (e.g., db/utils.ts vs utils/utils.ts)
-            if file_path == source_path_str or file_path.endswith(str(source_code_path)):
+            if file_path == source_path_posix or file_path.endswith(source_relative_posix):
                 file_coverage = file_data
                 break
 
         if not file_coverage:
-            logger.debug(f"No coverage data found for {source_code_path} in Jest coverage")
+            logger.debug(f"No coverage data found for {source_code_path} in JavaScript coverage")
             return CoverageData.create_empty(source_code_path, function_name, code_context)
 
         # Extract line coverage from statement map and execution counts
@@ -94,7 +97,7 @@ class JestCoverageUtils:
             # If function not found in fnMap, use entire file
             fn_start_line = 1
             fn_end_line = 999999
-            logger.debug(f"Function {function_name} not found in Jest fnMap, using file coverage")
+            logger.debug(f"Function {function_name} not found in JavaScript fnMap, using file coverage")
 
         # Calculate executed and unexecuted lines within the function
         executed_lines = []

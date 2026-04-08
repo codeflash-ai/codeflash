@@ -513,3 +513,54 @@ def ensure_vitest_imports(code: str, test_framework: str) -> str:
 
     logger.debug("Added vitest imports: %s", used_globals)
     return "\n".join(lines)
+
+
+def add_js_extensions_to_relative_imports(code: str) -> str:
+    """Add .js extensions to relative imports in ESM code.
+
+    In ESM mode with TypeScript, Node.js requires explicit .js extensions
+    for relative imports, even though the source files are .ts files.
+
+    This function adds .js extensions to relative imports that don't already
+    have a file extension.
+
+    Args:
+        code: JavaScript/TypeScript code with import statements.
+
+    Returns:
+        Code with .js extensions added to relative imports.
+
+    Examples:
+        >>> add_js_extensions_to_relative_imports("import X from './module';")
+        "import X from './module.js';"
+
+        >>> add_js_extensions_to_relative_imports("import X from './module.js';")
+        "import X from './module.js';"
+
+        >>> add_js_extensions_to_relative_imports("import X from 'node:assert';")
+        "import X from 'node:assert';"
+
+    """
+    # Pattern to match ES module import statements with relative paths
+    # Matches: import ... from './path' or import ... from "../path"
+    # Groups: (import statement)(quote char)(relative path)(quote char)
+    import_pattern = re.compile(
+        r"(import\s+(?:(?:\{[^}]*\})|(?:\*\s+as\s+\w+)|(?:\w+))\s+from\s+)(['\"])(\.\.?[^'\"]+)(['\"])"
+    )
+
+    def add_extension(match):
+        """Add .js extension if the import path doesn't have one."""
+        prefix = match.group(1)  # "import ... from "
+        quote_open = match.group(2)  # ' or "
+        path = match.group(3)  # The relative path (e.g., "./module" or "../foo/bar")
+        quote_close = match.group(4)  # ' or "
+
+        # Check if path already has an extension
+        # Common extensions: .js, .ts, .jsx, .tsx, .mjs, .mts, .json
+        if re.search(r"\.(js|ts|jsx|tsx|mjs|mts|json)$", path):
+            return match.group(0)
+
+        # Add .js extension
+        return f"{prefix}{quote_open}{path}.js{quote_close}"
+
+    return import_pattern.sub(add_extension, code)

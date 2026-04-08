@@ -14,7 +14,7 @@ from pathlib import Path  # noqa: TC003 — used at runtime
 
 logger = logging.getLogger(__name__)
 
-CODEFLASH_RUNTIME_VERSION = "1.0.0"
+CODEFLASH_RUNTIME_VERSION = "1.0.1"
 CODEFLASH_RUNTIME_JAR_NAME = f"codeflash-runtime-{CODEFLASH_RUNTIME_VERSION}.jar"
 
 JACOCO_PLUGIN_VERSION = "0.8.13"

@@ -290,6 +290,18 @@ class TreeSitterAnalyzer:
                 if func_info.is_method and node.parent and node.parent.type == "object":
                     should_include = False
 
+                # Skip property getters/setters (e.g., get: function foo() {})
+                # These are defined inside Object.defineProperty or object literals
+                # and cannot be called directly - they're accessed via property names.
+                # Tests would fail trying to call obj.getterFuncName() instead of obj.propertyName
+                if node.type == "function_expression" and node.parent and node.parent.type == "pair":
+                    # Check if this is a getter or setter by looking at the property name
+                    property_name_node = node.parent.child_by_field_name("key")
+                    if property_name_node:
+                        property_name = self.get_node_text(property_name_node, source_bytes)
+                        if property_name in ("get", "set"):
+                            should_include = False
+
                 if should_include:
                     functions.append(func_info)
 

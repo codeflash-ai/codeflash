@@ -21,7 +21,7 @@ codeflash/
 ├── api/                    # AI service communication
 ├── code_utils/             # Code parsing, git utilities
 ├── models/                 # Pydantic models and types
-├── languages/              # Multi-language support (Python, JavaScript/TypeScript, Java planned)
+├── languages/              # Multi-language support (Python, JavaScript/TypeScript, Java)
 │   ├── base.py                    # LanguageSupport protocol and shared data types
 │   ├── registry.py                # Language registration and lookup by extension/enum
 │   ├── current.py                 # Current language singleton (set_current_language / current_language_support)
@@ -35,11 +35,29 @@ codeflash/
 │   │   ├── test_runner.py         # Test subprocess execution for Python
 │   │   ├── instrument_codeflash_capture.py  # Instrument __init__ with capture decorators
 │   │   └── parse_line_profile_test_output.py  # Parse line profiler output
-│   └── javascript/
-│       ├── support.py             # JavaScriptSupport (LanguageSupport implementation)
-│       ├── function_optimizer.py  # JavaScriptFunctionOptimizer subclass
-│       ├── optimizer.py           # JS project root finding & module preparation
-│       └── normalizer.py          # JS/TS code normalization for deduplication
+│   ├── javascript/
+│   │   ├── support.py             # JavaScriptSupport (LanguageSupport implementation)
+│   │   ├── function_optimizer.py  # JavaScriptFunctionOptimizer subclass
+│   │   ├── optimizer.py           # JS project root finding & module preparation
+│   │   └── normalizer.py          # JS/TS code normalization for deduplication
+│   └── java/
+│       ├── support.py             # JavaSupport (LanguageSupport implementation)
+│       ├── function_optimizer.py  # JavaFunctionOptimizer subclass
+│       ├── build_tool_strategy.py # Abstract BuildToolStrategy for Maven/Gradle
+│       ├── maven_strategy.py      # Maven build tool strategy
+│       ├── gradle_strategy.py     # Gradle build tool strategy
+│       ├── build_tools.py         # Build tool detection and project info
+│       ├── build_config_strategy.py # Config read/write for pom.xml / gradle.properties
+│       ├── test_runner.py         # Test execution via Maven/Gradle
+│       ├── instrumentation.py     # Behavior capture and benchmarking instrumentation
+│       ├── discovery.py           # Function discovery using tree-sitter
+│       ├── test_discovery.py      # Test discovery for JUnit/TestNG
+│       ├── context.py             # Code context extraction
+│       ├── comparator.py          # Test result comparison
+│       ├── config.py              # Java project detection and config
+│       ├── formatter.py           # Code formatting and normalization
+│       ├── line_profiler.py       # JVM bytecode agent-based line profiling
+│       └── tracer.py              # Two-stage JFR + argument capture tracer
 ├── setup/                  # Config schema, auto-detection, first-run experience
 ├── picklepatch/            # Serialization/deserialization utilities
 ├── tracing/                # Function call tracing
@@ -57,7 +75,7 @@ codeflash/
 |------|------------|
 | CLI arguments & commands | `cli_cmds/cli.py` (parsing), `main.py` (subcommand dispatch) |
 | Optimization orchestration | `optimization/optimizer.py` → `run()` |
-| Per-function optimization | `languages/function_optimizer.py` (base), `languages/python/function_optimizer.py`, `languages/javascript/function_optimizer.py` |
+| Per-function optimization | `languages/function_optimizer.py` (base), `languages/python/function_optimizer.py`, `languages/javascript/function_optimizer.py`, `languages/java/function_optimizer.py` |
 | Function discovery | `discovery/functions_to_optimize.py` |
 | Context extraction | `languages/<lang>/context/code_context_extractor.py` |
 | Test execution | `languages/<lang>/support.py` (`run_behavioral_tests`, etc.), `verification/pytest_plugin.py` |
@@ -67,7 +85,7 @@ codeflash/
 
 ## LanguageSupport Protocol Methods
 
-Core protocol in `languages/base.py`. Each language (`PythonSupport`, `JavaScriptSupport`) implements these.
+Core protocol in `languages/base.py`. Each language (`PythonSupport`, `JavaScriptSupport`, `JavaSupport`) implements these.
 
 | Category | Method/Property | Purpose |
 |----------|----------------|---------|
