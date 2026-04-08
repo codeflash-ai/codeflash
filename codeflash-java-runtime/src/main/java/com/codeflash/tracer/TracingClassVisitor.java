@@ -4,14 +4,20 @@ import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
+import java.util.Collections;
+import java.util.Map;
+
 public class TracingClassVisitor extends ClassVisitor {
 
     private final String internalClassName;
+    private final Map<String, Integer> methodLineNumbers;
     private String sourceFile;
 
-    public TracingClassVisitor(ClassVisitor classVisitor, String internalClassName) {
+    public TracingClassVisitor(ClassVisitor classVisitor, String internalClassName,
+                               Map<String, Integer> methodLineNumbers) {
         super(Opcodes.ASM9, classVisitor);
         this.internalClassName = internalClassName;
+        this.methodLineNumbers = methodLineNumbers != null ? methodLineNumbers : Collections.emptyMap();
     }
 
     @Override
@@ -37,7 +43,8 @@ public class TracingClassVisitor extends ClassVisitor {
             return mv;
         }
 
+        int lineNumber = methodLineNumbers.getOrDefault(name + descriptor, 0);
         return new TracingMethodAdapter(mv, access, name, descriptor,
-                internalClassName, 0, sourceFile != null ? sourceFile : "");
+                internalClassName, lineNumber, sourceFile != null ? sourceFile : "");
     }
 }

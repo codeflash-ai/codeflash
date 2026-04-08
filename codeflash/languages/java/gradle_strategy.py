@@ -417,22 +417,7 @@ class GradleStrategy(BuildToolStrategy):
         )
 
     def find_executable(self, build_root: Path) -> str | None:
-        # Walk up from build_root to find gradlew — for multi-module projects
-        # the wrapper lives at the repo root, which may be a parent of build_root.
-        current = build_root.resolve()
-        while True:
-            gradlew_path = current / "gradlew"
-            if gradlew_path.exists():
-                return str(gradlew_path)
-            gradlew_bat_path = current / "gradlew.bat"
-            if gradlew_bat_path.exists():
-                return str(gradlew_bat_path)
-            parent = current.parent
-            if parent == current:
-                break
-            current = parent
-        # Fall back to system Gradle
-        return shutil.which("gradle")
+        return self.find_wrapper_executable(build_root, ("gradlew", "gradlew.bat"), "gradle")
 
     def ensure_runtime(self, build_root: Path, test_module: str | None) -> bool:
         runtime_jar = self.find_runtime_jar()
@@ -447,7 +432,7 @@ class GradleStrategy(BuildToolStrategy):
 
         libs_dir = module_root / "libs"
         libs_dir.mkdir(parents=True, exist_ok=True)
-        dest_jar = libs_dir / "codeflash-runtime-1.0.0.jar"
+        dest_jar = libs_dir / "codeflash-runtime-1.0.1.jar"
 
         if not dest_jar.exists():
             logger.info("Copying codeflash-runtime JAR to %s", dest_jar)

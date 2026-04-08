@@ -951,7 +951,7 @@ class TestResults(BaseModel):  # noqa: PLW1641
         by_id: dict[InvocationId, list[int]] = {}
         for result in self.test_results:
             if result.did_pass:
-                if result.runtime:
+                if result.runtime is not None:
                     by_id.setdefault(result.id, []).append(result.runtime)
                 else:
                     msg = (

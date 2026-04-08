@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -20,7 +21,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_RUNTIME_JAR_NAME = "codeflash-runtime-1.0.0.jar"
+_RUNTIME_JAR_NAME = "codeflash-runtime-1.0.1.jar"
 _JAVA_RUNTIME_DIR = Path(__file__).parent.parent.parent.parent / "codeflash-java-runtime"
 
 
@@ -72,6 +73,18 @@ class BuildToolStrategy(ABC):
             return dev_jar_gradle
 
         return None
+
+    def find_wrapper_executable(
+        self, build_root: Path, wrapper_names: tuple[str, ...], system_command: str
+    ) -> str | None:
+        search = build_root.resolve()
+        while search != search.parent:
+            for name in wrapper_names:
+                candidate = search / name
+                if candidate.exists():
+                    return str(candidate)
+            search = search.parent
+        return shutil.which(system_command)
 
     @abstractmethod
     def find_executable(self, build_root: Path) -> str | None:
