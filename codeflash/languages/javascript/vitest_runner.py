@@ -681,6 +681,17 @@ def run_vitest_benchmarking_tests(
     vitest_env["CODEFLASH_PERF_TARGET_DURATION_MS"] = str(target_duration_ms)
     vitest_env["CODEFLASH_PERF_STABILITY_CHECK"] = "true" if stability_check else "false"
     vitest_env["CODEFLASH_LOOP_INDEX"] = "1"
+    # Warmup and calibration for accurate benchmarking
+    vitest_env["CODEFLASH_PERF_WARMUP_ITERATIONS"] = "3"
+    vitest_env["CODEFLASH_PERF_MIN_TIME_NS"] = "5000"  # 5us minimum time for calibration
+
+    # Expose GC for accurate benchmarking (allows capturePerf to force GC before timing)
+    existing_node_options = vitest_env.get("NODE_OPTIONS", "")
+    if "--expose-gc" not in existing_node_options:
+        existing_node_options = f"{existing_node_options} --expose-gc".strip()
+    if "--max-old-space-size" not in existing_node_options:
+        existing_node_options = f"{existing_node_options} --max-old-space-size=4096".strip()
+    vitest_env["NODE_OPTIONS"] = existing_node_options
 
     # Set test module for marker identification (use first test file as reference)
     if test_files:

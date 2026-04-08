@@ -1104,6 +1104,9 @@ def run_jest_benchmarking_tests(
     jest_env["CODEFLASH_PERF_TARGET_DURATION_MS"] = str(target_duration_ms)
     jest_env["CODEFLASH_PERF_STABILITY_CHECK"] = "true" if stability_check else "false"
     jest_env["CODEFLASH_LOOP_INDEX"] = "1"  # Initial value for compatibility
+    # Warmup and calibration for accurate benchmarking
+    jest_env["CODEFLASH_PERF_WARMUP_ITERATIONS"] = "3"
+    jest_env["CODEFLASH_PERF_MIN_TIME_NS"] = "5000"  # 5us minimum time for calibration
 
     # Enable console output for timing markers
     # Some projects mock console.log in test setup (e.g., based on LOG_LEVEL or DEBUG)
@@ -1119,10 +1122,13 @@ def run_jest_benchmarking_tests(
     # Configure ESM support if project uses ES Modules
     _configure_esm_environment(jest_env, effective_cwd)
 
-    # Increase Node.js heap size for large TypeScript projects
+    # Increase Node.js heap size and expose GC for accurate benchmarking
     existing_node_options = jest_env.get("NODE_OPTIONS", "")
     if "--max-old-space-size" not in existing_node_options:
-        jest_env["NODE_OPTIONS"] = f"{existing_node_options} --max-old-space-size=4096".strip()
+        existing_node_options = f"{existing_node_options} --max-old-space-size=4096".strip()
+    if "--expose-gc" not in existing_node_options:
+        existing_node_options = f"{existing_node_options} --expose-gc".strip()
+    jest_env["NODE_OPTIONS"] = existing_node_options
 
     # Subprocess timeout: target_duration + 120s headroom for Jest startup
     # and TS compilation.  capturePerf's time budget governs actual looping.
