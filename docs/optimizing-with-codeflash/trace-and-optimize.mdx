@@ -62,17 +62,17 @@ To trace and optimize a running Java program, replace your `java` command with `
 ```bash
 cd /path/to/your/java/project
 
-# JAR application
-codeflash optimize java -jar target/my-app.jar
-
-# Class with classpath
+# Class with classpath (recommended — works with any compiled project)
 codeflash optimize java -cp target/classes com.example.Main
+
+# Executable JAR (requires maven-jar-plugin or equivalent with Main-Class manifest)
+codeflash optimize java -jar target/my-app.jar
 ```
 
 For long-running programs (servers, benchmarks), use `--timeout` to limit each tracing stage:
 
 ```bash
-codeflash optimize --timeout 30 java -jar target/my-app.jar
+codeflash optimize --timeout 30 java -cp target/classes com.example.Main
 ```
 </Tab>
 </Tabs>
@@ -227,12 +227,14 @@ The Java tracer uses a **two-stage approach**: JFR (Java Flight Recorder) for ac
    Replace your `java` command with `codeflash optimize java`:
 
    ```bash
-   # JAR application
-   codeflash optimize java -jar target/my-app.jar
-
-   # Class with classpath
+   # Class with classpath (recommended — works with any compiled project)
    codeflash optimize java -cp target/classes com.example.Main
+
+   # Executable JAR (requires maven-jar-plugin or equivalent with Main-Class manifest)
+   codeflash optimize java -jar target/my-app.jar
    ```
+
+   The `-cp` approach works with any project after `mvn compile` or `gradle build`. The `-jar` approach requires your project to produce an executable JAR with a `Main-Class` entry in the manifest — this is not the default Maven behavior.
 
    Codeflash will run your program twice (once for profiling, once for argument capture), generate JUnit replay tests, then optimize the most impactful functions.
 
@@ -262,7 +264,7 @@ The Java tracer uses a **two-stage approach**: JFR (Java Flight Recorder) for ac
    For servers, benchmarks, or programs that don't terminate on their own, use `--timeout` to limit each tracing stage:
 
    ```bash
-   codeflash optimize --timeout 30 java -jar target/my-benchmark.jar
+   codeflash optimize --timeout 30 java -cp target/classes com.example.Main
    ```
 
    Each stage runs for at most 30 seconds, then the program is terminated and captured data is processed.
