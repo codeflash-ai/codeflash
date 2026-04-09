@@ -1,3 +1,4 @@
+# TEMPORARILY DISABLED — re-enable by removing open-pull-requests-limit: 0
 version: 2
 updates:
   # Python (root pyproject.toml)
@@ -5,18 +6,21 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 0
 
   # JavaScript (codeflash npm package)
   - package-ecosystem: "npm"
     directory: "/packages/codeflash"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 0
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 0
 
   # code_to_optimize/ directories are test fixtures — do NOT update them.
   # Dependabot PRs for these always fail (missing secrets) and waste CI.
