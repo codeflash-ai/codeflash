@@ -61,26 +61,39 @@ jobs:
             fi
           }
 
-          # Unit tests: code + test infra + java + packages + build config
+          # Unit tests: code + test infra + packages + build config
           check_paths unit_tests \
-            'codeflash/' 'codeflash-benchmark/' 'codeflash-java-runtime/' \
+            'codeflash/' 'codeflash-benchmark/' \
             'tests/' 'packages/' 'pyproject.toml' 'uv.lock'
 
           # Type checking: code + build config + mypy config
           check_paths type_check \
             'codeflash/' 'pyproject.toml' 'uv.lock' 'mypy_allowlist.txt'
 
-          # E2E tests: code + tests + build config
+          # E2E tests: Python pipeline + tests + build config (excludes java/ and javascript/)
           check_paths e2e \
-            'codeflash/' 'tests/' 'pyproject.toml' 'uv.lock'
+            'codeflash/*.py' \
+            'codeflash/api/' 'codeflash/benchmarking/' 'codeflash/cli_cmds/' \
+            'codeflash/code_utils/' 'codeflash/discovery/' 'codeflash/github/' \
+            'codeflash/languages/python/' 'codeflash/languages/*.py' \
+            'codeflash/lsp/' 'codeflash/models/' 'codeflash/optimization/' \
+            'codeflash/picklepatch/' 'codeflash/result/' 'codeflash/setup/' \
+            'codeflash/telemetry/' 'codeflash/tracing/' 'codeflash/verification/' \
+            'tests/' 'pyproject.toml' 'uv.lock'
 
-          # JS E2E tests: JS packages changed
+          # JS E2E tests: JS language support + shared pipeline + packages
           check_paths e2e_js \
-            'packages/'
+            'codeflash/languages/javascript/' 'codeflash/languages/base.py' \
+            'codeflash/languages/registry.py' 'codeflash/optimization/' \
+            'codeflash/verification/' 'packages/' \
+            'tests/scripts/end_to_end_test_js*'
 
-          # Java E2E tests: java runtime or java test fixtures changed
+          # Java E2E tests: Java language support + shared pipeline + runtime
           check_paths e2e_java \
-            'codeflash-java-runtime/' 'code_to_optimize/java/'
+            'codeflash/languages/java/' 'codeflash/languages/base.py' \
+            'codeflash/languages/registry.py' 'codeflash/optimization/' \
+            'codeflash/verification/' 'codeflash-java-runtime/' \
+            'code_to_optimize/java/' 'tests/scripts/end_to_end_test_java*'
         env:
           MERGE_BASE: ${{ steps.merge_base.outputs.sha }}
 
@@ -108,28 +121,14 @@ jobs:
             python-version: "3.14"
           - os: windows-latest
             python-version: "3.13"
-    continue-on-error: true
     runs-on: ${{ matrix.os }}
     env:
       PYTHONIOENCODING: utf-8
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up JDK 11
-        uses: actions/setup-java@v4
-        with:
-          java-version: '11'
-          distribution: 'temurin'
-          cache: maven
-
-      - name: Build codeflash-runtime JAR
-        run: |
-          cd codeflash-java-runtime
-          mvn clean package -q -DskipTests
-          mvn install -q -DskipTests
 
       - name: Install uv
         uses: astral-sh/setup-uv@v8.0.0
@@ -156,7 +155,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install uv
@@ -180,14 +179,32 @@ jobs:
       && (needs.determine-changes.outputs.e2e == 'true'
           || needs.determine-changes.outputs.e2e_js == 'true')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.head_ref }}
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v8.0.0
+
+      - name: Auto-fix formatting
+        run: |
+          uv run ruff check --fix . || true
+          uv run ruff format .
+
+      - name: Commit and push fixes
+        run: |
+          git diff --quiet && exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -u
+          git commit -m "style: auto-format with ruff"
+          git push
+
       - uses: j178/prek-action@v1
         with:
-          extra-args: '--from-ref origin/${{ github.base_ref }} --to-ref ${{ github.sha }}'
+          extra-args: '--from-ref origin/${{ github.base_ref }} --to-ref HEAD'
 
   # ---------------------------------------------------------------------------
   # E2E tests — only on pull_request and workflow_dispatch (not push to main)
@@ -231,7 +248,6 @@ jobs:
           - name: init-optimization
             script: end_to_end_test_init_optimization.py
             expected_improvement: 10
-    name: ${{ matrix.name }}
     environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
     runs-on: ubuntu-latest
     env:
@@ -251,21 +267,12 @@ jobs:
 
       - name: Validate PR
         if: github.event_name == 'pull_request'
-        run: |
-          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -q "^.github/workflows/"; then
-            echo "Workflow changes detected."
-            AUTHOR="${{ github.event.pull_request.user.login }}"
-            if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
-              echo "Authorized user ($AUTHOR). Proceeding."
-            elif [[ "${{ github.event.pull_request.state }}" == "open" ]]; then
-              echo "PR is open. Protection rules in place. Proceeding."
-            else
-              echo "Unauthorized user ($AUTHOR). Exiting."
-              exit 1
-            fi
-          else
-            echo "No workflow file changes. Proceeding."
-          fi
+        uses: ./.github/actions/validate-pr
+        with:
+          base_sha: ${{ github.event.pull_request.base.sha }}
+          head_sha: ${{ github.event.pull_request.head.sha }}
+          author: ${{ github.event.pull_request.user.login }}
+          pr_state: ${{ github.event.pull_request.state }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v8.0.0
@@ -309,8 +316,7 @@ jobs:
   e2e-js:
     needs: determine-changes
     if: >-
-      (needs.determine-changes.outputs.e2e == 'true'
-       || needs.determine-changes.outputs.e2e_js == 'true')
+      needs.determine-changes.outputs.e2e_js == 'true'
       && github.event_name != 'push'
     strategy:
       fail-fast: false
@@ -328,7 +334,6 @@ jobs:
             script: end_to_end_test_js_ts_class.py
             js_project_dir: code_to_optimize/js/code_to_optimize_ts
             expected_improvement: 30
-    name: ${{ matrix.name }}
     environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
     runs-on: ubuntu-latest
     env:
@@ -350,21 +355,12 @@ jobs:
 
       - name: Validate PR
         if: github.event_name == 'pull_request'
-        run: |
-          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -q "^.github/workflows/"; then
-            echo "Workflow changes detected."
-            AUTHOR="${{ github.event.pull_request.user.login }}"
-            if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
-              echo "Authorized user ($AUTHOR). Proceeding."
-            elif [[ "${{ github.event.pull_request.state }}" == "open" ]]; then
-              echo "PR is open. Protection rules in place. Proceeding."
-            else
-              echo "Unauthorized user ($AUTHOR). Exiting."
-              exit 1
-            fi
-          else
-            echo "No workflow file changes. Proceeding."
-          fi
+        uses: ./.github/actions/validate-pr
+        with:
+          base_sha: ${{ github.event.pull_request.base.sha }}
+          head_sha: ${{ github.event.pull_request.head.sha }}
+          author: ${{ github.event.pull_request.user.login }}
+          pr_state: ${{ github.event.pull_request.state }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -396,8 +392,7 @@ jobs:
   e2e-java:
     needs: determine-changes
     if: >-
-      (needs.determine-changes.outputs.e2e == 'true'
-       || needs.determine-changes.outputs.e2e_java == 'true')
+      needs.determine-changes.outputs.e2e_java == 'true'
       && github.event_name != 'push'
     strategy:
       fail-fast: false
@@ -414,7 +409,6 @@ jobs:
             script: end_to_end_test_java_void_optimization.py
             expected_improvement: 70
             remove_git: true
-    name: ${{ matrix.name }}
     environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
     runs-on: ubuntu-latest
     env:
@@ -436,21 +430,12 @@ jobs:
 
       - name: Validate PR
         if: github.event_name == 'pull_request'
-        run: |
-          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -q "^.github/workflows/"; then
-            echo "Workflow changes detected."
-            AUTHOR="${{ github.event.pull_request.user.login }}"
-            if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
-              echo "Authorized user ($AUTHOR). Proceeding."
-            elif [[ "${{ github.event.pull_request.state }}" == "open" ]]; then
-              echo "PR is open. Protection rules in place. Proceeding."
-            else
-              echo "Unauthorized user ($AUTHOR). Exiting."
-              exit 1
-            fi
-          else
-            echo "No workflow file changes. Proceeding."
-          fi
+        uses: ./.github/actions/validate-pr
+        with:
+          base_sha: ${{ github.event.pull_request.base.sha }}
+          head_sha: ${{ github.event.pull_request.head.sha }}
+          author: ${{ github.event.pull_request.user.login }}
+          pr_state: ${{ github.event.pull_request.state }}
 
       - name: Set up JDK 11
         uses: actions/setup-java@v4
