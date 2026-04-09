@@ -3,7 +3,12 @@ name: E2E - JS TypeScript Class
 on:
   pull_request:
     paths:
-      - '**'  # Trigger for all paths
+      - 'codeflash/**'
+      - 'packages/**'
+      - 'tests/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/e2e-*.yaml'
 
   workflow_dispatch:
 

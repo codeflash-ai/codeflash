@@ -3,7 +3,11 @@ name: Coverage E2E
 on:
   pull_request:
     paths:
-      - '**'  # Trigger for all paths
+      - 'codeflash/**'
+      - 'tests/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/e2e-*.yaml'
 
   workflow_dispatch:
 

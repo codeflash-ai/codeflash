@@ -1,0 +1,22 @@
+version: 2
+updates:
+  # Python (root pyproject.toml)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # JavaScript (codeflash npm package)
+  - package-ecosystem: "npm"
+    directory: "/packages/codeflash"
+    schedule:
+      interval: "weekly"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # code_to_optimize/ directories are test fixtures — do NOT update them.
+  # Dependabot PRs for these always fail (missing secrets) and waste CI.

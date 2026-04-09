@@ -3,13 +3,13 @@ title: "Optimize Your Entire Codebase"
 description: "Automatically optimize all codepaths in your project with Codeflash's comprehensive analysis"
 icon: "database"
 sidebarTitle: "Optimize Entire Codebase"
-keywords: ["codebase optimization", "all functions", "batch optimization", "github app", "checkpoint", "recovery", "javascript", "typescript", "python"]
+keywords: ["codebase optimization", "all functions", "batch optimization", "github app", "checkpoint", "recovery", "javascript", "typescript", "python", "java"]
 ---
 
 # Optimize your entire codebase
 
 Codeflash can optimize your entire codebase by analyzing all the functions in your project and generating optimized versions of them.
-It iterates through all the functions in your codebase and optimizes them one by one. This works for Python, JavaScript, and TypeScript projects.
+It iterates through all the functions in your codebase and optimizes them one by one. This works for Python, JavaScript, TypeScript, and Java projects.
 
 To optimize your entire codebase, run the following command in your project directory:
 
@@ -43,6 +43,11 @@ codeflash --all path/to/dir
   codeflash optimize --trace-only --jest ; codeflash --all
   # or for Vitest projects
   codeflash optimize --trace-only --vitest ; codeflash --all
+  ```
+  </Tab>
+  <Tab title="Java">
+  ```bash
+  codeflash optimize --timeout 60 java -cp target/classes com.example.Main ; codeflash --all
   ```
   </Tab>
   </Tabs>

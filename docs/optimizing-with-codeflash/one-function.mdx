@@ -13,6 +13,7 @@ keywords:
     "javascript",
     "typescript",
     "python",
+    "java",
   ]
 ---
 
@@ -45,6 +46,11 @@ codeflash --file path/to/your/file.js --function functionName
 codeflash --file path/to/your/file.ts --function functionName
 ```
 </Tab>
+<Tab title="Java">
+```bash
+codeflash --file src/main/java/com/example/Utils.java --function methodName
+```
+</Tab>
 </Tabs>
 
 If you have installed the GitHub App to your repository, the above command will open a pull request with the optimized function.
@@ -59,6 +65,11 @@ codeflash --file path/to/your/file.py --function function_name --no-pr
 <Tab title="JavaScript / TypeScript">
 ```bash
 codeflash --file path/to/your/file.ts --function functionName --no-pr
+```
+</Tab>
+<Tab title="Java">
+```bash
+codeflash --file src/main/java/com/example/Utils.java --function methodName --no-pr
 ```
 </Tab>
 </Tabs>
@@ -77,5 +88,12 @@ codeflash --file path/to/your/file.py --function ClassName.method_name
 ```bash
 codeflash --file path/to/your/file.ts --function ClassName.methodName
 ```
+</Tab>
+<Tab title="Java">
+```bash
+codeflash --file src/main/java/com/example/Utils.java --function methodName
+```
+
+In Java, use just the method name — no `ClassName.` prefix is needed. Codeflash discovers the method by name within the specified file.
 </Tab>
 </Tabs>
