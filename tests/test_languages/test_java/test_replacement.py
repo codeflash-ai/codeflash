@@ -1784,6 +1784,214 @@ public class Command {{
         assert java_file.read_text(encoding="utf-8") == original_code
 
 
+class TestUnchangedTargetWithClassModifications:
+    """Tests that optimizations modifying class members without changing the target method are rejected.
+
+    This guards against the "wrong-file" pattern where the LLM adds cache fields,
+    modifies constructors, or adds helpers without changing the method it was asked to optimize.
+    """
+
+    def test_unchanged_target_with_unused_field_rejected(self, tmp_path, java_support):
+        """LLM adds a field but leaves the target method unchanged — should reject."""
+        java_file = tmp_path / "SessionContext.java"
+        original_code = """\
+public class SessionContext {
+    private String routeVIP;
+
+    public String getRouteVIP() {
+        return routeVIP;
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # LLM adds a cached field but doesn't change getRouteVIP
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class SessionContext {{
+    private String routeVIP;
+    private static final String DEFAULT_VIP = "";
+
+    public String getRouteVIP() {{
+        return routeVIP;
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+        result = replace_function_definitions_for_language(
+            function_names=["getRouteVIP"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            lang_support=java_support,
+        )
+
+        assert result is False
+        assert java_file.read_text(encoding="utf-8") == original_code
+
+    def test_unchanged_target_with_modified_constructor_rejected(self, tmp_path, java_support):
+        """LLM modifies constructor but leaves target method unchanged — should reject.
+
+        Reproduces Zuul #52: Header.getValue — title says getValue but diff changes constructor.
+        """
+        java_file = tmp_path / "Header.java"
+        original_code = """\
+public class Header {
+    private final String name;
+    private final String value;
+
+    public Header(String name, String value) {
+        this.name = name;
+        this.value = value;
+    }
+
+    public String getValue() {
+        return value;
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # LLM modifies constructor to cache but doesn't change getValue
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class Header {{
+    private final String name;
+    private final String value;
+
+    public Header(String name, String value) {{
+        this.name = name;
+        this.value = value != null ? value.intern() : null;
+    }}
+
+    public String getValue() {{
+        return value;
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+        result = replace_function_definitions_for_language(
+            function_names=["getValue"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            lang_support=java_support,
+        )
+
+        assert result is False
+        assert java_file.read_text(encoding="utf-8") == original_code
+
+    def test_unchanged_target_with_helper_rejected(self, tmp_path, java_support):
+        """LLM adds a helper method but leaves target method unchanged — should reject."""
+        java_file = tmp_path / "FilterRegistry.java"
+        original_code = """\
+public class FilterRegistry {
+    private final java.util.Map<String, Object> filters = new java.util.HashMap<>();
+
+    public int size() {
+        return filters.size();
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # LLM adds a helper but doesn't change size()
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class FilterRegistry {{
+    private final java.util.Map<String, Object> filters = new java.util.HashMap<>();
+
+    private int cachedSize() {{
+        return filters.size();
+    }}
+
+    public int size() {{
+        return filters.size();
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+        result = replace_function_definitions_for_language(
+            function_names=["size"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            lang_support=java_support,
+        )
+
+        assert result is False
+        assert java_file.read_text(encoding="utf-8") == original_code
+
+    def test_changed_target_with_field_accepted(self, tmp_path, java_support):
+        """LLM changes target method AND adds a field — should accept (valid optimization)."""
+        java_file = tmp_path / "Fibonacci.java"
+        original_code = """\
+public class Fibonacci {
+    public static long fib(int n) {
+        if (n <= 1) return n;
+        return fib(n - 1) + fib(n - 2);
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class Fibonacci {{
+    private static final long[] CACHE = new long[100];
+
+    public static long fib(int n) {{
+        if (n <= 1) return n;
+        if (n < 100 && CACHE[n] != 0) return CACHE[n];
+        long result = fib(n - 1) + fib(n - 2);
+        if (n < 100) CACHE[n] = result;
+        return result;
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+        result = replace_function_definitions_for_language(
+            function_names=["fib"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            lang_support=java_support,
+        )
+
+        assert result is True
+
+    def test_changed_target_only_accepted(self, tmp_path, java_support):
+        """LLM changes only the target method (no class modifications) — should accept."""
+        java_file = tmp_path / "Calculator.java"
+        original_code = """\
+public class Calculator {
+    public int add(int a, int b) {
+        return a + b;
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class Calculator {{
+    public int add(int a, int b) {{
+        return Math.addExact(a, b);
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+        result = replace_function_definitions_for_language(
+            function_names=["add"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            lang_support=java_support,
+        )
+
+        assert result is True
+
+
 class TestAnonymousInnerClassMethods:
     """Tests that methods inside anonymous inner classes are not hoisted as helpers.
 
