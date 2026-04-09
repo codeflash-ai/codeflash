@@ -78,16 +78,14 @@ jobs:
           check_paths e2e_js \
             'codeflash/languages/javascript/' 'codeflash/languages/base.py' \
             'codeflash/languages/registry.py' 'codeflash/optimization/' \
-            'codeflash/verification/' 'packages/' \
-            'tests/' 'pyproject.toml' 'uv.lock'
+            'codeflash/verification/' 'packages/' 'tests/'
 
           # Java E2E tests: Java language support + shared pipeline + runtime
           check_paths e2e_java \
             'codeflash/languages/java/' 'codeflash/languages/base.py' \
             'codeflash/languages/registry.py' 'codeflash/optimization/' \
             'codeflash/verification/' 'codeflash-java-runtime/' \
-            'code_to_optimize/java/' \
-            'tests/' 'pyproject.toml' 'uv.lock'
+            'code_to_optimize/java/' 'tests/'
         env:
           MERGE_BASE: ${{ steps.merge_base.outputs.sha }}
 
