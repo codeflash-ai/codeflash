@@ -22,6 +22,13 @@ if TYPE_CHECKING:
 
 def main() -> None:
     """Entry point for the codeflash command-line interface."""
+    # Fast path: --version exits before importing the full stack
+    if len(sys.argv) == 2 and sys.argv[1] == "--version":
+        from codeflash.version import __version__
+
+        print(f"Codeflash version {__version__}")
+        return
+
     from pathlib import Path
 
     from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
