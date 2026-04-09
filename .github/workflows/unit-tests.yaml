@@ -3,7 +3,23 @@ name: unit-tests
 on:
   push:
     branches: [main]
+    paths:
+      - 'codeflash/**'
+      - 'codeflash-benchmark/**'
+      - 'codeflash-java-runtime/**'
+      - 'tests/**'
+      - 'packages/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
   pull_request:
+    paths:
+      - 'codeflash/**'
+      - 'codeflash-benchmark/**'
+      - 'codeflash-java-runtime/**'
+      - 'tests/**'
+      - 'packages/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
   workflow_dispatch:
 
 concurrency:

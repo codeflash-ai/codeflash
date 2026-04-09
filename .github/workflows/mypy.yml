@@ -4,7 +4,17 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'codeflash/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'mypy_allowlist.txt'
   pull_request:
+    paths:
+      - 'codeflash/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'mypy_allowlist.txt'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}
