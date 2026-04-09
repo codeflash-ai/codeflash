@@ -11,7 +11,8 @@ from codeflash.models.models import TestDiffScope
 
 # Skip tests that require Java runtime if Java is not available
 requires_java = pytest.mark.skipif(
-    shutil.which("java") is None, reason="Java not found - skipping Comparator integration tests"
+    shutil.which("java") is None or shutil.which("mvn") is None,
+    reason="Java/Maven not found - skipping Comparator integration tests",
 )
 
 # Kryo-serialized bytes for common test values.
