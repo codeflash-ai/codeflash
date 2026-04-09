@@ -36,20 +36,30 @@ public class Workload {
     }
 
     public static void main(String[] args) {
-        // Exercise the methods so the tracer can capture invocations
+        // Run methods with large inputs so JFR can capture CPU samples.
+        // Small inputs finish too fast (<1ms) for JFR's 10ms sampling interval.
+        for (int round = 0; round < 1000; round++) {
+            computeSum(100_000);
+            repeatString("hello world ", 1000);
+
+            List<Integer> nums = new ArrayList<>();
+            for (int i = 1; i <= 10_000; i++) nums.add(i);
+            filterEvens(nums);
+
+            Workload w = new Workload();
+            w.instanceMethod(100_000, 42);
+        }
+
+        // Also call with small inputs for variety in traced args
         System.out.println("computeSum(100) = " + computeSum(100));
-        System.out.println("computeSum(50) = " + computeSum(50));
-
         System.out.println("repeatString(\"ab\", 3) = " + repeatString("ab", 3));
-        System.out.println("repeatString(\"x\", 5) = " + repeatString("x", 5));
 
-        List<Integer> nums = new ArrayList<>();
-        for (int i = 1; i <= 10; i++) nums.add(i);
-        System.out.println("filterEvens(1..10) = " + filterEvens(nums));
+        List<Integer> small = new ArrayList<>();
+        for (int i = 1; i <= 10; i++) small.add(i);
+        System.out.println("filterEvens(1..10) = " + filterEvens(small));
 
         Workload w = new Workload();
         System.out.println("instanceMethod(5, 3) = " + w.instanceMethod(5, 3));
-        System.out.println("instanceMethod(10, 2) = " + w.instanceMethod(10, 2));
 
         System.out.println("Workload complete.");
     }

@@ -641,3 +641,28 @@ class TestGradleEnsureRuntimeMultiModule:
         assert result is True
         nested_build = (nested / "build.gradle.kts").read_text(encoding="utf-8")
         assert "codeflash-runtime" in nested_build
+
+
+class TestValidationSkipFlags:
+    """Tests that validation skip flags include all known static analysis and formatting plugins."""
+
+    def test_maven_skip_flags_include_spotless(self):
+        from codeflash.languages.java.maven_strategy import _MAVEN_VALIDATION_SKIP_FLAGS
+
+        flags_str = " ".join(_MAVEN_VALIDATION_SKIP_FLAGS)
+        assert "-Dspotless.check.skip=true" in flags_str
+        assert "-Dspotless.apply.skip=true" in flags_str
+
+    def test_maven_skip_flags_include_all_known_plugins(self):
+        from codeflash.languages.java.maven_strategy import _MAVEN_VALIDATION_SKIP_FLAGS
+
+        flags_str = " ".join(_MAVEN_VALIDATION_SKIP_FLAGS)
+        for plugin in ["rat", "checkstyle", "spotbugs", "pmd", "enforcer", "japicmp", "errorprone", "spotless"]:
+            assert plugin in flags_str, f"Missing skip flag for {plugin}"
+
+    def test_gradle_skip_script_includes_spotless(self):
+        from codeflash.languages.java.gradle_strategy import _GRADLE_SKIP_VALIDATION_INIT_SCRIPT
+
+        assert "spotlessCheck" in _GRADLE_SKIP_VALIDATION_INIT_SCRIPT
+        assert "spotlessApply" in _GRADLE_SKIP_VALIDATION_INIT_SCRIPT
+        assert "spotlessJava" in _GRADLE_SKIP_VALIDATION_INIT_SCRIPT

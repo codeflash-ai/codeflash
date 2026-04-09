@@ -7,6 +7,7 @@ from posthog import Posthog
 
 from codeflash.api.cfapi import get_user_id
 from codeflash.cli_cmds.console import logger
+from codeflash.lsp.helpers import is_subagent_mode
 from codeflash.version import __version__
 
 _posthog = None
@@ -36,7 +37,7 @@ def ph(event: str, properties: dict[str, Any] | None = None) -> None:
         return
 
     properties = properties or {}
-    properties.update({"cli_version": __version__})
+    properties.update({"cli_version": __version__, "subagent": is_subagent_mode()})
 
     user_id = get_user_id()
 

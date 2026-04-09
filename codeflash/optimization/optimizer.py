@@ -127,7 +127,8 @@ class Optimizer:
                     function_benchmark_timings = CodeFlashBenchmarkPlugin.get_function_benchmark_timings(
                         self.trace_file
                     )
-                    total_benchmark_timings = CodeFlashBenchmarkPlugin.get_benchmark_timings(self.trace_file)
+                    total_benchmark_stats = CodeFlashBenchmarkPlugin.get_benchmark_timings(self.trace_file)
+                    total_benchmark_timings = {k: v.median_ns for k, v in total_benchmark_stats.items()}
                     function_to_results = validate_and_format_benchmark_table(
                         function_benchmark_timings, total_benchmark_timings
                     )
@@ -527,7 +528,11 @@ class Optimizer:
                 if funcs and funcs[0].language:
                     set_current_language(funcs[0].language)
                     self.test_cfg.set_language(funcs[0].language)
-                    current_language_support().setup_test_config(self.test_cfg, file_path, self.current_worktree)
+                    if not current_language_support().setup_test_config(
+                        self.test_cfg, file_path, self.current_worktree
+                    ):
+                        logger.error("Project setup failed — aborting optimization. Check warnings above for details.")
+                        return
                     break
 
         if self.args.all:

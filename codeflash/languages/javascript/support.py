@@ -7,6 +7,7 @@ using tree-sitter for code analysis and Jest for test execution.
 from __future__ import annotations
 
 import logging
+import re
 import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -14,7 +15,15 @@ from typing import TYPE_CHECKING, Any
 
 from codeflash.code_utils.git_utils import git_root_dir, mirror_path
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.languages.base import CodeContext, FunctionFilterCriteria, HelperFunction, Language, TestInfo, TestResult
+from codeflash.languages.base import (
+    CodeContext,
+    FunctionFilterCriteria,
+    HelperFunction,
+    Language,
+    SetupError,
+    TestInfo,
+    TestResult,
+)
 from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
 from codeflash.languages.registry import register_language
 from codeflash.models.models import FunctionParent
@@ -152,9 +161,15 @@ class JavaScriptSupport:
                 if not criteria.include_async and func.is_async:
                     continue
 
+                # Skip nested functions (functions defined inside other functions)
+                # Nested functions depend on closure variables from parent scope and cannot
+                # be optimized in isolation without complex context extraction
+                if func.parent_function:
+                    logger.debug(f"Skipping nested function: {func.name} (parent: {func.parent_function})")  # noqa: G004
+                    continue
+
                 # Skip non-exported functions (can't be imported in tests)
-                # Exception: nested functions and methods are allowed if their parent is exported
-                if criteria.require_export and not func.is_exported and not func.parent_function:
+                if criteria.require_export and not func.is_exported:
                     logger.debug(f"Skipping non-exported function: {func.name}")  # noqa: G004
                     continue
 
@@ -216,6 +231,15 @@ class JavaScriptSupport:
         """
         result: dict[str, list[TestInfo]] = {}
 
+        # Build indices for O(1) lookup per imported name (avoids O(NxM) loop)
+        function_name_to_qualified: dict[str, str] = {}
+        class_name_to_qualified_names: dict[str, list[str]] = {}
+        for func in source_functions:
+            function_name_to_qualified[func.function_name] = func.qualified_name
+            for parent in func.parents:
+                if parent.type == "ClassDef":
+                    class_name_to_qualified_names.setdefault(parent.name, []).append(func.qualified_name)
+
         # Find all test files using language-specific patterns
         test_patterns = self._get_test_patterns()
 
@@ -229,26 +253,41 @@ class JavaScriptSupport:
                 analyzer = get_analyzer_for_file(test_file)
                 imports = analyzer.find_imports(source)
 
-                # Build a set of imported function names
+                # Build a set of imported names, resolving aliases and namespace member access
                 imported_names: set[str] = set()
                 for imp in imports:
                     if imp.default_import:
                         imported_names.add(imp.default_import)
+                        # Extract member access patterns: e.g. `math.calculate(...)` → "calculate"
+                        for m in re.finditer(rf"\b{re.escape(imp.default_import)}\.(\w+)", source):
+                            imported_names.add(m.group(1))
+                    if imp.namespace_import:
+                        imported_names.add(imp.namespace_import)
+                        for m in re.finditer(rf"\b{re.escape(imp.namespace_import)}\.(\w+)", source):
+                            imported_names.add(m.group(1))
                     for name, alias in imp.named_imports:
-                        imported_names.add(alias or name)
+                        imported_names.add(name)
+                        if alias:
+                            imported_names.add(alias)
 
                 # Find test functions (describe/it/test blocks)
                 test_functions = self._find_jest_tests(source, analyzer)
 
-                # Match source functions to tests
-                for func in source_functions:
-                    if func.function_name in imported_names or func.function_name in source:
-                        if func.qualified_name not in result:
-                            result[func.qualified_name] = []
-                        for test_name in test_functions:
-                            result[func.qualified_name].append(
-                                TestInfo(test_name=test_name, test_file=test_file, test_class=None)
-                            )
+                # Match via indices: function names and class names → qualified names
+                matched_qualified_names: set[str] = set()
+                for imported_name in imported_names:
+                    if imported_name in function_name_to_qualified:
+                        matched_qualified_names.add(function_name_to_qualified[imported_name])
+                    if imported_name in class_name_to_qualified_names:
+                        matched_qualified_names.update(class_name_to_qualified_names[imported_name])
+
+                for qualified_name in matched_qualified_names:
+                    if qualified_name not in result:
+                        result[qualified_name] = []
+                    for test_name in test_functions:
+                        result[qualified_name].append(
+                            TestInfo(test_name=test_name, test_file=test_file, test_class=None)
+                        )
             except Exception as e:
                 logger.debug("Failed to analyze test file %s: %s", test_file, e)
 
@@ -1950,11 +1989,13 @@ class JavaScriptSupport:
 
         return prepare_javascript_module(module_code, module_path)
 
-    def setup_test_config(self, test_cfg: TestConfig, file_path: Path, current_worktree: Path | None) -> None:
+    def setup_test_config(self, test_cfg: TestConfig, file_path: Path, current_worktree: Path | None) -> bool:
         from codeflash.languages.javascript.optimizer import verify_js_requirements
         from codeflash.languages.javascript.test_runner import find_node_project_root
 
         test_cfg.js_project_root = find_node_project_root(file_path)
+        if test_cfg.js_project_root is None:
+            return False
         if current_worktree is not None:
             original_js_root = git_root_dir()
             worktree_node_modules = test_cfg.js_project_root / "node_modules"
@@ -1970,7 +2011,11 @@ class JavaScriptSupport:
                 original_root_node_modules = original_js_root / "node_modules"
                 if original_root_node_modules.exists() and not worktree_root_node_modules.exists():
                     worktree_root_node_modules.symlink_to(original_root_node_modules)
-        verify_js_requirements(test_cfg)
+        setup_errors = verify_js_requirements(test_cfg)
+        if any(e.should_abort for e in setup_errors):
+            return False
+
+        return True
 
     def adjust_test_config_for_discovery(self, test_cfg: TestConfig) -> None:
         test_cfg.tests_project_rootdir = test_cfg.tests_root
@@ -1998,6 +2043,7 @@ class JavaScriptSupport:
             validate_and_fix_import_style,
         )
         from codeflash.languages.javascript.module_system import (
+            ModuleSystem,
             ensure_module_system_compatibility,
             ensure_vitest_imports,
         )
@@ -2021,6 +2067,13 @@ class JavaScriptSupport:
         generated_test_source = ensure_module_system_compatibility(
             generated_test_source, project_module_system, test_cfg.tests_project_rootdir
         )
+
+        # Add .js extensions to relative imports for ESM projects
+        # TypeScript + ESM requires explicit .js extensions even for .ts source files
+        if project_module_system == ModuleSystem.ES_MODULE:
+            from codeflash.languages.javascript.module_system import add_js_extensions_to_relative_imports
+
+            generated_test_source = add_js_extensions_to_relative_imports(generated_test_source)
 
         # Ensure vitest imports are present when using vitest framework
         generated_test_source = ensure_vitest_imports(generated_test_source, test_cfg.test_framework)
@@ -2164,8 +2217,9 @@ class JavaScriptSupport:
     def get_module_path(self, source_file: Path, project_root: Path, tests_root: Path | None = None) -> str:
         """Get the module path for importing a JavaScript source file from tests.
 
-        For JavaScript, this returns a relative path from the tests directory to the source file
-        (e.g., '../fibonacci' for source at /project/fibonacci.js and tests at /project/tests/).
+        For JavaScript/TypeScript, this returns a relative path from the tests directory to
+        the source file. For ESM projects or TypeScript, the path includes a .js extension
+        (TypeScript convention). For CommonJS, no extension is added.
 
         Args:
             source_file: Path to the source file.
@@ -2179,13 +2233,15 @@ class JavaScriptSupport:
         import os
 
         from codeflash.cli_cmds.console import logger
+        from codeflash.languages.javascript.module_system import ModuleSystem, detect_module_system
 
         if tests_root is None:
             tests_root = self.find_test_root(project_root) or project_root
 
         try:
             # Resolve both paths to absolute to ensure consistent relative path calculation
-            source_file_abs = source_file.resolve().with_suffix("")
+            # Note: Don't remove extension yet - we'll decide based on module system
+            source_file_abs = source_file.resolve()
             tests_root_abs = tests_root.resolve()
 
             # Find the project root using language support
@@ -2205,18 +2261,45 @@ class JavaScriptSupport:
                     if not tests_root_abs.exists():
                         tests_root_abs = project_root_from_lang
 
+            # Detect module system to determine if we need to add .js extension
+            module_system = detect_module_system(project_root, source_file)
+
+            # Remove source file extension first
+            source_without_ext = source_file_abs.with_suffix("")
+
             # Use os.path.relpath to compute relative path from tests_root to source file
-            rel_path = os.path.relpath(str(source_file_abs), str(tests_root_abs))
-            logger.debug(
-                f"!lsp|Module path: source={source_file_abs}, tests_root={tests_root_abs}, rel_path={rel_path}"
-            )
+            # Replace backslashes with forward slashes — JavaScript import/require paths
+            # must use forward slashes. Backslashes are escape chars in JS strings
+            # (e.g. \t → tab, \n → newline) and would break imports on Windows.
+            rel_path = os.path.relpath(str(source_without_ext), str(tests_root_abs)).replace("\\", "/")
+
+            # For ESM, add .js extension (TypeScript convention)
+            # TypeScript requires imports to reference the OUTPUT file extension (.js),
+            # even when the source file is .ts. This is required for Node.js ESM resolution.
+            if module_system == ModuleSystem.ES_MODULE:
+                rel_path = rel_path + ".js"
+                logger.debug(
+                    f"!lsp|Module path (ESM): source={source_file_abs}, tests_root={tests_root_abs}, "
+                    f"rel_path={rel_path} (added .js for ESM)"
+                )
+            else:
+                logger.debug(
+                    f"!lsp|Module path (CommonJS): source={source_file_abs}, tests_root={tests_root_abs}, "
+                    f"rel_path={rel_path}"
+                )
+
             return rel_path
         except ValueError:
             # Fallback if paths are on different drives (Windows)
             rel_path = source_file.relative_to(project_root)
-            return "../" + rel_path.with_suffix("").as_posix()
+            # For fallback, also check module system
+            module_system = detect_module_system(project_root, source_file)
+            path_without_ext = "../" + rel_path.with_suffix("").as_posix()
+            if module_system == ModuleSystem.ES_MODULE:
+                return path_without_ext + ".js"
+            return path_without_ext
 
-    def verify_requirements(self, project_root: Path, test_framework: str = "jest") -> tuple[bool, list[str]]:
+    def verify_requirements(self, project_root: Path, test_framework: str = "jest") -> tuple[bool, list[SetupError]]:
         """Verify that all JavaScript requirements are met.
 
         Checks for:
@@ -2236,27 +2319,40 @@ class JavaScriptSupport:
             Tuple of (success, list of error messages).
 
         """
-        errors: list[str] = []
+        errors: list[SetupError] = []
 
         # Check Node.js
         try:
             result = subprocess.run(["node", "--version"], check=False, capture_output=True, text=True, timeout=10)
             if result.returncode != 0:
-                errors.append("Node.js is not installed. Please install Node.js 18+ from https://nodejs.org/")
+                errors.append(
+                    SetupError(
+                        "Node.js is not installed. Please install Node.js 18+ from https://nodejs.org/",
+                        should_abort=True,
+                    )
+                )
         except FileNotFoundError:
-            errors.append("Node.js is not installed. Please install Node.js 18+ from https://nodejs.org/")
+            errors.append(
+                SetupError(
+                    "Node.js is not installed. Please install Node.js 18+ from https://nodejs.org/", should_abort=True
+                )
+            )
         except Exception as e:
-            errors.append(f"Failed to check Node.js: {e}")
+            errors.append(SetupError(f"Failed to check Node.js: {e}", should_abort=True))
 
         # Check npm
         try:
             result = subprocess.run(["npm", "--version"], check=False, capture_output=True, text=True, timeout=10)
             if result.returncode != 0:
-                errors.append("npm is not available. Please ensure npm is installed with Node.js.")
+                errors.append(
+                    SetupError("npm is not available. Please ensure npm is installed with Node.js.", should_abort=True)
+                )
         except FileNotFoundError:
-            errors.append("npm is not available. Please ensure npm is installed with Node.js.")
+            errors.append(
+                SetupError("npm is not available. Please ensure npm is installed with Node.js.", should_abort=True)
+            )
         except Exception as e:
-            errors.append(f"Failed to check npm: {e}")
+            errors.append(SetupError(f"Failed to check npm: {e}", should_abort=True))
 
         # Check test framework is installed (with monorepo support)
         # Uses find_node_modules_with_package which searches up the directory tree
@@ -2270,12 +2366,17 @@ class JavaScriptSupport:
             local_node_modules = project_root / "node_modules"
             if not local_node_modules.exists():
                 errors.append(
-                    f"node_modules not found in {project_root}. Please run 'npm install' to install dependencies."
+                    SetupError(
+                        f"node_modules not found in {project_root}. Please run 'npm install' to install dependencies.",
+                        should_abort=True,
+                    )
                 )
             else:
                 errors.append(
-                    f"{test_framework} is not installed. "
-                    f"Please run 'npm install --save-dev {test_framework}' to install it."
+                    SetupError(
+                        f"{test_framework} is not installed. Please run 'npm install --save-dev {test_framework}' to install it.",
+                        should_abort=True,
+                    )
                 )
 
         return len(errors) == 0, errors

@@ -226,6 +226,14 @@ def normalize_codeflash_imports(source: str) -> str:
     return _CODEFLASH_IMPORT_PATTERN.sub(r"import \1 from 'codeflash'", source)
 
 
+# Pattern to detect existing framework imports (regardless of specific identifiers imported)
+# This catches semantic duplicates even if the order/identifiers differ from what we'd inject
+_HAS_VITEST_IMPORT_RE = re.compile(r"import\s+\{[^}]*\}\s+from\s+['\"]vitest['\"]", re.MULTILINE)
+_HAS_JEST_IMPORT_RE = re.compile(r"import\s+\{[^}]*\}\s+from\s+['\"]@jest/globals['\"]", re.MULTILINE)
+_HAS_MOCHA_ASSERT_IMPORT_RE = re.compile(r"import\s+.*\s+from\s+['\"]node:assert", re.MULTILINE)
+_HAS_MOCHA_ASSERT_REQUIRE_RE = re.compile(r"(?:const|let|var)\s+.*\s*=\s*require\s*\(\s*['\"]node:assert", re.MULTILINE)
+
+
 # Author: ali <mohammed18200118@gmail.com>
 def inject_test_globals(
     generated_tests: GeneratedTestsList, test_framework: str = "jest", module_system: str = "esm"
@@ -246,24 +254,29 @@ def inject_test_globals(
     # Use vitest imports for vitest projects, jest imports for jest projects
     if test_framework == "vitest":
         global_import = "import { vi, describe, it, expect, beforeEach, afterEach, beforeAll, test } from 'vitest'\n"
+        has_import_re = _HAS_VITEST_IMPORT_RE
     elif test_framework == "mocha":
         if is_cjs:
             global_import = "const assert = require('node:assert/strict');\n"
+            has_import_re = _HAS_MOCHA_ASSERT_REQUIRE_RE
         else:
             global_import = "import assert from 'node:assert/strict';\n"
+            has_import_re = _HAS_MOCHA_ASSERT_IMPORT_RE
     else:
         # Default to jest imports for jest and other frameworks
         global_import = (
             "import { jest, describe, it, expect, beforeEach, afterEach, beforeAll, test } from '@jest/globals'\n"
         )
+        has_import_re = _HAS_JEST_IMPORT_RE
 
     for test in generated_tests.generated_tests:
-        # Skip injection if the source already has the import (LLM may have included it)
-        if global_import.strip() not in test.generated_original_test_source:
+        # Skip injection if the source already has ANY import from the framework
+        # This catches semantic duplicates even if the AI used different identifiers/order
+        if not has_import_re.search(test.generated_original_test_source):
             test.generated_original_test_source = global_import + test.generated_original_test_source
-        if global_import.strip() not in test.instrumented_behavior_test_source:
+        if not has_import_re.search(test.instrumented_behavior_test_source):
             test.instrumented_behavior_test_source = global_import + test.instrumented_behavior_test_source
-        if global_import.strip() not in test.instrumented_perf_test_source:
+        if not has_import_re.search(test.instrumented_perf_test_source):
             test.instrumented_perf_test_source = global_import + test.instrumented_perf_test_source
     return generated_tests
 

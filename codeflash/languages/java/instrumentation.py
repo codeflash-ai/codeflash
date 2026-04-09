@@ -818,26 +818,35 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str, 
         if _is_test_annotation(stripped):
             if not helper_added:
                 helper_added = True
-            result.append(line)
-            i += 1
 
-            # Collect any additional annotations
-            while i < len(lines) and lines[i].strip().startswith("@"):
-                result.append(lines[i])
+            # Check if the @Test line already contains the method signature and opening brace
+            # (common in compact test styles like replay tests: @Test void replay_foo_0() throws Exception {)
+            if "{" in line:
+                # The annotation line IS the method signature — don't look for a separate one
+                result.append(line)
+                i += 1
+                method_lines = [line]
+            else:
+                result.append(line)
                 i += 1
 
-            # Now find the method signature and opening brace
-            method_lines = []
-            while i < len(lines):
-                method_lines.append(lines[i])
-                if "{" in lines[i]:
-                    break
-                i += 1
+                # Collect any additional annotations
+                while i < len(lines) and lines[i].strip().startswith("@"):
+                    result.append(lines[i])
+                    i += 1
 
-            # Add the method signature lines
-            for ml in method_lines:
-                result.append(ml)
-            i += 1
+                # Now find the method signature and opening brace
+                method_lines = []
+                while i < len(lines):
+                    method_lines.append(lines[i])
+                    if "{" in lines[i]:
+                        break
+                    i += 1
+
+                # Add the method signature lines
+                for ml in method_lines:
+                    result.append(ml)
+                i += 1
 
             # Extract the test method name from the method signature
             test_method_name = _extract_test_method_name(method_lines)

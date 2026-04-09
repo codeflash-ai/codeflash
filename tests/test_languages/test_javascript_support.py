@@ -1869,3 +1869,75 @@ describe('fn', () => {
   test('works', () => {});
 });"""
         assert fix_imports_inside_blocks(source) == expected
+
+
+class TestGetModulePath:
+    """Tests for get_module_path method to ensure proper module resolution."""
+
+    def test_get_module_path_typescript_esm_adds_js_extension(self, js_support):
+        """Test that TypeScript files in ESM projects get .js extension in import paths.
+
+        This is the TypeScript convention: imports reference the OUTPUT file extension (.js)
+        even when the source file is .ts. This is required for Node.js ESM resolution.
+
+        Regression test for: ERR_MODULE_NOT_FOUND when importing TypeScript modules
+        Trace ID: 08d0e99e-10e6-4ad2-981d-b907e3c068ea
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir)
+
+            # Create a TypeScript source file
+            source_dir = project_root / "packages" / "microservices" / "server"
+            source_dir.mkdir(parents=True)
+            source_file = source_dir / "server-factory.ts"
+            source_file.write_text("export class ServerFactory {}")
+
+            # Create tests directory
+            tests_dir = project_root / "packages" / "microservices" / "test" / "codeflash-generated"
+            tests_dir.mkdir(parents=True)
+
+            # Create package.json with type: module (ESM)
+            package_json = project_root / "package.json"
+            package_json.write_text('{"type": "module"}')
+
+            # Get module path
+            module_path = js_support.get_module_path(source_file, project_root, tests_dir)
+
+            # For ESM/TypeScript, the import path should end with .js
+            # This is TypeScript's convention: imports use .js extension even for .ts files
+            assert module_path.endswith(".js"), (
+                f"Expected module path to end with .js for ESM/TypeScript, got: {module_path}. "
+                "Node.js ESM requires explicit file extensions in import statements."
+            )
+
+            # The path should be relative (start with ../ or ./)
+            assert module_path.startswith(("../", "./")), (
+                f"Expected relative import path, got: {module_path}"
+            )
+
+    def test_get_module_path_commonjs_no_extension(self, js_support):
+        """Test that CommonJS projects get module paths without extensions."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir)
+
+            # Create a JavaScript source file
+            source_dir = project_root / "src"
+            source_dir.mkdir(parents=True)
+            source_file = source_dir / "utils.js"
+            source_file.write_text("module.exports = {}")
+
+            # Create tests directory
+            tests_dir = project_root / "test"
+            tests_dir.mkdir(parents=True)
+
+            # Create package.json WITHOUT type field (defaults to CommonJS)
+            package_json = project_root / "package.json"
+            package_json.write_text('{"name": "test-project"}')
+
+            # Get module path
+            module_path = js_support.get_module_path(source_file, project_root, tests_dir)
+
+            # For CommonJS, no extension is fine
+            assert not module_path.endswith((".js", ".ts", ".tsx")), (
+                f"Expected module path without extension for CommonJS, got: {module_path}"
+            )
