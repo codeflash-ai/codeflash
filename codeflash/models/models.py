@@ -740,6 +740,7 @@ class VerificationType(str, Enum):
     )
     INIT_STATE_FTO = "init_state_fto"  # Correctness verification for fto class instance attributes after init
     INIT_STATE_HELPER = "init_state_helper"  # Correctness verification for helper class instance attributes after init
+    VOID_STATE = "void_state"  # Correctness verification for void methods (no return value)
 
 
 @dataclass(frozen=True, slots=True)
