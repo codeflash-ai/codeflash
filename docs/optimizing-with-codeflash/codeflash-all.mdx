@@ -3,7 +3,7 @@ title: "Optimize Your Entire Codebase"
 description: "Automatically optimize all codepaths in your project with Codeflash's comprehensive analysis"
 icon: "database"
 sidebarTitle: "Optimize Entire Codebase"
-keywords: ["codebase optimization", "all functions", "batch optimization", "github app", "checkpoint", "recovery", "javascript", "typescript", "python"]
+keywords: ["codebase optimization", "all functions", "batch optimization", "github app", "checkpoint", "recovery", "javascript", "typescript", "python", "java"]
 ---
 
 # Optimize your entire codebase
@@ -43,6 +43,11 @@ codeflash --all path/to/dir
   codeflash optimize --trace-only --jest ; codeflash --all
   # or for Vitest projects
   codeflash optimize --trace-only --vitest ; codeflash --all
+  ```
+  </Tab>
+  <Tab title="Java">
+  ```bash
+  codeflash optimize --timeout 60 java -cp target/classes com.example.Main ; codeflash --all
   ```
   </Tab>
   </Tabs>

@@ -1,4 +1,4 @@
-name: E2E - Java Fibonacci (No Git)
+name: E2E - Java Void Optimization (No Git)
 
 on:
   pull_request:
@@ -10,8 +10,8 @@ on:
       - 'codeflash/verification/**'
       - 'code_to_optimize/java/**'
       - 'codeflash-java-runtime/**'
-      - 'tests/scripts/end_to_end_test_java_fibonacci.py'
-      - '.github/workflows/e2e-java-fibonacci-nogit.yaml'
+      - 'tests/scripts/end_to_end_test_java_void_optimization.py'
+      - '.github/workflows/e2e-java-void-optimization.yaml'
 
   workflow_dispatch:
 
@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  java-fibonacci-optimization-no-git:
+  java-void-optimization-no-git:
     environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
 
     runs-on: ubuntu-latest
@@ -72,7 +72,7 @@ jobs:
           cache: maven
 
       - name: Set up Python 3.11 for CLI
-        uses: astral-sh/setup-uv@v8.0.0
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: 3.11.6
 
@@ -100,6 +100,6 @@ jobs:
             exit 1
           fi
 
-      - name: Run Codeflash to optimize Fibonacci
+      - name: Run Codeflash to optimize void function
         run: |
-          uv run python tests/scripts/end_to_end_test_java_fibonacci.py
+          uv run python tests/scripts/end_to_end_test_java_void_optimization.py

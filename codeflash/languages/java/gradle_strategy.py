@@ -44,7 +44,8 @@ gradle.projectsEvaluated {
                 'spotbugsMain', 'spotbugsTest',
                 'pmdMain', 'pmdTest',
                 'rat', 'japicmp',
-                'jarHell', 'thirdPartyAudit'
+                'jarHell', 'thirdPartyAudit',
+                'spotlessCheck', 'spotlessApply', 'spotlessJava', 'spotlessKotlin', 'spotlessScala'
             ]
         }.configureEach {
             enabled = false
