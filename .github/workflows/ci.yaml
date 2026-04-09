@@ -1,0 +1,1093 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'codeflash/**'
+      - 'codeflash-benchmark/**'
+      - 'codeflash-java-runtime/**'
+      - 'tests/**'
+      - 'packages/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'mypy_allowlist.txt'
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Change detection — decides which downstream jobs actually run.
+  # On push/workflow_dispatch every flag is true so all jobs execute.
+  # On pull_request we diff against the merge base (same approach as astral-sh/ruff).
+  # ---------------------------------------------------------------------------
+  determine-changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      unit_tests: ${{ github.event_name != 'pull_request' || steps.check.outputs.unit_tests == 'true' }}
+      type_check: ${{ github.event_name != 'pull_request' || steps.check.outputs.type_check == 'true' }}
+      e2e: ${{ github.event_name != 'pull_request' || steps.check.outputs.e2e == 'true' }}
+      e2e_js: ${{ github.event_name != 'pull_request' || steps.check.outputs.e2e_js == 'true' }}
+      e2e_java: ${{ github.event_name != 'pull_request' || steps.check.outputs.e2e_java == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0
+
+      - name: Determine merge base
+        if: github.event_name == 'pull_request'
+        id: merge_base
+        run: |
+          sha=$(git merge-base HEAD "origin/${{ github.event.pull_request.base.ref }}")
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+
+      - name: Check changed paths
+        if: github.event_name == 'pull_request'
+        id: check
+        run: |
+          check_paths() {
+            local name="$1"; shift
+            if ! git diff --quiet "$MERGE_BASE...HEAD" -- "$@" 2>/dev/null; then
+              echo "${name}=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "${name}=false" >> "$GITHUB_OUTPUT"
+            fi
+          }
+
+          # Unit tests: code + test infra + java + packages + build config
+          check_paths unit_tests \
+            'codeflash/' 'codeflash-benchmark/' 'codeflash-java-runtime/' \
+            'tests/' 'packages/' 'pyproject.toml' 'uv.lock'
+
+          # Type checking: code + build config + mypy config
+          check_paths type_check \
+            'codeflash/' 'pyproject.toml' 'uv.lock' 'mypy_allowlist.txt'
+
+          # E2E tests: code + tests + build config
+          check_paths e2e \
+            'codeflash/' 'tests/' 'pyproject.toml' 'uv.lock'
+
+          # JS E2E tests: JS packages changed
+          check_paths e2e_js \
+            'packages/'
+
+          # Java E2E tests: java runtime or java test fixtures changed
+          check_paths e2e_java \
+            'codeflash-java-runtime/' 'code_to_optimize/java/'
+        env:
+          MERGE_BASE: ${{ steps.merge_base.outputs.sha }}
+
+  # ---------------------------------------------------------------------------
+  # Unit tests — 6 Linux + 1 Windows matrix
+  # ---------------------------------------------------------------------------
+  unit-tests:
+    needs: determine-changes
+    if: needs.determine-changes.outputs.unit_tests == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python-version: "3.9"
+          - os: ubuntu-latest
+            python-version: "3.10"
+          - os: ubuntu-latest
+            python-version: "3.11"
+          - os: ubuntu-latest
+            python-version: "3.12"
+          - os: ubuntu-latest
+            python-version: "3.13"
+          - os: ubuntu-latest
+            python-version: "3.14"
+          - os: windows-latest
+            python-version: "3.13"
+    continue-on-error: true
+    runs-on: ${{ matrix.os }}
+    env:
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build codeflash-runtime JAR
+        run: |
+          cd codeflash-java-runtime
+          mvn clean package -q -DskipTests
+          mvn install -q -DskipTests
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Install test-only dependencies (Python 3.9 and 3.13)
+        if: matrix.python-version == '3.9' || matrix.python-version == '3.13'
+        run: uv sync --group tests
+
+      - name: Unit tests
+        run: uv run pytest tests/
+
+  # ---------------------------------------------------------------------------
+  # Mypy type checking
+  # ---------------------------------------------------------------------------
+  type-check:
+    needs: determine-changes
+    if: needs.determine-changes.outputs.type_check == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.0.0
+
+      - name: Install dependencies
+        run: |
+          uv venv --seed
+          uv sync
+
+      - name: Run mypy
+        run: uv run mypy --non-interactive --config-file pyproject.toml @mypy_allowlist.txt
+
+  # ---------------------------------------------------------------------------
+  # Lint (prek) — pull_request only
+  # ---------------------------------------------------------------------------
+  prek:
+    needs: determine-changes
+    if: >-
+      github.event_name == 'pull_request'
+      && (needs.determine-changes.outputs.e2e == 'true'
+          || needs.determine-changes.outputs.e2e_js == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v8.0.0
+      - uses: j178/prek-action@v1
+        with:
+          extra-args: '--from-ref origin/${{ github.base_ref }} --to-ref ${{ github.sha }}'
+
+  # ---------------------------------------------------------------------------
+  # E2E tests — only on pull_request and workflow_dispatch (not push to main)
+  # ---------------------------------------------------------------------------
+
+  # --- Standard Python E2Es ---
+
+  tracer-replay:
+    needs: determine-changes
+    if: >-
+      needs.determine-changes.outputs.e2e == 'true'
+      && github.event_name != 'push'
+    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_AIS_SERVER: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+      COLUMNS: 110
+      MAX_RETRIES: 3
+      RETRY_DELAY: 5
+      EXPECTED_IMPROVEMENT_PCT: 10
+      CODEFLASH_END_TO_END: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || '' }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate PR
+        if: github.event_name == 'pull_request'
+        run: |
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -q "^.github/workflows/"; then
+            echo "Workflow changes detected."
+            AUTHOR="${{ github.event.pull_request.user.login }}"
+            if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
+              echo "Authorized user ($AUTHOR). Proceeding."
+            elif [[ "${{ github.event.pull_request.state }}" == "open" ]]; then
+              echo "PR is open. Protection rules in place. Proceeding."
+            else
+              echo "Unauthorized user ($AUTHOR). Exiting."
+              exit 1
+            fi
+          else
+            echo "No workflow file changes. Proceeding."
+          fi
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.0.0
+        with:
+          python-version: 3.11.6
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run E2E test
+        run: uv run python tests/scripts/end_to_end_test_tracer_replay.py
+
+  bubble-sort-pytest-nogit:
+    needs: determine-changes
+    if: >-
+      needs.determine-changes.outputs.e2e == 'true'
+      && github.event_name != 'push'
+    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_AIS_SERVER: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+      COLUMNS: 110
+      MAX_RETRIES: 3
+      RETRY_DELAY: 5
+      EXPECTED_IMPROVEMENT_PCT: 70
+      CODEFLASH_END_TO_END: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || '' }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate PR
+        if: github.event_name == 'pull_request'
+        run: |
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -q "^.github/workflows/"; then
+            echo "Workflow changes detected."
+            AUTHOR="${{ github.event.pull_request.user.login }}"
+            if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
+              echo "Authorized user ($AUTHOR). Proceeding."
+            elif [[ "${{ github.event.pull_request.state }}" == "open" ]]; then
+              echo "PR is open. Protection rules in place. Proceeding."
+            else
+              echo "Unauthorized user ($AUTHOR). Exiting."
+              exit 1
+            fi
+          else
+            echo "No workflow file changes. Proceeding."
+          fi
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.0.0
+        with:
+          python-version: 3.11.6
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Remove .git
+        run: |
+          if [ -d ".git" ]; then
+            echo ".git directory exists!"
+            sudo rm -rf .git
+            if [ -d ".git" ]; then
+              echo ".git directory still exists after removal attempt!"
+              exit 1
+            else
+              echo ".git directory successfully removed."
+            fi
+          else
+            echo ".git directory does not exist. Nothing to remove."
+            exit 1
+          fi
+
+      - name: Run E2E test
+        run: uv run python tests/scripts/end_to_end_test_bubblesort_pytest.py
+
+  bubble-sort-unittest:
+    needs: determine-changes
+    if: >-
+      needs.determine-changes.outputs.e2e == 'true'
+      && github.event_name != 'push'
+    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_AIS_SERVER: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+      COLUMNS: 110
+      MAX_RETRIES: 3
+      RETRY_DELAY: 5
+      EXPECTED_IMPROVEMENT_PCT: 40
+      CODEFLASH_END_TO_END: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || '' }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate PR
+        if: github.event_name == 'pull_request'
+        run: |
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -q "^.github/workflows/"; then
+            echo "Workflow changes detected."
+            AUTHOR="${{ github.event.pull_request.user.login }}"
+            if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
+              echo "Authorized user ($AUTHOR). Proceeding."
+            elif [[ "${{ github.event.pull_request.state }}" == "open" ]]; then
+              echo "PR is open. Protection rules in place. Proceeding."
+            else
+              echo "Unauthorized user ($AUTHOR). Exiting."
+              exit 1
+            fi
+          else
+            echo "No workflow file changes. Proceeding."
+          fi
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.0.0
+        with:
+          python-version: 3.11.6
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run E2E test
+        run: uv run python tests/scripts/end_to_end_test_bubblesort_unittest.py
+
+  futurehouse-structure:
+    needs: determine-changes
+    if: >-
+      needs.determine-changes.outputs.e2e == 'true'
+      && github.event_name != 'push'
+    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_AIS_SERVER: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+      COLUMNS: 110
+      MAX_RETRIES: 3
+      RETRY_DELAY: 5
+      EXPECTED_IMPROVEMENT_PCT: 5
+      CODEFLASH_END_TO_END: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || '' }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate PR
+        if: github.event_name == 'pull_request'
+        run: |
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -q "^.github/workflows/"; then
+            echo "Workflow changes detected."
+            AUTHOR="${{ github.event.pull_request.user.login }}"
+            if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
+              echo "Authorized user ($AUTHOR). Proceeding."
+            elif [[ "${{ github.event.pull_request.state }}" == "open" ]]; then
+              echo "PR is open. Protection rules in place. Proceeding."
+            else
+              echo "Unauthorized user ($AUTHOR). Exiting."
+              exit 1
+            fi
+          else
+            echo "No workflow file changes. Proceeding."
+          fi
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.0.0
+        with:
+          python-version: 3.11.6
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run E2E test
+        run: uv run python tests/scripts/end_to_end_test_futurehouse.py
+
+  topological-sort:
+    needs: determine-changes
+    if: >-
+      needs.determine-changes.outputs.e2e == 'true'
+      && github.event_name != 'push'
+    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_AIS_SERVER: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+      COLUMNS: 110
+      MAX_RETRIES: 3
+      RETRY_DELAY: 5
+      EXPECTED_IMPROVEMENT_PCT: 5
+      CODEFLASH_END_TO_END: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || '' }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate PR
+        if: github.event_name == 'pull_request'
+        run: |
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -q "^.github/workflows/"; then
+            echo "Workflow changes detected."
+            AUTHOR="${{ github.event.pull_request.user.login }}"
+            if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
+              echo "Authorized user ($AUTHOR). Proceeding."
+            elif [[ "${{ github.event.pull_request.state }}" == "open" ]]; then
+              echo "PR is open. Protection rules in place. Proceeding."
+            else
+              echo "Unauthorized user ($AUTHOR). Exiting."
+              exit 1
+            fi
+          else
+            echo "No workflow file changes. Proceeding."
+          fi
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.0.0
+        with:
+          python-version: 3.11.6
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run E2E test
+        run: uv run python tests/scripts/end_to_end_test_topological_sort_worktree.py
+
+  async-optimization:
+    needs: determine-changes
+    if: >-
+      needs.determine-changes.outputs.e2e == 'true'
+      && github.event_name != 'push'
+    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_AIS_SERVER: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+      COLUMNS: 110
+      MAX_RETRIES: 3
+      RETRY_DELAY: 5
+      EXPECTED_IMPROVEMENT_PCT: 10
+      CODEFLASH_END_TO_END: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || '' }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate PR
+        if: github.event_name == 'pull_request'
+        run: |
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -q "^.github/workflows/"; then
+            echo "Workflow changes detected."
+            AUTHOR="${{ github.event.pull_request.user.login }}"
+            if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
+              echo "Authorized user ($AUTHOR). Proceeding."
+            elif [[ "${{ github.event.pull_request.state }}" == "open" ]]; then
+              echo "PR is open. Protection rules in place. Proceeding."
+            else
+              echo "Unauthorized user ($AUTHOR). Exiting."
+              exit 1
+            fi
+          else
+            echo "No workflow file changes. Proceeding."
+          fi
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.0.0
+        with:
+          python-version: 3.11.6
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run E2E test
+        run: uv run python tests/scripts/end_to_end_test_async.py
+
+  benchmark-bubble-sort:
+    needs: determine-changes
+    if: >-
+      needs.determine-changes.outputs.e2e == 'true'
+      && github.event_name != 'push'
+    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_AIS_SERVER: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+      COLUMNS: 110
+      MAX_RETRIES: 3
+      RETRY_DELAY: 5
+      EXPECTED_IMPROVEMENT_PCT: 5
+      CODEFLASH_END_TO_END: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || '' }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate PR
+        if: github.event_name == 'pull_request'
+        run: |
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -q "^.github/workflows/"; then
+            echo "Workflow changes detected."
+            AUTHOR="${{ github.event.pull_request.user.login }}"
+            if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
+              echo "Authorized user ($AUTHOR). Proceeding."
+            elif [[ "${{ github.event.pull_request.state }}" == "open" ]]; then
+              echo "PR is open. Protection rules in place. Proceeding."
+            else
+              echo "Unauthorized user ($AUTHOR). Exiting."
+              exit 1
+            fi
+          else
+            echo "No workflow file changes. Proceeding."
+          fi
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.0.0
+        with:
+          python-version: 3.11.6
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run E2E test
+        run: uv run python tests/scripts/end_to_end_test_benchmark_sort.py
+
+  coverage-e2e:
+    needs: determine-changes
+    if: >-
+      needs.determine-changes.outputs.e2e == 'true'
+      && github.event_name != 'push'
+    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_AIS_SERVER: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+      MAX_RETRIES: 3
+      RETRY_DELAY: 5
+      CODEFLASH_END_TO_END: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || '' }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate PR
+        if: github.event_name == 'pull_request'
+        run: |
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -q "^.github/workflows/"; then
+            echo "Workflow changes detected."
+            AUTHOR="${{ github.event.pull_request.user.login }}"
+            if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
+              echo "Authorized user ($AUTHOR). Proceeding."
+            elif [[ "${{ github.event.pull_request.state }}" == "open" ]]; then
+              echo "PR is open. Protection rules in place. Proceeding."
+            else
+              echo "Unauthorized user ($AUTHOR). Exiting."
+              exit 1
+            fi
+          else
+            echo "No workflow file changes. Proceeding."
+          fi
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.0.0
+        with:
+          python-version: 3.11.6
+
+      - name: Install dependencies
+        run: |
+          uv sync
+          uv add black
+
+      - name: Run E2E test
+        run: uv run python tests/scripts/end_to_end_test_coverage.py
+
+  init-optimization:
+    needs: determine-changes
+    if: >-
+      needs.determine-changes.outputs.e2e == 'true'
+      && github.event_name != 'push'
+    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_AIS_SERVER: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+      COLUMNS: 110
+      MAX_RETRIES: 3
+      RETRY_DELAY: 5
+      EXPECTED_IMPROVEMENT_PCT: 10
+      CODEFLASH_END_TO_END: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || '' }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate PR
+        if: github.event_name == 'pull_request'
+        run: |
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -q "^.github/workflows/"; then
+            echo "Workflow changes detected."
+            AUTHOR="${{ github.event.pull_request.user.login }}"
+            if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
+              echo "Authorized user ($AUTHOR). Proceeding."
+            elif [[ "${{ github.event.pull_request.state }}" == "open" ]]; then
+              echo "PR is open. Protection rules in place. Proceeding."
+            else
+              echo "Unauthorized user ($AUTHOR). Exiting."
+              exit 1
+            fi
+          else
+            echo "No workflow file changes. Proceeding."
+          fi
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.0.0
+        with:
+          python-version: 3.11.6
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run E2E test
+        run: uv run python tests/scripts/end_to_end_test_init_optimization.py
+
+  # --- JS E2Es (need Node.js + packages/) ---
+
+  js-cjs-function:
+    needs: determine-changes
+    if: >-
+      (needs.determine-changes.outputs.e2e == 'true'
+       || needs.determine-changes.outputs.e2e_js == 'true')
+      && github.event_name != 'push'
+    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_AIS_SERVER: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+      COLUMNS: 110
+      MAX_RETRIES: 3
+      RETRY_DELAY: 5
+      EXPECTED_IMPROVEMENT_PCT: 50
+      CODEFLASH_END_TO_END: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || '' }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate PR
+        if: github.event_name == 'pull_request'
+        run: |
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -q "^.github/workflows/"; then
+            echo "Workflow changes detected."
+            AUTHOR="${{ github.event.pull_request.user.login }}"
+            if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
+              echo "Authorized user ($AUTHOR). Proceeding."
+            elif [[ "${{ github.event.pull_request.state }}" == "open" ]]; then
+              echo "PR is open. Protection rules in place. Proceeding."
+            else
+              echo "Unauthorized user ($AUTHOR). Exiting."
+              exit 1
+            fi
+          else
+            echo "No workflow file changes. Proceeding."
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install codeflash npm package dependencies
+        run: |
+          cd packages/codeflash
+          npm install
+
+      - name: Install JS test project dependencies
+        run: |
+          cd code_to_optimize/js/code_to_optimize_js
+          npm install
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.0.0
+        with:
+          python-version: 3.11.6
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run E2E test
+        run: uv run python tests/scripts/end_to_end_test_js_cjs_function.py
+
+  js-esm-async:
+    needs: determine-changes
+    if: >-
+      (needs.determine-changes.outputs.e2e == 'true'
+       || needs.determine-changes.outputs.e2e_js == 'true')
+      && github.event_name != 'push'
+    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_AIS_SERVER: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+      COLUMNS: 110
+      MAX_RETRIES: 3
+      RETRY_DELAY: 5
+      EXPECTED_IMPROVEMENT_PCT: 10
+      CODEFLASH_END_TO_END: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || '' }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate PR
+        if: github.event_name == 'pull_request'
+        run: |
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -q "^.github/workflows/"; then
+            echo "Workflow changes detected."
+            AUTHOR="${{ github.event.pull_request.user.login }}"
+            if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
+              echo "Authorized user ($AUTHOR). Proceeding."
+            elif [[ "${{ github.event.pull_request.state }}" == "open" ]]; then
+              echo "PR is open. Protection rules in place. Proceeding."
+            else
+              echo "Unauthorized user ($AUTHOR). Exiting."
+              exit 1
+            fi
+          else
+            echo "No workflow file changes. Proceeding."
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install codeflash npm package dependencies
+        run: |
+          cd packages/codeflash
+          npm install
+
+      - name: Install JS test project dependencies
+        run: |
+          cd code_to_optimize/js/code_to_optimize_js_esm
+          npm install
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.0.0
+        with:
+          python-version: 3.11.6
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run E2E test
+        run: uv run python tests/scripts/end_to_end_test_js_esm_async.py
+
+  js-ts-class:
+    needs: determine-changes
+    if: >-
+      (needs.determine-changes.outputs.e2e == 'true'
+       || needs.determine-changes.outputs.e2e_js == 'true')
+      && github.event_name != 'push'
+    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_AIS_SERVER: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+      COLUMNS: 110
+      MAX_RETRIES: 3
+      RETRY_DELAY: 5
+      EXPECTED_IMPROVEMENT_PCT: 30
+      CODEFLASH_END_TO_END: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || '' }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate PR
+        if: github.event_name == 'pull_request'
+        run: |
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -q "^.github/workflows/"; then
+            echo "Workflow changes detected."
+            AUTHOR="${{ github.event.pull_request.user.login }}"
+            if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
+              echo "Authorized user ($AUTHOR). Proceeding."
+            elif [[ "${{ github.event.pull_request.state }}" == "open" ]]; then
+              echo "PR is open. Protection rules in place. Proceeding."
+            else
+              echo "Unauthorized user ($AUTHOR). Exiting."
+              exit 1
+            fi
+          else
+            echo "No workflow file changes. Proceeding."
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install codeflash npm package dependencies
+        run: |
+          cd packages/codeflash
+          npm install
+
+      - name: Install JS test project dependencies
+        run: |
+          cd code_to_optimize/js/code_to_optimize_ts
+          npm install
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.0.0
+        with:
+          python-version: 3.11.6
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run E2E test
+        run: uv run python tests/scripts/end_to_end_test_js_ts_class.py
+
+  # --- Java E2Es (need JDK + Maven) ---
+
+  java-fibonacci-nogit:
+    needs: determine-changes
+    if: >-
+      (needs.determine-changes.outputs.e2e == 'true'
+       || needs.determine-changes.outputs.e2e_java == 'true')
+      && github.event_name != 'push'
+    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_AIS_SERVER: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+      COLUMNS: 110
+      MAX_RETRIES: 3
+      RETRY_DELAY: 5
+      EXPECTED_IMPROVEMENT_PCT: 70
+      CODEFLASH_END_TO_END: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || '' }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate PR
+        if: github.event_name == 'pull_request'
+        run: |
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -q "^.github/workflows/"; then
+            echo "Workflow changes detected."
+            AUTHOR="${{ github.event.pull_request.user.login }}"
+            if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
+              echo "Authorized user ($AUTHOR). Proceeding."
+            elif [[ "${{ github.event.pull_request.state }}" == "open" ]]; then
+              echo "PR is open. Protection rules in place. Proceeding."
+            else
+              echo "Unauthorized user ($AUTHOR). Exiting."
+              exit 1
+            fi
+          else
+            echo "No workflow file changes. Proceeding."
+          fi
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.0.0
+        with:
+          python-version: 3.11.6
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Build codeflash-runtime JAR
+        run: |
+          cd codeflash-java-runtime
+          mvn clean package -q -DskipTests
+          mvn install -q -DskipTests
+
+      - name: Verify Java installation
+        run: |
+          java -version
+          mvn --version
+
+      - name: Remove .git
+        run: |
+          if [ -d ".git" ]; then
+            sudo rm -rf .git
+            echo ".git directory removed."
+          else
+            echo ".git directory does not exist."
+            exit 1
+          fi
+
+      - name: Run E2E test
+        run: uv run python tests/scripts/end_to_end_test_java_fibonacci.py
+
+  java-tracer:
+    needs: determine-changes
+    if: >-
+      (needs.determine-changes.outputs.e2e == 'true'
+       || needs.determine-changes.outputs.e2e_java == 'true')
+      && github.event_name != 'push'
+    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_AIS_SERVER: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+      COLUMNS: 110
+      MAX_RETRIES: 3
+      RETRY_DELAY: 5
+      EXPECTED_IMPROVEMENT_PCT: 10
+      CODEFLASH_END_TO_END: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || '' }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate PR
+        if: github.event_name == 'pull_request'
+        run: |
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -q "^.github/workflows/"; then
+            echo "Workflow changes detected."
+            AUTHOR="${{ github.event.pull_request.user.login }}"
+            if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
+              echo "Authorized user ($AUTHOR). Proceeding."
+            elif [[ "${{ github.event.pull_request.state }}" == "open" ]]; then
+              echo "PR is open. Protection rules in place. Proceeding."
+            else
+              echo "Unauthorized user ($AUTHOR). Exiting."
+              exit 1
+            fi
+          else
+            echo "No workflow file changes. Proceeding."
+          fi
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.0.0
+        with:
+          python-version: 3.11.6
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Build codeflash-runtime JAR
+        run: |
+          cd codeflash-java-runtime
+          mvn clean package -q -DskipTests
+          mvn install -q -DskipTests
+
+      - name: Verify Java installation
+        run: |
+          java -version
+          mvn --version
+
+      - name: Run E2E test
+        run: uv run python tests/scripts/end_to_end_test_java_tracer.py
+
+  # ---------------------------------------------------------------------------
+  # Gate job — the ONLY required check in the GitHub ruleset.
+  # Accepts "success" and "skipped" (job skipped by change detection).
+  # Rejects "failure" and "cancelled".
+  # ---------------------------------------------------------------------------
+  required-checks-passed:
+    name: required checks passed
+    if: always()
+    needs:
+      - unit-tests
+      - type-check
+      - prek
+      - tracer-replay
+      - bubble-sort-pytest-nogit
+      - bubble-sort-unittest
+      - futurehouse-structure
+      - topological-sort
+      - async-optimization
+      - benchmark-bubble-sort
+      - coverage-e2e
+      - init-optimization
+      - js-cjs-function
+      - js-esm-async
+      - js-ts-class
+      - java-fibonacci-nogit
+      - java-tracer
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all required jobs passed
+        run: |
+          failing=$(echo "$NEEDS_JSON" | jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key): \(.value.result)"')
+          if [ -n "$failing" ]; then
+            echo "Required jobs failed or were cancelled:"
+            echo "$failing"
+            exit 1
+          fi
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
