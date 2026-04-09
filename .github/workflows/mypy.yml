@@ -9,14 +9,12 @@ on:
       - 'pyproject.toml'
       - 'uv.lock'
       - 'mypy_allowlist.txt'
-      - '.github/workflows/mypy.yml'
   pull_request:
     paths:
       - 'codeflash/**'
       - 'pyproject.toml'
       - 'uv.lock'
       - 'mypy_allowlist.txt'
-      - '.github/workflows/mypy.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}

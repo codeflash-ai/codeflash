@@ -7,7 +7,6 @@ on:
       - 'packages/**'
       - 'pyproject.toml'
       - 'uv.lock'
-      - '.github/workflows/prek.yaml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}
