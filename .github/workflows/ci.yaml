@@ -62,18 +62,15 @@ jobs:
           # Unit tests: code + test infra + java + packages + build config
           check_paths unit_tests \
             'codeflash/' 'codeflash-benchmark/' 'codeflash-java-runtime/' \
-            'tests/' 'packages/' 'pyproject.toml' 'uv.lock' \
-            '.github/workflows/ci.yaml'
+            'tests/' 'packages/' 'pyproject.toml' 'uv.lock'
 
           # Type checking: code + build config + mypy config
           check_paths type_check \
-            'codeflash/' 'pyproject.toml' 'uv.lock' 'mypy_allowlist.txt' \
-            '.github/workflows/ci.yaml'
+            'codeflash/' 'pyproject.toml' 'uv.lock' 'mypy_allowlist.txt'
 
-          # E2E tests: code + tests + build config + this workflow
+          # E2E tests: code + tests + build config
           check_paths e2e \
-            'codeflash/' 'tests/' 'pyproject.toml' 'uv.lock' \
-            '.github/workflows/ci.yaml'
+            'codeflash/' 'tests/' 'pyproject.toml' 'uv.lock'
         env:
           MERGE_BASE: ${{ steps.merge_base.outputs.sha }}
 
