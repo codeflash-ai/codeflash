@@ -74,13 +74,20 @@ jobs:
           check_paths e2e \
             'codeflash/' 'tests/' 'pyproject.toml' 'uv.lock'
 
-          # JS E2E tests: JS packages changed
+          # JS E2E tests: JS language support + shared pipeline + packages
           check_paths e2e_js \
-            'packages/'
+            'codeflash/languages/javascript/' 'codeflash/languages/base.py' \
+            'codeflash/languages/registry.py' 'codeflash/optimization/' \
+            'codeflash/verification/' 'packages/' \
+            'tests/' 'pyproject.toml' 'uv.lock'
 
-          # Java E2E tests: java runtime or java test fixtures changed
+          # Java E2E tests: Java language support + shared pipeline + runtime
           check_paths e2e_java \
-            'codeflash-java-runtime/' 'code_to_optimize/java/'
+            'codeflash/languages/java/' 'codeflash/languages/base.py' \
+            'codeflash/languages/registry.py' 'codeflash/optimization/' \
+            'codeflash/verification/' 'codeflash-java-runtime/' \
+            'code_to_optimize/java/' \
+            'tests/' 'pyproject.toml' 'uv.lock'
         env:
           MERGE_BASE: ${{ steps.merge_base.outputs.sha }}
 
@@ -313,8 +320,7 @@ jobs:
   e2e-js:
     needs: determine-changes
     if: >-
-      (needs.determine-changes.outputs.e2e == 'true'
-       || needs.determine-changes.outputs.e2e_js == 'true')
+      needs.determine-changes.outputs.e2e_js == 'true'
       && github.event_name != 'push'
     strategy:
       fail-fast: false
@@ -399,8 +405,7 @@ jobs:
   e2e-java:
     needs: determine-changes
     if: >-
-      (needs.determine-changes.outputs.e2e == 'true'
-       || needs.determine-changes.outputs.e2e_java == 'true')
+      needs.determine-changes.outputs.e2e_java == 'true'
       && github.event_name != 'push'
     strategy:
       fail-fast: false
