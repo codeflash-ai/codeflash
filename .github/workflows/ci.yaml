@@ -167,14 +167,32 @@ jobs:
       && (needs.determine-changes.outputs.e2e == 'true'
           || needs.determine-changes.outputs.e2e_js == 'true')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.head_ref }}
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v8.0.0
+
+      - name: Auto-fix formatting
+        run: |
+          uv run ruff check --fix . || true
+          uv run ruff format .
+
+      - name: Commit and push fixes
+        run: |
+          git diff --quiet && exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "style: auto-format with ruff"
+          git push
+
       - uses: j178/prek-action@v1
         with:
-          extra-args: '--from-ref origin/${{ github.base_ref }} --to-ref ${{ github.sha }}'
+          extra-args: '--from-ref origin/${{ github.base_ref }} --to-ref HEAD'
 
   # ---------------------------------------------------------------------------
   # E2E tests — only on pull_request and workflow_dispatch (not push to main)
