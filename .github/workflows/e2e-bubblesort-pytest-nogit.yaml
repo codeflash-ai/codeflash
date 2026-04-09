@@ -3,7 +3,11 @@ name: E2E - Bubble Sort Pytest (No Git)
 on:
   pull_request:
     paths:
-      - '**'  # Trigger for all paths
+      - 'codeflash/**'
+      - 'tests/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/e2e-*.yaml'
 
   workflow_dispatch:
 
