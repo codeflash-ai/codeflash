@@ -6,12 +6,18 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.languages.java.comparator import compare_invocations_directly, compare_test_results, values_equal
+from codeflash.languages.java.comparator import (
+    _find_comparator_jar,
+    compare_invocations_directly,
+    compare_test_results,
+    values_equal,
+)
 from codeflash.models.models import TestDiffScope
 
-# Skip tests that require Java runtime if Java is not available
+# Skip tests that require the codeflash-runtime JAR (built by Maven from codeflash-java-runtime/)
 requires_java = pytest.mark.skipif(
-    shutil.which("java") is None, reason="Java not found - skipping Comparator integration tests"
+    _find_comparator_jar() is None,
+    reason="codeflash-runtime JAR not found - skipping Comparator integration tests",
 )
 
 # Kryo-serialized bytes for common test values.
