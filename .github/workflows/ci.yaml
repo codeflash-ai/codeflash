@@ -12,6 +12,8 @@ on:
       - 'pyproject.toml'
       - 'uv.lock'
       - 'mypy_allowlist.txt'
+      - '.github/workflows/ci.yaml'
+      - '.github/actions/**'
   pull_request:
   workflow_dispatch:
 
@@ -366,6 +368,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            packages/codeflash/package-lock.json
+            code_to_optimize/js/*/package-lock.json
 
       - name: Install codeflash npm package dependencies
         run: |
@@ -452,16 +458,10 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Build codeflash-runtime JAR
+      - name: Build and install codeflash-runtime JAR
         run: |
           cd codeflash-java-runtime
-          mvn clean package -q -DskipTests
           mvn install -q -DskipTests
-
-      - name: Verify Java installation
-        run: |
-          java -version
-          mvn --version
 
       - name: Remove .git
         if: matrix.remove_git
