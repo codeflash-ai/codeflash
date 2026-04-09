@@ -7,7 +7,6 @@ on:
       - 'tests/**'
       - 'pyproject.toml'
       - 'uv.lock'
-      - '.github/workflows/codeflash-optimize.yaml'
 
   workflow_dispatch:
 
