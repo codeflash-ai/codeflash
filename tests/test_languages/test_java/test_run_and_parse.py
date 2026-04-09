@@ -377,7 +377,6 @@ public class AdderMultiTest {
         assert "testAddPositive" in test_names
         assert "testAddZero" in test_names
 
-    @requires_java_runtime
     def test_behavior_return_value_correctness(self, tmp_path):
         """Verify the Comparator JAR correctly identifies equivalent vs. differing results.
 
