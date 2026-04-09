@@ -1929,3 +1929,77 @@ public final class LuaMap {
 }
 """
         assert new_code == expected_code
+
+
+class TestFieldInjectionClassFiltering:
+    """Tests that fields from inner/anonymous classes are not injected into the target class."""
+
+    def test_inner_class_fields_not_injected_into_outer(self, tmp_path, java_support):
+        """Reproduces the Guava/Iterables.mergeSorted bug.
+
+        When the LLM generates an optimization that includes an inner class with
+        fields (e.g., generic type parameters), those fields must NOT be injected
+        into the outer class where the target method lives.
+        """
+        from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+
+        java_file = tmp_path / "Outer.java"
+        original_code = """\
+public class Outer {
+    private int count;
+
+    public int process(int x) {
+        return x + count;
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # LLM generates optimization with an inner class that has its own field.
+        # The inner class's field should NOT be injected into Outer.
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class Outer {{
+    private int count;
+    private static final int OFFSET = 10;
+
+    public int process(int x) {{
+        return x + count + OFFSET;
+    }}
+
+    private static class Inner {{
+        private final String badField;
+
+        Inner(String s) {{
+            this.badField = s;
+        }}
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        function_to_optimize = FunctionToOptimize(
+            function_name="process",
+            file_path=java_file,
+            starting_line=4,
+            ending_line=6,
+            parents=[FunctionParent(name="Outer", type="ClassDef")],
+            qualified_name="Outer.process",
+            is_method=True,
+        )
+
+        result = java_support.replace_function_definitions(
+            function_names=["process"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            function_to_optimize=function_to_optimize,
+        )
+
+        assert result is True
+        new_code = java_file.read_text(encoding="utf-8")
+
+        # Only OFFSET field should be added (belongs to Outer).
+        # badField belongs to Inner and should NOT appear.
+        assert "OFFSET" in new_code
+        assert "badField" not in new_code
