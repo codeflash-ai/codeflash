@@ -9,7 +9,7 @@ import java.util.List;
 public class Fibonacci {
 
     /**
-     * Calculate the nth Fibonacci number using recursion.
+     * Calculate the nth Fibonacci number using an efficient iterative fast-doubling algorithm.
      *
      * @param n Position in Fibonacci sequence (0-indexed)
      * @return The nth Fibonacci number
@@ -21,7 +21,28 @@ public class Fibonacci {
         if (n <= 1) {
             return n;
         }
-        return fibonacci(n - 1) + fibonacci(n - 2);
+
+        long a = 0L; // F(0)
+        long b = 1L; // F(1)
+
+        // Iterate from the highest bit of n down to the lowest.
+        for (int mask = Integer.highestOneBit(n); mask != 0; mask >>= 1) {
+            // Apply doubling formulas:
+            // F(2k)   = F(k) * (2*F(k+1) - F(k))
+            // F(2k+1) = F(k+1)^2 + F(k)^2
+            long twoBMinusA = (b << 1) - a;
+            long c = a * twoBMinusA;       // F(2k)
+            long d = a * a + b * b;        // F(2k+1)
+
+            if ((n & mask) == 0) {
+                a = c;
+                b = d;
+            } else {
+                a = d;
+                b = c + d;
+            }
+        }
+        return a;
     }
 
     /**
