@@ -234,6 +234,7 @@ public class PreciseWaiter {
 """
 
 
+@requires_java_runtime
 class TestJavaRunAndParseBehavior:
     def test_behavior_single_test_method(self, java_project):
         """Full pipeline: instrument → run → parse with precise field assertions."""
@@ -413,6 +414,7 @@ public class AdderMultiTest {
         assert equivalent is False
 
 
+@requires_java_runtime
 class TestJavaRunAndParsePerformance:
     """Tests that the performance instrumentation produces correct timing data.
 
