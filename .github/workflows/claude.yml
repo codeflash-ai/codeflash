@@ -53,7 +53,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref || github.ref }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
 
       - name: Install dependencies
         run: |
@@ -313,7 +313,7 @@ jobs:
           ref: ${{ steps.pr-ref.outputs.ref }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
 
       - name: Install dependencies
         run: |
