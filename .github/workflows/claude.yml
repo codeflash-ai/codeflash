@@ -27,17 +27,21 @@ on:
 jobs:
   # Automatic PR review (can fix linting issues and push)
   # Blocked for fork PRs to prevent malicious code execution
+  # TEMPORARILY DISABLED — re-enable by removing `false &&` below
   pr-review:
     concurrency:
       group: pr-review-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     if: |
+      false &&
       (
-        github.event_name == 'pull_request' &&
-        github.event.sender.login != 'claude[bot]' &&
-        github.event.pull_request.head.repo.full_name == github.repository
-      ) ||
-      github.event_name == 'workflow_dispatch'
+        (
+          github.event_name == 'pull_request' &&
+          github.event.sender.login != 'claude[bot]' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        ) ||
+        github.event_name == 'workflow_dispatch'
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: write
