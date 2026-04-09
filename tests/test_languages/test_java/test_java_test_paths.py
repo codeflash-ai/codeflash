@@ -489,23 +489,42 @@ class TestExtractModulesFromSettingsGradle:
     def test_simple_top_level_modules(self):
         content = """include("streams", "clients", "tools")"""
         modules = _extract_modules_from_settings_gradle(content)
-        assert "streams" in modules
-        assert "clients" in modules
-        assert "tools" in modules
+        assert modules == ["streams", "clients", "tools"]
 
     def test_nested_gradle_modules(self):
         """Nested modules like connect:runtime should be extracted."""
         content = """include("connect:runtime", "connect:api", "streams")"""
         modules = _extract_modules_from_settings_gradle(content)
-        assert "connect:runtime" in modules
-        assert "connect:api" in modules
-        assert "streams" in modules
+        assert modules == ["connect:runtime", "connect:api", "streams"]
 
     def test_leading_colon_stripped(self):
         content = """include(":streams", ":clients")"""
         modules = _extract_modules_from_settings_gradle(content)
-        assert "streams" in modules
-        assert "clients" in modules
+        assert modules == ["streams", "clients"]
+
+    def test_multiline_include(self):
+        """Multi-line include() calls should be parsed correctly."""
+        content = 'include(\n    "rewrite-core",\n    "rewrite-java",\n    "rewrite-test"\n)'
+        modules = _extract_modules_from_settings_gradle(content)
+        assert modules == ["rewrite-core", "rewrite-java", "rewrite-test"]
+
+    def test_kotlin_listof_variable(self):
+        """Kotlin-style val x = listOf(...) should be parsed for module names."""
+        content = 'val allProjects = listOf(\n    "rewrite-core",\n    "rewrite-java",\n    "rewrite-test"\n)\ninclude(*(allProjects).toTypedArray())'
+        modules = _extract_modules_from_settings_gradle(content)
+        assert modules == ["rewrite-core", "rewrite-java", "rewrite-test"]
+
+    def test_groovy_include_without_parens(self):
+        """Groovy-style include without parentheses."""
+        content = "include 'streams', 'clients'"
+        modules = _extract_modules_from_settings_gradle(content)
+        assert modules == ["streams", "clients"]
+
+    def test_deduplicates_modules(self):
+        """Same module referenced in listOf and include should appear once."""
+        content = 'val mods = listOf("core")\ninclude("core", "web")'
+        modules = _extract_modules_from_settings_gradle(content)
+        assert modules == ["core", "web"]
 
 
 class TestFindMultiModuleRoot:
