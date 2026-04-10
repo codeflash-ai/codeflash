@@ -134,3 +134,44 @@ class TestJavaSupportWithFixture:
         source = calculator_file.read_text(encoding="utf-8")
         functions = support.discover_functions(source, calculator_file)
         assert len(functions) > 0
+
+
+class TestJdkVersionCheck:
+    def test_jdk8_rejected(self, tmp_path: Path) -> None:
+        from unittest.mock import MagicMock, patch
+
+        support = get_java_support()
+
+        mock_config = MagicMock()
+        mock_config.java_version = "8"
+        mock_config.test_framework = "junit5"
+
+        with patch("codeflash.languages.java.support.detect_java_project", return_value=mock_config):
+            result = support.ensure_runtime_environment(tmp_path)
+        assert result is False
+
+    def test_jdk11_accepted(self, tmp_path: Path) -> None:
+        from unittest.mock import MagicMock, patch
+
+        support = get_java_support()
+
+        mock_config = MagicMock()
+        mock_config.java_version = "11"
+        mock_config.test_framework = "junit5"
+
+        with patch("codeflash.languages.java.support.detect_java_project", return_value=mock_config):
+            result = support.ensure_runtime_environment(tmp_path)
+        assert result is True
+
+    def test_jdk21_accepted(self, tmp_path: Path) -> None:
+        from unittest.mock import MagicMock, patch
+
+        support = get_java_support()
+
+        mock_config = MagicMock()
+        mock_config.java_version = "21"
+        mock_config.test_framework = "junit5"
+
+        with patch("codeflash.languages.java.support.detect_java_project", return_value=mock_config):
+            result = support.ensure_runtime_environment(tmp_path)
+        assert result is True
