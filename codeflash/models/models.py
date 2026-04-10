@@ -1,37 +1,26 @@
 from __future__ import annotations
 
+import enum
+import re
+import sys
 from collections import Counter, defaultdict
+from collections.abc import Collection
+from enum import Enum, IntEnum
 from functools import lru_cache
-from typing import TYPE_CHECKING
+from pathlib import Path
+from re import Pattern
+from typing import TYPE_CHECKING, Any, NamedTuple, Optional, cast
 
-import libcst as cst
-from rich.tree import Tree
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, model_validator
+from pydantic.dataclasses import dataclass
 
-from codeflash.cli_cmds.console import DEBUG_MODE, lsp_log
-from codeflash.languages.registry import get_language_support
-from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table
-from codeflash.lsp.lsp_message import LspMarkdownMessage
 from codeflash.models.test_type import TestType
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-import enum
-import re
-import sys
-from collections.abc import Collection
-from enum import Enum, IntEnum
-from pathlib import Path
-from re import Pattern
-from typing import Any, NamedTuple, Optional, cast
-
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, model_validator
-from pydantic.dataclasses import dataclass
-
-from codeflash.cli_cmds.console import console, logger
-from codeflash.code_utils.code_utils import diff_length, module_name_from_file_path, validate_python_code
-from codeflash.code_utils.env_utils import is_end_to_end
-from codeflash.verification.comparator import comparator
+    import libcst as cst
+    from rich.tree import Tree
 
 
 @dataclass(frozen=True)
@@ -254,6 +243,8 @@ class CodeString(BaseModel):
     def validate_code_syntax(self) -> CodeString:
         """Validate code syntax for the specified language."""
         if self.language == "python":
+            from codeflash.code_utils.code_utils import validate_python_code
+
             validate_python_code(self.code)
         else:
             from codeflash.languages.registry import get_language_support
@@ -267,6 +258,8 @@ class CodeString(BaseModel):
 
 def get_comment_prefix(file_path: Path) -> str:
     """Get the comment prefix for a given language."""
+    from codeflash.languages.registry import get_language_support
+
     support = get_language_support(file_path)
     return support.comment_prefix
 
@@ -565,6 +558,8 @@ class CandidateEvaluationContext:
         self.optimizations_post[past_opt_id] = self.ast_code_to_id[normalized_code]["shorter_source_code"].markdown
 
         # Update to shorter code if this candidate has a shorter diff
+        from codeflash.code_utils.code_utils import diff_length
+
         new_diff_len = diff_length(candidate.source_code.flat, original_flat_code)
         if new_diff_len < self.ast_code_to_id[normalized_code]["diff_len"]:
             self.ast_code_to_id[normalized_code]["shorter_source_code"] = candidate.source_code
@@ -574,6 +569,8 @@ class CandidateEvaluationContext:
         self, normalized_code: str, candidate: OptimizedCandidate, original_flat_code: str
     ) -> None:
         """Register a new candidate that hasn't been seen before."""
+        from codeflash.code_utils.code_utils import diff_length
+
         self.ast_code_to_id[normalized_code] = {
             "optimization_id": candidate.optimization_id,
             "shorter_source_code": candidate.source_code,
@@ -669,6 +666,9 @@ class CoverageData:
 
     def log_coverage(self) -> None:
         from rich.tree import Tree
+
+        from codeflash.cli_cmds.console import console, logger
+        from codeflash.code_utils.env_utils import is_end_to_end
 
         tree = Tree("Test Coverage Results")
         tree.add(f"Main Function: {self.main_func_coverage.name}: {self.coverage:.2f}%")
@@ -769,12 +769,16 @@ class InvocationId:
         )
 
     def find_func_in_class(self, class_node: cst.ClassDef, func_name: str) -> Optional[cst.FunctionDef]:
+        import libcst as cst
+
         for stmt in class_node.body.body:
             if isinstance(stmt, cst.FunctionDef) and stmt.name.value == func_name:
                 return stmt
         return None
 
     def get_src_code(self, test_path: Path) -> Optional[str]:
+        import libcst as cst
+
         if not test_path.exists():
             return None
         try:
@@ -856,6 +860,8 @@ class TestResults(BaseModel):  # noqa: PLW1641
         unique_id = function_test_invocation.unique_invocation_loop_id
         test_result_idx = self.test_result_idx
         if unique_id in test_result_idx:
+            from codeflash.cli_cmds.console import DEBUG_MODE, logger
+
             if DEBUG_MODE:
                 logger.warning(f"Test result with id {unique_id} already exists. SKIPPING")
             return
@@ -876,6 +882,8 @@ class TestResults(BaseModel):  # noqa: PLW1641
         self, benchmark_keys: list[BenchmarkKey], benchmark_replay_test_dir: Path, project_root: Path
     ) -> dict[BenchmarkKey, TestResults]:
         """Group TestResults by benchmark for calculating improvements for each benchmark."""
+        from codeflash.code_utils.code_utils import module_name_from_file_path
+
         test_results_by_benchmark = defaultdict(TestResults)
         benchmark_module_path = {}
         for benchmark_key in benchmark_keys:
@@ -929,9 +937,17 @@ class TestResults(BaseModel):  # noqa: PLW1641
 
     @staticmethod
     def report_to_tree(report: dict[TestType, dict[str, int]], title: str) -> Tree:
+        from rich.tree import Tree
+
+        from codeflash.lsp.helpers import is_LSP_enabled
+
         tree = Tree(title)
 
         if is_LSP_enabled():
+            from codeflash.cli_cmds.console import lsp_log
+            from codeflash.lsp.helpers import report_to_markdown_table
+            from codeflash.lsp.lsp_message import LspMarkdownMessage
+
             # Build markdown table
             markdown = report_to_markdown_table(report, title)
             lsp_log(LspMarkdownMessage(markdown=markdown))
@@ -946,6 +962,8 @@ class TestResults(BaseModel):  # noqa: PLW1641
         return tree
 
     def usable_runtime_data_by_test_case(self) -> dict[InvocationId, list[int]]:
+        from codeflash.cli_cmds.console import logger
+
         # Efficient single traversal, directly accumulating into a dict.
         # can track mins here and only sums can be return in total_passed_runtime
         by_id: dict[InvocationId, list[int]] = {}
@@ -1025,6 +1043,8 @@ class TestResults(BaseModel):  # noqa: PLW1641
         return bool(self.test_results)
 
     def __eq__(self, other: object) -> bool:
+        from codeflash.verification.comparator import comparator
+
         # Unordered comparison
         if type(self) is not type(other):
             return False

@@ -9,17 +9,16 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
 
-from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_utils import exit_with_message
-from codeflash.code_utils.formatter import format_code
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config, save_api_key_to_rc
-from codeflash.languages.registry import get_language_support_by_common_formatters
-from codeflash.lsp.helpers import is_LSP_enabled
 
 
 def check_formatter_installed(
     formatter_cmds: list[str], exit_on_failure: bool = True, language: str = "python"
 ) -> bool:
+    from codeflash.cli_cmds.console import logger
+    from codeflash.code_utils.formatter import format_code
+    from codeflash.languages.registry import get_language_support_by_common_formatters
+
     if not formatter_cmds or formatter_cmds[0] == "disabled":
         return True
     first_cmd = formatter_cmds[0]
@@ -69,6 +68,8 @@ def check_formatter_installed(
 
 @lru_cache(maxsize=1)
 def get_codeflash_api_key() -> str:
+    from codeflash.cli_cmds.console import logger
+
     # Check environment variable first
     env_api_key = os.environ.get("CODEFLASH_API_KEY")
     shell_api_key = read_api_key_from_shell_config()
@@ -96,7 +97,8 @@ def get_codeflash_api_key() -> str:
     # Prefer the shell configuration over environment variables for lsp,
     # as the API key may change in the RC file during lsp runtime. Since the LSP client (extension) can restart
     # within the same process, the environment variable could become outdated.
-    api_key = shell_api_key or env_api_key if is_LSP_enabled() else env_api_key or shell_api_key
+    is_lsp = os.getenv("CODEFLASH_LSP", default="false").lower() == "true"
+    api_key = shell_api_key or env_api_key if is_lsp else env_api_key or shell_api_key
 
     api_secret_docs_message = "For more information, refer to the documentation at [https://docs.codeflash.ai/optimizing-with-codeflash/codeflash-github-actions#manual-setup]."  # noqa
     if not api_key:
@@ -106,6 +108,8 @@ def get_codeflash_api_key() -> str:
             f"{api_secret_docs_message}"
         )
         if is_repo_a_fork():
+            from codeflash.code_utils.code_utils import exit_with_message
+
             msg = (
                 "Codeflash API key not detected in your environment. It appears you're running Codeflash from a GitHub fork.\n"
                 "For external contributors, please ensure you've added your own API key to your fork's repository secrets and set it as the CODEFLASH_API_KEY environment variable.\n"
@@ -124,6 +128,8 @@ def get_codeflash_api_key() -> str:
 
 
 def ensure_codeflash_api_key() -> bool:
+    from codeflash.cli_cmds.console import logger
+
     try:
         get_codeflash_api_key()
     except OSError:
