@@ -546,6 +546,21 @@ class JavaSupport(LanguageSupport):
         if self._language_version is None:
             self._detect_java_version()
 
+        if self._language_version is not None:
+            try:
+                major = int(self._language_version)
+                if major < 11:
+                    logger.error(
+                        "Java %s detected, but codeflash requires JDK 11 or later. "
+                        "The codeflash-runtime JAR and --add-opens flags are incompatible with JDK %s. "
+                        "Please install JDK 11+ and ensure it is on your PATH.",
+                        self._language_version,
+                        self._language_version,
+                    )
+                    return False
+            except ValueError:
+                pass
+
         self._test_framework = config.test_framework
 
         return True
