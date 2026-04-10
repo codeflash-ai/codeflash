@@ -22,7 +22,7 @@ def parse_args() -> Namespace:
 
 def process_and_validate_cmd_args(args: Namespace) -> Namespace:
     from codeflash.cli_cmds import logging_config
-    from codeflash.cli_cmds.console import apologize_and_exit, logger
+    from codeflash.cli_cmds.console import logger
     from codeflash.code_utils import env_utils
     from codeflash.code_utils.code_utils import exit_with_message
     from codeflash.code_utils.git_utils import (
