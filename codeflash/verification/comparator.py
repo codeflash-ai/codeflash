@@ -210,23 +210,49 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
             # distinct type objects are created at runtime, even if the class code is exactly the same, so we can only compare the names
             if orig_type.__name__ != type(new).__name__ or orig_type.__qualname__ != type(new).__qualname__:
                 return False
-        # Fast-path: O(1) frozenset lookup for common types (avoids isinstance MRO traversal)
-        if orig_type in _IDENTITY_EQ_TYPES:
-            return orig == new
+
+        # Fast-path: type identity checks for the most common return-value types.
+        # `orig_type is T` is a single pointer comparison — cheaper than frozenset hash
+        # lookup or isinstance MRO traversal — and these 4 types dominate real workloads.
+        if orig_type is str:
+            if orig == new:
+                return True
+            if _is_temp_path(orig) and _is_temp_path(new):
+                return _normalize_temp_path(orig) == _normalize_temp_path(new)
+            return False
+        if orig_type is list or orig_type is tuple:
+            if len(orig) != len(new):
+                return False
+            return all(comparator(elem1, elem2, superset_obj) for elem1, elem2 in zip(orig, new))
+        if orig_type is dict:
+            if superset_obj:
+                return all(k in new and comparator(v, new[k], superset_obj) for k, v in orig.items())
+            if len(orig) != len(new):
+                return False
+            for key in orig:
+                if key not in new:
+                    return False
+                if not comparator(orig[key], new[key], superset_obj):
+                    return False
+            return True
         if orig_type is float:
             if math.isnan(orig) and math.isnan(new):
                 return True
             return math.isclose(orig, new)
+        # O(1) frozenset lookup for remaining common types (int, bool, None, Decimal, etc.)
+        if orig_type in _IDENTITY_EQ_TYPES:
+            return orig == new
+
+        # Slower isinstance path for subclasses (deque, ChainMap, etc.)
         if isinstance(orig, (list, tuple, deque, ChainMap)):
             if len(orig) != len(new):
                 return False
             return all(comparator(elem1, elem2, superset_obj) for elem1, elem2 in zip(orig, new))
 
-        # Handle strings separately to normalize temp paths
+        # Handle string subclasses separately to normalize temp paths
         if isinstance(orig, str):
             if orig == new:
                 return True
-            # If strings differ, check if they're temp paths that differ only in session number
             if _is_temp_path(orig) and _is_temp_path(new):
                 return _normalize_temp_path(orig) == _normalize_temp_path(new)
             return False
