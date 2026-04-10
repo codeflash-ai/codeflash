@@ -88,6 +88,7 @@ class TestFunctionDiscoveryFromReplayTests:
                 assert func.file_path == file_path
 
         assert "computeSum" in all_func_names
+        assert "repeatString" in all_func_names
 
     def test_discover_tests_for_replay_tests(self, traced_workload: tuple) -> None:
         """Test that test discovery maps replay tests to source functions."""
@@ -111,6 +112,7 @@ class TestFunctionDiscoveryFromReplayTests:
             matched_func_names.add(func_name)
 
         assert "computeSum" in matched_func_names, f"computeSum not found in: {result.keys()}"
+        assert "repeatString" in matched_func_names, f"repeatString not found in: {result.keys()}"
 
         # Each function should have at least one test
         for func_name, test_infos in result.items():
