@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       # So that this workflow only runs when code within the target module is modified
-      - 'code_to_optimize_js_esm/**'
+      - 'code_to_optimize/js/code_to_optimize_js_esm/**'
   workflow_dispatch:
 
 concurrency:
@@ -23,19 +23,20 @@ jobs:
       CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
     defaults:
       run:
-        working-directory: ./code_to_optimize_js_esm
+        working-directory: ./code_to_optimize/js/code_to_optimize_js_esm
     steps:
       - name: 🛎️ Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: 🟢 Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
+          cache-dependency-path: code_to_optimize/js/code_to_optimize_js_esm/package-lock.json
       - name: 📦 Install Dependencies
         run: npm ci
-      
+
       - name: ⚡️ Codeflash Optimization
         run: npx codeflash
