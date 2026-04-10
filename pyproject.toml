@@ -354,7 +354,7 @@ __version__ = "{version}"
 # All paths are relative to this pyproject.toml's directory.
 module-root = "codeflash"
 tests-root = "tests"
-benchmarks-root = "tests/benchmarks"
+benchmarks-root = ".codeflash/benchmarks"
 ignore-paths = []
 formatter-cmds = [
     "uvx ruff check --exit-zero --fix $file",
