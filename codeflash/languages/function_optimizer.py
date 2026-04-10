@@ -489,6 +489,7 @@ class FunctionOptimizer:
             else function_to_optimize.file_path.read_text(encoding="utf8")
         )
         self.language_support = current_language_support()
+        self.language_support.ensure_runtime_environment(self.project_root)
         if not function_to_optimize_ast:
             self.function_to_optimize_ast = self._resolve_function_ast(
                 self.function_to_optimize_source_code, function_to_optimize.function_name, function_to_optimize.parents
