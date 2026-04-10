@@ -86,9 +86,10 @@ class JavaScriptLineProfiler:
         # Serialize line contents map for embedding in JavaScript
         line_contents_json = json.dumps(getattr(self, "line_contents", {}))
 
-        return f"""
+        return f"""// @ts-nocheck
 // Codeflash line profiler initialization
-// @ts-nocheck
+const __codeflash_fs__ = require('fs');
+const __codeflash_path__ = require('path');
 const {self.profiler_var} = {{
     stats: {{}},
     lineContents: {line_contents_json},
@@ -123,19 +124,18 @@ const {self.profiler_var} = {{
         this.lastLineTime = now;
 
         this.totalHits++;
-        // Save every 100 hits to ensure we capture results even with --forceExit
-        if (this.totalHits % 100 === 0) {{
+        // Save periodically to capture results even with --forceExit.
+        // Use 10000 (not 100) to avoid excessive I/O on hot loops.
+        if (this.totalHits % 10000 === 0) {{
             this.save();
         }}
     }},
 
     save: function() {{
-        const fs = require('fs');
-        const pathModule = require('path');
-        const outputDir = pathModule.dirname('{self.output_file.as_posix()}');
+        const outputDir = __codeflash_path__.dirname('{self.output_file.as_posix()}');
         try {{
-            if (!fs.existsSync(outputDir)) {{
-                fs.mkdirSync(outputDir, {{ recursive: true }});
+            if (!__codeflash_fs__.existsSync(outputDir)) {{
+                __codeflash_fs__.mkdirSync(outputDir, {{ recursive: true }});
             }}
             // Merge line contents into stats before saving
             const statsWithContent = {{}};
@@ -145,7 +145,7 @@ const {self.profiler_var} = {{
                     content: this.lineContents[key] || ''
                 }};
             }}
-            fs.writeFileSync(
+            __codeflash_fs__.writeFileSync(
                 '{self.output_file.as_posix()}',
                 JSON.stringify(statsWithContent, null, 2)
             );
@@ -298,8 +298,11 @@ if (__codeflash_save_interval__.unref) __codeflash_save_interval__.unref(); // D
             return {"timings": {}, "unit": 1e-9, "functions": {}}
 
         try:
-            with profile_file.open("r") as f:
-                data = json.load(f)
+            content = profile_file.read_text(encoding="utf-8").strip()
+            if not content:
+                logger.warning("Line profiler output file is empty: %s", profile_file)
+                return {"timings": {}, "unit": 1e-9, "functions": {}}
+            data = json.loads(content)
 
             # Group by file and function
             timings = {}

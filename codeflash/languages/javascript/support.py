@@ -2497,13 +2497,17 @@ class JavaScriptSupport:
     def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict:
         from codeflash.languages.javascript.line_profiler import JavaScriptLineProfiler
 
-        if line_profiler_output_file.exists():
-            parsed_results = JavaScriptLineProfiler.parse_results(line_profiler_output_file)
-            if parsed_results.get("timings"):
-                # Format output string for display
-                str_out = self._format_js_line_profile_output(parsed_results)
-                return {"timings": parsed_results.get("timings", {}), "unit": 1e-9, "str_out": str_out}
-        logger.warning("No line profiler output file found at %s", line_profiler_output_file)
+        if not line_profiler_output_file.exists():
+            logger.warning("Line profiler output file not found: %s", line_profiler_output_file)
+            return {"timings": {}, "unit": 0, "str_out": ""}
+
+        parsed_results = JavaScriptLineProfiler.parse_results(line_profiler_output_file)
+        if parsed_results.get("timings"):
+            # Format output string for display
+            str_out = self._format_js_line_profile_output(parsed_results)
+            return {"timings": parsed_results.get("timings", {}), "unit": 1e-9, "str_out": str_out}
+
+        logger.warning("Line profiler output file empty or contained no timing data: %s", line_profiler_output_file)
         return {"timings": {}, "unit": 0, "str_out": ""}
 
     def _format_js_line_profile_output(self, parsed_results: dict) -> str:
