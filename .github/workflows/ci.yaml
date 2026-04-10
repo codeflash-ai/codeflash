@@ -436,6 +436,7 @@ jobs:
       RETRY_DELAY: 5
       EXPECTED_IMPROVEMENT_PCT: ${{ matrix.expected_improvement }}
       CODEFLASH_END_TO_END: 1
+      CODEFLASH_LOOPING_TIME: 5
     steps:
       - uses: actions/checkout@v6
         with:
@@ -469,7 +470,15 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
+      - name: Cache codeflash-runtime JAR
+        id: runtime-jar-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/io/codeflash
+          key: codeflash-runtime-${{ hashFiles('codeflash-java-runtime/pom.xml', 'codeflash-java-runtime/src/**') }}
+
       - name: Build and install codeflash-runtime JAR
+        if: steps.runtime-jar-cache.outputs.cache-hit != 'true'
         run: |
           cd codeflash-java-runtime
           mvn install -q -DskipTests
