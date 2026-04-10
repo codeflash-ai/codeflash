@@ -8,7 +8,6 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
-from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.compat import LF
 from codeflash.either import Failure, Success
 
@@ -41,6 +40,8 @@ def is_powershell() -> bool:
     2. COMSPEC pointing to powershell.exe
     3. TERM_PROGRAM indicating Windows Terminal (often uses PowerShell)
     """
+    from codeflash.cli_cmds.console import logger  # noqa: PLC0415
+
     if os.name != "nt":
         return False
 
@@ -72,6 +73,8 @@ def is_powershell() -> bool:
 
 def read_api_key_from_shell_config() -> Optional[str]:
     """Read API key from shell configuration file."""
+    from codeflash.cli_cmds.console import logger  # noqa: PLC0415
+
     shell_rc_path = get_shell_rc_path()
     # Ensure shell_rc_path is a Path object for consistent handling
     if not isinstance(shell_rc_path, Path):
@@ -127,6 +130,8 @@ def get_api_key_export_line(api_key: str) -> str:
 
 def save_api_key_to_rc(api_key: str) -> Result[str, str]:
     """Save API key to the appropriate shell configuration file."""
+    from codeflash.cli_cmds.console import logger  # noqa: PLC0415
+
     shell_rc_path = get_shell_rc_path()
     # Ensure shell_rc_path is a Path object for consistent handling
     if not isinstance(shell_rc_path, Path):
