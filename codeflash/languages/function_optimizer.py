@@ -3253,6 +3253,11 @@ class FunctionOptimizer:
         test_env["CODEFLASH_TEST_ITERATION"] = str(codeflash_test_iteration)
         test_env["CODEFLASH_TRACER_DISABLE"] = str(codeflash_tracer_disable)
         test_env["CODEFLASH_LOOP_INDEX"] = str(codeflash_loop_index)
+        # Pin PYTHONHASHSEED so original and candidate test processes use the same hash seed.
+        # Without this, each subprocess gets a random seed, which can cause non-deterministic
+        # iteration order in sets/dicts and lead to flaky return-value comparisons.
+        if "PYTHONHASHSEED" not in test_env:
+            test_env["PYTHONHASHSEED"] = "0"
         return test_env
 
     def line_profiler_step(
