@@ -1,0 +1,77 @@
+name: Java E2E Tests
+on:
+  workflow_dispatch:
+
+jobs:
+  e2e-java:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: java-fibonacci-nogit
+            script: end_to_end_test_java_fibonacci.py
+            expected_improvement: 70
+            remove_git: true
+          - name: java-tracer
+            script: end_to_end_test_java_tracer.py
+            expected_improvement: 10
+          - name: java-void-optimization-nogit
+            script: end_to_end_test_java_void_optimization.py
+            expected_improvement: 70
+            remove_git: true
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_AIS_SERVER: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+      COLUMNS: 110
+      MAX_RETRIES: 3
+      RETRY_DELAY: 5
+      EXPECTED_IMPROVEMENT_PCT: ${{ matrix.expected_improvement }}
+      CODEFLASH_END_TO_END: 1
+      CODEFLASH_LOOPING_TIME: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v5
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.0.0
+        with:
+          python-version: 3.11.6
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Cache codeflash-runtime JAR
+        id: runtime-jar-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/io/codeflash
+          key: codeflash-runtime-${{ hashFiles('codeflash-java-runtime/pom.xml', 'codeflash-java-runtime/src/**') }}
+
+      - name: Build and install codeflash-runtime JAR
+        if: steps.runtime-jar-cache.outputs.cache-hit != 'true'
+        run: |
+          cd codeflash-java-runtime
+          mvn install -q -DskipTests
+
+      - name: Remove .git
+        if: matrix.remove_git
+        run: |
+          if [ -d ".git" ]; then
+            sudo rm -rf .git
+            echo ".git directory removed."
+          else
+            echo ".git directory does not exist."
+            exit 1
+          fi
+
+      - name: Run E2E test
+        run: uv run python tests/scripts/${{ matrix.script }}

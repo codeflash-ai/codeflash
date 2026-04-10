@@ -349,10 +349,10 @@ def _run_java_tracer(existing_args: Namespace | None = None) -> ArgumentParser:
     max_function_count = getattr(config, "max_function_count", 256)
     timeout = int(getattr(config, "timeout", None) or getattr(config, "tracer_timeout", 0) or 0)
 
-    console.print("[bold]Java project detected[/]")
-    console.print(f"  Project root: {project_root}")
-    console.print(f"  Module root:  {getattr(config, 'module_root', '?')}")
-    console.print(f"  Tests root:   {getattr(config, 'tests_root', '?')}")
+    logger.info("Java project detected")
+    logger.info("  Project root: %s", project_root)
+    logger.info("  Module root:  %s", getattr(config, "module_root", "?"))
+    logger.info("  Tests root:   %s", getattr(config, "tests_root", "?"))
 
     from codeflash.code_utils.code_utils import get_run_tmp_file
     from codeflash.languages.java.tracer import JavaTracer, run_java_tracer

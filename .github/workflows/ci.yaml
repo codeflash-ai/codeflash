@@ -95,7 +95,8 @@ jobs:
             'codeflash/languages/java/' 'codeflash/languages/base.py' \
             'codeflash/languages/registry.py' 'codeflash/optimization/' \
             'codeflash/verification/' 'codeflash-java-runtime/' \
-            'code_to_optimize/java/' 'tests/scripts/end_to_end_test_java*'
+            'code_to_optimize/java/' 'tests/scripts/end_to_end_test_java*' \
+            'tests/test_languages/fixtures/java_tracer_e2e/'
         env:
           MERGE_BASE: ${{ steps.merge_base.outputs.sha }}
 
@@ -257,7 +258,7 @@ jobs:
           - name: init-optimization
             script: end_to_end_test_init_optimization.py
             expected_improvement: 10
-    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    environment: ${{ ((github.event_name == 'workflow_dispatch' && github.actor != 'misrasaurabh1' && github.actor != 'KRRT7') || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
     runs-on: ubuntu-latest
     env:
       CODEFLASH_AIS_SERVER: prod
@@ -344,7 +345,7 @@ jobs:
             script: end_to_end_test_js_ts_class.py
             js_project_dir: code_to_optimize/js/code_to_optimize_ts
             expected_improvement: 30
-    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    environment: ${{ ((github.event_name == 'workflow_dispatch' && github.actor != 'misrasaurabh1' && github.actor != 'KRRT7') || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
     runs-on: ubuntu-latest
     env:
       CODEFLASH_AIS_SERVER: prod
@@ -424,7 +425,7 @@ jobs:
             script: end_to_end_test_java_void_optimization.py
             expected_improvement: 70
             remove_git: true
-    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    environment: ${{ ((github.event_name == 'workflow_dispatch' && github.actor != 'misrasaurabh1' && github.actor != 'KRRT7') || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
     runs-on: ubuntu-latest
     env:
       CODEFLASH_AIS_SERVER: prod
@@ -435,6 +436,7 @@ jobs:
       RETRY_DELAY: 5
       EXPECTED_IMPROVEMENT_PCT: ${{ matrix.expected_improvement }}
       CODEFLASH_END_TO_END: 1
+      CODEFLASH_LOOPING_TIME: 5
     steps:
       - uses: actions/checkout@v6
         with:
@@ -468,7 +470,15 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
+      - name: Cache codeflash-runtime JAR
+        id: runtime-jar-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/io/codeflash
+          key: codeflash-runtime-${{ hashFiles('codeflash-java-runtime/pom.xml', 'codeflash-java-runtime/src/**') }}
+
       - name: Build and install codeflash-runtime JAR
+        if: steps.runtime-jar-cache.outputs.cache-hit != 'true'
         run: |
           cd codeflash-java-runtime
           mvn install -q -DskipTests
