@@ -41,11 +41,17 @@ def compare_test_results(
     )
     test_diffs: list[TestDiff] = []
     did_all_timeout: bool = True
+    _matched_count = 0
+    _skipped_cdd_only = 0
+    _skipped_init_state = 0
+    _skipped_none = 0
+    _timed_out_count = 0
     for test_id in test_ids_superset:
         original_test_result = original_results.get_by_unique_invocation_loop_id(test_id)
         cdd_test_result = candidate_results.get_by_unique_invocation_loop_id(test_id)
 
         if cdd_test_result is not None and original_test_result is None:
+            _skipped_cdd_only += 1
             continue
         # If helper function instance_state verification is not present, that's ok. continue
         if (
@@ -53,11 +59,15 @@ def compare_test_results(
             and original_test_result.verification_type == VerificationType.INIT_STATE_HELPER
             and cdd_test_result is None
         ):
+            _skipped_init_state += 1
             continue
         if original_test_result is None or cdd_test_result is None:
+            _skipped_none += 1
             continue
+        _matched_count += 1
         did_all_timeout = did_all_timeout and original_test_result.timed_out
         if original_test_result.timed_out:
+            _timed_out_count += 1
             continue
         superset_obj = False
         if original_test_result.verification_type and (
@@ -148,6 +158,23 @@ def compare_test_results(
             )
 
     sys.setrecursionlimit(original_recursion_limit)
+    logger.info(
+        f"[compare_test_results] superset={len(test_ids_superset)} matched={_matched_count} "
+        f"skipped(cdd_only={_skipped_cdd_only} init_state={_skipped_init_state} none={_skipped_none}) "
+        f"timed_out={_timed_out_count} did_all_timeout={did_all_timeout} diffs={len(test_diffs)} "
+        f"pass_fail_only={pass_fail_only} orig_len={len(original_results)} cand_len={len(candidate_results)}"
+    )
+    if did_all_timeout and _matched_count > 0 and _matched_count <= 3:
+        # Log a few sample matched IDs for debugging
+        _sample_ids = []
+        for test_id in test_ids_superset:
+            orig = original_results.get_by_unique_invocation_loop_id(test_id)
+            cand = candidate_results.get_by_unique_invocation_loop_id(test_id)
+            if orig is not None and cand is not None:
+                _sample_ids.append(f"  id={test_id} orig_timed_out={orig.timed_out} orig_pass={orig.did_pass}")
+                if len(_sample_ids) >= 3:
+                    break
+        logger.info(f"[compare_test_results] sample matched: {_sample_ids}")
     if did_all_timeout:
         return False, test_diffs
     return len(test_diffs) == 0, test_diffs
