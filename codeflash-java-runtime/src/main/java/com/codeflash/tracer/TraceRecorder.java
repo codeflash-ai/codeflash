@@ -12,6 +12,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 public final class TraceRecorder {
 
@@ -23,6 +24,8 @@ public final class TraceRecorder {
     private final TraceWriter writer;
     private final ConcurrentHashMap<String, AtomicInteger> functionCounts = new ConcurrentHashMap<>();
     private final AtomicInteger droppedCaptures = new AtomicInteger(0);
+    private final AtomicLong totalOnEntryNs = new AtomicLong(0);
+    private final AtomicLong totalSerializationNs = new AtomicLong(0);
     private final int maxFunctionCount;
     private final ExecutorService serializerExecutor;
 
@@ -31,7 +34,7 @@ public final class TraceRecorder {
 
     private TraceRecorder(TracerConfig config) {
         this.config = config;
-        this.writer = new TraceWriter(config.getDbPath());
+        this.writer = new TraceWriter(config.getDbPath(), config.isInMemoryDb());
         this.maxFunctionCount = config.getMaxFunctionCount();
         this.serializerExecutor = Executors.newCachedThreadPool(r -> {
             Thread t = new Thread(r, "codeflash-serializer");
@@ -68,6 +71,8 @@ public final class TraceRecorder {
 
     private void onEntryImpl(String className, String methodName, String descriptor,
                              int lineNumber, String sourceFile, Object[] args) {
+        long entryStart = System.nanoTime();
+
         String qualifiedName = className + "." + methodName + descriptor;
 
         // Check per-method count limit
@@ -76,30 +81,38 @@ public final class TraceRecorder {
             return;
         }
 
-        // Serialize args with timeout to prevent deep object graph traversal from blocking
+        // Serialize args — try inline fast path first, fall back to async with timeout
         byte[] argsBlob;
-        Future<byte[]> future = serializerExecutor.submit(() -> Serializer.serialize(args));
-        try {
-            argsBlob = future.get(SERIALIZATION_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-        } catch (TimeoutException e) {
-            future.cancel(true);
-            droppedCaptures.incrementAndGet();
-            System.err.println("[codeflash-tracer] Serialization timed out for " + className + "."
-                    + methodName);
-            return;
-        } catch (Exception e) {
-            Throwable cause = e.getCause() != null ? e.getCause() : e;
-            droppedCaptures.incrementAndGet();
-            System.err.println("[codeflash-tracer] Serialization failed for " + className + "."
-                    + methodName + ": " + cause.getClass().getSimpleName() + ": " + cause.getMessage());
-            return;
+        long serStart = System.nanoTime();
+        argsBlob = Serializer.serializeFast(args);
+        if (argsBlob == null) {
+            // Slow path: async serialization with timeout for complex/unknown types
+            Future<byte[]> future = serializerExecutor.submit(() -> Serializer.serialize(args));
+            try {
+                argsBlob = future.get(SERIALIZATION_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            } catch (TimeoutException e) {
+                future.cancel(true);
+                droppedCaptures.incrementAndGet();
+                System.err.println("[codeflash-tracer] Serialization timed out for " + className + "."
+                        + methodName);
+                return;
+            } catch (Exception e) {
+                Throwable cause = e.getCause() != null ? e.getCause() : e;
+                droppedCaptures.incrementAndGet();
+                System.err.println("[codeflash-tracer] Serialization failed for " + className + "."
+                        + methodName + ": " + cause.getClass().getSimpleName() + ": " + cause.getMessage());
+                return;
+            }
         }
+        totalSerializationNs.addAndGet(System.nanoTime() - serStart);
 
         long timeNs = System.nanoTime();
         count.incrementAndGet();
 
         writer.recordFunctionCall("call", methodName, className, sourceFile,
                 lineNumber, descriptor, timeNs, argsBlob);
+
+        totalOnEntryNs.addAndGet(System.nanoTime() - entryStart);
     }
 
     public void flush() {
@@ -126,5 +139,16 @@ public final class TraceRecorder {
         System.err.println("[codeflash-tracer] Captured " + totalCaptures
                 + " invocations across " + functionCounts.size() + " methods"
                 + (dropped > 0 ? " (" + dropped + " dropped due to serialization timeout/failure)" : ""));
+
+        // Timing summary
+        long onEntryMs = totalOnEntryNs.get() / 1_000_000;
+        long serMs = totalSerializationNs.get() / 1_000_000;
+        String writerSummary = writer.getTimingSummary();
+        System.err.println("[codeflash-tracer] Timing: onEntry=" + onEntryMs + "ms"
+                + " (serialization=" + serMs + "ms)"
+                + (totalCaptures > 0
+                    ? " avg=" + String.format("%.2f", (double) onEntryMs / totalCaptures) + "ms/capture"
+                    : "")
+                + " " + writerSummary);
     }
 }

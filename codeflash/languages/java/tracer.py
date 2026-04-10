@@ -6,6 +6,7 @@ import os
 import subprocess
 from typing import TYPE_CHECKING
 
+from codeflash.code_utils.env_utils import is_ci
 from codeflash.languages.java.line_profiler import find_agent_jar
 from codeflash.languages.java.replay_test import generate_replay_tests
 
@@ -114,6 +115,7 @@ class JavaTracer:
             "maxFunctionCount": max_function_count,
             "timeout": timeout,
             "projectRoot": str(project_root.resolve()) if project_root else "",
+            "inMemoryDb": is_ci(),
         }
 
         config_path = trace_db_path.with_suffix(".config.json")

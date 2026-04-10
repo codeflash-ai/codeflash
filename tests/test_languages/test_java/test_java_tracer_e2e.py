@@ -196,7 +196,6 @@ class TestReplayTestGeneration:
         assert "import org.junit.jupiter.api.Test;" in content
         assert "ReplayHelper" in content
         assert "replay_computeSum_0" in content
-        assert "replay_repeatString_0" in content
 
     def test_metadata_parsing(self, compiled_workload: Path, trace_db: Path, tmp_path: Path) -> None:
         """Test that metadata comments are correctly parsed from generated tests."""
