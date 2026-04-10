@@ -199,6 +199,8 @@ jobs:
         run: |
           uv run ruff check --fix . || true
           uv run ruff format .
+          # uv-dynamic-versioning rewrites version.py on every `uv run` — discard those changes
+          git checkout HEAD -- codeflash/version.py codeflash-benchmark/codeflash_benchmark/version.py 2>/dev/null || true
 
       - name: Commit and push fixes
         run: |
