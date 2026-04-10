@@ -258,7 +258,7 @@ jobs:
           - name: init-optimization
             script: end_to_end_test_init_optimization.py
             expected_improvement: 10
-    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    environment: ${{ ((github.event_name == 'workflow_dispatch' && github.actor != 'misrasaurabh1' && github.actor != 'KRRT7') || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
     runs-on: ubuntu-latest
     env:
       CODEFLASH_AIS_SERVER: prod
@@ -345,7 +345,7 @@ jobs:
             script: end_to_end_test_js_ts_class.py
             js_project_dir: code_to_optimize/js/code_to_optimize_ts
             expected_improvement: 30
-    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    environment: ${{ ((github.event_name == 'workflow_dispatch' && github.actor != 'misrasaurabh1' && github.actor != 'KRRT7') || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
     runs-on: ubuntu-latest
     env:
       CODEFLASH_AIS_SERVER: prod
@@ -425,7 +425,7 @@ jobs:
             script: end_to_end_test_java_void_optimization.py
             expected_improvement: 70
             remove_git: true
-    environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    environment: ${{ ((github.event_name == 'workflow_dispatch' && github.actor != 'misrasaurabh1' && github.actor != 'KRRT7') || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
     runs-on: ubuntu-latest
     env:
       CODEFLASH_AIS_SERVER: prod
