@@ -17,17 +17,19 @@ logger = logging.getLogger(__name__)
 GRACEFUL_SHUTDOWN_WAIT = 5  # seconds to wait after SIGTERM before SIGKILL
 
 
-def _run_java_with_graceful_timeout(
-    java_command: list[str], env: dict[str, str], timeout: int, stage_name: str
-) -> None:
+def _run_java_with_graceful_timeout(java_command: list[str], env: dict[str, str], timeout: int, stage_name: str) -> int:
     """Run a Java command with graceful timeout handling.
 
     Sends SIGTERM first (allowing JFR dump and shutdown hooks to run),
     then SIGKILL if the process doesn't exit within GRACEFUL_SHUTDOWN_WAIT seconds.
+
+    Returns the process exit code, or -1 if the process was killed due to timeout.
     """
     if not timeout:
-        subprocess.run(java_command, env=env, check=False)
-        return
+        result = subprocess.run(java_command, env=env, check=False)
+        if result.returncode != 0:
+            logger.warning("%s exited with code %d", stage_name, result.returncode)
+        return result.returncode
 
     import signal
 
@@ -45,6 +47,11 @@ def _run_java_with_graceful_timeout(
             logger.warning("%s stage did not exit after SIGTERM, sending SIGKILL", stage_name)
             proc.kill()
             proc.wait()
+        return -1
+
+    if proc.returncode != 0:
+        logger.warning("%s exited with code %d", stage_name, proc.returncode)
+    return proc.returncode
 
 
 # --add-opens flags needed for Kryo serialization on Java 16+
@@ -78,21 +85,27 @@ class JavaTracer:
         jfr_file = trace_db_path.with_suffix(".jfr")
         trace_db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Stage 1: JFR Profiling
+        # Stage 1: JFR Profiling (non-fatal — JFR data is supplementary)
         logger.info("Stage 1: Running JFR profiling...")
         jfr_env = self.build_jfr_env(jfr_file)
-        _run_java_with_graceful_timeout(java_command, jfr_env, timeout, "JFR profiling")
+        jfr_exit = _run_java_with_graceful_timeout(java_command, jfr_env, timeout, "JFR profiling")
 
-        if not jfr_file.exists():
+        if jfr_exit != 0:
+            logger.warning("JFR profiling failed (exit code %d), continuing without profiling data", jfr_exit)
+        elif not jfr_file.exists():
             logger.warning("JFR file was not created at %s", jfr_file)
 
-        # Stage 2: Argument Capture via Tracing Agent
+        # Stage 2: Argument Capture via Tracing Agent (fatal — trace data is essential)
         logger.info("Stage 2: Running argument capture...")
         config_path = self.create_tracer_config(
             trace_db_path, packages, project_root=project_root, max_function_count=max_function_count, timeout=timeout
         )
         agent_env = self.build_agent_env(config_path)
-        _run_java_with_graceful_timeout(java_command, agent_env, timeout, "Argument capture")
+        capture_exit = _run_java_with_graceful_timeout(java_command, agent_env, timeout, "Argument capture")
+
+        if capture_exit != 0:
+            msg = f"Argument capture failed with exit code {capture_exit} — cannot proceed without trace data"
+            raise RuntimeError(msg)
 
         if not trace_db_path.exists():
             logger.error("Trace database was not created at %s", trace_db_path)
