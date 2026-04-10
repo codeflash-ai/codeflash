@@ -33,7 +33,29 @@ def main() -> None:
 
     args = parse_args()
 
-    # Heavy imports deferred until after parse_args() so --help exits fast
+    # Auth commands skip banner, telemetry, and version check entirely
+    if args.command == "auth":
+        from codeflash.cli_cmds.cmd_auth import auth_login, auth_status
+
+        if args.auth_command == "login":
+            auth_login()
+        elif args.auth_command == "status":
+            auth_status()
+        else:
+            from codeflash.code_utils.code_utils import exit_with_message
+
+            exit_with_message("Usage: codeflash auth {login,status}", error_on_exit=True)
+        return
+
+    # Compare command only needs its own imports
+    if args.command == "compare":
+        print_codeflash_banner()
+        from codeflash.cli_cmds.cmd_compare import run_compare
+
+        run_compare(args)
+        return
+
+    # All other commands need the full stack
     from pathlib import Path
 
     from codeflash.cli_cmds.cli import process_pyproject_config
@@ -44,10 +66,7 @@ def main() -> None:
     from codeflash.telemetry import posthog_cf
     from codeflash.telemetry.sentry import init_sentry
 
-    if args.command != "auth":
-        print_codeflash_banner()
-
-    # Check for newer version for all commands
+    print_codeflash_banner()
     check_for_newer_minor_version()
 
     if args.command:
@@ -58,18 +77,7 @@ def main() -> None:
         init_sentry(enabled=not disable_telemetry, exclude_errors=True)
         posthog_cf.initialize_posthog(enabled=not disable_telemetry)
 
-        if args.command == "auth":
-            from codeflash.cli_cmds.cmd_auth import auth_login, auth_status
-
-            if args.auth_command == "login":
-                auth_login()
-            elif args.auth_command == "status":
-                auth_status()
-            else:
-                from codeflash.code_utils.code_utils import exit_with_message
-
-                exit_with_message("Usage: codeflash auth {login,status}", error_on_exit=True)
-        elif args.command == "init":
+        if args.command == "init":
             from codeflash.cli_cmds.cmd_init import init_codeflash
 
             init_codeflash()
@@ -81,10 +89,6 @@ def main() -> None:
             from codeflash.cli_cmds.extension import install_vscode_extension
 
             install_vscode_extension()
-        elif args.command == "compare":
-            from codeflash.cli_cmds.cmd_compare import run_compare
-
-            run_compare(args)
         elif args.command == "optimize":
             from codeflash.tracer import main as tracer_main
 
