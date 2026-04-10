@@ -40,7 +40,7 @@ def is_powershell() -> bool:
     2. COMSPEC pointing to powershell.exe
     3. TERM_PROGRAM indicating Windows Terminal (often uses PowerShell)
     """
-    from codeflash.cli_cmds.console import logger  # noqa: PLC0415
+    from codeflash.cli_cmds.console import logger
 
     if os.name != "nt":
         return False
@@ -73,7 +73,7 @@ def is_powershell() -> bool:
 
 def read_api_key_from_shell_config() -> Optional[str]:
     """Read API key from shell configuration file."""
-    from codeflash.cli_cmds.console import logger  # noqa: PLC0415
+    from codeflash.cli_cmds.console import logger
 
     shell_rc_path = get_shell_rc_path()
     # Ensure shell_rc_path is a Path object for consistent handling
@@ -130,7 +130,7 @@ def get_api_key_export_line(api_key: str) -> str:
 
 def save_api_key_to_rc(api_key: str) -> Result[str, str]:
     """Save API key to the appropriate shell configuration file."""
-    from codeflash.cli_cmds.console import logger  # noqa: PLC0415
+    from codeflash.cli_cmds.console import logger
 
     shell_rc_path = get_shell_rc_path()
     # Ensure shell_rc_path is a Path object for consistent handling

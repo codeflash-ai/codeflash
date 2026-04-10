@@ -15,9 +15,9 @@ from codeflash.code_utils.shell_utils import read_api_key_from_shell_config, sav
 def check_formatter_installed(
     formatter_cmds: list[str], exit_on_failure: bool = True, language: str = "python"
 ) -> bool:
-    from codeflash.cli_cmds.console import logger  # noqa: PLC0415
-    from codeflash.code_utils.formatter import format_code  # noqa: PLC0415
-    from codeflash.languages.registry import get_language_support_by_common_formatters  # noqa: PLC0415
+    from codeflash.cli_cmds.console import logger
+    from codeflash.code_utils.formatter import format_code
+    from codeflash.languages.registry import get_language_support_by_common_formatters
 
     if not formatter_cmds or formatter_cmds[0] == "disabled":
         return True
@@ -68,7 +68,7 @@ def check_formatter_installed(
 
 @lru_cache(maxsize=1)
 def get_codeflash_api_key() -> str:
-    from codeflash.cli_cmds.console import logger  # noqa: PLC0415
+    from codeflash.cli_cmds.console import logger
 
     # Check environment variable first
     env_api_key = os.environ.get("CODEFLASH_API_KEY")
@@ -79,7 +79,7 @@ def get_codeflash_api_key() -> str:
     # If we have an env var but it's not in shell config, save it for persistence
     if env_api_key and not shell_api_key:
         try:
-            from codeflash.either import is_successful  # noqa: PLC0415
+            from codeflash.either import is_successful
 
             logger.debug("env_utils.py:get_codeflash_api_key - Saving API key from environment to shell config")
             result = save_api_key_to_rc(env_api_key)
@@ -108,7 +108,7 @@ def get_codeflash_api_key() -> str:
             f"{api_secret_docs_message}"
         )
         if is_repo_a_fork():
-            from codeflash.code_utils.code_utils import exit_with_message  # noqa: PLC0415
+            from codeflash.code_utils.code_utils import exit_with_message
 
             msg = (
                 "Codeflash API key not detected in your environment. It appears you're running Codeflash from a GitHub fork.\n"
@@ -128,7 +128,7 @@ def get_codeflash_api_key() -> str:
 
 
 def ensure_codeflash_api_key() -> bool:
-    from codeflash.cli_cmds.console import logger  # noqa: PLC0415
+    from codeflash.cli_cmds.console import logger
 
     try:
         get_codeflash_api_key()
