@@ -14,8 +14,6 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 
 public final class TraceWriter {
 
@@ -28,10 +26,6 @@ public final class TraceWriter {
     private final BlockingQueue<WriteTask> writeQueue;
     private final Thread writerThread;
     private final AtomicBoolean running;
-    private final AtomicLong totalWriteNs = new AtomicLong(0);
-    private final AtomicInteger batchCount = new AtomicInteger(0);
-    private final AtomicInteger taskCount = new AtomicInteger(0);
-    private volatile long dumpToFileMs = 0;
 
     private PreparedStatement insertFunctionCall;
     private PreparedStatement insertMetadata;
@@ -150,7 +144,6 @@ public final class TraceWriter {
             return;
         }
 
-        long writeStart = System.nanoTime();
         boolean hasFunctionCalls = false;
         try {
             for (WriteTask task : batch) {
@@ -176,9 +169,6 @@ public final class TraceWriter {
                 System.err.println("[codeflash-tracer] Rollback failed: " + re.getMessage());
             }
         }
-        totalWriteNs.addAndGet(System.nanoTime() - writeStart);
-        batchCount.incrementAndGet();
-        taskCount.addAndGet(batch.size());
     }
 
     public void flush() {
@@ -190,15 +180,6 @@ public final class TraceWriter {
                 break;
             }
         }
-    }
-
-    public String getTimingSummary() {
-        long writeMs = totalWriteNs.get() / 1_000_000;
-        int batches = batchCount.get();
-        int tasks = taskCount.get();
-        return "writes=" + writeMs + "ms (" + tasks + " tasks in " + batches + " batches"
-                + (batches > 0 ? ", avg=" + String.format("%.1f", (double) tasks / batches) + " tasks/batch" : "")
-                + ") dump=" + dumpToFileMs + "ms";
     }
 
     public void close() {
@@ -218,7 +199,6 @@ public final class TraceWriter {
         }
 
         if (inMemory) {
-            long dumpStart = System.nanoTime();
             try {
                 connection.commit();
                 connection.setAutoCommit(true);
@@ -228,7 +208,6 @@ public final class TraceWriter {
             } catch (SQLException e) {
                 System.err.println("[codeflash-tracer] Failed to write trace DB to disk: " + e.getMessage());
             }
-            dumpToFileMs = (System.nanoTime() - dumpStart) / 1_000_000;
         }
 
         try {
