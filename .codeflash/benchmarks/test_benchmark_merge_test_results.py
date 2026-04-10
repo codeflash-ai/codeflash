@@ -2,7 +2,7 @@ from codeflash.models.models import FunctionTestInvocation, InvocationId, TestRe
 from codeflash.verification.parse_test_output import merge_test_results
 
 
-def generate_test_invocations(count=100):
+def generate_test_invocations(count: int = 100) -> tuple[TestResults, TestResults]:
     """Generate a set number of test invocations for benchmarking."""
     test_results_xml = TestResults()
     test_results_bin = TestResults()
@@ -21,7 +21,7 @@ def generate_test_invocations(count=100):
                     function_getting_tested="sorter",
                     iteration_id=iteration_id,
                 ),
-                file_name="/tmp/tests/unittest/test_bubble_sort__perfinstrumented.py",
+                file_name="/tmp/tests/unittest/test_bubble_sort__perfinstrumented.py",  # noqa: S108
                 did_pass=True,
                 runtime=None if i % 3 == 0 else i * 100,  # Vary runtime values
                 test_framework="unittest",
@@ -42,7 +42,7 @@ def generate_test_invocations(count=100):
                     function_getting_tested="sorter",
                     iteration_id=iteration_id,
                 ),
-                file_name="/tmp/tests/unittest/test_bubble_sort__perfinstrumented.py",
+                file_name="/tmp/tests/unittest/test_bubble_sort__perfinstrumented.py",  # noqa: S108
                 did_pass=True,
                 runtime=500 + i * 20,  # Generate varying runtime values
                 test_framework="unittest",
@@ -56,12 +56,12 @@ def generate_test_invocations(count=100):
     return test_results_xml, test_results_bin
 
 
-def run_merge_benchmark(count=100):
+def run_merge_benchmark(count: int = 100) -> None:
     test_results_xml, test_results_bin = generate_test_invocations(count)
 
     # Perform the merge operation that will be benchmarked
     merge_test_results(xml_test_results=test_results_xml, bin_test_results=test_results_bin, test_framework="unittest")
 
 
-def test_benchmark_merge_test_results(benchmark):
+def test_benchmark_merge_test_results(benchmark) -> None:
     benchmark(run_merge_benchmark, 1000)  # Default to 100 test invocations
