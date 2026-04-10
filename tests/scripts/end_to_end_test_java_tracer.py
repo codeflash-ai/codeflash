@@ -51,6 +51,8 @@ def run_test(expected_improvement_pct: int) -> bool:
         "-m",
         "codeflash.main",
         "--no-pr",
+        "--effort",
+        "low",
         "optimize",
         "java",
         "-cp",
