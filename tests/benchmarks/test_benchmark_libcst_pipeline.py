@@ -27,8 +27,8 @@ _SECOND_FILE = _CODEFLASH_ROOT / "languages" / "python" / "static_analysis" / "c
 
 def _run_pipeline() -> None:
     """Simulate a single-file optimization pass through the full visitor pipeline."""
-    source = _TARGET_FILE.read_text()
-    source2 = _SECOND_FILE.read_text()
+    source = _TARGET_FILE.read_text(encoding="utf-8")
+    source2 = _SECOND_FILE.read_text(encoding="utf-8")
 
     # 1. Discover functions (FunctionVisitor + MetadataWrapper)
     ps = PythonSupport()

@@ -50,7 +50,7 @@ def _discover_all() -> None:
     """Run discover_functions on all source files."""
     ps = PythonSupport()
     for file_path in _SOURCE_FILES:
-        source = file_path.read_text()
+        source = file_path.read_text(encoding="utf-8")
         ps.discover_functions(source=source, file_path=file_path)
 
 
