@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Optional, Union
 
 import libcst as cst
 
+import codeflash.code_utils._libcst_cache  # noqa: F401
 from codeflash.cli_cmds.console import logger
 from codeflash.languages import current_language
 from codeflash.languages.base import Language

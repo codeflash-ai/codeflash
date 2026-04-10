@@ -20,6 +20,7 @@ from rich.syntax import Syntax
 from rich.text import Text
 from rich.tree import Tree
 
+import codeflash.code_utils._libcst_cache  # noqa: F401
 from codeflash.api.aiservice import AiServiceClient, AIServiceRefinerRequest, LocalAiServiceClient
 from codeflash.api.cfapi import add_code_context_hash, create_staging, get_cfapi_base_urls, mark_optimization_success
 from codeflash.benchmarking.utils import process_benchmark_data

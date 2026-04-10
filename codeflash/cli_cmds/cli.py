@@ -82,7 +82,7 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
 
 def process_pyproject_config(args: Namespace) -> Namespace:
     from codeflash.code_utils import env_utils
-    from codeflash.code_utils.code_utils import normalize_ignore_paths
+    from codeflash.code_utils.code_utils import exit_with_message, normalize_ignore_paths
     from codeflash.code_utils.config_parser import parse_config_file
     from codeflash.languages.test_framework import set_current_test_framework
     from codeflash.lsp.helpers import is_LSP_enabled

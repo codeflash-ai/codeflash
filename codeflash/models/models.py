@@ -19,6 +19,9 @@ from codeflash.models.test_type import TestType
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    import libcst as cst
+    from rich.tree import Tree
+
 
 @dataclass(frozen=True)
 class AIServiceRefinerRequest:

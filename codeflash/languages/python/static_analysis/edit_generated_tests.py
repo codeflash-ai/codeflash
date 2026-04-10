@@ -10,6 +10,7 @@ import libcst as cst
 from libcst import MetadataWrapper
 from libcst.metadata import PositionProvider
 
+import codeflash.code_utils._libcst_cache  # noqa: F401
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.time_utils import format_perf, format_time
 from codeflash.models.models import GeneratedTests, GeneratedTestsList
