@@ -18,10 +18,26 @@ public class Fibonacci {
         if (n < 0) {
             throw new IllegalArgumentException("Fibonacci not defined for negative numbers");
         }
-        if (n <= 1) {
-            return n;
+        // Fast doubling method (iterative, O(log n) time, O(1) space).
+        // Uses identities:
+        // F(2k)   = F(k) * (2*F(k+1) - F(k))
+        // F(2k+1) = F(k)^2 + F(k+1)^2
+        long a = 0L; // F(0)
+        long b = 1L; // F(1)
+        int highestBit = 31 - Integer.numberOfLeadingZeros(n);
+        for (int i = highestBit; i >= 0; i--) {
+            long twoB = b + b; // 2 * b (may overflow same as original)
+            long c = a * (twoB - a); // F(2k)
+            long d = a * a + b * b;  // F(2k+1)
+            if (((n >>> i) & 1) == 0) {
+                a = c;
+                b = d;
+            } else {
+                a = d;
+                b = c + d;
+            }
         }
-        return fibonacci(n - 1) + fibonacci(n - 2);
+        return a;
     }
 
     /**
