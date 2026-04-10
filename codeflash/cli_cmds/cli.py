@@ -374,14 +374,115 @@ def _handle_reset_config(confirm: bool = True) -> None:
 
 @lru_cache(maxsize=1)
 def _build_parser() -> ArgumentParser:
-    parser = ArgumentParser()
+    # Shared flags used by both the main parser and the optimize subparser.
+    # Using argparse parents= ensures flags like --verbose, --no-pr, --file are recognized
+    # regardless of whether the user runs "codeflash --verbose" or "codeflash optimize --verbose".
+    shared_flags = ArgumentParser(add_help=False)
+    shared_flags.add_argument("--file", help="Try to optimize only this file")
+    shared_flags.add_argument("--function", help="Try to optimize only this function within the given file path")
+    shared_flags.add_argument(
+        "--all",
+        help="Try to optimize all functions. Can take a really long time. Can pass an optional starting directory to"
+        " optimize code from. If no args specified (just --all), will optimize all code in the project.",
+        nargs="?",
+        const="",
+        default=SUPPRESS,
+    )
+    shared_flags.add_argument(
+        "--module-root",
+        type=str,
+        help="Path to the project's module that you want to optimize."
+        " This is the top-level root directory where all the source code is located.",
+    )
+    shared_flags.add_argument(
+        "--tests-root", type=str, help="Path to the test directory of the project, where all the tests are located."
+    )
+    shared_flags.add_argument("--config-file", type=str, help="Path to the pyproject.toml with codeflash configs.")
+    shared_flags.add_argument(
+        "--replay-test", type=str, nargs="+", help="Paths to replay test to optimize functions from"
+    )
+    shared_flags.add_argument(
+        "--rerun",
+        type=str,
+        help="Rerun a previous optimization by trace ID, using stored LLM results",
+        metavar="TRACE_ID",
+    )
+    shared_flags.add_argument(
+        "--no-pr", action="store_true", help="Do not create a PR for the optimization, only update the code locally."
+    )
+    shared_flags.add_argument(
+        "--no-gen-tests", action="store_true", help="Do not generate tests, use only existing tests for optimization."
+    )
+    shared_flags.add_argument(
+        "--no-jit-opts", action="store_true", help="Do not generate JIT-compiled optimizations for numerical code."
+    )
+    shared_flags.add_argument(
+        "--staging-review", action="store_true", help="Upload optimizations to staging for review"
+    )
+    shared_flags.add_argument(
+        "--verify-setup",
+        action="store_true",
+        help="Verify that codeflash is set up correctly by optimizing bubble sort as a test.",
+    )
+    shared_flags.add_argument("-v", "--verbose", action="store_true", help="Print verbose debug logs")
+    shared_flags.add_argument("--version", action="store_true", help="Print the version of codeflash")
+    shared_flags.add_argument(
+        "--benchmark", action="store_true", help="Trace benchmark tests and calculate optimization impact on benchmarks"
+    )
+    shared_flags.add_argument(
+        "--benchmarks-root",
+        type=str,
+        help="Path to the directory of the project, where all the pytest-benchmark tests are located.",
+    )
+    shared_flags.add_argument("--no-draft", default=False, action="store_true", help="Skip optimization for draft PRs")
+    shared_flags.add_argument("--worktree", default=False, action="store_true", help="Use worktree for optimization")
+    shared_flags.add_argument(
+        "--testgen-review", default=False, action="store_true", help="Enable AI review and repair of generated tests"
+    )
+    shared_flags.add_argument(
+        "--testgen-review-turns", type=int, default=None, help="Number of review/repair cycles (default: 2)"
+    )
+    shared_flags.add_argument(
+        "--async",
+        default=False,
+        action="store_true",
+        help="(Deprecated) Async function optimization is now enabled by default. This flag is ignored.",
+    )
+    shared_flags.add_argument(
+        "--server",
+        type=str,
+        choices=["local", "prod"],
+        help="AI service server to use: 'local' for localhost:8000, 'prod' for app.codeflash.ai",
+    )
+    shared_flags.add_argument(
+        "--effort", type=str, help="Effort level for optimization", choices=["low", "medium", "high"], default="medium"
+    )
+    shared_flags.add_argument(
+        "--show-config", action="store_true", help="Show current or auto-detected configuration and exit."
+    )
+    shared_flags.add_argument(
+        "--reset-config", action="store_true", help="Remove codeflash configuration from project config file."
+    )
+    shared_flags.add_argument(
+        "-y", "--yes", action="store_true", help="Skip confirmation prompts (useful for CI/scripts)."
+    )
+    shared_flags.add_argument(
+        "--subagent",
+        action="store_true",
+        help="Subagent mode: skip all interactive prompts with sensible defaults. Designed for AI agent integrations.",
+    )
+    shared_flags.add_argument("--trace-only", action="store_true", help="Only trace, do not optimize")
+
+    parser = ArgumentParser(parents=[shared_flags])
     subparsers = parser.add_subparsers(dest="command", help="Sub-commands")
 
     subparsers.add_parser("init", help="Initialize Codeflash for your project.")
     subparsers.add_parser("vscode-install", help="Install the Codeflash VSCode extension")
     subparsers.add_parser("init-actions", help="Initialize GitHub Actions workflow")
 
-    trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize your project.", add_help=False)
+    trace_optimize = subparsers.add_parser(
+        "optimize", help="Trace and optimize your project.", add_help=False, parents=[shared_flags]
+    )
     auth_parser = subparsers.add_parser("auth", help="Authentication commands")
     auth_subparsers = auth_parser.add_subparsers(dest="auth_command", help="Auth sub-commands")
     auth_subparsers.add_parser("login", help="Log in to Codeflash via OAuth")
@@ -419,13 +520,11 @@ def _build_parser() -> ArgumentParser:
     trace_optimize.add_argument(
         "--max-function-count",
         type=int,
-        default=100,
-        help="The maximum number of times to trace a single function. More calls to a function will not be traced. Default is 100.",
+        default=256,
+        help="The maximum number of times to trace a single function. Default is 256.",
     )
     trace_optimize.add_argument(
-        "--timeout",
-        type=int,
-        help="The maximum time in seconds to trace the entire workflow. Default is indefinite. This is useful while tracing really long workflows, to not wait indefinitely.",
+        "--timeout", type=int, help="The maximum time in seconds to trace the entire workflow. Default is indefinite."
     )
     trace_optimize.add_argument(
         "--output",
@@ -437,96 +536,6 @@ def _build_parser() -> ArgumentParser:
         "--config-file-path",
         type=str,
         help="The path to the pyproject.toml file which stores the Codeflash config. This is auto-discovered by default.",
-    )
-
-    parser.add_argument("--file", help="Try to optimize only this file")
-    parser.add_argument("--function", help="Try to optimize only this function within the given file path")
-    parser.add_argument(
-        "--all",
-        help="Try to optimize all functions. Can take a really long time. Can pass an optional starting directory to"
-        " optimize code from. If no args specified (just --all), will optimize all code in the project.",
-        nargs="?",
-        const="",
-        default=SUPPRESS,
-    )
-    parser.add_argument(
-        "--module-root",
-        type=str,
-        help="Path to the project's module that you want to optimize."
-        " This is the top-level root directory where all the source code is located.",
-    )
-    parser.add_argument(
-        "--tests-root", type=str, help="Path to the test directory of the project, where all the tests are located."
-    )
-    parser.add_argument("--config-file", type=str, help="Path to the pyproject.toml with codeflash configs.")
-    parser.add_argument("--replay-test", type=str, nargs="+", help="Paths to replay test to optimize functions from")
-    parser.add_argument(
-        "--rerun",
-        type=str,
-        help="Rerun a previous optimization by trace ID, using stored LLM results",
-        metavar="TRACE_ID",
-    )
-    parser.add_argument(
-        "--no-pr", action="store_true", help="Do not create a PR for the optimization, only update the code locally."
-    )
-    parser.add_argument(
-        "--no-gen-tests", action="store_true", help="Do not generate tests, use only existing tests for optimization."
-    )
-    parser.add_argument(
-        "--no-jit-opts", action="store_true", help="Do not generate JIT-compiled optimizations for numerical code."
-    )
-    parser.add_argument("--staging-review", action="store_true", help="Upload optimizations to staging for review")
-    parser.add_argument(
-        "--verify-setup",
-        action="store_true",
-        help="Verify that codeflash is set up correctly by optimizing bubble sort as a test.",
-    )
-    parser.add_argument("-v", "--verbose", action="store_true", help="Print verbose debug logs")
-    parser.add_argument("--version", action="store_true", help="Print the version of codeflash")
-    parser.add_argument(
-        "--benchmark", action="store_true", help="Trace benchmark tests and calculate optimization impact on benchmarks"
-    )
-    parser.add_argument(
-        "--benchmarks-root",
-        type=str,
-        help="Path to the directory of the project, where all the pytest-benchmark tests are located.",
-    )
-    parser.add_argument("--no-draft", default=False, action="store_true", help="Skip optimization for draft PRs")
-    parser.add_argument("--worktree", default=False, action="store_true", help="Use worktree for optimization")
-    parser.add_argument(
-        "--testgen-review", default=False, action="store_true", help="Enable AI review and repair of generated tests"
-    )
-    parser.add_argument(
-        "--testgen-review-turns", type=int, default=None, help="Number of review/repair cycles (default: 2)"
-    )
-    parser.add_argument(
-        "--async",
-        default=False,
-        action="store_true",
-        help="(Deprecated) Async function optimization is now enabled by default. This flag is ignored.",
-    )
-    parser.add_argument(
-        "--server",
-        type=str,
-        choices=["local", "prod"],
-        help="AI service server to use: 'local' for localhost:8000, 'prod' for app.codeflash.ai",
-    )
-    parser.add_argument(
-        "--effort", type=str, help="Effort level for optimization", choices=["low", "medium", "high"], default="medium"
-    )
-
-    # Config management flags
-    parser.add_argument(
-        "--show-config", action="store_true", help="Show current or auto-detected configuration and exit."
-    )
-    parser.add_argument(
-        "--reset-config", action="store_true", help="Remove codeflash configuration from project config file."
-    )
-    parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompts (useful for CI/scripts).")
-    parser.add_argument(
-        "--subagent",
-        action="store_true",
-        help="Subagent mode: skip all interactive prompts with sensible defaults. Designed for AI agent integrations.",
     )
 
     return parser
