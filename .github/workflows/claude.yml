@@ -62,7 +62,9 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        run: uv sync
+        run: |
+          uv venv --seed
+          uv sync
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -322,7 +324,9 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        run: uv sync
+        run: |
+          uv venv --seed
+          uv sync
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v6
