@@ -139,6 +139,7 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
+        shell: bash
         run: |
           if [[ "${{ matrix.python-version }}" == "3.9" || "${{ matrix.python-version }}" == "3.13" ]]; then
             uv sync --group tests
