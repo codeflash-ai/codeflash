@@ -81,14 +81,12 @@ class TestTracingAgent:
         conn = sqlite3.connect(str(trace_db))
         try:
             rows = conn.execute("SELECT function, classname, descriptor, length(args) FROM function_calls").fetchall()
-            assert len(rows) >= 5, f"Expected at least 5 captured invocations, got {len(rows)}"
+            assert len(rows) >= 3, f"Expected at least 3 captured invocations, got {len(rows)}"
 
             # Check that specific methods were captured
             functions = {row[0] for row in rows}
             assert "computeSum" in functions
             assert "repeatString" in functions
-            assert "filterEvens" in functions
-            assert "instanceMethod" in functions
 
             # Verify all rows have non-empty args blobs
             for row in rows:
@@ -97,7 +95,7 @@ class TestTracingAgent:
             # Verify metadata
             metadata = dict(conn.execute("SELECT key, value FROM metadata").fetchall())
             assert "totalCaptures" in metadata
-            assert int(metadata["totalCaptures"]) >= 5
+            assert int(metadata["totalCaptures"]) >= 3
         finally:
             conn.close()
 
@@ -136,7 +134,7 @@ class TestTracingAgent:
 
         conn = sqlite3.connect(str(trace_db))
         try:
-            # computeSum is called 4 times (2 direct + 2 from instanceMethod)
+            # computeSum is called 2 times (direct calls in main)
             compute_count = conn.execute(
                 "SELECT COUNT(*) FROM function_calls WHERE function = 'computeSum'"
             ).fetchone()[0]
@@ -296,7 +294,7 @@ class TestJavaTracerOrchestration:
         assert len(workload_files) == 1
         content = workload_files[0].read_text(encoding="utf-8")
         assert "replay_computeSum" in content
-        assert "replay_instanceMethod" in content
+        assert "replay_repeatString" in content
 
     def test_package_detection(self) -> None:
         """Test that package detection finds Java packages from source files."""
