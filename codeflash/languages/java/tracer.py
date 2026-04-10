@@ -138,10 +138,7 @@ class JavaTracer:
     def build_combined_env(self, jfr_file: Path, config_path: Path, classpath: str | None = None) -> dict[str, str]:
         """Build env with both JFR recording and tracing agent in a single JAVA_TOOL_OPTIONS."""
         env = os.environ.copy()
-        jfr_opts = (
-            f"-XX:StartFlightRecording=filename={jfr_file.resolve()},settings=profile,dumponexit=true"
-            ",jdk.ExecutionSample#period=1ms"
-        )
+        jfr_opts = f"-XX:StartFlightRecording=filename={jfr_file.resolve()},settings=profile,dumponexit=true"
         agent_jar = find_agent_jar(classpath=classpath)
         if agent_jar is None:
             msg = "codeflash-runtime JAR not found, cannot run tracing agent"
