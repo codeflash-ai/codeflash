@@ -95,7 +95,8 @@ jobs:
             'codeflash/languages/java/' 'codeflash/languages/base.py' \
             'codeflash/languages/registry.py' 'codeflash/optimization/' \
             'codeflash/verification/' 'codeflash-java-runtime/' \
-            'code_to_optimize/java/' 'tests/scripts/end_to_end_test_java*'
+            'code_to_optimize/java/' 'tests/scripts/end_to_end_test_java*' \
+            'tests/test_languages/fixtures/java_tracer_e2e/'
         env:
           MERGE_BASE: ${{ steps.merge_base.outputs.sha }}
 
