@@ -507,6 +507,25 @@ class TestExtractModulesFromSettingsGradle:
         assert "streams" in modules
         assert "clients" in modules
 
+    def test_multi_line_groovy_include(self):
+        content = """rootProject.name='eureka'
+include 'eureka-client',
+        'eureka-client-jersey2',
+        'eureka-server',
+        'eureka-core',
+        'eureka-resources'"""
+        modules = _extract_modules_from_settings_gradle(content)
+        assert modules == ["eureka-client", "eureka-client-jersey2", "eureka-server", "eureka-core", "eureka-resources"]
+
+    def test_multi_line_kotlin_dsl_include(self):
+        content = """include(
+    "module-a",
+    "module-b",
+    "module-c"
+)"""
+        modules = _extract_modules_from_settings_gradle(content)
+        assert modules == ["module-a", "module-b", "module-c"]
+
 
 class TestFindMultiModuleRoot:
     """Tests for _find_multi_module_root with Gradle multi-module projects."""
@@ -631,3 +650,32 @@ class TestFindMultiModuleRoot:
 
         assert build_root == tmp_path
         assert test_module == "streams"
+
+    def test_submodule_as_project_root_with_tests_inside(self, tmp_path):
+        """When project_root is a sub-module (e.g. rewrite-core/) and generated tests
+        are inside it, should walk up to find the real root and detect the module."""
+        self._make_kafka_like_project(tmp_path)
+        submodule_root = tmp_path / "clients"
+        test_file = submodule_root / "src" / "test" / "java" / "com" / "ClientsTest.java"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.touch()
+
+        test_paths = self._make_test_paths_mock([test_file])
+        build_root, test_module = _find_multi_module_root(submodule_root, test_paths)
+
+        assert build_root == tmp_path
+        assert test_module == "clients"
+
+    def test_submodule_as_project_root_nested_module(self, tmp_path):
+        """When project_root is a nested sub-module (connect/runtime), should detect it."""
+        self._make_kafka_like_project(tmp_path)
+        submodule_root = tmp_path / "connect" / "runtime"
+        test_file = submodule_root / "src" / "test" / "java" / "com" / "RuntimeTest.java"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.touch()
+
+        test_paths = self._make_test_paths_mock([test_file])
+        build_root, test_module = _find_multi_module_root(submodule_root, test_paths)
+
+        assert build_root == tmp_path
+        assert test_module == "connect:runtime"
