@@ -83,12 +83,12 @@ jobs:
             'codeflash/telemetry/' 'codeflash/tracing/' 'codeflash/verification/' \
             'tests/' 'pyproject.toml' 'uv.lock'
 
-          # JS E2E tests: JS language support + shared pipeline + packages
+          # JS E2E tests: JS language support + shared pipeline + packages + test fixtures
           check_paths e2e_js \
             'codeflash/languages/javascript/' 'codeflash/languages/base.py' \
             'codeflash/languages/registry.py' 'codeflash/optimization/' \
             'codeflash/verification/' 'packages/' \
-            'tests/scripts/end_to_end_test_js*'
+            'code_to_optimize/js/' 'tests/scripts/end_to_end_test_js*'
 
           # Java E2E tests: Java language support + shared pipeline + runtime
           check_paths e2e_java \
