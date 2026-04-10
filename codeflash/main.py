@@ -29,9 +29,14 @@ def main() -> None:
         print(f"Codeflash version {__version__}")
         return
 
+    from codeflash.cli_cmds.cli import parse_args
+
+    args = parse_args()
+
+    # Heavy imports deferred until after parse_args() so --help exits fast
     from pathlib import Path
 
-    from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
+    from codeflash.cli_cmds.cli import process_pyproject_config
     from codeflash.code_utils import env_utils
     from codeflash.code_utils.checkpoint import ask_should_use_checkpoint_get_functions
     from codeflash.code_utils.config_parser import parse_config_file
@@ -39,7 +44,6 @@ def main() -> None:
     from codeflash.telemetry import posthog_cf
     from codeflash.telemetry.sentry import init_sentry
 
-    args = parse_args()
     if args.command != "auth":
         print_codeflash_banner()
 
