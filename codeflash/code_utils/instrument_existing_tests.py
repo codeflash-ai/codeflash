@@ -15,7 +15,7 @@ from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent, TestingMode, VerificationType
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Iterator
 
     from codeflash.models.models import CodePosition
 
@@ -90,7 +90,7 @@ class InjectPerfOnly(ast.NodeTransformer):
         # it's much more efficient to visit nodes manually. We'll only descend into expressions/statements.
 
         # Helper for manual walk
-        def iter_ast_calls(node):
+        def iter_ast_calls(node: ast.AST) -> Iterator[ast.Call]:
             # Generator to yield each ast.Call in test_node, preserves node identity
             stack = [node]
             while stack:
