@@ -27,10 +27,12 @@ class FunctionCallNodeArguments:
 
 
 def get_call_arguments(call_node: ast.Call) -> FunctionCallNodeArguments:
+    """Capture the positional and keyword arguments from a call node."""
     return FunctionCallNodeArguments(call_node.args, call_node.keywords)
 
 
 def node_in_call_position(node: ast.AST, call_positions: list[CodePosition]) -> bool:
+    """Return whether an AST call node overlaps one of the recorded call positions."""
     # Profile: The most meaningful speedup here is to reduce attribute lookup and to localize call_positions if not empty.
     # Small optimizations for tight loop:
     if isinstance(node, ast.Call):
@@ -57,6 +59,7 @@ def node_in_call_position(node: ast.AST, call_positions: list[CodePosition]) -> 
 
 
 def is_argument_name(name: str, arguments_node: ast.arguments) -> bool:
+    """Check whether a name appears anywhere in a function signature's argument lists."""
     return any(
         element.arg == name
         for attribute_name in dir(arguments_node)
@@ -710,6 +713,13 @@ def inject_profiling_into_existing_test(
     tests_project_root: Path,
     mode: TestingMode = TestingMode.BEHAVIOR,
 ) -> tuple[bool, str | None]:
+    """Instrument matching calls in an existing sync test file and return the rewritten source.
+
+    This is the main entry point for Python test instrumentation. It rewrites the target test
+    module so matching function calls are wrapped with CodeFlash profiling logic, then prepends
+    the imports and helper wrapper needed for the selected testing mode.
+
+    """
     tests_project_root = tests_project_root.resolve()
     if function_to_optimize.is_async:
         return inject_async_profiling_into_existing_test(
@@ -1320,6 +1330,12 @@ def _create_wrapper_args(mode: TestingMode) -> ast.arguments:
 def create_wrapper_function(
     mode: TestingMode = TestingMode.BEHAVIOR, used_frameworks: dict[str, str] | None = None
 ) -> ast.FunctionDef:
+    """Build the `codeflash_wrap` AST function used to profile instrumented sync test calls.
+
+    The generated wrapper is responsible for invocation tracking, timing, optional framework
+    synchronization, stdout tagging, and behavior-mode result persistence.
+
+    """
     lineno = 1
     wrapper_body: list[ast.stmt] = [
         *_create_wrapper_invocation_tracking_statements(lineno),
@@ -1638,6 +1654,7 @@ ASYNC_HELPER_FILENAME = "codeflash_async_wrapper.py"
 
 
 def get_decorator_name_for_mode(mode: TestingMode) -> str:
+    """Return the async instrumentation decorator name for the requested testing mode."""
     if mode == TestingMode.BEHAVIOR:
         return "codeflash_behavior_async"
     if mode == TestingMode.CONCURRENCY:
@@ -1701,5 +1718,6 @@ def add_async_decorator_to_function(
 
 
 def create_instrumented_source_module_path(source_path: Path, temp_dir: Path) -> Path:
+    """Create the temp-file path used to hold an instrumented copy of a source module."""
     instrumented_filename = f"instrumented_{source_path.name}"
     return temp_dir / instrumented_filename
