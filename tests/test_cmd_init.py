@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from codeflash.cli_cmds import cmd_init
 from codeflash.cli_cmds.init_config import (
     CLISetupInfo,
     VsCodeSetupInfo,
@@ -186,3 +187,47 @@ def test_get_valid_subdirs(temp_dir: Path) -> None:
     assert "tests" in dirs
     assert "dir1" in dirs
     assert "dir2" in dirs
+
+
+def test_prompt_for_custom_relative_directory_retries_until_valid(
+    temp_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (temp_dir / "src").mkdir()
+    invalid_path = str((temp_dir / "src").resolve())
+    prompt_answers = iter([{"custom_path": invalid_path}, {"custom_path": "src"}])
+
+    def fake_prompt(*_args: object, **_kwargs: object) -> dict[str, str]:
+        return next(prompt_answers)
+
+    monkeypatch.chdir(temp_dir)
+    monkeypatch.setattr(cmd_init.inquirer, "prompt", fake_prompt)
+
+    prompt_for_custom_relative_directory = getattr(cmd_init, "_prompt_for_custom_relative_directory")
+    custom_path = prompt_for_custom_relative_directory(
+        panel_title="Custom",
+        panel_body="Choose a directory.",
+        answer_name="custom_path",
+        message="Enter the path",
+    )
+
+    assert custom_path == Path("src")
+
+
+def test_prompt_for_tests_root_creates_default_directory(temp_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    create_for_me_option = f"🆕 Create a new tests{os.pathsep} directory for me!"
+
+    def fake_suggestions(_section: object) -> tuple[list[str], None]:
+        return ["src"], None
+
+    def fake_prompt(*_args: object, **_kwargs: object) -> dict[str, str]:
+        return {"tests_root": create_for_me_option}
+
+    monkeypatch.chdir(temp_dir)
+    monkeypatch.setattr(cmd_init, "get_suggestions", fake_suggestions)
+    monkeypatch.setattr(cmd_init.inquirer, "prompt", fake_prompt)
+
+    prompt_for_tests_root = getattr(cmd_init, "_prompt_for_tests_root")
+    tests_root = prompt_for_tests_root(temp_dir, Path("src"))
+
+    assert tests_root == Path("tests")
+    assert (temp_dir / "tests").is_dir()
