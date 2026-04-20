@@ -149,18 +149,47 @@ def ask_run_end_to_end_test(args: Namespace) -> None:
         run_end_to_end_test(args, file_path)
 
 
-def collect_setup_info() -> CLISetupInfo:
-    from git import InvalidGitRepositoryError, Repo
-
-    curdir = Path.cwd()
-    # Check if the cwd is writable
+def _ensure_current_directory_is_writable(curdir: Path) -> None:
     if not os.access(curdir, os.W_OK):
         click.echo(f"❌ The current directory isn't writable, please check your folder permissions and try again.{LF}")
         click.echo("It's likely you don't have write permissions for this folder.")
         sys.exit(1)
 
-    # Check for the existence of pyproject.toml or setup.py
-    project_name = check_for_toml_or_setup_file()
+
+def _prompt_for_custom_relative_directory(*, panel_title: str, panel_body: str, answer_name: str, message: str) -> Path:
+    custom_panel = Panel(
+        Text(panel_body, style="yellow"),
+        title=panel_title,
+        border_style="bright_yellow",
+    )
+    console.print(custom_panel)
+    console.print()
+
+    while True:
+        custom_questions = [
+            inquirer.Path(
+                answer_name,
+                message=message,
+                path_type=inquirer.Path.DIRECTORY,
+                exists=True,
+            )
+        ]
+
+        custom_answers = inquirer.prompt(custom_questions, theme=CodeflashTheme())
+        if not custom_answers:
+            apologize_and_exit()
+
+        custom_path_str = str(custom_answers[answer_name])
+        is_valid, error_msg = validate_relative_directory_path(custom_path_str)
+        if is_valid:
+            return Path(custom_path_str)
+
+        click.echo(f"❌ Invalid path: {error_msg}")
+        click.echo("Please enter a valid relative directory path.")
+        console.print()
+
+
+def _prompt_for_module_root(curdir: Path, project_name: str | None) -> Path:
     valid_module_subdirs, _ = get_suggestions(CommonSections.module_root)
 
     curdir_option = f"current directory ({curdir})"
@@ -191,55 +220,24 @@ def collect_setup_info() -> CLISetupInfo:
     answers = inquirer.prompt(questions, theme=CodeflashTheme())
     if not answers:
         apologize_and_exit()
+
     module_root_answer = answers["module_root"]
     if module_root_answer == curdir_option:
-        module_root = "."
-    elif module_root_answer == custom_dir_option:
-        custom_panel = Panel(
-            Text(
-                "📂 Enter a custom module directory path.\n\nPlease provide the path to your Python module directory.",
-                style="yellow",
-            ),
-            title="📂 Custom Directory",
-            border_style="bright_yellow",
+        return Path()
+    if module_root_answer == custom_dir_option:
+        return _prompt_for_custom_relative_directory(
+            panel_title="📂 Custom Directory",
+            panel_body="📂 Enter a custom module directory path.\n\nPlease provide the path to your Python module directory.",
+            answer_name="custom_path",
+            message="Enter the path to your module directory",
         )
-        console.print(custom_panel)
-        console.print()
+    return Path(cast("str", module_root_answer))
 
-        # Retry loop for custom module root path
-        custom_module_root: Path | None = None
-        while custom_module_root is None:
-            custom_questions = [
-                inquirer.Path(
-                    "custom_path",
-                    message="Enter the path to your module directory",
-                    path_type=inquirer.Path.DIRECTORY,
-                    exists=True,
-                )
-            ]
 
-            custom_answers = inquirer.prompt(custom_questions, theme=CodeflashTheme())
-            if not custom_answers:
-                apologize_and_exit()
-
-            custom_path_str = str(custom_answers["custom_path"])
-            # Validate the path is safe
-            is_valid, error_msg = validate_relative_directory_path(custom_path_str)
-            if not is_valid:
-                click.echo(f"❌ Invalid path: {error_msg}")
-                click.echo("Please enter a valid relative directory path.")
-                console.print()  # Add spacing before retry
-                continue  # Retry the prompt
-            custom_module_root = Path(custom_path_str)
-        module_root = str(custom_module_root)
-    else:
-        module_root = module_root_answer
-    ph("cli-project-root-provided")
-
-    # Discover test directory
+def _prompt_for_tests_root(curdir: Path, module_root: Path) -> Path:
     create_for_me_option = f"🆕 Create a new tests{os.pathsep} directory for me!"
     tests_suggestions, default_tests_subdir = get_suggestions(CommonSections.tests_root)
-    test_subdir_options = [sub_dir for sub_dir in tests_suggestions if sub_dir != module_root]
+    test_subdir_options = [sub_dir for sub_dir in tests_suggestions if sub_dir != str(module_root)]
     if "tests" not in tests_suggestions:
         test_subdir_options.append(create_for_me_option)
     custom_dir_option = "📁 Enter a custom directory…"
@@ -271,66 +269,34 @@ def collect_setup_info() -> CLISetupInfo:
     tests_answers = inquirer.prompt(tests_questions, theme=CodeflashTheme())
     if not tests_answers:
         apologize_and_exit()
+
     tests_root_answer = tests_answers["tests_root"]
 
     if tests_root_answer == create_for_me_option:
-        tests_root = Path(curdir) / (default_tests_subdir or "tests")
-        tests_root.mkdir()
-        click.echo(f"✅ Created directory {tests_root}{os.path.sep}{LF}")
-    elif tests_root_answer == custom_dir_option:
-        custom_tests_panel = Panel(
-            Text(
-                "🧪 Enter a custom test directory path.\n\nPlease provide the path to your test directory, relative to the current directory.",
-                style="yellow",
-            ),
-            title="🧪 Custom Test Directory",
-            border_style="bright_yellow",
+        tests_root = Path(default_tests_subdir or "tests")
+        (curdir / tests_root).mkdir()
+        click.echo(f"✅ Created directory {curdir / tests_root}{os.path.sep}{LF}")
+        return tests_root
+    if tests_root_answer == custom_dir_option:
+        return _prompt_for_custom_relative_directory(
+            panel_title="🧪 Custom Test Directory",
+            panel_body="🧪 Enter a custom test directory path.\n\nPlease provide the path to your test directory, relative to the current directory.",
+            answer_name="custom_tests_path",
+            message="Enter the path to your tests directory",
         )
-        console.print(custom_tests_panel)
-        console.print()
+    return Path(cast("str", tests_root_answer))
 
-        # Retry loop for custom tests root path
-        custom_tests_root: Path | None = None
-        while custom_tests_root is None:
-            custom_tests_questions = [
-                inquirer.Path(
-                    "custom_tests_path",
-                    message="Enter the path to your tests directory",
-                    path_type=inquirer.Path.DIRECTORY,
-                    exists=True,
-                )
-            ]
 
-            custom_tests_answers = inquirer.prompt(custom_tests_questions, theme=CodeflashTheme())
-            if not custom_tests_answers:
-                apologize_and_exit()
-
-            custom_tests_path_str = str(custom_tests_answers["custom_tests_path"])
-            # Validate the path is safe
-            is_valid, error_msg = validate_relative_directory_path(custom_tests_path_str)
-            if not is_valid:
-                click.echo(f"❌ Invalid path: {error_msg}")
-                click.echo("Please enter a valid relative directory path.")
-                console.print()  # Add spacing before retry
-                continue  # Retry the prompt
-            custom_tests_root = Path(curdir) / Path(custom_tests_path_str)
-        tests_root = custom_tests_root
-    else:
-        tests_root = Path(curdir) / Path(cast("str", tests_root_answer))
-
-    tests_root = tests_root.relative_to(curdir)
-
-    resolved_module_root = (Path(curdir) / Path(module_root)).resolve()
-    resolved_tests_root = (Path(curdir) / Path(tests_root)).resolve()
+def _warn_if_tests_root_matches_module_root(curdir: Path, module_root: Path, tests_root: Path) -> None:
+    resolved_module_root = (curdir / module_root).resolve()
+    resolved_tests_root = (curdir / tests_root).resolve()
     if resolved_module_root == resolved_tests_root:
         logger.warning(
             "It looks like your tests root is the same as your module root. This is not recommended and can lead to unexpected behavior."
         )
 
-    ph("cli-tests-root-provided")
 
-    benchmarks_root = None
-
+def _prompt_for_formatter() -> str:
     formatter_panel = Panel(
         Text(
             "🎨 Let's configure your code formatter.\n\n"
@@ -362,47 +328,67 @@ def collect_setup_info() -> CLISetupInfo:
     formatter_answers = inquirer.prompt(formatter_questions, theme=CodeflashTheme())
     if not formatter_answers:
         apologize_and_exit()
-    formatter = formatter_answers["formatter"]
+    return cast("str", formatter_answers["formatter"])
 
-    git_remote = ""
+
+def _select_git_remote(module_root: Path) -> str:
+    from git import InvalidGitRepositoryError, Repo
+
     try:
         repo = Repo(str(module_root), search_parent_directories=True)
         git_remotes = get_git_remotes(repo)
-        if git_remotes:  # Only proceed if there are remotes
-            if len(git_remotes) > 1:
-                git_panel = Panel(
-                    Text(
-                        "🔗 Configure Git Remote for Pull Requests.\n\n"
-                        "Codeflash will use this remote to create pull requests with optimized code.",
-                        style="blue",
-                    ),
-                    title="🔗 Git Remote Setup",
-                    border_style="bright_blue",
-                )
-                console.print(git_panel)
-                console.print()
-
-                git_questions = [
-                    inquirer.List(
-                        "git_remote",
-                        message="Which git remote should Codeflash use for Pull Requests?",
-                        choices=git_remotes,
-                        default="origin",
-                        carousel=True,
-                    )
-                ]
-
-                git_answers = inquirer.prompt(git_questions, theme=CodeflashTheme())
-                git_remote = git_answers["git_remote"] if git_answers else git_remotes[0]
-            else:
-                git_remote = git_remotes[0]
-        else:
+        if not git_remotes:
             click.echo(
                 "No git remotes found. You can still use Codeflash locally, but you'll need to set up a remote "
                 "repository to use GitHub features."
             )
+            return ""
+
+        if len(git_remotes) == 1:
+            return git_remotes[0]
+
+        git_panel = Panel(
+            Text(
+                "🔗 Configure Git Remote for Pull Requests.\n\n"
+                "Codeflash will use this remote to create pull requests with optimized code.",
+                style="blue",
+            ),
+            title="🔗 Git Remote Setup",
+            border_style="bright_blue",
+        )
+        console.print(git_panel)
+        console.print()
+
+        git_questions = [
+            inquirer.List(
+                "git_remote",
+                message="Which git remote should Codeflash use for Pull Requests?",
+                choices=git_remotes,
+                default="origin",
+                carousel=True,
+            )
+        ]
+
+        git_answers = inquirer.prompt(git_questions, theme=CodeflashTheme())
+        return git_answers["git_remote"] if git_answers else git_remotes[0]
     except InvalidGitRepositoryError:
-        git_remote = ""
+        return ""
+
+
+def collect_setup_info() -> CLISetupInfo:
+    curdir = Path.cwd()
+    _ensure_current_directory_is_writable(curdir)
+
+    project_name = check_for_toml_or_setup_file()
+    module_root = _prompt_for_module_root(curdir, project_name)
+    ph("cli-project-root-provided")
+
+    tests_root = _prompt_for_tests_root(curdir, module_root)
+    _warn_if_tests_root_matches_module_root(curdir, module_root, tests_root)
+    ph("cli-tests-root-provided")
+
+    formatter = _prompt_for_formatter()
+    git_remote = _select_git_remote(module_root)
 
     enable_telemetry = ask_for_telemetry()
 
@@ -410,9 +396,9 @@ def collect_setup_info() -> CLISetupInfo:
     return CLISetupInfo(
         module_root=str(module_root),
         tests_root=str(tests_root),
-        benchmarks_root=str(benchmarks_root) if benchmarks_root else None,
+        benchmarks_root=None,
         ignore_paths=ignore_paths,
-        formatter=cast("str", formatter),
+        formatter=formatter,
         git_remote=str(git_remote),
         enable_telemetry=enable_telemetry,
     )
