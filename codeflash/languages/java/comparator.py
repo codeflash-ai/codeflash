@@ -230,9 +230,9 @@ def compare_test_results(
     project_root: Path | None = None,
     project_classpath: str | None = None,
 ) -> tuple[bool, list]:
-    """Compare Java test results using the codeflash-runtime Comparator.
+    """Compare Java behavioral test outputs via the runtime Comparator CLI.
 
-    This function calls the Java Comparator CLI that:
+    The Java-side comparator is responsible for the heavy lifting:
     1. Reads serialized behavior data from both SQLite databases
     2. Deserializes using Kryo
     3. Compares results using deep equality (handles Maps, Lists, arrays, etc.)
@@ -249,7 +249,9 @@ def compare_test_results(
             classpath and any project class causes ClassNotFoundException.
 
     Returns:
-        Tuple of (all_equivalent, list of TestDiff objects).
+        A tuple of ``(all_equivalent, list of Test_Diff objects)``. When the comparator cannot run
+        or returns unusable output, the function fails closed as ``(False, [])`` so
+        callers do not accidentally accept an unverifiable candidate.
 
     """
     java_exe = _find_java_executable()
@@ -350,7 +352,8 @@ def values_equal(orig: str | None, cand: str | None) -> bool:
     """Compare two serialized values with numeric-aware equality.
 
     Handles boxing mismatches where Integer(0) and Long(0) serialize to different strings
-    (e.g., "0" vs "0.0") but represent the same numeric value.
+    (e.g., "0" vs "0.0") but represent the same numeric value. Non-numeric payloads
+    still compare as plain serialized strings.
     """
     if orig == cand:
         return True
@@ -370,14 +373,17 @@ def compare_invocations_directly(original_results: dict, candidate_results: dict
     """Compare test invocations directly from Python dictionaries.
 
     This is a fallback when the Java comparator is not available.
-    It performs basic equality comparison on serialized JSON values.
+    It performs a lightweight comparison on serialized result(JSON values) and error payloads without
+    deserializing Java objects, which keeps the fallback safe but less expressive than
+    the runtime-backed comparator.
 
     Args:
         original_results: Dict mapping call_id to result data from original code.
         candidate_results: Dict mapping call_id to result data from candidate code.
 
     Returns:
-        Tuple of (all_equivalent, list of TestDiff objects).
+        A tuple of ``(all_equivalent, list of TestDiff objects)`` derived from the serialized
+        invocation payloads.
 
     """
     # Import lazily to avoid circular imports
