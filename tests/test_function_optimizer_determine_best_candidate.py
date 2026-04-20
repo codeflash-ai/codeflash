@@ -67,6 +67,7 @@ class FakeCandidateProcessor:
 
 
 def build_optimizer() -> tuple[FunctionOptimizer, RecordingExecutor, object, object]:
+    """Build a lightly mocked optimizer for determine_best_candidate tests."""
     optimizer = object.__new__(FunctionOptimizer)
     executor = RecordingExecutor()
     control_client = SimpleNamespace(optimize_python_code_line_profiler=MagicMock(name="control_line_profiler"))
@@ -105,6 +106,7 @@ def build_optimizer() -> tuple[FunctionOptimizer, RecordingExecutor, object, obj
 def test_determine_best_candidate_processes_candidates_and_logs_best(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify the control-path evaluation flow processes and logs candidates."""
     optimizer, executor, control_client, _ = build_optimizer()
     best_optimization = SimpleNamespace(name="best")
     optimizer.select_best_optimization.return_value = best_optimization
@@ -154,6 +156,7 @@ def test_determine_best_candidate_processes_candidates_and_logs_best(
 def test_determine_best_candidate_uses_local_client_for_experiment_runs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify experiment runs switch to the local client and skip final logging without a winner."""
     optimizer, executor, _, local_client = build_optimizer()
     monkeypatch.setattr(function_optimizer_module, "CandidateProcessor", FakeCandidateProcessor)
 
