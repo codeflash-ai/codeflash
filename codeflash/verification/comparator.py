@@ -175,6 +175,33 @@ def _get_wrapped_exception(exc: BaseException) -> Optional[BaseException]:  # no
     return _extract_exception_from_message(str(exc))
 
 
+def _compare_string_values(orig: str, new: str) -> bool:
+    if orig == new:
+        return True
+    if _is_temp_path(orig) and _is_temp_path(new):
+        return _normalize_temp_path(orig) == _normalize_temp_path(new)
+    return False
+
+
+def _compare_ordered_values(orig: Any, new: Any, superset_obj: bool) -> bool:
+    if len(orig) != len(new):
+        return False
+    return all(comparator(elem1, elem2, superset_obj) for elem1, elem2 in zip(orig, new))
+
+
+def _compare_mapping_values(orig: Any, new: Any, superset_obj: bool) -> bool:
+    if superset_obj:
+        return all(k in new and comparator(v, new[k], superset_obj) for k, v in orig.items())
+    if len(orig) != len(new):
+        return False
+    for key in orig:
+        if key not in new:
+            return False
+        if not comparator(orig[key], new[key], superset_obj):
+            return False
+    return True
+
+
 def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
     """Compare two objects for equality recursively. If superset_obj is True, the new object is allowed to have more keys than the original object. However, the existing keys/values must be equivalent."""
     try:
@@ -215,26 +242,11 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
         # `orig_type is T` is a single pointer comparison — cheaper than frozenset hash
         # lookup or isinstance MRO traversal — and these 4 types dominate real workloads.
         if orig_type is str:
-            if orig == new:
-                return True
-            if _is_temp_path(orig) and _is_temp_path(new):
-                return _normalize_temp_path(orig) == _normalize_temp_path(new)
-            return False
+            return _compare_string_values(orig, new)
         if orig_type is list or orig_type is tuple:
-            if len(orig) != len(new):
-                return False
-            return all(comparator(elem1, elem2, superset_obj) for elem1, elem2 in zip(orig, new))
+            return _compare_ordered_values(orig, new, superset_obj)
         if orig_type is dict:
-            if superset_obj:
-                return all(k in new and comparator(v, new[k], superset_obj) for k, v in orig.items())
-            if len(orig) != len(new):
-                return False
-            for key in orig:
-                if key not in new:
-                    return False
-                if not comparator(orig[key], new[key], superset_obj):
-                    return False
-            return True
+            return _compare_mapping_values(orig, new, superset_obj)
         if orig_type is float:
             if math.isnan(orig) and math.isnan(new):
                 return True
@@ -245,17 +257,11 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
 
         # Slower isinstance path for subclasses (deque, ChainMap, etc.)
         if isinstance(orig, (list, tuple, deque, ChainMap)):
-            if len(orig) != len(new):
-                return False
-            return all(comparator(elem1, elem2, superset_obj) for elem1, elem2 in zip(orig, new))
+            return _compare_ordered_values(orig, new, superset_obj)
 
         # Handle string subclasses separately to normalize temp paths
         if isinstance(orig, str):
-            if orig == new:
-                return True
-            if _is_temp_path(orig) and _is_temp_path(new):
-                return _normalize_temp_path(orig) == _normalize_temp_path(new)
-            return False
+            return _compare_string_values(orig, new)
 
         # enum.Enum subclasses and UnionType fall through from the frozenset fast-path
         if isinstance(orig, _EQUALITY_TYPES):
@@ -343,16 +349,7 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
 
         # scipy condition because dok_matrix type is also a instance of dict, but dict comparison doesn't work for it
         if isinstance(orig, dict) and not (HAS_SCIPY and isinstance(orig, scipy.sparse.spmatrix)):
-            if superset_obj:
-                return all(k in new and comparator(v, new[k], superset_obj) for k, v in orig.items())
-            if len(orig) != len(new):
-                return False
-            for key in orig:
-                if key not in new:
-                    return False
-                if not comparator(orig[key], new[key], superset_obj):
-                    return False
-            return True
+            return _compare_mapping_values(orig, new, superset_obj)
 
         # Handle mappingproxy (read-only dict view, commonly seen as class.__dict__)
         if isinstance(orig, types.MappingProxyType):
@@ -483,9 +480,7 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
         if isinstance(orig, array.array):
             if orig.typecode != new.typecode:
                 return False
-            if len(orig) != len(new):
-                return False
-            return all(comparator(elem1, elem2, superset_obj) for elem1, elem2 in zip(orig, new))
+            return _compare_ordered_values(orig, new, superset_obj)
 
         # This should be at the end of all numpy checking
         try:
@@ -520,23 +515,11 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
         if HAS_NUMBA:
             # Handle numba typed List
             if isinstance(orig, NumbaList):
-                if len(orig) != len(new):
-                    return False
-                return all(comparator(elem1, elem2, superset_obj) for elem1, elem2 in zip(orig, new))
+                return _compare_ordered_values(orig, new, superset_obj)
 
             # Handle numba typed Dict
             if isinstance(orig, NumbaDict):
-                if superset_obj:
-                    # Allow new dict to have more keys, but all orig keys must exist with equal values
-                    return all(key in new and comparator(orig[key], new[key], superset_obj) for key in orig)
-                if len(orig) != len(new):
-                    return False
-                for key in orig:
-                    if key not in new:
-                        return False
-                    if not comparator(orig[key], new[key], superset_obj):
-                        return False
-                return True
+                return _compare_mapping_values(orig, new, superset_obj)
 
             # Handle numba type objects (e.g., numba.int64, numba.float64, numba.Array, etc.)
             if isinstance(orig, numba.core.types.Type):
