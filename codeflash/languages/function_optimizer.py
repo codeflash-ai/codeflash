@@ -1314,25 +1314,13 @@ class FunctionOptimizer:
 
         return best_optimization
 
-    def determine_best_candidate(
+    def _initialize_candidate_evaluation(
         self,
         *,
-        candidates: list[OptimizedCandidate],
         code_context: CodeOptimizationContext,
         original_code_baseline: OriginalCodeBaseline,
-        original_helper_code: dict[Path, str],
-        file_path_to_helper_classes: dict[Path, set[str]],
         exp_type: str,
-        function_references: str,
-    ) -> BestOptimization | None:
-        """Determine the best optimization candidate from a list of candidates."""
-        logger.info(
-            f"Determining best optimization candidate (out of {len(candidates)}) for "
-            f"{self.function_to_optimize.qualified_name}…"
-        )
-        console.rule()
-
-        # Initialize evaluation context and async tasks
+    ) -> tuple[CandidateEvaluationContext, AiServiceClient, concurrent.futures.Future, str]:
         eval_ctx = CandidateEvaluationContext()
 
         self.future_all_refinements.clear()
@@ -1362,21 +1350,22 @@ class FunctionOptimizer:
             language_version=self.language_support.language_version,
             rerun_trace_id=self.rerun_trace_id,
         )
-
         normalized_original = self.language_support.normalize_code(code_context.read_writable_code.flat.strip())
-        processor = CandidateProcessor(
-            candidates,
-            future_line_profile_results,
-            eval_ctx,
-            self.effort,
-            code_context.read_writable_code.markdown,
-            self.future_all_refinements,
-            self.future_all_code_repair,
-            self.future_adaptive_optimizations,
-            normalize_fn=self.language_support.normalize_code,
-            normalized_original=normalized_original,
-            original_flat_code=code_context.read_writable_code.flat,
-        )
+        return eval_ctx, ai_service_client, future_line_profile_results, normalized_original
+
+    def _process_candidate_queue(
+        self,
+        *,
+        processor: CandidateProcessor,
+        code_context: CodeOptimizationContext,
+        original_code_baseline: OriginalCodeBaseline,
+        original_helper_code: dict[Path, str],
+        file_path_to_helper_classes: dict[Path, set[str]],
+        eval_ctx: CandidateEvaluationContext,
+        exp_type: str,
+        function_references: str,
+        normalized_original: str,
+    ) -> None:
         candidate_index = 0
 
         # Process candidates using queue-based approach
@@ -1409,6 +1398,57 @@ class FunctionOptimizer:
                 self.write_code_and_helpers(
                     self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                 )
+
+    def determine_best_candidate(
+        self,
+        *,
+        candidates: list[OptimizedCandidate],
+        code_context: CodeOptimizationContext,
+        original_code_baseline: OriginalCodeBaseline,
+        original_helper_code: dict[Path, str],
+        file_path_to_helper_classes: dict[Path, set[str]],
+        exp_type: str,
+        function_references: str,
+    ) -> BestOptimization | None:
+        """Determine the best optimization candidate from a list of candidates."""
+        logger.info(
+            f"Determining best optimization candidate (out of {len(candidates)}) for "
+            f"{self.function_to_optimize.qualified_name}…"
+        )
+        console.rule()
+
+        eval_ctx, ai_service_client, future_line_profile_results, normalized_original = (
+            self._initialize_candidate_evaluation(
+                code_context=code_context,
+                original_code_baseline=original_code_baseline,
+                exp_type=exp_type,
+            )
+        )
+
+        processor = CandidateProcessor(
+            candidates,
+            future_line_profile_results,
+            eval_ctx,
+            self.effort,
+            code_context.read_writable_code.markdown,
+            self.future_all_refinements,
+            self.future_all_code_repair,
+            self.future_adaptive_optimizations,
+            normalize_fn=self.language_support.normalize_code,
+            normalized_original=normalized_original,
+            original_flat_code=code_context.read_writable_code.flat,
+        )
+        self._process_candidate_queue(
+            processor=processor,
+            code_context=code_context,
+            original_code_baseline=original_code_baseline,
+            original_helper_code=original_helper_code,
+            file_path_to_helper_classes=file_path_to_helper_classes,
+            eval_ctx=eval_ctx,
+            exp_type=exp_type,
+            function_references=function_references,
+            normalized_original=normalized_original,
+        )
 
         # Select and return the best optimization
         best_optimization = self.select_best_optimization(
