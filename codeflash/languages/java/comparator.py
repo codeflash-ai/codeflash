@@ -131,6 +131,98 @@ def _find_java_executable() -> str | None:
     return None
 
 
+def _parse_comparator_output(result: subprocess.CompletedProcess[str]) -> dict | None:
+    """Parse JSON output from the Java comparator process."""
+    if not result.stdout or not result.stdout.strip():
+        logger.error("Java comparator returned empty output")
+        if result.stderr:
+            logger.error("stderr: %s", result.stderr)
+        return None
+
+    try:
+        comparison = json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        logger.exception("Failed to parse Java comparator output: %s", e)
+        logger.exception("stdout: %s", result.stdout[:500] if result.stdout else "(empty)")
+        if result.stderr:
+            logger.exception("stderr: %s", result.stderr[:500])
+        return None
+
+    if result.stderr:
+        logger.debug("Java comparator stderr: %s", result.stderr.strip())
+    return comparison
+
+
+def _build_test_diffs(comparison: dict) -> list:
+    """Convert Java comparator diff payloads into TestDiff objects."""
+    # Import lazily to avoid circular imports
+    from codeflash.models.models import TestDiff, TestDiffScope
+
+    test_diffs: list[TestDiff] = []
+    for diff in comparison.get("diffs", []):
+        scope_str = diff.get("scope", "return_value")
+        scope = TestDiffScope.RETURN_VALUE
+        if scope_str in {"exception", "missing"}:
+            scope = TestDiffScope.DID_PASS
+
+        method_id = diff.get("methodId", "unknown")
+        call_id = diff.get("callId", 0)
+        test_src_code = f"// Method: {method_id}\n// Call ID: {call_id}"
+
+        test_diffs.append(
+            TestDiff(
+                scope=scope,
+                original_value=diff.get("originalValue"),
+                candidate_value=diff.get("candidateValue"),
+                test_src_code=test_src_code,
+                candidate_pytest_error=diff.get("candidateError"),
+                original_pass=scope_str != "exception",
+                candidate_pass=scope_str not in ("missing", "exception"),
+                original_pytest_error=diff.get("originalError"),
+            )
+        )
+
+        logger.debug(
+            "Java test diff:\n  Method: %s\n  Call ID: %s\n  Scope: %s\n  Original: %s\n  Candidate: %s",
+            method_id,
+            call_id,
+            scope_str,
+            str(diff.get("originalValue", "N/A"))[:100],
+            str(diff.get("candidateValue", "N/A"))[:100],
+        )
+    return test_diffs
+
+
+def _finalize_comparison_result(comparison: dict, test_diffs: list) -> tuple[bool, list]:
+    """Validate summary fields and log the final Java comparison decision."""
+    equivalent = comparison.get("equivalent", False)
+    actual_comparisons = comparison.get("actualComparisons", -1)
+    skipped_placeholders = comparison.get("skippedPlaceholders", 0)
+    skipped_deser_errors = comparison.get("skippedDeserializationErrors", 0)
+
+    if actual_comparisons == 0:
+        logger.warning(
+            "Java comparison: no actual comparisons performed "
+            "(total=%s, skipped_placeholders=%s, skipped_deser_errors=%s). "
+            "Treating as NOT equivalent.",
+            comparison.get("totalInvocations", 0),
+            skipped_placeholders,
+            skipped_deser_errors,
+        )
+        return False, []
+
+    logger.info(
+        "Java comparison: %s (%s invocations, %s compared, %s placeholder skips, %s deser skips, %s diffs)",
+        "equivalent" if equivalent else "DIFFERENT",
+        comparison.get("totalInvocations", 0),
+        actual_comparisons,
+        skipped_placeholders,
+        skipped_deser_errors,
+        len(test_diffs),
+    )
+    return equivalent, test_diffs
+
+
 def compare_test_results(
     original_sqlite_path: Path,
     candidate_sqlite_path: Path,
@@ -160,9 +252,6 @@ def compare_test_results(
         Tuple of (all_equivalent, list of TestDiff objects).
 
     """
-    # Import lazily to avoid circular imports
-    from codeflash.models.models import TestDiff, TestDiffScope
-
     java_exe = _find_java_executable()
     if not java_exe:
         logger.error("Java not found. Please install Java to compare test results.")
@@ -227,23 +316,8 @@ def compare_test_results(
             cwd=str(cwd),
         )
 
-        # Parse the JSON output
-        try:
-            if not result.stdout or not result.stdout.strip():
-                logger.error("Java comparator returned empty output")
-                if result.stderr:
-                    logger.error("stderr: %s", result.stderr)
-                return False, []
-
-            comparison = json.loads(result.stdout)
-
-            if result.stderr:
-                logger.debug("Java comparator stderr: %s", result.stderr.strip())
-        except json.JSONDecodeError as e:
-            logger.exception("Failed to parse Java comparator output: %s", e)
-            logger.exception("stdout: %s", result.stdout[:500] if result.stdout else "(empty)")
-            if result.stderr:
-                logger.exception("stderr: %s", result.stderr[:500])
+        comparison = _parse_comparator_output(result)
+        if comparison is None:
             return False, []
 
         # Check for errors in the JSON response
@@ -258,68 +332,8 @@ def compare_test_results(
                 logger.error("stderr: %s", result.stderr)
             return False, []
 
-        # Convert diffs to TestDiff objects
-        test_diffs: list[TestDiff] = []
-        for diff in comparison.get("diffs", []):
-            scope_str = diff.get("scope", "return_value")
-            scope = TestDiffScope.RETURN_VALUE
-            if scope_str in {"exception", "missing"}:
-                scope = TestDiffScope.DID_PASS
-
-            # Build test identifier
-            method_id = diff.get("methodId", "unknown")
-            call_id = diff.get("callId", 0)
-            test_src_code = f"// Method: {method_id}\n// Call ID: {call_id}"
-
-            test_diffs.append(
-                TestDiff(
-                    scope=scope,
-                    original_value=diff.get("originalValue"),
-                    candidate_value=diff.get("candidateValue"),
-                    test_src_code=test_src_code,
-                    candidate_pytest_error=diff.get("candidateError"),
-                    original_pass=scope_str != "exception",
-                    candidate_pass=scope_str not in ("missing", "exception"),
-                    original_pytest_error=diff.get("originalError"),
-                )
-            )
-
-            logger.debug(
-                "Java test diff:\n  Method: %s\n  Call ID: %s\n  Scope: %s\n  Original: %s\n  Candidate: %s",
-                method_id,
-                call_id,
-                scope_str,
-                str(diff.get("originalValue", "N/A"))[:100],
-                str(diff.get("candidateValue", "N/A"))[:100],
-            )
-
-        equivalent = comparison.get("equivalent", False)
-        actual_comparisons = comparison.get("actualComparisons", -1)
-        skipped_placeholders = comparison.get("skippedPlaceholders", 0)
-        skipped_deser_errors = comparison.get("skippedDeserializationErrors", 0)
-
-        if actual_comparisons == 0:
-            logger.warning(
-                "Java comparison: no actual comparisons performed "
-                "(total=%s, skipped_placeholders=%s, skipped_deser_errors=%s). "
-                "Treating as NOT equivalent.",
-                comparison.get("totalInvocations", 0),
-                skipped_placeholders,
-                skipped_deser_errors,
-            )
-            return False, []
-
-        logger.info(
-            "Java comparison: %s (%s invocations, %s compared, %s placeholder skips, %s deser skips, %s diffs)",
-            "equivalent" if equivalent else "DIFFERENT",
-            comparison.get("totalInvocations", 0),
-            actual_comparisons,
-            skipped_placeholders,
-            skipped_deser_errors,
-            len(test_diffs),
-        )
-
-        return equivalent, test_diffs
+        test_diffs = _build_test_diffs(comparison)
+        return _finalize_comparison_result(comparison, test_diffs)
 
     except subprocess.TimeoutExpired:
         logger.exception("Java comparator timed out")
