@@ -44,6 +44,7 @@ if TYPE_CHECKING:
 
 
 def init_codeflash() -> None:
+    """Run the interactive Codeflash setup flow for the current project."""
     try:
         welcome_panel = Panel(
             Text(
@@ -131,6 +132,7 @@ def init_codeflash() -> None:
 
 
 def ask_run_end_to_end_test(args: Namespace) -> None:
+    """Offer to run the sample optimization that validates a fresh installation."""
     from rich.prompt import Confirm
 
     run_tests = Confirm.ask(
@@ -376,6 +378,7 @@ def _select_git_remote(module_root: Path) -> str:
 
 
 def collect_setup_info() -> CLISetupInfo:
+    """Collect the Python project settings needed to write Codeflash configuration."""
     curdir = Path.cwd()
     _ensure_current_directory_is_writable(curdir)
 
@@ -405,6 +408,7 @@ def collect_setup_info() -> CLISetupInfo:
 
 
 def check_for_toml_or_setup_file() -> str | None:
+    """Inspect project config files and create a minimal ``pyproject.toml`` when needed."""
     click.echo()
     click.echo("Checking for pyproject.toml or setup.py…\r", nl=False)
     curdir = Path.cwd()
@@ -503,6 +507,7 @@ def check_for_toml_or_setup_file() -> str | None:
 
 
 def create_find_common_tags_file(args: Namespace, file_name: str) -> Path:
+    """Create the sample optimization target used by the post-install smoke test."""
     find_common_tags_content = """from __future__ import annotations
 
 
@@ -535,6 +540,7 @@ def find_common_tags(articles: list[dict[str, list[str]]]) -> set[str]:
 
 
 def create_bubble_sort_file_and_test(args: Namespace) -> tuple[str, str]:
+    """Create the legacy demo module and pytest file used by onboarding flows."""
     bubble_sort_content = """from typing import Union, List
 def sorter(arr: Union[List[int],List[float]]) -> Union[List[int],List[float]]:
     for i in range(len(arr)):
@@ -548,7 +554,7 @@ def sorter(arr: Union[List[int],List[float]]) -> Union[List[int],List[float]]:
     # Always use pytest for tests
     bubble_sort_test_content = f"""from {Path(args.module_root).name}.bubble_sort import sorter
 
- def test_sort() -> None:
+def test_sort() -> None:
     input = [5, 4, 3, 2, 1, 0]
     output = sorter(input)
     assert output == [0, 1, 2, 3, 4, 5]
@@ -586,6 +592,7 @@ def sorter(arr: Union[List[int],List[float]]) -> Union[List[int],List[float]]:
 
 
 def run_end_to_end_test(args: Namespace, find_common_tags_path: Path) -> None:
+    """Run the sample optimization command and clean up the generated demo file."""
     try:
         check_formatter_installed(args.formatter_cmds)
     except Exception:
