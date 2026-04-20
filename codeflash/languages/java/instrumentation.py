@@ -472,16 +472,20 @@ def wrap_target_calls_with_treesitter(
     body_start_line: int = 0,
     target_return_type: str = "",
 ) -> tuple[list[str], int]:
-    """Replace target method calls in body_lines with capture + serialize using tree-sitter.
+    """Wrap matching Java calls in a method body using tree-sitter-aware rewrites.
 
-    Operates on the full body text with character offsets (not line-by-line) to correctly
-    handle calls that span multiple lines. Processes calls back-to-front so earlier offsets
-    remain valid after later replacements.
+    The wrapper walks the full method body as text so it can instrument calls that span
+    multiple lines, then applies replacements back-to-front to keep precomputed offsets
+    stable. It skips lambda-contained and complex-expression calls that would become
+    invalid if instrumentation were inserted inline.
 
-    For behavior mode (precise_call_timing=True), each call is wrapped in its own
-    try-finally block with immediate SQLite write to prevent data loss from multiple calls.
+    When ``precise_call_timing`` is enabled, each call gets its own start/end markers and
+    ``try/finally`` block so behavior-mode runs can persist one SQLite row per invocation
+    without losing data from later calls in the same test method.
 
-    Returns (wrapped_body_lines, call_counter).
+    Returns:
+        A tuple of ``(wrapped_body_lines, call_count)``.
+
     """
     from codeflash.languages.java.parser import get_java_analyzer
 
@@ -758,24 +762,29 @@ def instrument_existing_test(
     test_path: Path | None = None,
     test_class_name: str | None = None,
 ) -> tuple[bool, str | None]:
-    """Inject profiling code into an existing test file.
+    """Rewrite an existing Java test class for Codeflash behavior or performance runs.
 
-    For Java, this:
-    1. Renames the class to match the new file name (Java requires class name = file name)
-    2. For behavior mode: adds timing instrumentation that writes to SQLite
-    3. For performance mode: adds timing instrumentation with stdout markers
+    The rewritten source always renames the test class to match the instrumented filename,
+    which keeps Java's class-name/file-name contract intact. From there the function adds
+    the mode-specific instrumentation:
+
+    - ``behavior`` wraps target calls with per-invocation timing and SQLite persistence.
+    - ``performance`` adds stdout timing markers used by the Java benchmarking runner.
 
     Args:
-        test_string: String to the test file.
-        call_positions: List of code positions where the function is called.
-        function_to_optimize: The function being optimized.
-        tests_project_root: Root directory of tests.
-        mode: Testing mode - "behavior" or "performance".
-        analyzer: Optional JavaAnalyzer instance.
-        output_class_suffix: Optional suffix for the renamed class.
+        test_string: Original test source code.
+        function_to_optimize: The target function under evaluation.
+        mode: Instrumentation mode, either ``"behavior"`` or ``"performance"``.
+        test_path: Path to the existing test file, used to derive the original class name.
+        test_class_name: Optional class name override for generated or synthetic test inputs.
 
     Returns:
-        Tuple of (success, modified_source).
+        A ``(success, modified_source)`` tuple. ``success`` is ``False`` only when
+        instrumentation cannot be produced, and ``modified_source`` contains the rewritten
+        Java test when successful.
+
+    Raises:
+        ValueError: If neither ``test_path`` nor ``test_class_name`` is provided.
 
     """
     source = test_string
@@ -1411,7 +1420,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
 def create_benchmark_test(
     target_function: FunctionToOptimize, test_setup_code: str, invocation_code: str, iterations: int = 1000
 ) -> str:
-    """Create a benchmark test for a function.
+    """Create a standalone JUnit benchmark harness for a Java target function.
 
     Args:
         target_function: The function to benchmark.
@@ -1485,21 +1494,22 @@ def instrument_generated_java_test(
     mode: str,  # "behavior" or "performance"
     function_to_optimize: FunctionToOptimize,
 ) -> str:
-    """Instrument a generated Java test for behavior or performance testing.
+    """Instrument an AI-generated Java test for the requested evaluation mode.
 
-    For generated tests (AI-generated), this function:
-    1. Removes assertions and captures function return values (for regression testing)
-    2. Renames the class to include mode suffix
-    3. Adds timing instrumentation for performance mode
+    Generated tests follow the same class-renaming and timing conventions as existing
+    tests, but they may start from assertion-stripped source prepared by the caller.
+    Performance mode instruments the generated class directly, while behavior mode
+    reuses ``instrument_existing_test`` so both paths emit the same persistence format.
 
     Args:
-        test_code: The generated test source code.
+        test_code: Generated Java test source.
         function_name: Name of the function being tested.
-        qualified_name: Fully qualified name of the function.
-        mode: "behavior" for behavior capture or "performance" for timing.
+        qualified_name: Fully qualified name of the function under test.
+        mode: ``"behavior"`` for SQLite-backed capture or ``"performance"`` for timing markers.
+        function_to_optimize: Function metadata used when reusing the existing-test instrumentation path.
 
     Returns:
-        Instrumented test source code.
+        The instrumented Java test source.
 
     """
     if not test_code or not test_code.strip():
