@@ -203,7 +203,13 @@ def _compare_mapping_values(orig: Any, new: Any, superset_obj: bool) -> bool:
 
 
 def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
-    """Compare two objects for equality recursively. If superset_obj is True, the new object is allowed to have more keys than the original object. However, the existing keys/values must be equivalent."""
+    """Recursively compare captured values while preserving Codeflash-specific equivalence rules.
+
+    This comparator handles plain Python containers, framework objects, wrapped exceptions,
+    and a handful of normalized cases such as temporary file paths. When ``superset_obj`` is
+    enabled, mapping-like results may include additional keys as long as the original keys
+    still match recursively.
+    """
     try:
         # Handle exceptions specially - before type check to allow wrapper comparison
         if isinstance(orig, BaseException) and isinstance(new, BaseException):
