@@ -548,7 +548,7 @@ def sorter(arr: Union[List[int],List[float]]) -> Union[List[int],List[float]]:
     # Always use pytest for tests
     bubble_sort_test_content = f"""from {Path(args.module_root).name}.bubble_sort import sorter
 
-def test_sort():
+ def test_sort() -> None:
     input = [5, 4, 3, 2, 1, 0]
     output = sorter(input)
     assert output == [0, 1, 2, 3, 4, 5]
