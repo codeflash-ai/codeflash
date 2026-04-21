@@ -18,17 +18,19 @@ logger = logging.getLogger(__name__)
 GRACEFUL_SHUTDOWN_WAIT = 5  # seconds to wait after SIGTERM before SIGKILL
 
 
-def _run_java_with_graceful_timeout(
-    java_command: list[str], env: dict[str, str], timeout: int, stage_name: str
-) -> None:
+def _run_java_with_graceful_timeout(java_command: list[str], env: dict[str, str], timeout: int, stage_name: str) -> int:
     """Run a Java command with graceful timeout handling.
 
     Sends SIGTERM first (allowing JFR dump and shutdown hooks to run),
     then SIGKILL if the process doesn't exit within GRACEFUL_SHUTDOWN_WAIT seconds.
+
+    Returns the process exit code, or -1 if the process was killed due to timeout.
     """
     if not timeout:
-        subprocess.run(java_command, env=env, check=False)
-        return
+        result = subprocess.run(java_command, env=env, check=False)
+        if result.returncode != 0:
+            logger.warning("%s exited with code %d", stage_name, result.returncode)
+        return result.returncode
 
     import signal
 
@@ -46,6 +48,11 @@ def _run_java_with_graceful_timeout(
             logger.warning("%s stage did not exit after SIGTERM, sending SIGKILL", stage_name)
             proc.kill()
             proc.wait()
+        return -1
+
+    if proc.returncode != 0:
+        logger.warning("%s exited with code %d", stage_name, proc.returncode)
+    return proc.returncode
 
 
 # --add-opens flags needed for Kryo serialization on Java 16+
@@ -85,12 +92,23 @@ class JavaTracer:
         combined_env = self.build_combined_env(jfr_file, config_path)
 
         logger.info("Running combined JFR profiling + argument capture...")
-        _run_java_with_graceful_timeout(java_command, combined_env, timeout, "Combined tracing")
+        exit_code = _run_java_with_graceful_timeout(java_command, combined_env, timeout, "Combined tracing")
+
+        if not trace_db_path.exists():
+            msg = (
+                f"Combined tracing failed with exit code {exit_code} — trace database was not created at "
+                f"{trace_db_path}. Cannot proceed without trace data."
+            )
+            raise RuntimeError(msg)
+
+        if exit_code != 0:
+            logger.warning(
+                "Combined tracing exited with code %d but trace database was created — proceeding with partial data",
+                exit_code,
+            )
 
         if not jfr_file.exists():
             logger.warning("JFR file was not created at %s", jfr_file)
-        if not trace_db_path.exists():
-            logger.error("Trace database was not created at %s", trace_db_path)
 
         return trace_db_path, jfr_file
 
