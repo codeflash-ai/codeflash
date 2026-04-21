@@ -583,9 +583,9 @@ class JavaSupport(LanguageSupport):
                     end = line.find('"', start + 1)
                     if start != -1 and end != -1:
                         full_version = line[start + 1 : end]
-                        # Use major version only: "17.0.2" -> "17", "1.8.0_292" -> "8"
-                        major = full_version.split(".")[0]
-                        self._language_version = "8" if major == "1" else major
+                        # Use major version only: "17.0.2" -> "17". JDK 8 and earlier (reported as
+                        # "1.x.y") are unsupported — the downstream minimum-version check rejects them.
+                        self._language_version = full_version.split(".")[0]
                         return
         except Exception:
             pass

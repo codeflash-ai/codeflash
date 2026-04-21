@@ -175,3 +175,33 @@ class TestJdkVersionCheck:
         with patch("codeflash.languages.java.support.detect_java_project", return_value=mock_config):
             result = support.ensure_runtime_environment(tmp_path)
         assert result is True
+
+    def test_detect_java_version_legacy_jdk8_format(self) -> None:
+        from unittest.mock import MagicMock, patch
+
+        support = get_java_support()
+        support._language_version = None
+
+        mock_result = MagicMock()
+        mock_result.stderr = 'openjdk version "1.8.0_292"\n'
+        mock_result.stdout = ""
+
+        with patch("subprocess.run", return_value=mock_result):
+            support._detect_java_version()
+
+        assert support._language_version == "1"
+
+    def test_detect_java_version_modern_format(self) -> None:
+        from unittest.mock import MagicMock, patch
+
+        support = get_java_support()
+        support._language_version = None
+
+        mock_result = MagicMock()
+        mock_result.stderr = 'openjdk version "17.0.2"\n'
+        mock_result.stdout = ""
+
+        with patch("subprocess.run", return_value=mock_result):
+            support._detect_java_version()
+
+        assert support._language_version == "17"
