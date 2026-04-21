@@ -6,6 +6,7 @@ import os
 import subprocess
 from typing import TYPE_CHECKING
 
+from codeflash.code_utils.env_utils import is_ci
 from codeflash.languages.java.line_profiler import find_agent_jar
 from codeflash.languages.java.replay_test import generate_replay_tests
 
@@ -67,7 +68,7 @@ ADD_OPENS_FLAGS = (
 
 
 class JavaTracer:
-    """Orchestrates two-stage Java tracing: JFR profiling + argument capture."""
+    """Orchestrates Java tracing: combined JFR profiling + argument capture in a single JVM invocation."""
 
     def trace(
         self,
@@ -78,37 +79,36 @@ class JavaTracer:
         max_function_count: int = 256,
         timeout: int = 0,
     ) -> tuple[Path, Path]:
-        """Run the Java program twice: once for profiling, once for arg capture.
+        """Run the Java program once with both JFR profiling and argument capture.
 
         Returns (trace_db_path, jfr_file_path).
         """
         jfr_file = trace_db_path.with_suffix(".jfr")
         trace_db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Stage 1: JFR Profiling (non-fatal — JFR data is supplementary)
-        logger.info("Stage 1: Running JFR profiling...")
-        jfr_env = self.build_jfr_env(jfr_file)
-        jfr_exit = _run_java_with_graceful_timeout(java_command, jfr_env, timeout, "JFR profiling")
-
-        if jfr_exit != 0:
-            logger.warning("JFR profiling failed (exit code %d), continuing without profiling data", jfr_exit)
-        elif not jfr_file.exists():
-            logger.warning("JFR file was not created at %s", jfr_file)
-
-        # Stage 2: Argument Capture via Tracing Agent (fatal — trace data is essential)
-        logger.info("Stage 2: Running argument capture...")
         config_path = self.create_tracer_config(
             trace_db_path, packages, project_root=project_root, max_function_count=max_function_count, timeout=timeout
         )
-        agent_env = self.build_agent_env(config_path)
-        capture_exit = _run_java_with_graceful_timeout(java_command, agent_env, timeout, "Argument capture")
+        combined_env = self.build_combined_env(jfr_file, config_path)
 
-        if capture_exit != 0:
-            msg = f"Argument capture failed with exit code {capture_exit} — cannot proceed without trace data"
-            raise RuntimeError(msg)
+        logger.info("Running combined JFR profiling + argument capture...")
+        exit_code = _run_java_with_graceful_timeout(java_command, combined_env, timeout, "Combined tracing")
 
         if not trace_db_path.exists():
-            logger.error("Trace database was not created at %s", trace_db_path)
+            msg = (
+                f"Combined tracing failed with exit code {exit_code} — trace database was not created at "
+                f"{trace_db_path}. Cannot proceed without trace data."
+            )
+            raise RuntimeError(msg)
+
+        if exit_code != 0:
+            logger.warning(
+                "Combined tracing exited with code %d but trace database was created — proceeding with partial data",
+                exit_code,
+            )
+
+        if not jfr_file.exists():
+            logger.warning("JFR file was not created at %s", jfr_file)
 
         return trace_db_path, jfr_file
 
@@ -127,6 +127,7 @@ class JavaTracer:
             "maxFunctionCount": max_function_count,
             "timeout": timeout,
             "projectRoot": str(project_root.resolve()) if project_root else "",
+            "inMemoryDb": is_ci(),
         }
 
         config_path = trace_db_path.with_suffix(".config.json")
@@ -135,12 +136,7 @@ class JavaTracer:
 
     def build_jfr_env(self, jfr_file: Path) -> dict[str, str]:
         env = os.environ.copy()
-        # Use profile settings with increased sampling frequency (1ms instead of default 10ms)
-        # This captures more samples for short-running programs
-        jfr_opts = (
-            f"-XX:StartFlightRecording=filename={jfr_file.resolve()},settings=profile,dumponexit=true"
-            ",jdk.ExecutionSample#period=1ms"
-        )
+        jfr_opts = f"-XX:StartFlightRecording=filename={jfr_file.resolve()},settings=profile,dumponexit=true"
         existing = env.get("JAVA_TOOL_OPTIONS", "")
         env["JAVA_TOOL_OPTIONS"] = f"{existing} {jfr_opts}".strip()
         return env
@@ -155,6 +151,19 @@ class JavaTracer:
         agent_opts = f"{ADD_OPENS_FLAGS} -javaagent:{agent_jar}=trace={config_path.resolve()}"
         existing = env.get("JAVA_TOOL_OPTIONS", "")
         env["JAVA_TOOL_OPTIONS"] = f"{existing} {agent_opts}".strip()
+        return env
+
+    def build_combined_env(self, jfr_file: Path, config_path: Path, classpath: str | None = None) -> dict[str, str]:
+        """Build env with both JFR recording and tracing agent in a single JAVA_TOOL_OPTIONS."""
+        env = os.environ.copy()
+        jfr_opts = f"-XX:StartFlightRecording=filename={jfr_file.resolve()},settings=profile,dumponexit=true"
+        agent_jar = find_agent_jar(classpath=classpath)
+        if agent_jar is None:
+            msg = "codeflash-runtime JAR not found, cannot run tracing agent"
+            raise FileNotFoundError(msg)
+        agent_opts = f"{ADD_OPENS_FLAGS} -javaagent:{agent_jar}=trace={config_path.resolve()}"
+        existing = env.get("JAVA_TOOL_OPTIONS", "")
+        env["JAVA_TOOL_OPTIONS"] = f"{existing} {jfr_opts} {agent_opts}".strip()
         return env
 
     @staticmethod

@@ -156,7 +156,14 @@ def process_pyproject_config(args: Namespace) -> Namespace:
             raise AssertionError("--tests-root must be specified")
     assert Path(args.tests_root).is_dir(), f"--tests-root {args.tests_root} must be a valid directory"
     if args.benchmark:
-        assert args.benchmarks_root is not None, "--benchmarks-root must be specified when running with --benchmark"
+        if args.benchmarks_root is None:
+            # Auto-discover .codeflash/benchmarks/ convention
+            candidate = Path.cwd() / ".codeflash" / "benchmarks"
+            if candidate.is_dir():
+                args.benchmarks_root = str(candidate)
+            else:
+                msg = "--benchmarks-root must be specified when running with --benchmark, or .codeflash/benchmarks/ must exist"
+                raise AssertionError(msg)
         assert Path(args.benchmarks_root).is_dir(), (
             f"--benchmarks-root {args.benchmarks_root} must be a valid directory"
         )

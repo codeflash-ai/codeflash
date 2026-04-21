@@ -80,68 +80,72 @@ class TestRunJavaWithGracefulTimeout:
 
 
 class TestJavaTracerExitCodeHandling:
-    def test_stage1_failure_continues(self, tmp_path: Path) -> None:
+    def test_success_with_trace_db_created(self, tmp_path: Path) -> None:
         trace_db_path = (tmp_path / "trace.db").resolve()
         tracer = JavaTracer()
 
-        # Stage 1 fails (exit code 1), Stage 2 succeeds (exit code 0)
-        exit_codes = iter([1, 0])
-
         def mock_run_timeout(java_command: list[str], env: dict, timeout: int, stage_name: str) -> int:
-            rc = next(exit_codes)
-            if stage_name == "Argument capture":
-                trace_db_path.write_bytes(b"fake-db")
-            return rc
+            trace_db_path.write_bytes(b"fake-db")
+            return 0
 
         with (
             patch("codeflash.languages.java.tracer._run_java_with_graceful_timeout", side_effect=mock_run_timeout),
-            patch.object(tracer, "build_jfr_env", return_value={}),
-            patch.object(tracer, "build_agent_env", return_value={}),
+            patch.object(tracer, "build_combined_env", return_value={}),
             patch.object(tracer, "create_tracer_config", return_value=tmp_path / "config.json"),
         ):
             trace_db, _jfr_file = tracer.trace(
                 java_command=["java", "-cp", ".", "Main"], trace_db_path=trace_db_path, packages=["com.example"]
             )
-        # Should complete despite Stage 1 failure
         assert trace_db == trace_db_path
 
-    def test_stage2_failure_raises(self, tmp_path: Path) -> None:
+    def test_failure_without_trace_db_raises(self, tmp_path: Path) -> None:
         trace_db_path = (tmp_path / "trace.db").resolve()
         tracer = JavaTracer()
 
-        # Stage 1 succeeds (exit code 0), Stage 2 fails (exit code 1)
-        exit_codes = iter([0, 1])
-
         def mock_run_timeout(java_command: list[str], env: dict, timeout: int, stage_name: str) -> int:
-            return next(exit_codes)
+            return 1
 
         with (
             patch("codeflash.languages.java.tracer._run_java_with_graceful_timeout", side_effect=mock_run_timeout),
-            patch.object(tracer, "build_jfr_env", return_value={}),
-            patch.object(tracer, "build_agent_env", return_value={}),
+            patch.object(tracer, "build_combined_env", return_value={}),
             patch.object(tracer, "create_tracer_config", return_value=tmp_path / "config.json"),
-            pytest.raises(RuntimeError, match="Argument capture failed with exit code 1"),
+            pytest.raises(RuntimeError, match="Combined tracing failed with exit code 1"),
         ):
             tracer.trace(
                 java_command=["java", "-cp", ".", "Main"], trace_db_path=trace_db_path, packages=["com.example"]
             )
 
-    def test_both_stages_succeed(self, tmp_path: Path) -> None:
+    def test_nonzero_exit_with_trace_db_continues(self, tmp_path: Path) -> None:
         trace_db_path = (tmp_path / "trace.db").resolve()
         tracer = JavaTracer()
 
         def mock_run_timeout(java_command: list[str], env: dict, timeout: int, stage_name: str) -> int:
-            if stage_name == "Argument capture":
-                trace_db_path.write_bytes(b"fake-db")
-            return 0
+            trace_db_path.write_bytes(b"fake-db")
+            return 1
 
         with (
             patch("codeflash.languages.java.tracer._run_java_with_graceful_timeout", side_effect=mock_run_timeout),
-            patch.object(tracer, "build_jfr_env", return_value={}),
-            patch.object(tracer, "build_agent_env", return_value={}),
+            patch.object(tracer, "build_combined_env", return_value={}),
             patch.object(tracer, "create_tracer_config", return_value=tmp_path / "config.json"),
         ):
             trace_db, _jfr_file = tracer.trace(
                 java_command=["java", "-cp", ".", "Main"], trace_db_path=trace_db_path, packages=["com.example"]
             )
         assert trace_db == trace_db_path
+
+    def test_timeout_without_trace_db_raises(self, tmp_path: Path) -> None:
+        trace_db_path = (tmp_path / "trace.db").resolve()
+        tracer = JavaTracer()
+
+        def mock_run_timeout(java_command: list[str], env: dict, timeout: int, stage_name: str) -> int:
+            return -1
+
+        with (
+            patch("codeflash.languages.java.tracer._run_java_with_graceful_timeout", side_effect=mock_run_timeout),
+            patch.object(tracer, "build_combined_env", return_value={}),
+            patch.object(tracer, "create_tracer_config", return_value=tmp_path / "config.json"),
+            pytest.raises(RuntimeError, match="Combined tracing failed with exit code -1"),
+        ):
+            tracer.trace(
+                java_command=["java", "-cp", ".", "Main"], trace_db_path=trace_db_path, packages=["com.example"]
+            )

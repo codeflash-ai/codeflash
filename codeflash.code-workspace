@@ -16,7 +16,7 @@
             "tests/",
             "-vv",
             "--ignore",
-            "tests/benchmarks/"
+            ".codeflash/benchmarks/"
         ],
     },
     "launch": {

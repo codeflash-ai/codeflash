@@ -423,7 +423,7 @@ def get_run_tmp_file(file_path: Path | str) -> Path:
         file_path = Path(file_path)
     if not hasattr(get_run_tmp_file, "tmpdir_path"):
         get_run_tmp_file.tmpdir = TemporaryDirectory(prefix="codeflash_")
-        get_run_tmp_file.tmpdir_path = Path(get_run_tmp_file.tmpdir.name)
+        get_run_tmp_file.tmpdir_path = Path(get_run_tmp_file.tmpdir.name).resolve()
     return get_run_tmp_file.tmpdir_path / file_path
 
 
