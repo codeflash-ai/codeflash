@@ -275,6 +275,9 @@ tessl.json
 **/dist-nuitka/**
 **/.npmrc
 
+# Test fixture lockfiles — prevents Dependabot from scanning them
+code_to_optimize/**/package-lock.json
+
 # Tessl auto-generates AGENTS.md on install; ignore to avoid cluttering git status
 AGENTS.md
 .serena/
