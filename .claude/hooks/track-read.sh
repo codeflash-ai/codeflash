@@ -6,5 +6,6 @@ FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null |
 
 [ -z "$FILE_PATH" ] && exit 0
 
-echo "$FILE_PATH" >> "$CLAUDE_PROJECT_DIR/.claude/.read-tracker"
+TRACKER="$CLAUDE_PROJECT_DIR/.claude/.read-tracker"
+grep -qxF "$FILE_PATH" "$TRACKER" 2>/dev/null || echo "$FILE_PATH" >> "$TRACKER"
 exit 0

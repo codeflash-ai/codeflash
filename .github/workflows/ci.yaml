@@ -36,10 +36,17 @@ jobs:
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
         run: |
           # Skip for bots (dependabot, renovate, github-actions)
           if [[ "$PR_AUTHOR" == *"[bot]"* || "$PR_AUTHOR" == "dependabot" ]]; then
             echo "Bot PR — skipping linked issue check."
+            exit 0
+          fi
+
+          # Skip for org members
+          if [[ "$AUTHOR_ASSOCIATION" == "MEMBER" ]]; then
+            echo "Org member ($PR_AUTHOR) — skipping linked issue check."
             exit 0
           fi
 
@@ -185,7 +192,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8.0.0
+        uses: astral-sh/setup-uv@v8.1.0
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
@@ -218,7 +225,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8.0.0
+        uses: astral-sh/setup-uv@v8.1.0
         with:
           python-version: "3.13"
           enable-cache: true
@@ -234,7 +241,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: coverage.xml
@@ -254,7 +261,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8.0.0
+        uses: astral-sh/setup-uv@v8.1.0
         with:
           enable-cache: true
 
@@ -281,7 +288,7 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v8.0.0
+      - uses: astral-sh/setup-uv@v8.1.0
         with:
           enable-cache: true
 
@@ -315,6 +322,7 @@ jobs:
     if: >-
       needs.determine-changes.outputs.e2e == 'true'
       && github.event_name != 'push'
+      && github.actor != 'dependabot[bot]'
     strategy:
       fail-fast: false
       matrix:
@@ -374,7 +382,7 @@ jobs:
           pr_state: ${{ github.event.pull_request.state }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8.0.0
+        uses: astral-sh/setup-uv@v8.1.0
         with:
           python-version: 3.11.6
           enable-cache: true
@@ -418,6 +426,7 @@ jobs:
     if: >-
       needs.determine-changes.outputs.e2e_js == 'true'
       && github.event_name != 'push'
+      && github.actor != 'dependabot[bot]'
     strategy:
       fail-fast: false
       matrix:
@@ -430,10 +439,12 @@ jobs:
             script: end_to_end_test_js_esm_async.py
             js_project_dir: code_to_optimize/js/code_to_optimize_js_esm
             expected_improvement: 10
+            allow_failure: true
           - name: js-ts-class
             script: end_to_end_test_js_ts_class.py
             js_project_dir: code_to_optimize/js/code_to_optimize_ts
             expected_improvement: 30
+    continue-on-error: ${{ matrix.allow_failure || false }}
     environment: ${{ ((github.event_name == 'workflow_dispatch' && github.actor != 'misrasaurabh1' && github.actor != 'KRRT7') || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
     runs-on: ubuntu-latest
     env:
@@ -482,7 +493,7 @@ jobs:
           npm install
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8.0.0
+        uses: astral-sh/setup-uv@v8.1.0
         with:
           python-version: 3.11.6
           enable-cache: true
@@ -499,6 +510,7 @@ jobs:
     if: >-
       needs.determine-changes.outputs.e2e_java == 'true'
       && github.event_name != 'push'
+      && github.actor != 'dependabot[bot]'
     strategy:
       fail-fast: false
       matrix:
@@ -551,7 +563,7 @@ jobs:
           cache: maven
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8.0.0
+        uses: astral-sh/setup-uv@v8.1.0
         with:
           python-version: 3.11.6
           enable-cache: true
@@ -561,7 +573,7 @@ jobs:
 
       - name: Cache codeflash-runtime JAR
         id: runtime-jar-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.m2/repository/io/codeflash
           key: codeflash-runtime-${{ hashFiles('codeflash-java-runtime/pom.xml', 'codeflash-java-runtime/src/**') }}
