@@ -1,0 +1,38 @@
+# Default fallback
+*                                       @KRRT7
+
+# Java
+/codeflash/languages/java/              @mashraf-222 @HeshamHM28 @misrasaurabh1
+
+# JavaScript / TypeScript
+/codeflash/languages/javascript/        @Saga4 @mohammedahmed18 @KRRT7
+
+# Python language support
+/codeflash/languages/python/            @KRRT7
+
+# Core pipeline
+/codeflash/optimization/                @KRRT7 @aseembits93 @misrasaurabh1
+/codeflash/verification/                @KRRT7 @misrasaurabh1
+/codeflash/benchmarking/                @KRRT7
+/codeflash/discovery/                   @KRRT7 @misrasaurabh1
+
+# CLI & setup
+/codeflash/cli_cmds/                    @KRRT7 @misrasaurabh1
+
+# LSP
+/codeflash/lsp/                         @mohammedahmed18
+
+# API
+/codeflash/api/                         @KRRT7 @aseembits93
+
+# Tracing & entry points
+/codeflash/tracing/                     @misrasaurabh1 @KRRT7
+/codeflash/main.py                      @misrasaurabh1 @KRRT7
+/codeflash/tracer.py                    @misrasaurabh1 @KRRT7
+
+# Shared utilities
+/codeflash/code_utils/                  @KRRT7 @aseembits93 @misrasaurabh1
+/codeflash/models/                      @KRRT7
+
+# CI / workflows
+/.github/                               @KRRT7
