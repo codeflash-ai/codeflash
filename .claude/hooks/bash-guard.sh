@@ -24,6 +24,10 @@ case "$FIRST_CMD" in
         echo "BLOCKED: Use the Read tool instead of \`$FIRST_CMD\`. Read provides line numbers and supports images/PDFs." >&2
         exit 2
         ;;
+    awk)
+        echo "BLOCKED: Use the Grep tool or Read tool instead of \`awk\`." >&2
+        exit 2
+        ;;
     sed)
         if echo "$COMMAND" | grep -qE '(^|[[:space:]])sed[[:space:]]+-i'; then
             echo "BLOCKED: Use the Edit tool instead of \`sed -i\`. Edit tracks changes properly." >&2
