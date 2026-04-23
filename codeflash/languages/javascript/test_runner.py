@@ -1109,7 +1109,7 @@ def run_jest_benchmarking_tests(
     jest_env["CODEFLASH_PERF_STABILITY_CHECK"] = "true" if stability_check else "false"
     jest_env["CODEFLASH_LOOP_INDEX"] = "1"  # Initial value for compatibility
     # Warmup and calibration for accurate benchmarking
-    jest_env["CODEFLASH_PERF_WARMUP_ITERATIONS"] = "3"
+    jest_env["CODEFLASH_PERF_WARMUP_ITERATIONS"] = "5"
     jest_env["CODEFLASH_PERF_MIN_TIME_NS"] = "5000"  # 5us minimum time for calibration
 
     # Enable console output for timing markers

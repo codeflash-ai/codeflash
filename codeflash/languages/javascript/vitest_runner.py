@@ -682,7 +682,7 @@ def run_vitest_benchmarking_tests(
     vitest_env["CODEFLASH_PERF_STABILITY_CHECK"] = "true" if stability_check else "false"
     vitest_env["CODEFLASH_LOOP_INDEX"] = "1"
     # Warmup and calibration for accurate benchmarking
-    vitest_env["CODEFLASH_PERF_WARMUP_ITERATIONS"] = "3"
+    vitest_env["CODEFLASH_PERF_WARMUP_ITERATIONS"] = "5"
     vitest_env["CODEFLASH_PERF_MIN_TIME_NS"] = "5000"  # 5us minimum time for calibration
 
     # Expose GC for accurate benchmarking (allows capturePerf to force GC before timing)

@@ -73,7 +73,7 @@ function getPerfCurrentBatch() {
 }
 // Warmup iterations to trigger V8 JIT compilation before timing
 function getPerfWarmupIterations() {
-    return parseInt(process.env.CODEFLASH_PERF_WARMUP_ITERATIONS || '3', 10);
+    return parseInt(process.env.CODEFLASH_PERF_WARMUP_ITERATIONS || '5', 10);
 }
 // Minimum time in nanoseconds for calibration (5us matches Python's MIN_TIME)
 function getPerfMinTimeNs() {
