@@ -1,0 +1,7 @@
+{
+  "name": "tessl/pypi-humanize",
+  "version": "4.13.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:pypi/humanize@4.13.0",
+  "summary": "Python humanize utilities for converting machine-readable data into human-friendly formats"
+}

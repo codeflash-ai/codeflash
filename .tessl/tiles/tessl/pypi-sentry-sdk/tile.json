@@ -1,0 +1,7 @@
+{
+  "name": "tessl/pypi-sentry-sdk",
+  "version": "2.36.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:pypi/sentry-sdk@2.36.0",
+  "summary": "Official Python SDK for Sentry error monitoring and performance tracking with extensive framework integrations"
+}

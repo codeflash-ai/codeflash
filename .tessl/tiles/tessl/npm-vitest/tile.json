@@ -1,0 +1,7 @@
+{
+  "name": "tessl/npm-vitest",
+  "version": "4.0.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:npm/vitest@4.0.3",
+  "summary": "Next generation testing framework powered by Vite"
+}

@@ -398,7 +398,9 @@ replay_pid*
 
 # IDEs
 .idea/
-.vscode/
+.vscode/*
+!.vscode/mcp.json
+!.vscode/extensions.json
 
 # Nuitka
 **/dist-nuitka/**
@@ -409,8 +411,11 @@ replay_pid*
 # Mac
 .DS_Store
 
+# Playwright MCP
+.playwright-mcp/
+
 # Tessl — .tessl/.gitignore handles tiles/RULES.md internally
-.mcp.json
+.tessl/session-data/
 
 # Claude Code — track shared config, ignore local state
 .claude/*
