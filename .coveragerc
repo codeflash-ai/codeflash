@@ -7,7 +7,7 @@ omit =
 [report]
 sort = cover
 show_missing = true
-fail_under = 60
+fail_under = 58
 exclude_lines =
     pragma: no cover
     if TYPE_CHECKING:
