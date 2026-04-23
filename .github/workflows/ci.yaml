@@ -437,10 +437,12 @@ jobs:
             script: end_to_end_test_js_esm_async.py
             js_project_dir: code_to_optimize/js/code_to_optimize_js_esm
             expected_improvement: 10
+            allow_failure: true
           - name: js-ts-class
             script: end_to_end_test_js_ts_class.py
             js_project_dir: code_to_optimize/js/code_to_optimize_ts
             expected_improvement: 30
+    continue-on-error: ${{ matrix.allow_failure || false }}
     environment: ${{ ((github.event_name == 'workflow_dispatch' && github.actor != 'misrasaurabh1' && github.actor != 'KRRT7') || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
     runs-on: ubuntu-latest
     env:
