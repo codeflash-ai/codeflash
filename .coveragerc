@@ -1,0 +1,17 @@
+[run]
+branch = true
+source = codeflash
+omit =
+    codeflash/version.py
+
+[report]
+sort = cover
+show_missing = true
+fail_under = 60
+exclude_lines =
+    pragma: no cover
+    if TYPE_CHECKING:
+    if __name__ == .__main__.:
+
+[html]
+directory = htmlcov
