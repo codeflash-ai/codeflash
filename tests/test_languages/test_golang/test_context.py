@@ -1,0 +1,225 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from codeflash.languages.base import Language
+from codeflash.languages.golang.context import extract_code_context, find_helper_functions
+from codeflash.models.function_types import FunctionParent, FunctionToOptimize
+
+GO_SOURCE_WITH_METHOD = """\
+package calc
+
+import "math"
+
+type Calculator struct {
+\tResult float64
+}
+
+// Add returns the sum.
+func Add(a, b int) int {
+\treturn a + b
+}
+
+func subtract(a, b int) int {
+\treturn a - b
+}
+
+func (c *Calculator) AddFloat(val float64) float64 {
+\tc.Result += val
+\treturn c.Result
+}
+"""
+
+
+class TestExtractCodeContextFunction:
+    def test_target_code_with_doc_comment(self, tmp_path: Path) -> None:
+        source_file = (tmp_path / "calc.go").resolve()
+        source_file.write_text(GO_SOURCE_WITH_METHOD, encoding="utf-8")
+        func = FunctionToOptimize(
+            function_name="Add", file_path=source_file, language="go", starting_line=10, ending_line=12
+        )
+        ctx = extract_code_context(func, tmp_path.resolve())
+        assert ctx.target_code == "// Add returns the sum.\nfunc Add(a, b int) int {\n\treturn a + b\n}\n"
+
+    def test_target_code_no_doc(self, tmp_path: Path) -> None:
+        source_file = (tmp_path / "calc.go").resolve()
+        source_file.write_text(GO_SOURCE_WITH_METHOD, encoding="utf-8")
+        func = FunctionToOptimize(
+            function_name="subtract", file_path=source_file, language="go", starting_line=14, ending_line=16
+        )
+        ctx = extract_code_context(func, tmp_path.resolve())
+        assert ctx.target_code == "func subtract(a, b int) int {\n\treturn a - b\n}"
+
+    def test_imports_extracted(self, tmp_path: Path) -> None:
+        source_file = (tmp_path / "calc.go").resolve()
+        source_file.write_text(GO_SOURCE_WITH_METHOD, encoding="utf-8")
+        func = FunctionToOptimize(
+            function_name="Add", file_path=source_file, language="go", starting_line=10, ending_line=12
+        )
+        ctx = extract_code_context(func, tmp_path.resolve())
+        assert ctx.imports == ['"math"']
+
+    def test_no_read_only_context_for_function(self, tmp_path: Path) -> None:
+        source_file = (tmp_path / "calc.go").resolve()
+        source_file.write_text(GO_SOURCE_WITH_METHOD, encoding="utf-8")
+        func = FunctionToOptimize(
+            function_name="Add", file_path=source_file, language="go", starting_line=10, ending_line=12
+        )
+        ctx = extract_code_context(func, tmp_path.resolve())
+        assert ctx.read_only_context == ""
+
+    def test_helpers_for_function(self, tmp_path: Path) -> None:
+        source_file = (tmp_path / "calc.go").resolve()
+        source_file.write_text(GO_SOURCE_WITH_METHOD, encoding="utf-8")
+        func = FunctionToOptimize(
+            function_name="Add", file_path=source_file, language="go", starting_line=10, ending_line=12
+        )
+        ctx = extract_code_context(func, tmp_path.resolve())
+        helper_names = [h.name for h in ctx.helper_functions]
+        assert "subtract" in helper_names
+        assert "AddFloat" in helper_names
+        assert "Add" not in helper_names
+
+    def test_language_is_go(self, tmp_path: Path) -> None:
+        source_file = (tmp_path / "calc.go").resolve()
+        source_file.write_text(GO_SOURCE_WITH_METHOD, encoding="utf-8")
+        func = FunctionToOptimize(
+            function_name="Add", file_path=source_file, language="go", starting_line=10, ending_line=12
+        )
+        ctx = extract_code_context(func, tmp_path.resolve())
+        assert ctx.language == Language.GO
+
+    def test_target_file_path(self, tmp_path: Path) -> None:
+        source_file = (tmp_path / "calc.go").resolve()
+        source_file.write_text(GO_SOURCE_WITH_METHOD, encoding="utf-8")
+        func = FunctionToOptimize(
+            function_name="Add", file_path=source_file, language="go", starting_line=10, ending_line=12
+        )
+        ctx = extract_code_context(func, tmp_path.resolve())
+        assert ctx.target_file == source_file
+
+
+class TestExtractCodeContextMethod:
+    def test_method_target_code(self, tmp_path: Path) -> None:
+        source_file = (tmp_path / "calc.go").resolve()
+        source_file.write_text(GO_SOURCE_WITH_METHOD, encoding="utf-8")
+        func = FunctionToOptimize(
+            function_name="AddFloat",
+            file_path=source_file,
+            parents=[FunctionParent(name="Calculator", type="StructDef")],
+            language="go",
+            is_method=True,
+            starting_line=18,
+            ending_line=21,
+        )
+        ctx = extract_code_context(func, tmp_path.resolve())
+        assert ctx.target_code == (
+            "func (c *Calculator) AddFloat(val float64) float64 {\n"
+            "\tc.Result += val\n"
+            "\treturn c.Result\n"
+            "}"
+        )
+
+    def test_method_read_only_context_is_struct(self, tmp_path: Path) -> None:
+        source_file = (tmp_path / "calc.go").resolve()
+        source_file.write_text(GO_SOURCE_WITH_METHOD, encoding="utf-8")
+        func = FunctionToOptimize(
+            function_name="AddFloat",
+            file_path=source_file,
+            parents=[FunctionParent(name="Calculator", type="StructDef")],
+            language="go",
+            is_method=True,
+            starting_line=18,
+            ending_line=21,
+        )
+        ctx = extract_code_context(func, tmp_path.resolve())
+        assert ctx.read_only_context == "type Calculator struct {\n\tResult float64\n}"
+
+    def test_method_helpers_exclude_self(self, tmp_path: Path) -> None:
+        source_file = (tmp_path / "calc.go").resolve()
+        source_file.write_text(GO_SOURCE_WITH_METHOD, encoding="utf-8")
+        func = FunctionToOptimize(
+            function_name="AddFloat",
+            file_path=source_file,
+            parents=[FunctionParent(name="Calculator", type="StructDef")],
+            language="go",
+            is_method=True,
+            starting_line=18,
+            ending_line=21,
+        )
+        ctx = extract_code_context(func, tmp_path.resolve())
+        helper_names = [h.name for h in ctx.helper_functions]
+        assert "Add" in helper_names
+        assert "subtract" in helper_names
+        assert "AddFloat" not in helper_names
+
+    def test_method_helper_qualified_names(self, tmp_path: Path) -> None:
+        source_file = (tmp_path / "calc.go").resolve()
+        source_file.write_text(GO_SOURCE_WITH_METHOD, encoding="utf-8")
+        func = FunctionToOptimize(
+            function_name="AddFloat",
+            file_path=source_file,
+            parents=[FunctionParent(name="Calculator", type="StructDef")],
+            language="go",
+            is_method=True,
+            starting_line=18,
+            ending_line=21,
+        )
+        ctx = extract_code_context(func, tmp_path.resolve())
+        helper_qns = [h.qualified_name for h in ctx.helper_functions]
+        assert "Add" in helper_qns
+        assert "subtract" in helper_qns
+
+
+class TestExtractCodeContextEdgeCases:
+    def test_missing_file(self, tmp_path: Path) -> None:
+        missing = (tmp_path / "missing.go").resolve()
+        func = FunctionToOptimize(function_name="Foo", file_path=missing, language="go")
+        ctx = extract_code_context(func, tmp_path.resolve())
+        assert ctx.target_code == ""
+        assert ctx.language == Language.GO
+
+    def test_function_not_in_source(self, tmp_path: Path) -> None:
+        source_file = (tmp_path / "calc.go").resolve()
+        source_file.write_text("package calc\n\nfunc Other() {}\n", encoding="utf-8")
+        func = FunctionToOptimize(function_name="Missing", file_path=source_file, language="go")
+        ctx = extract_code_context(func, tmp_path.resolve())
+        assert ctx.target_code == ""
+
+    def test_multi_import(self, tmp_path: Path) -> None:
+        source = 'package calc\n\nimport (\n\t"fmt"\n\t"os"\n\tstr "strings"\n)\n\nfunc Hello() string {\n\treturn "hi"\n}\n'
+        source_file = (tmp_path / "hello.go").resolve()
+        source_file.write_text(source, encoding="utf-8")
+        func = FunctionToOptimize(function_name="Hello", file_path=source_file, language="go")
+        ctx = extract_code_context(func, tmp_path.resolve())
+        assert ctx.imports == ['"fmt"', '"os"', 'str "strings"']
+
+
+class TestFindHelperFunctions:
+    def test_skips_init_and_main(self, tmp_path: Path) -> None:
+        source = "package main\n\nfunc init() { println() }\n\nfunc main() { println() }\n\nfunc Target() int { return 1 }\n"
+        source_file = (tmp_path / "main.go").resolve()
+        func = FunctionToOptimize(function_name="Target", file_path=source_file, language="go")
+        helpers = find_helper_functions(source, func)
+        helper_names = [h.name for h in helpers]
+        assert "init" not in helper_names
+        assert "main" not in helper_names
+
+    def test_method_helpers_have_qualified_names(self, tmp_path: Path) -> None:
+        source = (
+            "package calc\n\n"
+            "type Calc struct{}\n\n"
+            "func (c Calc) Target() int { return 1 }\n\n"
+            "func (c Calc) Helper() int { return 2 }\n"
+        )
+        source_file = (tmp_path / "calc.go").resolve()
+        func = FunctionToOptimize(
+            function_name="Target",
+            file_path=source_file,
+            parents=[FunctionParent(name="Calc", type="StructDef")],
+            language="go",
+            is_method=True,
+        )
+        helpers = find_helper_functions(source, func)
+        assert len(helpers) == 1
+        assert helpers[0].qualified_name == "Calc.Helper"

@@ -87,6 +87,10 @@ class GoAnalyzer:
         self._source_bytes: bytes | None = None
         self._tree: Tree | None = None
 
+    @property
+    def last_tree(self) -> Tree | None:
+        return self._tree
+
     def parse(self, source: str) -> Tree:
         self._source_bytes = source.encode("utf-8")
         self._tree = self._parser.parse(self._source_bytes)
@@ -221,7 +225,7 @@ class GoAnalyzer:
         receiver_node = node.child_by_field_name("receiver")
         if receiver_node is None:
             return None
-        receiver_name, receiver_is_pointer = self._parse_receiver(receiver_node)
+        receiver_name, receiver_is_pointer = self.parse_receiver(receiver_node)
         if receiver_name is None:
             return None
 
@@ -240,7 +244,7 @@ class GoAnalyzer:
             doc_start_line=doc_line,
         )
 
-    def _parse_receiver(self, receiver_node: Node) -> tuple[str | None, bool]:
+    def parse_receiver(self, receiver_node: Node) -> tuple[str | None, bool]:
         for param in _children_of_type(receiver_node, "parameter_declaration"):
             type_node = param.child_by_field_name("type")
             if type_node is None:
@@ -284,7 +288,7 @@ class GoAnalyzer:
                     continue
                 recv_node = node.child_by_field_name("receiver")
                 if recv_node is not None:
-                    recv_name, _ = self._parse_receiver(recv_node)
+                    recv_name, _ = self.parse_receiver(recv_node)
                     if recv_name == receiver_type:
                         return self._get_source_with_doc(node)
         return None

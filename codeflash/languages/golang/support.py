@@ -4,9 +4,20 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from codeflash.languages.golang.comparator import compare_test_results as _compare_results
 from codeflash.languages.golang.config import detect_go_project, detect_go_version
+from codeflash.languages.golang.context import extract_code_context as _extract_context
+from codeflash.languages.golang.context import find_helper_functions as _find_helpers
 from codeflash.languages.golang.discovery import discover_functions_from_source
+from codeflash.languages.golang.formatter import format_go_code, normalize_go_code
 from codeflash.languages.golang.parser import GoAnalyzer
+from codeflash.languages.golang.replacement import add_global_declarations as _add_globals
+from codeflash.languages.golang.replacement import remove_test_functions as _remove_tests
+from codeflash.languages.golang.replacement import replace_function as _replace_func
+from codeflash.languages.golang.test_discovery import discover_tests as _discover_tests
+from codeflash.languages.golang.test_runner import parse_test_results as _parse_results
+from codeflash.languages.golang.test_runner import run_behavioral_tests as _run_behavioral
+from codeflash.languages.golang.test_runner import run_benchmarking_tests as _run_benchmarking
 from codeflash.languages.language_enum import Language
 from codeflash.languages.registry import register_language
 
@@ -19,6 +30,7 @@ if TYPE_CHECKING:
         FunctionFilterCriteria,
         HelperFunction,
         ReferenceInfo,
+        TestInfo,
     )
     from codeflash.models.function_types import FunctionToOptimize
 
@@ -80,39 +92,47 @@ class GoSupport:
     ) -> list[FunctionToOptimize]:
         return discover_functions_from_source(source, file_path, filter_criteria, self._analyzer)
 
-    def discover_tests(self, test_root: Path, source_functions: Sequence[FunctionToOptimize]) -> dict[str, list[Any]]:
-        raise NotImplementedError
+    def discover_tests(
+        self, test_root: Path, source_functions: Sequence[FunctionToOptimize]
+    ) -> dict[str, list[TestInfo]]:
+        return _discover_tests(test_root, source_functions)
 
     def validate_syntax(self, source: str, file_path: Path | None = None) -> bool:
         return self._analyzer.validate_syntax(source)
 
     def extract_code_context(self, function: FunctionToOptimize, project_root: Path, module_root: Path) -> CodeContext:
-        raise NotImplementedError
+        return _extract_context(function, project_root, module_root, self._analyzer)
 
     def find_helper_functions(self, function: FunctionToOptimize, project_root: Path) -> list[HelperFunction]:
-        raise NotImplementedError
+        try:
+            source = function.file_path.read_text(encoding="utf-8")
+        except Exception:
+            return []
+        return _find_helpers(source, function, self._analyzer)
 
     def find_references(
         self, function: FunctionToOptimize, project_root: Path, tests_root: Path | None = None, max_files: int = 100
     ) -> list[ReferenceInfo]:
-        raise NotImplementedError
+        return []
 
     def replace_function(self, source: str, function: FunctionToOptimize, new_source: str) -> str:
-        raise NotImplementedError
+        return _replace_func(source, function, new_source, self._analyzer)
 
     def format_code(self, source: str, file_path: Path | None = None) -> str:
-        raise NotImplementedError
+        return format_go_code(source, file_path)
 
     def normalize_code(self, source: str) -> str:
-        raise NotImplementedError
+        return normalize_go_code(source)
 
     def add_global_declarations(self, optimized_code: str, original_source: str, module_abspath: Path) -> str:
-        raise NotImplementedError
+        return _add_globals(optimized_code, original_source, self._analyzer)
 
     def prepare_module(
         self, module_code: str, module_path: Path, project_root: Path
     ) -> tuple[dict[Path, Any], None] | None:
-        raise NotImplementedError
+        if not self._analyzer.validate_syntax(module_code):
+            return None
+        return {module_path: module_code}, None
 
     def setup_test_config(self, test_cfg: Any) -> None:
         project_root = getattr(test_cfg, "project_root_path", Path.cwd())
@@ -124,17 +144,53 @@ class GoSupport:
     def detect_module_system(self, project_root: Path, source_file: Path | None = None) -> str | None:
         return None
 
-    def run_behavioral_tests(self, *args: Any, **kwargs: Any) -> Any:
-        raise NotImplementedError
+    def run_behavioral_tests(
+        self,
+        test_paths: Any,
+        test_env: dict[str, str],
+        cwd: Path,
+        timeout: int | None = None,
+        project_root: Path | None = None,
+        enable_coverage: bool = False,
+        candidate_index: int = 0,
+    ) -> tuple[Path, Any, Path | None, Path | None]:
+        return _run_behavioral(test_paths, test_env, cwd, timeout, project_root, enable_coverage, candidate_index)
 
-    def run_benchmarking_tests(self, *args: Any, **kwargs: Any) -> Any:
-        raise NotImplementedError
+    def run_benchmarking_tests(
+        self,
+        test_paths: Any,
+        test_env: dict[str, str],
+        cwd: Path,
+        timeout: int | None = None,
+        project_root: Path | None = None,
+        min_loops: int = 5,
+        max_loops: int = 100_000,
+        target_duration_seconds: float = 10.0,
+        inner_iterations: int = 100,
+    ) -> tuple[Path, Any]:
+        return _run_benchmarking(
+            test_paths,
+            test_env,
+            cwd,
+            timeout,
+            project_root,
+            min_loops,
+            max_loops,
+            target_duration_seconds,
+            inner_iterations,
+        )
 
     def run_line_profile_tests(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
 
-    def compare_test_results(self, *args: Any, **kwargs: Any) -> tuple[bool, list[Any]]:
-        raise NotImplementedError
+    def compare_test_results(
+        self,
+        original_results_path: Path,
+        candidate_results_path: Path,
+        project_root: Path | None = None,
+        project_classpath: str | None = None,
+    ) -> tuple[bool, list[Any]]:
+        return _compare_results(original_results_path, candidate_results_path, project_root, project_classpath)
 
     def instrument_for_behavior(self, source: str, functions: Sequence[FunctionToOptimize]) -> str:
         return source
@@ -178,12 +234,12 @@ class GoSupport:
         return test_source
 
     def remove_test_functions(self, test_source: str, functions_to_remove: list[str]) -> str:
-        raise NotImplementedError
+        return _remove_tests(test_source, functions_to_remove, self._analyzer)
 
     def get_test_dir_for_source(self, test_dir: Path, source_file: Path | None = None) -> Path | None:
         if source_file is not None:
             return source_file.parent
         return test_dir
 
-    def parse_test_results(self, *args: Any, **kwargs: Any) -> Any:
-        raise NotImplementedError
+    def parse_test_results(self, json_output_path: Path, stdout: str) -> Any:
+        return _parse_results(json_output_path, stdout)
