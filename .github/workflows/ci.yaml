@@ -44,9 +44,9 @@ jobs:
             exit 0
           fi
 
-          # Skip for org members
-          if [[ "$AUTHOR_ASSOCIATION" == "MEMBER" ]]; then
-            echo "Org member ($PR_AUTHOR) — skipping linked issue check."
+          # Skip for org members and collaborators
+          if [[ "$AUTHOR_ASSOCIATION" == "MEMBER" || "$AUTHOR_ASSOCIATION" == "COLLABORATOR" || "$AUTHOR_ASSOCIATION" == "OWNER" ]]; then
+            echo "Org member ($PR_AUTHOR, $AUTHOR_ASSOCIATION) — skipping linked issue check."
             exit 0
           fi
 
