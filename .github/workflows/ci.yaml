@@ -23,6 +23,57 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # Linked issue check — every PR must reference an issue or discussion.
+  # Skipped on push to main and workflow_dispatch.
+  # ---------------------------------------------------------------------------
+  check-linked-issue:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - name: Check PR body for linked issue or discussion
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          # Skip for bots (dependabot, renovate, github-actions)
+          if [[ "$PR_AUTHOR" == *"[bot]"* || "$PR_AUTHOR" == "dependabot" ]]; then
+            echo "Bot PR — skipping linked issue check."
+            exit 0
+          fi
+
+          if [ -z "$PR_BODY" ]; then
+            echo "::error::PR body is empty. Every PR must link an issue or discussion."
+            echo "Use 'Closes #<number>', 'Fixes #<number>', 'Relates to #<number>', or include a discussion URL."
+            exit 1
+          fi
+
+          # Match: #123, GH-123, org/repo#123, Closes/Fixes/Relates/Resolves #123,
+          # or a github.com URL to an issue or discussion
+          if echo "$PR_BODY" | grep -qiP '(close[sd]?|fix(e[sd])?|relate[sd]?\s+to|resolve[sd]?)\s+#\d+'; then
+            echo "Found linked issue keyword."
+            exit 0
+          fi
+          if echo "$PR_BODY" | grep -qP '#\d+'; then
+            echo "Found issue reference."
+            exit 0
+          fi
+          if echo "$PR_BODY" | grep -qiP 'github\.com/[^\s]+/(issues|discussions)/\d+'; then
+            echo "Found GitHub issue/discussion URL."
+            exit 0
+          fi
+          if echo "$PR_BODY" | grep -qiP 'CF-#?\d+'; then
+            echo "Found Linear ticket reference."
+            exit 0
+          fi
+
+          echo "::error::No linked issue or discussion found in PR body."
+          echo "Every PR must reference an issue or discussion. See CONTRIBUTING.md for details."
+          echo "Use 'Closes #<number>', 'Fixes #<number>', 'Relates to #<number>', or include a discussion URL."
+          exit 1
+
+  # ---------------------------------------------------------------------------
   # Change detection — decides which downstream jobs actually run.
   # On push/workflow_dispatch every flag is true so all jobs execute.
   # On pull_request we diff against the merge base (same approach as astral-sh/ruff).
@@ -506,6 +557,7 @@ jobs:
     name: required checks passed
     if: always()
     needs:
+      - check-linked-issue
       - unit-tests
       - type-check
       - prek
