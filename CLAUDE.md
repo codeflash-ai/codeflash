@@ -12,6 +12,13 @@ Discovery -> Ranking -> Context Extraction -> Test Gen + Optimization -> Baselin
 
 See `.claude/rules/architecture.md` for directory mapping and entry points.
 
+## Setup
+
+```bash
+uv sync                  # Install all dependencies
+uv run prek install      # Install git pre-commit hooks (ruff + mypy)
+```
+
 ## Bug Fix Workflow
 
 Follow these steps in order, do not skip ahead:
