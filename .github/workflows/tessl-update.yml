@@ -5,6 +5,10 @@ on:
     - cron: "0 9 * * 1" # Weekly on Monday at 9am UTC
   workflow_dispatch:
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   tessl:
     uses: codeflash-ai/github-workflows/.github/workflows/tessl-update.yml@main
