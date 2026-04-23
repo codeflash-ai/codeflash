@@ -546,6 +546,21 @@ class JavaSupport(LanguageSupport):
         if self._language_version is None:
             self._detect_java_version()
 
+        if self._language_version is not None:
+            try:
+                major = int(self._language_version)
+                if major < 11:
+                    logger.error(
+                        "Java %s detected, but codeflash requires JDK 11 or later. "
+                        "The codeflash-runtime JAR and --add-opens flags are incompatible with JDK %s. "
+                        "Please install JDK 11+ and ensure it is on your PATH.",
+                        self._language_version,
+                        self._language_version,
+                    )
+                    return False
+            except ValueError:
+                pass
+
         self._test_framework = config.test_framework
 
         return True
@@ -568,9 +583,9 @@ class JavaSupport(LanguageSupport):
                     end = line.find('"', start + 1)
                     if start != -1 and end != -1:
                         full_version = line[start + 1 : end]
-                        # Use major version only: "17.0.2" -> "17", "1.8.0_292" -> "8"
-                        major = full_version.split(".")[0]
-                        self._language_version = "8" if major == "1" else major
+                        # Use major version only: "17.0.2" -> "17". JDK 8 and earlier (reported as
+                        # "1.x.y") are unsupported — the downstream minimum-version check rejects them.
+                        self._language_version = full_version.split(".")[0]
                         return
         except Exception:
             pass
