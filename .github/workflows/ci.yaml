@@ -36,10 +36,17 @@ jobs:
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
         run: |
           # Skip for bots (dependabot, renovate, github-actions)
           if [[ "$PR_AUTHOR" == *"[bot]"* || "$PR_AUTHOR" == "dependabot" ]]; then
             echo "Bot PR — skipping linked issue check."
+            exit 0
+          fi
+
+          # Skip for org members and collaborators
+          if [[ "$AUTHOR_ASSOCIATION" == "MEMBER" || "$AUTHOR_ASSOCIATION" == "COLLABORATOR" ]]; then
+            echo "Org member/collaborator ($PR_AUTHOR) — skipping linked issue check."
             exit 0
           fi
 
