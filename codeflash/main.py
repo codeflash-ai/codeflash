@@ -31,6 +31,8 @@ def main() -> None:
 
     from codeflash.cli_cmds.cli import parse_args
 
+    if "--help" in sys.argv[1:] or "-h" in sys.argv[1:]:
+        print_codeflash_banner()
     args = parse_args()
 
     # Auth commands skip banner, telemetry, and version check entirely
