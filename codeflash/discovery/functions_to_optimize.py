@@ -195,7 +195,8 @@ def _find_all_functions_via_language_support(file_path: Path) -> dict[Path, list
 
     try:
         lang_support = get_language_support(file_path)
-        criteria = FunctionFilterCriteria(require_return=True)
+        require_return = lang_support.language != Language.JAVA
+        criteria = FunctionFilterCriteria(require_return=require_return)
         functions[file_path] = lang_support.discover_functions(file_path, criteria)
     except Exception as e:
         logger.debug(f"Failed to discover functions in {file_path}: {e}")
@@ -454,7 +455,8 @@ def find_all_functions_in_file(file_path: Path) -> dict[Path, list[FunctionToOpt
         from codeflash.languages.base import FunctionFilterCriteria
 
         lang_support = get_language_support(file_path)
-        criteria = FunctionFilterCriteria(require_return=True)
+        require_return = lang_support.language != Language.JAVA
+        criteria = FunctionFilterCriteria(require_return=require_return)
         source = file_path.read_text(encoding="utf-8")
         return {file_path: lang_support.discover_functions(source, file_path, criteria)}
     except Exception as e:

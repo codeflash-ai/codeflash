@@ -1,0 +1,537 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'codeflash/**'
+      - 'codeflash-benchmark/**'
+      - 'codeflash-java-runtime/**'
+      - 'tests/**'
+      - 'packages/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'mypy_allowlist.txt'
+      - '.github/workflows/ci.yaml'
+      - '.github/actions/**'
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Linked issue check — every PR must reference an issue or discussion.
+  # Skipped on push to main and workflow_dispatch.
+  # ---------------------------------------------------------------------------
+  check-linked-issue:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - name: Check PR body for linked issue or discussion
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
+        run: |
+          # Skip for bots (dependabot, renovate, github-actions)
+          if [[ "$PR_AUTHOR" == *"[bot]"* || "$PR_AUTHOR" == "dependabot" ]]; then
+            echo "Bot PR — skipping linked issue check."
+            exit 0
+          fi
+
+          # Skip for org members
+          if [[ "$AUTHOR_ASSOCIATION" == "MEMBER" ]]; then
+            echo "Org member ($PR_AUTHOR) — skipping linked issue check."
+            exit 0
+          fi
+
+          if [ -z "$PR_BODY" ]; then
+            echo "::error::PR body is empty. Every PR must link an issue or discussion."
+            echo "Use 'Closes #<number>', 'Fixes #<number>', 'Relates to #<number>', or include a discussion URL."
+            exit 1
+          fi
+
+          # Match: #123, GH-123, org/repo#123, Closes/Fixes/Relates/Resolves #123,
+          # or a github.com URL to an issue or discussion
+          if echo "$PR_BODY" | grep -qiP '(close[sd]?|fix(e[sd])?|relate[sd]?\s+to|resolve[sd]?)\s+#\d+'; then
+            echo "Found linked issue keyword."
+            exit 0
+          fi
+          if echo "$PR_BODY" | grep -qP '#\d+'; then
+            echo "Found issue reference."
+            exit 0
+          fi
+          if echo "$PR_BODY" | grep -qiP 'github\.com/[^\s]+/(issues|discussions)/\d+'; then
+            echo "Found GitHub issue/discussion URL."
+            exit 0
+          fi
+          if echo "$PR_BODY" | grep -qiP 'CF-#?\d+'; then
+            echo "Found Linear ticket reference."
+            exit 0
+          fi
+
+          echo "::error::No linked issue or discussion found in PR body."
+          echo "Every PR must reference an issue or discussion. See CONTRIBUTING.md for details."
+          echo "Use 'Closes #<number>', 'Fixes #<number>', 'Relates to #<number>', or include a discussion URL."
+          exit 1
+
+  # ---------------------------------------------------------------------------
+  # Change detection — decides which downstream jobs actually run.
+  # On push/workflow_dispatch every flag is true so all jobs execute.
+  # On pull_request we diff against the merge base.
+  # ---------------------------------------------------------------------------
+  determine-changes:
+    uses: codeflash-ai/github-workflows/.github/workflows/determine-changes.yml@main
+    with:
+      path-filters: |
+        {
+          "unit_tests": ["codeflash/", "codeflash-benchmark/", "tests/", "packages/", "pyproject.toml", "uv.lock"],
+          "type_check": ["codeflash/", "pyproject.toml", "uv.lock", "mypy_allowlist.txt"],
+          "e2e": ["codeflash/*.py", "codeflash/api/", "codeflash/benchmarking/", "codeflash/cli_cmds/", "codeflash/code_utils/", "codeflash/discovery/", "codeflash/github/", "codeflash/languages/python/", "codeflash/languages/*.py", "codeflash/lsp/", "codeflash/models/", "codeflash/optimization/", "codeflash/picklepatch/", "codeflash/result/", "codeflash/setup/", "codeflash/telemetry/", "codeflash/tracing/", "codeflash/verification/", "tests/", "pyproject.toml", "uv.lock"],
+          "e2e_js": ["codeflash/languages/javascript/", "codeflash/languages/base.py", "codeflash/languages/registry.py", "codeflash/optimization/", "codeflash/verification/", "packages/", "code_to_optimize/js/", "tests/scripts/end_to_end_test_js*"],
+          "e2e_java": ["codeflash/languages/java/", "codeflash/languages/base.py", "codeflash/languages/registry.py", "codeflash/optimization/", "codeflash/verification/", "codeflash-java-runtime/", "code_to_optimize/java/", "tests/scripts/end_to_end_test_java*", "tests/test_languages/fixtures/java_tracer_e2e/"]
+        }
+
+  # ---------------------------------------------------------------------------
+  # Unit tests — 6 Linux + 1 Windows matrix
+  # ---------------------------------------------------------------------------
+  unit-tests:
+    needs: determine-changes
+    if: fromJSON(needs.determine-changes.outputs.flags).unit_tests == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python-version: "3.9"
+          - os: ubuntu-latest
+            python-version: "3.10"
+          - os: ubuntu-latest
+            python-version: "3.11"
+          - os: ubuntu-latest
+            python-version: "3.12"
+          - os: ubuntu-latest
+            python-version: "3.13"
+          - os: ubuntu-latest
+            python-version: "3.14"
+          - os: windows-latest
+            python-version: "3.13"
+    runs-on: ${{ matrix.os }}
+    env:
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [[ "${{ matrix.python-version }}" == "3.9" || "${{ matrix.python-version }}" == "3.13" ]]; then
+            uv sync --group tests
+          else
+            uv sync
+          fi
+
+      - name: Unit tests
+        run: uv run pytest tests/
+
+  # ---------------------------------------------------------------------------
+  # Coverage — single run on ubuntu/py3.13 to enforce the coverage floor.
+  # ---------------------------------------------------------------------------
+  coverage:
+    needs: determine-changes
+    if: fromJSON(needs.determine-changes.outputs.flags).unit_tests == 'true'
+    runs-on: ubuntu-latest
+    env:
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run tests with coverage
+        run: uv run pytest tests/ --ignore=tests/test_tracer.py --cov=codeflash --cov-report=xml:coverage.xml --cov-report=term-missing --cov-config=.coveragerc
+
+      - name: Check coverage floor
+        run: uv run coverage report --fail-under=58
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # Mypy type checking
+  # ---------------------------------------------------------------------------
+  type-check:
+    needs: determine-changes
+    if: fromJSON(needs.determine-changes.outputs.flags).type_check == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run mypy
+        run: uv run mypy --non-interactive --config-file pyproject.toml @mypy_allowlist.txt
+
+  # ---------------------------------------------------------------------------
+  # Lint (prek) — pull_request only
+  # ---------------------------------------------------------------------------
+  prek:
+    needs: determine-changes
+    if: >-
+      github.event_name == 'pull_request'
+      && (fromJSON(needs.determine-changes.outputs.flags).e2e == 'true'
+          || fromJSON(needs.determine-changes.outputs.flags).e2e_js == 'true')
+    uses: codeflash-ai/github-workflows/.github/workflows/prek-lint.yml@main
+    permissions:
+      contents: write
+    with:
+      auto-fix: true
+      checkout-ref: ${{ github.head_ref }}
+      restore-paths: "codeflash/version.py codeflash-benchmark/codeflash_benchmark/version.py"
+
+  # ---------------------------------------------------------------------------
+  # E2E tests — only on pull_request and workflow_dispatch (not push to main)
+  # ---------------------------------------------------------------------------
+
+  # --- Standard Python E2Es (9 tests) ---
+  e2e-python:
+    needs: determine-changes
+    if: >-
+      fromJSON(needs.determine-changes.outputs.flags).e2e == 'true'
+      && github.event_name != 'push'
+      && github.actor != 'dependabot[bot]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: tracer-replay
+            script: end_to_end_test_tracer_replay.py
+            expected_improvement: 10
+          - name: bubble-sort-pytest-nogit
+            script: end_to_end_test_bubblesort_pytest.py
+            expected_improvement: 70
+            remove_git: true
+          - name: bubble-sort-unittest
+            script: end_to_end_test_bubblesort_unittest.py
+            expected_improvement: 40
+          - name: futurehouse-structure
+            script: end_to_end_test_futurehouse.py
+            expected_improvement: 5
+          - name: topological-sort
+            script: end_to_end_test_topological_sort_worktree.py
+            expected_improvement: 5
+          - name: async-optimization
+            script: end_to_end_test_async.py
+            expected_improvement: 10
+          - name: benchmark-bubble-sort
+            script: end_to_end_test_benchmark_sort.py
+            expected_improvement: 5
+          - name: coverage-e2e
+            script: end_to_end_test_coverage.py
+            extra_deps: black
+          - name: init-optimization
+            script: end_to_end_test_init_optimization.py
+            expected_improvement: 10
+    environment: ${{ ((github.event_name == 'workflow_dispatch' && github.actor != 'misrasaurabh1' && github.actor != 'KRRT7') || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_AIS_SERVER: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+      MAX_RETRIES: 3
+      RETRY_DELAY: 5
+      CODEFLASH_END_TO_END: 1
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref || '' }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate PR
+        if: github.event_name == 'pull_request'
+        uses: ./.github/actions/validate-pr
+        with:
+          base_sha: ${{ github.event.pull_request.base.sha }}
+          head_sha: ${{ github.event.pull_request.head.sha }}
+          author: ${{ github.event.pull_request.user.login }}
+          pr_state: ${{ github.event.pull_request.state }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          python-version: 3.11.6
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Install extra dependencies
+        if: matrix.extra_deps
+        run: uv add ${{ matrix.extra_deps }}
+
+      - name: Set test configuration
+        if: matrix.expected_improvement
+        run: |
+          echo "COLUMNS=110" >> "$GITHUB_ENV"
+          echo "EXPECTED_IMPROVEMENT_PCT=${{ matrix.expected_improvement }}" >> "$GITHUB_ENV"
+
+      - name: Remove .git
+        if: matrix.remove_git
+        run: |
+          if [ -d ".git" ]; then
+            echo ".git directory exists!"
+            sudo rm -rf .git
+            if [ -d ".git" ]; then
+              echo ".git directory still exists after removal attempt!"
+              exit 1
+            else
+              echo ".git directory successfully removed."
+            fi
+          else
+            echo ".git directory does not exist. Nothing to remove."
+            exit 1
+          fi
+
+      - name: Run E2E test
+        run: uv run python tests/scripts/${{ matrix.script }}
+
+  # --- JS E2Es (3 tests, need Node.js + packages/) ---
+  e2e-js:
+    needs: determine-changes
+    if: >-
+      fromJSON(needs.determine-changes.outputs.flags).e2e_js == 'true'
+      && github.event_name != 'push'
+      && github.actor != 'dependabot[bot]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: js-cjs-function
+            script: end_to_end_test_js_cjs_function.py
+            js_project_dir: code_to_optimize/js/code_to_optimize_js
+            expected_improvement: 50
+          - name: js-esm-async
+            script: end_to_end_test_js_esm_async.py
+            js_project_dir: code_to_optimize/js/code_to_optimize_js_esm
+            expected_improvement: 10
+            allow_failure: true
+          - name: js-ts-class
+            script: end_to_end_test_js_ts_class.py
+            js_project_dir: code_to_optimize/js/code_to_optimize_ts
+            expected_improvement: 30
+    continue-on-error: ${{ matrix.allow_failure || false }}
+    environment: ${{ ((github.event_name == 'workflow_dispatch' && github.actor != 'misrasaurabh1' && github.actor != 'KRRT7') || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_AIS_SERVER: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+      COLUMNS: 110
+      MAX_RETRIES: 3
+      RETRY_DELAY: 5
+      EXPECTED_IMPROVEMENT_PCT: ${{ matrix.expected_improvement }}
+      CODEFLASH_END_TO_END: 1
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref || '' }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate PR
+        if: github.event_name == 'pull_request'
+        uses: ./.github/actions/validate-pr
+        with:
+          base_sha: ${{ github.event.pull_request.base.sha }}
+          head_sha: ${{ github.event.pull_request.head.sha }}
+          author: ${{ github.event.pull_request.user.login }}
+          pr_state: ${{ github.event.pull_request.state }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            packages/codeflash/package-lock.json
+            code_to_optimize/js/*/package-lock.json
+
+      - name: Install codeflash npm package dependencies
+        run: |
+          cd packages/codeflash
+          npm install
+
+      - name: Install JS test project dependencies
+        run: |
+          cd ${{ matrix.js_project_dir }}
+          npm install
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          python-version: 3.11.6
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run E2E test
+        run: uv run python tests/scripts/${{ matrix.script }}
+
+  # --- Java E2Es (3 tests, need JDK + Maven) ---
+  e2e-java:
+    needs: determine-changes
+    if: >-
+      fromJSON(needs.determine-changes.outputs.flags).e2e_java == 'true'
+      && github.event_name != 'push'
+      && github.actor != 'dependabot[bot]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: java-fibonacci-nogit
+            script: end_to_end_test_java_fibonacci.py
+            expected_improvement: 70
+            remove_git: true
+          - name: java-tracer
+            script: end_to_end_test_java_tracer.py
+            expected_improvement: 10
+          - name: java-void-optimization-nogit
+            script: end_to_end_test_java_void_optimization.py
+            expected_improvement: 70
+            remove_git: true
+    environment: ${{ ((github.event_name == 'workflow_dispatch' && github.actor != 'misrasaurabh1' && github.actor != 'KRRT7') || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_AIS_SERVER: prod
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+      COLUMNS: 110
+      MAX_RETRIES: 3
+      RETRY_DELAY: 5
+      EXPECTED_IMPROVEMENT_PCT: ${{ matrix.expected_improvement }}
+      CODEFLASH_END_TO_END: 1
+      CODEFLASH_LOOPING_TIME: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref || '' }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate PR
+        if: github.event_name == 'pull_request'
+        uses: ./.github/actions/validate-pr
+        with:
+          base_sha: ${{ github.event.pull_request.base.sha }}
+          head_sha: ${{ github.event.pull_request.head.sha }}
+          author: ${{ github.event.pull_request.user.login }}
+          pr_state: ${{ github.event.pull_request.state }}
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v5
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          python-version: 3.11.6
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Cache codeflash-runtime JAR
+        id: runtime-jar-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.m2/repository/io/codeflash
+          key: codeflash-runtime-${{ hashFiles('codeflash-java-runtime/pom.xml', 'codeflash-java-runtime/src/**') }}
+
+      - name: Build and install codeflash-runtime JAR
+        if: steps.runtime-jar-cache.outputs.cache-hit != 'true'
+        run: |
+          cd codeflash-java-runtime
+          mvn install -q -DskipTests
+
+      - name: Remove .git
+        if: matrix.remove_git
+        run: |
+          if [ -d ".git" ]; then
+            sudo rm -rf .git
+            echo ".git directory removed."
+          else
+            echo ".git directory does not exist."
+            exit 1
+          fi
+
+      - name: Run E2E test
+        run: uv run python tests/scripts/${{ matrix.script }}
+
+  # ---------------------------------------------------------------------------
+  # Gate job — the ONLY required check in the GitHub ruleset.
+  # Accepts "success" and "skipped" (job skipped by change detection).
+  # Rejects "failure" and "cancelled".
+  # ---------------------------------------------------------------------------
+  required-checks-passed:
+    name: required checks passed
+    if: always()
+    needs:
+      - check-linked-issue
+      - unit-tests
+      - coverage
+      - type-check
+      - prek
+      - e2e-python
+      - e2e-js
+      - e2e-java
+    runs-on: ubuntu-latest
+    steps:
+      - uses: codeflash-ai/github-workflows/.github/actions/required-checks-gate@main
+        with:
+          needs-json: ${{ toJSON(needs) }}

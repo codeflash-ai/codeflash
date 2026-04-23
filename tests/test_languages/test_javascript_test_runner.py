@@ -122,7 +122,7 @@ class TestJestRootsConfiguration:
                 runtime_configs = [f for f in get_created_config_files() if "codeflash.runtime" in f.name]
                 assert len(runtime_configs) == 1, f"Expected 1 runtime config, got {len(runtime_configs)}"
                 config_content = runtime_configs[0].read_text(encoding="utf-8")
-                assert str(external_path) in config_content, "Runtime config should contain external test directory"
+                assert external_path.as_posix() in config_content, "Runtime config should contain external test directory"
 
             clear_created_config_files()
 

@@ -182,6 +182,11 @@ class JavaScriptFunctionOptimizer(FunctionOptimizer):
         try:
             line_profiler_output_path = get_run_tmp_file(Path("line_profiler_output.json"))
 
+            # Pre-create with valid empty JSON so the file is never 0 bytes
+            # even if the JS profiler save() is interrupted (e.g. SIGKILL on timeout)
+            line_profiler_output_path.parent.mkdir(parents=True, exist_ok=True)
+            line_profiler_output_path.write_text("{}", encoding="utf-8")
+
             success = self.language_support.instrument_source_for_line_profiler(
                 func_info=self.function_to_optimize, line_profiler_output_file=line_profiler_output_path
             )

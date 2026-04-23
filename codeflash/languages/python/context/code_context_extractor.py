@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 import libcst as cst
 
+import codeflash.code_utils._libcst_cache  # noqa: F401
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import encoded_tokens_len, get_qualified_name, path_belongs_to_site_packages
 from codeflash.code_utils.config_consts import (

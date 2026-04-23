@@ -1702,8 +1702,9 @@ class JavaScriptSupport:
     ) -> str:
         """Add behavior instrumentation to capture inputs/outputs.
 
-        For JavaScript, this wraps functions to capture their arguments
-        and return values.
+        For JavaScript, instrumentation is handled at runtime by the Babel tracer plugin
+        (babel-tracer-plugin.js) via trace-runner.js. This method returns the source
+        unchanged since no source-level transformation is needed.
 
         Args:
             source: Source code to instrument.
@@ -1711,21 +1712,11 @@ class JavaScriptSupport:
             output_file: Optional output file for traces.
 
         Returns:
-            Instrumented source code.
+            Source code unchanged (Babel handles instrumentation at runtime).
 
         """
-        if not functions:
-            return source
-
-        from codeflash.languages.javascript.tracer import JavaScriptTracer
-
-        # Use first function's file path if output_file not specified
-        if output_file is None:
-            file_path = functions[0].file_path
-            output_file = file_path.parent / ".codeflash" / "traces.db"
-
-        tracer = JavaScriptTracer(output_file)
-        return tracer.instrument_source(source, functions[0].file_path, list(functions))
+        # JavaScript tracing is done at runtime via Babel plugin, not source transformation
+        return source
 
     def instrument_for_benchmarking(self, test_source: str, target_function: FunctionToOptimize) -> str:
         """Add timing instrumentation to test code.
@@ -2268,7 +2259,10 @@ class JavaScriptSupport:
             source_without_ext = source_file_abs.with_suffix("")
 
             # Use os.path.relpath to compute relative path from tests_root to source file
-            rel_path = os.path.relpath(str(source_without_ext), str(tests_root_abs))
+            # Replace backslashes with forward slashes — JavaScript import/require paths
+            # must use forward slashes. Backslashes are escape chars in JS strings
+            # (e.g. \t → tab, \n → newline) and would break imports on Windows.
+            rel_path = os.path.relpath(str(source_without_ext), str(tests_root_abs)).replace("\\", "/")
 
             # For ESM, add .js extension (TypeScript convention)
             # TypeScript requires imports to reference the OUTPUT file extension (.js),
@@ -2494,13 +2488,17 @@ class JavaScriptSupport:
     def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict:
         from codeflash.languages.javascript.line_profiler import JavaScriptLineProfiler
 
-        if line_profiler_output_file.exists():
-            parsed_results = JavaScriptLineProfiler.parse_results(line_profiler_output_file)
-            if parsed_results.get("timings"):
-                # Format output string for display
-                str_out = self._format_js_line_profile_output(parsed_results)
-                return {"timings": parsed_results.get("timings", {}), "unit": 1e-9, "str_out": str_out}
-        logger.warning("No line profiler output file found at %s", line_profiler_output_file)
+        if not line_profiler_output_file.exists():
+            logger.warning("Line profiler output file not found: %s", line_profiler_output_file)
+            return {"timings": {}, "unit": 0, "str_out": ""}
+
+        parsed_results = JavaScriptLineProfiler.parse_results(line_profiler_output_file)
+        if parsed_results.get("timings"):
+            # Format output string for display
+            str_out = self._format_js_line_profile_output(parsed_results)
+            return {"timings": parsed_results.get("timings", {}), "unit": 1e-9, "str_out": str_out}
+
+        logger.warning("Line profiler output file empty or contained no timing data: %s", line_profiler_output_file)
         return {"timings": {}, "unit": 0, "str_out": ""}
 
     def _format_js_line_profile_output(self, parsed_results: dict) -> str:

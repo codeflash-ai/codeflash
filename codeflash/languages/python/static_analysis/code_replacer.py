@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, TypeVar
 import libcst as cst
 from libcst.metadata import PositionProvider
 
+import codeflash.code_utils._libcst_cache  # noqa: F401
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.config_parser import find_conftest_files
 from codeflash.code_utils.formatter import sort_imports

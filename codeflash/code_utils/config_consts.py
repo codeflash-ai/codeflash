@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from enum import Enum
 from typing import Any, Union
 
@@ -17,7 +18,7 @@ MIN_CONCURRENCY_IMPROVEMENT_THRESHOLD = 0.20  # 20% concurrency ratio improvemen
 CONCURRENCY_FACTOR = 10  # Number of concurrent executions for concurrency benchmark
 MAX_TEST_FUNCTION_RUNS = 50
 MAX_CUMULATIVE_TEST_RUNTIME_NANOSECONDS = 100e6  # 100ms
-TOTAL_LOOPING_TIME = 10.0  # 10 second candidate benchmarking budget
+TOTAL_LOOPING_TIME = float(os.getenv("CODEFLASH_LOOPING_TIME", "10.0"))  # candidate benchmarking budget (seconds)
 COVERAGE_THRESHOLD = 60.0
 MIN_TESTCASE_PASSED_THRESHOLD = 6
 REPEAT_OPTIMIZATION_PROBABILITY = 0.1

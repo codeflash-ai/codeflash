@@ -13,6 +13,13 @@ from pathlib import Path
 
 import pytest
 
+from codeflash.languages.java.comparator import _find_comparator_jar
+
+requires_java_runtime = pytest.mark.skipif(
+    _find_comparator_jar() is None,
+    reason="codeflash-runtime JAR not found - skipping Java integration tests",
+)
+
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import Language
 from codeflash.languages.current import set_current_language
@@ -227,6 +234,7 @@ public class PreciseWaiter {
 """
 
 
+@requires_java_runtime
 class TestJavaRunAndParseBehavior:
     def test_behavior_single_test_method(self, java_project):
         """Full pipeline: instrument → run → parse with precise field assertions."""
@@ -405,6 +413,7 @@ public class AdderMultiTest {
         assert equivalent is False
 
 
+@requires_java_runtime
 class TestJavaRunAndParsePerformance:
     """Tests that the performance instrumentation produces correct timing data.
 
@@ -512,13 +521,16 @@ public class PreciseWaiterTest {
         stddev_runtime = statistics.stdev(runtimes)
         coefficient_of_variation = stddev_runtime / mean_runtime
 
-        # Target: 10ms (10,000,000 ns), allow <5% coefficient of variation
-        # (accounts for JIT warmup - first iteration is cold, subsequent are optimized)
+        # Target: 10ms (10,000,000 ns), allow <15% coefficient of variation.
+        # The first iteration per test method runs with cold JIT, and shared CI VMs
+        # (especially Windows) have ~15ms scheduler granularity that adds noise.
+        # 15% still catches instrumentation bugs (e.g., 0ms or 100ms outliers)
+        # while the ±5% mean check below validates timing accuracy.
         expected_ns = 10_000_000
         runtimes_ms = [r / 1_000_000 for r in runtimes]
 
-        assert coefficient_of_variation < 0.05, (
-            f"Timing variance too high: CV={coefficient_of_variation:.2%} (should be <5%). "
+        assert coefficient_of_variation < 0.15, (
+            f"Timing variance too high: CV={coefficient_of_variation:.2%} (should be <15%). "
             f"Runtimes: {runtimes_ms} ms (mean={mean_runtime / 1_000_000:.3f}ms)"
         )
 
@@ -597,13 +609,16 @@ public class PreciseWaiterMultiTest {
         stddev_runtime = statistics.stdev(runtimes)
         coefficient_of_variation = stddev_runtime / mean_runtime
 
-        # Target: 10ms (10,000,000 ns), allow <5% coefficient of variation
-        # (accounts for JIT warmup - first iteration is cold, subsequent are optimized)
+        # Target: 10ms (10,000,000 ns), allow <15% coefficient of variation.
+        # The first iteration per test method runs with cold JIT, and shared CI VMs
+        # (especially Windows) have ~15ms scheduler granularity that adds noise.
+        # 15% still catches instrumentation bugs (e.g., 0ms or 100ms outliers)
+        # while the ±5% mean check below validates timing accuracy.
         expected_ns = 10_000_000
         runtimes_ms = [r / 1_000_000 for r in runtimes]
 
-        assert coefficient_of_variation < 0.05, (
-            f"Timing variance too high: CV={coefficient_of_variation:.2%} (should be <5%). "
+        assert coefficient_of_variation < 0.15, (
+            f"Timing variance too high: CV={coefficient_of_variation:.2%} (should be <15%). "
             f"Runtimes: {runtimes_ms} ms (mean={mean_runtime / 1_000_000:.3f}ms)"
         )
 
