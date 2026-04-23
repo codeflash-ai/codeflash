@@ -85,7 +85,9 @@ class GoSupport:
 
     @property
     def function_optimizer_class(self) -> type:
-        raise NotImplementedError
+        from codeflash.languages.golang.function_optimizer import GoFunctionOptimizer
+
+        return GoFunctionOptimizer
 
     def discover_functions(
         self, source: str, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None

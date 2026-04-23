@@ -81,6 +81,15 @@ class GoImportInfo:
     ending_line: int
 
 
+@dataclass(frozen=True)
+class GoGlobalDeclaration:
+    names: tuple[str, ...]
+    kind: str
+    source_code: str
+    starting_line: int
+    ending_line: int
+
+
 class GoAnalyzer:
     def __init__(self) -> None:
         self._parser = _get_go_parser()
@@ -188,6 +197,45 @@ class GoAnalyzer:
                         )
                     )
         return results
+
+    def find_global_declarations(self, source: str) -> list[GoGlobalDeclaration]:
+        tree = self.parse(source)
+        results: list[GoGlobalDeclaration] = []
+        for node in tree.root_node.children:
+            if node.type in ("var_declaration", "const_declaration"):
+                kind = "var" if node.type == "var_declaration" else "const"
+                names = _extract_declaration_names(node, self)
+                if names:
+                    results.append(
+                        GoGlobalDeclaration(
+                            names=tuple(names),
+                            kind=kind,
+                            source_code=self.get_node_text(node),
+                            starting_line=node.start_point.row + 1,
+                            ending_line=node.end_point.row + 1,
+                        )
+                    )
+        return results
+
+    def collect_body_identifiers(self, source: str, func_name: str, receiver_type: str | None = None) -> set[str]:
+        tree = self.parse(source)
+        for node in tree.root_node.children:
+            if receiver_type is None and node.type == "function_declaration":
+                name_node = node.child_by_field_name("name")
+                if name_node is not None and self.get_node_text(name_node) == func_name:
+                    body = node.child_by_field_name("body")
+                    return _collect_identifiers(body) if body else set()
+            if receiver_type is not None and node.type == "method_declaration":
+                name_node = node.child_by_field_name("name")
+                if name_node is None or self.get_node_text(name_node) != func_name:
+                    continue
+                recv_node = node.child_by_field_name("receiver")
+                if recv_node is not None:
+                    recv_name, _ = self.parse_receiver(recv_node)
+                    if recv_name == receiver_type:
+                        body = node.child_by_field_name("body")
+                        return _collect_identifiers(body) if body else set()
+        return set()
 
     def find_package_name(self, source: str) -> str | None:
         tree = self.parse(source)
@@ -315,6 +363,42 @@ def _iter_import_specs(import_node: Node) -> list[Node]:
         elif child.type == "import_spec_list":
             results.extend(c for c in child.children if c.type == "import_spec")
     return results
+
+
+def _extract_declaration_names(node: Node, analyzer: GoAnalyzer) -> list[str]:
+    names: list[str] = []
+    for child in node.children:
+        if child.type in ("var_spec", "const_spec"):
+            name_node = child.child_by_field_name("name")
+            if name_node is not None:
+                names.append(analyzer.get_node_text(name_node))
+        elif child.type in ("var_spec_list", "const_spec_list"):
+            for spec in child.children:
+                if spec.type in ("var_spec", "const_spec"):
+                    name_node = spec.child_by_field_name("name")
+                    if name_node is not None:
+                        names.append(analyzer.get_node_text(name_node))
+    return names
+
+
+def _collect_identifiers(node: Node | None) -> set[str]:
+    if node is None:
+        return set()
+    ids: set[str] = set()
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        if n.type in ("identifier", "type_identifier"):
+            text = n.parent
+            if text is not None and text.type not in ("parameter_declaration", "short_var_declaration"):
+                ids.add(n.text.decode("utf-8") if n.text else "")
+            elif text is not None and text.type == "short_var_declaration":
+                name_node = text.child_by_field_name("left")
+                if name_node is not n and (name_node is None or n not in (name_node, *tuple(name_node.children))):
+                    ids.add(n.text.decode("utf-8") if n.text else "")
+        stack.extend(n.children)
+    ids.discard("")
+    return ids
 
 
 def _find_preceding_comment_line(node: Node) -> int | None:

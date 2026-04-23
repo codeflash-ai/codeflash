@@ -55,6 +55,11 @@ def replace_function(
 def add_global_declarations(optimized_code: str, original_source: str, analyzer: GoAnalyzer | None = None) -> str:
     analyzer = analyzer or GoAnalyzer()
 
+    merged = _merge_imports(optimized_code, original_source, analyzer)
+    return _merge_global_var_const(optimized_code, merged, analyzer)
+
+
+def _merge_imports(optimized_code: str, original_source: str, analyzer: GoAnalyzer) -> str:
     opt_imports = analyzer.find_imports(optimized_code)
     orig_imports = analyzer.find_imports(original_source)
     orig_paths = {imp.path for imp in orig_imports}
@@ -89,6 +94,74 @@ def add_global_declarations(optimized_code: str, original_source: str, analyzer:
     insert_at = import_block_end
     import_block = "import (\n" + "".join(new_import_lines) + ")\n\n"
     return "".join([*lines[:insert_at], import_block, *lines[insert_at:]])
+
+
+def _merge_global_var_const(optimized_code: str, original_source: str, analyzer: GoAnalyzer) -> str:
+    opt_decls = analyzer.find_global_declarations(optimized_code)
+    if not opt_decls:
+        return original_source
+
+    orig_decls = analyzer.find_global_declarations(original_source)
+    orig_names_to_decl: dict[str, object] = {}
+    for decl in orig_decls:
+        for name in decl.names:
+            orig_names_to_decl[name] = decl
+
+    new_decls: list[str] = []
+    replaced_decls: set[int] = set()
+
+    for opt_decl in opt_decls:
+        overlapping_orig = None
+        for name in opt_decl.names:
+            if name in orig_names_to_decl:
+                overlapping_orig = orig_names_to_decl[name]
+                break
+
+        if overlapping_orig is None:
+            new_decls.append(opt_decl.source_code)
+        elif overlapping_orig.source_code.strip() != opt_decl.source_code.strip():
+            orig_id = id(overlapping_orig)
+            if orig_id not in replaced_decls:
+                replaced_decls.add(orig_id)
+                original_source = _replace_declaration_block(original_source, overlapping_orig, opt_decl.source_code)
+
+    if new_decls:
+        original_source = _insert_new_declarations(original_source, new_decls, analyzer)
+
+    return original_source
+
+
+def _replace_declaration_block(source: str, orig_decl: object, new_source_code: str) -> str:
+    lines = source.splitlines(keepends=True)
+    start = orig_decl.starting_line - 1
+    end = orig_decl.ending_line
+    replacement = new_source_code.rstrip("\n") + "\n"
+    return "".join([*lines[:start], replacement, *lines[end:]])
+
+
+def _insert_new_declarations(source: str, new_decls: list[str], analyzer: GoAnalyzer) -> str:
+    lines = source.splitlines(keepends=True)
+
+    insert_at = _find_declarations_insert_point(source, analyzer)
+
+    block = "\n".join(new_decls) + "\n\n"
+    return "".join([*lines[:insert_at], block, *lines[insert_at:]])
+
+
+def _find_declarations_insert_point(source: str, analyzer: GoAnalyzer) -> int:
+    tree = analyzer.parse(source)
+    last_line = 0
+    for node in tree.root_node.children:
+        if node.type in ("import_declaration", "var_declaration", "const_declaration"):
+            candidate = node.end_point.row + 1
+            last_line = max(last_line, candidate)
+    if last_line > 0:
+        return last_line
+
+    for node in tree.root_node.children:
+        if node.type == "package_clause":
+            return node.end_point.row + 1
+    return 0
 
 
 def remove_test_functions(test_source: str, functions_to_remove: list[str], analyzer: GoAnalyzer | None = None) -> str:

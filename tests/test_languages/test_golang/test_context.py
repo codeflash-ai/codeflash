@@ -195,6 +195,120 @@ class TestExtractCodeContextEdgeCases:
         assert ctx.imports == ['"fmt"', '"os"', 'str "strings"']
 
 
+GO_SOURCE_WITH_INIT = """\
+package server
+
+import "sync"
+
+var (
+\tglobalCache map[string]int
+\tmu          sync.Mutex
+)
+
+const MaxRetries = 5
+
+type Config struct {
+\tName string
+\tMax  int
+}
+
+func init() {
+\tglobalCache = make(map[string]int)
+\tglobalCache["default"] = 0
+\tmu.Lock()
+\tmu.Unlock()
+}
+
+func Process() int {
+\treturn MaxRetries
+}
+"""
+
+
+class TestExtractCodeContextWithInit:
+    def test_init_in_read_only_context(self, tmp_path: Path) -> None:
+        source_file = (tmp_path / "server.go").resolve()
+        source_file.write_text(GO_SOURCE_WITH_INIT, encoding="utf-8")
+        func = FunctionToOptimize(function_name="Process", file_path=source_file, language="go")
+        ctx = extract_code_context(func, tmp_path.resolve())
+        assert "func init()" in ctx.read_only_context
+
+    def test_init_referenced_globals_in_read_only_context(self, tmp_path: Path) -> None:
+        source_file = (tmp_path / "server.go").resolve()
+        source_file.write_text(GO_SOURCE_WITH_INIT, encoding="utf-8")
+        func = FunctionToOptimize(function_name="Process", file_path=source_file, language="go")
+        ctx = extract_code_context(func, tmp_path.resolve())
+        assert "globalCache" in ctx.read_only_context
+        assert "mu" in ctx.read_only_context
+
+    def test_init_not_in_helpers(self, tmp_path: Path) -> None:
+        source_file = (tmp_path / "server.go").resolve()
+        source_file.write_text(GO_SOURCE_WITH_INIT, encoding="utf-8")
+        func = FunctionToOptimize(function_name="Process", file_path=source_file, language="go")
+        ctx = extract_code_context(func, tmp_path.resolve())
+        helper_names = [h.name for h in ctx.helper_functions]
+        assert "init" not in helper_names
+
+    def test_no_init_no_extra_context(self, tmp_path: Path) -> None:
+        source_file = (tmp_path / "calc.go").resolve()
+        source_file.write_text(GO_SOURCE_WITH_METHOD, encoding="utf-8")
+        func = FunctionToOptimize(function_name="Add", file_path=source_file, language="go")
+        ctx = extract_code_context(func, tmp_path.resolve())
+        assert "func init()" not in ctx.read_only_context
+
+    def test_full_init_read_only_context(self, tmp_path: Path) -> None:
+        source_file = (tmp_path / "server.go").resolve()
+        source_file.write_text(GO_SOURCE_WITH_INIT, encoding="utf-8")
+        func = FunctionToOptimize(function_name="Process", file_path=source_file, language="go")
+        ctx = extract_code_context(func, tmp_path.resolve())
+        expected = (
+            "var (\n"
+            "\tglobalCache map[string]int\n"
+            "\tmu          sync.Mutex\n"
+            ")\n"
+            "\n"
+            "func init() {\n"
+            "\tglobalCache = make(map[string]int)\n"
+            "\tglobalCache[\"default\"] = 0\n"
+            "\tmu.Lock()\n"
+            "\tmu.Unlock()\n"
+            "}"
+        )
+        assert ctx.read_only_context == expected
+
+    def test_method_with_init_combines_struct_and_init_context(self, tmp_path: Path) -> None:
+        source = """\
+package server
+
+var globalOffset = 10
+
+type Calc struct {
+\tVal int
+}
+
+func init() {
+\tglobalOffset = 42
+}
+
+func (c *Calc) Compute() int {
+\treturn c.Val + globalOffset
+}
+"""
+        source_file = (tmp_path / "server.go").resolve()
+        source_file.write_text(source, encoding="utf-8")
+        func = FunctionToOptimize(
+            function_name="Compute",
+            file_path=source_file,
+            parents=[FunctionParent(name="Calc", type="StructDef")],
+            language="go",
+            is_method=True,
+        )
+        ctx = extract_code_context(func, tmp_path.resolve())
+        assert "type Calc struct" in ctx.read_only_context
+        assert "func init()" in ctx.read_only_context
+        assert "var globalOffset = 10" in ctx.read_only_context
+
+
 class TestFindHelperFunctions:
     def test_skips_init_and_main(self, tmp_path: Path) -> None:
         source = "package main\n\nfunc init() { println() }\n\nfunc main() { println() }\n\nfunc Target() int { return 1 }\n"

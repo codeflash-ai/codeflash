@@ -36,9 +36,15 @@ def extract_code_context(
     imports = analyzer.find_imports(source)
     import_lines = [_import_to_line(imp) for imp in imports]
 
-    read_only_context = ""
+    read_only_parts: list[str] = []
     if receiver_type:
-        read_only_context = _extract_struct_context(source, receiver_type, analyzer)
+        struct_ctx = _extract_struct_context(source, receiver_type, analyzer)
+        if struct_ctx:
+            read_only_parts.append(struct_ctx)
+
+    init_ctx = _extract_init_context(source, analyzer)
+    if init_ctx:
+        read_only_parts.append(init_ctx)
 
     helpers = find_helper_functions(source, function, analyzer)
 
@@ -46,7 +52,7 @@ def extract_code_context(
         target_code=target_code,
         target_file=function.file_path,
         helper_functions=helpers,
-        read_only_context=read_only_context,
+        read_only_context="\n\n".join(read_only_parts),
         imports=import_lines,
         language=Language.GO,
     )
@@ -125,3 +131,27 @@ def _extract_struct_context(source: str, struct_name: str, analyzer: GoAnalyzer)
             lines = source.splitlines()
             return "\n".join(lines[s.starting_line - 1 : s.ending_line])
     return ""
+
+
+def _extract_init_context(source: str, analyzer: GoAnalyzer) -> str:
+    init_source = analyzer.extract_function_source(source, "init")
+    if init_source is None:
+        return ""
+
+    init_ids = analyzer.collect_body_identifiers(source, "init")
+    if not init_ids:
+        return init_source
+
+    parts: list[str] = []
+
+    for decl in analyzer.find_global_declarations(source):
+        if init_ids & set(decl.names):
+            parts.append(decl.source_code)
+
+    for struct in analyzer.find_structs(source):
+        if struct.name in init_ids:
+            lines = source.splitlines()
+            parts.append("\n".join(lines[struct.starting_line - 1 : struct.ending_line]))
+
+    parts.append(init_source)
+    return "\n\n".join(parts)

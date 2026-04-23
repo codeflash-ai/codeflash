@@ -216,3 +216,125 @@ class TestGoAnalyzerExtract:
     def test_extract_nonexistent(self) -> None:
         analyzer = GoAnalyzer()
         assert analyzer.extract_function_source(GO_SOURCE, "DoesNotExist") is None
+
+
+GLOBALS_SOURCE = """\
+package server
+
+import "sync"
+
+var (
+\tglobalCache map[string]int
+\tmu          sync.Mutex
+)
+
+var singleVar = 42
+
+const MaxRetries = 5
+
+const (
+\tDefaultName = "prod"
+\tTimeout     = 30
+)
+
+type Config struct {
+\tName string
+\tMax  int
+}
+
+func init() {
+\tglobalCache = make(map[string]int)
+\tglobalCache["default"] = 0
+\tdefaultCfg := Config{Name: DefaultName, Max: MaxRetries}
+\t_ = defaultCfg
+\tmu.Lock()
+\tmu.Unlock()
+}
+
+func Process() int {
+\treturn singleVar + MaxRetries
+}
+"""
+
+
+class TestGoAnalyzerGlobalDeclarations:
+    def test_find_var_group(self) -> None:
+        analyzer = GoAnalyzer()
+        decls = analyzer.find_global_declarations(GLOBALS_SOURCE)
+        var_decls = [d for d in decls if d.kind == "var"]
+        all_names = [name for d in var_decls for name in d.names]
+        assert "globalCache" in all_names
+        assert "mu" in all_names
+        assert "singleVar" in all_names
+
+    def test_find_const_group(self) -> None:
+        analyzer = GoAnalyzer()
+        decls = analyzer.find_global_declarations(GLOBALS_SOURCE)
+        const_decls = [d for d in decls if d.kind == "const"]
+        all_names = [name for d in const_decls for name in d.names]
+        assert "MaxRetries" in all_names
+        assert "DefaultName" in all_names
+        assert "Timeout" in all_names
+
+    def test_grouped_var_names_together(self) -> None:
+        analyzer = GoAnalyzer()
+        decls = analyzer.find_global_declarations(GLOBALS_SOURCE)
+        var_group = next(d for d in decls if "globalCache" in d.names)
+        assert var_group.names == ("globalCache", "mu")
+
+    def test_single_var(self) -> None:
+        analyzer = GoAnalyzer()
+        decls = analyzer.find_global_declarations(GLOBALS_SOURCE)
+        single = next(d for d in decls if "singleVar" in d.names)
+        assert single.kind == "var"
+        assert single.source_code == "var singleVar = 42"
+
+    def test_const_group_source_code(self) -> None:
+        analyzer = GoAnalyzer()
+        decls = analyzer.find_global_declarations(GLOBALS_SOURCE)
+        group = next(d for d in decls if "DefaultName" in d.names)
+        assert "DefaultName" in group.source_code
+        assert "Timeout" in group.source_code
+
+    def test_no_globals_in_clean_source(self) -> None:
+        analyzer = GoAnalyzer()
+        decls = analyzer.find_global_declarations("package main\n\nfunc main() {}\n")
+        assert decls == []
+
+
+class TestGoAnalyzerCollectBodyIdentifiers:
+    def test_init_body_identifiers(self) -> None:
+        analyzer = GoAnalyzer()
+        ids = analyzer.collect_body_identifiers(GLOBALS_SOURCE, "init")
+        assert "globalCache" in ids
+        assert "Config" in ids
+        assert "DefaultName" in ids
+        assert "MaxRetries" in ids
+        assert "mu" in ids
+
+    def test_process_body_identifiers(self) -> None:
+        analyzer = GoAnalyzer()
+        ids = analyzer.collect_body_identifiers(GLOBALS_SOURCE, "Process")
+        assert "singleVar" in ids
+        assert "MaxRetries" in ids
+
+    def test_nonexistent_function_returns_empty(self) -> None:
+        analyzer = GoAnalyzer()
+        ids = analyzer.collect_body_identifiers(GLOBALS_SOURCE, "DoesNotExist")
+        assert ids == set()
+
+    def test_method_body_identifiers(self) -> None:
+        source = """\
+package calc
+
+type Calc struct{ val int }
+
+var offset = 10
+
+func (c *Calc) Compute() int {
+\treturn c.val + offset
+}
+"""
+        analyzer = GoAnalyzer()
+        ids = analyzer.collect_body_identifiers(source, "Compute", receiver_type="Calc")
+        assert "offset" in ids
