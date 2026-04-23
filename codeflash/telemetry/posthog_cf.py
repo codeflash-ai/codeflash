@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from posthog import Posthog
+if TYPE_CHECKING:
+    from posthog import Posthog
 
-from codeflash.api.cfapi import get_user_id
-from codeflash.cli_cmds.console import logger
-from codeflash.version import __version__
-
-_posthog = None
+_posthog: Posthog | None = None
 
 
 def initialize_posthog(*, enabled: bool = True) -> None:
@@ -19,6 +15,10 @@ def initialize_posthog(*, enabled: bool = True) -> None:
     """
     if not enabled:
         return
+
+    import logging
+
+    from posthog import Posthog
 
     global _posthog
     _posthog = Posthog(project_api_key="phc_aUO790jHd7z1SXwsYCz8dRApxueplZlZWeDSpKc5hol", host="https://us.posthog.com")
@@ -35,12 +35,18 @@ def ph(event: str, properties: dict[str, Any] | None = None) -> None:
     if _posthog is None:
         return
 
+    from codeflash.api.cfapi import get_user_id
+    from codeflash.lsp.helpers import is_subagent_mode
+    from codeflash.version import __version__
+
     properties = properties or {}
-    properties.update({"cli_version": __version__})
+    properties.update({"cli_version": __version__, "subagent": is_subagent_mode()})
 
     user_id = get_user_id()
 
     if user_id:
         _posthog.capture(distinct_id=user_id, event=event, properties=properties)
     else:
+        from codeflash.cli_cmds.console import logger
+
         logger.debug("Failed to log event to PostHog: User ID could not be retrieved.")

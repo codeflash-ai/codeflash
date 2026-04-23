@@ -5,15 +5,6 @@ from argparse import SUPPRESS, ArgumentParser, Namespace
 from functools import lru_cache
 from pathlib import Path
 
-from codeflash.cli_cmds import logging_config
-from codeflash.cli_cmds.console import apologize_and_exit, logger
-from codeflash.code_utils import env_utils
-from codeflash.code_utils.code_utils import exit_with_message, normalize_ignore_paths
-from codeflash.code_utils.config_parser import parse_config_file
-from codeflash.languages.test_framework import set_current_test_framework
-from codeflash.lsp.helpers import is_LSP_enabled
-from codeflash.version import __version__ as version
-
 
 def parse_args() -> Namespace:
     parser = _build_parser()
@@ -30,12 +21,17 @@ def parse_args() -> Namespace:
 
 
 def process_and_validate_cmd_args(args: Namespace) -> Namespace:
+    from codeflash.cli_cmds import logging_config
+    from codeflash.cli_cmds.console import logger
+    from codeflash.code_utils import env_utils
+    from codeflash.code_utils.code_utils import exit_with_message
     from codeflash.code_utils.git_utils import (
         check_running_in_git_repo,
         confirm_proceeding_with_no_git_repo,
         get_repo_owner_and_name,
     )
     from codeflash.code_utils.github_utils import require_github_app_or_exit
+    from codeflash.version import __version__ as version
 
     if args.server:
         os.environ["CODEFLASH_AIS_SERVER"] = args.server
@@ -85,6 +81,12 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
 
 
 def process_pyproject_config(args: Namespace) -> Namespace:
+    from codeflash.code_utils import env_utils
+    from codeflash.code_utils.code_utils import exit_with_message, normalize_ignore_paths
+    from codeflash.code_utils.config_parser import parse_config_file
+    from codeflash.languages.test_framework import set_current_test_framework
+    from codeflash.lsp.helpers import is_LSP_enabled
+
     try:
         pyproject_config, pyproject_file_path = parse_config_file(args.config_file)
     except ValueError as e:
@@ -154,7 +156,14 @@ def process_pyproject_config(args: Namespace) -> Namespace:
             raise AssertionError("--tests-root must be specified")
     assert Path(args.tests_root).is_dir(), f"--tests-root {args.tests_root} must be a valid directory"
     if args.benchmark:
-        assert args.benchmarks_root is not None, "--benchmarks-root must be specified when running with --benchmark"
+        if args.benchmarks_root is None:
+            # Auto-discover .codeflash/benchmarks/ convention
+            candidate = Path.cwd() / ".codeflash" / "benchmarks"
+            if candidate.is_dir():
+                args.benchmarks_root = str(candidate)
+            else:
+                msg = "--benchmarks-root must be specified when running with --benchmark, or .codeflash/benchmarks/ must exist"
+                raise AssertionError(msg)
         assert Path(args.benchmarks_root).is_dir(), (
             f"--benchmarks-root {args.benchmarks_root} must be a valid directory"
         )
@@ -222,6 +231,9 @@ def project_root_from_module_root(module_root: Path, pyproject_file_path: Path) 
 
 
 def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
+    from codeflash.cli_cmds.console import apologize_and_exit, logger
+    from codeflash.code_utils.code_utils import exit_with_message
+
     if hasattr(args, "all") or (hasattr(args, "file") and args.file):
         no_pr = getattr(args, "no_pr", False)
 
@@ -383,14 +395,33 @@ def _build_parser() -> ArgumentParser:
     auth_subparsers.add_parser("status", help="Check authentication status")
 
     compare_parser = subparsers.add_parser("compare", help="Compare benchmark performance between two git refs.")
-    compare_parser.add_argument("base_ref", help="Base git ref (branch, tag, or commit)")
+    compare_parser.add_argument(
+        "base_ref", nargs="?", default=None, help="Base git ref (default: auto-detect from PR or default branch)"
+    )
     compare_parser.add_argument("head_ref", nargs="?", default=None, help="Head git ref (default: current branch)")
     compare_parser.add_argument("--pr", type=int, help="Resolve head ref from a PR number (requires gh CLI)")
     compare_parser.add_argument(
         "--functions", type=str, help="Explicit functions to instrument: 'file.py::func1,func2;other.py::func3'"
     )
     compare_parser.add_argument("--timeout", type=int, default=600, help="Benchmark timeout in seconds (default: 600)")
+    compare_parser.add_argument("--output", "-o", type=str, help="Write markdown report to file")
+    compare_parser.add_argument(
+        "--memory", action="store_true", help="Profile peak memory usage per benchmark (requires memray, Linux/macOS)"
+    )
+    compare_parser.add_argument("--script", type=str, help="Shell command to run as benchmark in each worktree")
+    compare_parser.add_argument(
+        "--script-output",
+        type=str,
+        dest="script_output",
+        help="Relative path to JSON results file produced by --script (required with --script)",
+    )
     compare_parser.add_argument("--config-file", type=str, dest="config_file", help="Path to pyproject.toml")
+    compare_parser.add_argument(
+        "--inject",
+        nargs="+",
+        default=None,
+        help="Files or directories to copy into both worktrees before benchmarking. Paths are relative to repo root.",
+    )
 
     trace_optimize.add_argument(
         "--max-function-count",

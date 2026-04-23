@@ -2,17 +2,17 @@ from __future__ import annotations
 
 import os
 
-import click
-
-from codeflash.cli_cmds.console import console
-from codeflash.cli_cmds.oauth_handler import perform_oauth_signin
-from codeflash.code_utils.env_utils import get_codeflash_api_key
-from codeflash.code_utils.shell_utils import save_api_key_to_rc
-from codeflash.either import is_successful
-
 
 def auth_login() -> None:
     """Perform OAuth login and save the API key."""
+    import click
+
+    from codeflash.cli_cmds.console import console
+    from codeflash.cli_cmds.oauth_handler import perform_oauth_signin
+    from codeflash.code_utils.env_utils import get_codeflash_api_key
+    from codeflash.code_utils.shell_utils import save_api_key_to_rc
+    from codeflash.either import is_successful
+
     try:
         existing_api_key = get_codeflash_api_key()
     except OSError:
@@ -41,6 +41,9 @@ def auth_login() -> None:
 
 def auth_status() -> None:
     """Check and display current authentication status."""
+    from codeflash.cli_cmds.console import console
+    from codeflash.code_utils.env_utils import get_codeflash_api_key
+
     try:
         api_key = get_codeflash_api_key()
     except OSError:

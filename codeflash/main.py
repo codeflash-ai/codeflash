@@ -8,8 +8,7 @@ from __future__ import annotations
 
 import os
 import sys
-from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 if "--subagent" in sys.argv:
     os.environ["CODEFLASH_SUBAGENT_MODE"] = "true"
@@ -17,27 +16,57 @@ if "--subagent" in sys.argv:
 
     warnings.filterwarnings("ignore")
 
-from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
-from codeflash.cli_cmds.console import paneled_text
-from codeflash.code_utils import env_utils
-from codeflash.code_utils.checkpoint import ask_should_use_checkpoint_get_functions
-from codeflash.code_utils.config_parser import parse_config_file
-from codeflash.code_utils.version_check import check_for_newer_minor_version
-
 if TYPE_CHECKING:
     from argparse import Namespace
 
 
 def main() -> None:
     """Entry point for the codeflash command-line interface."""
+    # Fast path: --version exits before importing the full stack
+    if len(sys.argv) == 2 and sys.argv[1] == "--version":
+        from codeflash.version import __version__
+
+        print(f"Codeflash version {__version__}")
+        return
+
+    from codeflash.cli_cmds.cli import parse_args
+
+    args = parse_args()
+
+    # Auth commands skip banner, telemetry, and version check entirely
+    if args.command == "auth":
+        from codeflash.cli_cmds.cmd_auth import auth_login, auth_status
+
+        if args.auth_command == "login":
+            auth_login()
+        elif args.auth_command == "status":
+            auth_status()
+        else:
+            from codeflash.code_utils.code_utils import exit_with_message
+
+            exit_with_message("Usage: codeflash auth {login,status}", error_on_exit=True)
+        return
+
+    # Compare command only needs its own imports
+    if args.command == "compare":
+        print_codeflash_banner()
+        from codeflash.cli_cmds.cmd_compare import run_compare
+
+        run_compare(args)
+        return
+
+    # All other commands need the full stack
+    from pathlib import Path
+
+    from codeflash.cli_cmds.cli import process_pyproject_config
+    from codeflash.code_utils import env_utils
+    from codeflash.code_utils.checkpoint import ask_should_use_checkpoint_get_functions
+    from codeflash.code_utils.config_parser import parse_config_file
+    from codeflash.code_utils.version_check import check_for_newer_minor_version
     from codeflash.telemetry import posthog_cf
     from codeflash.telemetry.sentry import init_sentry
 
-    args = parse_args()
-    if args.command != "auth":
-        print_codeflash_banner()
-
-    # Check for newer version for all commands
+    print_codeflash_banner()
     check_for_newer_minor_version()
 
     if args.command:
@@ -48,18 +77,7 @@ def main() -> None:
         init_sentry(enabled=not disable_telemetry, exclude_errors=True)
         posthog_cf.initialize_posthog(enabled=not disable_telemetry)
 
-        if args.command == "auth":
-            from codeflash.cli_cmds.cmd_auth import auth_login, auth_status
-
-            if args.auth_command == "login":
-                auth_login()
-            elif args.auth_command == "status":
-                auth_status()
-            else:
-                from codeflash.code_utils.code_utils import exit_with_message
-
-                exit_with_message("Usage: codeflash auth {login,status}", error_on_exit=True)
-        elif args.command == "init":
+        if args.command == "init":
             from codeflash.cli_cmds.cmd_init import init_codeflash
 
             init_codeflash()
@@ -71,10 +89,6 @@ def main() -> None:
             from codeflash.cli_cmds.extension import install_vscode_extension
 
             install_vscode_extension()
-        elif args.command == "compare":
-            from codeflash.cli_cmds.cmd_compare import run_compare
-
-            run_compare(args)
         elif args.command == "optimize":
             from codeflash.tracer import main as tracer_main
 
@@ -89,7 +103,7 @@ def main() -> None:
         ask_run_end_to_end_test(args)
     else:
         # Check for first-run experience (no config exists)
-        loaded_args = _handle_config_loading(args)
+        loaded_args = _handle_config_loading(args, process_pyproject_config)
         if loaded_args is None:
             sys.exit(0)
         args = loaded_args
@@ -105,7 +119,9 @@ def main() -> None:
         optimizer.run_with_args(args)
 
 
-def _handle_config_loading(args: Namespace) -> Namespace | None:
+def _handle_config_loading(
+    args: Namespace, process_pyproject_config: Callable[[Namespace], Namespace]
+) -> Namespace | None:
     """Handle config loading with first-run experience support.
 
     If no config exists and not in CI, triggers the first-run experience.
@@ -113,6 +129,7 @@ def _handle_config_loading(args: Namespace) -> Namespace | None:
 
     Args:
         args: CLI args namespace.
+        process_pyproject_config: Config processing function.
 
     Returns:
         Updated args with config loaded, or None if user cancelled first-run.
@@ -157,6 +174,7 @@ def print_codeflash_banner() -> None:
     Renders the Codeflash ASCII logo inside a non-expanding panel titled with
     https://codeflash.ai, using bold gold text for visual emphasis.
     """
+    from codeflash.cli_cmds.console import paneled_text
     from codeflash.cli_cmds.console_constants import CODEFLASH_LOGO
 
     paneled_text(

@@ -15,7 +15,9 @@ keywords:
   ]
 ---
 
-Codeflash supports Java projects using Maven or Gradle build systems. It uses a two-stage tracing approach to capture method arguments and profiling data from running Java programs, then optimizes the hottest functions.
+Codeflash supports optimizing Java projects using Maven or Gradle build systems. It works in two main ways:
+1. Codeflash can optimize new java code written in a Pull Request through Github Actions.
+2. Codeflash can optimize real workloads end to end. It uses a two-stage tracing approach to capture method arguments and profiling data from running Java program, then optimizes the hottest functions with that data.
 
 ### Prerequisites
 
@@ -32,20 +34,51 @@ Good to have (optional):
 <Steps>
 <Step title="Install Codeflash CLI">
 
-Codeflash CLI is a Python tool. Install it with pip:
+Codeflash uses Python to run its CLI. You can use uv as a package manager and installer for Python programs.
+To install uv, run the following or [see these instructions](https://docs.astral.sh/uv/getting-started/installation/)
+
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
+Then install Codeflash as a uv tool.
 
 ```bash
-pip install codeflash
-```
-
-Or with uv:
-
-```bash
-uv pip install codeflash
+uv tool install codeflash
 ```
 
 </Step>
-<Step title="Initialize your project">
+<Step title="Authenticate with Codeflash">
+
+Codeflash uses cloud-hosted AI models. You need to authenticate before running any commands.
+
+**Option A: Browser login (recommended)**
+
+```bash
+codeflash auth login
+```
+
+This opens your browser to sign in with your GitHub account. Your API key is saved automatically to your shell profile.
+
+If you're on a remote server without a browser, a URL will be displayed that you can open on any device.
+
+**Option B: API key**
+
+1. Visit the [Codeflash Web App](https://app.codeflash.ai/) and sign up with your GitHub account (free tier available)
+2. Navigate to the [API Key](https://app.codeflash.ai/app/apikeys) page to generate your key
+3. Set it as an environment variable:
+
+```bash
+export CODEFLASH_API_KEY="your-api-key-here"
+```
+
+Add this to your shell profile (`~/.bashrc`, `~/.zshrc`) so it persists across sessions.
+
+<Info>
+If you skip this step, `codeflash init` will prompt you to authenticate interactively.
+</Info>
+
+</Step>
+<Step title="Initialize your project (recommended)">
 
 Navigate to your Java project root (where `pom.xml` or `build.gradle` is) and run:
 
@@ -53,67 +86,66 @@ Navigate to your Java project root (where `pom.xml` or `build.gradle` is) and ru
 codeflash init
 ```
 
-This will:
-- Detect your build tool (Maven/Gradle)
-- Find your source and test directories
-- Create a `codeflash.toml` configuration file
+The init command will:
+1. **Auto-detect your project** — find your build tool, source root (e.g., `src/main/java`), test root (e.g., `src/test/java`), and test framework
+2. **Confirm settings** — show the detected values and ask if you want to change anything
+3. **Configure formatter** — let you set up a code formatter (e.g., Spotless, google-java-format)
+4. **Install GitHub App** — offer to set up the [Codeflash GitHub App](https://github.com/apps/codeflash-ai/installations/select_target) for automatic PR creation (see next step)
+5. **Install GitHub Actions** — offer to add a CI workflow for automated optimization on PRs
+
+Only non-default settings are written to your `pom.xml` properties (Maven) or `gradle.properties` (Gradle). For standard layouts, no config changes are needed.
+
+<Info>
+**Can I skip init?** Yes. For standard Maven/Gradle projects, Codeflash auto-detects your project structure from `pom.xml` or `build.gradle` at runtime. If you're already authenticated and your project uses a standard layout (`src/main/java`, `src/test/java`), you can skip straight to optimizing.
+
+Init is recommended because it also sets up the GitHub App and Actions workflow, and lets you override paths for non-standard project layouts (e.g., multi-module projects where source is under `client/src/`).
+</Info>
 
 </Step>
-<Step title="Verify setup">
+<Step title="Install the Codeflash GitHub App (recommended)">
 
-Check that the configuration looks correct:
+To have Codeflash create pull requests with optimizations automatically, install the GitHub App:
 
-```bash
-cat codeflash.toml
-```
+[Install Codeflash GitHub App](https://github.com/apps/codeflash-ai/installations/select_target)
 
-You should see something like:
+Select the repositories you want Codeflash to optimize. This allows the codeflash-ai bot to open PRs with optimization suggestions in your repository.
 
-```toml
-[tool.codeflash]
-module-root = "src/main/java"
-tests-root = "src/test/java"
-language = "java"
-```
+<Info>
+If you prefer to try Codeflash locally first, you can skip this step and use the `--no-pr` flag to apply optimizations directly to your local files (see next step).
+</Info>
 
 </Step>
 <Step title="Run your first optimization">
 
-Trace and optimize a running Java program:
+Optimize a specific function:
 
 ```bash
-codeflash optimize java -jar target/my-app.jar
+codeflash --file src/main/java/com/example/Utils.java --function myMethod
 ```
 
-Or with Maven:
+If you installed the GitHub App, Codeflash will create a pull request with the optimization. If you haven't installed the app yet, or prefer to review changes locally first, add `--no-pr`:
 
 ```bash
-codeflash optimize mvn exec:java -Dexec.mainClass="com.example.Main"
+codeflash --file src/main/java/com/example/Utils.java --function myMethod --no-pr
+```
+
+Or optimize all functions in your project:
+
+```bash
+codeflash --all
 ```
 
 Codeflash will:
-1. Profile your program using JFR (Java Flight Recorder)
-2. Capture method arguments using a bytecode instrumentation agent
-3. Generate JUnit replay tests from the captured data
-4. Rank functions by performance impact
-5. Optimize the most impactful functions
+1. Discover optimizable functions in your source code
+2. Generate tests and optimization candidates using AI
+3. Verify correctness by running tests (JUnit 5, JUnit 4, or TestNG)
+4. Benchmark performance improvements
+5. Create a pull request with the optimization (or apply locally with `--no-pr`)
+
+For advanced workflow tracing (profiling a running Java program), see [Trace & Optimize](/optimizing-with-codeflash/trace-and-optimize).
 
 </Step>
 </Steps>
-
-## How it works
-
-Codeflash uses a **two-stage tracing** approach for Java:
-
-1. **Stage 1 — JFR Profiling**: Runs your program with Java Flight Recorder enabled to collect accurate method-level CPU profiling data. JFR has ~1% overhead and doesn't affect JIT compilation.
-
-2. **Stage 2 — Argument Capture**: Runs your program again with a bytecode instrumentation agent that captures method arguments using Kryo serialization. Arguments are stored in an SQLite database.
-
-The traced data is used to generate **JUnit replay tests** that exercise your functions with real-world inputs. Codeflash uses these tests alongside any existing unit tests to verify correctness and benchmark optimization candidates.
-
-<Info>
-Your program runs **twice** — once for profiling, once for argument capture. This separation ensures profiling data isn't distorted by serialization overhead.
-</Info>
 
 ## Supported build tools
 

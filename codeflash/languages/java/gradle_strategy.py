@@ -9,7 +9,6 @@ from __future__ import annotations
 import logging
 import os
 import re
-import shutil
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
@@ -17,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from codeflash.languages.java.build_tool_strategy import BuildToolStrategy, module_to_dir
-from codeflash.languages.java.build_tools import BuildTool, JavaProjectInfo
+from codeflash.languages.java.build_tools import CODEFLASH_RUNTIME_VERSION, BuildTool, JavaProjectInfo
 
 _RE_INCLUDE = re.compile(r"""include\s*\(?([^)\n]+)\)?""")
 
@@ -45,7 +44,8 @@ gradle.projectsEvaluated {
                 'spotbugsMain', 'spotbugsTest',
                 'pmdMain', 'pmdTest',
                 'rat', 'japicmp',
-                'jarHell', 'thirdPartyAudit'
+                'jarHell', 'thirdPartyAudit',
+                'spotlessCheck', 'spotlessApply', 'spotlessJava', 'spotlessKotlin', 'spotlessScala'
             ]
         }.configureEach {
             enabled = false
@@ -103,22 +103,6 @@ gradle.projectsEvaluated {
 }
 """
 
-# Gradle init script that applies JaCoCo plugin for coverage collection.
-# Uses projectsEvaluated to avoid triggering configuration of unrelated subprojects.
-_JACOCO_INIT_SCRIPT = """\
-gradle.projectsEvaluated {
-    allprojects {
-        apply plugin: 'jacoco'
-        jacocoTestReport {
-            reports {
-                xml.required = true
-                html.required = false
-            }
-        }
-    }
-}
-"""
-
 
 def find_gradle_build_file(project_root: Path) -> Path | None:
     kts = project_root / "build.gradle.kts"
@@ -130,12 +114,12 @@ def find_gradle_build_file(project_root: Path) -> Path | None:
     return None
 
 
-def _find_top_level_dependencies_block(build_file: Path, content: str) -> int | None:
-    """Find the insert position (before closing }) of the top-level dependencies block using tree-sitter.
+def _find_top_level_block(build_file: Path, content: str, block_name: str) -> int | None:
+    """Find the insert position (before closing }) of a top-level block using tree-sitter.
 
-    Returns the byte offset of the closing brace, or None if no top-level dependencies block exists.
-    Only matches `dependencies { }` at the root level — ignores blocks nested inside
-    `buildscript`, `subprojects`, `allprojects`, etc.
+    Returns the byte offset of the closing brace, or None if no top-level block with the
+    given name exists. Only matches blocks at the root level — ignores blocks nested inside
+    ``buildscript``, ``subprojects``, ``allprojects``, etc.
     """
     import tree_sitter as ts
 
@@ -153,10 +137,10 @@ def _find_top_level_dependencies_block(build_file: Path, content: str) -> int | 
 
     tree = parser.parse(source_bytes)
 
-    # Walk only direct children of root to find top-level `dependencies { }`
+    # Walk only direct children of root to find top-level `<block_name> { }`
     for child in tree.root_node.children:
-        # Groovy: expression_statement > method_invocation(identifier="dependencies", closure)
-        # Kotlin: call_expression(identifier="dependencies", annotated_lambda)
+        # Groovy: expression_statement > method_invocation(identifier, closure)
+        # Kotlin: call_expression(identifier, annotated_lambda)
         node = child
         if node.type == "expression_statement" and node.child_count > 0:
             node = node.children[0]
@@ -176,7 +160,7 @@ def _find_top_level_dependencies_block(build_file: Path, content: str) -> int | 
             continue
 
         name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf-8")
-        if name != "dependencies":
+        if name != block_name:
             continue
 
         # Find the closing brace of this block
@@ -189,6 +173,11 @@ def _find_top_level_dependencies_block(build_file: Path, content: str) -> int | 
             return closing_brace.start_byte
 
     return None
+
+
+def _find_top_level_dependencies_block(build_file: Path, content: str) -> int | None:
+    """Find the insert position (before closing }) of the top-level dependencies block."""
+    return _find_top_level_block(build_file, content, "dependencies")
 
 
 def _is_multimodule_project(build_root: Path) -> bool:
@@ -205,8 +194,66 @@ def _is_multimodule_project(build_root: Path) -> bool:
     return False
 
 
-def add_codeflash_dependency_multimodule(build_file: Path, runtime_jar_path: Path) -> bool:
-    """Add codeflash-runtime dependency wrapped in a subprojects block for multi-module projects.
+_CODEFLASH_MAVEN_COORD = f"com.codeflash:codeflash-runtime:{CODEFLASH_RUNTIME_VERSION}"
+
+
+def _update_existing_codeflash_dependency(build_file: Path, content: str) -> str | None:
+    """If the codeflash-runtime dependency exists but is outdated or uses the old files() format, update it.
+
+    Returns the updated content, or None if no update was needed (already current).
+    """
+    is_kts = build_file.name.endswith(".kts")
+
+    if is_kts:
+        current_dep = f'testImplementation("{_CODEFLASH_MAVEN_COORD}")'
+    else:
+        current_dep = f"testImplementation '{_CODEFLASH_MAVEN_COORD}'"
+
+    if current_dep in content:
+        return None
+
+    # Replace the line containing "codeflash-runtime" with the current Maven Central coordinate.
+    # This handles both old versions (e.g. 1.0.0) and old files() format.
+    updated_lines: list[str] = []
+    replaced = False
+    for line in content.splitlines(keepends=True):
+        if "codeflash-runtime" in line:
+            indent = len(line) - len(line.lstrip())
+            spaces = " " * indent
+            if is_kts:
+                updated_lines.append(f'{spaces}testImplementation("{_CODEFLASH_MAVEN_COORD}")  // codeflash-runtime\n')
+            else:
+                updated_lines.append(f"{spaces}testImplementation '{_CODEFLASH_MAVEN_COORD}'  // codeflash-runtime\n")
+            replaced = True
+        else:
+            updated_lines.append(line)
+
+    if replaced:
+        return "".join(updated_lines)
+    return None
+
+
+def _ensure_maven_central_repo(build_file: Path, content: str) -> str:
+    """Ensure mavenCentral() is present in the top-level repositories block. Returns updated content.
+
+    Uses tree-sitter to find the correct top-level ``repositories {}`` block, avoiding
+    false matches inside ``buildscript {}``, ``subprojects {}``, etc.
+    """
+    if "mavenCentral()" in content:
+        return content
+
+    # Use tree-sitter to find the top-level repositories block
+    insert_pos = _find_top_level_block(build_file, content, "repositories")
+    if insert_pos is not None:
+        return content[:insert_pos] + "    mavenCentral()\n" + content[insert_pos:]
+
+    # No top-level repositories block — append one
+    content += "\nrepositories {\n    mavenCentral()\n}\n"
+    return content
+
+
+def add_codeflash_dependency_multimodule(build_file: Path) -> bool:
+    """Add codeflash-runtime dependency from Maven Central in a subprojects block for multi-module projects.
 
     This avoids adding testImplementation to the root build file directly, which would fail
     if the root project doesn't apply the java plugin.
@@ -218,18 +265,29 @@ def add_codeflash_dependency_multimodule(build_file: Path, runtime_jar_path: Pat
         content = build_file.read_text(encoding="utf-8")
 
         if "codeflash-runtime" in content:
-            logger.info("codeflash-runtime dependency already present in %s", build_file.name)
+            updated = _update_existing_codeflash_dependency(build_file, content)
+            if updated is not None:
+                build_file.write_text(updated, encoding="utf-8")
+                logger.info(
+                    "Updated codeflash-runtime dependency in %s to version %s",
+                    build_file.name,
+                    CODEFLASH_RUNTIME_VERSION,
+                )
+            else:
+                logger.info("codeflash-runtime dependency already up-to-date in %s", build_file.name)
             return True
 
         is_kts = build_file.name.endswith(".kts")
-        jar_str = str(runtime_jar_path).replace("\\", "/")
 
         if is_kts:
             block = (
                 f"\nsubprojects {{\n"
                 f'    plugins.withId("java") {{\n'
+                f"        repositories {{\n"
+                f"            mavenCentral()\n"
+                f"        }}\n"
                 f"        dependencies {{\n"
-                f'            testImplementation(files("{jar_str}"))  // codeflash-runtime\n'
+                f'            testImplementation("{_CODEFLASH_MAVEN_COORD}")  // codeflash-runtime\n'
                 f"        }}\n"
                 f"    }}\n"
                 f"}}\n"
@@ -238,8 +296,11 @@ def add_codeflash_dependency_multimodule(build_file: Path, runtime_jar_path: Pat
             block = (
                 f"\nsubprojects {{\n"
                 f"    plugins.withId('java') {{\n"
+                f"        repositories {{\n"
+                f"            mavenCentral()\n"
+                f"        }}\n"
                 f"        dependencies {{\n"
-                f"            testImplementation files('{jar_str}')  // codeflash-runtime\n"
+                f"            testImplementation '{_CODEFLASH_MAVEN_COORD}'  // codeflash-runtime\n"
                 f"        }}\n"
                 f"    }}\n"
                 f"}}\n"
@@ -255,7 +316,7 @@ def add_codeflash_dependency_multimodule(build_file: Path, runtime_jar_path: Pat
         return False
 
 
-def add_codeflash_dependency(build_file: Path, runtime_jar_path: Path) -> bool:
+def add_codeflash_dependency(build_file: Path) -> bool:
     if not build_file.exists():
         return False
 
@@ -263,16 +324,28 @@ def add_codeflash_dependency(build_file: Path, runtime_jar_path: Path) -> bool:
         content = build_file.read_text(encoding="utf-8")
 
         if "codeflash-runtime" in content:
-            logger.info("codeflash-runtime dependency already present in %s", build_file.name)
+            updated = _update_existing_codeflash_dependency(build_file, content)
+            if updated is not None:
+                # Also ensure mavenCentral() is present (old files() format won't have it)
+                updated = _ensure_maven_central_repo(build_file, updated)
+                build_file.write_text(updated, encoding="utf-8")
+                logger.info(
+                    "Updated codeflash-runtime dependency in %s to version %s",
+                    build_file.name,
+                    CODEFLASH_RUNTIME_VERSION,
+                )
+            else:
+                logger.info("codeflash-runtime dependency already up-to-date in %s", build_file.name)
             return True
 
+        content = _ensure_maven_central_repo(build_file, content)
+
         is_kts = build_file.name.endswith(".kts")
-        jar_str = str(runtime_jar_path).replace("\\", "/")
 
         if is_kts:
-            dep_line = f'    testImplementation(files("{jar_str}"))  // codeflash-runtime\n'
+            dep_line = f'    testImplementation("{_CODEFLASH_MAVEN_COORD}")  // codeflash-runtime\n'
         else:
-            dep_line = f"    testImplementation files('{jar_str}')  // codeflash-runtime\n"
+            dep_line = f"    testImplementation '{_CODEFLASH_MAVEN_COORD}'  // codeflash-runtime\n"
 
         # Use tree-sitter to find the top-level dependencies block
         insert_pos = _find_top_level_dependencies_block(build_file, content)
@@ -284,9 +357,13 @@ def add_codeflash_dependency(build_file: Path, runtime_jar_path: Path) -> bool:
 
         # No existing dependencies block — append one
         if is_kts:
-            content += f'\ndependencies {{\n    testImplementation(files("{jar_str}"))  // codeflash-runtime\n}}\n'
+            content += (
+                f'\ndependencies {{\n    testImplementation("{_CODEFLASH_MAVEN_COORD}")  // codeflash-runtime\n}}\n'
+            )
         else:
-            content += f"\ndependencies {{\n    testImplementation files('{jar_str}')  // codeflash-runtime\n}}\n"
+            content += (
+                f"\ndependencies {{\n    testImplementation '{_CODEFLASH_MAVEN_COORD}'  // codeflash-runtime\n}}\n"
+            )
         build_file.write_text(content, encoding="utf-8")
         logger.info("Added codeflash-runtime dependency to %s (new block)", build_file.name)
         return True
@@ -420,23 +497,10 @@ class GradleStrategy(BuildToolStrategy):
         return self.find_wrapper_executable(build_root, ("gradlew", "gradlew.bat"), "gradle")
 
     def ensure_runtime(self, build_root: Path, test_module: str | None) -> bool:
-        runtime_jar = self.find_runtime_jar()
-        if runtime_jar is None:
-            logger.error("codeflash-runtime JAR not found. Generated tests will fail to compile.")
-            return False
-
         if test_module:
             module_root = build_root / module_to_dir(test_module)
         else:
             module_root = build_root
-
-        libs_dir = module_root / "libs"
-        libs_dir.mkdir(parents=True, exist_ok=True)
-        dest_jar = libs_dir / "codeflash-runtime-1.0.0.jar"
-
-        if not dest_jar.exists():
-            logger.info("Copying codeflash-runtime JAR to %s", dest_jar)
-            shutil.copy2(runtime_jar, dest_jar)
 
         build_file = find_gradle_build_file(module_root)
         if build_file is None:
@@ -444,10 +508,10 @@ class GradleStrategy(BuildToolStrategy):
             return False
 
         if not test_module and _is_multimodule_project(build_root):
-            if not add_codeflash_dependency_multimodule(build_file, dest_jar):
+            if not add_codeflash_dependency_multimodule(build_file):
                 logger.error("Failed to add codeflash-runtime dependency to %s", build_file)
                 return False
-        elif not add_codeflash_dependency(build_file, dest_jar):
+        elif not add_codeflash_dependency(build_file):
             logger.error("Failed to add codeflash-runtime dependency to %s", build_file)
             return False
 
@@ -469,14 +533,22 @@ class GradleStrategy(BuildToolStrategy):
             logger.error("Gradle not found — cannot pre-install multi-module dependencies")
             return False
 
-        cmd = [gradle, f":{test_module}:classes", "-x", "test", "--build-cache", "--no-daemon"]
+        cmd = [
+            gradle,
+            f":{test_module}:testClasses",
+            "-x",
+            "test",
+            "--build-cache",
+            "--no-daemon",
+            "--configure-on-demand",
+        ]
         cmd.extend(["--init-script", _get_skip_validation_init_script()])
 
         logger.info("Pre-installing multi-module dependencies: %s (module: %s)", build_root, test_module)
         logger.debug("Running: %s", " ".join(cmd))
 
         try:
-            result = _run_cmd_kill_pg_on_timeout(cmd, cwd=build_root, env=env, timeout=300)
+            result = _run_cmd_kill_pg_on_timeout(cmd, cwd=build_root, env=env, timeout=900)
             if result.returncode != 0:
                 logger.error(
                     "Failed to pre-install multi-module deps (exit %d).\nstdout: %s\nstderr: %s",
@@ -504,9 +576,9 @@ class GradleStrategy(BuildToolStrategy):
             return subprocess.CompletedProcess(args=["gradle"], returncode=-1, stdout="", stderr="Gradle not found")
 
         if test_module:
-            cmd = [gradle, f":{test_module}:testClasses", "--no-daemon"]
+            cmd = [gradle, f":{test_module}:testClasses", "--no-daemon", "--configure-on-demand"]
         else:
-            cmd = [gradle, "testClasses", "--no-daemon"]
+            cmd = [gradle, "testClasses", "--no-daemon", "--configure-on-demand"]
         cmd.extend(["--init-script", _get_skip_validation_init_script()])
 
         logger.debug("Compiling tests: %s in %s", " ".join(cmd), build_root)
@@ -528,9 +600,9 @@ class GradleStrategy(BuildToolStrategy):
             return subprocess.CompletedProcess(args=["gradle"], returncode=-1, stdout="", stderr="Gradle not found")
 
         if test_module:
-            cmd = [gradle, f":{test_module}:classes", "--no-daemon"]
+            cmd = [gradle, f":{test_module}:classes", "--no-daemon", "--configure-on-demand"]
         else:
-            cmd = [gradle, "classes", "--no-daemon"]
+            cmd = [gradle, "classes", "--no-daemon", "--configure-on-demand"]
         cmd.extend(["--init-script", _get_skip_validation_init_script()])
 
         logger.debug("Compiling source only: %s in %s", " ".join(cmd), build_root)
@@ -574,7 +646,7 @@ class GradleStrategy(BuildToolStrategy):
             else:
                 task = "codeflashPrintClasspath"
 
-            cmd = [gradle, "--init-script", init_script_path, task, "-q", "--no-daemon"]
+            cmd = [gradle, "--init-script", init_script_path, task, "-q", "--no-daemon", "--configure-on-demand"]
 
             logger.debug("Getting classpath: %s", " ".join(cmd))
 
@@ -657,7 +729,7 @@ class GradleStrategy(BuildToolStrategy):
         mode: str,
         test_module: str | None,
         javaagent_arg: str | None = None,
-        enable_coverage: bool = False,
+        enable_coverage: bool = False,  # kept for interface compatibility; coverage now uses JAVA_TOOL_OPTIONS
     ) -> subprocess.CompletedProcess[str]:
         from codeflash.languages.java.test_runner import _build_test_filter, _run_cmd_kill_pg_on_timeout
 
@@ -725,27 +797,14 @@ class GradleStrategy(BuildToolStrategy):
             with os.fdopen(init_fd, "w", encoding="utf-8") as f:
                 f.write(init_script_content)
 
-            cmd = [gradle, task, "--no-daemon", "--rerun", "--init-script", init_path]
+            cmd = [gradle, task, "--no-daemon", "--rerun", "--configure-on-demand", "--init-script", init_path]
             cmd.extend(["--init-script", _get_skip_validation_init_script()])
-
-            # --continue ensures Gradle keeps going even if some tests fail.
-            # For coverage: needed so jacocoTestReport runs even after test failures
-            #   (matches Maven's -Dmaven.test.failure.ignore=true).
-            # Note: multi-module --tests filtering is handled by
-            #   filter.failOnNoMatchingTests = false in the init script above
-            #   (matches Maven's -DfailIfNoTests=false).
-            if enable_coverage:
-                cmd.append("--continue")
 
             for class_filter in test_filter.split(","):
                 class_filter = class_filter.strip()
                 if class_filter:
                     cmd.extend(["--tests", class_filter])
             logger.debug("Added --tests filters to Gradle command")
-
-            # Append jacocoTestReport AFTER --tests so Gradle doesn't try to apply --tests to it
-            if enable_coverage:
-                cmd.append("jacocoTestReport")
 
             logger.debug("Running Gradle command: %s in %s", " ".join(cmd), build_root)
 
@@ -883,64 +942,105 @@ class GradleStrategy(BuildToolStrategy):
         timeout: int,
         candidate_index: int,
     ) -> tuple[subprocess.CompletedProcess[str], Path, Path | None]:
+        from codeflash.languages.java.line_profiler import find_agent_jar
         from codeflash.languages.java.test_runner import _get_combined_junit_xml
 
-        coverage_xml_path = self.setup_coverage(build_root, test_module, build_root)
+        if test_module:
+            module_path = build_root / module_to_dir(test_module)
+        else:
+            module_path = build_root
 
+        # Locate the runtime JAR (contains shaded JaCoCo agent + CLI)
+        classpath = self.get_classpath(build_root, run_env, test_module)
+        runtime_jar = find_agent_jar(classpath=classpath)
+        if runtime_jar is None:
+            logger.warning("codeflash-runtime JAR not found, cannot collect coverage")
+            result = self.run_tests_via_build_tool(
+                build_root, test_paths, run_env, timeout=timeout, mode="behavior", test_module=test_module
+            )
+            reports_dir = self.get_reports_dir(build_root, test_module)
+            result_xml_path = _get_combined_junit_xml(reports_dir, candidate_index)
+            return result, result_xml_path, None
+
+        # Use the runtime JAR's built-in JaCoCo agent via AgentDispatcher
+        exec_path = module_path / "build" / "jacoco" / "test.exec"
+        exec_path.parent.mkdir(parents=True, exist_ok=True)
+
+        jacoco_agent_arg = f"-javaagent:{runtime_jar}=destfile={exec_path}"
+        run_env = run_env.copy()
+        existing_opts = run_env.get("JAVA_TOOL_OPTIONS", "")
+        run_env["JAVA_TOOL_OPTIONS"] = f"{existing_opts} {jacoco_agent_arg}".strip()
+
+        # Run tests WITHOUT enable_coverage (no jacocoTestReport task needed)
         result = self.run_tests_via_build_tool(
-            build_root,
-            test_paths,
-            run_env,
-            timeout=timeout,
-            mode="behavior",
-            enable_coverage=True,
-            test_module=test_module,
+            build_root, test_paths, run_env, timeout=timeout, mode="behavior", test_module=test_module
         )
 
         reports_dir = self.get_reports_dir(build_root, test_module)
         result_xml_path = _get_combined_junit_xml(reports_dir, candidate_index)
 
+        # Convert .exec → .xml via the shaded JaCoCo CLI in the runtime JAR
+        coverage_xml_path = self._convert_jacoco_exec_to_xml(runtime_jar, exec_path, module_path)
+
         return result, result_xml_path, coverage_xml_path
+
+    def _convert_jacoco_exec_to_xml(self, runtime_jar: Path, exec_path: Path, module_path: Path) -> Path | None:
+        if not exec_path.exists():
+            logger.warning("JaCoCo exec file not found: %s", exec_path)
+            return None
+
+        xml_path = exec_path.with_suffix(".xml")
+
+        # Collect classfiles directories for the report
+        classfiles_dirs: list[str] = []
+        for classes_dir in [
+            module_path / "build" / "classes" / "java" / "main",
+            module_path / "build" / "classes" / "java" / "test",
+        ]:
+            if classes_dir.exists():
+                classfiles_dirs.append(str(classes_dir))
+
+        if not classfiles_dirs:
+            logger.warning("No classfiles directories found under %s/build/classes", module_path)
+            return None
+
+        cmd = [
+            "java",
+            "-cp",
+            str(runtime_jar),
+            "com.codeflash.shaded.org.jacoco.cli.internal.Main",
+            "report",
+            str(exec_path),
+        ]
+        for d in classfiles_dirs:
+            cmd.extend(["--classfiles", d])
+        cmd.extend(["--xml", str(xml_path)])
+
+        logger.debug("Converting JaCoCo exec to XML: %s", " ".join(cmd))
+        try:
+            conv_result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
+            if conv_result.returncode != 0:
+                logger.warning(
+                    "JaCoCo exec→XML conversion failed (exit %d): %s", conv_result.returncode, conv_result.stderr
+                )
+                return None
+        except Exception:
+            logger.exception("JaCoCo exec→XML conversion error")
+            return None
+
+        if xml_path.exists():
+            logger.info("JaCoCo coverage XML generated: %s", xml_path)
+            return xml_path
+
+        logger.warning("JaCoCo XML not created at %s", xml_path)
+        return None
 
     def setup_coverage(self, build_root: Path, test_module: str | None, project_root: Path) -> Path | None:
         if test_module:
             module_root = build_root / module_to_dir(test_module)
         else:
             module_root = project_root
-
-        build_file = find_gradle_build_file(module_root)
-        if build_file is None:
-            logger.warning("No build.gradle(.kts) found at %s, cannot setup JaCoCo", module_root)
-            return None
-
-        content = build_file.read_text(encoding="utf-8")
-        if "jacoco" not in content.lower():
-            logger.info("Adding JaCoCo plugin to %s for coverage collection", build_file.name)
-            is_kts = build_file.name.endswith(".kts")
-            if is_kts:
-                plugin_line = "plugins {\n    jacoco\n}\n"
-            else:
-                plugin_line = "apply plugin: 'jacoco'\n"
-
-            if "plugins {" in content or "plugins{" in content:
-                # Insert jacoco inside existing plugins block
-                plugins_idx = content.find("plugins")
-                brace_depth = 0
-                for i in range(plugins_idx, len(content)):
-                    if content[i] == "{":
-                        brace_depth += 1
-                    elif content[i] == "}":
-                        brace_depth -= 1
-                        if brace_depth == 0:
-                            insert = "    jacoco\n" if is_kts else "    id 'jacoco'\n"
-                            content = content[:i] + insert + content[i:]
-                            break
-            else:
-                content = plugin_line + content
-
-            build_file.write_text(content, encoding="utf-8")
-
-        return module_root / "build" / "reports" / "jacoco" / "test" / "jacocoTestReport.xml"
+        return module_root / "build" / "jacoco" / "test.xml"
 
     def get_test_run_command(self, project_root: Path, test_classes: list[str] | None = None) -> list[str]:
         from codeflash.languages.java.test_runner import _validate_java_class_name
@@ -952,7 +1052,7 @@ class GradleStrategy(BuildToolStrategy):
                     raise ValueError(msg)
 
         gradle = self.find_executable(project_root) or "gradle"
-        cmd = [gradle, "test", "--no-daemon"]
+        cmd = [gradle, "test", "--no-daemon", "--configure-on-demand"]
         if test_classes:
             for cls in test_classes:
                 cmd.extend(["--tests", cls])

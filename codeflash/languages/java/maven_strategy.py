@@ -43,6 +43,8 @@ _MAVEN_VALIDATION_SKIP_FLAGS = [
     "-Denforcer.skip=true",
     "-Djapicmp.skip=true",
     "-Derrorprone.skip=true",
+    "-Dspotless.check.skip=true",
+    "-Dspotless.apply.skip=true",
     "-Dmaven.compiler.failOnWarning=false",
     "-Dmaven.compiler.showWarnings=false",
 ]
@@ -62,11 +64,11 @@ GITHUB_RELEASE_URL = (
 
 CODEFLASH_CACHE_DIR = Path.home() / ".cache" / "codeflash"
 
-CODEFLASH_DEPENDENCY_SNIPPET = """\
+CODEFLASH_DEPENDENCY_SNIPPET = f"""\
         <dependency>
             <groupId>com.codeflash</groupId>
             <artifactId>codeflash-runtime</artifactId>
-            <version>1.0.0</version>
+            <version>{CODEFLASH_RUNTIME_VERSION}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>"""
@@ -140,7 +142,7 @@ def install_codeflash_runtime(project_root: Path, runtime_jar_path: Path, mvn: s
         f"-Dfile={runtime_jar_path}",
         "-DgroupId=com.codeflash",
         "-DartifactId=codeflash-runtime",
-        "-Dversion=1.0.0",
+        f"-Dversion={CODEFLASH_RUNTIME_VERSION}",
         "-Dpackaging=jar",
         "-B",
     ]
@@ -288,26 +290,26 @@ def add_codeflash_dependency(pom_path: Path) -> bool:
         content = pom_path.read_text(encoding="utf-8")
 
         if "codeflash-runtime" in content:
-            if "<scope>system</scope>" in content:
 
-                def replace_system_dep(match: re.Match[str]) -> str:
-                    block: str = match.group(0)
-                    if "codeflash-runtime" in block and "<scope>system</scope>" in block:
-                        return (
-                            "<dependency>\n"
-                            "            <groupId>com.codeflash</groupId>\n"
-                            "            <artifactId>codeflash-runtime</artifactId>\n"
-                            "            <version>1.0.0</version>\n"
-                            "            <scope>test</scope>\n"
-                            "        </dependency>"
-                        )
+            def update_codeflash_dep(match: re.Match[str]) -> str:
+                block: str = match.group(0)
+                if "codeflash-runtime" not in block:
                     return block
+                return (
+                    "<dependency>\n"
+                    "            <groupId>com.codeflash</groupId>\n"
+                    "            <artifactId>codeflash-runtime</artifactId>\n"
+                    f"            <version>{CODEFLASH_RUNTIME_VERSION}</version>\n"
+                    "            <scope>test</scope>\n"
+                    "        </dependency>"
+                )
 
-                content = re.sub(r"<dependency>[\s\S]*?</dependency>", replace_system_dep, content)
-                pom_path.write_text(content, encoding="utf-8")
-                logger.info("Replaced system-scope codeflash-runtime dependency with test scope")
-                return True
-            logger.info("codeflash-runtime dependency already present in pom.xml")
+            updated = re.sub(r"<dependency>[\s\S]*?</dependency>", update_codeflash_dep, content)
+            if updated != content:
+                pom_path.write_text(updated, encoding="utf-8")
+                logger.info("Updated codeflash-runtime dependency to version %s in pom.xml", CODEFLASH_RUNTIME_VERSION)
+            else:
+                logger.info("codeflash-runtime dependency already up to date in pom.xml")
             return True
 
         closing_tag = "</dependencies>"
@@ -571,8 +573,8 @@ class MavenStrategy(BuildToolStrategy):
         / "com"
         / "codeflash"
         / "codeflash-runtime"
-        / "1.0.0"
-        / "codeflash-runtime-1.0.0.jar"
+        / "1.0.1"
+        / "codeflash-runtime-1.0.1.jar"
     )
 
     @property

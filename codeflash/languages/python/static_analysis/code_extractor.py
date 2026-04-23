@@ -11,6 +11,7 @@ from libcst.codemod import CodemodContext
 from libcst.codemod.visitors import AddImportsVisitor, GatherImportsVisitor, RemoveImportsVisitor
 from libcst.helpers import calculate_module_and_package
 
+import codeflash.code_utils._libcst_cache  # noqa: F401
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.config_consts import MAX_CONTEXT_LEN_REVIEW
 from codeflash.languages.base import Language

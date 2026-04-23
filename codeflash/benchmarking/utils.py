@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import logging
 import shutil
+from operator import itemgetter
 from typing import TYPE_CHECKING, Optional
 
 from rich.console import Console
@@ -16,27 +18,30 @@ if TYPE_CHECKING:
 
 
 def validate_and_format_benchmark_table(
-    function_benchmark_timings: dict[str, dict[BenchmarkKey, int]], total_benchmark_timings: dict[BenchmarkKey, int]
+    function_benchmark_timings: dict[str, dict[BenchmarkKey, float]], total_benchmark_timings: dict[BenchmarkKey, float]
 ) -> dict[str, list[tuple[BenchmarkKey, float, float, float]]]:
     function_to_result = {}
-    # Process each function's benchmark data
+    scale = 1_000_000.0
     for func_path, test_times in function_benchmark_timings.items():
         # Sort by percentage (highest first)
         sorted_tests = []
         for benchmark_key, func_time in test_times.items():
             total_time = total_benchmark_timings.get(benchmark_key, 0)
             if func_time > total_time:
-                logger.debug(f"Skipping test {benchmark_key} due to func_time {func_time} > total_time {total_time}")
                 # If the function time is greater than total time, likely to have multithreading / multiprocessing issues.
                 # Do not try to project the optimization impact for this function.
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        f"Skipping test {benchmark_key} due to func_time {func_time} > total_time {total_time}"
+                    )
                 sorted_tests.append((benchmark_key, 0.0, 0.0, 0.0))
             elif total_time > 0:
                 percentage = (func_time / total_time) * 100
                 # Convert nanoseconds to milliseconds
-                func_time_ms = func_time / 1_000_000
-                total_time_ms = total_time / 1_000_000
+                func_time_ms = func_time / scale
+                total_time_ms = total_time / scale
                 sorted_tests.append((benchmark_key, total_time_ms, func_time_ms, percentage))
-        sorted_tests.sort(key=lambda x: x[3], reverse=True)
+        sorted_tests.sort(key=itemgetter(3), reverse=True)
         function_to_result[func_path] = sorted_tests
     return function_to_result
 
@@ -77,8 +82,8 @@ def print_benchmark_table(function_to_results: dict[str, list[tuple[BenchmarkKey
 
 def process_benchmark_data(
     replay_performance_gain: dict[BenchmarkKey, float],
-    fto_benchmark_timings: dict[BenchmarkKey, int],
-    total_benchmark_timings: dict[BenchmarkKey, int],
+    fto_benchmark_timings: dict[BenchmarkKey, float],
+    total_benchmark_timings: dict[BenchmarkKey, float],
 ) -> Optional[ProcessedBenchmarkInfo]:
     """Process benchmark data and generate detailed benchmark information.
 

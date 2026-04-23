@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Optional, Union
 
 import libcst as cst
 
+import codeflash.code_utils._libcst_cache  # noqa: F401
 from codeflash.code_utils.formatter import sort_imports
 
 if TYPE_CHECKING:

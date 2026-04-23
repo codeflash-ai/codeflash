@@ -284,3 +284,80 @@ import { process } from './processor';"""
         result = convert_commonjs_to_esm(code)
         expected = "import { queue, context, db as dbCore, cache, events } from '@budibase/backend-core';"
         assert result == expected
+
+
+class TestAddJsExtensionsToRelativeImports:
+    """Tests for adding .js extensions to relative imports in ESM mode."""
+
+    def test_add_js_extension_to_relative_import(self):
+        """Test adding .js extension to relative import without extension."""
+        from codeflash.languages.javascript.module_system import add_js_extensions_to_relative_imports
+
+        code = "import TreeNode from '../../injector/topology-tree/tree-node';"
+        result = add_js_extensions_to_relative_imports(code)
+        expected = "import TreeNode from '../../injector/topology-tree/tree-node.js';"
+        assert result == expected
+
+    def test_add_js_extension_to_single_dot_import(self):
+        """Test adding .js extension to same-directory import."""
+        from codeflash.languages.javascript.module_system import add_js_extensions_to_relative_imports
+
+        code = "import { foo } from './module';"
+        result = add_js_extensions_to_relative_imports(code)
+        expected = "import { foo } from './module.js';"
+        assert result == expected
+
+    def test_skip_imports_with_existing_extensions(self):
+        """Test that imports with extensions are left unchanged."""
+        from codeflash.languages.javascript.module_system import add_js_extensions_to_relative_imports
+
+        code = "import TreeNode from '../../tree-node.js';"
+        result = add_js_extensions_to_relative_imports(code)
+        assert result == code
+
+        code2 = "import TreeNode from '../../tree-node.ts';"
+        result2 = add_js_extensions_to_relative_imports(code2)
+        assert result2 == code2
+
+    def test_skip_node_modules_imports(self):
+        """Test that node_modules imports are left unchanged."""
+        from codeflash.languages.javascript.module_system import add_js_extensions_to_relative_imports
+
+        code = "import assert from 'node:assert/strict';"
+        result = add_js_extensions_to_relative_imports(code)
+        assert result == code
+
+        code2 = "import { describe } from 'mocha';"
+        result2 = add_js_extensions_to_relative_imports(code2)
+        assert result2 == code2
+
+    def test_multiple_imports(self):
+        """Test handling multiple imports in one code block."""
+        from codeflash.languages.javascript.module_system import add_js_extensions_to_relative_imports
+
+        code = """import assert from 'node:assert/strict';
+import TreeNode from '../../injector/topology-tree/tree-node';
+import { helper } from './helper';"""
+        result = add_js_extensions_to_relative_imports(code)
+        expected = """import assert from 'node:assert/strict';
+import TreeNode from '../../injector/topology-tree/tree-node.js';
+import { helper } from './helper.js';"""
+        assert result == expected
+
+    def test_named_imports(self):
+        """Test adding extensions to named imports."""
+        from codeflash.languages.javascript.module_system import add_js_extensions_to_relative_imports
+
+        code = "import { foo, bar } from '../utils/helpers';"
+        result = add_js_extensions_to_relative_imports(code)
+        expected = "import { foo, bar } from '../utils/helpers.js';"
+        assert result == expected
+
+    def test_namespace_imports(self):
+        """Test adding extensions to namespace imports."""
+        from codeflash.languages.javascript.module_system import add_js_extensions_to_relative_imports
+
+        code = "import * as helpers from '../utils';"
+        result = add_js_extensions_to_relative_imports(code)
+        expected = "import * as helpers from '../utils.js';"
+        assert result == expected

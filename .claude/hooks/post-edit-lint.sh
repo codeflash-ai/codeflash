@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Everyone is on macOS so this should be fine, we don't account for Windows
 set -euo pipefail
 
 input=$(cat)
@@ -10,6 +9,5 @@ if [[ -z "$file_path" || ! -f "$file_path" ]]; then
 fi
 
 if [[ "$file_path" == *.py ]]; then
-    # First run auto-fixes formatting; second run catches real lint errors
     uv run prek --files "$file_path" 2>/dev/null || uv run prek --files "$file_path"
 fi
