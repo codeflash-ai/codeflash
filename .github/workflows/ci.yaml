@@ -322,6 +322,7 @@ jobs:
     if: >-
       needs.determine-changes.outputs.e2e == 'true'
       && github.event_name != 'push'
+      && github.actor != 'dependabot[bot]'
     strategy:
       fail-fast: false
       matrix:
@@ -425,6 +426,7 @@ jobs:
     if: >-
       needs.determine-changes.outputs.e2e_js == 'true'
       && github.event_name != 'push'
+      && github.actor != 'dependabot[bot]'
     strategy:
       fail-fast: false
       matrix:
@@ -508,6 +510,7 @@ jobs:
     if: >-
       needs.determine-changes.outputs.e2e_java == 'true'
       && github.event_name != 'push'
+      && github.actor != 'dependabot[bot]'
     strategy:
       fail-fast: false
       matrix:
