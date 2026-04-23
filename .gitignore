@@ -266,11 +266,12 @@ WARP.MD
 .tessl/
 tessl.json
 
-# Claude Code - track shared rules, ignore local config
+# Claude Code - track shared config, ignore local state
 .claude/*
 !.claude/rules/
-!.claude/settings.json
 !.claude/hooks/
+!.claude/skills/
+!.claude/settings.json
 **/node_modules/**
 **/dist-nuitka/**
 **/.npmrc
