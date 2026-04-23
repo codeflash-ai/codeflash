@@ -378,3 +378,49 @@ vite.config.ts.timestamp-*
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+# =============================================================================
+# Project-specific
+# =============================================================================
+
+# XML (Maven generates many; allow specific pom.xml files)
+*.xml
+!tests/test_languages/fixtures/**/pom.xml
+!code_to_optimize/java/pom.xml
+!codeflash-java-runtime/pom.xml
+
+# Gradle
+.gradle/
+
+# Credentials
+*.pem
+**/.env
+
+# IDEs
+.idea/
+.vscode/
+
+# Nuitka
+**/dist-nuitka/**
+
+# npm
+**/.npmrc
+
+# Mac
+.DS_Store
+
+# Tessl — .tessl/.gitignore handles tiles/RULES.md internally
+.mcp.json
+
+# Claude Code — track shared config, ignore local state
+.claude/*
+!.claude/rules/
+!.claude/hooks/
+!.claude/skills/
+!.claude/settings.json
+
+# Test fixture lockfiles — prevents Dependabot from scanning them
+code_to_optimize/**/package-lock.json
+
+# Other tools
+.codeflash/
