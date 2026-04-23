@@ -172,6 +172,7 @@ def _find_project_root(start_path: Path) -> Path | None:
             "pom.xml",
             "build.gradle",
             "build.gradle.kts",
+            "go.mod",
         ]
         for marker in markers:
             if (current / marker).exists():
@@ -203,6 +204,11 @@ def _detect_language(project_root: Path) -> tuple[str, float, str]:
     has_package_json = (project_root / "package.json").exists()
     has_pom_xml = (project_root / "pom.xml").exists()
     has_build_gradle = (project_root / "build.gradle").exists() or (project_root / "build.gradle.kts").exists()
+    has_go_mod = (project_root / "go.mod").exists()
+
+    # Go (go.mod is definitive)
+    if has_go_mod:
+        return "go", 1.0, "go.mod found"
 
     # Java (pom.xml or build.gradle is definitive)
     if has_pom_xml:
@@ -235,7 +241,10 @@ def _detect_language(project_root: Path) -> tuple[str, float, str]:
     js_count = len(list(project_root.rglob("*.js")))
     ts_count = len(list(project_root.rglob("*.ts")))
     java_count = len(list(project_root.rglob("*.java")))
+    go_count = len(list(project_root.rglob("*.go")))
 
+    if go_count > 0 and go_count >= max(py_count, js_count, ts_count, java_count):
+        return "go", 0.5, f"found {go_count} .go files"
     if java_count > 0 and java_count >= max(py_count, js_count, ts_count):
         return "java", 0.5, f"found {java_count} .java files"
     if ts_count > 0:
@@ -264,6 +273,8 @@ def _detect_module_root(project_root: Path, language: str) -> tuple[Path, str]:
         return _detect_js_module_root(project_root)
     if language == "java":
         return _detect_java_module_root(project_root)
+    if language == "go":
+        return _detect_go_module_root(project_root)
     return _detect_python_module_root(project_root)
 
 
@@ -441,6 +452,23 @@ def _detect_java_module_root(project_root: Path) -> tuple[Path, str]:
     return project_root, "project root"
 
 
+def _detect_go_module_root(project_root: Path) -> tuple[Path, str]:
+    """Detect Go module root directory.
+
+    Go projects use go.mod at the module root. The source directory is the
+    same as the module root (Go packages are directories, not subdirectories).
+    """
+    if (project_root / "go.mod").exists():
+        return project_root, "project root (go.mod found)"
+
+    # Check common subdirectories
+    for subdir in ["cmd", "pkg", "internal"]:
+        if (project_root / subdir).is_dir():
+            return project_root, f"project root ({subdir}/ found)"
+
+    return project_root, "project root"
+
+
 def is_build_output_dir(path: Path) -> bool:
     """Check if a path is within a common build output directory.
 
@@ -474,6 +502,13 @@ def _detect_tests_root(project_root: Path, language: str) -> tuple[Path | None, 
     - spec/ (Ruby/JavaScript)
 
     """
+    # Go: tests are co-located with source files (*_test.go)
+    if language == "go":
+        test_files = list(project_root.rglob("*_test.go"))
+        if test_files:
+            return project_root, "project root (Go tests co-located with source)"
+        return project_root, "project root (Go convention: *_test.go)"
+
     # Java: standard Maven/Gradle test layout
     if language == "java":
         import xml.etree.ElementTree as ET
@@ -558,6 +593,8 @@ def _detect_test_runner(project_root: Path, language: str) -> tuple[str, str]:
         return _detect_js_test_runner(project_root)
     if language == "java":
         return _detect_java_test_runner(project_root)
+    if language == "go":
+        return "go-test", "go test (built-in)"
     return _detect_python_test_runner(project_root)
 
 
@@ -686,6 +723,8 @@ def _detect_formatter(project_root: Path, language: str) -> tuple[list[str], str
         return _detect_js_formatter(project_root)
     if language == "java":
         return _detect_java_formatter(project_root)
+    if language == "go":
+        return _detect_go_formatter(project_root)
     return _detect_python_formatter(project_root)
 
 
@@ -803,6 +842,19 @@ def _detect_js_formatter(project_root: Path) -> tuple[list[str], str]:
     return [], "none detected"
 
 
+def _detect_go_formatter(project_root: Path) -> tuple[list[str], str]:
+    """Detect Go formatter.
+
+    Go has a universal formatter (gofmt). goimports is preferred if available
+    because it also manages imports.
+    """
+    if shutil.which("goimports"):
+        return ["goimports -w $file"], "goimports (auto-detected)"
+    if shutil.which("gofmt"):
+        return ["gofmt -w $file"], "gofmt (auto-detected)"
+    return ["gofmt -w $file"], "gofmt (default)"
+
+
 def _detect_ignore_paths(project_root: Path, language: str) -> tuple[list[Path], str]:
     """Detect paths to ignore during optimization.
 
@@ -836,6 +888,7 @@ def _detect_ignore_paths(project_root: Path, language: str) -> tuple[list[Path],
         "javascript": ["node_modules", "dist", "build", ".next", ".nuxt", "coverage", ".cache"],
         "typescript": ["node_modules", "dist", "build", ".next", ".nuxt", "coverage", ".cache"],
         "java": ["target", "build", ".gradle", ".idea", "out"],
+        "go": ["vendor", "testdata"],
     }
 
     # Add default ignores
@@ -899,6 +952,10 @@ def has_existing_config(project_root: Path) -> tuple[bool, str | None]:
                 return True, "pyproject.toml"
         except Exception:
             pass
+
+    # Check Go projects — go.mod presence means "configured"
+    if (project_root / "go.mod").exists():
+        return True, "go.mod"
 
     # Check Java build files — zero-config: build file presence means "configured"
     for build_file in ("pom.xml", "build.gradle", "build.gradle.kts"):

@@ -54,6 +54,7 @@ def _ensure_languages_registered() -> None:
         "codeflash.languages.python.support",
         "codeflash.languages.javascript.support",
         "codeflash.languages.java.support",
+        "codeflash.languages.golang.support",
     ):
         with contextlib.suppress(ImportError):
             importlib.import_module(_lang_module)
@@ -227,11 +228,14 @@ def get_language_support_by_common_formatters(formatter_cmd: str | list[str]) ->
 
     py_formatters = ["black", "isort", "ruff", "autopep8", "yapf", "pyfmt"]
     js_ts_formatters = ["prettier", "eslint", "biome", "rome", "deno", "standard", "tslint"]
+    go_formatters = ["gofmt", "goimports", "golines"]
 
     if any(cmd in py_formatters for cmd in formatter_cmd):
         ext = ".py"
     elif any(cmd in js_ts_formatters for cmd in formatter_cmd):
         ext = ".js"
+    elif any(cmd in go_formatters for cmd in formatter_cmd):
+        ext = ".go"
 
     if ext is None:
         # can't determine language

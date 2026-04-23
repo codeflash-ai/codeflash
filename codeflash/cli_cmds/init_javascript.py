@@ -38,6 +38,7 @@ class ProjectLanguage(Enum):
     JAVASCRIPT = auto()
     TYPESCRIPT = auto()
     JAVA = auto()
+    GO = auto()
 
 
 class JsPackageManager(Enum):
@@ -88,6 +89,10 @@ def detect_project_language(project_root: Path | None = None) -> ProjectLanguage
 
     """
     root = project_root or Path.cwd()
+
+    # Go detection (go.mod is definitive)
+    if (root / "go.mod").exists():
+        return ProjectLanguage.GO
 
     # Java detection (pom.xml or build.gradle is definitive)
     has_pom = (root / "pom.xml").exists()

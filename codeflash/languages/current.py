@@ -113,6 +113,16 @@ def is_java() -> bool:
     return _current_language == Language.JAVA
 
 
+def is_go() -> bool:
+    """Check if the current language is Go.
+
+    Returns:
+        True if the current language is Go.
+
+    """
+    return _current_language == Language.GO
+
+
 def current_language_support() -> LanguageSupport:
     """Get the LanguageSupport instance for the current language.
 
