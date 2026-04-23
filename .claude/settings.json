@@ -42,16 +42,6 @@
             "timeout": 5
           }
         ]
-      },
-      {
-        "matcher": "Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/require-read.sh",
-            "timeout": 5
-          }
-        ]
       }
     ],
     "PostToolUse": [
@@ -92,5 +82,8 @@
     "type": "command",
     "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/status-line.sh"
   },
-  "enableAllProjectMcpServers": true
+  "enableAllProjectMcpServers": true,
+  "env": {
+    "ENABLE_LSP_TOOL": "1"
+  }
 }

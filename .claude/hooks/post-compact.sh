@@ -40,10 +40,8 @@ STATE="${STATE}- libcst for code transforms, ast for read-only analysis\n"
 
 [ -z "$STATE" ] && exit 0
 
-cat <<EOF
-{
-  "systemMessage": "PRESERVE the following session state through compaction:\n$(echo -e "$STATE" | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')"
-}
-EOF
+EXPANDED=$(printf '%b' "$STATE")
+jq -n --arg msg "PRESERVE the following session state through compaction:
+$EXPANDED" '{"systemMessage": $msg}'
 
 exit 0
