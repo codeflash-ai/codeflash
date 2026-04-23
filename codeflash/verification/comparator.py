@@ -74,6 +74,27 @@ _DICT_KEYS_TYPE = type({}.keys())
 _DICT_VALUES_TYPE = type({}.values())
 _DICT_ITEMS_TYPE = type({}.items())
 
+_IDENTITY_EQ_TYPES: frozenset[type[Any]] = frozenset(
+    {
+        int,
+        bool,
+        complex,
+        type(None),
+        type(Ellipsis),
+        decimal.Decimal,
+        set,
+        bytes,
+        bytearray,
+        memoryview,
+        frozenset,
+        type,
+        range,
+        slice,
+        OrderedDict,
+        types.GenericAlias,
+    }
+)
+
 _EQUALITY_TYPES = (
     int,
     bool,
@@ -184,32 +205,61 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
 
             return False
 
-        if type(orig) is not type(new):
-            type_obj = type(orig)
-            new_type_obj = type(new)
+        orig_type = type(orig)
+        if orig_type is not type(new):
             # distinct type objects are created at runtime, even if the class code is exactly the same, so we can only compare the names
-            if type_obj.__name__ != new_type_obj.__name__ or type_obj.__qualname__ != new_type_obj.__qualname__:
+            if orig_type.__name__ != type(new).__name__ or orig_type.__qualname__ != type(new).__qualname__:
                 return False
+
+        # Fast-path: type identity checks for the most common return-value types.
+        # `orig_type is T` is a single pointer comparison — cheaper than frozenset hash
+        # lookup or isinstance MRO traversal — and these 4 types dominate real workloads.
+        if orig_type is str:
+            if orig == new:
+                return True
+            if _is_temp_path(orig) and _is_temp_path(new):
+                return _normalize_temp_path(orig) == _normalize_temp_path(new)
+            return False
+        if orig_type is list or orig_type is tuple:
+            if len(orig) != len(new):
+                return False
+            return all(comparator(elem1, elem2, superset_obj) for elem1, elem2 in zip(orig, new))
+        if orig_type is dict:
+            if superset_obj:
+                return all(k in new and comparator(v, new[k], superset_obj) for k, v in orig.items())
+            if len(orig) != len(new):
+                return False
+            for key in orig:
+                if key not in new:
+                    return False
+                if not comparator(orig[key], new[key], superset_obj):
+                    return False
+            return True
+        if orig_type is float:
+            if math.isnan(orig) and math.isnan(new):
+                return True
+            return math.isclose(orig, new)
+        # O(1) frozenset lookup for remaining common types (int, bool, None, Decimal, etc.)
+        if orig_type in _IDENTITY_EQ_TYPES:
+            return orig == new
+
+        # Slower isinstance path for subclasses (deque, ChainMap, etc.)
         if isinstance(orig, (list, tuple, deque, ChainMap)):
             if len(orig) != len(new):
                 return False
             return all(comparator(elem1, elem2, superset_obj) for elem1, elem2 in zip(orig, new))
 
-        # Handle strings separately to normalize temp paths
+        # Handle string subclasses separately to normalize temp paths
         if isinstance(orig, str):
             if orig == new:
                 return True
-            # If strings differ, check if they're temp paths that differ only in session number
             if _is_temp_path(orig) and _is_temp_path(new):
                 return _normalize_temp_path(orig) == _normalize_temp_path(new)
             return False
 
+        # enum.Enum subclasses and UnionType fall through from the frozenset fast-path
         if isinstance(orig, _EQUALITY_TYPES):
             return orig == new
-        if isinstance(orig, float):
-            if math.isnan(orig) and math.isnan(new):
-                return True
-            return math.isclose(orig, new)
 
         # Handle weak references (e.g., found in torch.nn.LSTM/GRU modules)
         if isinstance(orig, weakref.ref):

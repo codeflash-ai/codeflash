@@ -6,7 +6,6 @@ import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy;
 import org.objenesis.strategy.StdInstantiatorStrategy;
 
-import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Field;
@@ -36,7 +35,11 @@ public final class Serializer {
     private static final int MAX_COLLECTION_SIZE = 1000;
     private static final int BUFFER_SIZE = 4096;
 
-    // Thread-local Kryo instances (Kryo is not thread-safe)
+    // Thread-local Kryo, Output, and IdentityHashMap instances for reuse
+    private static final ThreadLocal<Output> OUTPUT = ThreadLocal.withInitial(() -> new Output(BUFFER_SIZE, -1));
+    private static final ThreadLocal<IdentityHashMap<Object, Object>> SEEN =
+        ThreadLocal.withInitial(IdentityHashMap::new);
+
     private static final ThreadLocal<Kryo> KRYO = ThreadLocal.withInitial(() -> {
         Kryo kryo = new Kryo();
         kryo.setRegistrationRequired(false);
@@ -89,8 +92,76 @@ public final class Serializer {
      * @return Serialized bytes (may contain KryoPlaceholder for unserializable parts)
      */
     public static byte[] serialize(Object obj) {
-        Object processed = recursiveProcess(obj, new IdentityHashMap<>(), 0, "");
+        // Fast path: if args are all safe types, skip recursive processing entirely
+        if (obj instanceof Object[] && isSafeArgs((Object[]) obj)) {
+            return directSerialize(obj);
+        }
+
+        IdentityHashMap<Object, Object> seen = SEEN.get();
+        seen.clear();
+        Object processed = recursiveProcess(obj, seen, 0, "");
         return directSerialize(processed);
+    }
+
+    /**
+     * Attempt fast-path serialization for args that are all known-safe types.
+     * Returns serialized bytes if all args are safe, or null if the slow path is needed.
+     * Callers can use this to avoid executor submission overhead for simple arguments.
+     */
+    public static byte[] serializeFast(Object obj) {
+        if (obj instanceof Object[] && isSafeArgs((Object[]) obj)) {
+            return directSerialize(obj);
+        }
+        return null;
+    }
+
+    /**
+     * Check if all elements of an args array can be serialized directly without recursive processing.
+     */
+    private static boolean isSafeArgs(Object[] args) {
+        for (Object arg : args) {
+            if (!isSafeForDirectSerialization(arg)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Check if an object is safe to serialize directly without recursive processing.
+     * Covers: null, simple types, primitive arrays, and safe containers (up to 3 levels deep).
+     */
+    private static boolean isSafeForDirectSerialization(Object obj) {
+        return isSafeForDirectSerialization(obj, 3);
+    }
+
+    private static boolean isSafeForDirectSerialization(Object obj, int depthLeft) {
+        if (obj == null || isSimpleType(obj)) {
+            return true;
+        }
+        if (depthLeft <= 0) {
+            return false;
+        }
+        Class<?> clazz = obj.getClass();
+        if (clazz.isArray() && clazz.getComponentType().isPrimitive()) {
+            return true;
+        }
+        if (isSafeContainerType(clazz)) {
+            if (obj instanceof Collection) {
+                for (Object item : (Collection<?>) obj) {
+                    if (!isSafeForDirectSerialization(item, depthLeft - 1)) return false;
+                }
+                return true;
+            }
+            if (obj instanceof Map) {
+                for (Map.Entry<?, ?> e : ((Map<?, ?>) obj).entrySet()) {
+                    if (!isSafeForDirectSerialization(e.getKey(), depthLeft - 1) ||
+                        !isSafeForDirectSerialization(e.getValue(), depthLeft - 1)) return false;
+                }
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -141,14 +212,15 @@ public final class Serializer {
 
     /**
      * Direct serialization without recursive processing.
+     * Reuses a ThreadLocal Output buffer to avoid per-call allocation.
      */
     private static byte[] directSerialize(Object obj) {
         Kryo kryo = KRYO.get();
-        ByteArrayOutputStream baos = new ByteArrayOutputStream(BUFFER_SIZE);
-        try (Output output = new Output(baos)) {
-            kryo.writeClassAndObject(output, obj);
-        }
-        return baos.toByteArray();
+        Output output = OUTPUT.get();
+        output.reset();
+        kryo.writeClassAndObject(output, obj);
+        output.flush();
+        return output.toBytes();
     }
 
     /**
@@ -201,37 +273,23 @@ public final class Serializer {
             // unserializable types, recursively process to catch and replace unserializable objects.
             if (obj instanceof Map) {
                 Map<?, ?> map = (Map<?, ?>) obj;
-                if (containsOnlySimpleTypes(map)) {
-                    // Simple map - try direct serialization to preserve full size
-                    byte[] serialized = tryDirectSerialize(obj);
-                    if (serialized != null) {
-                        try {
-                            deserialize(serialized);
-                            return obj; // Success - return original
-                        } catch (Exception e) {
-                            // Fall through to recursive handling
-                        }
-                    }
+                if (isSafeContainerType(clazz) && containsOnlySimpleTypes(map)) {
+                    return obj;
                 }
                 return handleMap(map, seen, depth, path);
             }
             if (obj instanceof Collection) {
                 Collection<?> collection = (Collection<?>) obj;
-                if (containsOnlySimpleTypes(collection)) {
-                    // Simple collection - try direct serialization to preserve full size
-                    byte[] serialized = tryDirectSerialize(obj);
-                    if (serialized != null) {
-                        try {
-                            deserialize(serialized);
-                            return obj; // Success - return original
-                        } catch (Exception e) {
-                            // Fall through to recursive handling
-                        }
-                    }
+                if (isSafeContainerType(clazz) && containsOnlySimpleTypes(collection)) {
+                    return obj;
                 }
                 return handleCollection(collection, seen, depth, path);
             }
             if (clazz.isArray()) {
+                // Primitive arrays (int[], double[], etc.) are directly serializable by Kryo
+                if (clazz.getComponentType().isPrimitive()) {
+                    return obj;
+                }
                 return handleArray(obj, seen, depth, path);
             }
 
@@ -253,6 +311,19 @@ public final class Serializer {
         } finally {
             seen.remove(obj);
         }
+    }
+
+    /**
+     * Check if a container type is known to round-trip safely through Kryo without verification.
+     * Only includes types registered with Kryo that are known to serialize/deserialize correctly.
+     */
+    private static boolean isSafeContainerType(Class<?> clazz) {
+        return clazz == ArrayList.class ||
+               clazz == LinkedList.class ||
+               clazz == HashMap.class ||
+               clazz == LinkedHashMap.class ||
+               clazz == HashSet.class ||
+               clazz == LinkedHashSet.class;
     }
 
     /**

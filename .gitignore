@@ -266,14 +266,18 @@ WARP.MD
 .tessl/
 tessl.json
 
-# Claude Code - track shared rules, ignore local config
+# Claude Code - track shared config, ignore local state
 .claude/*
 !.claude/rules/
-!.claude/settings.json
 !.claude/hooks/
+!.claude/skills/
+!.claude/settings.json
 **/node_modules/**
 **/dist-nuitka/**
 **/.npmrc
+
+# Test fixture lockfiles — prevents Dependabot from scanning them
+code_to_optimize/**/package-lock.json
 
 # Tessl auto-generates AGENTS.md on install; ignore to avoid cluttering git status
 AGENTS.md

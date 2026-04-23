@@ -897,7 +897,7 @@ class LanguageSupport(Protocol):
         ...
 
     def instrument_source_for_line_profiler(
-        self, func_info: FunctionToOptimize, line_profiler_output_file: Path
+        self, func_info: FunctionToOptimize, line_profiler_output_file: Path, project_classpath: str | None = None
     ) -> bool:
         """Instrument source code before line profiling."""
         ...

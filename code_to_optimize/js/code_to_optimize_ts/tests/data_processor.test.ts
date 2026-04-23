@@ -24,7 +24,7 @@ describe('DataProcessor', () => {
 
         test('handles larger arrays with duplicates', () => {
             const data: number[] = [];
-            for (let i = 0; i < 100; i++) {
+            for (let i = 0; i < 10000; i++) {
                 data.push(i % 20);
             }
             const processor = new DataProcessor(data);
