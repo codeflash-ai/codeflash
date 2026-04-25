@@ -49,7 +49,7 @@ class AiServiceClient:
         self.is_local = self.base_url == "http://localhost:8000"
         # (connect_timeout, read_timeout) — connect should be fast; read
         # can be slow because the server runs LLM inference.
-        self.timeout: float | tuple[float, float] | None = (10, 300)
+        self.timeout: float | tuple[float, float] | None = (10, 600)
 
     def get_next_sequence(self) -> int:
         """Get the next LLM call sequence number."""
@@ -113,6 +113,8 @@ class AiServiceClient:
         url = f"{self.base_url}/ai{endpoint}"
         if method.upper() == "POST":
             json_payload = json.dumps(payload, indent=None, default=pydantic_encoder)
+            print(f"url: {url}")
+            print(f"payload: {json_payload}")
             headers = {**self.headers, "Content-Type": "application/json"}
             response = requests.post(url, data=json_payload, headers=headers, timeout=timeout)
         else:

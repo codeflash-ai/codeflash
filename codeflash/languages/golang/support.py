@@ -29,10 +29,12 @@ if TYPE_CHECKING:
         DependencyResolver,
         FunctionFilterCriteria,
         HelperFunction,
+        InvocationId,
         ReferenceInfo,
         TestInfo,
     )
     from codeflash.models.function_types import FunctionToOptimize
+    from codeflash.models.models import GeneratedTestsList
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +104,13 @@ class GoSupport:
     def validate_syntax(self, source: str, file_path: Path | None = None) -> bool:
         return self._analyzer.validate_syntax(source)
 
+    def parse_test_xml(
+        self, test_xml_file_path: Path, test_files: Any, test_config: Any, run_result: Any = None
+    ) -> Any:
+        from codeflash.languages.golang.parse import parse_go_test_output
+
+        return parse_go_test_output(test_xml_file_path, test_files, test_config, run_result)
+
     def extract_code_context(self, function: FunctionToOptimize, project_root: Path, module_root: Path) -> CodeContext:
         return _extract_context(function, project_root, module_root, self._analyzer)
 
@@ -129,19 +138,29 @@ class GoSupport:
     def add_global_declarations(self, optimized_code: str, original_source: str, module_abspath: Path) -> str:
         return _add_globals(optimized_code, original_source, self._analyzer)
 
+    def get_module_path(self, source_file: Path, project_root: Path, tests_root: Path | None = None) -> str:
+        return str(source_file)
+
     def prepare_module(
         self, module_code: str, module_path: Path, project_root: Path
     ) -> tuple[dict[Path, Any], None] | None:
+        from codeflash.models.models import ValidCode
+
         if not self._analyzer.validate_syntax(module_code):
             return None
-        return {module_path: module_code}, None
+        validated: dict[Path, ValidCode] = {
+            module_path: ValidCode(source_code=module_code, normalized_code=normalize_go_code(module_code))
+        }
+        return validated, None
 
-    def setup_test_config(self, test_cfg: Any) -> None:
+    def setup_test_config(self, test_cfg: Any, file_path: Path, current_worktree: Path | None = None) -> bool:
+        _ = file_path, current_worktree
         project_root = getattr(test_cfg, "project_root_path", Path.cwd())
         config = detect_go_project(project_root)
         if config is not None and config.go_version:
             self._go_version = config.go_version
             self._go_version_detected = True
+        return True
 
     def detect_module_system(self, project_root: Path, source_file: Path | None = None) -> str | None:
         return None
@@ -182,6 +201,9 @@ class GoSupport:
             inner_iterations,
         )
 
+    def generate_concolic_tests(self, *args: Any, **kwargs: Any) -> tuple[dict[str, Any], str]:
+        return {}, ""
+
     def run_line_profile_tests(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
 
@@ -200,14 +222,33 @@ class GoSupport:
     def instrument_for_benchmarking(self, test_source: str, target_function: FunctionToOptimize) -> str:
         return test_source
 
-    def instrument_existing_test(self, *args: Any, **kwargs: Any) -> tuple[bool, str | None]:
-        raise NotImplementedError
+    def instrument_existing_test(
+        self, test_path: Path, call_positions: Any, function_to_optimize: Any, tests_project_root: Path, mode: str
+    ) -> tuple[bool, str | None]:
+        _ = call_positions, function_to_optimize, tests_project_root, mode
+        try:
+            return True, test_path.read_text(encoding="utf-8")
+        except Exception:
+            return False, None
 
-    def postprocess_generated_tests(self, *args: Any, **kwargs: Any) -> Any:
-        raise NotImplementedError
+    def postprocess_generated_tests(
+        self, generated_tests: GeneratedTestsList, test_framework: str, project_root: Path, source_file_path: Path
+    ) -> GeneratedTestsList:
+        _ = test_framework, project_root, source_file_path
+        return generated_tests
 
-    def process_generated_test_strings(self, *args: Any, **kwargs: Any) -> Any:
-        raise NotImplementedError
+    def process_generated_test_strings(
+        self,
+        generated_test_source: str,
+        instrumented_behavior_test_source: str,
+        instrumented_perf_test_source: str,
+        function_to_optimize: Any,
+        test_path: Path,
+        test_cfg: Any,
+        project_module_system: str | None,
+    ) -> tuple[str, str, str]:
+        _ = function_to_optimize, test_path, test_cfg, project_module_system
+        return generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source
 
     def load_coverage(self, *args: Any, **kwargs: Any) -> Any:
         return None
@@ -237,6 +278,36 @@ class GoSupport:
 
     def remove_test_functions(self, test_source: str, functions_to_remove: list[str]) -> str:
         return _remove_tests(test_source, functions_to_remove, self._analyzer)
+
+    def add_runtime_comments_to_generated_tests(
+        self,
+        generated_tests: GeneratedTestsList,
+        original_runtimes: dict[InvocationId, list[int]],
+        optimized_runtimes: dict[InvocationId, list[int]],
+        tests_project_rootdir: Path | None = None,
+    ) -> GeneratedTestsList:
+        _ = original_runtimes, optimized_runtimes, tests_project_rootdir
+        return generated_tests
+
+    def remove_test_functions_from_generated_tests(
+        self, generated_tests: GeneratedTestsList, functions_to_remove: list[str]
+    ) -> GeneratedTestsList:
+        from codeflash.models.models import GeneratedTests
+
+        updated_tests: list[GeneratedTests] = []
+        for test in generated_tests.generated_tests:
+            updated_tests.append(
+                GeneratedTests(
+                    generated_original_test_source=self.remove_test_functions(
+                        test.generated_original_test_source, functions_to_remove
+                    ),
+                    instrumented_behavior_test_source=test.instrumented_behavior_test_source,
+                    instrumented_perf_test_source=test.instrumented_perf_test_source,
+                    behavior_file_path=test.behavior_file_path,
+                    perf_file_path=test.perf_file_path,
+                )
+            )
+        return type(generated_tests)(generated_tests=updated_tests)
 
     def get_test_dir_for_source(self, test_dir: Path, source_file: Path | None = None) -> Path | None:
         if source_file is not None:

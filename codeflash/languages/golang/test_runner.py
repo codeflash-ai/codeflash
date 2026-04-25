@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 from codeflash.languages.base import TestResult
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -39,7 +40,9 @@ def run_behavioral_tests(
 
     cmd = ["go", "test", "-json", "-v", "-count=1", *packages]
 
-    proc_result = _run_cmd_kill_pg_on_timeout(cmd, cwd=cwd, env=env, timeout=timeout)
+    originals = _collect_original_file_paths(test_paths)
+    with _hide_original_test_files(originals):
+        proc_result = _run_cmd_kill_pg_on_timeout(cmd, cwd=cwd, env=env, timeout=timeout)
 
     json_output_file.write_text(proc_result.stdout or "", encoding="utf-8")
 
@@ -82,7 +85,9 @@ def run_benchmarking_tests(
         *packages,
     ]
 
-    proc_result = _run_cmd_kill_pg_on_timeout(cmd, cwd=cwd, env=env, timeout=timeout)
+    originals = _collect_original_file_paths(test_paths)
+    with _hide_original_test_files(originals):
+        proc_result = _run_cmd_kill_pg_on_timeout(cmd, cwd=cwd, env=env, timeout=timeout)
 
     json_output_file.write_text(proc_result.stdout or "", encoding="utf-8")
 
@@ -182,6 +187,51 @@ def _collect_test_file_paths(test_paths: Any) -> list[Path]:
         return [_Path(p) for p in test_paths]
 
     return []
+
+
+def _collect_original_file_paths(test_paths: Any) -> list[Path]:
+    from pathlib import Path as _Path
+
+    if test_paths is None or not hasattr(test_paths, "test_files"):
+        return []
+
+    originals: list[Path] = []
+    for tf in test_paths.test_files:
+        instrumented = getattr(tf, "instrumented_behavior_file_path", None)
+        original = getattr(tf, "original_file_path", None)
+        if instrumented is not None and original is not None:
+            instrumented_p = _Path(instrumented)
+            original_p = _Path(original)
+            if instrumented_p != original_p and original_p.exists():
+                originals.append(original_p)
+    return originals
+
+
+@contextlib.contextmanager
+def _hide_original_test_files(originals: list[Path]) -> Generator[None, None, None]:
+    """Temporarily rename original test files so `go test` only sees the instrumented copies.
+
+    Go compiles all *_test.go files in a package together, so having both the original
+    and its instrumented copy causes duplicate symbol errors.
+    """
+    renamed: list[tuple[Path, Path]] = []
+    for original in originals:
+        hidden = original.with_suffix(".go.codeflash_hidden")
+        try:
+            original.rename(hidden)
+            renamed.append((hidden, original))
+            logger.debug("Temporarily hid %s during go test", original)
+        except OSError:
+            logger.debug("Could not hide %s, skipping", original)
+    try:
+        yield
+    finally:
+        for hidden, original in renamed:
+            try:
+                hidden.rename(original)
+                logger.debug("Restored %s", original)
+            except OSError:
+                logger.warning("Failed to restore %s from %s", original, hidden)
 
 
 def _test_files_to_packages(test_files: list[Path], cwd: Path) -> list[str]:

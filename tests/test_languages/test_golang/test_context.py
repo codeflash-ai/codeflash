@@ -68,17 +68,27 @@ class TestExtractCodeContextFunction:
         ctx = extract_code_context(func, tmp_path.resolve())
         assert ctx.read_only_context == ""
 
-    def test_helpers_for_function(self, tmp_path: Path) -> None:
+    def test_helpers_only_includes_called_functions(self, tmp_path: Path) -> None:
         source_file = (tmp_path / "calc.go").resolve()
         source_file.write_text(GO_SOURCE_WITH_METHOD, encoding="utf-8")
         func = FunctionToOptimize(
             function_name="Add", file_path=source_file, language="go", starting_line=10, ending_line=12
         )
         ctx = extract_code_context(func, tmp_path.resolve())
+        assert ctx.helper_functions == []
+
+    def test_helpers_includes_called_function(self, tmp_path: Path) -> None:
+        source = (
+            "package calc\n\n"
+            "func helper(x int) int { return x * 2 }\n\n"
+            "func Target(a int) int { return helper(a) }\n"
+        )
+        source_file = (tmp_path / "calc.go").resolve()
+        source_file.write_text(source, encoding="utf-8")
+        func = FunctionToOptimize(function_name="Target", file_path=source_file, language="go")
+        ctx = extract_code_context(func, tmp_path.resolve())
         helper_names = [h.name for h in ctx.helper_functions]
-        assert "subtract" in helper_names
-        assert "AddFloat" in helper_names
-        assert "Add" not in helper_names
+        assert helper_names == ["helper"]
 
     def test_language_is_go(self, tmp_path: Path) -> None:
         source_file = (tmp_path / "calc.go").resolve()
@@ -148,27 +158,28 @@ class TestExtractCodeContextMethod:
             ending_line=21,
         )
         ctx = extract_code_context(func, tmp_path.resolve())
-        helper_names = [h.name for h in ctx.helper_functions]
-        assert "Add" in helper_names
-        assert "subtract" in helper_names
-        assert "AddFloat" not in helper_names
+        assert ctx.helper_functions == []
 
-    def test_method_helper_qualified_names(self, tmp_path: Path) -> None:
+    def test_method_helpers_with_calls(self, tmp_path: Path) -> None:
+        source = (
+            "package calc\n\n"
+            "type Calc struct{ Val int }\n\n"
+            "func double(x int) int { return x * 2 }\n\n"
+            "func (c *Calc) Compute() int { return double(c.Val) }\n"
+        )
         source_file = (tmp_path / "calc.go").resolve()
-        source_file.write_text(GO_SOURCE_WITH_METHOD, encoding="utf-8")
+        source_file.write_text(source, encoding="utf-8")
         func = FunctionToOptimize(
-            function_name="AddFloat",
+            function_name="Compute",
             file_path=source_file,
-            parents=[FunctionParent(name="Calculator", type="StructDef")],
+            parents=[FunctionParent(name="Calc", type="StructDef")],
             language="go",
             is_method=True,
-            starting_line=18,
-            ending_line=21,
         )
         ctx = extract_code_context(func, tmp_path.resolve())
-        helper_qns = [h.qualified_name for h in ctx.helper_functions]
-        assert "Add" in helper_qns
-        assert "subtract" in helper_qns
+        helper_names = [h.name for h in ctx.helper_functions]
+        assert helper_names == ["double"]
+        assert "Compute" not in helper_names
 
 
 class TestExtractCodeContextEdgeCases:
@@ -323,7 +334,7 @@ class TestFindHelperFunctions:
         source = (
             "package calc\n\n"
             "type Calc struct{}\n\n"
-            "func (c Calc) Target() int { return 1 }\n\n"
+            "func (c Calc) Target() int { return c.Helper() }\n\n"
             "func (c Calc) Helper() int { return 2 }\n"
         )
         source_file = (tmp_path / "calc.go").resolve()
@@ -337,3 +348,27 @@ class TestFindHelperFunctions:
         helpers = find_helper_functions(source, func)
         assert len(helpers) == 1
         assert helpers[0].qualified_name == "Calc.Helper"
+
+    def test_transitive_helpers(self, tmp_path: Path) -> None:
+        source = (
+            "package calc\n\n"
+            "func innerHelper(x int) int { return x }\n\n"
+            "func outerHelper(x int) int { return innerHelper(x) }\n\n"
+            "func Target(a int) int { return outerHelper(a) }\n"
+        )
+        source_file = (tmp_path / "calc.go").resolve()
+        func = FunctionToOptimize(function_name="Target", file_path=source_file, language="go")
+        helpers = find_helper_functions(source, func)
+        helper_names = sorted(h.name for h in helpers)
+        assert helper_names == ["innerHelper", "outerHelper"]
+
+    def test_uncalled_functions_excluded(self, tmp_path: Path) -> None:
+        source = (
+            "package calc\n\n"
+            "func unrelated() int { return 99 }\n\n"
+            "func Target(a int) int { return a + 1 }\n"
+        )
+        source_file = (tmp_path / "calc.go").resolve()
+        func = FunctionToOptimize(function_name="Target", file_path=source_file, language="go")
+        helpers = find_helper_functions(source, func)
+        assert helpers == []

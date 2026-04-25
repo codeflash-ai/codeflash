@@ -116,13 +116,16 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     # Default to module_root if not specified
     is_js_ts_project = pyproject_config.get("language") in ("javascript", "typescript")
     is_java_project = pyproject_config.get("language") == "java"
+    is_go_project = pyproject_config.get("language") == "go"
 
     # Set the test framework singleton for JS/TS projects
     if is_js_ts_project and pyproject_config.get("test_framework"):
         set_current_test_framework(pyproject_config["test_framework"])
 
     if args.tests_root is None:
-        if is_java_project:
+        if is_go_project:
+            args.tests_root = args.module_root
+        elif is_java_project:
             # Try standard Maven/Gradle test directories
             for test_dir in ["src/test/java", "test", "tests"]:
                 test_path = Path(args.module_root).parent / test_dir if "/" in test_dir else Path(test_dir)
@@ -202,7 +205,10 @@ def process_pyproject_config(args: Namespace) -> Namespace:
         args.benchmarks_root = Path(args.benchmarks_root).resolve()
     args.test_project_root = project_root_from_module_root(args.tests_root, pyproject_file_path)
 
-    if is_java_project and pyproject_file_path.is_dir():
+    if is_go_project and pyproject_file_path.is_dir():
+        args.project_root = pyproject_file_path.resolve()
+        args.test_project_root = pyproject_file_path.resolve()
+    elif is_java_project and pyproject_file_path.is_dir():
         # For Java projects, pyproject_file_path IS the project root directory (not a file).
         # Override project_root which may have resolved to a sub-module.
         args.project_root = pyproject_file_path.resolve()

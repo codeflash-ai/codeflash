@@ -388,7 +388,7 @@ def _collect_identifiers(node: Node | None) -> set[str]:
     stack = [node]
     while stack:
         n = stack.pop()
-        if n.type in ("identifier", "type_identifier"):
+        if n.type in ("identifier", "type_identifier", "field_identifier"):
             text = n.parent
             if text is not None and text.type not in ("parameter_declaration", "short_var_declaration"):
                 ids.add(n.text.decode("utf-8") if n.text else "")

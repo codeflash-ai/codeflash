@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codeflash.languages.golang.test_runner import parse_go_test_json, parse_test_results
+from codeflash.languages.golang.test_runner import (
+    _collect_original_file_paths,
+    _hide_original_test_files,
+    parse_go_test_json,
+    parse_test_results,
+)
 
 
 GO_TEST_JSON_ALL_PASS = """\
@@ -90,3 +95,86 @@ class TestParseTestResults:
         assert len(results) == 1
         assert results[0].test_name == "TestBad"
         assert results[0].passed is False
+
+
+class _FakeTestFile:
+    def __init__(self, instrumented: Path | None = None, original: Path | None = None) -> None:
+        self.instrumented_behavior_file_path = instrumented
+        self.original_file_path = original
+
+
+class _FakeTestFiles:
+    def __init__(self, test_files: list[_FakeTestFile]) -> None:
+        self.test_files = test_files
+
+
+class TestCollectOriginalFilePaths:
+    def test_returns_originals_when_instrumented_differs(self, tmp_path: Path) -> None:
+        original = (tmp_path / "sorting_test.go").resolve()
+        original.write_text("package x", encoding="utf-8")
+        instrumented = (tmp_path / "sorting__perfinstrumented_test.go").resolve()
+        tf = _FakeTestFile(instrumented=instrumented, original=original)
+        result = _collect_original_file_paths(_FakeTestFiles([tf]))
+        assert result == [original]
+
+    def test_skips_when_same_path(self, tmp_path: Path) -> None:
+        original = (tmp_path / "sorting_test.go").resolve()
+        original.write_text("package x", encoding="utf-8")
+        tf = _FakeTestFile(instrumented=original, original=original)
+        result = _collect_original_file_paths(_FakeTestFiles([tf]))
+        assert result == []
+
+    def test_skips_missing_original(self, tmp_path: Path) -> None:
+        original = (tmp_path / "missing_test.go").resolve()
+        instrumented = (tmp_path / "missing__perfinstrumented_test.go").resolve()
+        tf = _FakeTestFile(instrumented=instrumented, original=original)
+        result = _collect_original_file_paths(_FakeTestFiles([tf]))
+        assert result == []
+
+    def test_none_test_paths(self) -> None:
+        assert _collect_original_file_paths(None) == []
+
+
+class TestHideOriginalTestFiles:
+    def test_hides_and_restores(self, tmp_path: Path) -> None:
+        original = (tmp_path / "sorting_test.go").resolve()
+        original.write_text("package x\n\nfunc TestSort(t *testing.T) {}", encoding="utf-8")
+
+        with _hide_original_test_files([original]):
+            assert not original.exists()
+            assert original.with_suffix(".go.codeflash_hidden").exists()
+
+        assert original.exists()
+        assert not original.with_suffix(".go.codeflash_hidden").exists()
+        assert original.read_text(encoding="utf-8") == "package x\n\nfunc TestSort(t *testing.T) {}"
+
+    def test_restores_even_on_exception(self, tmp_path: Path) -> None:
+        original = (tmp_path / "sorting_test.go").resolve()
+        original.write_text("content", encoding="utf-8")
+
+        try:
+            with _hide_original_test_files([original]):
+                raise RuntimeError("boom")
+        except RuntimeError:
+            pass
+
+        assert original.exists()
+        assert not original.with_suffix(".go.codeflash_hidden").exists()
+
+    def test_empty_list_is_noop(self) -> None:
+        with _hide_original_test_files([]):
+            pass
+
+    def test_multiple_files(self, tmp_path: Path) -> None:
+        files = []
+        for name in ("a_test.go", "b_test.go"):
+            f = (tmp_path / name).resolve()
+            f.write_text(f"package {name}", encoding="utf-8")
+            files.append(f)
+
+        with _hide_original_test_files(files):
+            for f in files:
+                assert not f.exists()
+
+        for f in files:
+            assert f.exists()

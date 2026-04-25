@@ -63,16 +63,44 @@ def find_helper_functions(
 ) -> list[HelperFunction]:
     analyzer = analyzer or GoAnalyzer()
     target_name = function.function_name
+    receiver_type = _get_receiver_type(function)
 
-    functions = analyzer.find_functions(source)
-    methods = analyzer.find_methods(source)
+    all_functions = analyzer.find_functions(source)
+    all_methods = analyzer.find_methods(source)
+
+    candidate_names: set[str] = set()
+    for func in all_functions:
+        if func.name not in ("init", "main") and func.name != target_name:
+            candidate_names.add(func.name)
+    for method in all_methods:
+        if not (method.name == target_name and method.receiver_name == receiver_type):
+            candidate_names.add(method.name)
+
+    referenced = analyzer.collect_body_identifiers(source, target_name, receiver_type=receiver_type)
+    needed = referenced & candidate_names
+
+    seen: set[str] = set()
+    queue = list(needed)
+    while queue:
+        name = queue.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        ids = analyzer.collect_body_identifiers(source, name)
+        if not ids:
+            for method in all_methods:
+                if method.name == name:
+                    ids = analyzer.collect_body_identifiers(source, name, receiver_type=method.receiver_name)
+                    if ids:
+                        break
+        for transitive in ids & candidate_names:
+            if transitive not in seen:
+                queue.append(transitive)
 
     helpers: list[HelperFunction] = []
 
-    for func in functions:
-        if func.name == target_name:
-            continue
-        if func.name in ("init", "main"):
+    for func in all_functions:
+        if func.name not in seen:
             continue
         extracted = analyzer.extract_function_source(source, func.name)
         if extracted is None:
@@ -88,9 +116,8 @@ def find_helper_functions(
             )
         )
 
-    receiver_type = _get_receiver_type(function)
-    for method in methods:
-        if method.name == target_name and method.receiver_name == receiver_type:
+    for method in all_methods:
+        if method.name not in seen:
             continue
         extracted = analyzer.extract_function_source(source, method.name, receiver_type=method.receiver_name)
         if extracted is None:

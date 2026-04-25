@@ -171,44 +171,6 @@ class TestBuildContextExportedFunction:
             func Add(a, b int) int {
             \treturn a + b
             }
-
-
-            func subtract(a, b int) int {
-            \treturn a - b
-            }
-
-            func multiply(a, b int) int {
-            \treturn a * b
-            }
-
-            // Greet builds a greeting message.
-            func Greet(name string) string {
-            \treturn fmt.Sprintf("Hello, %s", str.TrimSpace(name))
-            }
-
-
-            // AddFloat adds a float value and records history.
-            func (c *Calculator) AddFloat(val float64) float64 {
-            \tc.Result += val
-            \tc.History = append(c.History, c.Result)
-            \treturn c.Result
-            }
-
-
-            // Sqrt computes the square root of the current result.
-            func (c *Calculator) Sqrt() float64 {
-            \tc.Result = math.Sqrt(c.Result)
-            \tc.History = append(c.History, c.Result)
-            \treturn c.Result
-            }
-
-
-            // Reset zeroes out the calculator.
-            func (c Calculator) Reset() Calculator {
-            \tc.Result = 0
-            \tc.History = nil
-            \treturn c
-            }
         """)
         assert code == expected
 
@@ -227,39 +189,9 @@ class TestBuildContextExportedFunction:
         code = result.read_writable_code.code_strings[0].code
         assert "type Formatter interface" not in code
 
-    def test_helpers_include_other_functions_and_methods(self, tmp_path: Path) -> None:
+    def test_no_helpers_when_no_calls(self, tmp_path: Path) -> None:
         result = _build_context_for_function(CALCULATOR_SOURCE, "calc.go", "Add", tmp_path)
-        helper_names = sorted(h.only_function_name for h in result.helper_functions)
-        assert "subtract" in helper_names
-        assert "multiply" in helper_names
-        assert "Greet" in helper_names
-        assert "AddFloat" in helper_names
-        assert "Sqrt" in helper_names
-        assert "Reset" in helper_names
-        assert "Add" not in helper_names
-
-    def test_helper_sources_are_full_functions(self, tmp_path: Path) -> None:
-        result = _build_context_for_function(CALCULATOR_SOURCE, "calc.go", "Add", tmp_path)
-        by_name = {h.only_function_name: h for h in result.helper_functions}
-
-        assert by_name["subtract"].source_code == dedent("""\
-            func subtract(a, b int) int {
-            \treturn a - b
-            }""")
-
-        assert by_name["Greet"].source_code == dedent("""\
-            // Greet builds a greeting message.
-            func Greet(name string) string {
-            \treturn fmt.Sprintf("Hello, %s", str.TrimSpace(name))
-            }
-        """)
-
-    def test_method_helpers_have_qualified_names(self, tmp_path: Path) -> None:
-        result = _build_context_for_function(CALCULATOR_SOURCE, "calc.go", "Add", tmp_path)
-        by_name = {h.only_function_name: h for h in result.helper_functions}
-        assert by_name["AddFloat"].qualified_name == "Calculator.AddFloat"
-        assert by_name["AddFloat"].fully_qualified_name == "Calculator.AddFloat"
-        assert by_name["subtract"].qualified_name == "subtract"
+        assert result.helper_functions == []
 
     def test_no_read_only_context_for_plain_function(self, tmp_path: Path) -> None:
         result = _build_context_for_function(CALCULATOR_SOURCE, "calc.go", "Add", tmp_path)
@@ -315,42 +247,6 @@ class TestBuildContextPointerReceiverMethod:
             \tc.History = append(c.History, c.Result)
             \treturn c.Result
             }
-
-
-            // Add returns the sum of two integers.
-            func Add(a, b int) int {
-            \treturn a + b
-            }
-
-
-            func subtract(a, b int) int {
-            \treturn a - b
-            }
-
-            func multiply(a, b int) int {
-            \treturn a * b
-            }
-
-            // Greet builds a greeting message.
-            func Greet(name string) string {
-            \treturn fmt.Sprintf("Hello, %s", str.TrimSpace(name))
-            }
-
-
-            // Sqrt computes the square root of the current result.
-            func (c *Calculator) Sqrt() float64 {
-            \tc.Result = math.Sqrt(c.Result)
-            \tc.History = append(c.History, c.Result)
-            \treturn c.Result
-            }
-
-
-            // Reset zeroes out the calculator.
-            func (c Calculator) Reset() Calculator {
-            \tc.Result = 0
-            \tc.History = nil
-            \treturn c
-            }
         """)
         assert code == expected
 
@@ -369,16 +265,9 @@ class TestBuildContextPointerReceiverMethod:
             \tHistory []float64
             }""")
 
-    def test_helpers_exclude_self_include_others(self, tmp_path: Path) -> None:
+    def test_no_helpers_when_no_calls(self, tmp_path: Path) -> None:
         result = self._build(tmp_path)
-        helper_names = sorted(h.only_function_name for h in result.helper_functions)
-        assert "AddFloat" not in helper_names
-        assert "Add" in helper_names
-        assert "subtract" in helper_names
-        assert "multiply" in helper_names
-        assert "Greet" in helper_names
-        assert "Sqrt" in helper_names
-        assert "Reset" in helper_names
+        assert result.helper_functions == []
 
     def test_target_not_duplicated_in_code_string(self, tmp_path: Path) -> None:
         result = self._build(tmp_path)
@@ -418,21 +307,15 @@ class TestBuildContextValueReceiverMethod:
         assert code.count("func (c Calculator) Reset()") == 1
         assert expected_target in code
 
-    def test_helpers_include_other_methods_on_same_struct(self, tmp_path: Path) -> None:
+    def test_no_helpers_when_no_calls(self, tmp_path: Path) -> None:
         result = self._build(tmp_path)
-        helper_names = sorted(h.only_function_name for h in result.helper_functions)
-        assert "Reset" not in helper_names
-        assert "AddFloat" in helper_names
-        assert "Sqrt" in helper_names
-        assert "Add" in helper_names
+        assert result.helper_functions == []
 
-    def test_helper_code_in_assembled_string(self, tmp_path: Path) -> None:
+    def test_no_helper_code_in_assembled_string(self, tmp_path: Path) -> None:
         result = self._build(tmp_path)
         code = result.read_writable_code.code_strings[0].code
-        assert "func (c *Calculator) AddFloat" in code
-        assert "func (c *Calculator) Sqrt()" in code
-        assert "func Add(a, b int) int" in code
-        assert "func subtract(a, b int) int" in code
+        assert "func (c *Calculator) AddFloat" not in code
+        assert "func Add(a, b int) int" not in code
 
     def test_struct_in_read_only_context(self, tmp_path: Path) -> None:
         result = self._build(tmp_path)
