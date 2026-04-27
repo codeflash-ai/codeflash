@@ -47,7 +47,9 @@ class AiServiceClient:
         self.headers = {"Authorization": f"Bearer {get_codeflash_api_key()}", "Connection": "close"}
         self.llm_call_counter = count(1)
         self.is_local = self.base_url == "http://localhost:8000"
-        self.timeout: float | None = 300 if self.is_local else 90
+        # (connect_timeout, read_timeout) — connect should be fast; read
+        # can be slow because the server runs LLM inference.
+        self.timeout: float | tuple[float, float] | None = (10, 300)
 
     def get_next_sequence(self) -> int:
         """Get the next LLM call sequence number."""
@@ -88,7 +90,7 @@ class AiServiceClient:
         endpoint: str,
         method: str = "POST",
         payload: dict[str, Any] | list[dict[str, Any]] | None = None,
-        timeout: float | None = None,
+        timeout: float | tuple[float, float] | None = None,
     ) -> requests.Response:
         """Make an API request to the given endpoint on the AI service.
 

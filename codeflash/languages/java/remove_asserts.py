@@ -189,6 +189,7 @@ class JavaAssertTransformer:
         qualified_name: str | None = None,
         analyzer: JavaAnalyzer | None = None,
         mode: str = "capture",
+        target_return_type: str = "",
     ) -> None:
         self.analyzer = analyzer or get_java_analyzer()
         self.func_name = function_name
@@ -196,6 +197,7 @@ class JavaAssertTransformer:
         self.invocation_counter = 0
         self._detected_framework: str | None = None
         self.mode = mode  # "capture" (default, instrumentation) or "strip" (clean display)
+        self.target_return_type = target_return_type
 
         # Precompile the assignment-detection regex to avoid recompiling on each call.
         self._assign_re = re.compile(r"(\w+(?:<[^>]+>)?)\s+(\w+)\s*=\s*$")
@@ -1062,7 +1064,7 @@ class JavaAssertTransformer:
         if not assertion.target_calls:
             return ""
 
-        if self.mode == "strip":
+        if self.mode == "strip" or self.target_return_type == "void":
             return self._generate_strip_replacement(assertion)
 
         # Infer the return type from assertion context to avoid Object→primitive cast errors
@@ -1244,7 +1246,9 @@ class JavaAssertTransformer:
         return "".join(cur).rstrip()
 
 
-def transform_java_assertions(source: str, function_name: str, qualified_name: str | None = None) -> str:
+def transform_java_assertions(
+    source: str, function_name: str, qualified_name: str | None = None, target_return_type: str = ""
+) -> str:
     """Transform Java test code by removing assertions and capturing function calls.
 
     This is the main entry point for Java assertion transformation.
@@ -1253,12 +1257,15 @@ def transform_java_assertions(source: str, function_name: str, qualified_name: s
         source: The Java test source code.
         function_name: Name of the function being tested.
         qualified_name: Optional fully qualified name of the function.
+        target_return_type: Return type of the target function (e.g., "void", "int").
 
     Returns:
         Transformed source code with assertions replaced by capture statements.
 
     """
-    transformer = JavaAssertTransformer(function_name=function_name, qualified_name=qualified_name)
+    transformer = JavaAssertTransformer(
+        function_name=function_name, qualified_name=qualified_name, target_return_type=target_return_type
+    )
     return transformer.transform(source)
 
 

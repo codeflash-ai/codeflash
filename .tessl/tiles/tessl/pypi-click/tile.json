@@ -1,0 +1,7 @@
+{
+  "name": "tessl/pypi-click",
+  "version": "8.2.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:pypi/click@8.2.2",
+  "summary": "Composable command line interface toolkit for creating beautiful CLI applications with minimal code"
+}

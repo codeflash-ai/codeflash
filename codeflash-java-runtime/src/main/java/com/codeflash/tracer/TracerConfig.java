@@ -30,6 +30,9 @@ public final class TracerConfig {
     @SerializedName("projectRoot")
     private String projectRoot = "";
 
+    @SerializedName("inMemoryDb")
+    private boolean inMemoryDb = false;
+
     private static final Gson GSON = new Gson();
 
     public static TracerConfig parse(String agentArgs) {
@@ -87,6 +90,10 @@ public final class TracerConfig {
 
     public String getProjectRoot() {
         return projectRoot;
+    }
+
+    public boolean isInMemoryDb() {
+        return inMemoryDb;
     }
 
     public boolean shouldInstrumentClass(String internalClassName) {
