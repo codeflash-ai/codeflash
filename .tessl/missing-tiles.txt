@@ -1,0 +1,24 @@
+# PyPI
+tessl/pypi-tree-sitter-javascript
+tessl/pypi-tree-sitter-typescript
+tessl/pypi-tree-sitter-java
+tessl/pypi-tree-sitter-groovy
+tessl/pypi-tree-sitter-kotlin
+tessl/pypi-pytest-timeout
+tessl/pypi-junitparser
+tessl/pypi-isort
+tessl/pypi-line-profiler
+tessl/pypi-pytest-asyncio
+tessl/pypi-pytest-memray
+tessl/pypi-unidiff
+tessl/pypi-ruff
+# npm
+tessl/npm-msgpack--msgpack
+tessl/npm-babel--register
+tessl/npm-babel--preset-env
+# Maven
+tessl/maven-com-esotericsoftware--kryo
+tessl/maven-org-objenesis--objenesis
+tessl/maven-org-xerial--sqlite-jdbc
+tessl/maven-org-ow2-asm--asm
+tessl/maven-org-ow2-asm--asm-commons

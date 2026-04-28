@@ -1,0 +1,7 @@
+{
+  "name": "tessl/pypi-tree-sitter",
+  "version": "0.25.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:pypi/tree-sitter@0.25.1",
+  "summary": "Python bindings to the Tree-sitter parsing library for incremental parsing and syntax tree analysis"
+}

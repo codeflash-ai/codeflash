@@ -1,0 +1,7 @@
+{
+  "name": "tessl/pypi-uv",
+  "version": "0.8.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:pypi/uv@0.8.18",
+  "summary": "An extremely fast Python package and project manager, written in Rust."
+}

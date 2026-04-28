@@ -1,0 +1,7 @@
+{
+  "name": "tessl/pypi-filelock",
+  "version": "3.19.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:pypi/filelock@3.19.1",
+  "summary": "A platform independent file lock for cross-platform process synchronization."
+}

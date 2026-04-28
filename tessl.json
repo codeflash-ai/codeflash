@@ -1,5 +1,6 @@
 {
   "name": "codeflash",
+  "mode": "vendored",
   "dependencies": {
     "tessl/pypi-pytest": {
       "version": "8.4.0"
@@ -18,6 +19,12 @@
     },
     "tessl/pypi-tomlkit": {
       "version": "0.13.0"
+    },
+    "tessl/pypi-attrs": {
+      "version": "25.3.0"
+    },
+    "tessl/pypi-requests": {
+      "version": "2.32.0"
     },
     "tessl/pypi-pydantic": {
       "version": "2.11.0"
@@ -64,20 +71,47 @@
     "tessl/pypi-filelock": {
       "version": "3.19.0"
     },
-    "tessl/pypi-ipython": {
-      "version": "9.5.0"
+    "tessl/pypi-memray": {
+      "version": "1.18.0"
     },
     "tessl/pypi-mypy": {
       "version": "1.17.0"
     },
-    "tessl/pypi-ty": {
-      "version": "0.0.0"
-    },
-    "tessl/pypi-types-jsonschema": {
-      "version": "3.2.0"
-    },
     "tessl/pypi-uv": {
       "version": "0.8.0"
+    },
+    "tessl/pypi-pytest-cov": {
+      "version": "6.2.0"
+    },
+    "tessl/npm-jest": {
+      "version": "30.1.0"
+    },
+    "tessl/npm-vitest": {
+      "version": "4.0.0"
+    },
+    "tessl/npm-mocha": {
+      "version": "11.7.0"
+    },
+    "tessl/npm-typescript": {
+      "version": "5.9.1"
+    },
+    "tessl/npm-better-sqlite3": {
+      "version": "12.2.0"
+    },
+    "tessl/npm-babel--core": {
+      "version": "7.26.0"
+    },
+    "tessl/npm-babel--preset-typescript": {
+      "version": "7.27.0"
+    },
+    "tessl/maven-com-google-code-gson--gson": {
+      "version": "2.13.0"
+    },
+    "tessl/maven-org-jacoco--org-jacoco-agent": {
+      "version": "0.8.0"
+    },
+    "tessl/maven-org-junit-jupiter--junit-jupiter": {
+      "version": "5.12.0"
     }
   }
 }

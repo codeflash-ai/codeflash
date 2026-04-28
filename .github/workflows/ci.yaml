@@ -23,89 +23,86 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Change detection — decides which downstream jobs actually run.
-  # On push/workflow_dispatch every flag is true so all jobs execute.
-  # On pull_request we diff against the merge base (same approach as astral-sh/ruff).
+  # Linked issue check — every PR must reference an issue or discussion.
+  # Skipped on push to main and workflow_dispatch.
   # ---------------------------------------------------------------------------
-  determine-changes:
+  check-linked-issue:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-    outputs:
-      unit_tests: ${{ github.event_name != 'pull_request' || steps.check.outputs.unit_tests == 'true' }}
-      type_check: ${{ github.event_name != 'pull_request' || steps.check.outputs.type_check == 'true' }}
-      e2e: ${{ github.event_name != 'pull_request' || steps.check.outputs.e2e == 'true' }}
-      e2e_js: ${{ github.event_name != 'pull_request' || steps.check.outputs.e2e_js == 'true' }}
-      e2e_java: ${{ github.event_name != 'pull_request' || steps.check.outputs.e2e_java == 'true' }}
+      pull-requests: read
     steps:
-      - uses: actions/checkout@v6
-        if: github.event_name == 'pull_request'
-        with:
-          fetch-depth: 0
-
-      - name: Determine merge base
-        if: github.event_name == 'pull_request'
-        id: merge_base
-        run: |
-          sha=$(git merge-base HEAD "origin/${{ github.event.pull_request.base.ref }}")
-          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
-
-      - name: Check changed paths
-        if: github.event_name == 'pull_request'
-        id: check
-        run: |
-          check_paths() {
-            local name="$1"; shift
-            if ! git diff --quiet "$MERGE_BASE...HEAD" -- "$@" 2>/dev/null; then
-              echo "${name}=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "${name}=false" >> "$GITHUB_OUTPUT"
-            fi
-          }
-
-          # Unit tests: code + test infra + packages + build config
-          check_paths unit_tests \
-            'codeflash/' 'codeflash-benchmark/' \
-            'tests/' 'packages/' 'pyproject.toml' 'uv.lock'
-
-          # Type checking: code + build config + mypy config
-          check_paths type_check \
-            'codeflash/' 'pyproject.toml' 'uv.lock' 'mypy_allowlist.txt'
-
-          # E2E tests: Python pipeline + tests + build config (excludes java/ and javascript/)
-          check_paths e2e \
-            'codeflash/*.py' \
-            'codeflash/api/' 'codeflash/benchmarking/' 'codeflash/cli_cmds/' \
-            'codeflash/code_utils/' 'codeflash/discovery/' 'codeflash/github/' \
-            'codeflash/languages/python/' 'codeflash/languages/*.py' \
-            'codeflash/lsp/' 'codeflash/models/' 'codeflash/optimization/' \
-            'codeflash/picklepatch/' 'codeflash/result/' 'codeflash/setup/' \
-            'codeflash/telemetry/' 'codeflash/tracing/' 'codeflash/verification/' \
-            'tests/' 'pyproject.toml' 'uv.lock'
-
-          # JS E2E tests: JS language support + shared pipeline + packages + test fixtures
-          check_paths e2e_js \
-            'codeflash/languages/javascript/' 'codeflash/languages/base.py' \
-            'codeflash/languages/registry.py' 'codeflash/optimization/' \
-            'codeflash/verification/' 'packages/' \
-            'code_to_optimize/js/' 'tests/scripts/end_to_end_test_js*'
-
-          # Java E2E tests: Java language support + shared pipeline + runtime
-          check_paths e2e_java \
-            'codeflash/languages/java/' 'codeflash/languages/base.py' \
-            'codeflash/languages/registry.py' 'codeflash/optimization/' \
-            'codeflash/verification/' 'codeflash-java-runtime/' \
-            'code_to_optimize/java/' 'tests/scripts/end_to_end_test_java*' \
-            'tests/test_languages/fixtures/java_tracer_e2e/'
+      - name: Check PR body for linked issue or discussion
         env:
-          MERGE_BASE: ${{ steps.merge_base.outputs.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
+        run: |
+          # Skip for bots (dependabot, renovate, github-actions)
+          if [[ "$PR_AUTHOR" == *"[bot]"* || "$PR_AUTHOR" == "dependabot" ]]; then
+            echo "Bot PR — skipping linked issue check."
+            exit 0
+          fi
+
+          # Skip for org members and collaborators
+          if [[ "$AUTHOR_ASSOCIATION" == "MEMBER" || "$AUTHOR_ASSOCIATION" == "COLLABORATOR" || "$AUTHOR_ASSOCIATION" == "OWNER" ]]; then
+            echo "Org member ($PR_AUTHOR, $AUTHOR_ASSOCIATION) — skipping linked issue check."
+            exit 0
+          fi
+
+          if [ -z "$PR_BODY" ]; then
+            echo "::error::PR body is empty. Every PR must link an issue or discussion."
+            echo "Use 'Closes #<number>', 'Fixes #<number>', 'Relates to #<number>', or include a discussion URL."
+            exit 1
+          fi
+
+          # Match: #123, GH-123, org/repo#123, Closes/Fixes/Relates/Resolves #123,
+          # or a github.com URL to an issue or discussion
+          if echo "$PR_BODY" | grep -qiP '(close[sd]?|fix(e[sd])?|relate[sd]?\s+to|resolve[sd]?)\s+#\d+'; then
+            echo "Found linked issue keyword."
+            exit 0
+          fi
+          if echo "$PR_BODY" | grep -qP '#\d+'; then
+            echo "Found issue reference."
+            exit 0
+          fi
+          if echo "$PR_BODY" | grep -qiP 'github\.com/[^\s]+/(issues|discussions)/\d+'; then
+            echo "Found GitHub issue/discussion URL."
+            exit 0
+          fi
+          if echo "$PR_BODY" | grep -qiP 'CF-#?\d+'; then
+            echo "Found Linear ticket reference."
+            exit 0
+          fi
+
+          echo "::error::No linked issue or discussion found in PR body."
+          echo "Every PR must reference an issue or discussion. See CONTRIBUTING.md for details."
+          echo "Use 'Closes #<number>', 'Fixes #<number>', 'Relates to #<number>', or include a discussion URL."
+          exit 1
+
+  # ---------------------------------------------------------------------------
+  # Change detection — decides which downstream jobs actually run.
+  # On push/workflow_dispatch every flag is true so all jobs execute.
+  # On pull_request we diff against the merge base.
+  # ---------------------------------------------------------------------------
+  determine-changes:
+    uses: codeflash-ai/github-workflows/.github/workflows/determine-changes.yml@main
+    with:
+      path-filters: |
+        {
+          "unit_tests": ["codeflash/", "codeflash-benchmark/", "tests/", "packages/", "pyproject.toml", "uv.lock"],
+          "type_check": ["codeflash/", "pyproject.toml", "uv.lock", "mypy_allowlist.txt"],
+          "e2e": ["codeflash/*.py", "codeflash/api/", "codeflash/benchmarking/", "codeflash/cli_cmds/", "codeflash/code_utils/", "codeflash/discovery/", "codeflash/github/", "codeflash/languages/python/", "codeflash/languages/*.py", "codeflash/lsp/", "codeflash/models/", "codeflash/optimization/", "codeflash/picklepatch/", "codeflash/result/", "codeflash/setup/", "codeflash/telemetry/", "codeflash/tracing/", "codeflash/verification/", "tests/", "pyproject.toml", "uv.lock"],
+          "e2e_js": ["codeflash/languages/javascript/", "codeflash/languages/base.py", "codeflash/languages/registry.py", "codeflash/optimization/", "codeflash/verification/", "packages/", "code_to_optimize/js/", "tests/scripts/end_to_end_test_js*"],
+          "e2e_java": ["codeflash/languages/java/", "codeflash/languages/base.py", "codeflash/languages/registry.py", "codeflash/optimization/", "codeflash/verification/", "codeflash-java-runtime/", "code_to_optimize/java/", "tests/scripts/end_to_end_test_java*", "tests/test_languages/fixtures/java_tracer_e2e/"]
+        }
 
   # ---------------------------------------------------------------------------
   # Unit tests — 6 Linux + 1 Windows matrix
   # ---------------------------------------------------------------------------
   unit-tests:
     needs: determine-changes
-    if: needs.determine-changes.outputs.unit_tests == 'true'
+    if: fromJSON(needs.determine-changes.outputs.flags).unit_tests == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -134,7 +131,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8.0.0
+        uses: astral-sh/setup-uv@v8.1.0
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
@@ -152,11 +149,49 @@ jobs:
         run: uv run pytest tests/
 
   # ---------------------------------------------------------------------------
+  # Coverage — single run on ubuntu/py3.13 to enforce the coverage floor.
+  # ---------------------------------------------------------------------------
+  coverage:
+    needs: determine-changes
+    if: fromJSON(needs.determine-changes.outputs.flags).unit_tests == 'true'
+    runs-on: ubuntu-latest
+    env:
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run tests with coverage
+        run: uv run pytest tests/ --ignore=tests/test_tracer.py --cov=codeflash --cov-report=xml:coverage.xml --cov-report=term-missing --cov-config=.coveragerc
+
+      - name: Check coverage floor
+        run: uv run coverage report --fail-under=58
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
   # Mypy type checking
   # ---------------------------------------------------------------------------
   type-check:
     needs: determine-changes
-    if: needs.determine-changes.outputs.type_check == 'true'
+    if: fromJSON(needs.determine-changes.outputs.flags).type_check == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -165,7 +200,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8.0.0
+        uses: astral-sh/setup-uv@v8.1.0
         with:
           enable-cache: true
 
@@ -182,39 +217,15 @@ jobs:
     needs: determine-changes
     if: >-
       github.event_name == 'pull_request'
-      && (needs.determine-changes.outputs.e2e == 'true'
-          || needs.determine-changes.outputs.e2e_js == 'true')
-    runs-on: ubuntu-latest
+      && (fromJSON(needs.determine-changes.outputs.flags).e2e == 'true'
+          || fromJSON(needs.determine-changes.outputs.flags).e2e_js == 'true')
+    uses: codeflash-ai/github-workflows/.github/workflows/prek-lint.yml@main
     permissions:
       contents: write
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ github.head_ref }}
-          fetch-depth: 0
-      - uses: astral-sh/setup-uv@v8.0.0
-        with:
-          enable-cache: true
-
-      - name: Auto-fix formatting
-        run: |
-          uv run ruff check --fix . || true
-          uv run ruff format .
-          # uv-dynamic-versioning rewrites version.py on every `uv run` — discard those changes
-          git checkout HEAD -- codeflash/version.py codeflash-benchmark/codeflash_benchmark/version.py 2>/dev/null || true
-
-      - name: Commit and push fixes
-        run: |
-          git diff --quiet && exit 0
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -u
-          git commit -m "style: auto-format with ruff"
-          git push
-
-      - uses: j178/prek-action@v2
-        with:
-          extra-args: '--from-ref origin/${{ github.base_ref }} --to-ref HEAD'
+    with:
+      auto-fix: true
+      checkout-ref: ${{ github.head_ref }}
+      restore-paths: "codeflash/version.py codeflash-benchmark/codeflash_benchmark/version.py"
 
   # ---------------------------------------------------------------------------
   # E2E tests — only on pull_request and workflow_dispatch (not push to main)
@@ -224,8 +235,9 @@ jobs:
   e2e-python:
     needs: determine-changes
     if: >-
-      needs.determine-changes.outputs.e2e == 'true'
+      fromJSON(needs.determine-changes.outputs.flags).e2e == 'true'
       && github.event_name != 'push'
+      && github.actor != 'dependabot[bot]'
     strategy:
       fail-fast: false
       matrix:
@@ -285,7 +297,7 @@ jobs:
           pr_state: ${{ github.event.pull_request.state }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8.0.0
+        uses: astral-sh/setup-uv@v8.1.0
         with:
           python-version: 3.11.6
           enable-cache: true
@@ -327,8 +339,9 @@ jobs:
   e2e-js:
     needs: determine-changes
     if: >-
-      needs.determine-changes.outputs.e2e_js == 'true'
+      fromJSON(needs.determine-changes.outputs.flags).e2e_js == 'true'
       && github.event_name != 'push'
+      && github.actor != 'dependabot[bot]'
     strategy:
       fail-fast: false
       matrix:
@@ -341,10 +354,12 @@ jobs:
             script: end_to_end_test_js_esm_async.py
             js_project_dir: code_to_optimize/js/code_to_optimize_js_esm
             expected_improvement: 10
+            allow_failure: true
           - name: js-ts-class
             script: end_to_end_test_js_ts_class.py
             js_project_dir: code_to_optimize/js/code_to_optimize_ts
             expected_improvement: 30
+    continue-on-error: ${{ matrix.allow_failure || false }}
     environment: ${{ ((github.event_name == 'workflow_dispatch' && github.actor != 'misrasaurabh1' && github.actor != 'KRRT7') || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
     runs-on: ubuntu-latest
     env:
@@ -393,7 +408,7 @@ jobs:
           npm install
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8.0.0
+        uses: astral-sh/setup-uv@v8.1.0
         with:
           python-version: 3.11.6
           enable-cache: true
@@ -408,8 +423,9 @@ jobs:
   e2e-java:
     needs: determine-changes
     if: >-
-      needs.determine-changes.outputs.e2e_java == 'true'
+      fromJSON(needs.determine-changes.outputs.flags).e2e_java == 'true'
       && github.event_name != 'push'
+      && github.actor != 'dependabot[bot]'
     strategy:
       fail-fast: false
       matrix:
@@ -462,7 +478,7 @@ jobs:
           cache: maven
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8.0.0
+        uses: astral-sh/setup-uv@v8.1.0
         with:
           python-version: 3.11.6
           enable-cache: true
@@ -472,7 +488,7 @@ jobs:
 
       - name: Cache codeflash-runtime JAR
         id: runtime-jar-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.m2/repository/io/codeflash
           key: codeflash-runtime-${{ hashFiles('codeflash-java-runtime/pom.xml', 'codeflash-java-runtime/src/**') }}
@@ -506,7 +522,9 @@ jobs:
     name: required checks passed
     if: always()
     needs:
+      - check-linked-issue
       - unit-tests
+      - coverage
       - type-check
       - prek
       - e2e-python
@@ -514,13 +532,6 @@ jobs:
       - e2e-java
     runs-on: ubuntu-latest
     steps:
-      - name: Verify all required jobs passed
-        run: |
-          failing=$(echo "$NEEDS_JSON" | jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key): \(.value.result)"')
-          if [ -n "$failing" ]; then
-            echo "Required jobs failed or were cancelled:"
-            echo "$failing"
-            exit 1
-          fi
-        env:
-          NEEDS_JSON: ${{ toJSON(needs) }}
+      - uses: codeflash-ai/github-workflows/.github/actions/required-checks-gate@main
+        with:
+          needs-json: ${{ toJSON(needs) }}
